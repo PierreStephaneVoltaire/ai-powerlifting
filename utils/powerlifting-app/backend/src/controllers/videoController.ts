@@ -1,11 +1,11 @@
 import { v4 as uuidv4 } from 'uuid'
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
-import { transformProgram } from '../db/transforms'
-import type { Session, SessionVideo, VideoLibraryItem } from '@powerlifting/types'
+import { listSessions, patchSessionByDate } from '../services/sessionStore'
+import type { Phase, Session, SessionVideo, VideoLibraryItem } from '@powerlifting/types'
 
 const S3_BUCKET = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
 const S3_REGION = process.env.AWS_REGION || 'ca-central-1'
@@ -46,6 +46,16 @@ async function resolveVersionSk(pk: string, version: string): Promise<string> {
   return `program#${version}`
 }
 
+async function loadPhases(pk: string, sk: string): Promise<Phase[] | null> {
+  const result = await docClient.send(new GetCommand({
+    TableName: TABLE,
+    Key: { pk, sk },
+    ProjectionExpression: 'phases',
+  }))
+  if (!result.Item) return null
+  return (result.Item.phases ?? []) as Phase[]
+}
+
 /**
  * Upload a video to S3 and add metadata to session
  */
@@ -61,6 +71,14 @@ export async function uploadSessionVideo(
   notes?: string
 ): Promise<SessionVideo> {
   const sk = await resolveVersionSk(pk, version)
+  const phases = await loadPhases(pk, sk)
+  if (!phases) {
+    throw new AppError(`Program version ${version} not found`, 404)
+  }
+  const session = (await listSessions(pk, sk, phases)).find(s => s.date === sessionDate)
+  if (!session) {
+    throw new AppError(`Session with date ${sessionDate} not found`, 404)
+  }
 
   // Generate video ID
   const videoId = uuidv4()
@@ -98,45 +116,9 @@ export async function uploadSessionVideo(
     thumbnail_status: 'pending',
   }
 
-  // Add to session in DynamoDB
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-  const sessionIndex = sessions.findIndex(s => s.date === sessionDate)
-
-  if (sessionIndex === -1) {
-    throw new AppError(`Session with date ${sessionDate} not found`, 404)
-  }
-
-  // Initialize videos array if it doesn't exist
-  if (!sessions[sessionIndex].videos) {
-    sessions[sessionIndex].videos = []
-  }
-
-  sessions[sessionIndex].videos!.push(video)
-
-  // Safely update both sessions and metadata
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': stripUndefined(sessions),
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  await patchSessionByDate(pk, sk, sessionDate, {
+    videos: [...(session.videos || []), video],
+  } as Partial<Session>, phases)
 
   return video
 }
@@ -151,31 +133,20 @@ export async function removeSessionVideo(
   videoId: string
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-
-  // Get session to find video info
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
+  const phases = await loadPhases(pk, sk)
+  if (!phases) {
     throw new AppError(`Program version ${version} not found`, 404)
   }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-  const sessionIndex = sessions.findIndex(s => s.date === sessionDate)
-
-  if (sessionIndex === -1) {
+  const session = (await listSessions(pk, sk, phases)).find(s => s.date === sessionDate)
+  if (!session) {
     throw new AppError(`Session with date ${sessionDate} not found`, 404)
   }
 
-  if (!sessions[sessionIndex].videos) {
+  if (!session.videos) {
     throw new AppError(`Session has no videos`, 404)
   }
 
-  const video = sessions[sessionIndex].videos!.find(v => v.video_id === videoId)
+  const video = session.videos.find(v => v.video_id === videoId)
 
   if (!video) {
     throw new AppError(`Video ${videoId} not found`, 404)
@@ -194,26 +165,10 @@ export async function removeSessionVideo(
 
   await Promise.all(deletePromises)
 
-  // Remove from session
-  sessions[sessionIndex].videos = sessions[sessionIndex].videos!.filter(v => v.video_id !== videoId)
-
-  // Remove videos array if empty
-  if (sessions[sessionIndex].videos!.length === 0) {
-    delete sessions[sessionIndex].videos
-  }
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': stripUndefined(sessions),
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  const videos = session.videos.filter(v => v.video_id !== videoId)
+  await patchSessionByDate(pk, sk, sessionDate, {
+    videos: videos.length > 0 ? videos : undefined,
+  } as Partial<Session>, phases)
 }
 
 /**
@@ -229,30 +184,21 @@ export async function updateVideoThumbnail(
   status: 'ready' | 'failed'
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
+  const phases = await loadPhases(pk, sk)
+  if (!phases) {
     throw new AppError(`Program version ${version} not found`, 404)
   }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-  const sessionIndex = sessions.findIndex(s => s.date === sessionDate)
-
-  if (sessionIndex === -1) {
+  const session = (await listSessions(pk, sk, phases)).find(s => s.date === sessionDate)
+  if (!session) {
     throw new AppError(`Session with date ${sessionDate} not found`, 404)
   }
 
-  if (!sessions[sessionIndex].videos) {
+  if (!session.videos) {
     throw new AppError(`Session has no videos`, 404)
   }
 
-  const videoIndex = sessions[sessionIndex].videos!.findIndex(
+  const videos = [...session.videos]
+  const videoIndex = videos.findIndex(
     v => v.video_id === videoId
   )
 
@@ -260,25 +206,14 @@ export async function updateVideoThumbnail(
     throw new AppError(`Video ${videoId} not found`, 404)
   }
 
-  sessions[sessionIndex].videos![videoIndex] = {
-    ...sessions[sessionIndex].videos![videoIndex],
+  videos[videoIndex] = {
+    ...videos[videoIndex],
     thumbnail_url: thumbnailUrl,
     thumbnail_s3_key: thumbnailS3Key,
     thumbnail_status: status,
   }
 
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': stripUndefined(sessions),
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  await patchSessionByDate(pk, sk, sessionDate, { videos } as Partial<Session>, phases)
 }
 
 export async function getVideoLibrary(
@@ -288,20 +223,12 @@ export async function getVideoLibrary(
   sort: 'newest' | 'oldest' = 'newest'
 ): Promise<{ videos: VideoLibraryItem[]; exercises: string[] }> {
   const sk = await resolveVersionSk(pk, version)
-
-  const command = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-  })
-
-  const result = await docClient.send(command)
-  if (!result.Item) {
+  const phases = await loadPhases(pk, sk)
+  if (!phases) {
     return { videos: [], exercises: [] }
   }
 
-  // Transform program to get derived week_number and phase_name
-  const program = transformProgram(result.Item)
-  const sessions = program.sessions
+  const sessions = await listSessions(pk, sk, phases)
   const items: VideoLibraryItem[] = []
   const exerciseSet = new Set<string>()
 
@@ -340,4 +267,3 @@ export async function getVideoLibrary(
     exercises: Array.from(exerciseSet).sort(),
   }
 }
-

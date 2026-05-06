@@ -1,13 +1,17 @@
 import type { MuscleGroup, Session } from '@powerlifting/types'
+import { MUSCLE_CONTRIBUTION_MULTIPLIERS } from './sessionWorkload'
+import { exerciseVolume } from './volume'
 
 interface MuscleContribution {
   primary: MuscleGroup[]
   secondary: MuscleGroup[]
+  tertiary?: MuscleGroup[]
 }
 
 /**
  * Map of exercise names to their muscle contributions.
- * Primary muscles receive full volume credit, secondary receive 40%.
+ * Primary muscles receive full volume credit, secondary receive 50%,
+ * and tertiary receive 25%.
  */
 export const MUSCLE_MAP: Record<string, MuscleContribution> = {
   // ─── Squat variants ─────────────────────────────────────────────
@@ -93,7 +97,7 @@ export const MUSCLE_MAP: Record<string, MuscleContribution> = {
 
 /**
  * Calculate muscle volume from sessions.
- * Primary muscles get full volume, secondary get 40%.
+ * Primary muscles get full volume, secondary get 50%, tertiary get 25%.
  */
 export function muscleVolumeFromSessions(
   sessions: Session[]
@@ -105,13 +109,16 @@ export function muscleVolumeFromSessions(
       const map = MUSCLE_MAP[ex.name]
       if (!map || ex.kg === null) continue
 
-      const vol = (ex.sets || 0) * (ex.reps || 0) * ex.kg
+      const vol = exerciseVolume(ex)
 
       map.primary.forEach(m => {
         volumes[m] = (volumes[m] ?? 0) + vol
       })
       map.secondary.forEach(m => {
-        volumes[m] = (volumes[m] ?? 0) + vol * 0.4
+        volumes[m] = (volumes[m] ?? 0) + vol * MUSCLE_CONTRIBUTION_MULTIPLIERS.secondary
+      })
+      map.tertiary?.forEach(m => {
+        volumes[m] = (volumes[m] ?? 0) + vol * MUSCLE_CONTRIBUTION_MULTIPLIERS.tertiary
       })
     }
   }

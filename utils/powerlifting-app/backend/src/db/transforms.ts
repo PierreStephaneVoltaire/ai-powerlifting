@@ -77,7 +77,9 @@ export function transformProgram(item: Record<string, unknown>): Program {
 
   // Derive week_number and resolve phase for each session within its block
   program.sessions = program.sessions.map(session => {
-    const weekNum = parseWeekNumber(session.week as string | number | undefined)
+    const weekNum = typeof session.week_number === 'number'
+      ? session.week_number
+      : parseWeekNumber(session.week as string | number | undefined)
     const block = sessionBlock(session)
     const phase = resolvePhase(weekNum, block, program.phases)
 

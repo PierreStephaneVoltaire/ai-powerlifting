@@ -248,10 +248,12 @@ export interface Exercise {
   notes: string
   failed?: boolean          // deprecated — kept for backwards compat
   failed_sets?: boolean[]   // per-set: [false, false, true, false] = set 3 failed
+  set_statuses?: SetStatus[] // per-set execution state; failed_sets is derived for legacy readers
   load_source?: LoadSource
   rpe_target?: number | null
 }
 
+export type SetStatus = 'pending' | 'completed' | 'failed' | 'skipped'
 export type LoadSource = 'absolute' | 'rpe' | 'percentage' | 'unresolvable'
 export type LoadType = LoadSource
 

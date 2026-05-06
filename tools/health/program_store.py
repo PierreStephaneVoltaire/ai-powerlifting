@@ -11,6 +11,7 @@ import copy
 import hashlib
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Optional
@@ -57,6 +58,7 @@ class ProgramStore:
         self._table_name = table_name
         self._pk = pk
         self._region = region
+        self._sessions_table_name = os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions")
         self._table = None  # Lazy-loaded via property
         self._cache: Optional[dict] = None
         self._cache_version: Optional[int] = None
@@ -89,6 +91,38 @@ class ProgramStore:
         logger.debug("[ProgramStore] Cache invalidated")
         self._cache = None
         self._cache_version = None
+
+    def _invalidate_analysis_cache(self) -> None:
+        try:
+            from cache_invalidation import invalidate_analysis_caches
+            invalidate_analysis_caches(self._pk, self._table_name, self._region)
+        except Exception as exc:
+            logger.warning("[ProgramStore] Analysis cache invalidation failed: %s", exc)
+
+    def _get_session_store(self):
+        from session_store import SessionStore
+        return SessionStore(
+            table_name=self._sessions_table_name,
+            pk=self._pk,
+            region=self._region,
+            source_table_name=self._table_name,
+        )
+
+    def _current_program_sk_sync(self) -> str:
+        pointer_resp = self.table.get_item(Key={"pk": self._pk, "sk": self.POINTER_SK})
+        if "Item" in pointer_resp:
+            ref_sk = pointer_resp["Item"].get("ref_sk")
+            if ref_sk:
+                return str(ref_sk)
+
+        programs = self._list_programs_sync(include_archived=False)
+        if not programs:
+            raise ProgramNotFoundError(
+                f"No program or pointer found for pk={self._pk}. "
+                "Create a program using new_version() first."
+            )
+        programs.sort(key=lambda p: p["sk"], reverse=True)
+        return str(programs[0]["sk"])
     
     async def get_program(self) -> dict:
         """Get the current training program.
@@ -217,6 +251,10 @@ class ProgramStore:
         # Remove DynamoDB keys from returned program
         program.pop("pk", None)
         program.pop("sk", None)
+        program["sessions"] = self._get_session_store().list_sessions_sync(
+            str(ref_sk),
+            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+        )
         
         self._cache_version = version
         logger.debug(f"[ProgramStore] Loaded program version {version}")
@@ -239,32 +277,19 @@ class ProgramStore:
             ValueError: If session not found or patch invalid
             RuntimeError: If DynamoDB operation fails
         """
-        # Get current program (from cache or DynamoDB)
         program = await self.get_program()
-        
-        # Deep copy for modification
-        new_program = copy.deepcopy(program)
-        
-        # Find session by date
-        sessions = new_program.get("sessions", [])
-        session_idx = None
-        for i, session in enumerate(sessions):
-            if session.get("date") == date:
-                session_idx = i
-                break
-        
-        if session_idx is None:
-            raise ValueError(f"Session not found with date={date}")
-        
-        # Apply patch to session fields only
-        session = sessions[session_idx]
-        for key, value in patch.items():
-            session[key] = value
-        
-        # Write new minor version
-        updated_program = await self._write_new_version(new_program, minor=True)
-        
-        return updated_program
+        program_sk = await asyncio.get_running_loop().run_in_executor(
+            None, self._current_program_sk_sync
+        )
+        await self._get_session_store().patch_session(
+            program_sk,
+            date,
+            patch,
+            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+        )
+        self.invalidate_cache()
+        self._invalidate_analysis_cache()
+        return await self.get_program()
     
     async def new_version(self, patches: list[dict], change_reason: str) -> dict:
         """Create a new major version of the program with patches.
@@ -451,13 +476,18 @@ class ProgramStore:
         program["meta"]["version_label"] = new_label
         program["meta"]["updated_at"] = now
         
-        # Create new program item
+        # Create new program item. Sessions now live in if-sessions, so keep
+        # program versions lean and clone/write session rows under the new SK.
         new_sk = f"{self.PROGRAM_SK_PREFIX}{new_version_int:03d}"
-        
+
+        sessions = copy.deepcopy(program.get("sessions", []))
+        program_without_sessions = copy.deepcopy(program)
+        program_without_sessions.pop("sessions", None)
+
         program_item = {
             "pk": self._pk,
             "sk": new_sk,
-            **program
+            **program_without_sessions
         }
         
         # DynamoDB does not support Python float — convert all floats to Decimal
@@ -465,6 +495,12 @@ class ProgramStore:
         
         logger.debug(f"[ProgramStore] Writing new program version: sk={new_sk}, label={new_label}")
         self.table.put_item(Item=program_item)
+
+        self._get_session_store().replace_program_sessions_sync(
+            new_sk,
+            sessions if isinstance(sessions, list) else [],
+            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+        )
         
         # Update pointer
         pointer_item = {
@@ -477,6 +513,7 @@ class ProgramStore:
         
         logger.debug(f"[ProgramStore] Updating pointer to version={new_version_int}")
         self.table.put_item(Item=pointer_item)
+        self._invalidate_analysis_cache()
         
         # Update cache
         self._cache = program
@@ -520,7 +557,10 @@ class ProgramStore:
         
         if is_current:
             # Rule: cannot archive if it has incomplete future sessions
-            sessions = program.get("sessions", [])
+            sessions = self._get_session_store().list_sessions_sync(
+                sk,
+                program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+            )
             has_future = any(
                 not s.get("completed", False) and s.get("date", "") >= datetime.now().strftime("%Y-%m-%d")
                 for s in sessions
@@ -539,6 +579,7 @@ class ProgramStore:
         program["meta"]["archived_at"] = now
         
         self.table.put_item(Item=program)
+        self._invalidate_analysis_cache()
         logger.info(f"[ProgramStore] Archived program {sk}")
         
         if is_current:
@@ -600,6 +641,7 @@ class ProgramStore:
         program["meta"]["archived_at"] = None
         
         self.table.put_item(Item=program)
+        self._invalidate_analysis_cache()
         logger.info(f"[ProgramStore] Unarchived program {sk}")
 
     async def list_programs(self, include_archived: bool = False) -> list[dict]:

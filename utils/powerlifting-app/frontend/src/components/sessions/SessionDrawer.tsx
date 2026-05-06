@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
-import { Drawer, Button, Group, Stack, Paper, SimpleGrid, NumberInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal } from '@mantine/core'
+import { Drawer, Button, Group, Stack, Paper, SimpleGrid, NumberInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -8,11 +8,13 @@ import { getDayOfWeek } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
-import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator } from 'lucide-react'
-import type { Session, Exercise, SessionVideo, SessionWellness, GlossaryExercise } from '@powerlifting/types'
+import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2 } from 'lucide-react'
+import type { Session, Exercise, SessionVideo, SessionWellness, GlossaryExercise, SetStatus } from '@powerlifting/types'
 import VideoGrid from './VideoGrid'
 import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
+import SessionNotesHelperModal from './SessionNotesHelperModal'
+import AutoRegulationModal from './AutoRegulationModal'
 import { normalizeExerciseName } from '@/utils/volume'
 
 const WELLNESS_FIELDS: Array<{
@@ -41,6 +43,61 @@ function createDefaultWellness(existing?: SessionWellness | null): SessionWellne
   }
 }
 
+const SET_STATUS_META: Record<SetStatus, { label: string; color: string }> = {
+  pending: { label: 'Pending', color: 'gray' },
+  completed: { label: 'Completed', color: 'green' },
+  failed: { label: 'Failed', color: 'red' },
+  skipped: { label: 'Skipped', color: 'yellow' },
+}
+
+function normalizeSetStatuses(exercise: Exercise, sessionCompleted = false): SetStatus[] {
+  const setCount = Math.max(0, Math.round(Number(exercise.sets) || 0))
+  const fallbackStatus: SetStatus = sessionCompleted ? 'completed' : 'pending'
+  const source = Array.isArray(exercise.set_statuses)
+    ? exercise.set_statuses
+    : Array.from({ length: setCount }, (_, index) =>
+        exercise.failed_sets?.[index] ? 'failed' : fallbackStatus
+      )
+  const normalized = source.slice(0, setCount).map((status) =>
+    status === 'completed' || status === 'failed' || status === 'skipped' || status === 'pending'
+      ? status
+      : fallbackStatus
+  )
+  while (normalized.length < setCount) normalized.push(fallbackStatus)
+  return normalized
+}
+
+function withSetStatusFields(exercise: Exercise, sessionCompleted = false): Exercise {
+  const set_statuses = normalizeSetStatuses(exercise, sessionCompleted)
+  const failed_sets = set_statuses.map((status) => status === 'failed')
+  return {
+    ...exercise,
+    set_statuses,
+    failed_sets,
+    failed: failed_sets.some(Boolean),
+  }
+}
+
+function finalizeSessionForSave(session: Session): Session {
+  return {
+    ...session,
+    status: session.completed ? 'completed' : (session.status || 'planned'),
+    exercises: session.exercises.map((exercise) => {
+      const set_statuses = normalizeSetStatuses(exercise, session.completed).map((status) =>
+        session.completed && status === 'pending' ? 'completed' : status
+      )
+      return withSetStatusFields({ ...exercise, set_statuses }, session.completed)
+    }),
+  }
+}
+
+function statusCounts(exercise: Exercise): Record<SetStatus, number> {
+  return normalizeSetStatuses(exercise).reduce<Record<SetStatus, number>>(
+    (counts, status) => ({ ...counts, [status]: counts[status] + 1 }),
+    { pending: 0, completed: 0, failed: 0, skipped: 0 }
+  )
+}
+
 interface SessionDrawerProps {
   isOpen: boolean
   onClose: () => void
@@ -60,7 +117,7 @@ export default function SessionDrawer({
   mode = 'drawer',
   onSaveSuccess,
 }: SessionDrawerProps) {
-  const { program, updateSession, saveSession, rescheduleSession } = useProgramStore()
+  const { program, version, updateSession, saveSession, rescheduleSession } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const [localSession, setLocalSession] = useState<Session | null>(null)
@@ -69,6 +126,8 @@ export default function SessionDrawer({
   const [showVideoUpload, setShowVideoUpload] = useState(false)
   const [discardIntent, setDiscardIntent] = useState<'reset' | 'close' | null>(null)
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
+  const [showNotesHelper, setShowNotesHelper] = useState(false)
+  const [autoRegExerciseIndex, setAutoRegExerciseIndex] = useState<number | null>(null)
   const [toolkitExercise, setToolkitExercise] = useState<{
     name: string
     targetKg: number | null
@@ -104,14 +163,10 @@ export default function SessionDrawer({
           kg: pe.kg,
           notes: '',
           failed_sets: Array(pe.sets).fill(false),
+          set_statuses: Array(pe.sets).fill('pending'),
         }))
       }
-      // Ensure failed_sets exists on all exercises
-      for (const ex of clone.exercises) {
-        if (!ex.failed_sets) {
-          ex.failed_sets = Array(ex.sets).fill(false)
-        }
-      }
+      clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
       setLocalSession(clone)
       setOriginalDate(session.date)
       setHasChanges(false)
@@ -133,11 +188,13 @@ export default function SessionDrawer({
       }
 
       // Update session content
-      updateSession(localSession.date, sessionArrayIndex, localSession)
+      const sessionToSave = finalizeSessionForSave(localSession)
+      updateSession(sessionToSave.date, sessionArrayIndex, sessionToSave)
       await saveSession(localSession.date, sessionArrayIndex)
 
       setHasChanges(false)
-      setOriginalDate(localSession.date)
+      setLocalSession(sessionToSave)
+      setOriginalDate(sessionToSave.date)
       pushToast({ message: 'Session saved successfully', type: 'success' })
       if (onSaveSuccess) {
         onSaveSuccess()
@@ -151,7 +208,9 @@ export default function SessionDrawer({
   }
 
   const handleDiscard = () => {
-    setLocalSession(JSON.parse(JSON.stringify(session)))
+    const clone = JSON.parse(JSON.stringify(session)) as Session
+    clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
+    setLocalSession(clone)
     setHasChanges(false)
   }
 
@@ -190,7 +249,7 @@ export default function SessionDrawer({
         ...prev,
         exercises: [
           ...prev.exercises,
-          { name: '', sets: 3, reps: 5, kg: null, notes: '', failed_sets: [false, false, false] },
+          { name: '', sets: 3, reps: 5, kg: null, notes: '', failed_sets: [false, false, false], set_statuses: ['pending', 'pending', 'pending'] },
         ],
       }
     })
@@ -206,14 +265,14 @@ export default function SessionDrawer({
     setHasChanges(true)
   }
 
-  const toggleFailedSet = (exerciseIndex: number, setIndex: number) => {
+  const updateSetStatus = (exerciseIndex: number, setIndex: number, status: SetStatus) => {
     setLocalSession((prev) => {
       if (!prev) return prev
       const exercises = prev.exercises.map((ex, i) => {
         if (i !== exerciseIndex) return ex
-        const failed = [...(ex.failed_sets || Array(ex.sets).fill(false))]
-        failed[setIndex] = !failed[setIndex]
-        return { ...ex, failed_sets: failed }
+        const statuses = normalizeSetStatuses(ex, prev.completed)
+        statuses[setIndex] = status
+        return withSetStatusFields({ ...ex, set_statuses: statuses }, prev.completed)
       })
       return { ...prev, exercises }
     })
@@ -225,13 +284,7 @@ export default function SessionDrawer({
       if (!prev) return prev
       const exercises = prev.exercises.map((ex, i) => {
         if (i !== index) return ex
-        let failed = ex.failed_sets || Array(ex.sets).fill(false)
-        if (failed.length < newSets) {
-          failed = [...failed, ...Array(newSets - failed.length).fill(false)]
-        } else if (failed.length > newSets) {
-          failed = failed.slice(0, newSets)
-        }
-        return { ...ex, sets: newSets, failed_sets: failed }
+        return withSetStatusFields({ ...ex, sets: newSets }, prev.completed)
       })
       return { ...prev, exercises }
     })
@@ -247,7 +300,11 @@ export default function SessionDrawer({
   }
 
   const toggleComplete = () => {
-    setLocalSession((prev) => prev ? { ...prev, completed: !prev.completed } : prev)
+    setLocalSession((prev) => {
+      if (!prev) return prev
+      const completed = !prev.completed
+      return { ...prev, completed, status: completed ? 'completed' : 'planned' }
+    })
     setHasChanges(true)
   }
 
@@ -303,6 +360,137 @@ export default function SessionDrawer({
       reps: exercise.reps,
       isBarbell: match ? ['barbell', 'hex_bar'].includes(match.equipment) : true,
     })
+  }
+
+  const statusIcon = (status: SetStatus, size = 14) => {
+    if (status === 'completed') return <CheckCircle2 size={size} />
+    if (status === 'failed') return <XCircle size={size} />
+    if (status === 'skipped') return <Minus size={size} />
+    return <Circle size={size} />
+  }
+
+  const renderSetStatusControls = (exercise: Exercise, exerciseIndex: number, size: 'xs' | 'sm' = 'xs') => {
+    const statuses = normalizeSetStatuses(exercise, localSession.completed)
+    return (
+      <Group gap={4}>
+        {statuses.map((status, setIndex) => (
+          <Menu key={setIndex} withinPortal position="bottom-start" shadow="md">
+            <Menu.Target>
+              <Tooltip label={`Set ${setIndex + 1}: ${SET_STATUS_META[status].label}`}>
+                <ActionIcon
+                  size={size}
+                  variant={status === 'pending' ? 'default' : 'light'}
+                  color={SET_STATUS_META[status].color}
+                >
+                  {statusIcon(status, size === 'xs' ? 12 : 14)}
+                </ActionIcon>
+              </Tooltip>
+            </Menu.Target>
+            <Menu.Dropdown>
+              {(Object.keys(SET_STATUS_META) as SetStatus[]).map((option) => (
+                <Menu.Item
+                  key={option}
+                  leftSection={statusIcon(option)}
+                  color={SET_STATUS_META[option].color}
+                  onClick={() => updateSetStatus(exerciseIndex, setIndex, option)}
+                >
+                  {SET_STATUS_META[option].label}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
+        ))}
+      </Group>
+    )
+  }
+
+  const renderStatusBadges = (exercise: Exercise) => {
+    const counts = statusCounts(exercise)
+    return (
+      <Group gap={4}>
+        {(['completed', 'failed', 'skipped'] as SetStatus[]).map((status) =>
+          counts[status] > 0 ? (
+            <Badge key={status} size="xs" variant="light" color={SET_STATUS_META[status].color}>
+              {counts[status]} {SET_STATUS_META[status].label}
+            </Badge>
+          ) : null
+        )}
+      </Group>
+    )
+  }
+
+  const appendReasoningNote = (notes: string | undefined, reasoningNote: string) => {
+    const note = reasoningNote.trim()
+    if (!note) return notes || ''
+    const prefix = `Auto-regulation ${new Date().toISOString().slice(0, 10)}: ${note}`
+    return [notes || '', prefix].filter(Boolean).join('\n')
+  }
+
+  const exercisePrescriptionChanged = (before: Exercise, after: Exercise) => (
+    before.name !== after.name ||
+    before.kg !== after.kg ||
+    before.reps !== after.reps
+  )
+
+  const buildAutoRegulatedSession = (
+    baseSession: Session,
+    proposedExercises: Exercise[],
+    reasoningNote: string,
+    exerciseIndex: number
+  ): Session => {
+    const currentExercise = baseSession.exercises[exerciseIndex]
+    const proposedExercise = proposedExercises[exerciseIndex]
+    if (!currentExercise || !proposedExercise) return baseSession
+
+    const nextExercises = proposedExercises.map((exercise) =>
+      withSetStatusFields({ ...exercise, notes: exercise.notes || '' }, baseSession.completed)
+    )
+    const lockedStatuses = normalizeSetStatuses(currentExercise, baseSession.completed)
+      .filter((status) => status === 'completed' || status === 'failed')
+    const changedLockedWork = lockedStatuses.length > 0 && exercisePrescriptionChanged(currentExercise, proposedExercise)
+
+    if (changedLockedWork) {
+      const lockedExercise = withSetStatusFields({
+        ...currentExercise,
+        sets: lockedStatuses.length,
+        set_statuses: lockedStatuses,
+        notes: appendReasoningNote(currentExercise.notes, reasoningNote),
+      }, baseSession.completed)
+      const remainingSets = Math.max(0, Number(proposedExercise.sets || 0) - lockedStatuses.length)
+      const remainingStatuses = normalizeSetStatuses(proposedExercise).slice(lockedStatuses.length, lockedStatuses.length + remainingSets)
+      while (remainingStatuses.length < remainingSets) remainingStatuses.push('pending')
+      const replacement = [lockedExercise]
+      if (remainingSets > 0) {
+        replacement.push(withSetStatusFields({
+          ...proposedExercise,
+          sets: remainingSets,
+          set_statuses: remainingStatuses,
+          notes: appendReasoningNote(proposedExercise.notes, reasoningNote),
+        }, baseSession.completed))
+      }
+      nextExercises.splice(exerciseIndex, 1, ...replacement)
+    } else {
+      nextExercises[exerciseIndex] = withSetStatusFields({
+        ...nextExercises[exerciseIndex],
+        notes: appendReasoningNote(nextExercises[exerciseIndex].notes, reasoningNote),
+      }, baseSession.completed)
+    }
+
+    return { ...baseSession, exercises: nextExercises }
+  }
+
+  const applyAutoRegulation = async (proposedExercises: Exercise[], reasoningNote: string) => {
+    if (autoRegExerciseIndex === null) return
+    const nextSession = {
+      ...buildAutoRegulatedSession(localSession, proposedExercises, reasoningNote, autoRegExerciseIndex),
+      date: originalDate,
+      day: getDayOfWeek(originalDate),
+    }
+    setLocalSession(nextSession)
+    updateSession(originalDate, sessionArrayIndex, nextSession)
+    await saveSession(originalDate, sessionArrayIndex)
+    setHasChanges(false)
+    pushToast({ message: 'Auto-regulation applied', type: 'success' })
   }
 
   const editorContent = (
@@ -465,6 +653,14 @@ export default function SessionDrawer({
                       </ActionIcon>
                       <ActionIcon
                         variant="subtle"
+                        color="grape"
+                        onClick={() => setAutoRegExerciseIndex(group.entries[0].originalIndex)}
+                        title="Auto-regulation"
+                      >
+                        <Bot size={16} />
+                      </ActionIcon>
+                      <ActionIcon
+                        variant="subtle"
                         color="red"
                         onClick={() => removeExercise(group.entries[0].originalIndex)}
                       >
@@ -481,7 +677,8 @@ export default function SessionDrawer({
                           <Table.Th w={80}>Sets</Table.Th>
                           <Table.Th w={80}>Reps</Table.Th>
                           <Table.Th w={96}>{unit}</Table.Th>
-                          <Table.Th w={120} visibleFrom="sm">Failed Set</Table.Th>
+                          <Table.Th w={150} visibleFrom="sm">Set Status</Table.Th>
+                          <Table.Th w={40} />
                           <Table.Th w={40} />
                           <Table.Th w={40} />
                         </Table.Tr>
@@ -515,20 +712,18 @@ export default function SessionDrawer({
                                 />
                               </Table.Td>
                               <Table.Td visibleFrom="sm">
-                                <Group gap={4}>
-                                  {(entry.exercise.failed_sets || []).map((f, si) => (
-                                    <ActionIcon
-                                      key={si}
-                                      size="sm"
-                                      variant={f ? 'filled' : 'default'}
-                                      color={f ? 'red' : 'gray'}
-                                      onClick={() => toggleFailedSet(entry.originalIndex, si)}
-                                      title={`Set ${si + 1}${f ? ' (failed)' : ''}`}
-                                    >
-                                      <Text fz={10}>{si + 1}</Text>
-                                    </ActionIcon>
-                                  ))}
-                                </Group>
+                                {renderSetStatusControls(entry.exercise, entry.originalIndex, 'sm')}
+                              </Table.Td>
+                              <Table.Td>
+                                <ActionIcon
+                                  variant="subtle"
+                                  color="grape"
+                                  size="sm"
+                                  onClick={() => setAutoRegExerciseIndex(entry.originalIndex)}
+                                  title="Auto-regulation"
+                                >
+                                  <Bot size={14} />
+                                </ActionIcon>
                               </Table.Td>
                               <Table.Td>
                                 <ActionIcon
@@ -553,25 +748,13 @@ export default function SessionDrawer({
                               </Table.Td>
                             </Table.Tr>
                             <Table.Tr>
-                              <Table.Td colSpan={6} pt={4} pb={12} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-                                {(entry.exercise.failed_sets || []).length > 0 && (
+                              <Table.Td colSpan={7} pt={4} pb={12} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                                {normalizeSetStatuses(entry.exercise).length > 0 && (
                                   <Box hiddenFrom="sm" mb="xs">
                                     <Group gap="xs">
-                                      <Text size="xs" c="dimmed">Failed Set:</Text>
-                                      <Group gap={4}>
-                                        {(entry.exercise.failed_sets || []).map((f, si) => (
-                                          <ActionIcon
-                                            key={si}
-                                            size="xs"
-                                            variant={f ? 'filled' : 'default'}
-                                            color={f ? 'red' : 'gray'}
-                                            onClick={() => toggleFailedSet(entry.originalIndex, si)}
-                                            title={`Set ${si + 1}${f ? ' (failed)' : ''}`}
-                                          >
-                                            <Text fz={9}>{si + 1}</Text>
-                                          </ActionIcon>
-                                        ))}
-                                      </Group>
+                                      <Text size="xs" c="dimmed">Set Status:</Text>
+                                      {renderSetStatusControls(entry.exercise, entry.originalIndex)}
+                                      {renderStatusBadges(entry.exercise)}
                                     </Group>
                                   </Box>
                                 )}
@@ -627,6 +810,14 @@ export default function SessionDrawer({
                       </SimpleGrid>
                       <ActionIcon
                         variant="subtle"
+                        color="grape"
+                        onClick={() => setAutoRegExerciseIndex(group.entries[0].originalIndex)}
+                        title="Auto-regulation"
+                      >
+                        <Bot size={16} />
+                      </ActionIcon>
+                      <ActionIcon
+                        variant="subtle"
                         color="blue"
                         onClick={() => openToolkitForExercise(group.entries[0].exercise)}
                         title="Open toolkit"
@@ -649,23 +840,11 @@ export default function SessionDrawer({
                       />
                     </Box>
 
-                    {(group.entries[0].exercise.failed_sets || []).length > 0 && (
+                    {normalizeSetStatuses(group.entries[0].exercise).length > 0 && (
                       <Group gap="xs" mt={6}>
-                        <Text size="xs" c="dimmed">Failed Set:</Text>
-                        <Group gap={4}>
-                          {(group.entries[0].exercise.failed_sets || []).map((f, si) => (
-                            <ActionIcon
-                              key={si}
-                              size="xs"
-                              variant={f ? 'filled' : 'default'}
-                              color={f ? 'red' : 'gray'}
-                              onClick={() => toggleFailedSet(group.entries[0].originalIndex, si)}
-                              title={`Set ${si + 1}${f ? ' (failed)' : ''}`}
-                            >
-                              <Text fz={9}>{si + 1}</Text>
-                            </ActionIcon>
-                          ))}
-                        </Group>
+                        <Text size="xs" c="dimmed">Set Status:</Text>
+                        {renderSetStatusControls(group.entries[0].exercise, group.entries[0].originalIndex)}
+                        {renderStatusBadges(group.entries[0].exercise)}
                       </Group>
                     )}
                   </Box>
@@ -706,7 +885,17 @@ export default function SessionDrawer({
 
         <Paper withBorder p="md" radius="md">
           <Stack gap="sm">
-            <Text size="sm" fw={600}>Session Summary</Text>
+            <Group justify="space-between">
+              <Text size="sm" fw={600}>Session Summary</Text>
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<Wand2 size={14} />}
+                onClick={() => setShowNotesHelper(true)}
+              >
+                Help write notes
+              </Button>
+            </Group>
           <SimpleGrid cols={2} spacing="sm">
             <Box>
               <Text size="xs" c="dimmed">Session RPE</Text>
@@ -837,6 +1026,25 @@ export default function SessionDrawer({
           })
           setShowVideoUpload(false)
         }}
+      />
+
+      <SessionNotesHelperModal
+        opened={showNotesHelper}
+        onClose={() => setShowNotesHelper(false)}
+        version={version}
+        session={localSession}
+        sessionIndex={sessionArrayIndex}
+        onInsert={(notes) => updateNotes(notes)}
+      />
+
+      <AutoRegulationModal
+        opened={autoRegExerciseIndex !== null}
+        onClose={() => setAutoRegExerciseIndex(null)}
+        version={version}
+        session={localSession}
+        sessionIndex={sessionArrayIndex}
+        exerciseIndex={autoRegExerciseIndex}
+        onApply={applyAutoRegulation}
       />
 
       <SessionToolkitModal

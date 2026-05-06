@@ -29,6 +29,14 @@ class GlossaryStore:
         self._table = None
 
     @property
+    def pk(self) -> str:
+        return self._pk
+
+    @pk.setter
+    def pk(self, value: str) -> None:
+        self._pk = value
+
+    @property
     def table(self):
         if self._table is None:
             self._table = boto3.resource(
@@ -59,6 +67,13 @@ class GlossaryStore:
         text = re.sub(r"[^\w\s-]", "", text)
         text = re.sub(r"[\s-]+", "_", text)
         return text.strip("_")
+
+    def _invalidate_analysis_cache(self) -> None:
+        try:
+            from cache_invalidation import invalidate_analysis_caches
+            invalidate_analysis_caches(self._pk, self._table_name, self._region)
+        except Exception as exc:
+            logger.warning("[GlossaryStore] Analysis cache invalidation failed: %s", exc)
 
     def get_glossary_sync(self) -> list[dict]:
         resp = self.table.get_item(Key={"pk": self._pk, "sk": self.GLOSSARY_SK})
@@ -103,6 +118,7 @@ class GlossaryStore:
             "exercises": exercises,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }))
+        self._invalidate_analysis_cache()
         
         return exercise_id
 
@@ -130,6 +146,7 @@ class GlossaryStore:
             "exercises": exercises,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }))
+        self._invalidate_analysis_cache()
 
     async def update_exercise(self, exercise_id: str, fields: dict) -> None:
         await asyncio.get_running_loop().run_in_executor(

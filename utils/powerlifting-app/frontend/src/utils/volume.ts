@@ -11,9 +11,17 @@ function zeroCategoryRecord(): Record<LiftCategory, number> {
 /**
  * Calculate volume (sets * reps * kg) for a single exercise.
  */
+export function executedSets(ex: Pick<Exercise, 'sets' | 'set_statuses'>): number {
+  if (ex.set_statuses?.length) {
+    return ex.set_statuses.filter((status) => status === 'completed' || status === 'failed').length
+  }
+  return ex.sets || 0
+}
+
 export function exerciseVolume(ex: Exercise): number {
-  if (!ex.kg || !ex.sets || !ex.reps) return 0
-  return ex.sets * ex.reps * ex.kg
+  const sets = executedSets(ex)
+  if (!ex.kg || !sets || !ex.reps) return 0
+  return sets * ex.reps * ex.kg
 }
 
 /**
@@ -315,7 +323,7 @@ export function volumeByMuscleGroup(
       const muscles = lookup.get(normalizeExerciseName(ex.name))
       if (!muscles || ex.kg === null) continue
 
-      const vol = (ex.sets || 0) * (ex.reps || 0) * ex.kg
+      const vol = exerciseVolume(ex)
 
       for (const m of muscles.primary) {
         volumes[m] = (volumes[m] ?? 0) + vol
@@ -365,7 +373,7 @@ export function weeklySetsByMuscleGroup(
       const muscles = lookup.get(normalizeExerciseName(ex.name))
       if (!muscles) continue
 
-      const sets = ex.sets || 0
+      const sets = executedSets(ex)
 
       for (const m of muscles.primary) {
         weekData[m] = (weekData[m] ?? 0) + sets
@@ -473,7 +481,7 @@ export function weeklyVolumeByMuscleGroup(
       const muscles = lookup.get(normalizeExerciseName(ex.name))
       if (!muscles || ex.kg === null) continue
 
-      const vol = (ex.sets || 0) * (ex.reps || 0) * ex.kg
+      const vol = exerciseVolume(ex)
 
       for (const m of muscles.primary) {
         weekData[m] = (weekData[m] ?? 0) + vol

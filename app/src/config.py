@@ -276,6 +276,9 @@ SKILLS_PATH = os.getenv(
 # Note: IF_HEALTH_TABLE_NAME is defined at line 8 in .env.example
 IF_HEALTH_TABLE_NAME = os.getenv("IF_HEALTH_TABLE_NAME", "if-health")
 
+# DynamoDB table name for copied session records
+IF_SESSIONS_TABLE_NAME = os.getenv("IF_SESSIONS_TABLE_NAME", "if-sessions")
+
 # Partition key value for health program storage
 HEALTH_PROGRAM_PK = os.getenv("HEALTH_PROGRAM_PK", "operator")
 
@@ -341,6 +344,7 @@ MODEL_ROUTER_ENABLED: bool = os.getenv("MODEL_ROUTER_ENABLED", "true").lower() =
 # Defaults to Claude Sonnet with extended thinking enabled
 ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "openai/gpt-5.5")
 ANALYSIS_MODEL_THINKING_BUDGET = int(os.getenv("ANALYSIS_MODEL_THINKING_BUDGET", "16000"))
+ANALYSIS_CACHE_TABLE_NAME = os.getenv("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache")
 
 # Model settings for user-facing health estimate flows (fatigue, muscle groups,
 # accessory e1RM backfill, lift-profile stimulus). These callers hit the raw

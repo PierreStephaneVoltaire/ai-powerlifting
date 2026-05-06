@@ -3,6 +3,12 @@ import crypto from 'crypto'
 import { docClient, TABLE } from '../db/dynamo'
 import { transformProgram } from '../db/transforms'
 import { AppError } from '../middleware/errorHandler'
+import {
+  createSession as createStoredSession,
+  listSessions,
+  patchSessionAt,
+  replaceProgramSessions,
+} from '../services/sessionStore'
 import type { Program, ProgramListItem, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
 
 /**
@@ -54,7 +60,9 @@ export async function getProgram(pk: string, version: string): Promise<Program> 
     throw new AppError(`Program version ${version} not found`, 404)
   }
 
-  return transformProgram(result.Item as Record<string, unknown>)
+  const program = transformProgram(result.Item as Record<string, unknown>)
+  program.sessions = await listSessions(pk, sk, program.phases)
+  return program
 }
 
 /**
@@ -139,14 +147,16 @@ export async function forkProgram(
       ],
     },
   }
+  const { sessions = [], ...programItem } = forked
 
   // Write new item
   const command = new PutCommand({
     TableName: TABLE,
-    Item: forked,
+    Item: programItem,
   })
 
   await docClient.send(command)
+  await replaceProgramSessions(pk, `program#${newVersion}`, sessions, forked.phases || [])
   return newVersion
 }
 
@@ -293,7 +303,7 @@ export async function batchCreateWeek(
   const getCommand = new GetCommand({
     TableName: TABLE,
     Key: { pk, sk },
-    ProjectionExpression: 'sessions, phases',
+    ProjectionExpression: 'phases',
   })
 
   const result = await docClient.send(getCommand)
@@ -302,8 +312,8 @@ export async function batchCreateWeek(
     throw new AppError(`Program version ${version} not found`, 404)
   }
 
-  const sessions = (result.Item.sessions ?? []) as Session[]
   const phases = (result.Item.phases ?? []) as Phase[]
+  const sessions = await listSessions(pk, sk, phases)
 
   const targetBlock = 'current'
   const phase = phases.find(p =>
@@ -336,21 +346,9 @@ export async function batchCreateWeek(
     block: 'current',
   }))
 
-  sessions.push(...newSessions)
-  sessions.sort((a, b) => a.date.localeCompare(b.date))
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  for (const session of newSessions) {
+    await createStoredSession(pk, sk, session, phases)
+  }
 }
 
 /**
@@ -396,7 +394,7 @@ export async function updatePlannedExercises(
   const getCommand = new GetCommand({
     TableName: TABLE,
     Key: { pk, sk },
-    ProjectionExpression: 'sessions',
+    ProjectionExpression: 'phases',
   })
 
   const result = await docClient.send(getCommand)
@@ -405,7 +403,8 @@ export async function updatePlannedExercises(
     throw new AppError(`Program version ${version} not found`, 404)
   }
 
-  const sessions = (result.Item.sessions ?? []) as Session[]
+  const phases = (result.Item.phases ?? []) as Phase[]
+  const sessions = await listSessions(pk, sk, phases)
 
   if (index < 0 || index >= sessions.length) {
     throw new AppError(`Session at index ${index} not found`, 404)
@@ -427,24 +426,17 @@ export async function updatePlannedExercises(
       }))
     : existing.exercises
 
-  sessions[index] = {
-    ...existing,
-    planned_exercises: plannedExercises,
-    ...(syncExercises !== existing.exercises ? { exercises: syncExercises } : {}),
-  }
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
+  await patchSessionAt(
+    pk,
+    sk,
+    date,
+    index,
+    {
+      planned_exercises: plannedExercises,
+      ...(syncExercises !== existing.exercises ? { exercises: syncExercises } : {}),
     },
-  })
-
-  await docClient.send(updateCommand)
+    phases,
+  )
 }
 
 /**

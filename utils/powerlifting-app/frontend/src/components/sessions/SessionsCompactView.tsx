@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
-import { groupSessionsByWeek, formatDateShort, getDayOfWeek } from '@/utils/dates'
+import { findClosestSessionToToday, groupSessionsByWeek, formatDateShort, getDayOfWeek } from '@/utils/dates'
 import { displayWeight } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { normalizeExerciseName } from '@/utils/volume'
@@ -33,6 +33,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [newDate, setNewDate] = useState<string>('')
+  const compactTargetRef = useRef<HTMLButtonElement | null>(null)
+  const hasScrolledCompactRef = useRef(false)
 
   const availableBlocks = useMemo(() => {
     if (!program) return ['current']
@@ -40,6 +42,56 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
     for (const s of program.sessions) blocks.add(s.block ?? 'current')
     return Array.from(blocks).sort()
   }, [program])
+
+  const blockSessions = useMemo(() => {
+    if (!program) return []
+    return program.sessions
+      .filter((session) => (session.block ?? 'current') === block)
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [block, program])
+
+  const closestSession = useMemo(
+    () => findClosestSessionToToday(blockSessions),
+    [blockSessions],
+  )
+  const closestWeek = closestSession?.week_number ?? null
+
+  const sessionsByWeek = useMemo(
+    () => groupSessionsByWeek(program?.sessions ?? [], block),
+    [block, program],
+  )
+
+  useEffect(() => {
+    if (hasScrolledCompactRef.current || closestWeek == null) return
+
+    setExpandedWeeks((prev) => {
+      if (prev.has(closestWeek)) return prev
+      const next = new Set(prev)
+      next.add(closestWeek)
+      return next
+    })
+  }, [closestWeek])
+
+  useEffect(() => {
+    if (
+      hasScrolledCompactRef.current ||
+      closestWeek == null ||
+      !expandedWeeks.has(closestWeek) ||
+      !closestSession
+    ) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const target = compactTargetRef.current
+      if (!target) return
+
+      target.scrollIntoView({ block: 'center', inline: 'nearest' })
+      hasScrolledCompactRef.current = true
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [closestSession, closestWeek, expandedWeeks])
 
   const handleAddSession = async () => {
     if (!newDate) {
@@ -89,8 +141,6 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
       </Center>
     )
   }
-
-  const sessionsByWeek = groupSessionsByWeek(program.sessions, block)
 
   return (
     <Stack gap="md" style={{ position: 'relative' }}>
@@ -256,6 +306,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                     return (
                       <Box
                         key={`${session.date}-${session.id ?? session.week_number}`}
+                        ref={session === closestSession ? compactTargetRef : undefined}
                         component="button"
                         onClick={() => navigate(program.sessions.indexOf(session) >= 0 ? `/session/${session.date}/${program.sessions.indexOf(session)}` : `/session/${session.date}`, {
                           state: { backTo },

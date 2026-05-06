@@ -21,6 +21,7 @@ import { goalsRouter } from './routes/goals'
 import { federationsRouter } from './routes/federations'
 import { errorHandler } from './middleware/errorHandler'
 import { requireUserOptional, resolvePk } from './middleware/auth'
+import { analysisCacheInvalidationMiddleware } from './middleware/analysisCacheInvalidation'
 
 const app = express()
 
@@ -44,6 +45,7 @@ app.use('/api/auth', authRouter)
 
 // Identity resolution for all domain routes
 app.use(requireUserOptional, resolvePk)
+app.use(analysisCacheInvalidationMiddleware)
 
 // Domain routes
 app.use('/api/settings', settingsRouter)

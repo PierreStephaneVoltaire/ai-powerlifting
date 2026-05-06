@@ -387,6 +387,7 @@ def _section_trends(
 
 
 def _section_fatigue_readiness(
+    pk: str,
     program: dict,
     sessions: list[dict],
     fatigue_index,
@@ -414,7 +415,7 @@ def _section_fatigue_readiness(
             table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
                 os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
             )
-            item = table.get_item(Key={"pk": "operator", "sk": cache_sk}).get("Item")
+            item = table.get_item(Key={"pk": pk, "sk": cache_sk}).get("Item")
             if item and item.get("generated_at"):
                 generated_at = item["generated_at"]
                 # Check if within 24 hours
@@ -668,7 +669,7 @@ def _section_cached_deep_analyses(pk: str) -> str | None:
         # Program evaluation
         try:
             eval_sk = f"program_eval#{week_start.isoformat()}"
-            eval_item = table.get_item(Key={"pk": "operator", "sk": eval_sk}).get("Item")
+            eval_item = table.get_item(Key={"pk": pk, "sk": eval_sk}).get("Item")
             if eval_item and eval_item.get("report"):
                 has_content = True
                 gen_at = eval_item.get("generated_at", "?")
@@ -686,7 +687,7 @@ def _section_cached_deep_analyses(pk: str) -> str | None:
             raw_cutoff = today - timedelta(weeks=weeks)
             window_start = (raw_cutoff - timedelta(days=raw_cutoff.weekday())).isoformat()
             corr_sk = f"corr_report#{window_start}_{weeks}w"
-            corr_item = table.get_item(Key={"pk": "operator", "sk": corr_sk}).get("Item")
+            corr_item = table.get_item(Key={"pk": pk, "sk": corr_sk}).get("Item")
             if corr_item and corr_item.get("report"):
                 has_content = True
                 gen_at = corr_item.get("generated_at", "?")
@@ -776,7 +777,7 @@ async def build_context(pk: str, task: str) -> str | None:
     if s4:
         sections.append(s4)
 
-    s5 = _section_fatigue_readiness(program, sessions, fatigue_index, compute_inol, compute_acwr, compute_readiness_score, _calculate_current_week)
+    s5 = _section_fatigue_readiness(pk, program, sessions, fatigue_index, compute_inol, compute_acwr, compute_readiness_score, _calculate_current_week)
     if s5:
         sections.append(s5)
 

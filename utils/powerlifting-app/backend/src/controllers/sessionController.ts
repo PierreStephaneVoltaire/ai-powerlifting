@@ -1,7 +1,14 @@
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
 import type { Session, Exercise, Phase, SessionStatus, SessionWellness } from '@powerlifting/types'
+import {
+  createSession as createStoredSession,
+  deleteSessionAt,
+  getSession as getStoredSession,
+  patchSessionAt,
+  replaceSessionAt,
+} from '../services/sessionStore'
 
 /**
  * Resolve a version string to the actual SK.
@@ -19,6 +26,18 @@ async function resolveVersionSk(pk: string, version: string): Promise<string> {
   return `program#${version}`
 }
 
+async function loadPhases(pk: string, sk: string, version: string): Promise<Phase[]> {
+  const result = await docClient.send(new GetCommand({
+    TableName: TABLE,
+    Key: { pk, sk },
+    ProjectionExpression: 'phases',
+  }))
+  if (!result.Item) {
+    throw new AppError(`Program version ${version} not found`, 404)
+  }
+  return (result.Item.phases ?? []) as Phase[]
+}
+
 /**
  * Create a new session
  */
@@ -28,29 +47,11 @@ export async function createSession(
   session: Session
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions, phases',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-  const phases = (result.Item.phases ?? []) as Phase[]
-
-  // Check if session with this date already exists
-  if (sessions.some(s => s.date === session.date)) {
-    throw new AppError(`Session with date ${session.date} already exists`, 400)
-  }
+  const phases = await loadPhases(pk, sk, version)
 
   // Derive week_number and phase for the new session
   const weekMatch = session.week?.match(/W(\d+)/)
-  const weekNumber = weekMatch ? parseInt(weekMatch[1], 10) : 1
+  const weekNumber = session.week_number || (weekMatch ? parseInt(weekMatch[1], 10) : 1)
   const sessionBlock = session.block ?? 'current'
 
   // Resolve phase scoped to the session's block
@@ -71,21 +72,7 @@ export async function createSession(
     block: sessionBlock,
   }
 
-  sessions.push(newSession)
-  sessions.sort((a, b) => a.date.localeCompare(b.date))
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  await createStoredSession(pk, sk, newSession, phases)
 }
 
 /**
@@ -98,67 +85,13 @@ export async function deleteSession(
   index: number
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  sessions.splice(index, 1)
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  await deleteSessionAt(pk, sk, date, index)
 }
 
 export async function getSession(pk: string, version: string, date: string, index: number): Promise<Session | null> {
   const sk = await resolveVersionSk(pk, version)
-  const command = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(command)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-  const session = sessions[index]
-  if (!session) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  // Validate date matches for safety
-  if (session.date !== date) {
-    throw new AppError(`Session at index ${index} has date ${session.date}, expected ${date}`, 409)
-  }
-  return session
+  const phases = await loadPhases(pk, sk, version)
+  return getStoredSession(pk, sk, date, index, phases)
 }
 
 /**
@@ -172,41 +105,8 @@ export async function updateSession(
   session: Session
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  sessions[index] = session
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  const phases = await loadPhases(pk, sk, version)
+  await replaceSessionAt(pk, sk, date, index, session, phases)
 }
 
 /**
@@ -221,45 +121,8 @@ export async function rescheduleSession(
   newDay: string
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  sessions[index] = {
-    ...sessions[index],
-    date: newDate,
-    day: newDay,
-  }
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  const phases = await loadPhases(pk, sk, version)
+  await patchSessionAt(pk, sk, date, index, { date: newDate, day: newDay }, phases)
 }
 
 /**
@@ -273,48 +136,16 @@ export async function completeSession(
   data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | undefined }
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  sessions[index] = {
-    ...sessions[index],
+  const phases = await loadPhases(pk, sk, version)
+  const current = await getStoredSession(pk, sk, date, index, phases)
+  await patchSessionAt(pk, sk, date, index, {
     completed: true,
-    session_rpe: data.rpe ?? sessions[index].session_rpe,
-    body_weight_kg: data.bodyWeightKg ?? sessions[index].body_weight_kg,
-    session_notes: data.notes ?? sessions[index].session_notes,
-    wellness: data.wellness ?? sessions[index].wellness,
-  }
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+    status: current.status === 'planned' ? 'completed' : current.status,
+    session_rpe: data.rpe ?? current.session_rpe,
+    body_weight_kg: data.bodyWeightKg ?? current.body_weight_kg,
+    session_notes: data.notes ?? current.session_notes,
+    wellness: data.wellness ?? current.wellness,
+  }, phases)
 }
 
 /**
@@ -328,45 +159,12 @@ export async function updateSessionStatus(
   status: SessionStatus
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  sessions[index] = {
-    ...sessions[index],
+  const phases = await loadPhases(pk, sk, version)
+  const current = await getStoredSession(pk, sk, date, index, phases)
+  await patchSessionAt(pk, sk, date, index, {
     status,
-    completed: status === 'completed' ? true : sessions[index].completed,
-  }
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+    completed: status === 'completed' || status === 'logged' ? true : current.completed,
+  }, phases)
 }
 
 /**
@@ -380,41 +178,11 @@ export async function addExercise(
   exercise: Exercise
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  sessions[index].exercises.push(exercise)
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  const phases = await loadPhases(pk, sk, version)
+  const session = await getStoredSession(pk, sk, date, index, phases)
+  await patchSessionAt(pk, sk, date, index, {
+    exercises: [...(session.exercises || []), exercise],
+  }, phases)
 }
 
 /**
@@ -428,45 +196,15 @@ export async function removeExercise(
   exerciseIndex: number
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  if (exerciseIndex < 0 || exerciseIndex >= sessions[index].exercises.length) {
+  const phases = await loadPhases(pk, sk, version)
+  const session = await getStoredSession(pk, sk, date, index, phases)
+  const exercises = [...(session.exercises || [])]
+  if (exerciseIndex < 0 || exerciseIndex >= exercises.length) {
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
 
-  sessions[index].exercises.splice(exerciseIndex, 1)
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  exercises.splice(exerciseIndex, 1)
+  await patchSessionAt(pk, sk, date, index, { exercises }, phases)
 }
 
 /**
@@ -482,43 +220,13 @@ export async function updateExerciseField(
   value: unknown
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'sessions',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  const sessions = (result.Item.sessions ?? []) as Session[]
-
-  if (index < 0 || index >= sessions.length) {
-    throw new AppError(`Session at index ${index} not found`, 404)
-  }
-  if (sessions[index].date !== date) {
-    throw new AppError(`Session at index ${index} has date ${sessions[index].date}, expected ${date}`, 409)
-  }
-
-  if (exerciseIndex < 0 || exerciseIndex >= sessions[index].exercises.length) {
+  const phases = await loadPhases(pk, sk, version)
+  const session = await getStoredSession(pk, sk, date, index, phases)
+  const exercises = [...(session.exercises || [])]
+  if (exerciseIndex < 0 || exerciseIndex >= exercises.length) {
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
 
-  ;(sessions[index].exercises[exerciseIndex] as any)[field] = value
-
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET sessions = :sessions, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':sessions': sessions,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
+  ;(exercises[exerciseIndex] as any)[field] = value
+  await patchSessionAt(pk, sk, date, index, { exercises }, phases)
 }

@@ -1,10 +1,38 @@
 const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
 const AGENT_MODEL = process.env.AGENT_MODEL || 'if-prototype'
 
+type CompletionMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
 function extractJson(text: string): any {
   const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/)
   if (!match) throw new Error(`No JSON in tool response: ${text.slice(0, 200)}`)
   return JSON.parse(match[0])
+}
+
+async function invokeChat(
+  messages: CompletionMessage[],
+  chatId?: string,
+): Promise<string> {
+  const response = await fetch(`${IF_API_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: AGENT_MODEL,
+      messages,
+      ...(chatId ? { chat_id: chatId } : {}),
+    }),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Agent API error ${response.status}: ${text}`)
+  }
+  const body: any = await response.json()
+  return body?.choices?.[0]?.message?.content ?? ''
 }
 
 async function invokeRawTool(
@@ -63,4 +91,24 @@ export async function invokeToolDirect(
 
   await reloadIfTools()
   return invokeRawTool(toolName, args)
+}
+
+export async function invokeJsonCompletion(
+  messages: CompletionMessage[],
+  chatId?: string,
+): Promise<any> {
+  const content = await invokeChat(messages, chatId)
+  return extractJson(content)
+}
+
+export async function invokeSpecialistJson(
+  specialist: string,
+  task: string,
+  chatId?: string,
+): Promise<any> {
+  const content = await invokeChat(
+    [{ role: 'user', content: `/${specialist} ${task}` }],
+    chatId,
+  )
+  return extractJson(content)
 }

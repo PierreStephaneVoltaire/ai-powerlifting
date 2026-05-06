@@ -4,17 +4,17 @@ import {
   Scale, Moon, Beef, Ruler, Utensils, Info,
 } from 'lucide-react'
 import {
-  fetchWeeklyAnalysis, type WeeklyAnalysis,
+  fetchWeeklyAnalysisBundle, type AnalysisWindowKey, type WeeklyAnalysisBundle,
 } from '@/api/analytics'
 import { useProgramStore } from '@/store/programStore'
 import { fetchWeightLog, fetchGlossary } from '@/api/client'
-import { normalizeExerciseName } from '@/utils/volume'
+import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 import { useSettingsStore } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit, displayWeight } from '@/utils/units'
 import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
-import type { WeightEntry, GlossaryExercise, ExerciseCategory } from '@powerlifting/types'
+import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
 import {
   Stack, Group, Paper, SimpleGrid, Text, Title, Badge, Table,
@@ -25,13 +25,39 @@ import { AlertsStrip } from '@/components/analysis/AlertsStrip'
 import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
 
-function epleyE1rm(kg: number, reps: number): number {
-  if (reps <= 0 || kg <= 0) return 0
-  if (reps === 1) return kg
-  return kg * (1 + reps / 30)
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const RPE_TABLE_PRIMARY = new Map<string, number>([
+  ['1-10', 1.000], ['2-10', 0.960], ['3-10', 0.930], ['4-10', 0.900], ['5-10', 0.880], ['6-10', 0.860],
+  ['1-9', 1.000], ['2-9', 0.940], ['3-9', 0.900], ['4-9', 0.870], ['5-9', 0.845], ['6-9', 0.825],
+  ['1-8', 1.000], ['2-8', 0.920], ['3-8', 0.875], ['4-8', 0.845], ['5-8', 0.815], ['6-8', 0.795],
+  ['1-7', 1.000], ['2-7', 0.900], ['3-7', 0.850], ['4-7', 0.820], ['5-7', 0.795], ['6-7', 0.775],
+  ['1-6', 1.000], ['2-6', 0.880], ['3-6', 0.830], ['4-6', 0.800], ['5-6', 0.775], ['6-6', 0.755],
+])
+
+const CONSERVATIVE_REP_PCT: Record<number, number> = {
+  1: 1.000,
+  2: 0.955,
+  3: 0.925,
+  4: 0.898,
+  5: 0.875,
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+function estimateAnalysisE1rm(kg: number, reps: number, rpe?: number | null): number | null {
+  if (kg <= 0 || reps <= 0) return null
+
+  if (rpe != null && Number.isFinite(rpe)) {
+    const rpeInt = Math.trunc(rpe)
+    if (reps >= 1 && reps <= 6 && rpeInt >= 6 && rpeInt <= 10) {
+      const pct = RPE_TABLE_PRIMARY.get(`${reps}-${rpeInt}`)
+      return pct ? kg / pct : null
+    }
+    return null
+  }
+
+  const pct = CONSERVATIVE_REP_PCT[reps]
+  return pct ? kg / pct : null
+}
 
 function fatigueBadgeColor(score: number | null): string {
   if (score === null) return 'gray'
@@ -78,50 +104,72 @@ function isInsufficientData(value: unknown): value is { status: 'insufficient_da
 }
 
 function toDateStr(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-function getWeekStart(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(12, 0, 0, 0)
-  const day = d.getDay() || 7
-  d.setDate(d.getDate() - day + 1)
-  return d
+function isCompletedOrDue(session: Session, todayStr: string): boolean {
+  return Boolean(
+    session.completed ||
+    session.status === 'logged' ||
+    session.status === 'completed' ||
+    session.date <= todayStr,
+  )
 }
 
-function shiftDays(date: Date, days: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + days)
-  return d
+function getCurrentTrainingWeek(sessions: Session[], todayStr: string): number {
+  const currentOrPastWeeks = sessions
+    .filter(s => (s.block ?? 'current') === 'current' && s.week_number > 0 && isCompletedOrDue(s, todayStr))
+    .map(s => s.week_number)
+  if (currentOrPastWeeks.length) return Math.max(...currentOrPastWeeks)
+
+  const allWeeks = sessions
+    .filter(s => (s.block ?? 'current') === 'current' && s.week_number > 0)
+    .map(s => s.week_number)
+  return allWeeks.length ? Math.min(...allWeeks) : 1
 }
 
-function getAnalysisWindow(mode: number | 'current' | 'block', programStart?: string | null) {
-  const today = new Date()
-  today.setHours(12, 0, 0, 0)
-  const currentWeekStart = getWeekStart(today)
+function getAnalysisWindow(
+  mode: number | 'current' | 'block',
+  sessions: Session[] = [],
+  programStart?: string | null,
+) {
+  const todayStr = toDateStr(new Date())
+  const currentWeek = getCurrentTrainingWeek(sessions, todayStr)
+  let weekStart: number
+  let weekEnd: number
 
   if (mode === 'current') {
-    return {
-      start: toDateStr(currentWeekStart),
-      end: toDateStr(today),
-    }
+    weekStart = currentWeek
+    weekEnd = currentWeek
+  } else if (mode === 'block') {
+    weekStart = 1
+    weekEnd = currentWeek
+  } else {
+    const weeks = Math.max(1, mode)
+    weekEnd = Math.max(1, currentWeek - 1)
+    weekStart = Math.max(1, weekEnd - weeks + 1)
   }
 
-  if (mode === 'block') {
-    const start = programStart ? new Date(`${programStart}T12:00:00`) : currentWeekStart
-    start.setHours(12, 0, 0, 0)
-    return {
-      start: toDateStr(start),
-      end: toDateStr(today),
-    }
-  }
+  const selectedSessions = sessions
+    .filter(s => (s.block ?? 'current') === 'current' && s.week_number >= weekStart && s.week_number <= weekEnd)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const selectedDates = selectedSessions.map(s => s.date).filter(Boolean)
+  const start = selectedDates[0] ?? programStart ?? todayStr
+  const rawEnd = mode === 'current' || mode === 'block'
+    ? todayStr
+    : selectedDates[selectedDates.length - 1] ?? todayStr
+  const end = rawEnd > todayStr ? todayStr : rawEnd
 
-  const weeks = Math.max(1, mode)
-  const start = shiftDays(currentWeekStart, -(weeks * 7))
-  const end = shiftDays(currentWeekStart, -1)
   return {
-    start: toDateStr(start),
-    end: toDateStr(end),
+    start,
+    end,
+    weekStart,
+    weekEnd,
+    weeks: Math.max(1, weekEnd - weekStart + 1),
+    currentWeek,
   }
 }
 
@@ -230,6 +278,12 @@ function InfoLabel({ label, help }: { label: string; help: string }) {
   )
 }
 
+function analysisKeyForMode(mode: number | 'current' | 'block'): AnalysisWindowKey {
+  if (mode === 'current') return 'current'
+  if (mode === 'block') return 'block'
+  return `previous_${mode}` as AnalysisWindowKey
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function AnalysisPage() {
@@ -237,28 +291,22 @@ export default function AnalysisPage() {
   const { unit, sex } = useSettingsStore()
 
   const [weeksMode, setWeeksMode] = useState<number | 'current' | 'block'>(4)
-  const [data, setData] = useState<WeeklyAnalysis | null>(null)
+  const [analysisBundle, setAnalysisBundle] = useState<WeeklyAnalysisBundle | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
   const [viewMode, setViewMode] = useState<'raw' | 'graph'>('raw')
 
-  const effectiveWeeks = useMemo(() => {
-    if (weeksMode !== 'block' && weeksMode !== 'current') return weeksMode
-    if (weeksMode === 'current') return 1
-    const start = program?.meta?.program_start
-    if (!start) return 52
-    const startDate = new Date(start)
-    const today = new Date()
-    const diffDays = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
-    return Math.max(1, Math.ceil(diffDays / 7))
-  }, [weeksMode, program?.meta?.program_start])
-
   const analysisWindow = useMemo(
-    () => getAnalysisWindow(weeksMode, program?.meta?.program_start),
-    [program?.meta?.program_start, weeksMode],
+    () => getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start),
+    [program?.meta?.program_start, program?.sessions, weeksMode],
   )
+  const asOfDate = useMemo(() => toDateStr(new Date()), [])
+  const analysisKey = analysisKeyForMode(weeksMode)
+  const data = analysisBundle?.results[analysisKey] ?? null
+
+  const effectiveWeeks = analysisWindow.weeks
 
   const competitions = useMemo(() => {
     return (program?.competitions || []).sort((a, b) => a.date.localeCompare(b.date))
@@ -287,11 +335,11 @@ export default function AnalysisPage() {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    fetchWeeklyAnalysis(effectiveWeeks, 'current', analysisWindow.start, analysisWindow.end)
-      .then(setData)
+    fetchWeeklyAnalysisBundle(asOfDate)
+      .then(setAnalysisBundle)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [analysisWindow.end, analysisWindow.start, effectiveWeeks, weeksMode])
+  }, [asOfDate, program?.meta?.updated_at, version])
 
   useEffect(() => {
     fetchWeightLog(version).then(setWeightLog).catch(console.error)
@@ -303,10 +351,11 @@ export default function AnalysisPage() {
     return program.sessions.filter(s =>
       (s.block ?? 'current') === 'current' &&
       s.completed &&
-      s.date >= analysisWindowStartStr &&
+      s.week_number >= analysisWindow.weekStart &&
+      s.week_number <= analysisWindow.weekEnd &&
       s.date <= analysisWindowEndStr
     )
-  }, [program?.sessions, analysisWindowEndStr, analysisWindowStartStr])
+  }, [program?.sessions, analysisWindow.weekEnd, analysisWindow.weekStart, analysisWindowEndStr])
 
   const glossaryMuscles = useMemo(() => {
     const lookup = new Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>()
@@ -337,8 +386,8 @@ export default function AnalysisPage() {
       for (const ex of s.exercises || []) {
         const muscles = glossaryMuscles.get(normalizeExerciseName(ex.name))
         if (!muscles) continue
-        const sets = ex.sets || 0
-        const vol = sets * (ex.reps || 0) * (ex.kg || 0)
+        const sets = executedSets(ex)
+        const vol = exerciseVolume(ex)
         for (const m of muscles.primary) { mgSets[m] = (mgSets[m] || 0) + sets; mgVol[m] = (mgVol[m] || 0) + vol }
         for (const m of muscles.secondary) { mgSets[m] = (mgSets[m] || 0) + sets * 0.5; mgVol[m] = (mgVol[m] || 0) + vol * 0.5 }
         for (const m of muscles.tertiary) { mgSets[m] = (mgSets[m] || 0) + sets * 0.25; mgVol[m] = (mgVol[m] || 0) + vol * 0.25 }
@@ -367,10 +416,10 @@ export default function AnalysisPage() {
           const info = glossaryCategory.get(normalizeExerciseName(ex.name))
           const isMainLift = exLower === liftName || (liftName === 'bench' && exLower === 'bench press')
           if (isMainLift || (info && info === category)) hasLift = true
-          if (isMainLift) rawSets += ex.sets || 0
+          if (isMainLift) rawSets += executedSets(ex)
           if (info && info === category && !isMainLift) {
-            const sets = ex.sets || 0
-            const vol = sets * (ex.reps || 0) * (ex.kg || 0)
+            const sets = executedSets(ex)
+            const vol = exerciseVolume(ex)
             if (!accessoryMap[ex.name]) accessoryMap[ex.name] = { sets: 0, volume: 0 }
             accessoryMap[ex.name].sets += sets
             accessoryMap[ex.name].volume += vol
@@ -391,7 +440,9 @@ export default function AnalysisPage() {
 
   const nutritionTrend = useMemo(() => {
     if (!program?.diet_notes?.length) return null
-    const inWindow = program.diet_notes.filter(n => n.date >= analysisWindowStartStr).sort((a, b) => a.date.localeCompare(b.date))
+    const inWindow = program.diet_notes
+      .filter(n => n.date >= analysisWindowStartStr && n.date <= analysisWindowEndStr)
+      .sort((a, b) => a.date.localeCompare(b.date))
     if (!inWindow.length) return null
 
     const withCalories = inWindow.filter(n => n.avg_daily_calories != null)
@@ -461,22 +512,25 @@ export default function AnalysisPage() {
       consistencyPct: inWindow.length ? Math.round((consistent / inWindow.length) * 100) : null,
       entries: inWindow.length,
     }
-  }, [program?.diet_notes, analysisWindowStartStr])
+  }, [program?.diet_notes, analysisWindowEndStr, analysisWindowStartStr])
 
   const weightTrend = useMemo(() => {
     if (weightLog.length < 2) return null
-    const sorted = [...weightLog].sort((a, b) => a.date.localeCompare(b.date))
+    const sorted = weightLog
+      .filter(e => e.date <= analysisWindowEndStr)
+      .sort((a, b) => a.date.localeCompare(b.date))
+    if (sorted.length < 2) return null
     const latest = sorted[sorted.length - 1].kg
-    const windowEntries = sorted.filter(e => e.date >= analysisWindowStartStr)
+    const windowEntries = sorted.filter(e => e.date >= analysisWindowStartStr && e.date <= analysisWindowEndStr)
     const oldest = windowEntries.length > 0 ? windowEntries[0].kg : sorted[0].kg
     const change = latest - oldest
     return { latest, change, entries: sorted.slice(-8) }
-  }, [weightLog, analysisWindowStartStr])
+  }, [weightLog, analysisWindowEndStr, analysisWindowStartStr])
 
   const banisterSeries = useMemo(() => {
     if (!banister) return []
-    return banister.series.filter(point => point.date >= analysisWindowStartStr)
-  }, [banister, analysisWindowStartStr])
+    return banister.series.filter(point => point.date >= analysisWindowStartStr && point.date <= analysisWindowEndStr)
+  }, [banister, analysisWindowEndStr, analysisWindowStartStr])
 
   const dotsTrend = useMemo(() => {
     if (!filteredSessions.length) return null
@@ -503,7 +557,9 @@ export default function AnalysisPage() {
         const name = ex.name.toLowerCase()
         const kg = ex.kg || 0
         const reps = ex.reps || 0
-        const e1rm = epleyE1rm(kg, reps)
+        const rpe = (ex as { rpe?: number | null }).rpe ?? s.session_rpe
+        const e1rm = estimateAnalysisE1rm(kg, reps, rpe)
+        if (e1rm == null) continue
         if (name === 'squat' || (name.includes('squat') && !name.includes('hack') && !name.includes('split'))) {
           w.squat = Math.max(w.squat, e1rm)
           w.hasSquat = true
@@ -517,7 +573,9 @@ export default function AnalysisPage() {
       }
     }
 
-    const sortedLog = [...weightLog].sort((a, b) => a.date.localeCompare(b.date))
+    const sortedLog = weightLog
+      .filter(e => e.date <= analysisWindowEndStr)
+      .sort((a, b) => a.date.localeCompare(b.date))
 
     const rows: TrendRow[] = Array.from(byWeek.entries())
       .sort(([a], [b]) => a - b)
@@ -561,7 +619,7 @@ export default function AnalysisPage() {
     }
 
     return { rows, dotsChange }
-  }, [filteredSessions, weightLog, sex])
+  }, [analysisWindowEndStr, filteredSessions, weightLog, sex])
 
   const ipfGlTrend = useMemo(() => {
     if (!dotsTrend?.rows.length) return null
@@ -1453,7 +1511,7 @@ export default function AnalysisPage() {
                 </Table>
               </Box>
               <Text fz="xs" c="dimmed" mt="xs">
-                DOTS uses estimated 1RM (Epley) and nearest bodyweight. IPF GL uses Classic Powerlifting for full SBD weeks and Classic Bench for bench-only weeks.
+                DOTS uses table-based session e1RM and nearest bodyweight. IPF GL uses Classic Powerlifting for full SBD weeks and Classic Bench for bench-only weeks.
               </Text>
             </Paper>
           )}
@@ -1786,7 +1844,8 @@ export default function AnalysisPage() {
 
           {/* Footer */}
           <Text size="xs" c="dimmed">
-            Week {data.week} ({data.block}) &middot; {data.sessions_analyzed} sessions analyzed
+            Week {analysisWindow.weekStart === analysisWindow.weekEnd ? analysisWindow.weekStart : `${analysisWindow.weekStart}-${analysisWindow.weekEnd}`} selected
+            {' '}({data.block}) &middot; {data.sessions_analyzed} sessions analyzed
             {weeksMode === 'block' && ` · Full block (${effectiveWeeks} wks)`}
           </Text>
         </>

@@ -1664,6 +1664,7 @@ def _read_cached_correlation(weeks: int = 4) -> dict | None:
     import boto3
 
     from config import IF_HEALTH_TABLE_NAME
+    from core import _get_store
 
     today = datetime.utcnow().date()
     raw_cutoff = today - timedelta(weeks=weeks)
@@ -1671,7 +1672,7 @@ def _read_cached_correlation(weeks: int = 4) -> dict | None:
     cache_sk = f"corr_report#{window_start}_{weeks}w"
 
     table = boto3.resource("dynamodb", region_name="ca-central-1").Table(IF_HEALTH_TABLE_NAME)
-    item = table.get_item(Key={"pk": "operator", "sk": cache_sk}).get("Item")
+    item = table.get_item(Key={"pk": _get_store().pk, "sk": cache_sk}).get("Item")
     if not item or not item.get("report"):
         return None
 
@@ -1926,7 +1927,14 @@ class CalculateDotsTool(ToolDefinition[CalculateDotsAction, CalculateDotsObserva
 class WeeklyAnalysisAction(Action):
     weeks: int = Field(default=1, description="Number of weeks to analyze (default: 1)")
     block: str = Field(default="current", description="Program block filter (default 'current')")
+    week_start: int | None = Field(default=None, description="Inclusive training week number to start analysis")
+    week_end: int | None = Field(default=None, description="Inclusive training week number to end analysis")
+    window_start: str | None = Field(default=None, description="Optional date window start (YYYY-MM-DD) for time-series context")
+    window_end: str | None = Field(default=None, description="Optional date window end (YYYY-MM-DD) for time-series context")
+    ref_date: str | None = Field(default=None, description="Optional reference date (YYYY-MM-DD)")
     refresh_program: bool = Field(default=True, description="Invalidate the program cache before analysis")
+    program: Optional[Dict[str, Any]] = Field(default=None, description="Optional program snapshot supplied by the caller")
+    sessions: Optional[List[Dict[str, Any]]] = Field(default=None, description="Optional session snapshot supplied by the caller")
 
 
 class WeeklyAnalysisObservation(Observation):
@@ -1942,12 +1950,22 @@ class WeeklyAnalysisExecutor(ToolExecutor[WeeklyAnalysisAction, WeeklyAnalysisOb
         store = _get_store()
         if action.refresh_program:
             store.invalidate_cache()
-        program = _run_async(store.get_program())
-        sessions = program.get("sessions", [])
+        if isinstance(action.program, dict):
+            program = dict(action.program)
+            sessions = action.sessions if isinstance(action.sessions, list) else program.get("sessions", [])
+            program["sessions"] = sessions if isinstance(sessions, list) else []
+        else:
+            program = _run_async(store.get_program())
+            sessions = program.get("sessions", [])
         glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME)
         result = weekly_analysis(
             program,
             sessions,
+            window_start=action.window_start,
+            window_end=action.window_end,
+            ref_date=action.ref_date,
+            week_start=action.week_start,
+            week_end=action.week_end,
             weeks=action.weeks,
             block=action.block,
             glossary=glossary,
@@ -1997,7 +2015,7 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
 
         from core import _get_store
         from correlation_ai import generate_correlation_report
-        from config import IF_HEALTH_TABLE_NAME
+        from config import IF_HEALTH_TABLE_NAME, AWS_REGION
         import boto3
 
         today = datetime.utcnow().date()
@@ -2007,11 +2025,13 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
         window_start_str = window_start.isoformat()
         cache_sk = f"corr_report#{window_start_str}_{action.weeks}w"
 
-        dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
+        store = _get_store()
+        active_pk = store.pk
+        dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
         table = dynamodb.Table(IF_HEALTH_TABLE_NAME)
 
         if not action.refresh:
-            cached = table.get_item(Key={"pk": "operator", "sk": cache_sk}).get("Item")
+            cached = table.get_item(Key={"pk": active_pk, "sk": cache_sk}).get("Item")
             if cached and cached.get("report"):
                 report = cached["report"]
                 if isinstance(report, dict):
@@ -2021,7 +2041,8 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
                     report["weeks"] = action.weeks
                 return CorrelationAnalysisObservation.from_text(_format_result(report))
 
-        program = _run_async(_get_store().get_program())
+        store.invalidate_cache()
+        program = _run_async(store.get_program())
         sessions = program.get("sessions", [])
         lift_profiles = program.get("lift_profiles", [])
 
@@ -2036,7 +2057,7 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
         generated_at = datetime.utcnow().isoformat() + "Z"
 
         table.put_item(Item={
-            "pk": "operator",
+            "pk": active_pk,
             "sk": cache_sk,
             "report": report,
             "generated_at": generated_at,
@@ -2936,7 +2957,14 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "properties": {
                     "weeks": {"type": "integer", "description": "Number of weeks to analyze", "default": 1},
                     "block": {"type": "string", "description": "Program block filter", "default": "current"},
+                    "week_start": {"type": "integer", "description": "Inclusive training week number to start analysis"},
+                    "week_end": {"type": "integer", "description": "Inclusive training week number to end analysis"},
+                    "window_start": {"type": "string", "description": "Optional date window start (YYYY-MM-DD) for time-series context"},
+                    "window_end": {"type": "string", "description": "Optional date window end (YYYY-MM-DD) for time-series context"},
+                    "ref_date": {"type": "string", "description": "Optional reference date (YYYY-MM-DD)"},
                     "refresh_program": {"type": "boolean", "description": "Invalidate the program cache before analysis", "default": True},
+                    "program": {"type": "object", "description": "Optional program snapshot supplied by the caller"},
+                    "sessions": {"type": "array", "description": "Optional session snapshot supplied by the caller", "items": {"type": "object"}},
                 },
                 "required": [],
             },
@@ -3448,6 +3476,22 @@ def _get_program_and_sessions(refresh_program: bool = False):
     return program, sessions, program_start
 
 
+def _get_analysis_program_and_sessions(args: dict, refresh_program: bool = False):
+    """Use caller-supplied snapshots when available; otherwise load from the store."""
+    supplied_program = args.get("program")
+    supplied_sessions = args.get("sessions")
+    if isinstance(supplied_program, dict):
+        program = dict(supplied_program)
+        sessions = supplied_sessions if isinstance(supplied_sessions, list) else program.get("sessions", [])
+        if not isinstance(sessions, list):
+            sessions = []
+        program["sessions"] = sessions
+        program_start = program.get("meta", {}).get("program_start", "")
+        return program, sessions, program_start
+
+    return _get_program_and_sessions(refresh_program=refresh_program)
+
+
 def _do_health_invalidate_program_cache(args):
     from core import _get_store
     _get_store().invalidate_cache()
@@ -3501,7 +3545,10 @@ def _do_calculate_dots(args):
 def _do_weekly_analysis(args):
     from analytics import weekly_analysis
     from config import IF_HEALTH_TABLE_NAME
-    program, sessions, program_start = _get_program_and_sessions(refresh_program=args.get("refresh_program", True))
+    program, sessions, program_start = _get_analysis_program_and_sessions(
+        args,
+        refresh_program=args.get("refresh_program", True),
+    )
     glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME)
     return weekly_analysis(
         program,
@@ -3509,6 +3556,8 @@ def _do_weekly_analysis(args):
         window_start=args.get("window_start"),
         window_end=args.get("window_end"),
         ref_date=args.get("ref_date"),
+        week_start=args.get("week_start"),
+        week_end=args.get("week_end"),
         weeks=args.get("weeks", 1),
         block=args.get("block", "current"),
         glossary=glossary,
@@ -3532,11 +3581,13 @@ def _do_correlation_analysis(args):
     window_start_str = window_start.isoformat()
     cache_sk = f"corr_report#{window_start_str}_{weeks}w"
 
+    store = _get_store()
+    active_pk = store.pk
     dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(IF_HEALTH_TABLE_NAME)
 
     if not refresh:
-        cached = table.get_item(Key={"pk": "operator", "sk": cache_sk}).get("Item")
+        cached = table.get_item(Key={"pk": active_pk, "sk": cache_sk}).get("Item")
         if cached and cached.get("report"):
             report = cached["report"]
             if isinstance(report, dict):
@@ -3546,7 +3597,8 @@ def _do_correlation_analysis(args):
                 report["weeks"] = weeks
             return report
 
-    program = _run_async(_get_store().get_program())
+    store.invalidate_cache()
+    program = _run_async(store.get_program())
     sessions = program.get("sessions", [])
     lift_profiles = program.get("lift_profiles", [])
 
@@ -3561,7 +3613,7 @@ def _do_correlation_analysis(args):
     generated_at = datetime.utcnow().isoformat() + "Z"
 
     table.put_item(Item={
-        "pk": "operator",
+        "pk": active_pk,
         "sk": cache_sk,
         "report": report,
         "generated_at": generated_at,

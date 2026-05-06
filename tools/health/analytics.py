@@ -182,12 +182,26 @@ def _num(v: Any) -> float:
 
 
 def _count_failed_sets(ex: dict) -> int:
+    statuses = ex.get("set_statuses")
+    if statuses and isinstance(statuses, list):
+        return sum(1 for status in statuses if status == "failed")
     failed_arr = ex.get("failed_sets")
     if failed_arr and isinstance(failed_arr, list):
         return sum(1 for f in failed_arr if f)
     if ex.get("failed", False):
         return int(_num(ex.get("sets", 0)))
     return 0
+
+
+def _executed_sets(ex: dict) -> float:
+    statuses = ex.get("set_statuses")
+    if statuses and isinstance(statuses, list):
+        return float(sum(1 for status in statuses if status in {"completed", "failed"}))
+    return _num(ex.get("sets", 0))
+
+
+def _executed_volume(ex: dict) -> float:
+    return _executed_sets(ex) * _num(ex.get("reps", 0)) * _num(ex.get("kg", 0))
 
 
 def _mad(values: list[float]) -> float:
@@ -303,6 +317,78 @@ def _session_week_num(session: dict, program_start: str = "") -> Optional[int]:
     return None
 
 
+def _parse_week_bound(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        week = int(value)
+    except (ValueError, TypeError):
+        return None
+    return week if week > 0 else None
+
+
+def _is_completed_session(session: dict) -> bool:
+    return bool(session.get("completed") or session.get("status") in ("logged", "completed"))
+
+
+def _resolve_week_window(
+    sessions: list[dict],
+    current_week: int,
+    weeks: int,
+    program_start: str = "",
+    week_start: Any = None,
+    week_end: Any = None,
+) -> tuple[int, int]:
+    """Resolve an inclusive training-week window using session.week_number."""
+    start = _parse_week_bound(week_start)
+    end = _parse_week_bound(week_end)
+    if start is None and end is None:
+        end = current_week
+        start = max(1, end - max(1, int(weeks or 1)) + 1)
+    elif start is None:
+        start = max(1, end - max(1, int(weeks or 1)) + 1)
+    elif end is None:
+        end = start + max(1, int(weeks or 1)) - 1
+
+    if start > end:
+        start, end = end, start
+
+    available = sorted(
+        {
+            wk
+            for s in sessions
+            if (wk := _session_week_num(s, program_start)) is not None
+        }
+    )
+    if available:
+        start = max(start, available[0])
+        end = min(end, available[-1])
+        if start > end:
+            end = start
+    return start, end
+
+
+def _sessions_in_week_window(
+    sessions: list[dict],
+    program_start: str,
+    week_start: int,
+    week_end: int,
+) -> list[dict]:
+    return [
+        s
+        for s in sessions
+        if (wk := _session_week_num(s, program_start)) is not None
+        and week_start <= wk <= week_end
+    ]
+
+
+def _session_date_bounds(sessions: list[dict]) -> tuple[Optional[date], Optional[date]]:
+    dates = sorted(d for s in sessions if (d := _parse_date(s.get("date", ""))) is not None)
+    if not dates:
+        return None, None
+    return dates[0], dates[-1]
+
+
 def _week_index(session: dict, program_start: str) -> Optional[float]:
     """Float week offset — kept for legacy callers; use _session_week_num for grouping."""
     d = _parse_date(session.get("date", ""))
@@ -335,7 +421,7 @@ def _compute_weekly_volume_load(sessions: list[dict], program_start: str) -> dic
             continue
         week_load = 0.0
         for ex in s.get("exercises", []):
-            week_load += _num(ex.get("sets", 0)) * _num(ex.get("reps", 0)) * _num(ex.get("kg", 0))
+            week_load += _executed_volume(ex)
         weekly[wk] = weekly.get(wk, 0.0) + week_load
     return weekly
 
@@ -410,10 +496,7 @@ def _detect_deloads(
     for wk in sorted_weeks:
         w_sessions = week_sessions[wk]
 
-        vl = sum(
-            _num(ex.get("sets", 0)) * _num(ex.get("reps", 0)) * _num(ex.get("kg", 0))
-            for s in w_sessions for ex in s.get("exercises", [])
-        )
+        vl = sum(_executed_volume(ex) for s in w_sessions for ex in s.get("exercises", []))
         is_break = vl == 0.0
 
         has_main_lift = any(
@@ -555,7 +638,7 @@ def _weekly_fatigue_by_dimension(
         for ex in s.get("exercises", []):
             name = ex.get("name", "").strip()
             kg = _num(ex.get("kg", 0))
-            sets = int(_num(ex.get("sets", 0)))
+            sets = int(_executed_sets(ex))
             reps = int(_num(ex.get("reps", 0)))
             if kg <= 0 or sets <= 0 or reps <= 0:
                 continue
@@ -641,7 +724,7 @@ def _daily_fatigue_by_dimension(
         for ex in s.get("exercises", []):
             name = ex.get("name", "").strip()
             kg = _num(ex.get("kg", 0))
-            sets = int(_num(ex.get("sets", 0)))
+            sets = int(_executed_sets(ex))
             reps = int(_num(ex.get("reps", 0)))
             if kg <= 0 or sets <= 0 or reps <= 0:
                 continue
@@ -1094,7 +1177,7 @@ def volume_intensity_correlation(sessions: list[dict], exercise_name: str, progr
             if ex.get("name", "").lower() != name_lower:
                 continue
             kg = _num(ex.get("kg") or 0)
-            sets = _num(ex.get("sets", 0))
+            sets = _executed_sets(ex)
             reps = _num(ex.get("reps", 0))
             weekly_volume[wk] = weekly_volume.get(wk, 0) + sets * reps * kg
             weekly_intensity[wk] = weekly_intensity.get(wk, 0) + kg
@@ -1306,7 +1389,7 @@ def fatigue_index(
             for ex in s.get("exercises", []):
                 name_lower = ex.get("name", "").lower()
                 if any(kw in name_lower for kw in ["squat", "deadlift", "bench", "press", "row", "rdl", "pullup", "chinup"]):
-                    sets = _num(ex.get("sets", 0))
+                    sets = _executed_sets(ex)
                     total_compound_sets += sets
                     failed_sets += _count_failed_sets(ex)
         failed_ratio = failed_sets / total_compound_sets if total_compound_sets > 0 else 0
@@ -1355,7 +1438,7 @@ def fatigue_index(
         for s in wk_sessions:
             for ex in s.get("exercises", []):
                 kg = _num(ex.get("kg", 0))
-                sets = int(_num(ex.get("sets", 0)))
+                sets = int(_executed_sets(ex))
                 reps = int(_num(ex.get("reps", 0)))
                 if sets <= 0 or kg <= 0 or reps <= 0:
                     continue
@@ -1538,6 +1621,43 @@ def session_compliance(sessions: list[dict], phases: list[dict], program_start: 
 
     current_phase = _find_current_phase(phases, current_week)
     phase_name = current_phase.get("name", "Unknown") if current_phase else "Unknown"
+
+    return {
+        "phase": phase_name,
+        "planned_sessions": planned_count,
+        "completed_sessions": completed_count,
+        "compliance_pct": compliance_pct,
+    }
+
+
+def session_compliance_for_week_window(
+    sessions: list[dict],
+    phases: list[dict],
+    week_start: int,
+    week_end: int,
+) -> dict:
+    """Compliance for an explicit inclusive training-week range."""
+    sessions_in_window = [
+        s for s in sessions
+        if (s.get("status") in ("planned", "logged", "completed", "skipped") or not s.get("status"))
+        and week_start <= int(s.get("week_number", 0) or 0) <= week_end
+    ]
+    planned_count = len(sessions_in_window)
+    completed_count = sum(1 for s in sessions_in_window if _is_completed_session(s))
+    compliance_pct = round((completed_count / planned_count) * 100, 1) if planned_count > 0 else 0
+
+    if week_start == week_end:
+        phase = _find_current_phase(phases, week_end)
+        phase_name = phase.get("name", "Unknown") if phase else "Unknown"
+    else:
+        phase_names = [
+            p.get("name")
+            for p in phases
+            if p.get("name")
+            and p.get("start_week", 0) <= week_end
+            and p.get("end_week", 0) >= week_start
+        ]
+        phase_name = phase_names[-1] if len(set(phase_names)) == 1 else ("Mixed" if phase_names else "Unknown")
 
     return {
         "phase": phase_name,
@@ -1954,7 +2074,7 @@ def compute_volume_landmarks(
             if week_num in excluded_weeks:
                 continue
             total_sets = sum(
-                _num(ex.get("sets", 0))
+                _executed_sets(ex)
                 for s in w_sessions
                 for ex in s.get("exercises", [])
                 if ex.get("name", "").lower().strip() in syns and _num(ex.get("kg", 0)) > 0 and _num(ex.get("reps", 0)) > 0
@@ -2312,7 +2432,7 @@ def _lift_weekly_volume_ri(
                 continue
             kg = _num(ex.get("kg", 0))
             reps = int(_num(ex.get("reps", 0)))
-            sets = int(_num(ex.get("sets", 0)))
+            sets = int(_executed_sets(ex))
             if kg <= 0 or reps <= 0 or sets <= 0:
                 continue
             row = result.setdefault(canonical, {}).setdefault(
@@ -2368,7 +2488,7 @@ def compute_inol(
                 continue
             kg = _num(ex.get("kg", 0))
             reps = int(_num(ex.get("reps", 0)))
-            sets = int(_num(ex.get("sets", 0)))
+            sets = int(_executed_sets(ex))
             if kg <= 0 or reps <= 0:
                 continue
             I = kg / max_val
@@ -3140,7 +3260,7 @@ def compute_ri_distribution(sessions: list[dict], current_maxes: dict | None = N
             if not max_val or max_val <= 0:
                 continue
             kg = _num(ex.get("kg", 0))
-            sets = int(_num(ex.get("sets", 0)))
+            sets = int(_executed_sets(ex))
             if kg <= 0 or sets <= 0:
                 continue
             b = _bucket(kg / max_val)
@@ -3187,7 +3307,7 @@ def compute_specificity_ratio(
         if not (s.get("completed") or s.get("status") in ("logged", "completed")):
             continue
         for ex in s.get("exercises", []):
-            sets = int(_num(ex.get("sets", 0)))
+            sets = int(_executed_sets(ex))
             if sets <= 0:
                 continue
             name_lower = ex.get("name", "").lower().strip()
@@ -3404,6 +3524,8 @@ def weekly_analysis(
     window_start: Optional[str] = None,
     window_end: Optional[str] = None,
     ref_date: Optional[str] = None,
+    week_start: Optional[int] = None,
+    week_end: Optional[int] = None,
     weeks: int = 1,
     block: Optional[str] = None,
     glossary: list[dict] | None = None,
@@ -3421,14 +3543,16 @@ def weekly_analysis(
     current_phase = _find_current_phase(phases, current_week)
     phase_name = current_phase.get("name", "Unknown") if current_phase else "Unknown"
 
-    # Date-window filter → recent_sessions
+    # Window filter. Session-derived summaries are keyed by the user's training
+    # week number, not calendar weeks. Explicit date windows are still accepted
+    # for older callers that have not moved to week_start/week_end yet.
     end = _parse_date(window_end) if window_end else (_parse_date(ref_date) if ref_date else date.today())
     ref = end
     start = _parse_date(window_start) if window_start else None
-    if start is None:
-        cutoff = end - timedelta(weeks=weeks)
-    else:
-        cutoff = start
+    use_week_window = week_start is not None or week_end is not None or start is None
+    selected_week_start: Optional[int] = None
+    selected_week_end: Optional[int] = None
+
     all_sessions_to_ref = [
         s for s in sessions
         if (d := _parse_date(s.get("date", ""))) is not None
@@ -3436,28 +3560,78 @@ def weekly_analysis(
     ]
     completed_history_to_ref = [
         s for s in all_sessions_to_ref
-        if s.get("completed") or s.get("status") in ("logged", "completed")
+        if _is_completed_session(s)
     ]
-    recent_sessions = sorted(
-        [
-            s
-            for s in all_sessions_to_ref
-            if (d := _parse_date(s.get("date", ""))) and d >= cutoff and d <= end
-        ],
-        key=lambda s: s.get("date", ""),
-        reverse=True,
-    )
 
-    # Completed sessions in window are selected-window summaries only.
-    completed_in_window = sorted(
-        [
-            s for s in completed_history_to_ref
-            if (d := _parse_date(s.get("date", ""))) is not None
-            and cutoff <= d <= end
-        ],
-        key=lambda s: s.get("date", ""),
-        reverse=True,
-    )
+    if use_week_window:
+        selected_week_start, selected_week_end = _resolve_week_window(
+            sessions,
+            current_week,
+            weeks,
+            program_start,
+            week_start=week_start,
+            week_end=week_end,
+        )
+        selected_sessions = _sessions_in_week_window(
+            sessions,
+            program_start,
+            selected_week_start,
+            selected_week_end,
+        )
+        inferred_start, _ = _session_date_bounds(selected_sessions)
+        if start is None:
+            start = inferred_start or end - timedelta(days=max(7, weeks * 7) - 1)
+            window_start = start.isoformat()
+        if not window_end:
+            window_end = end.isoformat()
+
+        recent_sessions = sorted(
+            [
+                s for s in selected_sessions
+                if (d := _parse_date(s.get("date", ""))) is None or d <= end
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+        completed_in_window = sorted(
+            [
+                s for s in recent_sessions
+                if _is_completed_session(s)
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+        selected_week_count = max(1, selected_week_end - selected_week_start + 1)
+    else:
+        cutoff = start
+        recent_sessions = sorted(
+            [
+                s
+                for s in all_sessions_to_ref
+                if (d := _parse_date(s.get("date", ""))) and d >= cutoff and d <= end
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+
+        # Completed sessions in window are selected-window summaries only.
+        completed_in_window = sorted(
+            [
+                s for s in completed_history_to_ref
+                if (d := _parse_date(s.get("date", ""))) is not None
+                and cutoff <= d <= end
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+        selected_week_nums = {
+            wk for s in completed_in_window
+            if (wk := _session_week_num(s, program_start)) is not None
+        }
+        if selected_week_nums:
+            selected_week_start = min(selected_week_nums)
+            selected_week_end = max(selected_week_nums)
+        selected_week_count = max(1, int(weeks or 1))
 
     # Exercise stats: completed sessions only, to avoid inflated counts from planned sessions
     exercise_stats: dict[str, dict[str, Any]] = {}
@@ -3467,7 +3641,7 @@ def weekly_analysis(
             if not name:
                 continue
             kg = _num(ex.get("kg", 0))
-            sets = _num(ex.get("sets", 0))
+            sets = _executed_sets(ex)
             reps = _num(ex.get("reps", 0))
             vol = sets * reps * kg
             if name not in exercise_stats:
@@ -3553,14 +3727,14 @@ def weekly_analysis(
 
     fatigue = fatigue_index(
         completed_history_to_ref,
-        days=weeks * 7, 
+        days=selected_week_count * 7,
         glossary=glossary,
         current_maxes=current_maxes_raw, 
         program_start=program_start,
         ref_date=ref,
         window_start=window_start,
         window_end=window_end,
-        weeks=weeks,
+        weeks=selected_week_count,
         target_rpe_midpoint=target_rpe_mid
     )
     fatigue_score = fatigue.get("score") if "score" in fatigue else None
@@ -3568,7 +3742,15 @@ def weekly_analysis(
     if fatigue.get("flags"):
         all_flags.extend(fatigue["flags"])
 
-    compliance_result = session_compliance(sessions, phases, program_start, weeks=weeks)
+    if selected_week_start is not None and selected_week_end is not None:
+        compliance_result = session_compliance_for_week_window(
+            sessions,
+            phases,
+            selected_week_start,
+            selected_week_end,
+        )
+    else:
+        compliance_result = session_compliance(sessions, phases, program_start, weeks=selected_week_count)
     compliance_obj = {
         "phase": compliance_result.get("phase", "Unknown"),
         "planned": compliance_result.get("planned_sessions", 0),
@@ -3728,7 +3910,7 @@ def weekly_analysis(
         current_maxes_raw,
         program.get("lift_profiles"),
         phases=phases,
-        selected_weeks=weeks,
+        selected_weeks=selected_week_count,
         all_history_sessions=completed_history_to_ref,
         ref_date=end,
     )
@@ -3800,11 +3982,16 @@ def weekly_analysis(
         completed_history_to_ref,
         glossary,
         ref_date=end,
-        window_weeks=weeks,
+        window_weeks=selected_week_count,
     )
 
     return {
         "week": current_week,
+        "selected_week_start": selected_week_start,
+        "selected_week_end": selected_week_end,
+        "selected_week_count": selected_week_count,
+        "window_start": window_start,
+        "window_end": window_end,
         "block": phase_name,
         "lifts": lifts_report,
         "fatigue_index": fatigue_score,

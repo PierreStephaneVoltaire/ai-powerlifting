@@ -53,6 +53,8 @@ resource "kubernetes_config_map" "if_agent_api_config" {
   data = {
     IF_CORE_TABLE_NAME          = var.dynamodb_core_table
     IF_HEALTH_TABLE_NAME        = var.dynamodb_health_table
+    IF_SESSIONS_TABLE_NAME      = var.dynamodb_sessions_table
+    ANALYSIS_CACHE_TABLE_NAME   = var.dynamodb_analysis_cache_table
     IF_FINANCE_TABLE_NAME       = var.dynamodb_finance_table
     IF_DIARY_ENTRIES_TABLE_NAME = var.dynamodb_diary_entries_table
     IF_DIARY_SIGNALS_TABLE_NAME = var.dynamodb_diary_signals_table
@@ -193,17 +195,19 @@ resource "kubernetes_config_map" "powerlifting_app_config" {
   }
 
   data = {
-    AWS_REGION            = var.region
-    DYNAMODB_TABLE        = var.dynamodb_powerlifting_table
-    NODE_ENV              = "production"
-    PORT                  = "3005"
-    FRONTEND_URL          = "http://powerlifting-app-frontend:3001"
-    DISCORD_CLIENT_ID     = var.discord_client_id
-    DISCORD_CLIENT_SECRET = var.discord_client_secret
-    DISCORD_REDIRECT_URI  = var.discord_redirect_uri
-    JWT_SECRET            = var.jwt_secret
-    COOKIE_DOMAIN         = var.cookie_domain
-    COOKIE_SECURE         = var.cookie_secure
+    AWS_REGION                = var.region
+    DYNAMODB_TABLE            = var.dynamodb_powerlifting_table
+    IF_SESSIONS_TABLE_NAME    = var.dynamodb_sessions_table
+    ANALYSIS_CACHE_TABLE_NAME = var.dynamodb_analysis_cache_table
+    NODE_ENV                  = "production"
+    PORT                      = "3005"
+    FRONTEND_URL              = "http://powerlifting-app-frontend:3001"
+    DISCORD_CLIENT_ID         = var.discord_client_id
+    DISCORD_CLIENT_SECRET     = var.discord_client_secret
+    DISCORD_REDIRECT_URI      = var.discord_redirect_uri
+    JWT_SECRET                = var.jwt_secret
+    COOKIE_DOMAIN             = var.cookie_domain
+    COOKIE_SECURE             = var.cookie_secure
   }
 }
 
@@ -221,4 +225,3 @@ resource "kubernetes_secret" "tinyauth_secrets" {
 
   type = "Opaque"
 }
-

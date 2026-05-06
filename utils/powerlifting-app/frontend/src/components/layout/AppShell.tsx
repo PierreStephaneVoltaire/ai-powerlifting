@@ -10,15 +10,32 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
   useEffect(() => {
-    const handleResize = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
-    };
+    const handleViewportChange = () => {
+      const visualViewport = window.visualViewport
+      const viewportHeight = visualViewport?.height ?? window.innerHeight
+      const viewportOffsetTop = visualViewport?.offsetTop ?? 0
+      const bottomOverlap = Math.max(
+        0,
+        window.innerHeight - viewportHeight - viewportOffsetTop
+      )
 
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+      document.documentElement.style.setProperty('--app-viewport-height', `${viewportHeight}px`)
+      document.documentElement.style.setProperty('--app-browser-bottom-overlap', `${bottomOverlap}px`)
+    }
+
+    handleViewportChange()
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('orientationchange', handleViewportChange)
+    window.visualViewport?.addEventListener('resize', handleViewportChange)
+    window.visualViewport?.addEventListener('scroll', handleViewportChange)
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('orientationchange', handleViewportChange)
+      window.visualViewport?.removeEventListener('resize', handleViewportChange)
+      window.visualViewport?.removeEventListener('scroll', handleViewportChange)
+    }
+  }, [])
 
   return (
     <MantineAppShell
@@ -34,8 +51,7 @@ export default function AppShell({ children }: AppShellProps) {
       }}
       padding="md"
       style={{ 
-        minHeight: '100dvh',
-        height: 'calc(var(--vh, 1vh) * 100)',
+        minHeight: 'var(--app-viewport-height, 100dvh)',
         display: 'flex',
         flexDirection: 'column'
       }}
@@ -46,15 +62,18 @@ export default function AppShell({ children }: AppShellProps) {
 
       <MantineAppShell.Navbar
         style={{
-          height: 'calc(var(--vh, 1vh) * 100 - 60px)',
-          maxHeight: 'calc(var(--vh, 1vh) * 100 - 60px)',
+          height: 'calc(var(--app-viewport-height, 100dvh) - 60px)',
+          maxHeight: 'calc(var(--app-viewport-height, 100dvh) - 60px)',
         }}
       >
         <Sidebar />
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main
-        pb={{ base: 'calc(180px + env(safe-area-inset-bottom, 0px))', md: 140 }}
+        pb={{
+          base: 'calc(180px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
+          md: 140
+        }}
         style={{ flex: 1 }}
       >
         {children}

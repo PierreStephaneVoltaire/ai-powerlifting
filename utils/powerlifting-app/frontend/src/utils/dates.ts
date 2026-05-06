@@ -62,6 +62,28 @@ export function sessionsInDateRange(
   return sessions.filter(s => s.date >= startDate && s.date <= endDate)
 }
 
+export function findClosestSessionToToday(sessions: Session[]): Session | null {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  let closest: { session: Session; distanceMs: number } | null = null
+
+  for (const session of sessions) {
+    const sessionDate = parseLocalDate(session.date)
+    const sessionTime = sessionDate.getTime()
+    if (!Number.isFinite(sessionTime)) continue
+
+    sessionDate.setHours(0, 0, 0, 0)
+    const distanceMs = Math.abs(sessionDate.getTime() - today.getTime())
+
+    if (!closest || distanceMs < closest.distanceMs) {
+      closest = { session, distanceMs }
+    }
+  }
+
+  return closest?.session ?? null
+}
+
 export function groupSessionsByWeek(sessions: Session[], block?: string): Map<number, Session[]> {
   const groups = new Map<number, Session[]>()
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react'
 import {
   Modal, Stack, Group, Button, TextInput, NumberInput, Select, Autocomplete, ActionIcon, Text, Divider,
 } from '@mantine/core'
@@ -59,12 +59,44 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
     setEditing(s => s ? { ...s, exercises: s.exercises.filter((_, i) => i !== index) } : s)
   }
 
+  function moveExercise(index: number, direction: -1 | 1) {
+    setEditing(s => {
+      if (!s) return s
+      const nextIndex = index + direction
+      if (nextIndex < 0 || nextIndex >= s.exercises.length) return s
+      const exercises = [...s.exercises]
+      const [exercise] = exercises.splice(index, 1)
+      exercises.splice(nextIndex, 0, exercise)
+      return { ...s, exercises }
+    })
+  }
+
   function handleSave() {
     if (editing) onSave(editing)
   }
 
   return (
-    <Modal opened={session !== null} onClose={onClose} title="Edit Session" centered size="lg">
+    <Modal
+      opened={session !== null}
+      onClose={onClose}
+      title="Edit Session"
+      centered
+      size="lg"
+      styles={{
+        content: {
+          maxHeight: 'calc(var(--app-viewport-height, 100dvh) - 32px)',
+          display: 'flex',
+          flexDirection: 'column',
+        },
+        body: {
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          paddingBottom: 'calc(var(--mantine-spacing-md) + env(safe-area-inset-bottom, 0px))',
+        },
+      }}
+    >
       <Stack gap="md">
         <TextInput
           label="Label"
@@ -107,9 +139,35 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                   onChange={(val) => handleExerciseNameChange(i, val)}
                   style={{ flex: 1 }}
                 />
-                <ActionIcon variant="subtle" color="red" onClick={() => removeExercise(i)} style={{ marginBottom: 1 }}>
-                  <Trash2 size={16} />
-                </ActionIcon>
+                <Group gap={2} wrap="nowrap" style={{ marginBottom: 1 }}>
+                  <ActionIcon
+                    variant="subtle"
+                    onClick={() => moveExercise(i, -1)}
+                    disabled={i === 0}
+                    title="Move exercise up"
+                    aria-label="Move exercise up"
+                  >
+                    <ArrowUp size={16} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant="subtle"
+                    onClick={() => moveExercise(i, 1)}
+                    disabled={i === editing.exercises.length - 1}
+                    title="Move exercise down"
+                    aria-label="Move exercise down"
+                  >
+                    <ArrowDown size={16} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    onClick={() => removeExercise(i)}
+                    title="Remove exercise"
+                    aria-label="Remove exercise"
+                  >
+                    <Trash2 size={16} />
+                  </ActionIcon>
+                </Group>
               </Group>
 
               <Group gap="xs" grow>

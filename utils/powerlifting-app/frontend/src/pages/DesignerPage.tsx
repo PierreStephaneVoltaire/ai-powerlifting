@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Plus, Trash2, X, Save, BarChart3, Copy, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Plus, Trash2, X, Save, BarChart3, Copy, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 import {
   Stack, Group, Text, Button, Paper, Badge, Modal, SimpleGrid,
-  TextInput, NumberInput, Select, ActionIcon, Autocomplete, Progress, Box, Divider
+  NumberInput, Select, ActionIcon, Autocomplete, Progress, Box, Divider
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
+import { addDays, differenceInCalendarDays, format } from 'date-fns'
 import {
   DndContext,
   closestCenter,
@@ -26,7 +27,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { normalizeExerciseName } from '@/utils/volume'
+import { sessionMuscleSets } from '@/utils/sessionWorkload'
+import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
 import { toDisplayUnit, fromDisplayUnit, displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
 import type { Session, PlannedExercise, GlossaryExercise } from '@powerlifting/types'
@@ -66,6 +68,19 @@ const STATUS_COLORS: Record<string, string> = {
   skipped: 'gray',
 }
 
+function toIsoDate(date: Date): string {
+  return format(date, 'yyyy-MM-dd')
+}
+
+function addDaysIso(date: string, days: number): string {
+  return toIsoDate(addDays(parseLocalDate(date), days))
+}
+
+function programWeekStartDate(programStart: string | undefined, week: number): string {
+  const start = programStart || toIsoDate(new Date())
+  return addDaysIso(start, (week - 1) * 7)
+}
+
 // Helper to add IDs to planned exercises for stable DND
 interface PlannedExerciseWithId extends PlannedExercise {
   id: string
@@ -73,10 +88,14 @@ interface PlannedExerciseWithId extends PlannedExercise {
 
 import { LoadTypeBadge } from '@/components/shared/LoadTypeBadge'
 
-function SortableExercise({ ex, onRemove, onUpdate }: { 
+function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: { 
   ex: PlannedExerciseWithId; 
   onRemove: (id: string) => void;
   onUpdate: (id: string, f: keyof PlannedExercise, v: any) => void;
+  onMoveUp: (id: string) => void;
+  onMoveDown: (id: string) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   const { unit } = useSettingsStore()
   const {
@@ -145,22 +164,43 @@ function SortableExercise({ ex, onRemove, onUpdate }: {
       <Group justify="space-between" gap="xs" mb={4}>
         <Group gap="xs" style={{ flex: 1 }}>
           <Box {...attributes} {...listeners} style={{ cursor: 'grab', padding: '4px 0' }}>
-            <Group gap={2}>
-              <Box style={{ width: 2, height: 12, background: 'var(--mantine-color-gray-4)' }} />
-              <Box style={{ width: 2, height: 12, background: 'var(--mantine-color-gray-4)' }} />
-            </Group>
+            <GripVertical size={16} color="var(--mantine-color-gray-6)" />
           </Box>
           <Text size="sm" fw={500} truncate>{ex.name}</Text>
           {ex.load_source && <LoadTypeBadge source={ex.load_source} />}
         </Group>
-        <ActionIcon
-          variant="subtle"
-          color="red"
-          size="sm"
-          onClick={() => onRemove(ex.id)}
-        >
-          <Trash2 size={12} />
-        </ActionIcon>
+        <Group gap={2} wrap="nowrap">
+          <ActionIcon
+            variant="subtle"
+            size="sm"
+            onClick={() => onMoveUp(ex.id)}
+            disabled={!canMoveUp}
+            title="Move exercise up"
+            aria-label="Move exercise up"
+          >
+            <ArrowUp size={12} />
+          </ActionIcon>
+          <ActionIcon
+            variant="subtle"
+            size="sm"
+            onClick={() => onMoveDown(ex.id)}
+            disabled={!canMoveDown}
+            title="Move exercise down"
+            aria-label="Move exercise down"
+          >
+            <ArrowDown size={12} />
+          </ActionIcon>
+          <ActionIcon
+            variant="subtle"
+            color="red"
+            size="sm"
+            onClick={() => onRemove(ex.id)}
+            title="Remove exercise"
+            aria-label="Remove exercise"
+          >
+            <Trash2 size={12} />
+          </ActionIcon>
+        </Group>
       </Group>
       <Group gap={6}>
         <NumberInput
@@ -224,9 +264,6 @@ export default function DesignerPage() {
 
   // Session form state
   const [sessionDate, setSessionDate] = useState<string | null>(null)
-  const [sessionDay, setSessionDay] = useState('Monday')
-  const [sessionWeek, setSessionWeek] = useState('W1')
-  const [sessionPhase, setSessionPhase] = useState('')
   const [plannedExercises, setPlannedExercises] = useState<PlannedExerciseWithId[]>([])
 
   const phases = program?.phases || []
@@ -261,16 +298,14 @@ export default function DesignerPage() {
     return Array.from(s)
   }, [program?.sessions])
 
-  const phaseOptions = useMemo(() => {
-    const seen = new Set<string>([''])
-    const options = [{ value: '', label: 'None' }]
-    for (const phase of phases) {
-      if (!phase.name || seen.has(phase.name)) continue
-      seen.add(phase.name)
-      options.push({ value: phase.name, label: phase.name })
-    }
-    return options
-  }, [phases])
+  const selectedPhase = useMemo(() => {
+    return phases.find(
+      (phase) =>
+        (phase.block ?? 'current') === block &&
+        selectedWeek >= phase.start_week &&
+        selectedWeek <= phase.end_week
+    )
+  }, [phases, block, selectedWeek])
 
   const weekSessions = useMemo(() => {
     return (program?.sessions || [])
@@ -278,31 +313,24 @@ export default function DesignerPage() {
       .filter(s => (s.block ?? 'current') === block)
   }, [program?.sessions, selectedWeek, block])
 
-  const plannedMuscleVolume = useMemo(() => {
-    const mgSets: Record<string, number> = {}
-    const lookup = new Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>()
-    for (const ex of glossary) {
-      lookup.set(normalizeExerciseName(ex.name), {
-        primary: ex.primary_muscles,
-        secondary: ex.secondary_muscles,
-        tertiary: ex.tertiary_muscles ?? [],
-      })
-    }
+  const selectedWeekStartDate = useMemo(() => {
+    return programWeekStartDate(program?.meta?.program_start, selectedWeek)
+  }, [program?.meta?.program_start, selectedWeek])
 
-    for (const s of weekSessions) {
-      for (const ex of s.planned_exercises || []) {
-        const muscles = lookup.get(normalizeExerciseName(ex.name))
-        if (!muscles) continue
-        const sets = ex.sets || 0
-        for (const m of muscles.primary) mgSets[m] = (mgSets[m] || 0) + sets
-        for (const m of muscles.secondary) mgSets[m] = (mgSets[m] || 0) + sets * 0.5
-        for (const m of muscles.tertiary) mgSets[m] = (mgSets[m] || 0) + sets * 0.25
-      }
-    }
+  const selectedWeekDates = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => addDaysIso(selectedWeekStartDate, i))
+  }, [selectedWeekStartDate])
+
+  const selectedWeekEndDate = selectedWeekDates[6] ?? selectedWeekStartDate
+  const inferredSessionDay = sessionDate ? getDayOfWeek(sessionDate) : null
+
+  const plannedMuscleVolume = useMemo(() => {
+    const plannedEntries = weekSessions.flatMap((s) => s.planned_exercises ?? [])
+    const mgSets = sessionMuscleSets(plannedEntries, glossary)
 
     const sorted = Object.entries(mgSets)
-      .sort(([, a], [, b]) => b - a)
-      .map(([muscle, sets]) => ({ label: MUSCLE_LABELS[muscle] || muscle, sets }))
+      .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+      .map(([muscle, sets]) => ({ label: MUSCLE_LABELS[muscle] || muscle, sets: Number(sets) || 0 }))
 
     if (sorted.length <= 5) return sorted
     const top5 = sorted.slice(0, 5)
@@ -357,16 +385,21 @@ export default function DesignerPage() {
           }
         } else {
           // Create new session for that day in the target week
+          const sourceWeekStart = programWeekStartDate(program?.meta?.program_start, copySourceWeek)
           const dayIndex = DAYS.indexOf(src.day)
-          const programStart = new Date(program?.meta?.program_start || new Date().toISOString())
-          const targetDate = new Date(programStart)
-          targetDate.setDate(targetDate.getDate() + (selectedWeek - 1) * 7 + dayIndex)
-          const dateStr = targetDate.toISOString().slice(0, 10)
+          const dateOffset = differenceInCalendarDays(
+            parseLocalDate(src.date),
+            parseLocalDate(sourceWeekStart)
+          )
+          const targetOffset = dateOffset >= 0 && dateOffset <= 6 ? dateOffset : Math.max(dayIndex, 0)
+          const dateStr = addDaysIso(selectedWeekStartDate, targetOffset)
+          const day = getDayOfWeek(dateStr)
 
           await api.createSession(version, {
             date: dateStr,
-            day: src.day,
+            day,
             week: `W${selectedWeek}`,
+            week_number: selectedWeek,
             block: block,
             status: 'planned',
             completed: false,
@@ -395,20 +428,13 @@ export default function DesignerPage() {
           : program?.sessions.findIndex(s => s.date === session.date && s.week_number === session.week_number && s.day === session.day) ?? -1
       )
       setSessionDate(session.date)
-      setSessionDay(session.day)
-      setSessionWeek(session.week)
-      setSessionPhase(typeof session.phase === 'string' ? session.phase : session.phase?.name || '')
       setPlannedExercises((session.planned_exercises || []).map((ex, i) => ({ ...ex, id: `ex-${Date.now()}-${i}` })))
     } else {
       setEditingSession(null)
       setEditingSessionDate('')
       setEditingSessionGlobalIndex(-1)
-      const dayName = DAYS[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1]
-      setSessionDate(new Date().toISOString().slice(0, 10))
-      setSessionDay(dayName)
-      setSessionWeek(`W${selectedWeek}`)
-      const phaseParam = searchParams.get('phase')
-      setSessionPhase(phaseParam || phases[0]?.name || '')
+      const usedDates = new Set(weekSessions.map((s) => s.date))
+      setSessionDate(selectedWeekDates.find((date) => !usedDates.has(date)) ?? selectedWeekStartDate)
       setPlannedExercises([])
     }
     setIsSessionEditorOpen(true)
@@ -425,15 +451,23 @@ export default function DesignerPage() {
 
   async function saveSession() {
     try {
-      const dateStr = sessionDate ?? new Date().toISOString().slice(0, 10)
+      if (!sessionDate) {
+        pushToast({ message: 'Choose a session date before saving', type: 'error' })
+        return
+      }
+
+      const dateStr = sessionDate
+      const day = getDayOfWeek(dateStr)
       
       // Strip IDs before saving
       const exercisesToSave = plannedExercises.map(({ id, ...rest }) => rest)
 
       const sessionData: Partial<Session> & { date: string } = {
         date: dateStr,
-        day: sessionDay,
-        week: sessionWeek,
+        day,
+        week: `W${selectedWeek}`,
+        week_number: selectedWeek,
+        block,
         status: 'planned',
         completed: false,
         planned_exercises: exercisesToSave,
@@ -446,6 +480,9 @@ export default function DesignerPage() {
           throw new Error('Could not resolve the session index for update')
         }
         await api.updatePlannedExercises(version, editingSessionDate, editingSessionGlobalIndex, exercisesToSave)
+        if (dateStr !== editingSessionDate) {
+          await api.rescheduleSession(version, editingSessionDate, editingSessionGlobalIndex, dateStr, day)
+        }
       } else {
         await createSession(sessionData)
       }
@@ -471,6 +508,15 @@ export default function DesignerPage() {
 
   function updatePlannedExercise(id: string, field: keyof PlannedExercise, value: unknown) {
     setPlannedExercises(prev => prev.map((pe) => pe.id === id ? { ...pe, [field]: value } : pe))
+  }
+
+  function movePlannedExercise(id: string, direction: -1 | 1) {
+    setPlannedExercises(prev => {
+      const index = prev.findIndex((ex) => ex.id === id)
+      const nextIndex = index + direction
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.length) return prev
+      return arrayMove(prev, index, nextIndex)
+    })
   }
 
   function removePlannedExercise(id: string) {
@@ -658,42 +704,39 @@ export default function DesignerPage() {
         onClose={closeSessionEditor}
         title={editingSession ? 'Edit Session' : 'Plan Session'}
         size="lg"
+        styles={{
+          content: {
+            maxHeight: 'calc(var(--app-viewport-height, 100dvh) - 32px)',
+            display: 'flex',
+            flexDirection: 'column',
+          },
+          body: {
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            paddingBottom: 'calc(var(--mantine-spacing-md) + env(safe-area-inset-bottom, 0px))',
+          },
+        }}
       >
         <Stack gap="md">
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <Stack gap="xs">
             <DatePickerInput
               label="Date"
-              value={sessionDate ? new Date(sessionDate) : null}
-              onChange={(d) => {
-                const date = d as Date | null
-                if (date) {
-                  setSessionDate(date.toISOString().slice(0, 10))
-                } else {
-                  setSessionDate(null)
-                }
-              }}
+              value={sessionDate}
+              onChange={setSessionDate}
+              valueFormat="ddd MMM D, YYYY"
+              defaultDate={selectedWeekStartDate}
+              minDate={selectedWeekStartDate}
+              maxDate={selectedWeekEndDate}
+              clearable={false}
             />
-            <Select
-              label="Day"
-              value={sessionDay}
-              onChange={(v) => setSessionDay(v ?? 'Monday')}
-              data={DAYS}
-            />
-          </SimpleGrid>
-
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            <TextInput
-              label="Week"
-              value={sessionWeek}
-              onChange={(e) => setSessionWeek(e.currentTarget.value)}
-            />
-            <Select
-              label="Phase"
-              value={sessionPhase}
-              onChange={(v) => setSessionPhase(v ?? '')}
-              data={phaseOptions}
-            />
-          </SimpleGrid>
+            <Group gap="xs" wrap="wrap">
+              <Badge variant="light">Week {selectedWeek}</Badge>
+              {inferredSessionDay && <Badge variant="light">{inferredSessionDay}</Badge>}
+              <Badge variant="light">{selectedPhase?.name ?? 'Unscheduled'}</Badge>
+            </Group>
+          </Stack>
 
           {/* Planned exercises */}
           <Stack gap="xs">
@@ -709,12 +752,16 @@ export default function DesignerPage() {
                 strategy={verticalListSortingStrategy}
               >
                 <Stack gap="xs">
-                  {plannedExercises.map((ex) => (
+                  {plannedExercises.map((ex, index) => (
                     <SortableExercise
                       key={ex.id}
                       ex={ex}
                       onRemove={removePlannedExercise}
                       onUpdate={updatePlannedExercise}
+                      onMoveUp={(id) => movePlannedExercise(id, -1)}
+                      onMoveDown={(id) => movePlannedExercise(id, 1)}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < plannedExercises.length - 1}
                     />
                   ))}
                 </Stack>

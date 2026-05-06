@@ -53,6 +53,18 @@ variable "dynamodb_health_table" {
   default     = "if-health"
 }
 
+variable "dynamodb_sessions_table" {
+  description = "DynamoDB table for copied health sessions"
+  type        = string
+  default     = "if-sessions"
+}
+
+variable "dynamodb_analysis_cache_table" {
+  description = "DynamoDB table for cached powerlifting analysis bundles"
+  type        = string
+  default     = "if-powerlifting-analysis-cache"
+}
+
 variable "dynamodb_finance_table" {
   description = "DynamoDB table for finance portal"
   type        = string

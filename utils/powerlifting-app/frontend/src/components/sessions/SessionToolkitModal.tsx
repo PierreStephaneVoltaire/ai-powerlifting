@@ -211,28 +211,6 @@ export default function SessionToolkitModal({
                 )}
 
                 <Group justify="center" gap="sm" py="md">
-                  <Group gap={4}>
-                    {[...loadout.plates].reverse().map((plate, idx) => (
-                      <div
-                        key={`left-${idx}`}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 2,
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          width: `${Math.min(40 + plate * 2, 80)}px`,
-                          height: `${Math.min(20 + plate, 40)}px`,
-                          backgroundColor: getPlateColor(plate, unit),
-                          color: plate >= 5 ? '#fff' : '#000',
-                        }}
-                      >
-                        {plateDisplayValue(plate, unit)}
-                      </div>
-                    ))}
-                  </Group>
-
                   <div style={{ width: 16, height: 32, backgroundColor: '#9ca3af', borderRadius: 2 }} />
 
                   <Group gap={4}>

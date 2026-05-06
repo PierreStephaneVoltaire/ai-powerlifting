@@ -128,6 +128,11 @@ export interface PeakingTimeline {
 
 export interface WeeklyAnalysis {
   week: number
+  selected_week_start?: number | null
+  selected_week_end?: number | null
+  selected_week_count?: number | null
+  window_start?: string | null
+  window_end?: string | null
   block: string
   lifts: Record<string, {
     progression_rate_kg_per_week?: number | null
@@ -293,6 +298,34 @@ export interface WeeklyAnalysis {
   peaking_timeline?: PeakingTimeline
 }
 
+export type AnalysisWindowKey =
+  | 'current'
+  | 'previous_1'
+  | 'previous_2'
+  | 'previous_4'
+  | 'previous_8'
+  | 'block'
+
+export interface AnalysisWindow {
+  key: AnalysisWindowKey
+  label: string
+  start: string
+  end: string
+  weekStart: number
+  weekEnd: number
+  weeks: number
+  currentWeek: number
+}
+
+export interface WeeklyAnalysisBundle {
+  schemaVersion: number
+  asOfDate: string
+  generatedAt: string
+  cached: boolean
+  windows: Record<AnalysisWindowKey, AnalysisWindow>
+  results: Record<AnalysisWindowKey, WeeklyAnalysis>
+}
+
 export interface CorrelationFinding {
   exercise: string
   lift: 'squat' | 'bench' | 'deadlift'
@@ -442,6 +475,9 @@ export async function fetchWeeklyAnalysis(
   block = 'current',
   windowStart?: string,
   windowEnd?: string,
+  weekStart?: number,
+  weekEnd?: number,
+  refDate?: string,
 ): Promise<WeeklyAnalysis> {
   const params = new URLSearchParams({
     weeks: String(weeks),
@@ -449,7 +485,20 @@ export async function fetchWeeklyAnalysis(
   })
   if (windowStart) params.set('windowStart', windowStart)
   if (windowEnd) params.set('windowEnd', windowEnd)
+  if (weekStart) params.set('weekStart', String(weekStart))
+  if (weekEnd) params.set('weekEnd', String(weekEnd))
+  if (refDate) params.set('refDate', refDate)
   const res = await api.get(`/analytics/analysis/weekly?${params.toString()}`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function fetchWeeklyAnalysisBundle(asOfDate?: string): Promise<WeeklyAnalysisBundle> {
+  const params = new URLSearchParams()
+  if (asOfDate) params.set('asOfDate', asOfDate)
+  const qs = params.toString()
+  const res = await api.get(`/analytics/analysis/weekly-bundle${qs ? `?${qs}` : ''}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return body.data

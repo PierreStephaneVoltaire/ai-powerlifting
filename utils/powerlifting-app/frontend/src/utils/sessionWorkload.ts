@@ -1,7 +1,13 @@
 import type { GlossaryExercise, MuscleGroup, Session } from '@powerlifting/types'
-import { normalizeExerciseName } from './volume'
+import { executedSets, normalizeExerciseName } from './volume'
 
-type WorkoutEntry = Pick<Session['exercises'][number], 'name' | 'sets' | 'reps' | 'kg'>
+type WorkoutEntry = Pick<Session['exercises'][number], 'name' | 'sets' | 'set_statuses' | 'reps' | 'kg'>
+
+export const MUSCLE_CONTRIBUTION_MULTIPLIERS = {
+  primary: 1,
+  secondary: 0.5,
+  tertiary: 0.25,
+} as const
 
 interface MuscleContribution {
   primary: MuscleGroup[]
@@ -21,6 +27,17 @@ function buildGlossaryLookup(glossary: GlossaryExercise[]): Map<string, MuscleCo
   return lookup
 }
 
+function addWeightedSets(
+  volumes: Partial<Record<MuscleGroup, number>>,
+  muscles: MuscleGroup[],
+  sets: number,
+  multiplier: number
+) {
+  for (const muscle of muscles) {
+    volumes[muscle] = (volumes[muscle] ?? 0) + sets * multiplier
+  }
+}
+
 export function sessionMuscleSets(
   entries: WorkoutEntry[],
   glossary: GlossaryExercise[]
@@ -32,18 +49,12 @@ export function sessionMuscleSets(
     const muscles = lookup.get(normalizeExerciseName(ex.name))
     if (!muscles) continue
 
-    const sets = ex.sets || 0
+    const sets = executedSets(ex)
     if (sets <= 0) continue
 
-    for (const muscle of muscles.primary) {
-      volumes[muscle] = (volumes[muscle] ?? 0) + sets
-    }
-    for (const muscle of muscles.secondary) {
-      volumes[muscle] = (volumes[muscle] ?? 0) + sets * 0.5
-    }
-    for (const muscle of muscles.tertiary) {
-      volumes[muscle] = (volumes[muscle] ?? 0) + sets * 0.25
-    }
+    addWeightedSets(volumes, muscles.primary, sets, MUSCLE_CONTRIBUTION_MULTIPLIERS.primary)
+    addWeightedSets(volumes, muscles.secondary, sets, MUSCLE_CONTRIBUTION_MULTIPLIERS.secondary)
+    addWeightedSets(volumes, muscles.tertiary, sets, MUSCLE_CONTRIBUTION_MULTIPLIERS.tertiary)
   }
 
   return volumes

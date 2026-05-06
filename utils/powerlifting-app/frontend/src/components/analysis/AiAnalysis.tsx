@@ -310,10 +310,10 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
                               </Badge>
                             </Group>
                             <Text size="xs" c="dimmed">{strategy.reason}</Text>
-                            {strategy.alternative_strategies?.length > 0 && (
+                            {(strategy.alternative_strategies ?? []).length > 0 && (
                               <Stack gap={4} mt="xs" pl="sm" style={{ borderLeft: '2px solid var(--mantine-color-default-border)' }}>
                                 <Text size="xs" fw={500} c="dimmed">Alternatives</Text>
-                                {strategy.alternative_strategies.map((alt: any, j: number) => (
+                                {(strategy.alternative_strategies ?? []).map((alt: any, j: number) => (
                                   <Group key={j} gap="xs" align="flex-start" wrap="wrap">
                                     <Badge color="grape" variant="light" size="xs" style={{ textTransform: 'capitalize' }}>
                                       {alt.approach.replace('_', ' ')}

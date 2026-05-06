@@ -70,7 +70,7 @@ function DesktopSidebar() {
 
   return (
     <ScrollArea
-      h="calc(var(--vh, 1vh) * 100 - 60px)"
+      h="calc(var(--app-viewport-height, 100dvh) - 60px)"
       offsetScrollbars
       style={{ minHeight: 0 }}
     >

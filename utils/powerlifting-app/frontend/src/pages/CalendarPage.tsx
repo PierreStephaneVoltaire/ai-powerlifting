@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Group,
@@ -16,7 +16,7 @@ import { Calendar } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { phaseColor } from '@/utils/phases'
 import { startOfWeek, format } from 'date-fns'
-import { parseLocalDate } from '@/utils/dates'
+import { findClosestSessionToToday, parseLocalDate } from '@/utils/dates'
 import { normalizeExerciseName } from '@/utils/volume'
 import { Check } from 'lucide-react'
 import dayjs from 'dayjs'
@@ -39,6 +39,8 @@ export default function CalendarPage() {
   const { program, isLoading } = useProgramStore()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const agendaTargetRef = useRef<HTMLButtonElement | null>(null)
+  const hasScrolledAgendaRef = useRef(false)
   const view = (() => {
     const raw = searchParams.get('view')
     return raw === 'Month' || raw === 'Compact' || raw === 'Agenda' ? raw : 'Agenda'
@@ -61,6 +63,11 @@ export default function CalendarPage() {
       .filter((session) => (session.block ?? 'current') === 'current')
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [program])
+
+  const closestAgendaSession = useMemo(
+    () => findClosestSessionToToday(currentSessions),
+    [currentSessions],
+  )
 
   const weeklyGroups = useMemo(() => {
     if (!currentSessions.length) return []
@@ -93,6 +100,20 @@ export default function CalendarPage() {
     }
     return map
   }, [currentSessions, program])
+
+  useEffect(() => {
+    if (view !== 'Agenda' || hasScrolledAgendaRef.current || !closestAgendaSession) return
+
+    const timeoutId = window.setTimeout(() => {
+      const target = agendaTargetRef.current
+      if (!target) return
+
+      target.scrollIntoView({ block: 'center', inline: 'nearest' })
+      hasScrolledAgendaRef.current = true
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [closestAgendaSession, view])
 
   if (isLoading || !program) {
     return (
@@ -146,7 +167,11 @@ export default function CalendarPage() {
     const previewNames = Array.from(new Set(previewExercises.map((exercise) => exercise.name))).slice(0, compact ? 2 : 3).join(', ') || 'Rest Day'
 
     return (
-      <UnstyledButton key={`${session.date}-${session.id ?? session.week_number}`} onClick={() => openSession(session)}>
+      <UnstyledButton
+        key={`${session.date}-${session.id ?? session.week_number}`}
+        ref={session === closestAgendaSession ? agendaTargetRef : undefined}
+        onClick={() => openSession(session)}
+      >
         <Paper
           withBorder
           p={compact ? 'xs' : 'sm'}

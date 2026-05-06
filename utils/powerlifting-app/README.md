@@ -163,8 +163,21 @@ Phases matter to:
 - `notes`
 - `failed`
 - `failed_sets[]`
+- `set_statuses[]`
 - `load_source`
 - `rpe_target`
+
+`set_statuses[]` is the current per-set execution state:
+
+- `pending`
+- `completed`
+- `failed`
+- `skipped`
+
+For backward compatibility, `failed_sets[]` is still written and is derived from
+`set_statuses[]`. Analytics treat `completed` and `failed` as executed sets.
+`skipped` and `pending` do not count toward executed volume, fatigue workload,
+INOL, specificity, or muscle-set totals.
 
 These are the raw inputs to almost everything:
 
@@ -1400,6 +1413,12 @@ Important implementation detail:
 
 The app has multiple AI entry points, but each is narrow.
 
+The powerlifting portal does not call OpenRouter directly from the browser or
+backend feature routes. AI requests go through the IF Agent API. Specialist
+flows use IF slash-specialist commands such as `/powerlifting_coach`, so model
+selection, specialist prompts, tool access, and context injection stay inside
+the IF agent layer.
+
 Current model/config variables:
 
 - `ANALYSIS_MODEL`
@@ -1416,6 +1435,62 @@ Current model/config variables:
   lightweight routing and non-estimate health helpers
 - `IMPORT_FAST_MODEL`
   import classification and glossary resolution
+
+### Session note assistance
+
+User-visible surface:
+
+- Session editor -> `Help write notes`
+
+Route:
+
+- `POST /api/sessions/:version/:date/:index/notes/draft`
+
+Specialist path:
+
+- IF Agent API `/powerlifting_coach`
+
+Boundary:
+
+- The feature drafts text for `session_notes` only.
+- It receives the exact session, planned work, executed work, wellness, RPE,
+  set statuses, and the structured answers from the form.
+- It must not answer training questions, mention future workouts, create or
+  delete sessions, change exercises, or suggest program changes.
+- The backend rejects obvious out-of-scope requests before specialist invocation
+  and requires the submitted session date to match the route date.
+- The backend only reads a returned `notes` string. No mutation happens until
+  the user inserts the draft and saves the session.
+
+### Session auto-regulation
+
+User-visible surface:
+
+- Session editor -> per-exercise auto-regulation button
+
+Route:
+
+- `POST /api/sessions/:version/:date/:index/autoregulation`
+
+Specialist path:
+
+- IF Agent API `/powerlifting_coach`
+
+Boundary:
+
+- The feature is limited to the exact session date/index and selected exercise
+  index.
+- The specialist can approve, deny, or ask follow-up questions.
+- The specialist is instructed not to answer unrelated questions, not to emit
+  `HANDOFF_REQUIRED`, and not to create, delete, reschedule, complete, or drop
+  sessions.
+- The backend rejects obvious out-of-scope requests before specialist invocation
+  and requires the submitted session date to match the route date.
+- The backend sanitizes the specialist JSON before the frontend can apply it:
+  only the selected exercise can differ, all other exercise rows are restored
+  from the submitted session, and completed or failed set statuses are preserved.
+- `planned_exercises[]` is never mutated. Applying the result updates only the
+  executed `exercises[]` list and appends concise reasoning to exercise notes.
 
 ### 1. Exercise fatigue-profile estimation
 

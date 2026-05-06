@@ -13,3 +13,4 @@ const client = new DynamoDBClient({
 
 export const docClient = DynamoDBDocumentClient.from(client)
 export const TABLE = process.env.DYNAMO_TABLE || 'if-health'
+export const SESSION_TABLE = process.env.IF_SESSIONS_TABLE_NAME || 'if-sessions'

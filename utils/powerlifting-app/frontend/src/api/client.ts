@@ -146,6 +146,49 @@ export async function completeSession(
   await api.patch(`/sessions/${version}/${date}/${index}/complete`, data)
 }
 
+export async function draftSessionNotes(
+  version: string,
+  date: string,
+  index: number,
+  data: { session: Session; answers: Record<string, unknown> }
+): Promise<{ notes: string }> {
+  const res = await api.post<ApiResponse<{ notes: string }>>(
+    `/sessions/${version}/${date}/${index}/notes/draft`,
+    data
+  )
+  return res.data.data
+}
+
+export interface AutoRegulationResponse {
+  status: 'needs_more_info' | 'denied' | 'ready'
+  message: string
+  follow_up_questions: string[]
+  proposed_exercises: Exercise[] | null
+  diff: string[]
+  reasoning: string
+  reasoning_note: string
+}
+
+export async function requestAutoRegulation(
+  version: string,
+  date: string,
+  index: number,
+  data: {
+    session: Session
+    exerciseIndex: number
+    mode: 'change_exercise' | 'change_weight'
+    toggles: Record<string, boolean>
+    userMessage: string
+    conversation: Array<{ role: 'user' | 'assistant'; content: string }>
+  }
+): Promise<AutoRegulationResponse> {
+  const res = await api.post<ApiResponse<AutoRegulationResponse>>(
+    `/sessions/${version}/${date}/${index}/autoregulation`,
+    data
+  )
+  return res.data.data
+}
+
 export async function addExercise(
   version: string,
   date: string,

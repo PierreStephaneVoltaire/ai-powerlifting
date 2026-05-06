@@ -132,6 +132,28 @@ def test_fatigue_physics_is_nonlinear() -> None:
     assert systemic_90 > systemic_70
 
 
+def test_set_statuses_drive_executed_volume_and_failures() -> None:
+    exercise = make_exercise(
+        "Squat",
+        100,
+        5,
+        sets=4,
+        set_statuses=["completed", "failed", "skipped", "pending"],
+        failed_sets=[False, False, False, False],
+    )
+
+    assert analytics._executed_sets(exercise) == 2
+    assert analytics._executed_volume(exercise) == 1000
+    assert analytics._count_failed_sets(exercise) == 1
+
+
+def test_set_statuses_fallback_to_legacy_failed_sets() -> None:
+    exercise = make_exercise("Bench Press", 80, 5, sets=3, failed_sets=[False, True, False])
+
+    assert analytics._executed_sets(exercise) == 3
+    assert analytics._count_failed_sets(exercise) == 1
+
+
 @pytest.mark.parametrize(
     ("avg_rpe", "expected"),
     [
@@ -409,6 +431,38 @@ def test_weekly_analysis_previous_week_window_excludes_current_week() -> None:
 
     assert result["sessions_analyzed"] == 1
     assert result["exercise_stats"]["Squat"]["max_kg"] == 100
+
+
+def test_weekly_analysis_training_week_window_overrides_calendar_start() -> None:
+    program = {
+        "meta": {"program_start": "2026-04-01"},
+        "phases": [{"name": "Build", "intent": "", "start_week": 1, "end_week": 8}],
+        "sessions": [],
+    }
+    sessions = [
+        make_session(6, [make_exercise("Squat", 140, 3, sets=4)], week_number=4),
+        make_session(1, [make_exercise("Bench Press", 100, 3, sets=4)], week_number=4),
+        make_session(0, [make_exercise("Deadlift", 180, 1, sets=3)], week_number=5, completed=False, status="planned"),
+    ]
+
+    result = analytics.weekly_analysis(
+        program,
+        sessions,
+        window_start="2026-04-20",
+        window_end="2026-04-24",
+        week_start=4,
+        week_end=4,
+        weeks=1,
+        block="current",
+    )
+
+    assert result["selected_week_start"] == 4
+    assert result["selected_week_end"] == 4
+    assert result["sessions_analyzed"] == 2
+    assert result["exercise_stats"]["Squat"]["total_sets"] == 4
+    assert result["exercise_stats"]["Squat"]["max_kg"] == 140
+    assert result["compliance"]["planned"] == 2
+    assert result["compliance"]["completed"] == 2
 
 
 def test_compute_banister_ffm_constant_load_stays_balanced() -> None:

@@ -12,6 +12,7 @@ import asyncio
 import copy
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -130,6 +131,17 @@ def _load_program_version(version: str, pk: str | None = None) -> tuple[dict, st
     program = copy.deepcopy(item)
     program.pop("pk", None)
     program.pop("sk", None)
+    from session_store import SessionStore
+    session_store = SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    )
+    program["sessions"] = session_store.list_sessions_sync(
+        sk,
+        program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+    )
     return program, sk, _store
 
 
@@ -137,10 +149,29 @@ def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None
     table, default_pk, store = _get_table_and_pk()
     active_pk = pk or default_pk
     item = copy.deepcopy(program)
+    sessions = item.pop("sessions", [])
     item["pk"] = active_pk
     item["sk"] = sk
     table.put_item(Item=item)
+    if isinstance(sessions, list):
+        from session_store import SessionStore
+        session_store = SessionStore(
+            table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+            pk=active_pk,
+            region=os.environ.get("AWS_REGION", "ca-central-1"),
+            source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        )
+        session_store.replace_program_sessions_sync(
+            sk,
+            sessions,
+            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+        )
     store.invalidate_cache()
+    try:
+        from cache_invalidation import invalidate_analysis_caches
+        invalidate_analysis_caches(active_pk, getattr(store, "_table_name", None), getattr(store, "_region", None))
+    except Exception as exc:
+        logger.warning("[HealthTools] Analysis cache invalidation failed: %s", exc)
 
 
 GOAL_TYPES = {
@@ -423,6 +454,11 @@ async def _write_federation_library(library: dict[str, Any]) -> dict[str, Any]:
     store = _get_federation_store()
     item = _floats_to_decimals(library)
     await asyncio.get_running_loop().run_in_executor(None, lambda: store.table.put_item(Item=item))
+    try:
+        from cache_invalidation import invalidate_analysis_caches
+        invalidate_analysis_caches(store.pk, getattr(store, "_table_name", None), getattr(store, "_region", None))
+    except Exception as exc:
+        logger.warning("[HealthTools] Analysis cache invalidation failed after federation update: %s", exc)
     return library
 
 
@@ -1486,33 +1522,37 @@ async def health_create_session(
     Raises:
         ValueError: If session already exists on that date
     """
-    import copy
     # Validate date format
     datetime.strptime(date, "%Y-%m-%d")
 
     store = _get_store()
     program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    sessions = new_program.setdefault("sessions", [])
-    if any(s.get("date") == date for s in sessions):
-        raise ValueError(f"Session already exists on {date}")
-
+    table, active_pk, _ = _get_table_and_pk()
+    program_sk = _resolve_program_sk(table, active_pk, "current")
     new_session = {
         "date": date,
         "day": day,
+        "week": f"W{week_number}",
         "week_number": week_number,
+        "block": "current",
+        "status": "planned",
         "completed": False,
         "session_rpe": None,
         "body_weight_kg": None,
         "session_notes": session_notes,
+        "planned_exercises": [],
         "exercises": exercises or [],
     }
-    sessions.append(new_session)
-    sessions.sort(key=lambda s: s.get("date", ""))
-
-    await store._write_new_version(new_program, minor=True)
-    return new_session
+    from session_store import SessionStore
+    created = await SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    ).create_session(program_sk, new_session, program.get("phases", []))
+    store.invalidate_cache()
+    store._invalidate_analysis_cache()
+    return created
 
 
 async def health_delete_session(date: str) -> dict:
@@ -1527,20 +1567,20 @@ async def health_delete_session(date: str) -> dict:
     Raises:
         ValueError: If session not found
     """
-    import copy
     store = _get_store()
     program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    sessions = new_program.get("sessions", [])
-    before = len(sessions)
-    new_program["sessions"] = [s for s in sessions if s.get("date") != date]
-
-    if len(new_program["sessions"]) == before:
-        raise ValueError(f"Session not found: {date}")
-
-    await store._write_new_version(new_program, minor=True)
-    return {"deleted": date}
+    table, active_pk, _ = _get_table_and_pk()
+    program_sk = _resolve_program_sk(table, active_pk, "current")
+    from session_store import SessionStore
+    result = await SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    ).delete_session(program_sk, date)
+    store.invalidate_cache()
+    store._invalidate_analysis_cache()
+    return result
 
 
 async def health_reschedule_session(old_date: str, new_date: str) -> dict:
@@ -1556,28 +1596,31 @@ async def health_reschedule_session(old_date: str, new_date: str) -> dict:
     Raises:
         ValueError: If old session not found or new date already occupied
     """
-    import copy
     datetime.strptime(old_date, "%Y-%m-%d")
     datetime.strptime(new_date, "%Y-%m-%d")
 
     store = _get_store()
     program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    sessions = new_program.get("sessions", [])
-
-    if any(s.get("date") == new_date for s in sessions):
+    table, active_pk, _ = _get_table_and_pk()
+    program_sk = _resolve_program_sk(table, active_pk, "current")
+    from session_store import SessionStore
+    session_store = SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    )
+    if await session_store.get_sessions_range(program_sk, new_date, new_date, program.get("phases", [])):
         raise ValueError(f"A session already exists on {new_date}")
-
-    session_idx = next((i for i, s in enumerate(sessions) if s.get("date") == old_date), None)
-    if session_idx is None:
-        raise ValueError(f"Session not found: {old_date}")
-
-    sessions[session_idx]["date"] = new_date
-    sessions.sort(key=lambda s: s.get("date", ""))
-
-    await store._write_new_version(new_program, minor=True)
-    return sessions[next(i for i, s in enumerate(sessions) if s.get("date") == new_date)]
+    updated = await session_store.patch_session(
+        program_sk,
+        old_date,
+        {"date": new_date},
+        program.get("phases", []),
+    )
+    store.invalidate_cache()
+    store._invalidate_analysis_cache()
+    return updated
 
 
 async def health_add_exercise(date: str, exercise: dict) -> dict:
@@ -1593,23 +1636,26 @@ async def health_add_exercise(date: str, exercise: dict) -> dict:
     Raises:
         ValueError: If session not found or exercise missing name
     """
-    import copy
     if not exercise.get("name"):
         raise ValueError("exercise.name is required")
 
     store = _get_store()
     program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    sessions = new_program.get("sessions", [])
-    session_idx = next((i for i, s in enumerate(sessions) if s.get("date") == date), None)
-    if session_idx is None:
-        raise ValueError(f"Session not found: {date}")
-
-    sessions[session_idx].setdefault("exercises", []).append(exercise)
-
-    await store._write_new_version(new_program, minor=True)
-    return {"date": date, "exercises": sessions[session_idx]["exercises"]}
+    table, active_pk, _ = _get_table_and_pk()
+    program_sk = _resolve_program_sk(table, active_pk, "current")
+    session = await health_get_session(date)
+    exercises = list(session.get("exercises") or [])
+    exercises.append(exercise)
+    from session_store import SessionStore
+    updated = await SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
+    store.invalidate_cache()
+    store._invalidate_analysis_cache()
+    return {"date": date, "exercises": updated.get("exercises", [])}
 
 
 async def health_remove_exercise(date: str, exercise_index: int) -> dict:
@@ -1625,23 +1671,26 @@ async def health_remove_exercise(date: str, exercise_index: int) -> dict:
     Raises:
         ValueError: If session not found or index out of range
     """
-    import copy
     store = _get_store()
     program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    sessions = new_program.get("sessions", [])
-    session_idx = next((i for i, s in enumerate(sessions) if s.get("date") == date), None)
-    if session_idx is None:
-        raise ValueError(f"Session not found: {date}")
-
-    exercises = sessions[session_idx].get("exercises", [])
+    table, active_pk, _ = _get_table_and_pk()
+    program_sk = _resolve_program_sk(table, active_pk, "current")
+    session = await health_get_session(date)
+    exercises = list(session.get("exercises") or [])
     if exercise_index < 0 or exercise_index >= len(exercises):
         raise ValueError(f"Exercise index {exercise_index} out of range (0-{len(exercises)-1})")
 
     exercises.pop(exercise_index)
 
-    await store._write_new_version(new_program, minor=True)
+    from session_store import SessionStore
+    await SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
+    store.invalidate_cache()
+    store._invalidate_analysis_cache()
     return {"date": date, "exercises": exercises}
 
 
@@ -1922,6 +1971,7 @@ async def health_program_evaluation(refresh: bool = False) -> dict:
     from program_evaluation_ai import generate_program_evaluation_report
 
     store = _get_store()
+    store.invalidate_cache()
     program = await store.get_program()
     federation_library = await _get_federation_store().get_library()
     active_pk = store.pk
