@@ -5,7 +5,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from export import build_program_markdown  # noqa: E402
+from export import _fmt_failed_set_reasons, build_program_markdown  # noqa: E402
+
+
+def test_fmt_failed_set_reasons_keeps_valid_failed_reason_labels() -> None:
+    assert _fmt_failed_set_reasons([
+        [],
+        ["grip", "lockout", "unknown"],
+        "not-a-list",
+        ["misload_bad_attempt_selection", "fatigue"],
+    ]) == (
+        "set 2: Grip, Lockout; "
+        "set 4: Misload / bad attempt selection, Fatigue"
+    )
 
 
 def test_build_program_markdown_produces_narrative(tmp_path: Path) -> None:
@@ -197,6 +209,49 @@ def test_session_notes_inline_not_in_notes_section(tmp_path: Path) -> None:
 
     # No session/competition notes duplicated in Notes section
     assert "## Notes" not in text
+
+
+def test_post_meet_report_renders_attempts_and_context(tmp_path: Path) -> None:
+    program = {
+        "meta": {"program_name": "Meet Report", "sex": "male", "current_body_weight_kg": 90},
+        "sessions": [],
+        "competitions": [
+            {
+                "name": "Spring Meet",
+                "date": "2026-05-01",
+                "status": "completed",
+                "weight_class_kg": 93,
+                "body_weight_kg": 90,
+                "results": {"squat_kg": 200, "bench_kg": 120, "deadlift_kg": 240, "total_kg": 560},
+                "post_meet_report": {
+                    "attempts": [
+                        {"lift": "squat", "attempt_number": 1, "kg": 190, "result": "made", "miss_reasons": [], "miss_category": None},
+                        {"lift": "squat", "attempt_number": 2, "kg": 205, "result": "missed", "miss_reasons": ["depth", "command_failure"], "miss_category": "judged_technical"},
+                    ],
+                    "sleep_hours": 6,
+                    "travel_notes": "slept at hotel",
+                    "warmup_timing": "bench warmups long",
+                    "pre_meet_food": "oats",
+                    "during_meet_food": "rice crispy treats",
+                    "caffeine_mg": 500,
+                    "caffeine_timing": "split over squat and deadlift",
+                    "equipment_issues": "belt lever loose",
+                    "commands_missed": "squat rack command",
+                    "attempt_selection_grade": 3,
+                    "notes": "third deadlift was conservative",
+                },
+            }
+        ],
+    }
+    out_path = tmp_path / "meet.md"
+
+    build_program_markdown(program, str(out_path))
+    text = out_path.read_text(encoding="utf-8")
+
+    assert "Spring Meet" in text
+    assert "Judged technical / Depth, Command failure" in text
+    assert "Attempt selection: 3/5" in text
+    assert "belt lever loose" in text
 
 
 def test_dots_and_weight_trends(tmp_path: Path) -> None:

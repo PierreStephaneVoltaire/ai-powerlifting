@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
-import { Drawer, Button, Group, Stack, Paper, SimpleGrid, NumberInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip } from '@mantine/core'
+import { Drawer, Button, Group, Stack, Paper, SimpleGrid, NumberInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip, Checkbox } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -9,7 +9,7 @@ import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
 import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2 } from 'lucide-react'
-import type { Session, Exercise, SessionVideo, SessionWellness, GlossaryExercise, SetStatus } from '@powerlifting/types'
+import type { Session, Exercise, SessionVideo, SessionWellness, GlossaryExercise, SetStatus, FailedSetReason } from '@powerlifting/types'
 import VideoGrid from './VideoGrid'
 import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
@@ -50,6 +50,23 @@ const SET_STATUS_META: Record<SetStatus, { label: string; color: string }> = {
   skipped: { label: 'Skipped', color: 'yellow' },
 }
 
+const FAILED_SET_REASON_OPTIONS: Array<{ value: FailedSetReason; label: string }> = [
+  { value: 'strength_failure', label: 'Strength failure' },
+  { value: 'technical_failure', label: 'Technical failure' },
+  { value: 'command_failure', label: 'Command failure' },
+  { value: 'grip', label: 'Grip' },
+  { value: 'depth', label: 'Depth' },
+  { value: 'pause', label: 'Pause' },
+  { value: 'lockout', label: 'Lockout' },
+  { value: 'balance', label: 'Balance' },
+  { value: 'pain', label: 'Pain' },
+  { value: 'fatigue', label: 'Fatigue' },
+  { value: 'misload_bad_attempt_selection', label: 'Misload / bad attempt selection' },
+]
+
+const FAILED_SET_REASON_VALUES = new Set(FAILED_SET_REASON_OPTIONS.map((option) => option.value))
+const FAILED_SET_REASON_LABELS = new Map(FAILED_SET_REASON_OPTIONS.map((option) => [option.value, option.label]))
+
 function normalizeSetStatuses(exercise: Exercise, sessionCompleted = false): SetStatus[] {
   const setCount = Math.max(0, Math.round(Number(exercise.sets) || 0))
   const fallbackStatus: SetStatus = sessionCompleted ? 'completed' : 'pending'
@@ -67,13 +84,34 @@ function normalizeSetStatuses(exercise: Exercise, sessionCompleted = false): Set
   return normalized
 }
 
+function normalizeFailedSetReasons(exercise: Exercise, statuses = normalizeSetStatuses(exercise)): FailedSetReason[][] {
+  const source = Array.isArray(exercise.failed_set_reasons) ? exercise.failed_set_reasons : []
+  return statuses.map((status, setIndex) => {
+    if (status !== 'failed') return []
+    const rawReasons = Array.isArray(source[setIndex]) ? source[setIndex] : []
+    const reasons: FailedSetReason[] = []
+    for (const rawReason of rawReasons) {
+      if (
+        typeof rawReason === 'string' &&
+        FAILED_SET_REASON_VALUES.has(rawReason as FailedSetReason) &&
+        !reasons.includes(rawReason as FailedSetReason)
+      ) {
+        reasons.push(rawReason as FailedSetReason)
+      }
+    }
+    return reasons
+  })
+}
+
 function withSetStatusFields(exercise: Exercise, sessionCompleted = false): Exercise {
   const set_statuses = normalizeSetStatuses(exercise, sessionCompleted)
   const failed_sets = set_statuses.map((status) => status === 'failed')
+  const failed_set_reasons = normalizeFailedSetReasons(exercise, set_statuses)
   return {
     ...exercise,
     set_statuses,
     failed_sets,
+    failed_set_reasons,
     failed: failed_sets.some(Boolean),
   }
 }
@@ -96,6 +134,10 @@ function statusCounts(exercise: Exercise): Record<SetStatus, number> {
     (counts, status) => ({ ...counts, [status]: counts[status] + 1 }),
     { pending: 0, completed: 0, failed: 0, skipped: 0 }
   )
+}
+
+function failedReasonLabels(reasons: FailedSetReason[]): string {
+  return reasons.map((reason) => FAILED_SET_REASON_LABELS.get(reason) || reason).join(', ')
 }
 
 interface SessionDrawerProps {
@@ -128,6 +170,8 @@ export default function SessionDrawer({
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
   const [showNotesHelper, setShowNotesHelper] = useState(false)
   const [autoRegExerciseIndex, setAutoRegExerciseIndex] = useState<number | null>(null)
+  const [failedReasonTarget, setFailedReasonTarget] = useState<{ exerciseIndex: number; setIndex: number } | null>(null)
+  const [failedReasonDraft, setFailedReasonDraft] = useState<FailedSetReason[]>([])
   const [toolkitExercise, setToolkitExercise] = useState<{
     name: string
     targetKg: number | null
@@ -164,6 +208,7 @@ export default function SessionDrawer({
           notes: '',
           failed_sets: Array(pe.sets).fill(false),
           set_statuses: Array(pe.sets).fill('pending'),
+          failed_set_reasons: Array.from({ length: pe.sets }, () => []),
         }))
       }
       clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
@@ -249,7 +294,16 @@ export default function SessionDrawer({
         ...prev,
         exercises: [
           ...prev.exercises,
-          { name: '', sets: 3, reps: 5, kg: null, notes: '', failed_sets: [false, false, false], set_statuses: ['pending', 'pending', 'pending'] },
+          {
+            name: '',
+            sets: 3,
+            reps: 5,
+            kg: null,
+            notes: '',
+            failed_sets: [false, false, false],
+            set_statuses: ['pending', 'pending', 'pending'],
+            failed_set_reasons: [[], [], []],
+          },
         ],
       }
     })
@@ -277,6 +331,49 @@ export default function SessionDrawer({
       return { ...prev, exercises }
     })
     setHasChanges(true)
+  }
+
+  const openFailedSetReasons = (exerciseIndex: number, setIndex: number, exerciseOverride?: Exercise) => {
+    const exercise = exerciseOverride || localSession.exercises[exerciseIndex]
+    const statuses = normalizeSetStatuses(exercise, localSession.completed)
+    setFailedReasonDraft(normalizeFailedSetReasons(exercise, statuses)[setIndex] || [])
+    setFailedReasonTarget({ exerciseIndex, setIndex })
+  }
+
+  const handleSetStatusSelection = (exerciseIndex: number, setIndex: number, status: SetStatus) => {
+    const exercise = localSession.exercises[exerciseIndex]
+    updateSetStatus(exerciseIndex, setIndex, status)
+    if (status === 'failed' && exercise) {
+      const statuses = normalizeSetStatuses(exercise, localSession.completed)
+      statuses[setIndex] = 'failed'
+      openFailedSetReasons(exerciseIndex, setIndex, { ...exercise, set_statuses: statuses })
+    }
+  }
+
+  const updateFailedSetReasons = (exerciseIndex: number, setIndex: number, reasons: FailedSetReason[]) => {
+    const uniqueReasons = reasons.filter((reason, index) =>
+      FAILED_SET_REASON_VALUES.has(reason) && reasons.indexOf(reason) === index
+    )
+    setLocalSession((prev) => {
+      if (!prev) return prev
+      const exercises = prev.exercises.map((ex, i) => {
+        if (i !== exerciseIndex) return ex
+        const statuses = normalizeSetStatuses(ex, prev.completed)
+        statuses[setIndex] = 'failed'
+        const failed_set_reasons = normalizeFailedSetReasons({ ...ex, set_statuses: statuses }, statuses)
+        failed_set_reasons[setIndex] = uniqueReasons
+        return withSetStatusFields({ ...ex, set_statuses: statuses, failed_set_reasons }, prev.completed)
+      })
+      return { ...prev, exercises }
+    })
+    setHasChanges(true)
+  }
+
+  const saveFailedSetReasons = () => {
+    if (!failedReasonTarget) return
+    updateFailedSetReasons(failedReasonTarget.exerciseIndex, failedReasonTarget.setIndex, failedReasonDraft)
+    setFailedReasonTarget(null)
+    setFailedReasonDraft([])
   }
 
   const updateSetsWithResize = (index: number, newSets: number) => {
@@ -371,35 +468,50 @@ export default function SessionDrawer({
 
   const renderSetStatusControls = (exercise: Exercise, exerciseIndex: number, size: 'xs' | 'sm' = 'xs') => {
     const statuses = normalizeSetStatuses(exercise, localSession.completed)
+    const failedReasons = normalizeFailedSetReasons(exercise, statuses)
     return (
-      <Group gap={4}>
-        {statuses.map((status, setIndex) => (
-          <Menu key={setIndex} withinPortal position="bottom-start" shadow="md">
-            <Menu.Target>
-              <Tooltip label={`Set ${setIndex + 1}: ${SET_STATUS_META[status].label}`}>
-                <ActionIcon
-                  size={size}
-                  variant={status === 'pending' ? 'default' : 'light'}
-                  color={SET_STATUS_META[status].color}
-                >
-                  {statusIcon(status, size === 'xs' ? 12 : 14)}
-                </ActionIcon>
-              </Tooltip>
-            </Menu.Target>
-            <Menu.Dropdown>
-              {(Object.keys(SET_STATUS_META) as SetStatus[]).map((option) => (
-                <Menu.Item
-                  key={option}
-                  leftSection={statusIcon(option)}
-                  color={SET_STATUS_META[option].color}
-                  onClick={() => updateSetStatus(exerciseIndex, setIndex, option)}
-                >
-                  {SET_STATUS_META[option].label}
-                </Menu.Item>
-              ))}
-            </Menu.Dropdown>
-          </Menu>
-        ))}
+      <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+        {statuses.map((status, setIndex) => {
+          const reasonLabel = failedReasonLabels(failedReasons[setIndex] || [])
+          const tooltip = reasonLabel
+            ? `Set ${setIndex + 1}: ${SET_STATUS_META[status].label} - ${reasonLabel}`
+            : `Set ${setIndex + 1}: ${SET_STATUS_META[status].label}`
+          return (
+            <Menu key={setIndex} withinPortal position="bottom-start" shadow="md">
+              <Menu.Target>
+                <Tooltip label={tooltip}>
+                  <ActionIcon
+                    size={size}
+                    variant={status === 'pending' ? 'default' : 'light'}
+                    color={SET_STATUS_META[status].color}
+                  >
+                    {statusIcon(status, size === 'xs' ? 12 : 14)}
+                  </ActionIcon>
+                </Tooltip>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {(Object.keys(SET_STATUS_META) as SetStatus[]).map((option) => (
+                  <Menu.Item
+                    key={option}
+                    leftSection={statusIcon(option)}
+                    color={SET_STATUS_META[option].color}
+                    onClick={() => handleSetStatusSelection(exerciseIndex, setIndex, option)}
+                  >
+                    {SET_STATUS_META[option].label}
+                  </Menu.Item>
+                ))}
+                {status === 'failed' && (
+                  <>
+                    <Menu.Divider />
+                    <Menu.Item onClick={() => openFailedSetReasons(exerciseIndex, setIndex)}>
+                      Edit reasons
+                    </Menu.Item>
+                  </>
+                )}
+              </Menu.Dropdown>
+            </Menu>
+          )
+        })}
       </Group>
     )
   }
@@ -445,8 +557,13 @@ export default function SessionDrawer({
     const nextExercises = proposedExercises.map((exercise) =>
       withSetStatusFields({ ...exercise, notes: exercise.notes || '' }, baseSession.completed)
     )
-    const lockedStatuses = normalizeSetStatuses(currentExercise, baseSession.completed)
-      .filter((status) => status === 'completed' || status === 'failed')
+    const currentStatuses = normalizeSetStatuses(currentExercise, baseSession.completed)
+    const currentReasons = normalizeFailedSetReasons(currentExercise, currentStatuses)
+    const lockedSets = currentStatuses
+      .map((status, index) => ({ status, reasons: currentReasons[index] || [] }))
+      .filter((entry) => entry.status === 'completed' || entry.status === 'failed')
+    const lockedStatuses = lockedSets.map((entry) => entry.status)
+    const lockedReasons = lockedSets.map((entry) => entry.status === 'failed' ? entry.reasons : [])
     const changedLockedWork = lockedStatuses.length > 0 && exercisePrescriptionChanged(currentExercise, proposedExercise)
 
     if (changedLockedWork) {
@@ -454,17 +571,23 @@ export default function SessionDrawer({
         ...currentExercise,
         sets: lockedStatuses.length,
         set_statuses: lockedStatuses,
+        failed_set_reasons: lockedReasons,
         notes: appendReasoningNote(currentExercise.notes, reasoningNote),
       }, baseSession.completed)
       const remainingSets = Math.max(0, Number(proposedExercise.sets || 0) - lockedStatuses.length)
-      const remainingStatuses = normalizeSetStatuses(proposedExercise).slice(lockedStatuses.length, lockedStatuses.length + remainingSets)
+      const proposedStatuses = normalizeSetStatuses(proposedExercise)
+      const proposedReasons = normalizeFailedSetReasons(proposedExercise, proposedStatuses)
+      const remainingStatuses = proposedStatuses.slice(lockedStatuses.length, lockedStatuses.length + remainingSets)
+      const remainingReasons = proposedReasons.slice(lockedStatuses.length, lockedStatuses.length + remainingSets)
       while (remainingStatuses.length < remainingSets) remainingStatuses.push('pending')
+      while (remainingReasons.length < remainingSets) remainingReasons.push([])
       const replacement = [lockedExercise]
       if (remainingSets > 0) {
         replacement.push(withSetStatusFields({
           ...proposedExercise,
           sets: remainingSets,
           set_statuses: remainingStatuses,
+          failed_set_reasons: remainingReasons,
           notes: appendReasoningNote(proposedExercise.notes, reasoningNote),
         }, baseSession.completed))
       }
@@ -646,6 +769,7 @@ export default function SessionDrawer({
                       <ActionIcon
                         variant="subtle"
                         color="blue"
+                        size="sm"
                         onClick={() => openToolkitForExercise(group.entries[0].exercise)}
                         title="Open toolkit"
                       >
@@ -654,6 +778,7 @@ export default function SessionDrawer({
                       <ActionIcon
                         variant="subtle"
                         color="grape"
+                        size="sm"
                         onClick={() => setAutoRegExerciseIndex(group.entries[0].originalIndex)}
                         title="Auto-regulation"
                       >
@@ -662,6 +787,7 @@ export default function SessionDrawer({
                       <ActionIcon
                         variant="subtle"
                         color="red"
+                        size="sm"
                         onClick={() => removeExercise(group.entries[0].originalIndex)}
                       >
                         <Trash2 size={16} />
@@ -751,11 +877,13 @@ export default function SessionDrawer({
                               <Table.Td colSpan={7} pt={4} pb={12} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                                 {normalizeSetStatuses(entry.exercise).length > 0 && (
                                   <Box hiddenFrom="sm" mb="xs">
-                                    <Group gap="xs">
-                                      <Text size="xs" c="dimmed">Set Status:</Text>
-                                      {renderSetStatusControls(entry.exercise, entry.originalIndex)}
-                                      {renderStatusBadges(entry.exercise)}
+                                    <Group gap={4} align="center" wrap="nowrap">
+                                      <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
+                                      <Box style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+                                        {renderSetStatusControls(entry.exercise, entry.originalIndex)}
+                                      </Box>
                                     </Group>
+                                    {renderStatusBadges(entry.exercise)}
                                   </Box>
                                 )}
                                 <Textarea
@@ -778,8 +906,8 @@ export default function SessionDrawer({
                   </Box>
                 ) : (
                   <Box>
-                    <Group justify="space-between" align="flex-start" mb="xs" wrap="nowrap">
-                      <SimpleGrid cols={{ base: 3, sm: 3 }} spacing="xs" style={{ flex: 1 }}>
+                    <Group justify="space-between" align="flex-start" gap={4} mb="xs" wrap="nowrap">
+                      <SimpleGrid cols={{ base: 3, sm: 3 }} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
                       <Box>
                         <Text size="xs" c="dimmed">Sets</Text>
                         <NumberInput
@@ -811,6 +939,7 @@ export default function SessionDrawer({
                       <ActionIcon
                         variant="subtle"
                         color="grape"
+                        size="sm"
                         onClick={() => setAutoRegExerciseIndex(group.entries[0].originalIndex)}
                         title="Auto-regulation"
                       >
@@ -819,6 +948,7 @@ export default function SessionDrawer({
                       <ActionIcon
                         variant="subtle"
                         color="blue"
+                        size="sm"
                         onClick={() => openToolkitForExercise(group.entries[0].exercise)}
                         title="Open toolkit"
                       >
@@ -841,11 +971,15 @@ export default function SessionDrawer({
                     </Box>
 
                     {normalizeSetStatuses(group.entries[0].exercise).length > 0 && (
-                      <Group gap="xs" mt={6}>
-                        <Text size="xs" c="dimmed">Set Status:</Text>
-                        {renderSetStatusControls(group.entries[0].exercise, group.entries[0].originalIndex)}
+                      <Box mt={6}>
+                        <Group gap={4} align="center" wrap="nowrap">
+                          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
+                          <Box style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+                            {renderSetStatusControls(group.entries[0].exercise, group.entries[0].originalIndex)}
+                          </Box>
+                        </Group>
                         {renderStatusBadges(group.entries[0].exercise)}
-                      </Group>
+                      </Box>
                     )}
                   </Box>
                 )}
@@ -1046,6 +1180,48 @@ export default function SessionDrawer({
         exerciseIndex={autoRegExerciseIndex}
         onApply={applyAutoRegulation}
       />
+
+      <Modal
+        opened={failedReasonTarget !== null}
+        onClose={() => {
+          setFailedReasonTarget(null)
+          setFailedReasonDraft([])
+        }}
+        title={failedReasonTarget ? `Set ${failedReasonTarget.setIndex + 1} failure reasons` : 'Failure reasons'}
+        size="lg"
+        centered
+      >
+        <Stack gap="md">
+          <Checkbox.Group
+            value={failedReasonDraft}
+            onChange={(value) => setFailedReasonDraft(value as FailedSetReason[])}
+          >
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+              {FAILED_SET_REASON_OPTIONS.map((option) => (
+                <Checkbox
+                  key={option.value}
+                  value={option.value}
+                  label={option.label}
+                />
+              ))}
+            </SimpleGrid>
+          </Checkbox.Group>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setFailedReasonTarget(null)
+                setFailedReasonDraft([])
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={saveFailedSetReasons} disabled={failedReasonDraft.length === 0}>
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <SessionToolkitModal
         opened={toolkitExercise !== null}

@@ -212,6 +212,7 @@ export interface Competition {
   projected_at_t_minus_1w?: LiftResults
   projection_snapshot_date?: string
   results?: CompetitionResults    // For completed competitions
+  post_meet_report?: PostMeetReport
   notes?: string
   decision_date?: string | null
   between_comp_plan?: BetweenCompPlan
@@ -228,6 +229,55 @@ export interface CompetitionPrr {
 export interface CompetitionResults extends LiftResults {
   projected_at_t_minus_1w?: LiftResults
   prr?: CompetitionPrr
+}
+
+export type CompetitionLift = 'squat' | 'bench' | 'deadlift'
+export type CompetitionAttemptResult = 'made' | 'missed' | 'not_taken'
+export type CompetitionMissCategory =
+  | 'strength'
+  | 'judged_technical'
+  | 'command'
+  | 'attempt_selection'
+  | 'pain'
+  | 'fatigue'
+  | 'equipment'
+  | 'other'
+export type CompetitionMissReason =
+  | 'strength_failure'
+  | 'technical_failure'
+  | 'command_failure'
+  | 'grip'
+  | 'depth'
+  | 'pause'
+  | 'lockout'
+  | 'balance'
+  | 'pain'
+  | 'fatigue'
+  | 'misload_bad_attempt_selection'
+  | 'equipment_issue'
+
+export interface CompetitionAttempt {
+  lift: CompetitionLift
+  attempt_number: 1 | 2 | 3
+  kg: number | null
+  result: CompetitionAttemptResult
+  miss_reasons: CompetitionMissReason[]
+  miss_category: CompetitionMissCategory | null
+}
+
+export interface PostMeetReport {
+  attempts: CompetitionAttempt[]
+  sleep_hours: number | null
+  travel_notes: string
+  warmup_timing: string
+  pre_meet_food: string
+  during_meet_food: string
+  caffeine_mg: number | null
+  caffeine_timing: string
+  equipment_issues: string
+  commands_missed: string
+  attempt_selection_grade: 1 | 2 | 3 | 4 | 5 | null
+  notes: string
 }
 
 export interface BetweenCompPlan {
@@ -249,11 +299,24 @@ export interface Exercise {
   failed?: boolean          // deprecated — kept for backwards compat
   failed_sets?: boolean[]   // per-set: [false, false, true, false] = set 3 failed
   set_statuses?: SetStatus[] // per-set execution state; failed_sets is derived for legacy readers
+  failed_set_reasons?: FailedSetReason[][] // per failed set, aligned to set_statuses
   load_source?: LoadSource
   rpe_target?: number | null
 }
 
 export type SetStatus = 'pending' | 'completed' | 'failed' | 'skipped'
+export type FailedSetReason =
+  | 'strength_failure'
+  | 'technical_failure'
+  | 'command_failure'
+  | 'grip'
+  | 'depth'
+  | 'pause'
+  | 'lockout'
+  | 'balance'
+  | 'pain'
+  | 'fatigue'
+  | 'misload_bad_attempt_selection'
 export type LoadSource = 'absolute' | 'rpe' | 'percentage' | 'unresolvable'
 export type LoadType = LoadSource
 

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import * as competitionController from '../controllers/competitionController'
-import type { Competition, LiftResults } from '@powerlifting/types'
+import type { Competition, LiftResults, PostMeetReport } from '@powerlifting/types'
 import { invokeToolDirect } from '../utils/agent'
 
 export const competitionsRouter = Router({ mergeParams: true })
@@ -51,7 +51,7 @@ competitionsRouter.post('/:version/migrate', async (req, res, next) => {
 // PATCH /api/competitions/:version/:date/complete - Mark competition as completed
 competitionsRouter.patch('/:version/:date/complete', async (req, res, next) => {
   try {
-    const { results, bodyWeightKg } = req.body
+    const { results, bodyWeightKg, postMeetReport } = req.body
 
     if (!results || typeof bodyWeightKg !== 'number') {
       return res.status(400).json({
@@ -79,6 +79,7 @@ competitionsRouter.patch('/:version/:date/complete', async (req, res, next) => {
       date: req.params.date,
       results: results as LiftResults,
       body_weight_kg: bodyWeightKg,
+      post_meet_report: postMeetReport as PostMeetReport | undefined,
       version: req.params.version,
       allow_retrospective: true,
       pk: req.effectivePk,

@@ -164,6 +164,7 @@ Phases matter to:
 - `failed`
 - `failed_sets[]`
 - `set_statuses[]`
+- `failed_set_reasons[][]`
 - `load_source`
 - `rpe_target`
 
@@ -178,6 +179,22 @@ For backward compatibility, `failed_sets[]` is still written and is derived from
 `set_statuses[]`. Analytics treat `completed` and `failed` as executed sets.
 `skipped` and `pending` do not count toward executed volume, fatigue workload,
 INOL, specificity, or muscle-set totals.
+
+`failed_set_reasons[][]` is aligned to `set_statuses[]`. Each failed set can
+store multiple reason tags. Non-failed sets store an empty reason list. Valid
+reason tags are:
+
+- `strength_failure`
+- `technical_failure`
+- `command_failure`
+- `grip`
+- `depth`
+- `pause`
+- `lockout`
+- `balance`
+- `pain`
+- `fatigue`
+- `misload_bad_attempt_selection`
 
 These are the raw inputs to almost everything:
 
@@ -203,10 +220,24 @@ These are the raw inputs to almost everything:
 - `body_weight_kg`
 - `targets`
 - `results`
+- `post_meet_report`
 - `notes`
 - `decision_date`
 - `between_comp_plan`
 - `comp_day_protocol`
+
+`post_meet_report` is an optional completed-meet detail object. It stores:
+
+- fixed 9-attempt log: squat/bench/deadlift attempts 1-3
+- per-attempt `result`: `made`, `missed`, or `not_taken`
+- miss category and miss reasons for missed attempts
+- official bodyweight remains on `body_weight_kg`
+- sleep, travel, warm-up timing, food, caffeine, equipment issues, commands
+  missed, attempt-selection grade, and meet notes
+
+When a post-meet report is saved, `results` remains the compatibility summary:
+best made squat, bench, deadlift, and total. DOTS, PRR, readiness, exports, and
+analysis continue to read `results`.
 
 Competition data drives:
 

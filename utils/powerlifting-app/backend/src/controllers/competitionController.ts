@@ -1,7 +1,7 @@
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
-import type { Competition, LastComp, LiftResults } from '@powerlifting/types'
+import type { Competition, LastComp, LiftResults, PostMeetReport } from '@powerlifting/types'
 
 /**
  * Resolve a version string to the actual SK.
@@ -136,7 +136,8 @@ export async function completeCompetition(
   version: string,
   compDate: string,
   results: LiftResults,
-  bodyWeightKg: number
+  bodyWeightKg: number,
+  postMeetReport?: PostMeetReport
 ): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
 
@@ -165,6 +166,7 @@ export async function completeCompetition(
     status: 'completed',
     results,
     body_weight_kg: bodyWeightKg,
+    ...(postMeetReport ? { post_meet_report: postMeetReport } : {}),
   }
 
   const updateCommand = new UpdateCommand({

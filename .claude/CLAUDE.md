@@ -11,6 +11,12 @@ A single main agent with context-aware tiering and specialist subagent delegatio
 - MCP servers for extended capabilities (time, AWS docs, Yahoo Finance, Alpha Vantage)
 - Kubernetes deployment via Terraform, Docker images via Packer
 
+## DynamoDB Number Handling
+
+- Boto3 DynamoDB writes reject Python `float` values. Before every DynamoDB `put_item`, `update_item`, batch write, or nested payload write from Python, recursively convert floats to `Decimal(str(value))`.
+- Reuse existing helpers such as `ProgramStore._floats_to_decimals`, `tools/health/core.py::_floats_to_decimals`, or equivalent store-level conversion helpers. Do not write raw floats into DynamoDB.
+- This applies to nested health, competition, session, analysis-cache, import, template, glossary, federation, finance, diary, proposal, and model-registry payloads.
+
 ## How to Run
 
 ```bash

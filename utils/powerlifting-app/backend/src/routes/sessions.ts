@@ -7,7 +7,7 @@ import {
   analysisSourceFingerprint,
   getCachedWeeklyAnalysisBundle,
 } from '../services/analysisCache'
-import type { Session, Exercise, SessionStatus, SessionWellness } from '@powerlifting/types'
+import type { Session, Exercise, SessionStatus, SessionWellness, FailedSetReason } from '@powerlifting/types'
 
 export const sessionsRouter = Router({ mergeParams: true })
 
@@ -62,6 +62,19 @@ function hasOutOfScopeSessionRequest(value: unknown): boolean {
 }
 
 const SET_STATUSES = new Set(['pending', 'completed', 'failed', 'skipped'])
+const FAILED_SET_REASONS = new Set([
+  'strength_failure',
+  'technical_failure',
+  'command_failure',
+  'grip',
+  'depth',
+  'pause',
+  'lockout',
+  'balance',
+  'pain',
+  'fatigue',
+  'misload_bad_attempt_selection',
+])
 
 function normalizeSetStatuses(exercise: Exercise, completed = false): Array<'pending' | 'completed' | 'failed' | 'skipped'> {
   const setCount = Math.max(0, Math.round(Number(exercise.sets) || 0))
@@ -76,6 +89,30 @@ function normalizeSetStatuses(exercise: Exercise, completed = false): Array<'pen
   return statuses
 }
 
+function normalizeFailedSetReasons(
+  exercise: Exercise,
+  statuses = normalizeSetStatuses(exercise),
+): FailedSetReason[][] {
+  const source = Array.isArray((exercise as any).failed_set_reasons)
+    ? (exercise as any).failed_set_reasons
+    : []
+  return statuses.map((status, setIndex) => {
+    if (status !== 'failed') return []
+    const rawReasons = Array.isArray(source[setIndex]) ? source[setIndex] : []
+    const reasons: FailedSetReason[] = []
+    for (const rawReason of rawReasons) {
+      if (
+        typeof rawReason === 'string' &&
+        FAILED_SET_REASONS.has(rawReason) &&
+        !reasons.includes(rawReason as FailedSetReason)
+      ) {
+        reasons.push(rawReason as FailedSetReason)
+      }
+    }
+    return reasons
+  })
+}
+
 function sanitizeExercise(exercise: Exercise, completed = false): Exercise {
   const sets = Math.max(0, Math.round(Number(exercise.sets) || 0))
   const reps = Math.max(0, Math.round(Number(exercise.reps) || 0))
@@ -85,6 +122,7 @@ function sanitizeExercise(exercise: Exercise, completed = false): Exercise {
     : Number(rawKg)
   const set_statuses = normalizeSetStatuses({ ...exercise, sets }, completed)
   const failed_sets = set_statuses.map((status) => status === 'failed')
+  const failed_set_reasons = normalizeFailedSetReasons({ ...exercise, sets }, set_statuses)
   return {
     name: String(exercise.name || '').slice(0, 160),
     sets,
@@ -94,6 +132,7 @@ function sanitizeExercise(exercise: Exercise, completed = false): Exercise {
     failed: failed_sets.some(Boolean),
     failed_sets,
     set_statuses,
+    failed_set_reasons,
     load_source: exercise.load_source,
     rpe_target: exercise.rpe_target ?? null,
   } as Exercise
@@ -113,13 +152,22 @@ function sanitizeProposedExercises(
   if (!current) return null
   const proposed = sanitizeExercise({ ...current, ...(rawSelected as Partial<Exercise>) }, session.completed)
   const currentStatuses = normalizeSetStatuses(current, session.completed)
-  const locked = currentStatuses.filter((status) => status === 'completed' || status === 'failed')
+  const currentReasons = normalizeFailedSetReasons(current, currentStatuses)
+  const locked = currentStatuses
+    .map((status, index) => ({ status, reasons: currentReasons[index] || [] }))
+    .filter((entry) => entry.status === 'completed' || entry.status === 'failed')
   if (proposed.sets < locked.length) proposed.sets = locked.length
 
   const proposedStatuses = normalizeSetStatuses(proposed, session.completed)
-  for (let i = 0; i < locked.length; i += 1) proposedStatuses[i] = locked[i]
+  const proposedReasons = normalizeFailedSetReasons(proposed, proposedStatuses)
+  for (let i = 0; i < locked.length; i += 1) proposedStatuses[i] = locked[i].status
+  for (let i = 0; i < locked.length; i += 1) {
+    proposedReasons[i] = locked[i].status === 'failed' ? locked[i].reasons : []
+  }
   while (proposedStatuses.length < proposed.sets) proposedStatuses.push('pending')
+  while (proposedReasons.length < proposed.sets) proposedReasons.push([])
   proposed.set_statuses = proposedStatuses.slice(0, proposed.sets)
+  proposed.failed_set_reasons = proposedReasons.slice(0, proposed.sets)
   proposed.failed_sets = proposed.set_statuses.map((status) => status === 'failed')
   proposed.failed = proposed.failed_sets.some(Boolean)
 
@@ -450,7 +498,7 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
         'Ask follow-up questions when information is insufficient.',
         'If ready, proposed_exercises must be the full executed session exercises array, but only the selected exercise may differ. The server will discard all other differences.',
         'Never mutate planned_exercises.',
-        'Preserve completed and failed set statuses and do not rewrite completed/failed work. Only adjust remaining pending work.',
+        'Preserve completed and failed set statuses and failed_set_reasons; do not rewrite completed/failed work. Only adjust remaining pending work.',
         'Append concise reasoning in reasoning_note for exercise notes.',
       ],
       response_schema: {

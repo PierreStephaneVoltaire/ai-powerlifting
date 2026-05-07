@@ -423,6 +423,8 @@ export async function updatePlannedExercises(
         kg: pe.kg,
         notes: '',
         failed_sets: Array(pe.sets).fill(false),
+        set_statuses: Array(pe.sets).fill('pending'),
+        failed_set_reasons: Array.from({ length: pe.sets }, () => []),
       }))
     : existing.exercises
 

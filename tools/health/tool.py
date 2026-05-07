@@ -1054,6 +1054,7 @@ class HealthCompleteCompetitionAction(Action):
     date: str = Field(description="Competition date to complete (YYYY-MM-DD)")
     results: Dict[str, Any] = Field(description="Best successful lift attempts and total")
     body_weight_kg: float = Field(description="Official weigh-in bodyweight in kg")
+    post_meet_report: Optional[Dict[str, Any]] = Field(default=None, description="Optional structured post-meet attempt and context report")
     version: str = Field(default="current", description="Program version to update")
     allow_retrospective: bool = Field(
         default=True,
@@ -1075,6 +1076,7 @@ class HealthCompleteCompetitionExecutor(ToolExecutor[HealthCompleteCompetitionAc
                 action.body_weight_kg,
                 action.version,
                 action.allow_retrospective,
+                action.post_meet_report,
             )
         )
         return HealthCompleteCompetitionObservation.from_text(_format_result(result))
@@ -2675,6 +2677,7 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                     "date": {"type": "string", "description": "Competition date to complete (YYYY-MM-DD)"},
                     "results": {"type": "object", "description": "Best successful lift attempts and total"},
                     "body_weight_kg": {"type": "number", "description": "Official weigh-in bodyweight in kg"},
+                    "post_meet_report": {"type": "object", "description": "Optional structured post-meet attempt and context report"},
                     "version": {"type": "string", "description": "Program version to update", "default": "current"},
                     "allow_retrospective": {"type": "boolean", "description": "Allow backfilling a missing T-1 snapshot", "default": True},
                 },
@@ -3824,7 +3827,7 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         }),
         "health_update_competition": lambda: do_update_competition(args["date"], args["patch"]),
         "health_snapshot_competition_projection": lambda: do_snapshot_competition_projection(args["date"], args.get("version", "current"), args.get("allow_retrospective", False)),
-        "health_complete_competition": lambda: do_complete_competition(args["date"], args["results"], args["body_weight_kg"], args.get("version", "current"), args.get("allow_retrospective", True)),
+        "health_complete_competition": lambda: do_complete_competition(args["date"], args["results"], args["body_weight_kg"], args.get("version", "current"), args.get("allow_retrospective", True), args.get("post_meet_report")),
         "health_update_diet_note": lambda: do_update_diet_note(args["date"], args["notes"]),
         "health_update_supplements": lambda: do_update_supplements(args["patch"]),
         "health_create_session": lambda: do_create_session(args["date"], args["day"], args["week_number"], args.get("exercises"), args.get("session_notes", "")),

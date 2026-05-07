@@ -4,7 +4,9 @@ import asyncio
 import copy
 import math
 import sys
+import types
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,51 @@ class FrozenDate(date):
 @pytest.fixture(autouse=True)
 def freeze_today(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(analytics, "date", FrozenDate)
+
+
+def test_save_program_version_converts_nested_floats(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeTable:
+        def put_item(self, Item: dict) -> None:
+            captured["item"] = Item
+
+    class FakeStore:
+        def invalidate_cache(self) -> None:
+            captured["invalidated"] = True
+
+    monkeypatch.setattr(core, "_get_table_and_pk", lambda: (FakeTable(), "operator", FakeStore()))
+    fake_cache_module = types.ModuleType("cache_invalidation")
+    fake_cache_module.invalidate_analysis_caches = lambda *args, **kwargs: captured.__setitem__(
+        "cache_invalidated",
+        args,
+    )
+    monkeypatch.setitem(sys.modules, "cache_invalidation", fake_cache_module)
+
+    core._save_program_version(
+        {
+            "sessions": None,
+            "competitions": [
+                {
+                    "date": "2025-10-04",
+                    "actual_body_weight_kg": 82.5,
+                    "post_meet_report": {"sleep_hours": 6.5, "attempt_selection_grade": 8.5},
+                }
+            ],
+        },
+        "program#v001",
+    )
+
+    item = captured["item"]
+    assert isinstance(item, dict)
+    competition = item["competitions"][0]
+    assert isinstance(competition["actual_body_weight_kg"], Decimal)
+    assert isinstance(competition["post_meet_report"]["sleep_hours"], Decimal)
+    assert isinstance(competition["post_meet_report"]["attempt_selection_grade"], Decimal)
+    assert item["pk"] == "operator"
+    assert item["sk"] == "program#v001"
+    assert captured["invalidated"] is True
+    assert captured["cache_invalidated"][0] == "operator"
 
 
 def make_exercise(name: str, kg: float, reps: int, sets: int = 1, **extra) -> dict:
@@ -140,6 +187,7 @@ def test_set_statuses_drive_executed_volume_and_failures() -> None:
         sets=4,
         set_statuses=["completed", "failed", "skipped", "pending"],
         failed_sets=[False, False, False, False],
+        failed_set_reasons=[[], ["grip", "lockout"], [], []],
     )
 
     assert analytics._executed_sets(exercise) == 2
@@ -1461,6 +1509,24 @@ def test_health_snapshot_and_completion_backfill_use_versioned_program(monkeypat
             {"squat_kg": 210, "bench_kg": 95, "deadlift_kg": 260, "total_kg": 565},
             90,
             version="v003",
+            post_meet_report={
+                "attempts": [
+                    {"lift": "squat", "attempt_number": 1, "kg": 190, "result": "made", "miss_reasons": [], "miss_category": None},
+                    {"lift": "squat", "attempt_number": 2, "kg": 210, "result": "made", "miss_reasons": [], "miss_category": None},
+                    {"lift": "squat", "attempt_number": 3, "kg": 220, "result": "missed", "miss_reasons": ["depth"], "miss_category": "judged_technical"},
+                ],
+                "sleep_hours": 6.5,
+                "travel_notes": "two-hour drive",
+                "warmup_timing": "squat warmups rushed",
+                "pre_meet_food": "bagel",
+                "during_meet_food": "rice bars",
+                "caffeine_mg": 500,
+                "caffeine_timing": "200mg before squat, 300mg before deadlift",
+                "equipment_issues": "loose wrist wrap",
+                "commands_missed": "soft squat rack command",
+                "attempt_selection_grade": 4,
+                "notes": "good execution overall",
+            },
         )
     )
 
@@ -1470,8 +1536,11 @@ def test_health_snapshot_and_completion_backfill_use_versioned_program(monkeypat
     assert updated_comp["results"]["prr"]["bench"] == pytest.approx(0.95, abs=1e-6)
     assert updated_comp["results"]["prr"]["deadlift"] == pytest.approx(1.04, abs=1e-2)
     assert updated_comp["results"]["prr"]["total"] == pytest.approx(1.027, abs=1e-3)
+    assert updated_comp["post_meet_report"]["sleep_hours"] == pytest.approx(6.5)
+    assert updated_comp["post_meet_report"]["attempts"][2]["miss_reasons"] == ["depth"]
     assert completion_saved["sk"] == "program#v003"
     assert completion_saved["program"]["competitions"][0]["status"] == "completed"
+    assert completion_saved["program"]["competitions"][0]["post_meet_report"]["attempt_selection_grade"] == 4
 
 
 def test_readiness_wellness_penalty_and_fallback() -> None:

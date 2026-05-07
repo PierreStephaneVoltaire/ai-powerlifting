@@ -26,6 +26,38 @@ _WRAP = Alignment(wrap_text=True, vertical="top")
 
 # openpyxl cell content limit
 _CELL_CHAR_LIMIT = 32000
+_FAILED_SET_REASON_LABELS = {
+    "strength_failure": "Strength failure",
+    "technical_failure": "Technical failure",
+    "command_failure": "Command failure",
+    "grip": "Grip",
+    "depth": "Depth",
+    "pause": "Pause",
+    "lockout": "Lockout",
+    "balance": "Balance",
+    "pain": "Pain",
+    "fatigue": "Fatigue",
+    "misload_bad_attempt_selection": "Misload / bad attempt selection",
+}
+_COMPETITION_MISS_REASON_LABELS = {
+    **_FAILED_SET_REASON_LABELS,
+    "equipment_issue": "Equipment issue",
+}
+_COMPETITION_MISS_CATEGORY_LABELS = {
+    "strength": "Strength",
+    "judged_technical": "Judged technical",
+    "command": "Command",
+    "attempt_selection": "Attempt selection",
+    "pain": "Pain",
+    "fatigue": "Fatigue",
+    "equipment": "Equipment",
+    "other": "Other",
+}
+_COMPETITION_LIFT_LABELS = {
+    "squat": "Squat",
+    "bench": "Bench",
+    "deadlift": "Deadlift",
+}
 
 
 def _num(v: Any) -> Any:
@@ -70,6 +102,33 @@ def _serialize_json(value: Any) -> str:
         return json.dumps(value, default=str, ensure_ascii=True, sort_keys=True)
     except TypeError:
         return str(value)
+
+
+def _fmt_failed_set_reasons(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    set_chunks: list[str] = []
+    for index, raw_reasons in enumerate(value, start=1):
+        if not isinstance(raw_reasons, list):
+            continue
+        labels = [
+            _FAILED_SET_REASON_LABELS[reason]
+            for reason in raw_reasons
+            if isinstance(reason, str) and reason in _FAILED_SET_REASON_LABELS
+        ]
+        if labels:
+            set_chunks.append(f"set {index}: {', '.join(labels)}")
+    return "; ".join(set_chunks)
+
+
+def _fmt_competition_miss_reasons(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    return ", ".join(
+        _COMPETITION_MISS_REASON_LABELS[reason]
+        for reason in value
+        if isinstance(reason, str) and reason in _COMPETITION_MISS_REASON_LABELS
+    )
 
 
 def _first_non_blank(*values: Any) -> Any:
@@ -757,12 +816,16 @@ def _md_sessions(sessions: list[dict]) -> str:
                 ex_rows = []
                 for ex in exercises:
                     failed = " \u2717" if ex.get("failed") else ""
+                    failed_reason_suffix = _fmt_failed_set_reasons(ex.get("failed_set_reasons"))
+                    notes_value = _first_line(ex.get("notes", "")) + failed
+                    if failed_reason_suffix:
+                        notes_value = f"{notes_value} ({failed_reason_suffix})".strip()
                     ex_rows.append([
                         ex.get("name", ""),
                         f"{ex.get('sets', '')} x {ex.get('reps', '')}",
                         ex.get("kg", ""),
                         ex.get("rpe", ""),
-                        _first_line(ex.get("notes", "")) + failed,
+                        notes_value,
                     ])
                 lines.append("")
                 lines.append(_md_table(["Exercise", "Sets x Reps", "kg", "RPE", "Notes"], ex_rows))
@@ -838,6 +901,58 @@ def _md_competitions(
             result_parts.append(f"**Place:** {place}")
         if result_parts:
             lines.append("**Results:** " + " / ".join(result_parts))
+
+        report = comp.get("post_meet_report") or {}
+        attempts = report.get("attempts") if isinstance(report, dict) else None
+        if isinstance(attempts, list) and attempts:
+            attempt_rows = []
+            for attempt in attempts:
+                if not isinstance(attempt, dict):
+                    continue
+                result = str(attempt.get("result") or "")
+                miss_detail = ""
+                if result == "missed":
+                    miss_detail = " / ".join(
+                        part
+                        for part in [
+                            _COMPETITION_MISS_CATEGORY_LABELS.get(str(attempt.get("miss_category") or ""), ""),
+                            _fmt_competition_miss_reasons(attempt.get("miss_reasons")),
+                        ]
+                        if part
+                    )
+                attempt_rows.append([
+                    f"{_COMPETITION_LIFT_LABELS.get(str(attempt.get('lift') or ''), attempt.get('lift', ''))} {attempt.get('attempt_number', '')}",
+                    attempt.get("kg", ""),
+                    result.replace("_", " "),
+                    miss_detail,
+                ])
+            if attempt_rows:
+                lines.append("")
+                lines.append(_md_table(["Attempt", "kg", "Result", "Miss Detail"], attempt_rows))
+
+        if isinstance(report, dict) and report:
+            context_parts = []
+            if not _is_blank(report.get("sleep_hours")):
+                context_parts.append(f"Sleep: {report.get('sleep_hours')}h")
+            if not _is_blank(report.get("caffeine_mg")):
+                context_parts.append(f"Caffeine: {report.get('caffeine_mg')}mg")
+            if not _is_blank(report.get("attempt_selection_grade")):
+                context_parts.append(f"Attempt selection: {report.get('attempt_selection_grade')}/5")
+            if context_parts:
+                lines.append("**Meet Context:** " + " / ".join(context_parts))
+            for label, key in [
+                ("Warm-ups", "warmup_timing"),
+                ("Travel", "travel_notes"),
+                ("Food before", "pre_meet_food"),
+                ("Food during", "during_meet_food"),
+                ("Caffeine timing", "caffeine_timing"),
+                ("Equipment", "equipment_issues"),
+                ("Commands", "commands_missed"),
+                ("Meet notes", "notes"),
+            ]:
+                value = report.get(key)
+                if value:
+                    lines.append(f"**{label}:** {value}")
 
         comp_notes = comp.get("notes")
         if comp_notes:
@@ -2270,7 +2385,7 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
     ws = wb.create_sheet("Exercises")
     headers = [
         "Date", "Week", "Block", "Phase", "Exercise", "Sets", "Reps", "Weight (kg)",
-        "Failed", "Failed Sets", "RPE", "Notes", "Volume",
+        "Failed", "Failed Sets", "Failed Set Reasons", "RPE", "Notes", "Volume",
     ]
     rows = []
     for session in sessions:
@@ -2294,13 +2409,14 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
                 ex.get("kg", ""),
                 ex.get("failed", False),
                 failed_sets_val,
+                _fmt_failed_set_reasons(ex.get("failed_set_reasons")),
                 ex.get("rpe", ""),
                 ex.get("notes", ""),
                 round(sets_f * reps_f * kg_f, 1),
             ])
     if not rows:
-        rows.append(["—", "", "", "", "No exercises recorded", "", "", "", "", "", "", "", ""])
-    _write_sheet(ws, headers, rows, col_widths={12: 40})
+        rows.append(["—", "", "", "", "No exercises recorded", "", "", "", "", "", "", "", "", ""])
+    _write_sheet(ws, headers, rows, col_widths={11: 36, 13: 40})
 
 
 def _write_competitions_sheet(
@@ -2323,7 +2439,7 @@ def _write_competitions_sheet(
         "Body Weight", "Body Weight Source", "Target Squat", "Target Bench", "Target Deadlift",
         "Target Total", "Target DOTS", "Result Squat", "Result Bench", "Result Deadlift",
         "Result Total", "Result DOTS", "Place", "Decision Date", "Projection Snapshot Date",
-        "Notes", "Between Comp Plan", "Comp Day Protocol",
+        "Notes", "Post-Meet Report", "Between Comp Plan", "Comp Day Protocol",
     ]
     rows = []
     for comp in sorted(competitions, key=lambda c: str(c.get("date", ""))):
@@ -2364,12 +2480,13 @@ def _write_competitions_sheet(
             comp.get("decision_date", ""),
             comp.get("projection_snapshot_date", ""),
             comp.get("notes", ""),
+            _serialize_json(comp.get("post_meet_report", {})),
             _serialize_json(comp.get("between_comp_plan", {})),
             _serialize_json(comp.get("comp_day_protocol", {})),
         ])
     if not rows:
-        rows.append(["—", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "No competitions recorded", "", ""])
-    _write_sheet(ws, headers, rows, col_widths={23: 40, 24: 36, 25: 36})
+        rows.append(["—", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "No competitions recorded", "", "", ""])
+    _write_sheet(ws, headers, rows, col_widths={24: 40, 25: 48, 26: 36, 27: 36})
 
 
 def _write_biometrics_sheet(wb: Workbook, diet_notes: list[dict[str, Any]]) -> None:

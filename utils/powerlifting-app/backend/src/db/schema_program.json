@@ -133,6 +133,8 @@
           "notes": "Done as planned",
           "failed": false,
           "failed_sets": [false, false, false],
+          "set_statuses": ["completed", "completed", "completed"],
+          "failed_set_reasons": [[], [], []],
           "load_source": "absolute",
           "rpe_target": null
         }
@@ -178,6 +180,24 @@
         "bench_kg": 115,
         "deadlift_kg": 235,
         "total_kg": 535
+      },
+      "post_meet_report": {
+        "attempts": [
+          { "lift": "squat", "attempt_number": 1, "kg": 175, "result": "made", "miss_reasons": [], "miss_category": null },
+          { "lift": "squat", "attempt_number": 2, "kg": 185, "result": "made", "miss_reasons": [], "miss_category": null },
+          { "lift": "squat", "attempt_number": 3, "kg": 192.5, "result": "missed", "miss_reasons": ["depth"], "miss_category": "judged_technical" }
+        ],
+        "sleep_hours": 6.5,
+        "travel_notes": "hotel night before",
+        "warmup_timing": "squat warmups slightly rushed",
+        "pre_meet_food": "oats and banana",
+        "during_meet_food": "rice bars",
+        "caffeine_mg": 500,
+        "caffeine_timing": "split before squat and deadlift",
+        "equipment_issues": "",
+        "commands_missed": "missed squat depth call",
+        "attempt_selection_grade": 4,
+        "notes": "Good meet execution overall."
       },
       "notes": "Primary comp.",
       "decision_date": null,

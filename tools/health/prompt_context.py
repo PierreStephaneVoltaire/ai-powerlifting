@@ -687,6 +687,7 @@ def summarize_competitions(
             "bodyweight_kg": bodyweight if bodyweight > 0 else None,
             "hotel_required": bool(comp.get("hotel_required")),
             "notes": comp.get("notes") or "",
+            "post_meet_report": comp.get("post_meet_report"),
             "linked_goals": [_goal_payload(goal, explicit_target=True) for goal in linked_goals],
             "eligible_goals": competition_goals,
             "governing_goal": governing_goal,
@@ -993,6 +994,7 @@ def summarize_completed_sessions(
                     "rpe": ex.get("rpe"),
                     "failed": ex.get("failed", False),
                     "failed_sets": ex.get("failed_sets"),
+                    "failed_set_reasons": ex.get("failed_set_reasons"),
                 }
                 for ex in exercises
                 if ex.get("name")

@@ -29,6 +29,7 @@ import type {
   Template,
   TemplateListEntry,
   ConflictResolution,
+  PostMeetReport,
 } from '@powerlifting/types'
 
 const api = axios.create({
@@ -401,9 +402,13 @@ export async function completeCompetition(
   version: string,
   date: string,
   results: LiftResults,
-  bodyWeightKg: number
+  bodyWeightKg: number,
+  postMeetReport?: PostMeetReport
 ): Promise<Competition> {
-  const res = await api.patch<ApiResponse<Competition>>(`/competitions/${version}/${date}/complete`, { results, bodyWeightKg })
+  const res = await api.patch<ApiResponse<Competition>>(
+    `/competitions/${version}/${date}/complete`,
+    { results, bodyWeightKg, postMeetReport }
+  )
   return res.data.data
 }
 

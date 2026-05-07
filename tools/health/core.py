@@ -152,7 +152,7 @@ def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None
     sessions = item.pop("sessions", [])
     item["pk"] = active_pk
     item["sk"] = sk
-    table.put_item(Item=item)
+    table.put_item(Item=_floats_to_decimals(item))
     if isinstance(sessions, list):
         from session_store import SessionStore
         session_store = SessionStore(
@@ -535,6 +535,7 @@ def _complete_competition_in_program(
     results: dict,
     body_weight_kg: float,
     allow_retrospective: bool = True,
+    post_meet_report: Optional[dict] = None,
 ) -> dict:
     target = None
     for comp in program.get("competitions", []) or []:
@@ -566,6 +567,8 @@ def _complete_competition_in_program(
         "results": completed_results,
         "body_weight_kg": body_weight_kg,
     })
+    if post_meet_report is not None:
+        target["post_meet_report"] = copy.deepcopy(post_meet_report)
     if snapshot:
         target["projected_at_t_minus_1w"] = snapshot
     if target.get("projection_snapshot_date") is None and snapshot:
@@ -1397,6 +1400,7 @@ async def health_complete_competition(
     body_weight_kg: float,
     version: str = "current",
     allow_retrospective: bool = True,
+    post_meet_report: Optional[dict] = None,
 ) -> dict:
     """Mark a competition as completed and compute PRR.
 
@@ -1406,6 +1410,7 @@ async def health_complete_competition(
         body_weight_kg: Weigh-in body weight.
         version: Program version to update.
         allow_retrospective: Backfill a missing T-1 snapshot if needed.
+        post_meet_report: Optional structured attempt/context report.
 
     Returns:
         Updated competition object.
@@ -1417,6 +1422,7 @@ async def health_complete_competition(
         results,
         body_weight_kg,
         allow_retrospective=allow_retrospective,
+        post_meet_report=post_meet_report,
     )
     _save_program_version(program, sk)
     return updated_comp
