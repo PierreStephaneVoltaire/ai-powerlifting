@@ -1,56 +1,58 @@
-# IF Sessions Migration Plan
+# Current-Program Past Block Analytics
 
-## Goal
+## Summary
 
-Move health training sessions into a dedicated DynamoDB table named `if-sessions` so the bloated `if-health` program objects no longer need to be loaded or rewritten for normal session reads and writes.
+- Use only the `current` program as the source of truth. Do not scan forks, archived versions, or historical program versions.
+- Derive all blocks from `current.sessions[*].block`, with `current` treated as the latest block and non-current block labels treated as past blocks.
+- Keep this in `/analysis` as tabs: `Weekly`, `Past Blocks`, and `Lifetime Compare`.
 
-This is copy-first. Do not delete `sessions` from `if-health`. The embedded sessions remain the fallback and source of truth until the health tools and portal have been tested against `if-sessions` and the app is stable.
+## Stage 1: Data Mapping
 
-## Current Additive Migration
+- Add a backend block index built from `getProgram(pk, 'current')` only.
+- For each block, compute block key, label, first and last workout date, week range, completed/planned sessions, phases for that block, source fingerprint, and data-quality flags.
+- Link completed competitions from `current.competitions` to blocks by:
+  - competition date inside the block date range,
+  - otherwise completed competition within 30 days after the block's last workout,
+  - closest eligible competition if multiple candidates exist.
+- If no competition maps, mark the block `training_only`; still analyzable, but exclude it from default comp-block comparisons.
+- Surface missing data: no linked comp, missing comp results/bodyweight/post-meet report, missing T-minus-1 projection/PRR, missing start maxes, sparse bodyweight/wellness/diet, missing glossary muscle/fatigue metadata.
 
-- Terraform creates `if-sessions` with `pk` and `sk`, on-demand billing, and `prevent_destroy`.
-- `scripts/migrate_sessions_to_if_sessions.py` copies embedded sessions from `if-health` into one item per session.
-- The migration resolves `if-health` `program#current` by default and copies only that referenced version.
-- `--version program#vNNN` can be used for an explicit version. `--version all` exists only for deliberate audit/backfill runs, not normal migration.
-- Target keys support multiple sessions on the same day:
-  `session#<program_sk>#<YYYY-MM-DD>#<same_day_ordinal>#<session_id>`.
-- Copied items preserve the existing session object and add metadata for lookup and migration safety:
-  `entity_type`, `session_id`, `source_table`, `program_sk`, `program_version`, `source_index`, `same_day_ordinal`, `block`, `week_number`, `status`, `phase`, `phase_name`, `phase_ref`, `migrated_at`, and `updated_at`.
-- The script is idempotent by default and skips existing target items. Use `--replace` only when intentionally refreshing copied session records.
-- `planned_exercises` is copied from the source session only. Ad hoc sessions that do not have planned work remain empty.
+## Stage 2: Past Block Analysis
 
-## Health Tools Cutover
+- Add `GET /api/analytics/blocks` for the current-program block list.
+- Add `GET /api/analytics/blocks/:blockKey/analysis?refresh=false`.
+- Generate a `BlockAnalysisBundle` from only sessions in that block, with block-local phases and `ref_date = block.end`.
+- Reuse deterministic analytics: full-block weekly analysis, INOL, ACWR, Banister, fatigue, monotony/strain, specificity, taper quality, volume landmarks, compliance, deloads, exercise stats, and muscle-map averages.
+- Add historical-only outputs: start/end strength, comp outcome, actual DOTS/IPF GL, projection accuracy/PRR, and what data was missing.
+- Cache by block source fingerprint in `if-powerlifting-analysis-cache`; past blocks should not expire quickly because completed blocks rarely change.
 
-- Add a Python session store helper alongside the existing health program store.
-- Resolve `program#current` from `if-health`, then query `if-sessions` by `pk` and `begins_with(sk, session#<program_sk>#...)`.
-- Keep program metadata, phases, goals, competitions, diet notes, supplements, maxes, templates, glossary, and federation data in `if-health`.
-- Change session read tools first:
-  `health_get_session`, `health_get_sessions_range`, session countdown/planning reads, and analytics inputs should hydrate sessions from `if-sessions`.
-- Keep response shapes unchanged by returning normal session objects with resolved `phase` and `phase_name`.
-- Support date/index compatibility by sorting sessions by `(date, same_day_ordinal, source_index)` and selecting the requested date/index pair.
-- For writes, dual-write during the stability window:
-  update the copied item in `if-sessions` and continue updating `if-health.sessions[]`.
-- Do not remove embedded sessions from `if-health` in tool code.
+## Stage 3: Lifetime Comparison
 
-## Portal Cutover
+- Add `POST /api/analytics/block-comparison` with selected `blockKeys` plus an `includeCurrentFullBlock` option.
+- Default selection: all past blocks linked to completed competitions; optionally include training-only blocks and the latest full current-block cache.
+- Compare cached block summaries, not raw sessions, for token efficiency.
+- Show inter-block trends: actual/e1RM progression, total/DOTS/IPF GL, INOL, ACWR, volume, muscle-map volume averages, compliance, taper/fatigue shape, projection accuracy, and exercise/muscle ROI signals.
+- Estimate volume tolerance/MRV-style patterns only when enough comp-linked blocks exist; otherwise show low confidence and required missing sample size.
 
-- Add a TypeScript session store module in the powerlifting backend using `IF_SESSIONS_TABLE_NAME`.
-- In `getProgram`, load the program shell from `if-health`, then replace `program.sessions` with sessions queried from `if-sessions` for the resolved program SK.
-- Keep the frontend `Program` and `Session` types unchanged so the portal does not need a major object restructure.
-- Update session routes to use the session store for reads and writes, while dual-writing back to the embedded `if-health.sessions[]` array during testing.
-- Keep existing route contracts such as `/api/sessions/:version/:date/:index` by mapping date/index to the sorted copied sessions.
-- Update designer planned-session operations and video metadata updates to dual-write so planned sessions, logged sessions, and attached videos stay consistent.
+## UI Plan
 
-## Verification
+- `Weekly`: keep the current weekly/full-current-block analysis.
+- `Past Blocks`: block list with linked comp, data-quality badges, cache status, generate/refresh/view actions.
+- `Lifetime Compare`: block selector, `All comp blocks` preset, optional `Include training-only`, and comparison charts/tables.
+- Empty states cover no past blocks, no comp-linked blocks, ambiguous comp mapping, missing comp results, and insufficient data for correlation/tolerance estimates.
 
-- Run the migration with `--dry-run` and confirm selected source session count.
-- Run against the real target table without `--replace`; verify copied plus skipped counts.
-- Compare source embedded sessions from the `program#current` referenced version to copied session items, ignoring added migration metadata.
-- Confirm multiple sessions on the same date receive unique SKs and stable `same_day_ordinal` values.
-- Test portal pages that load sessions, designer planned sessions, completed session logging, video upload/delete, and analytics.
-- Test health tools that read a single session, a date range, planned sessions, countdown, and analytics.
+## Test Plan
 
-## Rollback
+- Unit test current-program block discovery from `session.block`.
+- Unit test competition mapping: in-range, within 30 days after block, multiple candidates, no comp, skipped comp, missing results.
+- Unit test source fingerprints and cache reuse/refresh.
+- Unit test start/end max fallback logic.
+- Integration test past-block analysis with missing glossary/bodyweight/wellness data.
+- Integration test lifetime comparison with zero, one, and multiple selected blocks.
+- Frontend tests for tabs, block selection, empty states, cached/generated status, and missing-data badges.
 
-- Disable `IF_SESSIONS_TABLE_NAME` usage or feature-flag the session store back to embedded `if-health.sessions[]`.
-- Leave `if-sessions` data in place for inspection. No rollback step should delete sessions from either table.
+## Assumptions
+
+- The current program contains all historical and current blocks.
+- No code should read forks or archived program versions for this feature.
+- Training-only blocks are valid for past-block analysis but excluded from default lifetime comp comparisons.
