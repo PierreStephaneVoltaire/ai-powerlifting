@@ -55,7 +55,7 @@ def invalidate_analysis_caches(pk: str, health_table_name: str | None = None, re
     analysis_table_name = os.getenv("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache")
     try:
         analysis_table = dynamodb.Table(analysis_table_name)
-        _batch_delete(analysis_table, _query_keys(analysis_table, f"analysis#{pk}"))
+        _batch_delete(analysis_table, _query_keys(analysis_table, f"analysis#{pk}", "weekly_bundle#"))
     except Exception as exc:
         logger.warning("[AnalysisCache] Failed to invalidate weekly bundle cache for pk=%s: %s", pk, exc)
 

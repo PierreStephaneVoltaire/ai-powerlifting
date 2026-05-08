@@ -3803,7 +3803,7 @@ def weekly_analysis(
     today = ref
     upcoming = [
         c for c in sorted(program.get("competitions", []), key=lambda x: x.get("date", ""))
-        if c.get("status") in ("confirmed", "optional") and (d := _parse_date(c.get("date", ""))) and d > today
+        if c.get("status") in ("confirmed", "optional", "completed") and (d := _parse_date(c.get("date", ""))) and d > today
     ]
     to_project = [upcoming[0], upcoming[-1]] if len(upcoming) >= 2 else upcoming[:1]
     projection_calibration = _resolve_projection_lambda_multiplier(program, reference_date=ref)

@@ -12,6 +12,9 @@ from config import (
     ESTIMATE_MODEL,
     ESTIMATE_MODEL_REASONING_EFFORT,
     ESTIMATE_MODEL_VERBOSITY,
+    HEALTH_HELPER_MODEL,
+    HEALTH_HELPER_MODEL_REASONING_EFFORT,
+    HEALTH_HELPER_MODEL_VERBOSITY,
     LLM_BASE_URL,
     OPENROUTER_API_KEY,
 )
@@ -384,7 +387,16 @@ def _fallback_estimate(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _call_tool(system_prompt: str, user_msg: str, tool_schema: dict[str, Any], tool_name: str) -> dict[str, Any] | None:
+async def _call_tool(
+    system_prompt: str,
+    user_msg: str,
+    tool_schema: dict[str, Any],
+    tool_name: str,
+    *,
+    model: str = ESTIMATE_MODEL,
+    reasoning_effort: str = ESTIMATE_MODEL_REASONING_EFFORT,
+    verbosity: str = ESTIMATE_MODEL_VERBOSITY,
+) -> dict[str, Any] | None:
     if not OPENROUTER_API_KEY:
         return None
 
@@ -396,16 +408,16 @@ async def _call_tool(system_prompt: str, user_msg: str, tool_schema: dict[str, A
                 "Content-Type": "application/json",
             },
             json={
-                "model": ESTIMATE_MODEL,
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_msg},
                 ],
                 "reasoning": {
                     "enabled": True,
-                    "effort": ESTIMATE_MODEL_REASONING_EFFORT,
+                    "effort": reasoning_effort,
                 },
-                "verbosity": ESTIMATE_MODEL_VERBOSITY,
+                "verbosity": verbosity,
                 "tools": [tool_schema],
                 "tool_choice": {"type": "function", "function": {"name": tool_name}},
             },
@@ -423,18 +435,24 @@ async def _call_tool(system_prompt: str, user_msg: str, tool_schema: dict[str, A
     return json.loads(args_str)
 
 
-async def review_lift_profile(profile: dict[str, Any]) -> dict[str, Any]:
+async def review_lift_profile(profile: dict[str, Any], *, use_helper_model: bool = False) -> dict[str, Any]:
     lift = str(profile.get("lift", "")).lower()
     if lift not in LIFTS:
         return {**_fallback_review(profile), "error": "Invalid lift. Expected squat, bench, or deadlift."}
 
     baseline = _fallback_review(profile)
     try:
+        model_kwargs = {
+            "model": HEALTH_HELPER_MODEL,
+            "reasoning_effort": HEALTH_HELPER_MODEL_REASONING_EFFORT,
+            "verbosity": HEALTH_HELPER_MODEL_VERBOSITY,
+        } if use_helper_model else {}
         args = await _call_tool(
             _REVIEW_SYSTEM_PROMPT,
             f"Review this lift profile:\n{_profile_payload(profile)}",
             _REVIEW_TOOL_SCHEMA,
             "review_lift_profile",
+            **model_kwargs,
         )
         if not args:
             return baseline
@@ -468,6 +486,9 @@ async def rewrite_lift_profile(profile: dict[str, Any]) -> dict[str, Any]:
             f"Rewrite this lift profile without estimating a coefficient:\n{_profile_payload(profile)}",
             _REWRITE_TOOL_SCHEMA,
             "rewrite_lift_profile",
+            model=HEALTH_HELPER_MODEL,
+            reasoning_effort=HEALTH_HELPER_MODEL_REASONING_EFFORT,
+            verbosity=HEALTH_HELPER_MODEL_VERBOSITY,
         )
         if not args:
             return _fallback_rewrite(profile)
@@ -478,7 +499,7 @@ async def rewrite_lift_profile(profile: dict[str, Any]) -> dict[str, Any]:
             "sticking_points": str(args.get("sticking_points", profile.get("sticking_points", ""))).strip(),
             "primary_muscle": str(args.get("primary_muscle", profile.get("primary_muscle", ""))).strip(),
             "volume_tolerance": profile.get("volume_tolerance", "moderate"),
-            "missing_details": (await review_lift_profile(profile)).get("missing_details", []),
+            "missing_details": (await review_lift_profile(profile, use_helper_model=True)).get("missing_details", []),
         }
     except Exception as e:
         logger.warning("[LiftProfileAI] rewrite failed: %s", e)
@@ -544,6 +565,9 @@ async def rewrite_and_estimate_lift_profile(profile: dict[str, Any]) -> dict[str
             f"Rewrite and estimate this lift profile:\n{_profile_payload(profile)}",
             _REWRITE_ESTIMATE_TOOL_SCHEMA,
             "rewrite_and_estimate_lift_profile",
+            model=HEALTH_HELPER_MODEL,
+            reasoning_effort=HEALTH_HELPER_MODEL_REASONING_EFFORT,
+            verbosity=HEALTH_HELPER_MODEL_VERBOSITY,
         )
         if not args:
             return _fallback_rewrite_and_estimate(profile)
@@ -562,7 +586,7 @@ async def rewrite_and_estimate_lift_profile(profile: dict[str, Any]) -> dict[str
             "stimulus_coefficient_confidence": confidence,
             "stimulus_coefficient_reasoning": str(args.get("reasoning", "")).strip(),
             "stimulus_coefficient_updated_at": datetime.now(timezone.utc).isoformat(),
-            "missing_details": (await review_lift_profile(profile)).get("missing_details", []),
+            "missing_details": (await review_lift_profile(profile, use_helper_model=True)).get("missing_details", []),
         }
     except Exception as e:
         logger.warning("[LiftProfileAI] rewrite/estimate failed: %s", e)

@@ -465,8 +465,9 @@ class SpawnSpecialistObservation(TextObservation):
 class SpawnSpecialistExecutor(ToolExecutor):
     """Executor for specialist subagent."""
 
-    def __init__(self, chat_id: str):
+    def __init__(self, chat_id: str, model_override: Optional[str] = None):
         self.chat_id = chat_id
+        self.model_override = model_override.strip() if model_override else None
 
     def __call__(
         self,
@@ -520,9 +521,13 @@ class SpawnSpecialistExecutor(ToolExecutor):
             if action.write_to_file:
                 user_message = f"{action.task}\n\nSave your output to: {action.write_to_file}"
 
-            # Route to concrete model via router
-            from models.router import select_model_for_specialist
-            model = await select_model_for_specialist(specialist.preset, action.task)
+            # Route to concrete model via router unless an internal caller pins
+            # a cheaper helper model for narrow UI tasks.
+            if self.model_override:
+                model = self.model_override
+            else:
+                from models.router import select_model_for_specialist
+                model = await select_model_for_specialist(specialist.preset, action.task)
 
             from channels.status import send_status, StatusType
             await send_status(

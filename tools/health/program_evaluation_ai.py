@@ -96,6 +96,11 @@ GOALS & QUALIFICATION STANDARDS
     federation, strategy mode, and weight-class target.
   - A goal may now link to multiple competitions and multiple standards.
     Treat those as alternative paths to the same block outcome, not as noise.
+  - Goal type controls the success bar. For goal_type="hit_total", judge
+    success only against target_total_kg / success_metric.target_total_kg.
+    Do NOT mark a hit_total goal missed because a separate qualifying
+    standard is higher. For goal_type="qualify_for_federation", use the
+    goal-owned qualifying standard or explicit target_total_kg.
   - Never silently downgrade a primary goal to an easier secondary standard.
     If a primary OPA path requires 570 kg and a secondary CPU path requires
     535 kg, a 535 total does NOT satisfy the 570 goal even if the meet
@@ -202,6 +207,9 @@ For each competition in the block:
 
 For goal_status:
   - Rate each explicit goal: achieved / on_track / at_risk / off_track / unclear.
+  - First inspect goal_type and success_metric. A hit_total goal is achieved
+    when the actual or projected total meets target_total_kg, even if linked
+    qualification standards are higher.
   - Reason from linked standards, projections, bodyweight trend, meet timing,
     meet federation eligibility, and weight-class compatibility.
 

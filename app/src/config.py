@@ -354,6 +354,12 @@ ESTIMATE_MODEL = os.getenv("ESTIMATE_MODEL", ANALYSIS_MODEL)
 ESTIMATE_MODEL_REASONING_EFFORT = os.getenv("ESTIMATE_MODEL_REASONING_EFFORT", "xhigh")
 ESTIMATE_MODEL_VERBOSITY = os.getenv("ESTIMATE_MODEL_VERBOSITY", "max")
 
+# Cheaper model for narrow user-facing health helpers such as session note
+# drafting, session auto-regulation, and lift-profile rewrite cleanup.
+HEALTH_HELPER_MODEL = os.getenv("HEALTH_HELPER_MODEL", "openai/gpt-5.4-mini")
+HEALTH_HELPER_MODEL_REASONING_EFFORT = os.getenv("HEALTH_HELPER_MODEL_REASONING_EFFORT", "low")
+HEALTH_HELPER_MODEL_VERBOSITY = os.getenv("HEALTH_HELPER_MODEL_VERBOSITY", "low")
+
 # Fast model for import classification and resolution
 IMPORT_FAST_MODEL = os.getenv("IMPORT_FAST_MODEL", "anthropic/claude-haiku-4.5")
 

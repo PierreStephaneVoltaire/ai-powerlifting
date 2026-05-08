@@ -1965,7 +1965,7 @@ def _floats_to_decimals(obj):
     return obj
 
 
-async def health_program_evaluation(refresh: bool = False) -> dict:
+async def health_program_evaluation(refresh: bool = False, cache_only: bool = False) -> dict:
     """Generate a conservative full-block program evaluation.
 
     This tool is intentionally gated to the current block / full report and is
@@ -2022,6 +2022,17 @@ async def health_program_evaluation(refresh: bool = False) -> dict:
                 report["window_start"] = window_start
                 report["weeks"] = len(completed_weeks)
                 return report
+
+    if cache_only:
+        return {
+            "insufficient_data": True,
+            "insufficient_data_reason": "No cached program evaluation exists. Generate it to run AI analysis.",
+            "cache_miss": True,
+            "cached": False,
+            "generated_at": "",
+            "window_start": window_start,
+            "weeks": len(completed_weeks),
+        }
 
     report = await generate_program_evaluation_report(program, federation_library=federation_library)
     generated_at = datetime.utcnow().isoformat() + "Z"

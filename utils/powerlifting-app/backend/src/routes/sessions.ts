@@ -418,6 +418,7 @@ sessionsRouter.post('/:version/:date/:index/notes/draft', async (req, res, next)
         'powerlifting_coach',
         JSON.stringify(prompt),
         `powerlifting-notes-${req.effectivePk}-${req.params.date}-${index}`,
+        true,
       )
       notes = String(result?.notes || '').trim()
     } catch (error) {
@@ -535,6 +536,7 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
         'powerlifting_coach',
         JSON.stringify(task),
         `powerlifting-autoreg-${req.effectivePk}-${req.params.date}-${index}-${exerciseIndex}`,
+        true,
       ), session, exerciseIndex)
     } catch (error) {
       console.warn('Auto-regulation coach call failed:', error)

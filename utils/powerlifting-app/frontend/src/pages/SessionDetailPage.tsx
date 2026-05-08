@@ -9,9 +9,10 @@ export default function SessionDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { program, isLoading } = useProgramStore()
+  const fallbackBackTo = location.pathname.startsWith('/list/') ? '/sessions?view=Compact' : '/sessions'
   const backTo = typeof location.state === 'object' && location.state && 'backTo' in location.state
-    ? String((location.state as { backTo?: string }).backTo || '/sessions')
-    : '/sessions'
+    ? String((location.state as { backTo?: string }).backTo || fallbackBackTo)
+    : fallbackBackTo
 
   if (isLoading || !program) {
     return (

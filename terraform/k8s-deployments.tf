@@ -311,8 +311,8 @@ resource "kubernetes_deployment" "portal_backends" {
               cpu    = "${var.portal_cpu_millicores}m"
             }
             requests = {
-              memory = "1024Mi"
-              cpu    = "1000m"
+              memory = "${var.portal_memory_mb / 2}Mi"
+              cpu    = "${var.portal_cpu_millicores / 2}m"
             }
           }
 
@@ -400,8 +400,8 @@ resource "kubernetes_deployment" "portal_frontends" {
               cpu    = "${var.frontend_cpu_millicores}m"
             }
             requests = {
-              memory = "1024Mi"
-              cpu    = "1000m"
+              memory = "${var.frontend_memory_mb / 2}Mi"
+              cpu    = "${var.frontend_cpu_millicores / 2}m"
             }
           }
 

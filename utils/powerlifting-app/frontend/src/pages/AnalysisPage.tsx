@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Activity, Download, AlertTriangle, CheckCircle, TrendingUp, Dumbbell, Trophy,
   Scale, Moon, Beef, Ruler, Utensils, Info,
@@ -22,10 +23,34 @@ import {
 } from '@mantine/core'
 import { AiAnalysis } from '@/components/analysis/AiAnalysis'
 import { AlertsStrip } from '@/components/analysis/AlertsStrip'
+import { LifetimeComparePanel, PastBlocksPanel } from '@/components/analysis/BlockAnalytics'
 import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+type WeeksMode = number | 'current' | 'block'
+type AnalysisSection = 'weekly' | 'blocks' | 'compare'
+type AnalysisViewMode = 'raw' | 'graph'
+
+const ANALYSIS_SECTIONS: AnalysisSection[] = ['weekly', 'blocks', 'compare']
+const ANALYSIS_VIEW_MODES: AnalysisViewMode[] = ['raw', 'graph']
+const WEEK_MODE_NUMBERS = new Set(['1', '2', '4', '8'])
+
+function parseAnalysisSection(searchParams: URLSearchParams): AnalysisSection {
+  const raw = searchParams.get('type') ?? searchParams.get('section')
+  return ANALYSIS_SECTIONS.includes(raw as AnalysisSection) ? raw as AnalysisSection : 'weekly'
+}
+
+function parseAnalysisViewMode(raw: string | null): AnalysisViewMode {
+  return ANALYSIS_VIEW_MODES.includes(raw as AnalysisViewMode) ? raw as AnalysisViewMode : 'raw'
+}
+
+function parseWeeksMode(raw: string | null): WeeksMode {
+  if (raw === 'current' || raw === 'block') return raw
+  if (raw && WEEK_MODE_NUMBERS.has(raw)) return Number(raw)
+  return 4
+}
 
 const RPE_TABLE_PRIMARY = new Map<string, number>([
   ['1-10', 1.000], ['2-10', 0.960], ['3-10', 0.930], ['4-10', 0.900], ['5-10', 0.880], ['6-10', 0.860],
@@ -132,7 +157,7 @@ function getCurrentTrainingWeek(sessions: Session[], todayStr: string): number {
 }
 
 function getAnalysisWindow(
-  mode: number | 'current' | 'block',
+  mode: WeeksMode,
   sessions: Session[] = [],
   programStart?: string | null,
 ) {
@@ -278,7 +303,7 @@ function InfoLabel({ label, help }: { label: string; help: string }) {
   )
 }
 
-function analysisKeyForMode(mode: number | 'current' | 'block'): AnalysisWindowKey {
+function analysisKeyForMode(mode: WeeksMode): AnalysisWindowKey {
   if (mode === 'current') return 'current'
   if (mode === 'block') return 'block'
   return `previous_${mode}` as AnalysisWindowKey
@@ -289,14 +314,37 @@ function analysisKeyForMode(mode: number | 'current' | 'block'): AnalysisWindowK
 export default function AnalysisPage() {
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [weeksMode, setWeeksMode] = useState<number | 'current' | 'block'>(4)
+  const weeksMode = parseWeeksMode(searchParams.get('weeks'))
+  const viewMode = parseAnalysisViewMode(searchParams.get('view'))
+  const activeSection = parseAnalysisSection(searchParams)
   const [analysisBundle, setAnalysisBundle] = useState<WeeklyAnalysisBundle | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
-  const [viewMode, setViewMode] = useState<'raw' | 'graph'>('raw')
+
+  const updateAnalysisParams = (updates: { type?: AnalysisSection; weeks?: WeeksMode; view?: AnalysisViewMode }) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+
+      if (updates.type !== undefined) {
+        next.delete('section')
+        updates.type === 'weekly' ? next.delete('type') : next.set('type', updates.type)
+      }
+
+      if (updates.weeks !== undefined) {
+        String(updates.weeks) === '4' ? next.delete('weeks') : next.set('weeks', String(updates.weeks))
+      }
+
+      if (updates.view !== undefined) {
+        updates.view === 'raw' ? next.delete('view') : next.set('view', updates.view)
+      }
+
+      return next
+    })
+  }
 
   const analysisWindow = useMemo(
     () => getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start),
@@ -659,6 +707,21 @@ export default function AnalysisPage() {
   return (
     <Stack gap="lg">
       <Group justify="space-between" wrap="wrap">
+        <Title order={2}>Analysis</Title>
+        <SegmentedControl
+          value={activeSection}
+          onChange={(value) => updateAnalysisParams({ type: value as AnalysisSection })}
+          data={[
+            { value: 'weekly', label: 'Weekly' },
+            { value: 'blocks', label: 'Past Blocks' },
+            { value: 'compare', label: 'Lifetime Compare' },
+          ]}
+        />
+      </Group>
+
+      {activeSection === 'weekly' && (
+        <>
+      <Group justify="space-between" wrap="wrap">
         <Title order={2}>Weekly Analysis</Title>
         <Group gap="sm" wrap="wrap">
           <Select
@@ -666,9 +729,7 @@ export default function AnalysisPage() {
             value={String(weeksMode)}
             onChange={(val) => {
               if (!val) return
-              if (val === 'block') return setWeeksMode('block')
-              if (val === 'current') return setWeeksMode('current')
-              setWeeksMode(Number(val))
+              updateAnalysisParams({ weeks: parseWeeksMode(val) })
             }}
             data={[
               { value: 'current', label: 'Current Week' },
@@ -683,7 +744,7 @@ export default function AnalysisPage() {
           <SegmentedControl
             size="xs"
             value={viewMode}
-            onChange={(v) => setViewMode(v as 'raw' | 'graph')}
+            onChange={(v) => updateAnalysisParams({ view: v as AnalysisViewMode })}
             data={[
               { value: 'raw', label: 'Table' },
               { value: 'graph', label: 'Charts' },
@@ -1856,6 +1917,11 @@ export default function AnalysisPage() {
           <Text c="dimmed">No analysis data available for the selected period.</Text>
         </Center>
       )}
+        </>
+      )}
+
+      {activeSection === 'blocks' && <PastBlocksPanel unit={unit} />}
+      {activeSection === 'compare' && <LifetimeComparePanel unit={unit} />}
     </Stack>
   )
 }

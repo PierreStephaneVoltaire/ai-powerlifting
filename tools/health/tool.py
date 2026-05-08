@@ -65,7 +65,6 @@ def _sync_powerlifting_datasets():
                 else:
                     logger.warning(f"Health Plugin: [Background] No powerlifting datasets found in s3://{bucket_name}/{prefix}")
         except Exception as e:
-            import logging
             logging.getLogger(__name__).warning(f"Health Plugin: [Background] Powerlifting dataset sync failed: {e}")
 
         # Always attempt to warm the DataFrame cache after sync (covers both fresh
@@ -74,7 +73,6 @@ def _sync_powerlifting_datasets():
             from powerlifting_stats import warm_cache
             warm_cache()
         except Exception as e:
-            import logging
             logging.getLogger(__name__).warning(f"Health Plugin: [Background] warm_cache() failed: {e}")
 
     # Run sync in background thread to avoid blocking tool loading/app startup
@@ -2005,6 +2003,7 @@ class CorrelationAnalysisAction(Action):
     weeks: int = Field(default=4, description="Rolling window in weeks (default 4)")
     block: str = Field(default="current", description="Program block filter (default 'current')")
     refresh: bool = Field(default=False, description="Force regeneration, ignore cache")
+    cache_only: bool = Field(default=False, description="Return only cached results; do not generate a new AI report")
 
 
 class CorrelationAnalysisObservation(Observation):
@@ -2042,6 +2041,19 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
                     report["window_start"] = window_start_str
                     report["weeks"] = action.weeks
                 return CorrelationAnalysisObservation.from_text(_format_result(report))
+
+        if action.cache_only:
+            return CorrelationAnalysisObservation.from_text(_format_result({
+                "findings": [],
+                "summary": "",
+                "insufficient_data": True,
+                "insufficient_data_reason": "No cached ROI correlation report exists. Generate it to run AI analysis.",
+                "cache_miss": True,
+                "cached": False,
+                "generated_at": "",
+                "window_start": window_start_str,
+                "weeks": action.weeks,
+            }))
 
         store.invalidate_cache()
         program = _run_async(store.get_program())
@@ -2233,6 +2245,7 @@ register_tool("LiftProfileRewriteEstimateTool", LiftProfileRewriteEstimateTool)
 
 class ProgramEvaluationAction(Action):
     refresh: bool = Field(default=False, description="Force regeneration, ignore cache")
+    cache_only: bool = Field(default=False, description="Return only cached results; do not generate a new AI report")
 
 
 class ProgramEvaluationObservation(Observation):
@@ -2242,7 +2255,7 @@ class ProgramEvaluationObservation(Observation):
 class ProgramEvaluationExecutor(ToolExecutor[ProgramEvaluationAction, ProgramEvaluationObservation]):
     def __call__(self, action: ProgramEvaluationAction, conversation=None) -> ProgramEvaluationObservation:
         from core import health_program_evaluation
-        result = _run_async(health_program_evaluation(refresh=action.refresh))
+        result = _run_async(health_program_evaluation(refresh=action.refresh, cache_only=action.cache_only))
         return ProgramEvaluationObservation.from_text(_format_result(result))
 
 
@@ -2990,8 +3003,26 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                     "weeks": {"type": "integer", "description": "Rolling window in weeks", "default": 4},
                     "block": {"type": "string", "description": "Program block filter", "default": "current"},
                     "refresh": {"type": "boolean", "description": "Force regeneration, ignore cache", "default": False},
+                    "cache_only": {"type": "boolean", "description": "Return only cached results without generating AI output", "default": False},
                 },
                 "required": [],
+            },
+        },
+        "block_correlation_analysis": {
+            "name": "block_correlation_analysis",
+            "description": (
+                "AI-powered exercise ROI correlation analysis for a supplied block snapshot. "
+                "Use this for past blocks so the correlation uses that block's sessions rather than today's rolling window."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "weeks": {"type": "integer", "description": "Block length in weeks", "default": 4},
+                    "window_start": {"type": "string", "description": "Block start date (YYYY-MM-DD)"},
+                    "program": {"type": "object", "description": "Block-scoped program snapshot"},
+                    "sessions": {"type": "array", "items": {"type": "object"}, "description": "Block sessions"},
+                },
+                "required": ["program", "sessions"],
             },
         },
         "fatigue_profile_estimate": {
@@ -3139,8 +3170,39 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "refresh": {"type": "boolean", "description": "Force regeneration, ignore cache", "default": False},
+                    "cache_only": {"type": "boolean", "description": "Return only cached results without generating AI output", "default": False},
                 },
                 "required": [],
+            },
+        },
+        "block_program_evaluation": {
+            "name": "block_program_evaluation",
+            "description": (
+                "AI program evaluation for a supplied historical block snapshot. "
+                "The caller supplies a normalized program where the target block sessions are scoped to current. "
+                "Use this for past-block program analysis without loading the live current program."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "program": {"type": "object", "description": "Block-scoped program snapshot to evaluate."},
+                },
+                "required": ["program"],
+            },
+        },
+        "multi_block_comparison_analysis": {
+            "name": "multi_block_comparison_analysis",
+            "description": (
+                "AI comparison of current and historical block analysis bundles. "
+                "Identifies similarities, differences, lift-specific outcomes, ROI, volume dose response, "
+                "bodyweight/training-day relationships, projection accuracy, fatigue patterns, and best-value blocks."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "payload": {"type": "object", "description": "Multi-block comparison payload built from block analytics."},
+                },
+                "required": ["payload"],
             },
         },
         "import_parse_file": {
@@ -3576,6 +3638,7 @@ def _do_correlation_analysis(args):
 
     weeks = args.get("weeks", 4)
     refresh = args.get("refresh", False)
+    cache_only = args.get("cache_only", False)
 
     today = datetime.utcnow().date()
     raw_cutoff = today - timedelta(weeks=weeks)
@@ -3599,6 +3662,19 @@ def _do_correlation_analysis(args):
                 report["window_start"] = window_start_str
                 report["weeks"] = weeks
             return report
+
+    if cache_only:
+        return {
+            "findings": [],
+            "summary": "",
+            "insufficient_data": True,
+            "insufficient_data_reason": "No cached ROI correlation report exists. Generate it to run AI analysis.",
+            "cache_miss": True,
+            "cached": False,
+            "generated_at": "",
+            "window_start": window_start_str,
+            "weeks": weeks,
+        }
 
     store.invalidate_cache()
     program = _run_async(store.get_program())
@@ -3628,6 +3704,41 @@ def _do_correlation_analysis(args):
     report["generated_at"] = generated_at
     report["window_start"] = window_start_str
     report["weeks"] = weeks
+    return report
+
+
+def _do_block_correlation_analysis(args):
+    from datetime import datetime
+    from correlation_ai import generate_correlation_report
+
+    program = args.get("program")
+    sessions = args.get("sessions")
+    weeks = args.get("weeks", 4)
+    window_start = args.get("window_start", "")
+    if not isinstance(program, dict) or not isinstance(sessions, list):
+        return {
+            "findings": [],
+            "summary": "",
+            "generated_at": "",
+            "window_start": window_start,
+            "weeks": weeks,
+            "cached": False,
+            "insufficient_data": True,
+            "insufficient_data_reason": "A block-scoped program and sessions snapshot is required.",
+        }
+
+    report = _run_async(generate_correlation_report(
+        sessions=sessions,
+        lift_profiles=program.get("lift_profiles", []),
+        weeks=weeks,
+        window_start=window_start,
+        program=program,
+    ))
+    if isinstance(report, dict):
+        report["cached"] = False
+        report["generated_at"] = datetime.utcnow().isoformat() + "Z"
+        report["window_start"] = window_start
+        report["weeks"] = weeks
     return report
 
 
@@ -3688,7 +3799,44 @@ def _do_lift_profile_estimate_stimulus(args):
 
 def _do_program_evaluation(args):
     from core import health_program_evaluation
-    return _run_async(health_program_evaluation(refresh=args.get("refresh", False)))
+    return _run_async(health_program_evaluation(refresh=args.get("refresh", False), cache_only=args.get("cache_only", False)))
+
+
+def _do_block_program_evaluation(args):
+    from program_evaluation_ai import generate_program_evaluation_report
+
+    program = args.get("program")
+    if not isinstance(program, dict):
+        return {
+            "insufficient_data": True,
+            "insufficient_data_reason": "A block-scoped program snapshot is required.",
+            "cached": False,
+            "generated_at": "",
+            "window_start": "",
+            "weeks": 0,
+        }
+
+    federation_library = None
+    try:
+        from core import _get_federation_store
+        federation_library = _run_async(_get_federation_store().get_library())
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("block_program_evaluation: federation library unavailable: %s", exc)
+
+    return _run_async(generate_program_evaluation_report(
+        program,
+        federation_library=federation_library,
+    ))
+
+
+def _do_multi_block_comparison_analysis(args):
+    from multi_block_comparison_ai import generate_multi_block_comparison_report
+
+    payload = args.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+    return _run_async(generate_multi_block_comparison_report(payload))
 
 
 def _do_powerlifting_filter_categories(args):
@@ -3854,6 +4002,7 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "calculate_dots": lambda: _do_calculate_dots(args),
         "weekly_analysis": lambda: _do_weekly_analysis(args),
         "correlation_analysis": lambda: _do_correlation_analysis(args),
+        "block_correlation_analysis": lambda: _do_block_correlation_analysis(args),
         "fatigue_profile_estimate": lambda: _do_fatigue_profile_estimate(args),
         "muscle_group_estimate": lambda: _do_muscle_group_estimate(args),
         "lift_profile_review": lambda: _do_lift_profile_review(args),
@@ -3861,6 +4010,8 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "lift_profile_rewrite": lambda: _do_lift_profile_rewrite(args),
         "lift_profile_estimate_stimulus": lambda: _do_lift_profile_estimate_stimulus(args),
         "program_evaluation": lambda: _do_program_evaluation(args),
+        "block_program_evaluation": lambda: _do_block_program_evaluation(args),
+        "multi_block_comparison_analysis": lambda: _do_multi_block_comparison_analysis(args),
         "import_parse_file": lambda: import_parse_file(args["base64_content"], args["filename"]),
         "import_apply": lambda: import_apply(args["import_id"], args.get("merge_strategy", "append"), args.get("conflict_resolutions"), args.get("start_date")),
         "import_reject": lambda: import_reject(args["import_id"], args.get("reason")),

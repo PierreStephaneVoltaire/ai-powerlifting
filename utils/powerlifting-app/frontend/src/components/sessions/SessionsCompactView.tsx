@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
@@ -29,7 +29,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const navigate = useNavigate()
-  const [block, setBlock] = useState('current')
+  const [searchParams, setSearchParams] = useSearchParams()
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [newDate, setNewDate] = useState<string>('')
@@ -42,6 +42,18 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
     for (const s of program.sessions) blocks.add(s.block ?? 'current')
     return Array.from(blocks).sort()
   }, [program])
+
+  const requestedBlock = searchParams.get('block') || 'current'
+  const block = availableBlocks.includes(requestedBlock) ? requestedBlock : 'current'
+
+  const updateBlockParam = (nextBlock: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('view', 'Compact')
+      nextBlock === 'current' ? next.delete('block') : next.set('block', nextBlock)
+      return next
+    })
+  }
 
   const blockSessions = useMemo(() => {
     if (!program) return []
@@ -161,7 +173,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
             {availableBlocks.length > 1 && (
               <Select
                 value={block}
-                onChange={(v) => setBlock(v || 'current')}
+                onChange={(v) => updateBlockParam(v || 'current')}
                 data={availableBlocks.map((b) => ({
                   value: b,
                   label: b === 'current' ? 'Current Block' : b,
@@ -191,11 +203,11 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
         aria-label="Add Session"
         style={{
           position: 'fixed',
-          bottom: 24,
-          right: 24,
-          zIndex: 40,
-          width: 56,
-          height: 56,
+          bottom: 'calc(76px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
+          right: 16,
+          zIndex: 120,
+          width: 52,
+          height: 52,
         }}
       >
         <Plus size={24} />

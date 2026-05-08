@@ -5,10 +5,11 @@ import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, type LiftProfileReview } from '@/api/client'
-import { daysUntil, sessionsThisCalendarWeek } from '@/utils/dates'
+import { fetchBlockAnalysis, fetchProgramBlocks, type BlockAnalysisBundle, type WeeklyAnalysis } from '@/api/analytics'
+import { daysUntil } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
-import { CalendarDays, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse } from 'lucide-react'
+import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse } from 'lucide-react'
 import {
   Stack,
   Group,
@@ -28,6 +29,7 @@ import {
   Modal,
   Alert,
   Divider,
+  Table,
 } from '@mantine/core'
 import type { Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
@@ -145,6 +147,46 @@ function buildWellnessTrend(sessions: Session[]): {
   }
 }
 
+function fatigueBadgeColor(score: number | null): string {
+  if (score === null) return 'gray'
+  if (score >= 0.65) return 'red'
+  if (score >= 0.45) return 'orange'
+  if (score >= 0.25) return 'yellow'
+  return 'green'
+}
+
+function fatigueLabel(score: number | null): string {
+  if (score === null) return 'N/A'
+  if (score >= 0.65) return 'Very High'
+  if (score >= 0.45) return 'High'
+  if (score >= 0.25) return 'Moderate'
+  return 'Low'
+}
+
+function formatSignedKg(deltaKg: number | null | undefined, unit: 'kg' | 'lb'): string {
+  if (typeof deltaKg !== 'number' || !Number.isFinite(deltaKg)) return '--'
+  const value = displayWeight(Math.abs(deltaKg), unit)
+  return `${deltaKg >= 0 ? '+' : '-'}${value}`
+}
+
+function aggregateLiftStats(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift']) {
+  const aliases: Record<LiftProfile['lift'], string[]> = {
+    squat: ['squat'],
+    bench: ['bench'],
+    deadlift: ['deadlift'],
+  }
+  const stats = weekly?.exercise_stats ?? {}
+  return Object.entries(stats).reduce((acc, [name, stat]) => {
+    const lowerName = name.toLowerCase()
+    if (!aliases[lift].some((alias) => lowerName.includes(alias))) return acc
+    return {
+      sets: acc.sets + (Number(stat.total_sets) || 0),
+      volumeKg: acc.volumeKg + (Number(stat.total_volume) || 0),
+      maxKg: Math.max(acc.maxKg, Number(stat.max_kg) || 0),
+    }
+  }, { sets: 0, volumeKg: 0, maxKg: 0 })
+}
+
 export default function Dashboard() {
   const { program, version, isLoading, updateMaxes, updateBodyWeight, updatePhases, updateLiftProfiles } = useProgramStore()
   const { unit } = useSettingsStore()
@@ -169,6 +211,9 @@ export default function Dashboard() {
   const [profileGuideLoading, setProfileGuideLoading] = useState(false)
   const [profileGuideRewriting, setProfileGuideRewriting] = useState(false)
   const [profileGuideEstimating, setProfileGuideEstimating] = useState(false)
+  const [currentBlockBundle, setCurrentBlockBundle] = useState<BlockAnalysisBundle | null>(null)
+  const [currentBlockLoading, setCurrentBlockLoading] = useState(false)
+  const [currentBlockCacheMissing, setCurrentBlockCacheMissing] = useState(false)
 
   useEffect(() => {
     if (version) {
@@ -186,6 +231,52 @@ export default function Dashboard() {
     }
   }, [program?.lift_profiles])
 
+  useEffect(() => {
+    let cancelled = false
+
+    if (!version) {
+      setCurrentBlockBundle(null)
+      setCurrentBlockCacheMissing(false)
+      return
+    }
+
+    setCurrentBlockLoading(true)
+    setCurrentBlockCacheMissing(false)
+
+    fetchProgramBlocks()
+      .then((blocks) => {
+        const currentBlock = blocks.find((block) => block.isCurrent)
+        if (!currentBlock?.cacheStatus?.cached) {
+          if (!cancelled) {
+            setCurrentBlockBundle(null)
+            setCurrentBlockCacheMissing(true)
+          }
+          return null
+        }
+        return fetchBlockAnalysis(currentBlock.blockKey, false, true)
+      })
+      .then((bundle) => {
+        if (!cancelled && bundle) {
+          setCurrentBlockBundle(bundle)
+          setCurrentBlockCacheMissing(false)
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load cached current block analysis:', error)
+        if (!cancelled) {
+          setCurrentBlockBundle(null)
+          setCurrentBlockCacheMissing(true)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCurrentBlockLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [version])
+
   if (isLoading || !program) {
     return (
       <Group justify="center" mih="50vh">
@@ -195,8 +286,6 @@ export default function Dashboard() {
   }
 
   const { meta, sessions, phases, competitions } = program
-  const thisWeekSessions = sessionsThisCalendarWeek(sessions)
-  const completedThisWeek = thisWeekSessions.filter((s) => s.completed).length
 
   const upcomingComps = competitions
     .filter((c) => c.status !== 'skipped' && new Date(c.date) >= new Date())
@@ -217,7 +306,6 @@ export default function Dashboard() {
     }
   }
 
-  const currentPhase = thisWeekSessions[0]?.phase
   const wellnessTrend = buildWellnessTrend(sessions)
 
   const startEditingMaxes = () => {
@@ -416,6 +504,26 @@ export default function Dashboard() {
   )
   const profileGuideScore = profileGuideReview?.completeness_score ?? 0
   const profileGuideCanEstimate = profileGuideScore >= PROFILE_ESTIMATE_READY_SCORE
+  const currentBlockWeekly = currentBlockBundle?.weekly ?? null
+  const currentBlockFatigue = currentBlockWeekly?.fatigue_index ?? null
+  const liftBreakdownRows = LIFT_ORDER.map((lift) => {
+    const liftStats = aggregateLiftStats(currentBlockWeekly, lift)
+    const liftAnalysis = currentBlockWeekly?.lifts?.[lift]
+    const endStrength = currentBlockBundle?.historical.endStrength[lift] ?? currentBlockWeekly?.current_maxes?.[lift] ?? null
+    const strengthDelta = currentBlockBundle?.historical.strengthDelta[lift] ?? null
+    return {
+      lift,
+      endStrength,
+      strengthDelta,
+      sets: liftStats.sets,
+      volumeKg: liftStats.volumeKg,
+      avgInol: currentBlockWeekly?.inol?.avg_inol?.[lift] ?? currentBlockBundle?.historical.analyticsSummary.avgInol?.[lift] ?? null,
+      progressionRate: liftAnalysis?.progression_rate_kg_per_week ?? null,
+      failedSets: liftAnalysis?.failed_sets ?? 0,
+      volumeChangePct: liftAnalysis?.volume_change_pct,
+      intensityChangePct: liftAnalysis?.intensity_change_pct,
+    }
+  })
 
   return (
     <Stack gap={24}>
@@ -718,30 +826,126 @@ export default function Dashboard() {
           )}
         </Paper>
 
-        {/* This Week */}
+        {/* Current Fatigue State */}
         <Paper withBorder p="md">
-          <Group gap="xs" mb="sm">
-            <CalendarDays size={20} />
-            <Text fw={500}>This Week</Text>
+          <Group justify="space-between" mb="sm" align="flex-start">
+            <Group gap="xs">
+              <HeartPulse size={20} />
+              <Text fw={500}>Current Fatigue State</Text>
+            </Group>
+            {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
           </Group>
-          <Text fz="h1" fw={700}>{completedThisWeek}/{thisWeekSessions.length}</Text>
-          <Text size="sm" c="dimmed">sessions completed</Text>
+          {currentBlockLoading ? (
+            <Group gap="xs">
+              <Loader size="sm" />
+              <Text size="sm" c="dimmed">Loading cached block analysis...</Text>
+            </Group>
+          ) : currentBlockWeekly ? (
+            <Stack gap="xs">
+              <Group justify="space-between" align="flex-end">
+                <Stack gap={0}>
+                  <Text fz="h1" fw={700} c={fatigueBadgeColor(currentBlockFatigue)}>
+                    {currentBlockFatigue !== null ? `${(currentBlockFatigue * 100).toFixed(0)}%` : 'N/A'}
+                  </Text>
+                  <Text size="sm" c="dimmed">{fatigueLabel(currentBlockFatigue)} current state</Text>
+                </Stack>
+                <Text size="xs" c="dimmed" ta="right">
+                  {currentBlockBundle?.block.startDate} to {currentBlockBundle?.block.endDate}
+                </Text>
+              </Group>
+              <Group gap={6} wrap="wrap">
+                {typeof currentBlockWeekly.fatigue_components?.window_mean_fi === 'number' && (
+                  <Badge variant="light" color="blue">
+                    Mean {(currentBlockWeekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%
+                  </Badge>
+                )}
+                {typeof currentBlockWeekly.fatigue_components?.window_peak_fi === 'number' && (
+                  <Badge variant="light" color="orange">
+                    Peak {(currentBlockWeekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%
+                  </Badge>
+                )}
+                {currentBlockWeekly.fatigue_components?.fatigue_context_confidence && (
+                  <Badge variant="light" color="gray">
+                    {currentBlockWeekly.fatigue_components.fatigue_context_confidence} confidence
+                  </Badge>
+                )}
+              </Group>
+              <Text fz="xs" c="dimmed" lh="lg">
+                Failures {((currentBlockWeekly.fatigue_components?.failure_stress ?? 0) * 100).toFixed(0)}%
+                {' '}· Spike {((currentBlockWeekly.fatigue_components?.acute_spike_stress ?? 0) * 100).toFixed(0)}%
+                {' '}· RPE {((currentBlockWeekly.fatigue_components?.rpe_stress ?? 0) * 100).toFixed(0)}%
+                {' '}· Reservoir {((currentBlockWeekly.fatigue_components?.chronic_load_stress ?? 0) * 100).toFixed(0)}%
+                {' '}· Strain {((currentBlockWeekly.fatigue_components?.monotony_stress ?? 0) * 100).toFixed(0)}%
+              </Text>
+            </Stack>
+          ) : (
+            <Text size="sm" c="dimmed">
+              {currentBlockCacheMissing ? 'No cached current-block analysis available.' : 'Cached block analysis unavailable.'}
+            </Text>
+          )}
         </Paper>
 
-        {/* Current Phase */}
-        {currentPhase && (
-          <Paper withBorder p="md">
-            <Group gap="xs" mb="sm">
-              <TrendingUp size={20} />
-              <Text fw={500}>Current Phase</Text>
-            </Group>
+        {/* Per-Lift Breakdown */}
+        <Paper withBorder p="md" style={{ minWidth: 0 }}>
+          <Group justify="space-between" mb="sm" align="flex-start">
             <Group gap="xs">
-              <Box w={12} h={12} style={{ borderRadius: '50%', backgroundColor: phaseColor(currentPhase, phases) }} />
-              <Text fw={500}>{currentPhase.name}</Text>
+              <Activity size={20} />
+              <Text fw={500}>Per-Lift Breakdown</Text>
             </Group>
-            <Text size="sm" c="dimmed" mt={4}>{currentPhase.intent}</Text>
-          </Paper>
-        )}
+            {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
+          </Group>
+          {currentBlockLoading ? (
+            <Group gap="xs">
+              <Loader size="sm" />
+              <Text size="sm" c="dimmed">Loading cached lift data...</Text>
+            </Group>
+          ) : currentBlockWeekly ? (
+            <Box style={{ overflowX: 'auto' }}>
+              <Table striped highlightOnHover withTableBorder={false} withColumnBorders={false} miw={620}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Lift</Table.Th>
+                    <Table.Th>Current</Table.Th>
+                    <Table.Th>Delta</Table.Th>
+                    <Table.Th>Sets</Table.Th>
+                    <Table.Th>Volume</Table.Th>
+                    <Table.Th>INOL</Table.Th>
+                    <Table.Th>Trend</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {liftBreakdownRows.map((row) => (
+                    <Table.Tr key={row.lift}>
+                      <Table.Td fw={500}>{LIFT_LABELS[row.lift]}</Table.Td>
+                      <Table.Td>{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</Table.Td>
+                      <Table.Td c={typeof row.strengthDelta === 'number' ? row.strengthDelta >= 0 ? 'green' : 'red' : 'dimmed'}>
+                        {formatSignedKg(row.strengthDelta, unit)}
+                      </Table.Td>
+                      <Table.Td>{row.sets ? Math.round(row.sets) : '--'}</Table.Td>
+                      <Table.Td>{row.volumeKg ? displayWeight(Math.round(row.volumeKg), unit) : '--'}</Table.Td>
+                      <Table.Td>{typeof row.avgInol === 'number' ? row.avgInol.toFixed(2) : '--'}</Table.Td>
+                      <Table.Td>
+                        <Stack gap={0}>
+                          <Text size="sm">
+                            {typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            Vol {typeof row.volumeChangePct === 'number' ? `${row.volumeChangePct.toFixed(0)}%` : '--'}
+                            {' '}· Int {typeof row.intensityChangePct === 'number' ? `${row.intensityChangePct.toFixed(0)}%` : '--'}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Box>
+          ) : (
+            <Text size="sm" c="dimmed">
+              {currentBlockCacheMissing ? 'No cached current-block lift breakdown available.' : 'Cached lift breakdown unavailable.'}
+            </Text>
+          )}
+        </Paper>
 
         {/* Program Phases */}
         <Paper withBorder p="md">

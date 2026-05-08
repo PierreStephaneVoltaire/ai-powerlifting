@@ -175,6 +175,7 @@ export async function updateMetaField(
     'current_body_weight_kg', 'current_body_weight_lb',
     'target_squat_kg', 'target_bench_kg', 'target_dl_kg', 'target_total_kg',
     'attempt_pct', 'height_cm', 'arm_wingspan_cm', 'leg_length_cm',
+    'block_start_maxes',
   ]
 
   if (!allowedFields.includes(field)) {

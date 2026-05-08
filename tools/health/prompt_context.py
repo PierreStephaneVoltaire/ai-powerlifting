@@ -301,6 +301,50 @@ def _goal_required_total(goal: dict[str, Any] | None) -> float | None:
     return _positive_num((goal.get("linked_standard") or {}).get("required_total_kg"))
 
 
+def _goal_success_metric(goal: dict[str, Any], target_total: float | None) -> dict[str, Any]:
+    goal_type = str(goal.get("goal_type") or "")
+    target_dots = _positive_num(goal.get("target_dots"))
+    target_ipf_gl = _positive_num(goal.get("target_ipf_gl"))
+    linked_standard_total = _positive_num((goal.get("linked_standard") or {}).get("required_total_kg"))
+    if goal_type == "hit_total":
+        return {
+            "metric": "total_kg",
+            "target_total_kg": target_total,
+            "uses_qualification_standard": False,
+            "instruction": "Judge this goal by target_total_kg only; qualifying standards are context, not the success bar.",
+        }
+    if goal_type == "improve_dots":
+        return {
+            "metric": "dots",
+            "target_dots": target_dots,
+            "uses_qualification_standard": False,
+            "instruction": "Judge this goal by target_dots only.",
+        }
+    if goal_type == "qualify_for_federation":
+        return {
+            "metric": "qualification_total_kg",
+            "target_total_kg": target_total,
+            "linked_standard_total_kg": linked_standard_total,
+            "uses_qualification_standard": True,
+            "instruction": "Judge this goal by the goal-owned qualifying standard or explicit target_total_kg.",
+        }
+    if target_ipf_gl is not None:
+        return {
+            "metric": "ipf_gl",
+            "target_ipf_gl": target_ipf_gl,
+            "uses_qualification_standard": False,
+            "instruction": "Judge this goal by target_ipf_gl only.",
+        }
+    return {
+        "metric": "goal_type",
+        "target_total_kg": target_total,
+        "target_dots": target_dots,
+        "target_ipf_gl": target_ipf_gl,
+        "uses_qualification_standard": goal_type == "qualify_for_federation",
+        "instruction": "Judge success by the explicit fields attached to this goal type.",
+    }
+
+
 def _goal_sort_key(goal: dict[str, Any]) -> tuple[int, int, float, str]:
     required_total = _goal_required_total(goal)
     return (
@@ -519,6 +563,7 @@ def summarize_goals(
                 "required_total_kg": target_total,
                 "target_dots": _positive_num(goal.get("target_dots")),
                 "target_ipf_gl": _positive_num(goal.get("target_ipf_gl")),
+                "success_metric": _goal_success_metric(goal, target_total),
                 "target_weight_class_kg": target_weight_class,
                 "acceptable_weight_classes_kg": acceptable_weight_classes,
                 "max_acceptable_bodyweight_loss_pct": _positive_num(goal.get("max_acceptable_bodyweight_loss_pct")),
@@ -643,6 +688,7 @@ def summarize_competitions(
                 "strategy_mode": goal.get("strategy_mode"),
                 "target_total_kg": goal.get("target_total_kg"),
                 "required_total_kg": goal.get("required_total_kg"),
+                "success_metric": goal.get("success_metric"),
                 "target_weight_class_kg": goal.get("target_weight_class_kg"),
                 "acceptable_weight_classes_kg": goal.get("acceptable_weight_classes_kg"),
                 "target_federation": goal.get("target_federation"),

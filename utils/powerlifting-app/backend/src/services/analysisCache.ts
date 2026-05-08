@@ -380,8 +380,11 @@ export async function invalidateAnalysisCache(userPk: string): Promise<void> {
     do {
       const response = await docClient.send(new QueryCommand({
         TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk',
-        ExpressionAttributeValues: { ':pk': pk },
+        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+        ExpressionAttributeValues: {
+          ':pk': pk,
+          ':prefix': 'weekly_bundle#',
+        },
         ProjectionExpression: 'pk, sk',
         ExclusiveStartKey,
       }))

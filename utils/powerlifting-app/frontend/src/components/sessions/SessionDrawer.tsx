@@ -8,7 +8,7 @@ import { getDayOfWeek } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
-import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2 } from 'lucide-react'
+import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal } from 'lucide-react'
 import type { Session, Exercise, SessionVideo, SessionWellness, GlossaryExercise, SetStatus, FailedSetReason } from '@powerlifting/types'
 import VideoGrid from './VideoGrid'
 import VideoUploadModal from './VideoUploadModal'
@@ -459,6 +459,62 @@ export default function SessionDrawer({
     })
   }
 
+  const renderMobileExerciseMenu = (exercise: Exercise, exerciseIndex: number) => (
+    <Menu withinPortal position="bottom-end" shadow="md">
+      <Menu.Target>
+        <ActionIcon
+          hiddenFrom="sm"
+          variant="subtle"
+          color="gray"
+          size="sm"
+          title="Exercise actions"
+          aria-label="Exercise actions"
+        >
+          <MoreHorizontal size={16} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item
+          leftSection={<Bot size={14} />}
+          onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
+        >
+          Auto-regulation
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<Calculator size={14} />}
+          onClick={() => openToolkitForExercise(exercise)}
+        >
+          Toolkit
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  )
+
+  const renderDesktopExerciseActions = (exercise: Exercise, exerciseIndex: number, iconSize = 16) => (
+    <>
+      <ActionIcon
+        visibleFrom="sm"
+        variant="subtle"
+        color="grape"
+        size="sm"
+        onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
+        title="Auto-regulation"
+      >
+        <Bot size={iconSize} />
+      </ActionIcon>
+      <ActionIcon
+        visibleFrom="sm"
+        variant="subtle"
+        color="blue"
+        size="sm"
+        onClick={() => openToolkitForExercise(exercise)}
+        title="Open toolkit"
+      >
+        <Calculator size={iconSize} />
+      </ActionIcon>
+    </>
+  )
+
   const statusIcon = (status: SetStatus, size = 14) => {
     if (status === 'completed') return <CheckCircle2 size={size} />
     if (status === 'failed') return <XCircle size={size} />
@@ -766,24 +822,8 @@ export default function SessionDrawer({
                   />
                   {group.entries.length === 1 && (
                     <Group gap={4} wrap="nowrap">
-                      <ActionIcon
-                        variant="subtle"
-                        color="blue"
-                        size="sm"
-                        onClick={() => openToolkitForExercise(group.entries[0].exercise)}
-                        title="Open toolkit"
-                      >
-                        <Calculator size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="subtle"
-                        color="grape"
-                        size="sm"
-                        onClick={() => setAutoRegExerciseIndex(group.entries[0].originalIndex)}
-                        title="Auto-regulation"
-                      >
-                        <Bot size={16} />
-                      </ActionIcon>
+                      {renderMobileExerciseMenu(group.entries[0].exercise, group.entries[0].originalIndex)}
+                      {renderDesktopExerciseActions(group.entries[0].exercise, group.entries[0].originalIndex)}
                       <ActionIcon
                         variant="subtle"
                         color="red"
@@ -805,7 +845,7 @@ export default function SessionDrawer({
                           <Table.Th w={96}>{unit}</Table.Th>
                           <Table.Th w={150} visibleFrom="sm">Set Status</Table.Th>
                           <Table.Th w={40} />
-                          <Table.Th w={40} />
+                          <Table.Th w={40} visibleFrom="sm" />
                           <Table.Th w={40} />
                         </Table.Tr>
                       </Table.Thead>
@@ -841,7 +881,9 @@ export default function SessionDrawer({
                                 {renderSetStatusControls(entry.exercise, entry.originalIndex, 'sm')}
                               </Table.Td>
                               <Table.Td>
+                                {renderMobileExerciseMenu(entry.exercise, entry.originalIndex)}
                                 <ActionIcon
+                                  visibleFrom="sm"
                                   variant="subtle"
                                   color="grape"
                                   size="sm"
@@ -851,7 +893,7 @@ export default function SessionDrawer({
                                   <Bot size={14} />
                                 </ActionIcon>
                               </Table.Td>
-                              <Table.Td>
+                              <Table.Td visibleFrom="sm">
                                 <ActionIcon
                                   variant="subtle"
                                   color="blue"
@@ -936,24 +978,10 @@ export default function SessionDrawer({
                         />
                       </Box>
                       </SimpleGrid>
-                      <ActionIcon
-                        variant="subtle"
-                        color="grape"
-                        size="sm"
-                        onClick={() => setAutoRegExerciseIndex(group.entries[0].originalIndex)}
-                        title="Auto-regulation"
-                      >
-                        <Bot size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="subtle"
-                        color="blue"
-                        size="sm"
-                        onClick={() => openToolkitForExercise(group.entries[0].exercise)}
-                        title="Open toolkit"
-                      >
-                        <Calculator size={16} />
-                      </ActionIcon>
+                      <Group gap={4} wrap="nowrap">
+                        {renderMobileExerciseMenu(group.entries[0].exercise, group.entries[0].originalIndex)}
+                        {renderDesktopExerciseActions(group.entries[0].exercise, group.entries[0].originalIndex)}
+                      </Group>
                     </Group>
                     
                     <Box mt="xs">

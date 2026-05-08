@@ -326,6 +326,320 @@ export interface WeeklyAnalysisBundle {
   results: Record<AnalysisWindowKey, WeeklyAnalysis>
 }
 
+export interface DataQualityFlag {
+  code: string
+  label: string
+  severity: 'info' | 'warning' | 'critical'
+}
+
+export interface BlockCompetitionLink {
+  name: string
+  date: string
+  status: string
+  mapping: 'in_range' | 'within_30_days_after'
+  distanceDays: number
+}
+
+export interface ProgramBlockIndexEntry {
+  blockKey: string
+  block: string
+  label: string
+  isCurrent: boolean
+  startDate: string
+  endDate: string
+  weekStart: number
+  weekEnd: number
+  weekCount: number
+  completedSessions: number
+  plannedSessions: number
+  totalSessions: number
+  phases: Array<{
+    name: string
+    intent?: string
+    start_week: number
+    end_week: number
+  }>
+  sourceFingerprint: string
+  linkedCompetition: BlockCompetitionLink | null
+  trainingOnly: boolean
+  comparisonEligible: boolean
+  dataQualityFlags: DataQualityFlag[]
+  cacheStatus?: {
+    cached: boolean
+    generatedAt?: string
+  }
+  programEvaluationCacheStatus?: {
+    cached: boolean
+    generatedAt?: string
+  }
+}
+
+export interface BlockStrengthSummary {
+  squat: number | null
+  bench: number | null
+  deadlift: number | null
+  total: number | null
+}
+
+export interface BlockStartMaxEntry {
+  squat_kg: number | null
+  bench_kg: number | null
+  deadlift_kg: number | null
+  total_kg: number | null
+  source: 'manual'
+  updated_at: string
+}
+
+export interface BlockCompetitionOutcome {
+  competitionName: string
+  competitionDate: string
+  bodyweightKg: number | null
+  results: {
+    squat_kg: number
+    bench_kg: number
+    deadlift_kg: number
+    total_kg: number
+  } | null
+  dots: number | null
+  ipfGl: number | null
+  ipfGlMode: 'classic_powerlifting' | null
+  projectedAtTMinus1w: {
+    squat_kg: number
+    bench_kg: number
+    deadlift_kg: number
+    total_kg: number
+  } | null
+  projectionAccuracy: Record<string, {
+    actualKg: number
+    projectedKg: number
+    deltaKg: number
+    deltaPct: number | null
+  }> | null
+  prr: unknown | null
+  postMeetReportCaptured: boolean
+}
+
+export interface BlockHistoricalSummary {
+  startStrength: BlockStrengthSummary
+  endStrength: BlockStrengthSummary
+  strengthDelta: BlockStrengthSummary
+  startMaxesSource: 'manual' | 'session_estimated'
+  manualStartMaxes: BlockStartMaxEntry | null
+  competitionOutcome: BlockCompetitionOutcome | null
+  analyticsSummary: {
+    sessionsAnalyzed: number
+    compliancePct: number | null
+    fatigueIndex: number | null
+    acwrComposite: number | null
+    avgInol: Record<string, number>
+    totalVolumeKg: number
+    muscleMap: Record<string, unknown>
+  }
+  missingData: DataQualityFlag[]
+}
+
+export interface BlockAnalysisBundle {
+  schemaVersion: number
+  generatedAt: string
+  cached: boolean
+  sourceFingerprint: string
+  block: ProgramBlockIndexEntry
+  weekly: WeeklyAnalysis
+  historical: BlockHistoricalSummary
+}
+
+export interface BlockComparisonRow {
+  blockKey: string
+  label: string
+  startDate: string
+  endDate: string
+  trainingOnly: boolean
+  competitionName: string | null
+  competitionDate: string | null
+  actualTotalKg: number | null
+  actualDots: number | null
+  actualIpfGl: number | null
+  estimatedDots: number | null
+  startTotalKg: number | null
+  endTotalKg: number | null
+  e1rmDeltaKg: number | null
+  compliancePct: number | null
+  fatigueIndex: number | null
+  acwrComposite: number | null
+  totalVolumeKg: number
+  avgInol: Record<string, number>
+  projectionTotalDeltaKg: number | null
+  dataQualityFlags: DataQualityFlag[]
+  competitions?: Array<{
+    name: string
+    date: string
+    status: string
+    federation?: string
+    weightClassKg?: number | null
+    bodyweightKg?: number | null
+    targetTotalKg?: number | null
+    resultTotalKg?: number | null
+    projectedTotalKg?: number | null
+  }>
+  goals?: Array<{
+    id: string
+    title: string
+    goalType: string
+    priority: string
+    targetTotalKg?: number | null
+    targetDots?: number | null
+    targetIpfGl?: number | null
+    targetDate?: string
+    targetCompetitionDates: string[]
+    strategyMode?: string
+    riskTolerance?: string
+  }>
+}
+
+export interface BlockComparisonResult {
+  schemaVersion: number
+  generatedAt: string
+  selectedBlockKeys: string[]
+  rows: BlockComparisonRow[]
+  trends: {
+    actualTotal: Array<{ blockKey: string; label: string; value: number | null }>
+    dots: Array<{ blockKey: string; label: string; value: number | null }>
+    ipfGl: Array<{ blockKey: string; label: string; value: number | null }>
+    e1rmTotal: Array<{ blockKey: string; label: string; value: number | null }>
+    compliance: Array<{ blockKey: string; label: string; value: number | null }>
+    fatigue: Array<{ blockKey: string; label: string; value: number | null }>
+    volume: Array<{ blockKey: string; label: string; value: number }>
+  }
+  roiSignals: Array<{
+    lift: string
+    avgInolPerWeek: number | null
+    avgStrengthDeltaKg: number | null
+    interpretation: string
+  }>
+  exerciseRoi?: Array<{
+    exercise: string
+    blockCount: number
+    totalSets: number
+    totalVolumeKg: number
+    correlatedLifts: string[]
+    positiveSignals: number
+    negativeSignals: number
+    unclearSignals: number
+    confidence: 'low' | 'medium' | 'high'
+    summary: string
+    blocks: Array<{
+      blockKey: string
+      label: string
+      sets: number
+      volumeKg: number
+      correlations: Array<{
+        lift: string
+        direction: 'positive' | 'negative' | 'unclear'
+        strength: 'weak' | 'moderate' | 'strong'
+      }>
+      liftDeltasKg: Record<string, number | null>
+    }>
+  }>
+  correlationFindings?: Array<{
+    blockKey: string
+    label: string
+    exercise: string
+    lift: string
+    direction: 'positive' | 'negative' | 'unclear'
+    strength: 'weak' | 'moderate' | 'strong'
+    reasoning: string
+    caveat: string
+  }>
+  patternSignals?: Array<{
+    kind: 'roi' | 'training_response' | 'fatigue' | 'compliance' | 'data_quality'
+    finding: string
+    evidence: string
+    confidence: 'low' | 'medium' | 'high'
+  }>
+  liftDoseResponse?: Array<{
+    blockKey: string
+    label: string
+    lift: 'squat' | 'bench' | 'deadlift'
+    avgInol: number | null
+    rawAvgInol: number | null
+    sets: number
+    volumeKg: number
+    strengthDeltaKg: number | null
+    responsePerSetKg: number | null
+    responsePer1000Kg: number | null
+  }>
+  trainingDayResponse?: Array<{
+    blockKey: string
+    label: string
+    completedWeeks: number
+    totalTrainingDays: number
+    avgTrainingDaysPerWeek: number | null
+    strengthDeltaKg: number | null
+    compliancePct: number | null
+  }>
+  trendSeries?: Array<{
+    blockKey: string
+    label: string
+    weekNumber: number
+    weekStart: string
+    squatKg: number | null
+    benchKg: number | null
+    deadliftKg: number | null
+    e1rmTotalKg: number | null
+    estimatedDots: number | null
+    volumeKg: number
+    trainingDays: number
+    strain: number | null
+  }>
+  volumeTolerance: {
+    status: 'low_confidence' | 'estimated'
+    confidence: 'low' | 'medium'
+    sampleSize: number
+    requiredSampleSize: number
+    message: string
+    byLift: Record<string, {
+      bestObservedAvgInol: number | null
+      positiveDeltaBlocks: number
+    }>
+  }
+  missingDataSummary: Array<{
+    blockKey: string
+    label: string
+    flags: DataQualityFlag[]
+  }>
+}
+
+export interface AiBlockComparisonReport {
+  overall_summary?: string
+  similarities?: unknown[]
+  differences?: unknown[]
+  what_works?: unknown[]
+  what_does_not_work?: unknown[]
+  lift_specific_insights?: unknown[]
+  multi_block_exercise_roi?: unknown[]
+  volume_dose_response?: unknown[]
+  bodyweight_relationships?: unknown[]
+  training_day_frequency?: unknown[]
+  best_value_blocks?: unknown[]
+  projection_accuracy?: unknown[]
+  progress_dropoff_points?: unknown[]
+  fatigue_patterns?: unknown[]
+  data_limits?: unknown[]
+  insufficient_data?: boolean
+  insufficient_data_reason?: string
+  [key: string]: unknown
+}
+
+export interface AiBlockComparisonResult {
+  schemaVersion: number
+  generatedAt: string
+  cached: boolean
+  selectedBlockKeys: string[]
+  sourceFingerprint: string
+  report: AiBlockComparisonReport
+  deterministic: BlockComparisonResult
+}
+
 export interface CorrelationFinding {
   exercise: string
   lift: 'squat' | 'bench' | 'deadlift'
@@ -342,6 +656,7 @@ export interface CorrelationReport {
   window_start: string
   weeks: number
   cached: boolean
+  cache_miss?: boolean
   insufficient_data?: boolean
   insufficient_data_reason?: string
 }
@@ -355,6 +670,7 @@ function normalizeCorrelationReport(data: unknown): CorrelationReport {
     window_start: typeof report.window_start === 'string' ? report.window_start : '',
     weeks: typeof report.weeks === 'number' ? report.weeks : 0,
     cached: Boolean(report.cached),
+    cache_miss: Boolean((report as Partial<CorrelationReport> & { cache_miss?: boolean }).cache_miss),
     insufficient_data: Boolean(report.insufficient_data),
     insufficient_data_reason: typeof report.insufficient_data_reason === 'string' ? report.insufficient_data_reason : '',
   }
@@ -433,6 +749,7 @@ export interface ProgramEvaluationReport {
   window_start: string
   weeks: number
   cached: boolean
+  cache_miss?: boolean
 }
 
 function normalizeProgramEvaluation(data: unknown): ProgramEvaluationReport {
@@ -467,6 +784,7 @@ function normalizeProgramEvaluation(data: unknown): ProgramEvaluationReport {
     window_start: typeof report.window_start === 'string' ? report.window_start : '',
     weeks: typeof report.weeks === 'number' ? report.weeks : 0,
     cached: Boolean(report.cached),
+    cache_miss: Boolean((report as Partial<ProgramEvaluationReport> & { cache_miss?: boolean }).cache_miss),
   }
 }
 
@@ -504,22 +822,111 @@ export async function fetchWeeklyAnalysisBundle(asOfDate?: string): Promise<Week
   return body.data
 }
 
+export async function fetchProgramBlocks(): Promise<ProgramBlockIndexEntry[]> {
+  const res = await api.get('/analytics/blocks')
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function fetchBlockAnalysis(blockKey: string, refresh = false, cacheOnly = false): Promise<BlockAnalysisBundle> {
+  const params = new URLSearchParams({
+    refresh: String(refresh),
+    cacheOnly: String(cacheOnly),
+  })
+  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/analysis?${params.toString()}`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function fetchBlockProgramEvaluation(
+  blockKey: string,
+  refresh = false,
+  cacheOnly = false,
+): Promise<ProgramEvaluationReport> {
+  const params = new URLSearchParams({
+    refresh: String(refresh),
+    cacheOnly: String(cacheOnly),
+  })
+  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/program-evaluation?${params.toString()}`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return normalizeProgramEvaluation(body.data)
+}
+
+export async function updateBlockStartMaxes(
+  blockKey: string,
+  maxes: Pick<BlockStartMaxEntry, 'squat_kg' | 'bench_kg' | 'deadlift_kg'>,
+): Promise<BlockStartMaxEntry> {
+  const res = await api.put(`/analytics/blocks/${encodeURIComponent(blockKey)}/start-maxes`, maxes)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function fetchBlockComparison(options: {
+  blockKeys?: string[]
+  includeCurrentFullBlock?: boolean
+  includeTrainingOnly?: boolean
+  cacheOnly?: boolean
+}): Promise<BlockComparisonResult> {
+  const res = await api.post('/analytics/block-comparison', options)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function fetchAiBlockComparison(options: {
+  blockKeys?: string[]
+  refresh?: boolean
+  cacheOnly?: boolean
+}): Promise<AiBlockComparisonResult> {
+  const res = await api.post('/analytics/block-comparison/ai', options)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
 export async function fetchCorrelationReport(
   weeks: number,
   block = 'current',
   refresh = false,
+  cacheOnly = false,
 ): Promise<CorrelationReport> {
-  const res = await api.get(
-    `/analytics/correlation?weeks=${weeks}&block=${encodeURIComponent(block)}&refresh=${refresh}`,
-  )
+  const params = new URLSearchParams({
+    weeks: String(weeks),
+    block,
+    refresh: String(refresh),
+    cacheOnly: String(cacheOnly),
+  })
+  const res = await api.get(`/analytics/correlation?${params.toString()}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return normalizeCorrelationReport(body.data)
 }
 
-export async function fetchProgramEvaluation(refresh = false): Promise<ProgramEvaluationReport> {
+export async function fetchBlockCorrelationReport(
+  blockKey: string,
+  options: { refresh?: boolean; cacheOnly?: boolean } = {},
+): Promise<CorrelationReport> {
+  const params = new URLSearchParams({
+    refresh: String(Boolean(options.refresh)),
+    cacheOnly: String(Boolean(options.cacheOnly)),
+  })
+  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/correlation?${params.toString()}`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return normalizeCorrelationReport(body.data)
+}
+
+export async function fetchProgramEvaluation(refresh = false, cacheOnly = false): Promise<ProgramEvaluationReport> {
   const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
-  const res = await fetch(`${apiBase}/analytics/program-evaluation?refresh=${refresh}`, {
+  const params = new URLSearchParams({
+    refresh: String(refresh),
+    cacheOnly: String(cacheOnly),
+  })
+  const res = await fetch(`${apiBase}/analytics/program-evaluation?${params.toString()}`, {
     headers: { 'Content-Type': 'application/json' },
   })
   const body = await res.json()

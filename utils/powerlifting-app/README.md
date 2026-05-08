@@ -1462,8 +1462,10 @@ Current model/config variables:
   reasoning effort for those estimate calls, default `xhigh`
 - `ESTIMATE_MODEL_VERBOSITY`
   output effort/detail for those estimate calls, default `max`
+- `HEALTH_HELPER_MODEL`
+  session note drafting, session auto-regulation, and lift-profile rewrite cleanup, default `openai/gpt-5.4-mini`
 - `MODEL_ROUTER_MODEL`
-  lightweight routing and non-estimate health helpers
+  lightweight routing
 - `IMPORT_FAST_MODEL`
   import classification and glossary resolution
 

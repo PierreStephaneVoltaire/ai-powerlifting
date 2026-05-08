@@ -32,7 +32,7 @@ from agent.tiering import (
     get_tier_for_context,
 )
 from files import strip_files_line, log_file_refs, consume_file_refs, FilesStripBuffer, FileRef
-from config import API_MODEL_NAME
+from config import API_MODEL_NAME, HEALTH_HELPER_MODEL
 
 if TYPE_CHECKING:
     import httpx
@@ -304,6 +304,17 @@ def _find_specialist_for_tool(tool_name: str) -> Optional[str]:
         return None
 
 
+def _specialist_model_override(request_data: Dict[str, Any]) -> Optional[str]:
+    """Return an internal specialist model override from request metadata."""
+    metadata = request_data.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+
+    if metadata.get("use_health_helper_model") is True:
+        return HEALTH_HELPER_MODEL
+    return None
+
+
 async def process_chat_completion_internal(
     request_data: Dict[str, Any],
     http_client: "httpx.AsyncClient",
@@ -475,7 +486,10 @@ async def process_chat_completion_internal(
 
             try:
                 from agent.tools.subagents import SpawnSpecialistAction, SpawnSpecialistExecutor
-                observation = SpawnSpecialistExecutor(chat_id=cache_key)(
+                observation = SpawnSpecialistExecutor(
+                    chat_id=cache_key,
+                    model_override=_specialist_model_override(request_data),
+                )(
                     SpawnSpecialistAction(
                         specialist_type=cmd.target,
                         task=task,

@@ -198,9 +198,15 @@ variable "directive_rewrite_model" {
 }
 
 variable "model_router_model" {
-  description = "Fast model for subagent routing and health AI calls"
+  description = "Fast model for subagent routing"
   type        = string
   default     = "anthropic/claude-haiku-4.5"
+}
+
+variable "health_helper_model" {
+  description = "Cheaper model for narrow powerlifting helper flows"
+  type        = string
+  default     = "openai/gpt-5.4-mini"
 }
 
 variable "condenser_model" {

@@ -42,7 +42,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
     }
     setCorrLoading(true);
     setCorrError(null);
-    fetchCorrelationReport(effectiveWeeks, 'current')
+    fetchCorrelationReport(effectiveWeeks, 'current', false, true)
       .then(setCorrReport)
       .catch((e) => setCorrError(e.message))
       .finally(() => setCorrLoading(false));
@@ -75,7 +75,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
     }
     setEvalLoading(true);
     setEvalError(null);
-    fetchProgramEvaluation(false)
+    fetchProgramEvaluation(false, true)
       .then(setEvalReport)
       .catch((e) => setEvalError(e.message))
       .finally(() => setEvalLoading(false));
@@ -139,7 +139,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
               disabled={corrLoading}
               leftSection={<RefreshCw size={14} style={corrLoading ? { animation: 'spin 1s linear infinite' } : undefined} />}
             >
-              Regenerate
+              {corrReport?.cache_miss ? 'Generate' : 'Regenerate'}
             </Button>
           )}
         </Group>
@@ -149,7 +149,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
         ) : corrLoading ? (
           <Group gap="xs" py="md">
             <Loader size="xs" />
-            <Text size="sm" c="dimmed">Analyzing training data with AI...</Text>
+            <Text size="sm" c="dimmed">Loading cached ROI analysis...</Text>
           </Group>
         ) : corrError ? (
           <Text size="sm" c="red">{corrError}</Text>
@@ -230,7 +230,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
               disabled={evalLoading || completedCount < 4}
               leftSection={<RefreshCw size={14} style={evalLoading ? { animation: 'spin 1s linear infinite' } : undefined} />}
             >
-              Regenerate
+              {evalReport?.cache_miss ? 'Generate' : 'Regenerate'}
             </Button>
           </Group>
 
@@ -239,7 +239,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
           ) : evalLoading ? (
             <Group gap="xs" py="md">
               <Loader size="xs" />
-              <Text size="sm" c="dimmed">Evaluating your training block with AI sports scientist...</Text>
+              <Text size="sm" c="dimmed">Loading cached program evaluation...</Text>
             </Group>
           ) : evalError ? (
             <Text size="sm" c="red">{evalError}</Text>

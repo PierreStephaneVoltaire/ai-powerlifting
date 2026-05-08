@@ -25,6 +25,15 @@ import MuscleVolumeChart from '@/components/charts/MuscleVolumeChart'
 import { SessionsCompactView } from '@/components/sessions/SessionsCompactView'
 
 type ViewType = 'Month' | 'Agenda' | 'Compact'
+const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
+
+function parseSessionView(raw: string | null): ViewType {
+  return raw === 'Month' || raw === 'Compact' || raw === 'Agenda' ? raw : 'Agenda'
+}
+
+function parseDateParam(raw: string | null): string | null {
+  return raw && SESSION_DATE_PARAM.test(raw) ? raw : null
+}
 
 function countUniqueExerciseNames(session: Session): number {
   const entries = session.exercises.length > 0 ? session.exercises : session.planned_exercises ?? []
@@ -41,10 +50,28 @@ export default function CalendarPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const agendaTargetRef = useRef<HTMLButtonElement | null>(null)
   const hasScrolledAgendaRef = useRef(false)
-  const view = (() => {
-    const raw = searchParams.get('view')
-    return raw === 'Month' || raw === 'Compact' || raw === 'Agenda' ? raw : 'Agenda'
-  })() as ViewType
+  const view = parseSessionView(searchParams.get('view'))
+  const calendarDate = parseDateParam(searchParams.get('date'))
+  const sessionsBackTo = useMemo(() => {
+    const query = searchParams.toString()
+    return query ? `/sessions?${query}` : '/sessions'
+  }, [searchParams])
+
+  const updateSessionParams = (updates: { view?: ViewType; date?: string | null }) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+
+      if (updates.view !== undefined) {
+        updates.view === 'Agenda' ? next.delete('view') : next.set('view', updates.view)
+      }
+
+      if (updates.date !== undefined) {
+        updates.date ? next.set('date', updates.date) : next.delete('date')
+      }
+
+      return next
+    })
+  }
 
   const sessionsByDate = useMemo(() => {
     const map = new Map<string, Session>()
@@ -125,7 +152,7 @@ export default function CalendarPage() {
 
   const openSession = (session: Session) => {
     navigate(sessionRoute(session, program.sessions.indexOf(session)), {
-      state: { backTo: `/sessions?view=${view}` },
+      state: { backTo: sessionsBackTo },
     })
   }
 
@@ -230,12 +257,12 @@ export default function CalendarPage() {
           size="xs"
           data={['Month', 'Agenda', 'Compact']}
           value={view}
-          onChange={(value) => setSearchParams(value === 'Agenda' ? {} : { view: value })}
+          onChange={(value) => updateSessionParams({ view: value as ViewType })}
         />
       </Group>
 
       {view === 'Compact' ? (
-        <SessionsCompactView backTo="/sessions?view=Compact" />
+        <SessionsCompactView backTo={sessionsBackTo} />
       ) : (
         <Paper withBorder p={{ base: 'xs', sm: 'md' }}>
           {view === 'Month' ? (
@@ -243,6 +270,8 @@ export default function CalendarPage() {
               <Calendar
                 renderDay={renderDay}
                 getDayProps={getDayProps}
+                date={calendarDate ?? undefined}
+                onDateChange={(date) => updateSessionParams({ date })}
                 size="md"
               />
             </Center>

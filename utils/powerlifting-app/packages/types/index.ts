@@ -33,6 +33,14 @@ export interface ProgramMeta {
     bench: number
     deadlift: number
   }
+  block_start_maxes?: Record<string, {
+    squat_kg: number | null
+    bench_kg: number | null
+    deadlift_kg: number | null
+    total_kg: number | null
+    source: 'manual'
+    updated_at: string
+  }>
   lift_attempt_settings?: Record<string, {
     max: number
     incremental: boolean

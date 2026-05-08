@@ -6,6 +6,11 @@ type CompletionMessage = {
   content: string
 }
 
+type InvokeChatOptions = {
+  chatId?: string
+  metadata?: Record<string, unknown>
+}
+
 function extractJson(text: string): any {
   const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/)
   if (!match) throw new Error(`No JSON in tool response: ${text.slice(0, 200)}`)
@@ -14,7 +19,7 @@ function extractJson(text: string): any {
 
 async function invokeChat(
   messages: CompletionMessage[],
-  chatId?: string,
+  options: InvokeChatOptions = {},
 ): Promise<string> {
   const response = await fetch(`${IF_API_URL}/v1/chat/completions`, {
     method: 'POST',
@@ -24,7 +29,8 @@ async function invokeChat(
     body: JSON.stringify({
       model: AGENT_MODEL,
       messages,
-      ...(chatId ? { chat_id: chatId } : {}),
+      ...(options.chatId ? { chat_id: options.chatId } : {}),
+      ...(options.metadata ? { metadata: options.metadata } : {}),
     }),
   })
   if (!response.ok) {
@@ -97,7 +103,7 @@ export async function invokeJsonCompletion(
   messages: CompletionMessage[],
   chatId?: string,
 ): Promise<any> {
-  const content = await invokeChat(messages, chatId)
+  const content = await invokeChat(messages, { chatId })
   return extractJson(content)
 }
 
@@ -105,10 +111,14 @@ export async function invokeSpecialistJson(
   specialist: string,
   task: string,
   chatId?: string,
+  useHealthHelperModel = false,
 ): Promise<any> {
   const content = await invokeChat(
     [{ role: 'user', content: `/${specialist} ${task}` }],
-    chatId,
+    {
+      chatId,
+      ...(useHealthHelperModel ? { metadata: { use_health_helper_model: true } } : {}),
+    },
   )
   return extractJson(content)
 }
