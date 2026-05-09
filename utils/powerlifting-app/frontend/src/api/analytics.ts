@@ -617,6 +617,8 @@ export interface AiBlockComparisonReport {
   what_does_not_work?: unknown[]
   lift_specific_insights?: unknown[]
   multi_block_exercise_roi?: unknown[]
+  cross_block_correlations?: unknown[]
+  pattern_detections?: unknown[]
   volume_dose_response?: unknown[]
   bodyweight_relationships?: unknown[]
   training_day_frequency?: unknown[]

@@ -34,6 +34,7 @@ import type { Unit } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit } from '@/utils/units'
+import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { fetchGlossary, fetchWeightLog } from '@/api/client'
 import {
   type BlockAnalysisBundle,
@@ -154,6 +155,15 @@ function buildBlockSessions(program: Program | null, block: string): Session[] {
   return (program?.sessions ?? []).filter((session) => (session.block ?? 'current') === block && session.completed)
 }
 
+function buildBlockBodyweightSessions(program: Program | null, block: string, startDate: string, endDate: string): Session[] {
+  return (program?.sessions ?? []).filter((session) =>
+    (session.block ?? 'current') === block &&
+    session.status !== 'skipped' &&
+    session.date >= startDate &&
+    session.date <= endDate
+  )
+}
+
 export function BlockWeeklySurface({
   program,
   bundle,
@@ -178,6 +188,10 @@ export function BlockWeeklySurface({
   const filteredSessions = useMemo(
     () => buildBlockSessions(program, bundle.block.block).filter((s) => s.week_number >= analysisWindow.weekStart && s.week_number <= analysisWindow.weekEnd && s.date <= analysisWindow.end),
     [analysisWindow.end, analysisWindow.weekEnd, analysisWindow.weekStart, bundle.block.block, program],
+  )
+  const bodyweightSessions = useMemo(
+    () => buildBlockBodyweightSessions(program, bundle.block.block, analysisWindow.start, analysisWindow.end),
+    [analysisWindow.end, analysisWindow.start, bundle.block.block, program],
   )
 
   useEffect(() => {
@@ -363,26 +377,26 @@ export function BlockWeeklySurface({
     return competitionBodyweight ?? latestSessionWeight ?? latestLogWeight
   }, [bundle.historical.competitionOutcome?.bodyweightKg, filteredSessions, weightLog])
 
-  const weightTrend = useMemo(() => {
-    if (weightLog.length < 2) return null
-    const sorted = weightLog.filter(e => e.date <= analysisWindow.end).sort((a, b) => a.date.localeCompare(b.date))
-    if (sorted.length < 2) return null
-    const latest = sorted[sorted.length - 1].kg
-    const windowEntries = sorted.filter(e => e.date >= analysisWindow.start && e.date <= analysisWindow.end)
-    const oldest = windowEntries.length > 0 ? windowEntries[0].kg : sorted[0].kg
-    const change = latest - oldest
-    return { latest, change, entries: sorted.slice(-8) }
-  }, [analysisWindow.end, analysisWindow.start, weightLog])
+  const bodyweightEntries = useMemo(
+    () => mergeBodyweightEntries(weightLog, bodyweightSessions),
+    [bodyweightSessions, weightLog],
+  )
+
+  const weightTrend = useMemo(
+    () => buildBodyweightTrend(bodyweightEntries, analysisWindow.start, analysisWindow.end),
+    [analysisWindow.end, analysisWindow.start, bodyweightEntries],
+  )
 
   const dotsTrend = useMemo(() => {
     if (!filteredSessions.length) return null
-    type WeekData = { squat: number; bench: number; deadlift: number; bw: number; hasSquat: boolean; hasBench: boolean; hasDeadlift: boolean }
+    type WeekData = { squat: number; bench: number; deadlift: number; bw: number; date: string | null; hasSquat: boolean; hasBench: boolean; hasDeadlift: boolean }
     const byWeek = new Map<number, WeekData>()
     for (const s of filteredSessions) {
       const wn = s.week_number
       if (!wn) continue
-      if (!byWeek.has(wn)) byWeek.set(wn, { squat: 0, bench: 0, deadlift: 0, bw: 0, hasSquat: false, hasBench: false, hasDeadlift: false })
+      if (!byWeek.has(wn)) byWeek.set(wn, { squat: 0, bench: 0, deadlift: 0, bw: 0, date: null, hasSquat: false, hasBench: false, hasDeadlift: false })
       const w = byWeek.get(wn)!
+      if (!w.date || s.date < w.date) w.date = s.date
       if (s.body_weight_kg && s.body_weight_kg > w.bw) w.bw = s.body_weight_kg
       for (const ex of s.exercises || []) {
         const name = ex.name.toLowerCase()
@@ -403,10 +417,9 @@ export function BlockWeeklySurface({
         }
       }
     }
-    const sortedLog = weightLog.filter(e => e.date <= analysisWindow.end).sort((a, b) => a.date.localeCompare(b.date))
     const rows = Array.from(byWeek.entries()).sort(([a], [b]) => a - b).map(([wn, d]) => {
       let bw = d.bw
-      if (!bw) bw = sortedLog.length ? sortedLog[sortedLog.length - 1].kg : (fallbackBodyweight ?? 0)
+      if (!bw) bw = latestBodyweightOnOrBefore(bodyweightEntries, d.date ?? analysisWindow.end, fallbackBodyweight) ?? 0
       const total = (d.squat > 0 ? d.squat : 0) + (d.bench > 0 ? d.bench : 0) + (d.deadlift > 0 ? d.deadlift : 0)
       const dots = total > 0 && bw > 0 ? calculateDots(total, bw, sex) : null
       const hasFullSbd = d.hasSquat && d.hasBench && d.hasDeadlift
@@ -435,7 +448,7 @@ export function BlockWeeklySurface({
       dotsChange = Math.round(((withDots[withDots.length - 1].dots! - withDots[0].dots!) / Math.max(1, withDots.length - 1)) * 100) / 100
     }
     return { rows, dotsChange }
-  }, [analysisWindow.end, filteredSessions, sex, weightLog])
+  }, [analysisWindow.end, bodyweightEntries, fallbackBodyweight, filteredSessions, sex])
 
   const ipfGlTrend = useMemo(() => {
     if (!dotsTrend?.rows.length) return null

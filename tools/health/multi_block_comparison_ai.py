@@ -16,19 +16,22 @@ _SYSTEM_PROMPT = """\
 You are an objective sports scientist comparing multiple powerlifting training
 blocks for the same athlete.
 
-Use the supplied block analysis data. Do not invent sessions, lifts, maxes,
-bodyweight trends, or competition outcomes. Treat correlations as low sample
-signals unless multiple blocks point in the same direction. If data is sparse,
-say exactly what is missing and keep the conclusion conservative.
+Use the supplied saved block analysis data as the source of truth. Do not
+invent sessions, lifts, maxes, bodyweight trends, or competition outcomes.
+Treat correlations as low sample signals unless multiple blocks point in the
+same direction. If data is sparse, say exactly what is missing and keep the
+conclusion conservative.
 
 The athlete wants to know:
 - which blocks looked similar or different,
 - what training seemed to work and what did not,
 - lift-specific patterns for squat, bench, and deadlift,
 - multi-block exercise ROI signals,
+- cross-block correlations and repeated pattern detection,
 - volume dose response, including likely minimal effective and maximum
-  tolerable volume ranges when the data supports it,
+  tolerable volume ranges per squat, bench, and deadlift when the data supports it,
 - whether bodyweight or training-day count related to max increases,
+- how linked competitions and goals lined up with each block outcome,
 - which block provided the best value,
 - whether projections matched competition results,
 - which lift lagged at competitions,
@@ -37,7 +40,8 @@ The athlete wants to know:
 
 Prefer concrete references to block names, dates, lifts, volume, INOL, fatigue,
 ACWR, compliance, bodyweight, and competition results. Avoid generic coaching
-advice.
+advice. Do not describe the storage/cache mechanism, and avoid the word
+"cached" in findings.
 """
 
 
@@ -79,6 +83,8 @@ _TOOL_SCHEMA = {
                     },
                 },
                 "multi_block_exercise_roi": {"type": "array", "items": _INSIGHT_OBJECT},
+                "cross_block_correlations": {"type": "array", "items": _INSIGHT_OBJECT},
+                "pattern_detections": {"type": "array", "items": _INSIGHT_OBJECT},
                 "volume_dose_response": {"type": "array", "items": _INSIGHT_OBJECT},
                 "bodyweight_relationships": {"type": "array", "items": _INSIGHT_OBJECT},
                 "training_day_frequency": {"type": "array", "items": _INSIGHT_OBJECT},
@@ -108,6 +114,8 @@ _TOOL_SCHEMA = {
                 "what_does_not_work",
                 "lift_specific_insights",
                 "multi_block_exercise_roi",
+                "cross_block_correlations",
+                "pattern_detections",
                 "volume_dose_response",
                 "bodyweight_relationships",
                 "training_day_frequency",
@@ -143,6 +151,8 @@ def _default_report(reason: str) -> dict[str, Any]:
         "what_does_not_work": [],
         "lift_specific_insights": [],
         "multi_block_exercise_roi": [],
+        "cross_block_correlations": [],
+        "pattern_detections": [],
         "volume_dose_response": [],
         "bodyweight_relationships": [],
         "training_day_frequency": [],
@@ -168,6 +178,8 @@ def _normalize_report(args: dict[str, Any]) -> dict[str, Any]:
         "what_does_not_work",
         "lift_specific_insights",
         "multi_block_exercise_roi",
+        "cross_block_correlations",
+        "pattern_detections",
         "volume_dose_response",
         "bodyweight_relationships",
         "training_day_frequency",

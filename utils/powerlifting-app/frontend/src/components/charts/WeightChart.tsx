@@ -12,6 +12,7 @@ import {
 import { Paper, Text } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { mergeBodyweightEntries } from '@/utils/bodyweight'
 import { displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
 import type { WeightEntry } from '@powerlifting/types'
@@ -34,20 +35,20 @@ export default function WeightChart() {
   }, [version])
 
   const data = useMemo(() => {
-    if (entries.length === 0) return []
+    const merged = mergeBodyweightEntries(entries, program?.sessions ?? [])
+    if (merged.length === 0) return []
 
-    return [...entries]
-      .sort((a, b) => a.date.localeCompare(b.date))
+    return merged
       .map((entry) => ({
         date: entry.date,
         kg: entry.kg,
         lb: entry.kg * 2.20462,
       }))
-  }, [entries])
+  }, [entries, program?.sessions])
 
   const weightClassCeiling = program?.meta?.weight_class_kg
 
-  if (entries.length === 0) {
+  if (data.length === 0) {
     return (
       <Paper withBorder p="md" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, flex: 1 }}>
         <Text size="sm" c="dimmed">

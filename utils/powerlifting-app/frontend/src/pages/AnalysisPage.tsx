@@ -14,6 +14,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit, displayWeight } from '@/utils/units'
+import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
 import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
@@ -405,6 +406,16 @@ export default function AnalysisPage() {
     )
   }, [program?.sessions, analysisWindow.weekEnd, analysisWindow.weekStart, analysisWindowEndStr])
 
+  const bodyweightSessions = useMemo(() => {
+    if (!program?.sessions) return []
+    return program.sessions.filter(s =>
+      (s.block ?? 'current') === 'current' &&
+      s.status !== 'skipped' &&
+      s.date >= analysisWindowStartStr &&
+      s.date <= analysisWindowEndStr
+    )
+  }, [analysisWindowEndStr, analysisWindowStartStr, program?.sessions])
+
   const glossaryMuscles = useMemo(() => {
     const lookup = new Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>()
     for (const ex of glossary) {
@@ -562,18 +573,15 @@ export default function AnalysisPage() {
     }
   }, [program?.diet_notes, analysisWindowEndStr, analysisWindowStartStr])
 
-  const weightTrend = useMemo(() => {
-    if (weightLog.length < 2) return null
-    const sorted = weightLog
-      .filter(e => e.date <= analysisWindowEndStr)
-      .sort((a, b) => a.date.localeCompare(b.date))
-    if (sorted.length < 2) return null
-    const latest = sorted[sorted.length - 1].kg
-    const windowEntries = sorted.filter(e => e.date >= analysisWindowStartStr && e.date <= analysisWindowEndStr)
-    const oldest = windowEntries.length > 0 ? windowEntries[0].kg : sorted[0].kg
-    const change = latest - oldest
-    return { latest, change, entries: sorted.slice(-8) }
-  }, [weightLog, analysisWindowEndStr, analysisWindowStartStr])
+  const bodyweightEntries = useMemo(
+    () => mergeBodyweightEntries(weightLog, bodyweightSessions),
+    [bodyweightSessions, weightLog],
+  )
+
+  const weightTrend = useMemo(
+    () => buildBodyweightTrend(bodyweightEntries, analysisWindowStartStr, analysisWindowEndStr),
+    [analysisWindowEndStr, analysisWindowStartStr, bodyweightEntries],
+  )
 
   const banisterSeries = useMemo(() => {
     if (!banister) return []
@@ -587,6 +595,7 @@ export default function AnalysisPage() {
       bench: number
       deadlift: number
       bw: number
+      date: string | null
       hasSquat: boolean
       hasBench: boolean
       hasDeadlift: boolean
@@ -596,8 +605,9 @@ export default function AnalysisPage() {
     for (const s of filteredSessions) {
       const wn = s.week_number
       if (!wn) continue
-      if (!byWeek.has(wn)) byWeek.set(wn, { squat: 0, bench: 0, deadlift: 0, bw: 0, hasSquat: false, hasBench: false, hasDeadlift: false })
+      if (!byWeek.has(wn)) byWeek.set(wn, { squat: 0, bench: 0, deadlift: 0, bw: 0, date: null, hasSquat: false, hasBench: false, hasDeadlift: false })
       const w = byWeek.get(wn)!
+      if (!w.date || s.date < w.date) w.date = s.date
 
       if (s.body_weight_kg && s.body_weight_kg > w.bw) w.bw = s.body_weight_kg
 
@@ -621,15 +631,11 @@ export default function AnalysisPage() {
       }
     }
 
-    const sortedLog = weightLog
-      .filter(e => e.date <= analysisWindowEndStr)
-      .sort((a, b) => a.date.localeCompare(b.date))
-
     const rows: TrendRow[] = Array.from(byWeek.entries())
       .sort(([a], [b]) => a - b)
       .map(([wn, d]) => {
         let bw = d.bw
-        if (!bw && sortedLog.length) bw = sortedLog[sortedLog.length - 1].kg
+        if (!bw) bw = latestBodyweightOnOrBefore(bodyweightEntries, d.date ?? analysisWindowEndStr) ?? 0
 
         const total = (d.squat > 0 ? d.squat : 0) + (d.bench > 0 ? d.bench : 0) + (d.deadlift > 0 ? d.deadlift : 0)
         const dots = total > 0 && bw > 0 ? calculateDots(total, bw, sex) : null
@@ -667,7 +673,7 @@ export default function AnalysisPage() {
     }
 
     return { rows, dotsChange }
-  }, [analysisWindowEndStr, filteredSessions, weightLog, sex])
+  }, [analysisWindowEndStr, bodyweightEntries, filteredSessions, sex])
 
   const ipfGlTrend = useMemo(() => {
     if (!dotsTrend?.rows.length) return null
@@ -691,11 +697,11 @@ export default function AnalysisPage() {
     
     const total = squat + bench + deadlift
     let bw = weightTrend?.latest || 0
-    if (!bw && weightLog.length) bw = weightLog[weightLog.length - 1].kg
+    if (!bw && bodyweightEntries.length) bw = bodyweightEntries[bodyweightEntries.length - 1].kg
     const dots = total > 0 && bw > 0 ? calculateDots(total, bw, sex) : null
 
     return { squat: squat || null, bench: bench || null, deadlift: deadlift || null, total, dots }
-    }, [dotsTrend, weightTrend, weightLog, sex])
+    }, [bodyweightEntries, dotsTrend, weightTrend, sex])
   const sleepTrend = useMemo(() => {
     const weeks = nutritionTrend?.weekly.filter(w => w.sleep != null) || []
     if (!weeks.length) return null

@@ -42,7 +42,7 @@ import {
   YAxis,
 } from 'recharts'
 import {
-  fetchBlockComparison,
+  fetchAiBlockComparison,
   fetchBlockAnalysis,
   fetchBlockProgramEvaluation,
   fetchProgramBlocks,
@@ -646,6 +646,8 @@ function AiReportSection({ comparison }: { comparison: AiBlockComparisonResult }
     ['What Did Not Work', report.what_does_not_work],
     ['Lift Specific', report.lift_specific_insights],
     ['Exercise ROI', report.multi_block_exercise_roi],
+    ['Cross-Block Correlations', report.cross_block_correlations],
+    ['Pattern Detection', report.pattern_detections],
     ['Volume Dose Response', report.volume_dose_response],
     ['Bodyweight Relationship', report.bodyweight_relationships],
     ['Training Days', report.training_day_frequency],
@@ -661,8 +663,8 @@ function AiReportSection({ comparison }: { comparison: AiBlockComparisonResult }
       <Group justify="space-between" mb="sm">
         <Group gap="xs">
           <Brain size={18} />
-          <Text fw={500}>AI Multi-Block Analysis</Text>
-          {comparison.cached && <Badge color="green" variant="light" size="sm">Cached</Badge>}
+          <Text fw={500}>AI Lifetime Analysis</Text>
+          {comparison.cached && <Badge color="green" variant="light" size="sm">Saved</Badge>}
           {report.insufficient_data && <Badge color="yellow" variant="light" size="sm">Limited data</Badge>}
         </Group>
         <Text fz="xs" c="dimmed">{comparison.selectedBlockKeys.length} blocks</Text>
@@ -671,10 +673,10 @@ function AiReportSection({ comparison }: { comparison: AiBlockComparisonResult }
         <Text fz="sm">{report.overall_summary || report.insufficient_data_reason || 'No AI summary returned.'}</Text>
         <SimpleGrid cols={{ base: 1, lg: 2 }}>
           {sections.map(([title, items]) => (
-            <Stack key={title} gap={4}>
+            <Paper key={title} withBorder p="sm">
               <Text fw={500} fz="sm">{title}</Text>
               <TextList items={items} />
-            </Stack>
+            </Paper>
           ))}
         </SimpleGrid>
       </Stack>
@@ -706,18 +708,17 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
           <Stack gap={2}>
             <Group gap="xs">
               <GitCompare size={18} />
-              <Text fw={500}>Consolidated Exercise ROI</Text>
-              <Badge color="green" variant="light" size="sm">Cached analysis only</Badge>
+              <Text fw={500}>Exercise ROI Source Detail</Text>
             </Group>
             <Text fz="xs" c="dimmed">
-              Aggregates exercise volume from cached block analysis and cached ROI correlation reports. Current block is scoped to completed block-to-date data.
+              Exercise volume and correlation details from the selected source analyses. Current block is scoped to completed block-to-date data.
             </Text>
           </Stack>
-          <Badge variant="light">{comparison.rows.length} cached blocks</Badge>
+          <Badge variant="light">{comparison.rows.length} source blocks</Badge>
         </Group>
 
         {comparison.rows.length < 2 ? (
-          <Text fz="sm" c="dimmed">At least two cached block analyses are needed for lifetime exercise ROI.</Text>
+          <Text fz="sm" c="dimmed">At least two source block analyses are needed for lifetime exercise ROI.</Text>
         ) : exerciseRoi.length ? (
           <Box style={{ overflowX: 'auto' }}>
             <Table fz="sm">
@@ -727,7 +728,7 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
                   <Table.Th ta="right">Blocks</Table.Th>
                   <Table.Th ta="right">Sets</Table.Th>
                   <Table.Th ta="right">Volume</Table.Th>
-                  <Table.Th>Cached Signals</Table.Th>
+                  <Table.Th>Signals</Table.Th>
                   <Table.Th>Pattern</Table.Th>
                   <Table.Th>Confidence</Table.Th>
                 </Table.Tr>
@@ -766,7 +767,7 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
             </Table>
           </Box>
         ) : (
-          <Text fz="sm" c="dimmed">No repeated exercise ROI signals were found in the selected cached blocks.</Text>
+          <Text fz="sm" c="dimmed">No repeated exercise ROI signals were found in the selected source blocks.</Text>
         )}
       </Paper>
 
@@ -795,7 +796,7 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
         <Paper withBorder p="md">
           <Group gap="xs" mb="sm">
             <Database size={18} />
-            <Text fw={500}>Cached Correlation Findings</Text>
+            <Text fw={500}>Correlation Findings</Text>
           </Group>
           <Stack gap="xs">
             {findings.length ? findings.slice(0, 12).map((finding, index) => (
@@ -811,7 +812,7 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
                 <Text fz="xs" c="dimmed">{finding.reasoning || finding.caveat}</Text>
               </Stack>
             )) : (
-              <Text fz="sm" c="dimmed">No cached block correlation reports were found for the selected blocks.</Text>
+              <Text fz="sm" c="dimmed">No block correlation reports were found for the selected blocks.</Text>
             )}
           </Stack>
         </Paper>
@@ -823,31 +824,54 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
 export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
   const [blocks, setBlocks] = useState<ProgramBlockIndexEntry[]>([])
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
-  const [comparison, setComparison] = useState<BlockComparisonResult | null>(null)
+  const [comparison, setComparison] = useState<AiBlockComparisonResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const currentBlock = useMemo(() => blocks.find((block) => block.isCurrent) ?? null, [blocks])
-  const selectableBlocks = useMemo(() => sortedPastBlocks(blocks), [blocks])
+  const selectableBlocks = useMemo(() => sortedPastBlocks(blocks).filter((block) => block.cacheStatus?.cached), [blocks])
+  const sourceComparison = comparison?.deterministic ?? null
+  const hasSourceBlocks = Boolean(currentBlock?.cacheStatus?.cached) || selectedKeys.length > 0
+  const isMissingAiResult = comparison?.report?.cache_miss === true
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
     fetchProgramBlocks()
       .then((result) => {
+        if (cancelled) return null
+        const defaultKeys = result
+          .filter((block) => !block.isCurrent && block.cacheStatus?.cached)
+          .map((block) => block.blockKey)
         setBlocks(result)
-        setSelectedKeys(result.filter((block) => !block.isCurrent).map((block) => block.blockKey))
+        setSelectedKeys(defaultKeys)
+        return fetchAiBlockComparison({
+          blockKeys: defaultKeys,
+          cacheOnly: true,
+        })
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+      .then((result) => {
+        if (!cancelled && result) setComparison(result)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const runComparison = () => {
     setLoading(true)
     setError(null)
-    fetchBlockComparison({
+    fetchAiBlockComparison({
       blockKeys: selectedKeys,
-      cacheOnly: true,
+      refresh: true,
+      cacheOnly: false,
     })
       .then(setComparison)
       .catch((err) => setError(err.message))
@@ -855,14 +879,15 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
   }
 
   const setAllPastBlocks = () => {
-    setSelectedKeys(blocks.filter((block) => !block.isCurrent).map((block) => block.blockKey))
+    setSelectedKeys(blocks.filter((block) => !block.isCurrent && block.cacheStatus?.cached).map((block) => block.blockKey))
+    setComparison(null)
   }
 
-  const trendLines = comparison ? trendBlockLines(comparison) : []
-  const e1rmTrendData = comparison ? trendChartData(comparison, 'e1rmTotalKg', unit) : []
-  const dotsTrendData = comparison ? trendChartData(comparison, 'estimatedDots', unit) : []
-  const volumeTrendData = comparison ? trendChartData(comparison, 'volumeKg', unit) : []
-  const trainingDaysTrendData = comparison ? trendChartData(comparison, 'trainingDays', unit) : []
+  const trendLines = sourceComparison ? trendBlockLines(sourceComparison) : []
+  const e1rmTrendData = sourceComparison ? trendChartData(sourceComparison, 'e1rmTotalKg', unit) : []
+  const dotsTrendData = sourceComparison ? trendChartData(sourceComparison, 'estimatedDots', unit) : []
+  const volumeTrendData = sourceComparison ? trendChartData(sourceComparison, 'volumeKg', unit) : []
+  const trainingDaysTrendData = sourceComparison ? trendChartData(sourceComparison, 'trainingDays', unit) : []
 
   return (
     <Stack gap="md">
@@ -879,10 +904,9 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
             <Title order={3} fz="lg">Lifetime Compare</Title>
           </Group>
           <Group gap="xs">
-            <Button size="xs" variant="light" onClick={setAllPastBlocks}>All past blocks</Button>
-            <Button size="xs" variant="subtle" onClick={() => setSelectedKeys([])}>Current only</Button>
-            <Button size="xs" leftSection={<GitCompare size={14} />} onClick={runComparison} disabled={!blocks.length}>
-              Compare cached
+            <Button size="xs" variant="light" onClick={setAllPastBlocks}>All saved past blocks</Button>
+            <Button size="xs" leftSection={<Brain size={14} />} onClick={runComparison} disabled={!hasSourceBlocks || loading}>
+              {comparison && !isMissingAiResult ? 'Regenerate AI Analysis' : 'Run AI Lifetime Analysis'}
             </Button>
           </Group>
         </Group>
@@ -890,14 +914,18 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
         <Group gap="lg" align="flex-start">
           <Stack gap="xs" style={{ minWidth: 260 }}>
             {currentBlock ? (
-              <Checkbox checked disabled label={`Current block-to-date (${currentBlock.label})`} />
+              <Checkbox
+                checked={Boolean(currentBlock.cacheStatus?.cached)}
+                disabled
+                label={`Current block-to-date (${currentBlock.label})`}
+              />
             ) : (
               <Badge color="yellow" variant="light">No current block found</Badge>
             )}
-            <Text fz="xs" c="dimmed">Uses cached block analysis and cached ROI correlation only. Select the past named blocks to compare against current block-to-date.</Text>
+            <Text fz="xs" c="dimmed">Uses saved block analyses as AI source input. Current block-to-date is included when available.</Text>
           </Stack>
           <Group gap="xs" wrap="wrap" style={{ flex: 1 }}>
-            {selectableBlocks.map((block) => (
+            {selectableBlocks.length ? selectableBlocks.map((block) => (
               <Checkbox
                 key={block.blockKey}
                 checked={selectedKeys.includes(block.blockKey)}
@@ -908,10 +936,13 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                       ? Array.from(new Set([...current, block.blockKey]))
                       : current.filter((key) => key !== block.blockKey),
                   )
+                  setComparison(null)
                 }}
                 label={`${block.label}${block.linkedCompetition ? ` (${block.linkedCompetition.date})` : ' (training only)'}`}
               />
-            ))}
+            )) : (
+              <Text fz="sm" c="dimmed">No saved past block analyses are available yet.</Text>
+            )}
           </Group>
         </Group>
       </Paper>
@@ -920,14 +951,26 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
 
       {comparison && !loading && (
         <>
-          {comparison.rows.length === 0 ? (
+          {!sourceComparison || sourceComparison.rows.length === 0 ? (
             <Paper withBorder p="lg">
-              <Text fw={500}>No comparison blocks selected</Text>
-              <Text fz="sm" c="dimmed">No current or past blocks were available for comparison.</Text>
+              <Text fw={500}>No source analyses selected</Text>
+              <Text fz="sm" c="dimmed">No current or past block analyses were available for comparison.</Text>
             </Paper>
           ) : (
             <Stack gap="md">
-              <ConsolidatedRoiSection comparison={comparison} unit={unit} />
+              {isMissingAiResult ? (
+                <Paper withBorder p="lg">
+                  <Group gap="xs" mb="xs">
+                    <AlertTriangle size={18} />
+                    <Text fw={500}>No saved AI lifetime analysis for this source set</Text>
+                  </Group>
+                  <Text fz="sm" c="dimmed">
+                    Run the AI lifetime analysis to compare the selected block analyses. Opening this page does not generate a new report.
+                  </Text>
+                </Paper>
+              ) : (
+                <AiReportSection comparison={comparison} />
+              )}
 
               <SimpleGrid cols={{ base: 1, lg: 2 }}>
                 <Paper withBorder p="md">
@@ -949,7 +992,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                         />
                         <Legend />
                         {trendLines.map((line) => (
-                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls dot={false} />
+                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls={false} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -975,7 +1018,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                         />
                         <Legend />
                         {trendLines.map((line) => (
-                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls dot={false} />
+                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls={false} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -996,7 +1039,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                         <RechartsTooltip contentStyle={{ backgroundColor: 'var(--mantine-color-body)', border: '1px solid var(--mantine-color-default-border)' }} />
                         <Legend />
                         {trendLines.map((line) => (
-                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls dot={false} />
+                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls={false} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1017,7 +1060,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                         <RechartsTooltip contentStyle={{ backgroundColor: 'var(--mantine-color-body)', border: '1px solid var(--mantine-color-default-border)' }} />
                         <Legend />
                         {trendLines.map((line) => (
-                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls dot={false} />
+                          <Line key={line.blockKey} type="monotone" dataKey={line.blockKey} name={line.label} stroke={line.color} strokeWidth={2} connectNulls={false} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1045,7 +1088,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
-                      {comparison.rows.map((row) => (
+                      {sourceComparison.rows.map((row) => (
                         <Table.Tr key={row.blockKey}>
                           <Table.Td>
                             <Text fw={500}>{row.label}</Text>
@@ -1114,7 +1157,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {(comparison.liftDoseResponse ?? []).map((row) => (
+                        {(sourceComparison.liftDoseResponse ?? []).map((row) => (
                           <Table.Tr key={`${row.blockKey}-${row.lift}`}>
                             <Table.Td>{row.label}</Table.Td>
                             <Table.Td tt="capitalize">{row.lift}</Table.Td>
@@ -1148,7 +1191,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {(comparison.trainingDayResponse ?? []).map((row) => (
+                        {(sourceComparison.trainingDayResponse ?? []).map((row) => (
                           <Table.Tr key={row.blockKey}>
                             <Table.Td>{row.label}</Table.Td>
                             <Table.Td ta="right">{row.completedWeeks}</Table.Td>
@@ -1163,6 +1206,8 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                   </Box>
                 </Paper>
               </SimpleGrid>
+
+              <ConsolidatedRoiSection comparison={sourceComparison} unit={unit} />
             </Stack>
           )}
         </>

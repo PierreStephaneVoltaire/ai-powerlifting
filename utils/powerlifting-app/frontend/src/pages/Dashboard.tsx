@@ -35,6 +35,11 @@ import type { Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 const PROFILE_ESTIMATE_READY_SCORE = 55
+const LIFT_ALIASES: Record<LiftProfile['lift'], string[]> = {
+  squat: ['squat'],
+  bench: ['bench'],
+  deadlift: ['deadlift'],
+}
 
 const LIFT_LABELS: Record<LiftProfile['lift'], string> = {
   squat: 'Squat',
@@ -169,22 +174,14 @@ function formatSignedKg(deltaKg: number | null | undefined, unit: 'kg' | 'lb'): 
   return `${deltaKg >= 0 ? '+' : '-'}${value}`
 }
 
-function aggregateLiftStats(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift']) {
-  const aliases: Record<LiftProfile['lift'], string[]> = {
-    squat: ['squat'],
-    bench: ['bench'],
-    deadlift: ['deadlift'],
-  }
-  const stats = weekly?.exercise_stats ?? {}
-  return Object.entries(stats).reduce((acc, [name, stat]) => {
+function findLiftAnalysis(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift']) {
+  if (!weekly) return undefined
+  const exact = weekly.lifts?.[lift]
+  if (exact) return exact
+  return Object.entries(weekly.lifts ?? {}).find(([name]) => {
     const lowerName = name.toLowerCase()
-    if (!aliases[lift].some((alias) => lowerName.includes(alias))) return acc
-    return {
-      sets: acc.sets + (Number(stat.total_sets) || 0),
-      volumeKg: acc.volumeKg + (Number(stat.total_volume) || 0),
-      maxKg: Math.max(acc.maxKg, Number(stat.max_kg) || 0),
-    }
-  }, { sets: 0, volumeKg: 0, maxKg: 0 })
+    return LIFT_ALIASES[lift].some((alias) => lowerName.includes(alias))
+  })?.[1]
 }
 
 export default function Dashboard() {
@@ -507,21 +504,12 @@ export default function Dashboard() {
   const currentBlockWeekly = currentBlockBundle?.weekly ?? null
   const currentBlockFatigue = currentBlockWeekly?.fatigue_index ?? null
   const liftBreakdownRows = LIFT_ORDER.map((lift) => {
-    const liftStats = aggregateLiftStats(currentBlockWeekly, lift)
-    const liftAnalysis = currentBlockWeekly?.lifts?.[lift]
+    const liftAnalysis = findLiftAnalysis(currentBlockWeekly, lift)
     const endStrength = currentBlockBundle?.historical.endStrength[lift] ?? currentBlockWeekly?.current_maxes?.[lift] ?? null
-    const strengthDelta = currentBlockBundle?.historical.strengthDelta[lift] ?? null
     return {
       lift,
       endStrength,
-      strengthDelta,
-      sets: liftStats.sets,
-      volumeKg: liftStats.volumeKg,
-      avgInol: currentBlockWeekly?.inol?.avg_inol?.[lift] ?? currentBlockBundle?.historical.analyticsSummary.avgInol?.[lift] ?? null,
       progressionRate: liftAnalysis?.progression_rate_kg_per_week ?? null,
-      failedSets: liftAnalysis?.failed_sets ?? 0,
-      volumeChangePct: liftAnalysis?.volume_change_pct,
-      intensityChangePct: liftAnalysis?.intensity_change_pct,
     }
   })
 
@@ -901,15 +889,11 @@ export default function Dashboard() {
             </Group>
           ) : currentBlockWeekly ? (
             <Box style={{ overflowX: 'auto' }}>
-              <Table striped highlightOnHover withTableBorder={false} withColumnBorders={false} miw={620}>
+              <Table striped highlightOnHover withTableBorder={false} withColumnBorders={false} miw={360}>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Lift</Table.Th>
                     <Table.Th>Current</Table.Th>
-                    <Table.Th>Delta</Table.Th>
-                    <Table.Th>Sets</Table.Th>
-                    <Table.Th>Volume</Table.Th>
-                    <Table.Th>INOL</Table.Th>
                     <Table.Th>Trend</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -918,22 +902,8 @@ export default function Dashboard() {
                     <Table.Tr key={row.lift}>
                       <Table.Td fw={500}>{LIFT_LABELS[row.lift]}</Table.Td>
                       <Table.Td>{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</Table.Td>
-                      <Table.Td c={typeof row.strengthDelta === 'number' ? row.strengthDelta >= 0 ? 'green' : 'red' : 'dimmed'}>
-                        {formatSignedKg(row.strengthDelta, unit)}
-                      </Table.Td>
-                      <Table.Td>{row.sets ? Math.round(row.sets) : '--'}</Table.Td>
-                      <Table.Td>{row.volumeKg ? displayWeight(Math.round(row.volumeKg), unit) : '--'}</Table.Td>
-                      <Table.Td>{typeof row.avgInol === 'number' ? row.avgInol.toFixed(2) : '--'}</Table.Td>
                       <Table.Td>
-                        <Stack gap={0}>
-                          <Text size="sm">
-                            {typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            Vol {typeof row.volumeChangePct === 'number' ? `${row.volumeChangePct.toFixed(0)}%` : '--'}
-                            {' '}· Int {typeof row.intensityChangePct === 'number' ? `${row.intensityChangePct.toFixed(0)}%` : '--'}
-                          </Text>
-                        </Stack>
+                        {typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}
                       </Table.Td>
                     </Table.Tr>
                   ))}

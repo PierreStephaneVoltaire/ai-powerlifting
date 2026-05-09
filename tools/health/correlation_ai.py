@@ -370,7 +370,7 @@ async def generate_correlation_report(
         primary = comp_summary.get("primary_competition") or {}
         weeks_to_primary_comp = primary.get("weeks_to_comp")
 
-        bw_trend = summarize_bodyweight_trend(program.get("sessions", []))
+        bw_trend = summarize_bodyweight_trend(program.get("sessions", []), weight_log=program.get("weight_log", []))
         caloric_context = summarize_diet_context(program, bodyweight_trend=bw_trend)
         caloric_status = caloric_context.get("status", "unclear")
         bodyweight_trend = bw_trend

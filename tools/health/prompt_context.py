@@ -844,13 +844,24 @@ def summarize_meet_interference(
 
 def summarize_bodyweight_trend(
     sessions: list[dict[str, Any]],
+    weight_log: list[dict[str, Any]] | None = None,
     reference_date: date | None = None,
     window_start: date | None = None,
 ) -> dict[str, Any]:
     reference_date = reference_date or date.today()
-    points = []
+    by_date: dict[str, float] = {}
+    for entry in weight_log or []:
+        d = _parse_date(entry.get("date"))
+        if d is None:
+            continue
+        if window_start and d < window_start:
+            continue
+        kg = _num(entry.get("kg"))
+        if kg > 0:
+            by_date[d.isoformat()] = round(kg, 1)
+
     for session in sessions:
-        if not (session.get("completed") or session.get("status") in ("logged", "completed")):
+        if session.get("status") == "skipped":
             continue
         bw = session.get("body_weight_kg")
         if bw is None:
@@ -860,8 +871,11 @@ def summarize_bodyweight_trend(
             continue
         if window_start and d < window_start:
             continue
-        points.append({"date": d.isoformat(), "kg": round(_num(bw), 1)})
+        kg = _num(bw)
+        if kg > 0:
+            by_date[d.isoformat()] = round(kg, 1)
 
+    points = [{"date": entry_date, "kg": kg} for entry_date, kg in by_date.items()]
     points.sort(key=lambda p: p["date"])
     if len(points) < 2:
         return {"points": points, "latest": None, "change": None, "direction": "unclear"}

@@ -505,7 +505,11 @@ def _build_user_message(program: dict[str, Any], federation_library: dict[str, A
     window_start = _parse_date(meta.get("program_start"))
 
     completed_weeks = sorted({int(s.get("week_number") or 0) for s in sessions if (s.get("completed") or s.get("status") in ("logged", "completed")) and s.get("week_number")})
-    bodyweight_trend = summarize_bodyweight_trend(sessions, window_start=window_start)
+    bodyweight_trend = summarize_bodyweight_trend(
+        sessions,
+        weight_log=program.get("weight_log", []),
+        window_start=window_start,
+    )
     diet_context = summarize_diet_context(program, window_start=window_start, bodyweight_trend=bodyweight_trend)
     goals = summarize_goals(program, federation_library=federation_library)
     competitions = summarize_competitions(

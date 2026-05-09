@@ -8,7 +8,7 @@ import {
 import { createHash } from 'crypto'
 import { gzipSync, gunzipSync } from 'zlib'
 import { docClient } from '../db/dynamo'
-import type { AthleteGoal, Competition, LiftResults, Program, Session } from '@powerlifting/types'
+import type { AthleteGoal, Competition, LiftResults, Program, Session, WeightEntry } from '@powerlifting/types'
 
 export type DataQualitySeverity = 'info' | 'warning' | 'critical'
 
@@ -175,6 +175,7 @@ export interface BlockComparisonRow {
 
 export interface BlockComparisonContext {
   sessions: Session[]
+  weightLog: WeightEntry[]
   competitions: Competition[]
   goals: AthleteGoal[]
   sex: 'male' | 'female'
@@ -485,6 +486,24 @@ function roundOrNull(value: number | null | undefined, digits = 1): number | nul
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   const factor = 10 ** digits
   return Math.round(value * factor) / factor
+}
+
+function programWeightLog(program: Program): WeightEntry[] {
+  const entries = (program as Program & { weight_log?: WeightEntry[] }).weight_log
+  return Array.isArray(entries) ? entries : []
+}
+
+function blockWeightLog(program: Program, startDate: string, endDate: string): WeightEntry[] {
+  return programWeightLog(program)
+    .filter((entry) =>
+      typeof entry.date === 'string' &&
+      typeof entry.kg === 'number' &&
+      Number.isFinite(entry.kg) &&
+      entry.kg > 0 &&
+      entry.date >= startDate &&
+      entry.date <= endDate,
+    )
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 function sourceHash(value: unknown): string {
@@ -924,7 +943,7 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
     const evalCacheStatus = evalCacheStatuses.get(blockKey)
     const results = linkedCompetition?.competition.results
 
-    return {
+    const entry: ProgramBlockIndexEntry = {
       blockKey,
       block,
       label: block === DEFAULT_BLOCK ? 'Current' : block,
@@ -948,12 +967,17 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
       trainingOnly: !linkedCompetition,
       comparisonEligible: Boolean(linkedCompetition && hasResults(results)),
       dataQualityFlags,
+    }
+    const cacheFingerprint = analysisScopedBlockEntry(program, entry).sourceFingerprint
+
+    return {
+      ...entry,
       cacheStatus: {
-        cached: cacheStatus?.sourceFingerprint === sourceFingerprint || (block !== DEFAULT_BLOCK && Boolean(cacheStatus)),
+        cached: cacheStatus?.sourceFingerprint === cacheFingerprint || (block !== DEFAULT_BLOCK && Boolean(cacheStatus)),
         generatedAt: cacheStatus?.generatedAt,
       },
       programEvaluationCacheStatus: {
-        cached: evalCacheStatus?.sourceFingerprint === sourceFingerprint || (block !== DEFAULT_BLOCK && Boolean(evalCacheStatus)),
+        cached: evalCacheStatus?.sourceFingerprint === cacheFingerprint || (block !== DEFAULT_BLOCK && Boolean(evalCacheStatus)),
         generatedAt: evalCacheStatus?.generatedAt,
       },
     } satisfies ProgramBlockIndexEntry
@@ -1493,7 +1517,8 @@ export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntr
     goals,
     meta,
     diet_notes: blockDietNotes(program, entry.startDate, analysisEndDate),
-  }
+    weight_log: blockWeightLog(program, entry.startDate, analysisEndDate),
+  } as Program & { weight_log: WeightEntry[] }
 }
 
 export function buildBlockComparisonContext(program: Program, rawEntry: ProgramBlockIndexEntry): BlockComparisonContext {
@@ -1506,6 +1531,7 @@ export function buildBlockComparisonContext(program: Program, rawEntry: ProgramB
 
   return {
     sessions: analysisSessionsForBlock(program, scopedEntry, { includeSyntheticCompetition: false }),
+    weightLog: blockWeightLog(program, scopedEntry.startDate, scopedEntry.linkedCompetition?.date ?? scopedEntry.endDate),
     competitions,
     goals,
     sex: program.meta?.sex === 'female' ? 'female' : 'male',
@@ -1528,7 +1554,7 @@ export async function getOrCreateBlockAnalysisBundle(
 
   if (!refresh || cacheOnly) {
     const cached = await getCachedBlockAnalysisBundle(userPk, blockKey, entry.sourceFingerprint, { allowStale: !entry.isCurrent })
-    if (cached && !hasPastDateProjectionFailure(cached, entry)) return cached
+    if (cached && (cacheOnly || !hasPastDateProjectionFailure(cached, entry))) return cached
   }
   if (cacheOnly) return null
 
@@ -1921,8 +1947,8 @@ function buildConsolidatedExerciseRoi(
             ? 'medium'
             : 'low'
       const signalText = positiveSignals || negativeSignals || unclearSignals
-        ? `${positiveSignals} positive, ${negativeSignals} negative, ${unclearSignals} unclear cached correlation signal${positiveSignals + negativeSignals + unclearSignals === 1 ? '' : 's'}`
-        : 'no cached correlation finding'
+        ? `${positiveSignals} positive, ${negativeSignals} negative, ${unclearSignals} unclear correlation signal${positiveSignals + negativeSignals + unclearSignals === 1 ? '' : 's'}`
+        : 'no correlation finding'
       const liftText = correlatedLifts.length ? ` across ${correlatedLifts.join(', ')}` : ''
       return {
         exercise: row.displayName,
@@ -1934,7 +1960,7 @@ function buildConsolidatedExerciseRoi(
         negativeSignals,
         unclearSignals,
         confidence,
-        summary: `${row.displayName} appeared in ${blocks.length} cached block${blocks.length === 1 ? '' : 's'} with ${Math.round(row.totalSets)} sets and ${Math.round(row.totalVolumeKg).toLocaleString()} kg volume; ${signalText}${liftText}.`,
+        summary: `${row.displayName} appeared in ${blocks.length} source block${blocks.length === 1 ? '' : 's'} with ${Math.round(row.totalSets)} sets and ${Math.round(row.totalVolumeKg).toLocaleString()} kg volume; ${signalText}${liftText}.`,
         blocks,
       }
     })
@@ -1998,11 +2024,31 @@ function exerciseVolumeKg(session: Session): number {
   }, 0)
 }
 
-function latestBodyweight(sessions: Session[], fallback: number | null, maxDate: string): number | null {
-  const match = [...sessions]
-    .filter((session) => session.date <= maxDate && typeof session.body_weight_kg === 'number' && session.body_weight_kg > 0)
-    .sort((a, b) => b.date.localeCompare(a.date))[0]
-  return match?.body_weight_kg ?? fallback
+function latestBodyweight(
+  sessions: Session[],
+  fallback: number | null,
+  maxDate: string,
+  weightLog: WeightEntry[] = [],
+): number | null {
+  const dated = new Map<string, number>()
+  for (const entry of weightLog) {
+    if (entry.date <= maxDate && typeof entry.kg === 'number' && Number.isFinite(entry.kg) && entry.kg > 0) {
+      dated.set(entry.date, entry.kg)
+    }
+  }
+  for (const session of sessions) {
+    if (
+      session.status !== 'skipped' &&
+      session.date <= maxDate &&
+      typeof session.body_weight_kg === 'number' &&
+      Number.isFinite(session.body_weight_kg) &&
+      session.body_weight_kg > 0
+    ) {
+      dated.set(session.date, session.body_weight_kg)
+    }
+  }
+  const match = [...dated.entries()].sort(([a], [b]) => b.localeCompare(a))[0]
+  return match?.[1] ?? fallback
 }
 
 function buildBlockTrendSeries(
@@ -2064,7 +2110,7 @@ function buildBlockTrendSeries(
     const total = carried.squat != null && carried.bench != null && carried.deadlift != null
       ? roundOrNull(carried.squat + carried.bench + carried.deadlift, 1)
       : null
-    const bodyweight = latestBodyweight(sessions, context?.fallbackBodyweightKg ?? null, weekStart)
+    const bodyweight = latestBodyweight(sessions, context?.fallbackBodyweightKg ?? null, weekStart, context?.weightLog ?? [])
 
     rows.push({
       blockKey: bundle.block.blockKey,
@@ -2127,7 +2173,7 @@ function buildPatternSignals(
     const top = exerciseRoi[0]
     patterns.push({
       kind: 'roi',
-      finding: `${top.exercise} has the strongest consolidated exercise ROI signal in the cached data.`,
+      finding: `${top.exercise} has the strongest consolidated exercise ROI signal in the source data.`,
       evidence: top.summary,
       confidence: top.confidence,
     })
@@ -2137,8 +2183,8 @@ function buildPatternSignals(
   if (repeatedPositive) {
     patterns.push({
       kind: 'roi',
-      finding: `${repeatedPositive.exercise} has repeated positive transfer signals across cached blocks.`,
-      evidence: `${repeatedPositive.positiveSignals} positive cached correlation findings across ${repeatedPositive.blockCount} blocks; lifts: ${repeatedPositive.correlatedLifts.join(', ') || 'not specified'}.`,
+      finding: `${repeatedPositive.exercise} has repeated positive transfer signals across source blocks.`,
+      evidence: `${repeatedPositive.positiveSignals} positive correlation findings across ${repeatedPositive.blockCount} blocks; lifts: ${repeatedPositive.correlatedLifts.join(', ') || 'not specified'}.`,
       confidence: repeatedPositive.confidence,
     })
   }
@@ -2150,7 +2196,7 @@ function buildPatternSignals(
     if (best && worst && best.blockKey !== worst.blockKey) {
       patterns.push({
         kind: 'training_response',
-        finding: `${best.label} had the strongest total response among cached blocks.`,
+        finding: `${best.label} had the strongest total response among source blocks.`,
         evidence: `${best.label}: ${best.e1rmDeltaKg} kg total delta, ${best.compliancePct ?? 'unknown'} compliance, ${Math.round(best.totalVolumeKg).toLocaleString()} kg volume. ${worst.label}: ${worst.e1rmDeltaKg} kg total delta.`,
         confidence: rows.length >= 3 ? 'medium' : 'low',
       })
@@ -2175,8 +2221,8 @@ function buildPatternSignals(
   if (missingCorrelationRows.length) {
     patterns.push({
       kind: 'data_quality',
-      finding: 'Some selected blocks do not have cached ROI correlation reports.',
-      evidence: `Missing cached correlation data for: ${missingCorrelationRows.map((row) => row.label).join(', ')}. Exercise ROI still uses block exercise stats, but pattern confidence is lower without cached correlation findings.`,
+      finding: 'Some selected blocks do not have ROI correlation reports.',
+      evidence: `Missing correlation data for: ${missingCorrelationRows.map((row) => row.label).join(', ')}. Exercise ROI still uses block exercise stats, but pattern confidence is lower without correlation findings.`,
       confidence: 'high',
     })
   }
@@ -2188,7 +2234,7 @@ function buildPatternSignals(
     if (high && low && high.blockKey !== low.blockKey) {
       patterns.push({
         kind: 'training_response',
-        finding: 'Average training days per week differs across selected cached blocks.',
+        finding: 'Average training days per week differs across selected source blocks.',
         evidence: `${high.label}: ${high.avgTrainingDaysPerWeek} days/week and ${high.strengthDeltaKg} kg total delta. ${low.label}: ${low.avgTrainingDaysPerWeek} days/week and ${low.strengthDeltaKg} kg total delta.`,
         confidence: trainingDayRows.length >= 3 ? 'medium' : 'low',
       })
@@ -2206,8 +2252,8 @@ function buildPatternSignals(
       if (zeroWeeks >= 2) {
         patterns.push({
           kind: 'training_response',
-          finding: `${row.label} has a training-day dropoff in the cached block-to-date series.`,
-          evidence: `Training days fell to 0 starting W${series[firstZeroAfterTraining].weekNumber} (${series[firstZeroAfterTraining].weekStart}) for ${zeroWeeks} consecutive week${zeroWeeks === 1 ? '' : 's'} in the selected cached data.`,
+          finding: `${row.label} has a training-day dropoff in the block-to-date series.`,
+          evidence: `Training days fell to 0 starting W${series[firstZeroAfterTraining].weekNumber} (${series[firstZeroAfterTraining].weekStart}) for ${zeroWeeks} consecutive week${zeroWeeks === 1 ? '' : 's'} in the selected source data.`,
           confidence: 'high',
         })
       }
@@ -2332,44 +2378,31 @@ export function buildBlockComparison(
   }
 }
 
-function compactWeeklyForAi(weekly: unknown): Record<string, unknown> {
-  const report = recordFromUnknown(weekly)
-  return {
-    week: report.week,
-    selected_week_start: report.selected_week_start,
-    selected_week_end: report.selected_week_end,
-    selected_week_count: report.selected_week_count,
-    window_start: report.window_start,
-    window_end: report.window_end,
-    sessions_analyzed: report.sessions_analyzed,
-    compliance: report.compliance,
-    current_maxes: report.current_maxes,
-    estimated_dots: report.estimated_dots,
-    estimated_dots_reason: report.estimated_dots_reason,
-    projections: report.projections,
-    projection_reason: report.projection_reason,
-    projection_calibration: report.projection_calibration,
-    lifts: report.lifts,
-    fatigue_index: report.fatigue_index,
-    fatigue_components: report.fatigue_components,
-    fatigue_dimensions: report.fatigue_dimensions,
-    acwr: report.acwr,
-    banister: report.banister,
-    monotony_strain: report.monotony_strain,
-    decoupling: report.decoupling,
-    inol: report.inol,
-    ri_distribution: report.ri_distribution,
-    specificity_ratio: report.specificity_ratio,
-    volume_landmarks: report.volume_landmarks,
-    exercise_stats: report.exercise_stats,
-    muscle_map: report.muscle_map ?? report.muscle_group_avg_weekly ?? report.muscle_volume,
-    flags: report.flags,
-  }
+function stripRuntimeCacheMarkers(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripRuntimeCacheMarkers)
+  if (!value || typeof value !== 'object') return value
+
+  const omittedKeys = new Set([
+    'cached',
+    'cache_miss',
+    'cacheStatus',
+    'programEvaluationCacheStatus',
+  ])
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !omittedKeys.has(key))
+      .map(([key, nested]) => [key, stripRuntimeCacheMarkers(nested)]),
+  )
+}
+
+function isSavedSupportingReport(report: Record<string, unknown> | null | undefined): report is Record<string, unknown> {
+  return Boolean(report && report.cached === true && report.cache_miss !== true)
 }
 
 function buildAiComparisonPayload(
   bundles: BlockAnalysisBundle[],
   correlationReports?: Map<string, Record<string, unknown> | null>,
+  programEvaluationReports?: Map<string, Record<string, unknown> | null>,
   contexts?: Map<string, BlockComparisonContext>,
 ): {
   sourceFingerprint: string
@@ -2386,6 +2419,11 @@ function buildAiComparisonPayload(
       generatedAt: typeof report?.generated_at === 'string' ? report.generated_at : '',
       findings: Array.isArray(report?.findings) ? report.findings : [],
     })),
+    programEvaluationFingerprints: [...(programEvaluationReports?.entries() ?? [])].map(([blockKey, report]) => ({
+      blockKey,
+      generatedAt: typeof report?.generated_at === 'string' ? report.generated_at : '',
+      report,
+    })),
   })
 
   return {
@@ -2396,28 +2434,32 @@ function buildAiComparisonPayload(
       generated_at: new Date().toISOString(),
       selected_block_keys: ordered.map((bundle) => bundle.block.blockKey),
       deterministic,
-      correlation_reports: Object.fromEntries(correlationReports?.entries() ?? []),
+      correlation_reports: stripRuntimeCacheMarkers(Object.fromEntries(
+        [...(correlationReports?.entries() ?? [])].map(([blockKey, report]) => [
+          blockKey,
+          isSavedSupportingReport(report) ? report : null,
+        ]),
+      )),
+      program_evaluation_reports: stripRuntimeCacheMarkers(Object.fromEntries(
+        [...(programEvaluationReports?.entries() ?? [])].map(([blockKey, report]) => [
+          blockKey,
+          isSavedSupportingReport(report) ? report : null,
+        ]),
+      )),
       blocks: ordered.map((bundle) => ({
-        block: {
-          block_key: bundle.block.blockKey,
-          block_name: bundle.block.label,
-          raw_block_name: bundle.block.block,
-          is_current: bundle.block.isCurrent,
-          start_date: bundle.block.startDate,
-          end_date: bundle.block.endDate,
-          week_start: bundle.block.weekStart,
-          week_end: bundle.block.weekEnd,
-          week_count: bundle.block.weekCount,
-          completed_sessions: bundle.block.completedSessions,
-          planned_sessions: bundle.block.plannedSessions,
-          total_sessions: bundle.block.totalSessions,
-          phases: bundle.block.phases,
-          training_only: bundle.block.trainingOnly,
-          linked_competition: bundle.block.linkedCompetition,
-          data_quality_flags: bundle.block.dataQualityFlags,
-        },
-        historical: bundle.historical,
-        weekly: compactWeeklyForAi(bundle.weekly),
+        block_analysis: stripRuntimeCacheMarkers(bundle),
+        competitions: contexts?.get(bundle.block.blockKey)?.competitions ?? [],
+        goals: contexts?.get(bundle.block.blockKey)?.goals ?? [],
+        correlation_report: stripRuntimeCacheMarkers(
+          isSavedSupportingReport(correlationReports?.get(bundle.block.blockKey))
+            ? correlationReports?.get(bundle.block.blockKey)
+            : null,
+        ),
+        program_evaluation_report: stripRuntimeCacheMarkers(
+          isSavedSupportingReport(programEvaluationReports?.get(bundle.block.blockKey))
+            ? programEvaluationReports?.get(bundle.block.blockKey)
+            : null,
+        ),
       })),
     },
   }
@@ -2430,9 +2472,15 @@ export async function getOrCreateAiBlockComparison(
   refresh = false,
   cacheOnly = false,
   correlationReports?: Map<string, Record<string, unknown> | null>,
+  programEvaluationReports?: Map<string, Record<string, unknown> | null>,
   contexts?: Map<string, BlockComparisonContext>,
 ): Promise<AiBlockComparisonResult> {
-  const { sourceFingerprint, deterministic, payload } = buildAiComparisonPayload(bundles, correlationReports, contexts)
+  const { sourceFingerprint, deterministic, payload } = buildAiComparisonPayload(
+    bundles,
+    correlationReports,
+    programEvaluationReports,
+    contexts,
+  )
   const selectedBlockKeys = deterministic.selectedBlockKeys
   const sk = blockAiComparisonSk(sourceFingerprint)
 
@@ -2458,7 +2506,7 @@ export async function getOrCreateAiBlockComparison(
       sourceFingerprint,
       report: {
         insufficient_data: true,
-        insufficient_data_reason: 'No cached multi-block AI comparison exists for this block selection. Generate it to run AI analysis.',
+        insufficient_data_reason: 'No saved multi-block AI comparison exists for this block selection. Generate it to run AI analysis.',
         cache_miss: true,
       },
       deterministic,

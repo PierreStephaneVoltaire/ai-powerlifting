@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { invokeToolDirect } from '../utils/agent'
 import * as programController from '../controllers/programController'
+import * as weightController from '../controllers/weightController'
+import type { Program, WeightEntry } from '@powerlifting/types'
 import {
   analysisSourceFingerprint,
   buildAnalysisWindows,
@@ -24,6 +26,8 @@ import {
 
 export const analyticsRouter = Router()
 
+type ProgramWithWeightLog = Program & { weight_log: WeightEntry[] }
+
 const WINDOW_KEYS: AnalysisWindowKey[] = [
   'current',
   'previous_1',
@@ -35,6 +39,20 @@ const WINDOW_KEYS: AnalysisWindowKey[] = [
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+async function getProgramWithWeightLog(pk: string, version = 'current'): Promise<ProgramWithWeightLog> {
+  const program = await programController.getProgram(pk, version)
+  try {
+    const log = await weightController.getWeightLog(pk, version)
+    return {
+      ...program,
+      weight_log: Array.isArray(log.entries) ? log.entries : [],
+    }
+  } catch (error) {
+    console.warn('Failed to load weight log for analytics context:', error)
+    return { ...program, weight_log: [] }
+  }
 }
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
@@ -56,7 +74,7 @@ analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
     const pk = req.effectivePk!
     const requestedAsOfDate = req.query.asOfDate as string | undefined
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
-    let program = await programController.getProgram(pk, 'current')
+    let program = await getProgramWithWeightLog(pk, 'current')
     let sourceFingerprint = analysisSourceFingerprint(program)
 
     const cached = await getCachedWeeklyAnalysisBundle(pk, asOfDate, sourceFingerprint)
@@ -65,7 +83,7 @@ analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
     }
 
     await snapshotCompetitionProjection(pk, asOfDate)
-    program = await programController.getProgram(pk, 'current')
+    program = await getProgramWithWeightLog(pk, 'current')
     sourceFingerprint = analysisSourceFingerprint(program)
 
     const windows = buildAnalysisWindows(program, asOfDate)
@@ -111,7 +129,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const weekEnd = Number.isFinite(weekEndRaw) && weekEndRaw > 0 ? weekEndRaw : undefined
     const today = todayIso()
     await snapshotCompetitionProjection(req.effectivePk!, today)
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const data = await invokeToolDirect('weekly_analysis', {
       weeks,
       block,
@@ -134,7 +152,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
 // GET /api/analytics/blocks
 analyticsRouter.get('/blocks', async (req, res) => {
   try {
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
     res.json({ data: blocks, error: null })
   } catch (err) {
@@ -145,7 +163,7 @@ analyticsRouter.get('/blocks', async (req, res) => {
 // GET /api/analytics/blocks/:blockKey/analysis?refresh=false
 analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
   try {
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.query.cacheOnly === 'true'
     const bundle = await getOrCreateBlockAnalysisBundle(
@@ -168,7 +186,7 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
 // GET /api/analytics/blocks/:blockKey/program-evaluation?refresh=false
 analyticsRouter.get('/blocks/:blockKey/program-evaluation', async (req, res) => {
   try {
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.query.cacheOnly === 'true'
     const report = await getOrCreateBlockProgramEvaluation(
@@ -191,7 +209,7 @@ analyticsRouter.get('/blocks/:blockKey/program-evaluation', async (req, res) => 
 // PUT /api/analytics/blocks/:blockKey/start-maxes
 analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
   try {
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
     const block = blocks.find((entry) => entry.blockKey === req.params.blockKey)
     if (!block) {
@@ -242,7 +260,7 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
 // GET /api/analytics/blocks/:blockKey/correlation
 analyticsRouter.get('/blocks/:blockKey/correlation', async (req, res) => {
   try {
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.query.cacheOnly === 'true'
     const data = await getOrCreateBlockCorrelationReport(
@@ -265,7 +283,7 @@ analyticsRouter.get('/blocks/:blockKey/correlation', async (req, res) => {
 // POST /api/analytics/block-comparison
 analyticsRouter.post('/block-comparison', async (req, res) => {
   try {
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
     const requestedKeys = Array.isArray(req.body?.blockKeys)
       ? req.body.blockKeys.filter((key: unknown): key is string => typeof key === 'string')
@@ -318,7 +336,7 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
 // POST /api/analytics/block-comparison/ai
 analyticsRouter.post('/block-comparison/ai', async (req, res) => {
   try {
-    const program = await programController.getProgram(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
     const requestedKeys = Array.isArray(req.body?.blockKeys)
       ? req.body.blockKeys.filter((key: unknown): key is string => typeof key === 'string')
@@ -332,33 +350,36 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     const cacheOnly = req.body?.cacheOnly === true
     const bundles = []
     const correlationReports = new Map<string, Record<string, unknown> | null>()
+    const programEvaluationReports = new Map<string, Record<string, unknown> | null>()
     const contexts = new Map()
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
-      const bundle = cacheOnly
-        ? await getCachedBlockAnalysisBundle(
-            req.effectivePk!,
-            block.blockKey,
-            block.sourceFingerprint,
-            { allowStale: !block.isCurrent },
-          )
-        : await getOrCreateBlockAnalysisBundle(
-            req.effectivePk!,
-            program,
-            block.blockKey,
-            invokeToolDirect,
-            false,
-          )
-      if (bundle) bundles.push(bundle)
-      correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(
+      const bundle = await getCachedBlockAnalysisBundle(
         req.effectivePk!,
-        program,
         block.blockKey,
-        invokeToolDirect,
-        false,
-        true,
-      ))
+        block.sourceFingerprint,
+        { allowStale: !block.isCurrent },
+      )
+      if (bundle) bundles.push(bundle)
+      if (bundle) {
+        correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(
+          req.effectivePk!,
+          program,
+          block.blockKey,
+          invokeToolDirect,
+          false,
+          true,
+        ))
+        programEvaluationReports.set(block.blockKey, await getOrCreateBlockProgramEvaluation(
+          req.effectivePk!,
+          program,
+          block.blockKey,
+          invokeToolDirect,
+          false,
+          true,
+        ))
+      }
     }
 
     const comparison = await getOrCreateAiBlockComparison(
@@ -368,6 +389,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
       req.body?.refresh === true,
       cacheOnly,
       correlationReports,
+      programEvaluationReports,
       contexts,
     )
     res.json({ data: comparison, error: null })
