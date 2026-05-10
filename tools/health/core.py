@@ -221,11 +221,6 @@ def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
         )
     store.invalidate_cache()
-    try:
-        from cache_invalidation import invalidate_analysis_caches
-        invalidate_analysis_caches(active_pk, getattr(store, "_table_name", None), getattr(store, "_region", None))
-    except Exception as exc:
-        logger.warning("[HealthTools] Analysis cache invalidation failed: %s", exc)
 
 
 GOAL_TYPES = {
@@ -1611,7 +1606,6 @@ async def health_create_session(
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).create_session(program_sk, new_session, program.get("phases", []))
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return created
 
 
@@ -1639,7 +1633,6 @@ async def health_delete_session(date: str) -> dict:
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).delete_session(program_sk, date)
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return result
 
 
@@ -1679,7 +1672,6 @@ async def health_reschedule_session(old_date: str, new_date: str) -> dict:
         program.get("phases", []),
     )
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return updated
 
 
@@ -1714,7 +1706,6 @@ async def health_add_exercise(date: str, exercise: dict) -> dict:
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return {"date": date, "exercises": updated.get("exercises", [])}
 
 
@@ -1750,7 +1741,6 @@ async def health_remove_exercise(date: str, exercise_index: int) -> dict:
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return {"date": date, "exercises": exercises}
 
 

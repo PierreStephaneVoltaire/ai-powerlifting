@@ -345,13 +345,31 @@ export async function getCachedWeeklyAnalysisBundle(
 ): Promise<WeeklyAnalysisBundle | null> {
   try {
     const pk = cachePk(userPk)
-    const sk = bundleSk(asOfDate)
-    const response = await docClient.send(new GetCommand({
+    const skPrefix = `weekly_bundle#v${CACHE_SCHEMA_VERSION}#`
+    
+    const exactSk = bundleSk(asOfDate)
+    const exactResponse = await docClient.send(new GetCommand({
       TableName: ANALYSIS_CACHE_TABLE,
-      Key: { pk, sk },
+      Key: { pk, sk: exactSk },
     }))
+    
+    let item = exactResponse.Item
 
-    const item = response.Item
+    // If exact not found, query for the latest one
+    if (!item) {
+      const queryResponse = await docClient.send(new QueryCommand({
+        TableName: ANALYSIS_CACHE_TABLE,
+        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+        ExpressionAttributeValues: {
+          ':pk': pk,
+          ':prefix': skPrefix,
+        },
+        ScanIndexForward: false, 
+        Limit: 1,
+      }))
+      item = queryResponse.Items?.[0]
+    }
+
     if (!item) return null
 
     let payload = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
@@ -361,7 +379,7 @@ export async function getCachedWeeklyAnalysisBundle(
         Array.from({ length: shardCount }, async (_, index) => {
           const part = await docClient.send(new GetCommand({
             TableName: ANALYSIS_CACHE_TABLE,
-            Key: { pk, sk: partSk(sk, index) },
+            Key: { pk, sk: partSk(item!.sk as string, index) },
           }))
           return String(part.Item?.payload_gzip_b64 ?? '')
         }),
@@ -371,7 +389,6 @@ export async function getCachedWeeklyAnalysisBundle(
 
     if (!payload) return null
     const bundle = decodePayload(payload)
-    if (bundle.schemaVersion !== CACHE_SCHEMA_VERSION || bundle.asOfDate !== asOfDate) return null
     if (expectedSourceFingerprint && bundle.sourceFingerprint !== expectedSourceFingerprint) return null
     return { ...bundle, cached: true }
   } catch (error) {

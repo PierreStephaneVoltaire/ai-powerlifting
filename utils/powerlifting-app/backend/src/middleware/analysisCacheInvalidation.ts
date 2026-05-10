@@ -6,24 +6,12 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 function shouldInvalidate(method: string, path: string): boolean {
   if (!MUTATING_METHODS.has(method)) return false
 
-  if (path.startsWith('/api/auth')) return false
-  if (path.startsWith('/api/settings')) return false
-  if (path.startsWith('/api/stats')) return false
-  if (path.startsWith('/api/videos')) return false
-
-  if (path.startsWith('/api/import')) {
-    return /\/apply$/.test(path)
+  // ONLY invalidate analysis cache when sessions are saved/modified
+  if (path.startsWith('/api/sessions')) {
+    return true
   }
 
-  if (path.startsWith('/api/templates')) {
-    return /\/apply\/confirm$/.test(path)
-  }
-
-  if (path.startsWith('/api/analytics')) {
-    return false
-  }
-
-  return path.startsWith('/api/')
+  return false
 }
 
 export function analysisCacheInvalidationMiddleware(
