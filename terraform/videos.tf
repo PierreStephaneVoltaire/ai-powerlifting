@@ -83,259 +83,19 @@ resource "aws_iam_role_policy" "video_thumbnail_lambda" {
         Resource = "${aws_s3_bucket.session_videos.arn}/thumbnails/*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["dynamodb:UpdateItem"]
-        Resource = "arn:aws:dynamodb:${var.region}:*:table/${var.dynamodb_health_table}"
+        Effect = "Allow"
+        Action = ["dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:GetItem"]
+        Resource = [
+          "arn:aws:dynamodb:${var.region}:*:table/${var.dynamodb_health_table}",
+          "arn:aws:dynamodb:${var.region}:*:table/${var.dynamodb_sessions_table}"
+        ]
       }
     ]
   })
 }
 
-resource "aws_dynamodb_table" "if_models" {
-  name         = var.dynamodb_models_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
 
-  attribute {
-    name = "pk"
-    type = "S"
-  }
 
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "model-registry"
-  }
-}
-
-# ─── Existing DynamoDB Tables (imported into Terraform state) ──────────────
-
-resource "aws_dynamodb_table" "if_core" {
-  name         = var.dynamodb_core_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "core-directives"
-  }
-}
-
-resource "aws_dynamodb_table" "if_health" {
-  name         = var.dynamodb_health_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  ttl {
-    attribute_name = "ttl"
-    enabled        = true
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "health"
-  }
-}
-
-resource "aws_dynamodb_table" "if_sessions" {
-  name         = var.dynamodb_sessions_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "sessions"
-  }
-}
-
-resource "aws_dynamodb_table" "if_powerlifting_analysis_cache" {
-  name         = var.dynamodb_analysis_cache_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  ttl {
-    attribute_name = "expires_at"
-    enabled        = true
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "powerlifting-analysis-cache"
-  }
-}
-
-resource "aws_dynamodb_table" "if_finance" {
-  name         = var.dynamodb_finance_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "finance"
-  }
-}
-
-resource "aws_dynamodb_table" "if_diary_entries" {
-  name         = var.dynamodb_diary_entries_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "diary"
-  }
-}
-
-resource "aws_dynamodb_table" "if_diary_signals" {
-  name         = var.dynamodb_diary_signals_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "diary-signals"
-  }
-}
-
-resource "aws_dynamodb_table" "if_proposals" {
-  name         = var.dynamodb_proposals_table
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "proposals"
-  }
-}
 
 data "aws_caller_identity" "current" {}
 
@@ -343,6 +103,13 @@ data "archive_file" "video_lambda" {
   type        = "zip"
   output_path = "${path.module}/video-lambda.zip"
   source_dir  = "${path.module}/../utils/video-lambda"
+}
+
+resource "aws_lambda_layer_version" "ffmpeg" {
+  filename            = "${path.module}/ffmpeg-layer.zip"
+  layer_name          = "ffmpeg-layer"
+  source_code_hash    = filebase64sha256("${path.module}/ffmpeg-layer.zip")
+  compatible_runtimes = ["python3.12"]
 }
 
 resource "aws_lambda_function" "video_thumbnail" {
@@ -356,10 +123,13 @@ resource "aws_lambda_function" "video_thumbnail" {
   filename         = data.archive_file.video_lambda.output_path
   source_code_hash = data.archive_file.video_lambda.output_base64sha256
 
+  layers = [aws_lambda_layer_version.ffmpeg.arn]
+
   environment {
     variables = {
-      TABLE_NAME    = var.dynamodb_health_table
-      VIDEOS_BUCKET = aws_s3_bucket.session_videos.id
+      TABLE_NAME          = var.dynamodb_health_table
+      SESSIONS_TABLE_NAME = var.dynamodb_sessions_table
+      VIDEOS_BUCKET       = aws_s3_bucket.session_videos.id
     }
   }
 

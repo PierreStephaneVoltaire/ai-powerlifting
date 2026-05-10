@@ -10,6 +10,7 @@ import {
   isIsoDate,
   makeWeeklyAnalysisBundle,
   putCachedWeeklyAnalysisBundle,
+  invalidateAnalysisCache,
   type AnalysisWindowKey,
 } from '../services/analysisCache'
 import {
@@ -25,6 +26,16 @@ import {
 } from '../services/blockAnalytics'
 
 export const analyticsRouter = Router()
+
+analyticsRouter.post('/cache/invalidate', async (req, res) => {
+  try {
+    const pk = req.effectivePk!
+    await invalidateAnalysisCache(pk)
+    res.json({ data: { success: true } })
+  } catch (error) {
+    res.status(500).json({ error: String(error) })
+  }
+})
 
 type ProgramWithWeightLog = Program & { weight_log: WeightEntry[] }
 

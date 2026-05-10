@@ -10,7 +10,7 @@ import {
   Group,
   Stack,
   SimpleGrid,
-  NumberInput,
+  TextInput,
   Select,
   Table,
   Text,
@@ -81,14 +81,13 @@ export default function PlateCalculator() {
         <Stack gap="xs">
           <Text size="sm" fw={500}>Target Weight</Text>
           <Group gap="xs">
-            <NumberInput
+            <TextInput
+              type="number"
               flex={1}
               value={targetWeight || ''}
-              onChange={(val) => setTargetWeight(typeof val === 'number' ? val : 0)}
+              onChange={(e) => setTargetWeight(Number(e.currentTarget.value) || 0)}
               placeholder={unit === 'kg' ? 'kg' : 'lb'}
               step={unit === 'kg' ? 2.5 : 5}
-              min={0}
-              hideControls
             />
             <Paper bg="var(--mantine-color-default)" px="sm" py="xs" radius="sm">
               <Text size="sm">{unit.toUpperCase()}</Text>
@@ -110,13 +109,12 @@ export default function PlateCalculator() {
             onChange={(val) => setBarPreset((val ?? 'standard') as BarPreset)}
           />
           {barPreset === 'custom' && (
-            <NumberInput
+            <TextInput
+              type="number"
               value={barWeightKg || ''}
-              onChange={(val) => setBarWeight(typeof val === 'number' ? val : 20)}
+              onChange={(e) => setBarWeight(Number(e.currentTarget.value) || 20)}
               placeholder="kg"
-              min={0}
               step={0.5}
-              hideControls
             />
           )}
         </Stack>

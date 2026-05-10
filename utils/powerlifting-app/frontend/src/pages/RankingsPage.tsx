@@ -5,7 +5,7 @@ import {
   Paper,
   Grid,
   Select,
-  NumberInput,
+  TextInput,
   Button,
   Stack,
   SimpleGrid,
@@ -277,33 +277,33 @@ export default function RankingsPage() {
             <Paper withBorder p="md" radius="md">
               <Title order={4} mb="md">Your Numbers</Title>
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                <NumberInput
+                <TextInput
+                  type="number"
                   label="Squat (kg)"
                   placeholder="e.g. 180"
                   value={squat}
-                  onChange={(v) => setSquat(typeof v === 'number' ? v : '')}
-                  min={0}
+                  onChange={(e) => setSquat(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
                 />
-                <NumberInput
+                <TextInput
+                  type="number"
                   label="Bench (kg)"
                   placeholder="e.g. 120"
                   value={bench}
-                  onChange={(v) => setBench(typeof v === 'number' ? v : '')}
-                  min={0}
+                  onChange={(e) => setBench(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
                 />
-                <NumberInput
+                <TextInput
+                  type="number"
                   label="Deadlift (kg)"
                   placeholder="e.g. 220"
                   value={deadlift}
-                  onChange={(v) => setDeadlift(typeof v === 'number' ? v : '')}
-                  min={0}
+                  onChange={(e) => setDeadlift(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
                 />
-                <NumberInput
+                <TextInput
+                  type="number"
                   label="Bodyweight (kg)"
                   placeholder="e.g. 83"
                   value={bodyweight}
-                  onChange={(v) => setBodyweight(typeof v === 'number' ? v : '')}
-                  min={0}
+                  onChange={(e) => setBodyweight(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
                 />
               </SimpleGrid>
 

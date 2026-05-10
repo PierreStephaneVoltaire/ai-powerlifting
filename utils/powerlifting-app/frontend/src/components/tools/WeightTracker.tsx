@@ -11,7 +11,6 @@ import {
   Group,
   Stack,
   SimpleGrid,
-  NumberInput,
   TextInput,
   ActionIcon,
   Progress,
@@ -255,13 +254,13 @@ export default function WeightTracker() {
             value={newDate}
             onChange={(e) => setNewDate(e.currentTarget.value)}
           />
-          <NumberInput
+          <TextInput
+            type="number"
             flex={1}
             value={newWeight || ''}
-            onChange={(val) => setNewWeight(typeof val === 'string' ? val : String(val ?? ''))}
+            onChange={(e) => setNewWeight(e.currentTarget.value)}
             placeholder={unit}
             step={unit === 'kg' ? 0.1 : 0.25}
-            hideControls
           />
           <ActionIcon
             variant="filled"

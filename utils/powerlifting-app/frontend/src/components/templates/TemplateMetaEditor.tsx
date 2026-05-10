@@ -1,4 +1,4 @@
-import { Stack, TextInput, Textarea, NumberInput } from '@mantine/core'
+import { Stack, TextInput, Textarea } from '@mantine/core'
 import type { TemplateMeta } from '@powerlifting/types'
 
 interface Props {
@@ -21,18 +21,17 @@ export function TemplateMetaEditor({ meta, onChange }: Props) {
         autosize
         minRows={2}
       />
-      <NumberInput
+      <TextInput
+        type="number"
         label="Estimated Weeks"
         value={meta.estimated_weeks}
-        onChange={(v) => onChange({ ...meta, estimated_weeks: Number(v) || 1 })}
-        min={1}
+        onChange={(e) => onChange({ ...meta, estimated_weeks: Number(e.currentTarget.value) || 1 })}
       />
-      <NumberInput
+      <TextInput
+        type="number"
         label="Days Per Week"
         value={meta.days_per_week}
-        onChange={(v) => onChange({ ...meta, days_per_week: Number(v) || 1 })}
-        min={1}
-        max={7}
+        onChange={(e) => onChange({ ...meta, days_per_week: Number(e.currentTarget.value) || 1 })}
       />
     </Stack>
   )

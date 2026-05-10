@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Plus, Edit2, Trash2, Save } from 'lucide-react'
 import {
   Stack, Group, Title, Text, Paper, Box, Button, ActionIcon,
-  Modal, TextInput, Textarea, NumberInput, SimpleGrid,
+  Modal, TextInput, Textarea, SimpleGrid,
 } from '@mantine/core'
 import type { TemplatePhase } from '@powerlifting/types'
 
@@ -130,19 +130,19 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
           <SimpleGrid cols={2} spacing="md">
             <Box>
               <Text size="sm" c="dimmed" mb={4}>Week Start</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.week_start || 1}
-                onChange={(v) => setPhaseForm(p => ({ ...p, week_start: Number(v) }))}
-                min={1}
+                onChange={(e) => setPhaseForm(p => ({ ...p, week_start: Number(e.currentTarget.value) || 1 }))}
                 size="sm"
               />
             </Box>
             <Box>
               <Text size="sm" c="dimmed" mb={4}>Week End</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.week_end || 4}
-                onChange={(v) => setPhaseForm(p => ({ ...p, week_end: Number(v) }))}
-                min={1}
+                onChange={(e) => setPhaseForm(p => ({ ...p, week_end: Number(e.currentTarget.value) || 1 }))}
                 size="sm"
               />
             </Box>
@@ -151,18 +151,20 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
           <SimpleGrid cols={2} spacing="md">
             <Box>
               <Text size="sm" c="dimmed" mb={4}>RPE Min</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.target_rpe_min ?? ''}
-                onChange={(v) => setPhaseForm(p => ({ ...p, target_rpe_min: v === '' ? undefined : Number(v) }))}
+                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
               />
             </Box>
             <Box>
               <Text size="sm" c="dimmed" mb={4}>RPE Max</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.target_rpe_max ?? ''}
-                onChange={(v) => setPhaseForm(p => ({ ...p, target_rpe_max: v === '' ? undefined : Number(v) }))}
+                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
               />

@@ -845,12 +845,12 @@ export default function AnalysisPage() {
                     </Stack>
                     <Stack gap={0} ta="center">
                       <Text fz="xs" c="dimmed">Sets</Text>
-                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.set_pct ?? 0)}>{data.compliance.set_pct?.toFixed(0)}%</Text>
-                      <Text fz="xs" c="dimmed">{data.compliance.completed_sets}/{data.compliance.planned_sets}</Text>
+                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.set_pct ?? 0)}>{(data.compliance.set_pct ?? 0).toFixed(0)}%</Text>
+                      <Text fz="xs" c="dimmed">{(data.compliance.completed_sets ?? 0)}/{(data.compliance.planned_sets ?? 0)}</Text>
                     </Stack>
                     <Stack gap={0} ta="center">
                       <Text fz="xs" c="dimmed">Volume</Text>
-                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.vol_pct ?? 0)}>{data.compliance.vol_pct?.toFixed(0)}%</Text>
+                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.vol_pct ?? 0)}>{(data.compliance.vol_pct ?? 0).toFixed(0)}%</Text>
                       <Text fz="xs" c="dimmed" truncate>{Math.round(toDisplayUnit(data.compliance.completed_volume ?? 0, unit)).toLocaleString()} {unit}</Text>
                     </Stack>
                   </SimpleGrid>

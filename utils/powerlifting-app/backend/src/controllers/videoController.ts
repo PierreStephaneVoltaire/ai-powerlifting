@@ -9,6 +9,7 @@ import type { Phase, Session, SessionVideo, VideoLibraryItem } from '@powerlifti
 
 const S3_BUCKET = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
 const S3_REGION = process.env.AWS_REGION || 'ca-central-1'
+const SESSION_TABLE = process.env.IF_SESSIONS_TABLE_NAME || 'if-sessions'
 
 const s3Client = new S3Client({
   region: S3_REGION,
@@ -82,26 +83,39 @@ export async function uploadSessionVideo(
 
   // Generate video ID
   const videoId = uuidv4()
-  const s3Key = `videos/${sessionDate}/${videoId}.mp4`
+  const extension = filename.split('.').pop() || 'mp4'
+  const s3Key = `videos/${sessionDate}/${videoId}.${extension}`
 
-  // Upload to S3 with metadata for Lambda
-  const upload = new Upload({
-    client: s3Client,
-    params: {
-      Bucket: S3_BUCKET,
-      Key: s3Key,
-      Body: file,
-      ContentType: mimeType,
-      Metadata: {
-        video_id: videoId,
-        session_date: sessionDate,
-        pk,
-        sk,
+  console.log(`[VideoController] Starting upload to S3: bucket=${S3_BUCKET}, key=${s3Key}, mime=${mimeType}`)
+
+  try {
+    // Upload to S3 with metadata for Lambda
+    const upload = new Upload({
+      client: s3Client,
+      params: {
+        Bucket: S3_BUCKET,
+        Key: s3Key,
+        Body: file,
+        ContentType: mimeType,
+        Metadata: {
+          video_id: videoId,
+          session_date: sessionDate,
+          pk,
+          sk,
+        },
       },
-    },
-  })
+    })
 
-  await upload.done()
+    upload.on('httpUploadProgress', (progress) => {
+      console.log(`[VideoController] Upload progress for ${videoId}: ${progress.loaded}/${progress.total}`)
+    })
+
+    await upload.done()
+    console.log(`[VideoController] S3 upload successful: ${videoId}`)
+  } catch (err) {
+    console.error(`[VideoController] S3 upload failed for ${videoId}:`, err)
+    throw new AppError(`Failed to upload video to storage: ${String(err)}`, 500)
+  }
 
   const videoUrl = `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${s3Key}`
 

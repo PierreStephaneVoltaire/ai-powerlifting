@@ -1,4 +1,4 @@
-import { Drawer, SegmentedControl, NumberInput, Text, Stack, Group, Button, Select, Divider, Avatar } from '@mantine/core'
+import { Drawer, SegmentedControl, Text, Stack, Group, Button, Select, Divider, Avatar, TextInput } from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
 import { defaultBarWeightKgForUnit, useSettingsStore, type Theme } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
@@ -55,7 +55,7 @@ export default function SettingsDrawer() {
                 </Avatar>
                 <Stack gap={0}>
                   <Text size="sm" fw={600}>{user.username}</Text>
-                  <Text size="xs" c="dimmed">{user.email || 'Discord User'}</Text>
+                  <Text size="xs" c="dimmed">Discord User</Text>
                 </Stack>
               </Group>
               <Button
@@ -160,18 +160,15 @@ export default function SettingsDrawer() {
           <Text size="sm" fw={500} mb="xs">
             Bar Weight ({unit})
           </Text>
-          <NumberInput
+          <TextInput
+            type="number"
             value={toDisplayUnit(barWeightKg, unit)}
-            onChange={(val) => setBarWeight(
-              typeof val === 'number'
-                ? fromDisplayUnit(val, unit)
+            onChange={(e) => setBarWeight(
+              e.currentTarget.value !== ''
+                ? fromDisplayUnit(Number(e.currentTarget.value), unit)
                 : defaultBarWeightKgForUnit(unit),
             )}
-            min={0}
-            max={unit === 'kg' ? 50 : 120}
             step={unit === 'kg' ? 0.25 : 0.5}
-            decimalScale={2}
-            hideControls
           />
           <Text size="xs" c="dimmed" mt={4}>
             Used for plate calculator. Default is 20kg in metric mode and 45lb in imperial mode.

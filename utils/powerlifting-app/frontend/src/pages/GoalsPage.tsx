@@ -7,7 +7,6 @@ import {
   Button,
   Group,
   MultiSelect,
-  NumberInput,
   Paper,
   Select,
   SimpleGrid,
@@ -368,27 +367,29 @@ export default function GoalsPage() {
                     )}
 
                     <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                      <NumberInput
+                      <TextInput
+                        type="number"
                         label="Target Total (kg)"
-                        value={goal.target_total_kg ?? undefined}
-                        onChange={(value) => updateGoal(goal.id, { target_total_kg: typeof value === 'number' ? value : undefined })}
+                        value={goal.target_total_kg ?? ''}
+                        onChange={(e) => updateGoal(goal.id, { target_total_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
                       />
-                      <NumberInput
+                      <TextInput
+                        type="number"
                         label="Target DOTS"
-                        decimalScale={2}
-                        value={goal.target_dots ?? undefined}
-                        onChange={(value) => updateGoal(goal.id, { target_dots: typeof value === 'number' ? value : undefined })}
+                        value={goal.target_dots ?? ''}
+                        onChange={(e) => updateGoal(goal.id, { target_dots: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
                       />
-                      <NumberInput
+                      <TextInput
+                        type="number"
                         label="Target IPF GL"
-                        decimalScale={2}
-                        value={goal.target_ipf_gl ?? undefined}
-                        onChange={(value) => updateGoal(goal.id, { target_ipf_gl: typeof value === 'number' ? value : undefined })}
+                        value={goal.target_ipf_gl ?? ''}
+                        onChange={(e) => updateGoal(goal.id, { target_ipf_gl: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
                       />
-                      <NumberInput
+                      <TextInput
+                        type="number"
                         label="Target Weight Class (kg)"
-                        value={goal.target_weight_class_kg ?? undefined}
-                        onChange={(value) => updateGoal(goal.id, { target_weight_class_kg: typeof value === 'number' ? value : undefined })}
+                        value={goal.target_weight_class_kg ?? ''}
+                        onChange={(e) => updateGoal(goal.id, { target_weight_class_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
                       />
                     </SimpleGrid>
 
@@ -407,20 +408,20 @@ export default function GoalsPage() {
                         value={goal.risk_tolerance}
                         onChange={(value) => value && updateGoal(goal.id, { risk_tolerance: value as RiskTolerance })}
                       />
-                      <NumberInput
+                      <TextInput
+                        type="number"
                         label="Max Bodyweight Loss %"
-                        decimalScale={1}
-                        value={goal.max_acceptable_bodyweight_loss_pct ?? undefined}
-                        onChange={(value) => updateGoal(goal.id, {
-                          max_acceptable_bodyweight_loss_pct: typeof value === 'number' ? value : undefined,
+                        value={goal.max_acceptable_bodyweight_loss_pct ?? ''}
+                        onChange={(e) => updateGoal(goal.id, {
+                          max_acceptable_bodyweight_loss_pct: e.currentTarget.value ? Number(e.currentTarget.value) : undefined,
                         })}
                       />
-                      <NumberInput
+                      <TextInput
+                        type="number"
                         label="Max Water Cut %"
-                        decimalScale={1}
-                        value={goal.max_acceptable_water_cut_pct ?? undefined}
-                        onChange={(value) => updateGoal(goal.id, {
-                          max_acceptable_water_cut_pct: typeof value === 'number' ? value : undefined,
+                        value={goal.max_acceptable_water_cut_pct ?? ''}
+                        onChange={(e) => updateGoal(goal.id, {
+                          max_acceptable_water_cut_pct: e.currentTarget.value ? Number(e.currentTarget.value) : undefined,
                         })}
                       />
                     </SimpleGrid>

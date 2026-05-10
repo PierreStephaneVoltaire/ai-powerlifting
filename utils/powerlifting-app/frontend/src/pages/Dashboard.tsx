@@ -18,7 +18,6 @@ import {
   SimpleGrid,
   Button,
   ActionIcon,
-  NumberInput,
   TextInput,
   Textarea,
   SegmentedControl,
@@ -590,11 +589,11 @@ export default function Dashboard() {
               {(['squat', 'bench', 'deadlift'] as const).map((lift) => (
                 <Group key={lift} gap="xs">
                   <Text size="sm" w={64} tt="capitalize">{lift}</Text>
-                  <NumberInput
+                  <TextInput
+                    type="number"
                     style={{ flex: 1 }}
                     value={toDisplayUnit(localMaxes[lift], unit)}
-                    onChange={(v) => setLocalMaxes(prev => ({ ...prev, [lift]: fromDisplayUnit(typeof v === 'number' ? v : 0, unit) }))}
-                    decimalScale={1}
+                    onChange={(e) => setLocalMaxes(prev => ({ ...prev, [lift]: fromDisplayUnit(Number(e.currentTarget.value) || 0, unit) }))}
                     size="sm"
                   />
                   <Text size="xs" c="dimmed">{unit}</Text>
@@ -673,13 +672,12 @@ export default function Dashboard() {
           </Group>
           {editingWeight ? (
             <Group gap="xs">
-              <NumberInput
+              <TextInput
+                type="number"
                 style={{ flex: 1 }}
                 value={toDisplayUnit(localWeight, unit)}
-                onChange={(v) => setLocalWeight(fromDisplayUnit(typeof v === 'number' ? v : 0, unit))}
-                decimalScale={1}
+                onChange={(e) => setLocalWeight(fromDisplayUnit(Number(e.currentTarget.value) || 0, unit))}
                 size="lg"
-                fw={700}
               />
               <Text size="sm" c="dimmed">{unit}</Text>
             </Group>
@@ -761,11 +759,11 @@ export default function Dashboard() {
             <Stack gap="xs">
               <Group gap="xs">
                 <Text size="sm" w={96}>Height</Text>
-                <NumberInput
+                <TextInput
+                  type="number"
                   style={{ flex: 1 }}
                   value={localHeight}
-                  onChange={(v) => setLocalHeight(typeof v === 'number' ? v : '')}
-                  decimalScale={1}
+                  onChange={(e) => setLocalHeight(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
                   placeholder="--"
                   size="sm"
                 />
@@ -773,11 +771,11 @@ export default function Dashboard() {
               </Group>
               <Group gap="xs">
                 <Text size="sm" w={96}>Arm Wingspan</Text>
-                <NumberInput
+                <TextInput
+                  type="number"
                   style={{ flex: 1 }}
                   value={localWingspan}
-                  onChange={(v) => setLocalWingspan(typeof v === 'number' ? v : '')}
-                  decimalScale={1}
+                  onChange={(e) => setLocalWingspan(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
                   placeholder="--"
                   size="sm"
                 />
@@ -785,11 +783,11 @@ export default function Dashboard() {
               </Group>
               <Group gap="xs">
                 <Text size="sm" w={96}>Leg Length</Text>
-                <NumberInput
+                <TextInput
+                  type="number"
                   style={{ flex: 1 }}
                   value={localLegLength}
-                  onChange={(v) => setLocalLegLength(typeof v === 'number' ? v : '')}
-                  decimalScale={1}
+                  onChange={(e) => setLocalLegLength(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
                   placeholder="--"
                   size="sm"
                 />
@@ -950,22 +948,20 @@ export default function Dashboard() {
                     placeholder="Phase name"
                     size="xs"
                   />
-                  <NumberInput
-                    w={48}
+                  <TextInput
+                    type="number"
+                    style={{ width: 48 }}
                     value={phase.start_week}
-                    onChange={(v) => updatePhase(idx, 'start_week', typeof v === 'number' ? v : 0)}
+                    onChange={(e) => updatePhase(idx, 'start_week', Number(e.currentTarget.value) || 0)}
                     size="xs"
-                    ta="center"
-                    hideControls
                   />
                   <Text size="xs">-</Text>
-                  <NumberInput
-                    w={48}
+                  <TextInput
+                    type="number"
+                    style={{ width: 48 }}
                     value={phase.end_week}
-                    onChange={(v) => updatePhase(idx, 'end_week', typeof v === 'number' ? v : 0)}
+                    onChange={(e) => updatePhase(idx, 'end_week', Number(e.currentTarget.value) || 0)}
                     size="xs"
-                    ta="center"
-                    hideControls
                   />
                   <ActionIcon variant="subtle" color="red" onClick={() => removePhase(idx)}><Trash2 size={12} /></ActionIcon>
                 </Group>
@@ -1079,13 +1075,11 @@ export default function Dashboard() {
 
                 <Stack gap={4}>
                   <Text size="xs" c="dimmed">Stimulus Coefficient</Text>
-                  <NumberInput
-                    min={1}
-                    max={2}
+                  <TextInput
+                    type="number"
                     step={0.05}
-                    decimalScale={2}
                     value={profile.stimulus_coefficient ?? 1}
-                    onChange={(v) => updateLocalProfile(profile.lift, { stimulus_coefficient: coefficientValue(v) })}
+                    onChange={(e) => updateLocalProfile(profile.lift, { stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) })}
                     size="xs"
                   />
                   {profile.stimulus_coefficient_reasoning && (
@@ -1233,14 +1227,12 @@ export default function Dashboard() {
                 value={profileGuideDraft.volume_tolerance}
                 onChange={(v) => updateProfileGuideDraft({ volume_tolerance: v as 'low' | 'moderate' | 'high' })}
               />
-              <NumberInput
+              <TextInput
+                type="number"
                 label="Stimulus Coefficient"
-                min={1}
-                max={2}
                 step={0.05}
-                decimalScale={2}
                 value={profileGuideDraft.stimulus_coefficient ?? 1}
-                onChange={(v) => updateProfileGuideDraft({ stimulus_coefficient: coefficientValue(v) })}
+                onChange={(e) => updateProfileGuideDraft({ stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) })}
               />
             </Group>
 

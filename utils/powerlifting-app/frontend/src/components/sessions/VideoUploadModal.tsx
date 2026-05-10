@@ -6,7 +6,6 @@ import {
   Stack,
   Paper,
   Select,
-  NumberInput,
   TextInput,
   Progress,
   Text,
@@ -158,11 +157,11 @@ export default function VideoUploadModal({
         />
 
         {/* Set Number */}
-        <NumberInput
+        <TextInput
+          type="number"
           label="Set Number (optional)"
-          min={1}
-          value={setNumber}
-          onChange={(value) => setSetNumber(typeof value === 'number' ? value : undefined)}
+          value={setNumber ?? ''}
+          onChange={(e) => setSetNumber(e.currentTarget.value ? Number(e.currentTarget.value) : undefined)}
           placeholder="e.g., 1, 2, 3..."
           disabled={isUploading}
         />

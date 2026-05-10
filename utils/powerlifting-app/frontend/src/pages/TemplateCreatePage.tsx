@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Stack, Group, Title, Text, TextInput, Textarea, NumberInput, Button, Alert } from '@mantine/core'
+import { Stack, Group, Title, Text, TextInput, Textarea, Button, Alert } from '@mantine/core'
 import { createBlankTemplate } from '../api/client'
 import { templateEditRoute } from '../utils/templateRoutes'
 
@@ -74,18 +74,17 @@ export default function TemplateCreatePage() {
           autosize
           minRows={2}
         />
-        <NumberInput
+        <TextInput
+          type="number"
           label="Estimated Weeks"
           value={form.estimated_weeks}
-          onChange={(v) => setForm(f => ({ ...f, estimated_weeks: Number(v) || 4 }))}
-          min={1}
+          onChange={(e) => setForm(f => ({ ...f, estimated_weeks: Number(e.currentTarget.value) || 4 }))}
         />
-        <NumberInput
+        <TextInput
+          type="number"
           label="Days Per Week"
           value={form.days_per_week}
-          onChange={(v) => setForm(f => ({ ...f, days_per_week: Number(v) || 3 }))}
-          min={1}
-          max={7}
+          onChange={(e) => setForm(f => ({ ...f, days_per_week: Number(e.currentTarget.value) || 3 }))}
         />
       </Stack>
 

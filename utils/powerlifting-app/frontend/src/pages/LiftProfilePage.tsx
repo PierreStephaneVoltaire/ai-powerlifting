@@ -10,7 +10,6 @@ import {
   Grid,
   Group,
   Loader,
-  NumberInput,
   Paper,
   SegmentedControl,
   SimpleGrid,
@@ -418,13 +417,11 @@ export default function LiftProfilePage() {
                     <RotateCcw size={14} />
                   </ActionIcon>
                 </Group>
-                <NumberInput
-                  min={0.85}
-                  max={1.10}
+                <TextInput
+                  type="number"
                   step={0.01}
-                  decimalScale={2}
                   value={draft.e1rm_multiplier ?? 1.00}
-                  onChange={(value) => updateDraft({ e1rm_multiplier: multiplierValue(value) }, false)}
+                  onChange={(e) => updateDraft({ e1rm_multiplier: multiplierValue(Number(e.currentTarget.value)) }, false)}
                 />
                 <Text size="xs" c="dimmed">
                   Use this if the app consistently overestimates or underestimates your real
@@ -470,13 +467,11 @@ export default function LiftProfilePage() {
             <Paper withBorder p="md">
               <Stack gap="xs">
                 <Text size="sm" fw={500}>Stimulus Coefficient</Text>
-                <NumberInput
-                  min={1}
-                  max={2}
+                <TextInput
+                  type="number"
                   step={0.05}
-                  decimalScale={2}
                   value={draft.stimulus_coefficient ?? 1}
-                  onChange={(value) => updateDraft({ stimulus_coefficient: coefficientValue(value) }, false)}
+                  onChange={(e) => updateDraft({ stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) }, false)}
                 />
                 <Text size="xs" c="dimmed">Range is 1.00 to 2.00. Baseline competition-standard stimulus is 1.00.</Text>
               </Stack>
