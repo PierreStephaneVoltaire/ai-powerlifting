@@ -41,8 +41,6 @@ type LiftProfile = {
   // existing fields...
 
   e1rm_multiplier?: number
-  e1rm_multiplier_updated_at?: string
-  e1rm_multiplier_note?: string
 }
 ```
 
@@ -71,8 +69,6 @@ history in this task.
 Tasks:
 1. Update `packages/types/index.ts` so each `LiftProfile` can optionally store:
    - `e1rm_multiplier?: number`
-   - `e1rm_multiplier_updated_at?: string`
-   - `e1rm_multiplier_note?: string`
 2. Add helper logic wherever lift profiles are normalized:
    - missing `e1rm_multiplier` means `1.00`
    - clamp saved values to `0.85` through `1.10`
@@ -122,8 +118,6 @@ Add manual e1RM multiplier controls to the lift profile UI.
 Context:
 Each lift profile may now contain:
 - `e1rm_multiplier`
-- `e1rm_multiplier_updated_at`
-- `e1rm_multiplier_note`
 
 The multiplier is simple:
 adjusted e1RM = raw e1RM * multiplier.
@@ -140,8 +134,6 @@ Tasks:
    max for this lift. 1.00 means no adjustment. 0.96 lowers estimates by 4%."
 5. On save:
    - persist `e1rm_multiplier`
-   - set `e1rm_multiplier_updated_at` to the current timestamp
-   - optionally save `e1rm_multiplier_note`
 6. Add a reset button that sets multiplier back to `1.00`.
 7. If raw backend current maxes are available on the page, show a preview:
    - raw e1RM
@@ -381,7 +373,6 @@ Tasks:
    - button: `Apply suggestion`
    - button: `Ignore`
 8. Applying the suggestion simply writes it to `e1rm_multiplier`,
-   updates `e1rm_multiplier_updated_at`, and optionally writes a short note.
 9. Do not auto-apply without user action.
 
 Acceptance criteria:
