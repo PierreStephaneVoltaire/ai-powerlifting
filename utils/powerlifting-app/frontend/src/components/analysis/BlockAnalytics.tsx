@@ -20,7 +20,7 @@ import {
   Checkbox,
   Group,
   Loader,
-  NumberInput,
+  TextInput,
   Paper,
   SimpleGrid,
   Stack,
@@ -334,18 +334,19 @@ function BlockAnalysisDetails({
             ['bench_kg', 'Bench'],
             ['deadlift_kg', 'Deadlift'],
           ] as const).map(([key, label]) => (
-            <NumberInput
+            <TextInput
               key={key}
+              type="number"
               label={label}
               value={startMaxes[key] ?? ''}
-              min={0}
-              decimalScale={1}
-              fixedDecimalScale={false}
-              suffix=" kg"
-              onChange={(value) => {
+              rightSection={<Text size="xs" c="dimmed" pr="xs">kg</Text>}
+              rightSectionWidth={40}
+              step={0.5}
+              onChange={(e) => {
+                const value = e.currentTarget.value
                 setStartMaxes((current) => ({
                   ...current,
-                  [key]: typeof value === 'number' && Number.isFinite(value) ? value : null,
+                  [key]: value !== '' && !isNaN(Number(value)) ? Number(value) : null,
                 }))
               }}
             />

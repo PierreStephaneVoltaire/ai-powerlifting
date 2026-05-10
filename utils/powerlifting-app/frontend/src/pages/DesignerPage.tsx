@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, Trash2, X, Save, BarChart3, Copy, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 import {
   Stack, Group, Text, Button, Paper, Badge, Modal, SimpleGrid,
-  NumberInput, Select, ActionIcon, Autocomplete, Progress, Box, Divider
+  Select, ActionIcon, Autocomplete, Progress, Box, Divider, TextInput
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
@@ -112,11 +112,10 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
     switch (ex.load_source) {
       case 'rpe':
         return (
-          <NumberInput
+          <TextInput
+            type="number"
             value={ex.rpe_target || ''}
-            onChange={(v) => onUpdate(ex.id, 'rpe_target', Number(v) || null)}
-            min={0}
-            max={10}
+            onChange={(e) => onUpdate(ex.id, 'rpe_target', Number(e.currentTarget.value) || null)}
             step={0.5}
             w={70}
             placeholder="RPE"
@@ -126,13 +125,13 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
         return (
           <Group gap={4} wrap="nowrap">
             <Text size="xs" c="dimmed">~</Text>
-            <NumberInput
+            <TextInput
+              type="number"
               value={ex.kg !== null ? toDisplayUnit(ex.kg, unit) : ''}
-              onChange={(v) => onUpdate(ex.id, 'kg', v !== '' ? fromDisplayUnit(Number(v), unit) : null)}
-              min={0}
+              onChange={(e) => onUpdate(ex.id, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
               w={70}
               placeholder={unit}
-              decimalScale={unit === 'lb' ? 1 : 2}
+              step={0.5}
             />
           </Group>
         )
@@ -141,13 +140,13 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
       case 'absolute':
       default:
         return (
-          <NumberInput
+          <TextInput
+            type="number"
             value={ex.kg !== null ? toDisplayUnit(ex.kg, unit) : ''}
-            onChange={(v) => onUpdate(ex.id, 'kg', v !== '' ? fromDisplayUnit(Number(v), unit) : null)}
-            min={0}
+            onChange={(e) => onUpdate(ex.id, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
             w={70}
             placeholder={unit}
-            decimalScale={unit === 'lb' ? 1 : 2}
+            step={0.5}
           />
         )
     }
@@ -197,18 +196,18 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
         </Group>
       </Group>
       <Group gap={6}>
-        <NumberInput
-          value={ex.sets}
-          onChange={(v) => onUpdate(ex.id, 'sets', Number(v) || 0)}
-          min={0}
+        <TextInput
+          type="number"
+          value={ex.sets || ''}
+          onChange={(e) => onUpdate(ex.id, 'sets', Number(e.currentTarget.value) || 0)}
           w={60}
           placeholder="Sets"
         />
         <Text size="xs" c="dimmed">x</Text>
-        <NumberInput
-          value={ex.reps}
-          onChange={(v) => onUpdate(ex.id, 'reps', Number(v) || 0)}
-          min={0}
+        <TextInput
+          type="number"
+          value={ex.reps || ''}
+          onChange={(e) => onUpdate(ex.id, 'reps', Number(e.currentTarget.value) || 0)}
           w={60}
           placeholder="Reps"
         />
@@ -535,7 +534,7 @@ export default function DesignerPage() {
     return glossary.filter(e => e.name.toLowerCase().includes(q)).slice(0, 10)
   }, [glossary, exerciseSearch])
 
-  const autocompleteData = useMemo(() => filteredGlossary.map(e => e.name), [filteredGlossary])
+  const autocompleteData = useMemo(() => Array.from(new Set(filteredGlossary.map(e => e.name))), [filteredGlossary])
 
   return (
     <Stack gap="md">
@@ -798,22 +797,6 @@ export default function DesignerPage() {
                 }
               }}
             />
-            {exerciseSearch && filteredGlossary.length > 0 && (
-              <Stack gap={0} style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 'var(--mantine-radius-sm)', maxHeight: 160, overflowY: 'auto' }}>
-                {filteredGlossary.map(ex => (
-                  <Button
-                    key={ex.id}
-                    variant="subtle"
-                    fullWidth
-                    justify="flex-start"
-                    size="sm"
-                    onClick={() => addPlannedExercise(ex)}
-                  >
-                    {ex.name}
-                  </Button>
-                ))}
-              </Stack>
-            )}
             <Text size="xs" c="dimmed">Select an exercise from the dropdown to add it.</Text>
           </Stack>
 

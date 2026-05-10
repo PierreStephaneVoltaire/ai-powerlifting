@@ -127,6 +127,27 @@ async def health_get_lifetime_comparison(block_keys: list[str]) -> dict:
     comparison = build_block_comparison(bundles)
     return comparison
 
+async def health_suggest_e1rm_multipliers() -> dict:
+    """Generate e1RM multiplier suggestions based on comps and max history."""
+    store = _get_store()
+    program = await store.get_program()
+    if not program:
+        return {"error": "Program not found."}
+
+    # Fetch max history
+    max_history_item = await asyncio.get_running_loop().run_in_executor(
+        None,
+        _get_versioned_item_sync,
+        os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        store.pk,
+        f"max_history#{program['meta']['version_label']}"
+    )
+    max_history = (max_history_item or {}).get("entries", [])
+
+    from analytics import compute_e1rm_multiplier_suggestions
+    suggestions = compute_e1rm_multiplier_suggestions(program, max_history)
+    return suggestions
+
 def _get_rag():
     """Lazily create and return the HealthDocsRAG singleton."""
     global _rag

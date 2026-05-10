@@ -1206,14 +1206,14 @@ export default function AnalysisPage() {
                       {typeof raw === 'number' && <Text fz="xs" c="dimmed">Raw {raw.toFixed(2)}</Text>}
                       <Text fz="xs" c="dimmed">Stimulus x{coefficient.toFixed(2)}</Text>
                       <Text fz="xs" c="dimmed">{zoneMeta.label}</Text>
-                      <Text fz="xs" c="dimmed">
+                      <Text fz="xs" c="dimmed" visibleFrom="sm">
                         Target {(adjusted?.low ?? baseThresholds.low).toFixed(1)} - {(adjusted?.high ?? baseThresholds.high).toFixed(1)}
                       </Text>
-                      <Text fz="xs" c="dimmed">
+                      <Text fz="xs" c="dimmed" visibleFrom="sm">
                         Display {displayThresholds.low.toFixed(1)} - {displayThresholds.high.toFixed(1)}
                       </Text>
                       {trend && (
-                        <Text fz="xs" c="dimmed">
+                        <Text fz="xs" c="dimmed" visibleFrom="sm">
                           Trend {(trend.value * 100).toFixed(0)}%
                         </Text>
                       )}
@@ -1291,7 +1291,8 @@ export default function AnalysisPage() {
                   color={getAcwrZoneMeta((data.acwr as any).composite_zone).color}
                   variant="light"
                 >
-                  Composite: {(data.acwr as any).composite?.toFixed(2) ?? 'N/A'} ({(data.acwr as any).composite_label ?? getAcwrZoneMeta((data.acwr as any).composite_zone).label})
+                  Composite: {(data.acwr as any).composite?.toFixed(2) ?? 'N/A'}
+                  <Text span visibleFrom="sm"> ({(data.acwr as any).composite_label ?? getAcwrZoneMeta((data.acwr as any).composite_zone).label})</Text>
                 </Badge>
               </Group>
               <Text fz="xs" c="dimmed" mb="sm">
@@ -1304,7 +1305,7 @@ export default function AnalysisPage() {
                     <Stack key={dim} gap={2} ta="center" p="sm" style={{ borderRadius: 'var(--mantine-radius-sm)', background: `var(--mantine-color-${zoneMeta.color}-light)` }}>
                       <Text fz="xs" tt="capitalize">{dim}</Text>
                       <Text fz="xl" fw={700}>{info.value?.toFixed(2) ?? '--'}</Text>
-                      <Text fz="xs">{info.label ?? zoneMeta.label}</Text>
+                      <Text fz="xs" visibleFrom="sm">{info.label ?? zoneMeta.label}</Text>
                     </Stack>
                   )
                 })}
@@ -1547,7 +1548,7 @@ export default function AnalysisPage() {
                       <Table.Th ta="right">Deadlift</Table.Th>
                       <Table.Th ta="right" visibleFrom="sm">Total</Table.Th>
                       <Table.Th ta="right">DOTS</Table.Th>
-                      <Table.Th ta="right">IPF GL</Table.Th>
+                      <Table.Th ta="right" visibleFrom="sm">IPF GL</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -1559,7 +1560,7 @@ export default function AnalysisPage() {
                         <Table.Td ta="right">{r.deadlift !== null ? toDisplayUnit(r.deadlift, unit).toFixed(1) : '--'}</Table.Td>
                         <Table.Td ta="right" fw={500} visibleFrom="sm">{r.total !== null ? toDisplayUnit(r.total, unit).toFixed(1) : '--'}</Table.Td>
                         <Table.Td ta="right" fw={700} c="blue">{r.dots?.toFixed(2) ?? '--'}</Table.Td>
-                        <Table.Td ta="right">
+                        <Table.Td ta="right" visibleFrom="sm">
                           {r.ipfGl !== null && r.ipfGlMode !== null ? (
                             <Stack gap={0} align="flex-end">
                               <Text span fw={700} fz="sm">{r.ipfGl.toFixed(2)}</Text>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Stack, Title, Paper, Text, SimpleGrid, TextInput, Group, Loader, Center, Switch, NumberInput, Divider, Badge } from '@mantine/core'
+import { Stack, Title, Paper, Text, SimpleGrid, TextInput, Group, Loader, Center, Switch, Divider, Badge } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { updateMetaField } from '@/api/client'
 import { Trophy, ArrowUpCircle, Percent } from 'lucide-react'
@@ -117,16 +117,14 @@ export default function AttemptSelector() {
             { key: 'second' as const, label: 'Second Pct', hint: 'Default 0.955' },
             { key: 'third' as const, label: 'Third Pct', hint: 'Default 1.00' },
           ].map(({ key, label, hint }) => (
-            <NumberInput
+            <TextInput
               key={key}
+              type="number"
               label={label}
               size="sm"
               value={attemptPct[key]}
-              onChange={(v) => handleUpdatePct(key, Number(v))}
-              min={0}
-              max={2}
+              onChange={(e) => handleUpdatePct(key, Number(e.currentTarget.value))}
               step={0.005}
-              decimalScale={3}
               description={hint}
             />
           ))}
@@ -147,20 +145,21 @@ export default function AttemptSelector() {
                 />
               </Group>
 
-              <NumberInput
+              <TextInput
+                type="number"
                 label="Target Max (kg)"
                 value={liftSettings[lift].max || ''}
-                onChange={(v) => handleUpdateSetting(lift, 'max', Number(v) || 0)}
-                min={0}
+                onChange={(e) => handleUpdateSetting(lift, 'max', Number(e.currentTarget.value) || 0)}
                 placeholder="Target Max"
+                step={0.5}
               />
 
               {liftSettings[lift].incremental && (
-                <NumberInput
+                <TextInput
+                  type="number"
                   label="Increment (kg)"
                   value={liftSettings[lift].increment}
-                  onChange={(v) => handleUpdateSetting(lift, 'increment', Number(v) || 5)}
-                  min={0.5}
+                  onChange={(e) => handleUpdateSetting(lift, 'increment', Number(e.currentTarget.value) || 5)}
                   step={0.5}
                   placeholder="kg per attempt"
                 />

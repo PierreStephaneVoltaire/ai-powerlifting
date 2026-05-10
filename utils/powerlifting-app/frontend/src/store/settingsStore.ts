@@ -6,6 +6,7 @@ import { lbToKg } from '@/utils/units'
 
 export type Unit = 'kg' | 'lb'
 export type Theme = 'light' | 'dark' | 'system'
+export type SessionsView = 'Month' | 'Agenda' | 'Compact'
 
 interface SettingsState {
   unit: Unit
@@ -13,6 +14,7 @@ interface SettingsState {
   barWeightCustomized: boolean
   sex: Sex
   theme: Theme
+  defaultSessionsView: SessionsView
   plateInventoryKg: number[]
   plateInventoryLb: number[]
 
@@ -21,6 +23,7 @@ interface SettingsState {
   setBarWeight: (kg: number) => void
   setSex: (sex: Sex) => void
   setTheme: (theme: Theme) => void
+  setDefaultSessionsView: (view: SessionsView) => void
   setPlateInventoryKg: (plates: number[]) => void
   setPlateInventoryLb: (plates: number[]) => void
 }
@@ -70,6 +73,7 @@ export const useSettingsStore = create<SettingsState>()(
       barWeightCustomized: false,
       sex: 'male',
       theme: 'system',
+      defaultSessionsView: 'Agenda',
       plateInventoryKg: [],
       plateInventoryLb: [],
 
@@ -96,6 +100,8 @@ export const useSettingsStore = create<SettingsState>()(
         applyTheme(theme)
         set({ theme })
       },
+
+      setDefaultSessionsView: (defaultSessionsView) => set({ defaultSessionsView }),
 
       setPlateInventoryKg: (plates) => set({ plateInventoryKg: normalizePlateInventory(plates) }),
 

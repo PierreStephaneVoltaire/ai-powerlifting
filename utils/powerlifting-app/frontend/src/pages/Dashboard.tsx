@@ -815,107 +815,111 @@ export default function Dashboard() {
         </Paper>
 
         {/* Current Fatigue State */}
-        <Paper withBorder p="md">
-          <Group justify="space-between" mb="sm" align="flex-start">
-            <Group gap="xs">
-              <HeartPulse size={20} />
-              <Text fw={500}>Current Fatigue State</Text>
+        {!currentBlockCacheMissing && (
+          <Paper withBorder p="md">
+            <Group justify="space-between" mb="sm" align="flex-start">
+              <Group gap="xs">
+                <HeartPulse size={20} />
+                <Text fw={500}>Current Fatigue State</Text>
+              </Group>
+              {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
             </Group>
-            {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
-          </Group>
-          {currentBlockLoading ? (
-            <Group gap="xs">
-              <Loader size="sm" />
-              <Text size="sm" c="dimmed">Loading cached block analysis...</Text>
-            </Group>
-          ) : currentBlockWeekly ? (
-            <Stack gap="xs">
-              <Group justify="space-between" align="flex-end">
-                <Stack gap={0}>
-                  <Text fz="h1" fw={700} c={fatigueBadgeColor(currentBlockFatigue)}>
-                    {currentBlockFatigue !== null ? `${(currentBlockFatigue * 100).toFixed(0)}%` : 'N/A'}
+            {currentBlockLoading ? (
+              <Group gap="xs">
+                <Loader size="sm" />
+                <Text size="sm" c="dimmed">Loading cached block analysis...</Text>
+              </Group>
+            ) : currentBlockWeekly ? (
+              <Stack gap="xs">
+                <Group justify="space-between" align="flex-end">
+                  <Stack gap={0}>
+                    <Text fz="h1" fw={700} c={fatigueBadgeColor(currentBlockFatigue)}>
+                      {currentBlockFatigue !== null ? `${(currentBlockFatigue * 100).toFixed(0)}%` : 'N/A'}
+                    </Text>
+                    <Text size="sm" c="dimmed">{fatigueLabel(currentBlockFatigue)} current state</Text>
+                  </Stack>
+                  <Text size="xs" c="dimmed" ta="right">
+                    {currentBlockBundle?.block.startDate} to {currentBlockBundle?.block.endDate}
                   </Text>
-                  <Text size="sm" c="dimmed">{fatigueLabel(currentBlockFatigue)} current state</Text>
-                </Stack>
-                <Text size="xs" c="dimmed" ta="right">
-                  {currentBlockBundle?.block.startDate} to {currentBlockBundle?.block.endDate}
+                </Group>
+                <Group gap={6} wrap="wrap">
+                  {typeof currentBlockWeekly.fatigue_components?.window_mean_fi === 'number' && (
+                    <Badge variant="light" color="blue">
+                      Mean {(currentBlockWeekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%
+                    </Badge>
+                  )}
+                  {typeof currentBlockWeekly.fatigue_components?.window_peak_fi === 'number' && (
+                    <Badge variant="light" color="orange">
+                      Peak {(currentBlockWeekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%
+                    </Badge>
+                  )}
+                  {currentBlockWeekly.fatigue_components?.fatigue_context_confidence && (
+                    <Badge variant="light" color="gray">
+                      {currentBlockWeekly.fatigue_components.fatigue_context_confidence} confidence
+                    </Badge>
+                  )}
+                </Group>
+                <Text fz="xs" c="dimmed" lh="lg">
+                  Failures {((currentBlockWeekly.fatigue_components?.failure_stress ?? 0) * 100).toFixed(0)}%
+                  {' '}· Spike {((currentBlockWeekly.fatigue_components?.acute_spike_stress ?? 0) * 100).toFixed(0)}%
+                  {' '}· RPE {((currentBlockWeekly.fatigue_components?.rpe_stress ?? 0) * 100).toFixed(0)}%
+                  {' '}· Reservoir {((currentBlockWeekly.fatigue_components?.chronic_load_stress ?? 0) * 100).toFixed(0)}%
+                  {' '}· Strain {((currentBlockWeekly.fatigue_components?.monotony_stress ?? 0) * 100).toFixed(0)}%
                 </Text>
-              </Group>
-              <Group gap={6} wrap="wrap">
-                {typeof currentBlockWeekly.fatigue_components?.window_mean_fi === 'number' && (
-                  <Badge variant="light" color="blue">
-                    Mean {(currentBlockWeekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%
-                  </Badge>
-                )}
-                {typeof currentBlockWeekly.fatigue_components?.window_peak_fi === 'number' && (
-                  <Badge variant="light" color="orange">
-                    Peak {(currentBlockWeekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%
-                  </Badge>
-                )}
-                {currentBlockWeekly.fatigue_components?.fatigue_context_confidence && (
-                  <Badge variant="light" color="gray">
-                    {currentBlockWeekly.fatigue_components.fatigue_context_confidence} confidence
-                  </Badge>
-                )}
-              </Group>
-              <Text fz="xs" c="dimmed" lh="lg">
-                Failures {((currentBlockWeekly.fatigue_components?.failure_stress ?? 0) * 100).toFixed(0)}%
-                {' '}· Spike {((currentBlockWeekly.fatigue_components?.acute_spike_stress ?? 0) * 100).toFixed(0)}%
-                {' '}· RPE {((currentBlockWeekly.fatigue_components?.rpe_stress ?? 0) * 100).toFixed(0)}%
-                {' '}· Reservoir {((currentBlockWeekly.fatigue_components?.chronic_load_stress ?? 0) * 100).toFixed(0)}%
-                {' '}· Strain {((currentBlockWeekly.fatigue_components?.monotony_stress ?? 0) * 100).toFixed(0)}%
+              </Stack>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Cached block analysis unavailable.
               </Text>
-            </Stack>
-          ) : (
-            <Text size="sm" c="dimmed">
-              {currentBlockCacheMissing ? 'No cached current-block analysis available.' : 'Cached block analysis unavailable.'}
-            </Text>
-          )}
-        </Paper>
+            )}
+          </Paper>
+        )}
 
         {/* Per-Lift Breakdown */}
-        <Paper withBorder p="md" style={{ minWidth: 0 }}>
-          <Group justify="space-between" mb="sm" align="flex-start">
-            <Group gap="xs">
-              <Activity size={20} />
-              <Text fw={500}>Per-Lift Breakdown</Text>
+        {!currentBlockCacheMissing && (
+          <Paper withBorder p="md" style={{ minWidth: 0 }}>
+            <Group justify="space-between" mb="sm" align="flex-start">
+              <Group gap="xs">
+                <Activity size={20} />
+                <Text fw={500}>Per-Lift Breakdown</Text>
+              </Group>
+              {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
             </Group>
-            {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
-          </Group>
-          {currentBlockLoading ? (
-            <Group gap="xs">
-              <Loader size="sm" />
-              <Text size="sm" c="dimmed">Loading cached lift data...</Text>
-            </Group>
-          ) : currentBlockWeekly ? (
-            <Box style={{ overflowX: 'auto' }}>
-              <Table striped highlightOnHover withTableBorder={false} withColumnBorders={false} miw={360}>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Lift</Table.Th>
-                    <Table.Th>Current</Table.Th>
-                    <Table.Th>Trend</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {liftBreakdownRows.map((row) => (
-                    <Table.Tr key={row.lift}>
-                      <Table.Td fw={500}>{LIFT_LABELS[row.lift]}</Table.Td>
-                      <Table.Td>{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</Table.Td>
-                      <Table.Td>
-                        {typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}
-                      </Table.Td>
+            {currentBlockLoading ? (
+              <Group gap="xs">
+                <Loader size="sm" />
+                <Text size="sm" c="dimmed">Loading cached lift data...</Text>
+              </Group>
+            ) : currentBlockWeekly ? (
+              <Box style={{ overflowX: 'auto' }}>
+                <Table striped highlightOnHover withTableBorder={false} withColumnBorders={false} miw={360}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Lift</Table.Th>
+                      <Table.Th>Current</Table.Th>
+                      <Table.Th>Trend</Table.Th>
                     </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Box>
-          ) : (
-            <Text size="sm" c="dimmed">
-              {currentBlockCacheMissing ? 'No cached current-block lift breakdown available.' : 'Cached lift breakdown unavailable.'}
-            </Text>
-          )}
-        </Paper>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {liftBreakdownRows.map((row) => (
+                      <Table.Tr key={row.lift}>
+                        <Table.Td fw={500}>{LIFT_LABELS[row.lift]}</Table.Td>
+                        <Table.Td>{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</Table.Td>
+                        <Table.Td>
+                          {typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Box>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Cached lift breakdown unavailable.
+              </Text>
+            )}
+          </Paper>
+        )}
 
         {/* Program Phases */}
         <Paper withBorder p="md">

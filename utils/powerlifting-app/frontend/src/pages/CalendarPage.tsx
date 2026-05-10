@@ -6,7 +6,6 @@ import {
   Paper,
   Stack,
   Text,
-  SegmentedControl,
   Box,
   ThemeIcon,
   UnstyledButton,
@@ -14,6 +13,7 @@ import {
 } from '@mantine/core'
 import { Calendar } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { phaseColor } from '@/utils/phases'
 import { format } from 'date-fns'
 import { findClosestSessionToToday, parseLocalDate } from '@/utils/dates'
@@ -28,8 +28,8 @@ import { SessionsCompactView } from '@/components/sessions/SessionsCompactView'
 type ViewType = 'Month' | 'Agenda' | 'Compact'
 const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
 
-function parseSessionView(raw: string | null): ViewType {
-  return raw === 'Month' || raw === 'Compact' || raw === 'Agenda' ? raw : 'Agenda'
+function parseSessionView(raw: string | null): ViewType | null {
+  return raw === 'Month' || raw === 'Compact' || raw === 'Agenda' ? raw : null
 }
 
 function parseDateParam(raw: string | null): string | null {
@@ -47,24 +47,21 @@ function sessionRoute(session: Session, index: number): string {
 
 export default function CalendarPage() {
   const { program, isLoading } = useProgramStore()
+  const { defaultSessionsView } = useSettingsStore()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const agendaTargetRef = useRef<HTMLButtonElement | null>(null)
   const hasScrolledAgendaRef = useRef(false)
-  const view = parseSessionView(searchParams.get('view'))
+  const view = parseSessionView(searchParams.get('view')) || defaultSessionsView
   const calendarDate = parseDateParam(searchParams.get('date'))
   const sessionsBackTo = useMemo(() => {
     const query = searchParams.toString()
     return query ? `/sessions?${query}` : '/sessions'
   }, [searchParams])
 
-  const updateSessionParams = (updates: { view?: ViewType; date?: string | null }) => {
+  const updateSessionParams = (updates: { date?: string | null }) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
-
-      if (updates.view !== undefined) {
-        updates.view === 'Agenda' ? next.delete('view') : next.set('view', updates.view)
-      }
 
       if (updates.date !== undefined) {
         updates.date ? next.set('date', updates.date) : next.delete('date')
@@ -255,12 +252,6 @@ export default function CalendarPage() {
     <Stack gap="md">
       <Group justify="space-between" wrap="nowrap">
         <Text size="xl" fw={700}>Sessions</Text>
-        <SegmentedControl
-          size="xs"
-          data={['Month', 'Agenda', 'Compact']}
-          value={view}
-          onChange={(value) => updateSessionParams({ view: value as ViewType })}
-        />
       </Group>
 
       {view === 'Compact' ? (

@@ -598,6 +598,18 @@ export async function estimateMuscleGroups(exercise: {
   return res.data.data
 }
 
+export async function fetchE1rmMultiplierSuggestions(): Promise<Record<string, {
+  lift: string
+  suggested_multiplier: number
+  current_multiplier: number
+  difference: number
+  basis: string
+  sample_size: number
+} | null>> {
+  const res = await api.post<ApiResponse<any>>('/analytics/e1rm-multiplier/suggestions')
+  return res.data.data
+}
+
 // ─── Import ──────────────────────────────────────────────────────────────────
 
 export async function uploadImport(file: File): Promise<{ 

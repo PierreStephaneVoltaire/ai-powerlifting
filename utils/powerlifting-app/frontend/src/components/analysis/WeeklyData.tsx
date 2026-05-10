@@ -229,9 +229,9 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                     <Table.Th ta="right">Monotony</Table.Th>
                     <Table.Th ta="right">Raw</Table.Th>
                     <Table.Th ta="right">Strain</Table.Th>
-                    <Table.Th ta="right">Strain Index</Table.Th>
-                    <Table.Th ta="right">Days</Table.Th>
-                    <Table.Th ta="right">Flags</Table.Th>
+                    <Table.Th ta="right" visibleFrom="sm">Strain Index</Table.Th>
+                    <Table.Th ta="right" visibleFrom="sm">Days</Table.Th>
+                    <Table.Th ta="right" visibleFrom="sm">Flags</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -244,9 +244,9 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                         <Table.Td ta="right" c={row.monotony > 2 ? 'red' : 'green'}>{row.monotony.toFixed(2)}</Table.Td>
                         <Table.Td ta="right">{typeof row.monotony_raw === 'number' ? row.monotony_raw.toFixed(2) : '--'}</Table.Td>
                         <Table.Td ta="right">{row.strain.toFixed(1)}</Table.Td>
-                        <Table.Td ta="right">{typeof row.strain_index === 'number' ? row.strain_index.toFixed(2) : '--'}</Table.Td>
-                        <Table.Td ta="right">{row.nonzero_training_days ?? '--'}</Table.Td>
-                        <Table.Td ta="right">
+                        <Table.Td ta="right" visibleFrom="sm">{typeof row.strain_index === 'number' ? row.strain_index.toFixed(2) : '--'}</Table.Td>
+                        <Table.Td ta="right" visibleFrom="sm">{row.nonzero_training_days ?? '--'}</Table.Td>
+                        <Table.Td ta="right" visibleFrom="sm">
                           <Group gap="xs" wrap="wrap" justify="flex-end">
                             {row.flags.length > 0 ? row.flags.map(flag => (
                               <Badge key={flag} color="yellow" variant="light" size="sm">{flag}</Badge>

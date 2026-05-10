@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Menu, Button, Group, Badge, Avatar } from '@mantine/core'
+import { Menu, Button, Group, Badge } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
-import { useAuth } from '@/auth/AuthProvider'
-import { Copy, Settings, ChevronDown, Check, Archive, BookOpen, RotateCcw, LogOut, LogIn } from 'lucide-react'
+import { Copy, Settings, ChevronDown, Check, Archive, BookOpen, RotateCcw } from 'lucide-react'
 import * as api from '@/api/client'
 
 export default function TopBar() {
@@ -128,7 +127,7 @@ export default function TopBar() {
         </Menu.Dropdown>
       </Menu>
 
-      {/* Right: Unit toggle + Settings + Auth */}
+      {/* Right: Unit toggle + Settings */}
       <Group gap="xs">
         <Button variant="subtle" size="sm" onClick={toggleUnit}>
           {unit.toUpperCase()}
@@ -141,50 +140,7 @@ export default function TopBar() {
         >
           <Settings size={20} />
         </Button>
-
-        <AuthControl />
       </Group>
     </Group>
-  )
-}
-
-function AuthControl() {
-  const { user, loading, signIn, signOut } = useAuth()
-
-  if (loading) return null
-
-  if (!user) {
-    return (
-      <Button variant="light" size="sm" leftSection={<LogIn size={16} />} onClick={signIn}>
-        Sign in
-      </Button>
-    )
-  }
-
-  return (
-    <Menu shadow="md" width={200} position="bottom-end">
-      <Menu.Target>
-        <Button variant="subtle" p={4} style={{ borderRadius: '50%' }}>
-          <Avatar
-            src={user.avatar}
-            alt={user.username}
-            size={28}
-            radius="xl"
-          >
-            {user.username[0]?.toUpperCase()}
-          </Avatar>
-        </Button>
-      </Menu.Target>
-      <Menu.Dropdown>
-        <Menu.Label>{user.username}</Menu.Label>
-        <Menu.Item
-          leftSection={<LogOut size={14} />}
-          color="red"
-          onClick={signOut}
-        >
-          Sign out
-        </Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
   )
 }

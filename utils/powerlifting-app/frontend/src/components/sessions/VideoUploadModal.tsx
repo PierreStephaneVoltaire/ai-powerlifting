@@ -47,7 +47,7 @@ export default function VideoUploadModal({
 
   if (!isOpen) return null
 
-  const exerciseOptions = session.exercises.map((e) => e.name)
+  const exerciseOptions = Array.from(new Set(session.exercises.map((e) => e.name)))
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0]

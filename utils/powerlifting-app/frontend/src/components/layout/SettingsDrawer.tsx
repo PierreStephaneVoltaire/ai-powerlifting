@@ -1,10 +1,11 @@
-import { Drawer, SegmentedControl, NumberInput, Text, Stack, Group, Button, Select } from '@mantine/core'
+import { Drawer, SegmentedControl, NumberInput, Text, Stack, Group, Button, Select, Divider, Avatar } from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
 import { defaultBarWeightKgForUnit, useSettingsStore, type Theme } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
+import { useAuth } from '@/auth/AuthProvider'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
-import { Sun, Moon, Monitor } from 'lucide-react'
+import { Sun, Moon, Monitor, LogIn, LogOut } from 'lucide-react'
 import type { WeekStartDay } from '@powerlifting/types'
 
 const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -15,8 +16,12 @@ const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
 
 export default function SettingsDrawer() {
   const { drawerOpen, drawerType, closeDrawer } = useUiStore()
-  const { unit, theme, setTheme, sex, setSex, barWeightKg, setBarWeight } = useSettingsStore()
+  const {
+    unit, theme, setTheme, sex, setSex, barWeightKg, setBarWeight,
+    defaultSessionsView, setDefaultSessionsView,
+  } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
+  const { user, loading, signIn, signOut } = useAuth()
 
   const isOpen = drawerOpen && drawerType === 'settings'
 
@@ -30,6 +35,55 @@ export default function SettingsDrawer() {
       shadow="md"
     >
       <Stack gap="lg">
+        {/* Authentication */}
+        <div>
+          <Text size="sm" fw={500} mb="xs">
+            Account
+          </Text>
+          {loading ? (
+            <Text size="xs" c="dimmed">Loading account...</Text>
+          ) : user ? (
+            <Stack gap="xs">
+              <Group gap="sm">
+                <Avatar
+                  src={user.avatar}
+                  alt={user.username}
+                  size={32}
+                  radius="xl"
+                >
+                  {user.username[0]?.toUpperCase()}
+                </Avatar>
+                <Stack gap={0}>
+                  <Text size="sm" fw={600}>{user.username}</Text>
+                  <Text size="xs" c="dimmed">{user.email || 'Discord User'}</Text>
+                </Stack>
+              </Group>
+              <Button
+                variant="light"
+                color="red"
+                size="sm"
+                leftSection={<LogOut size={16} />}
+                onClick={signOut}
+                fullWidth
+              >
+                Sign out
+              </Button>
+            </Stack>
+          ) : (
+            <Button
+              variant="filled"
+              size="sm"
+              leftSection={<LogIn size={16} />}
+              onClick={signIn}
+              fullWidth
+            >
+              Sign in with Discord
+            </Button>
+          )}
+        </div>
+
+        <Divider />
+
         {/* Theme */}
         <div>
           <Text size="sm" fw={500} mb="xs">
@@ -52,6 +106,22 @@ export default function SettingsDrawer() {
               )
             })}
           </Group>
+        </div>
+
+        {/* Sessions View */}
+        <div>
+          <Text size="sm" fw={500} mb="xs">
+            Default Sessions View
+          </Text>
+          <Select
+            value={defaultSessionsView}
+            onChange={(val) => val && setDefaultSessionsView(val as 'Month' | 'Agenda' | 'Compact')}
+            data={[
+              { label: 'Agenda', value: 'Agenda' },
+              { label: 'Month', value: 'Month' },
+              { label: 'Compact', value: 'Compact' },
+            ]}
+          />
         </div>
 
         {/* Sex for DOTS calculation */}

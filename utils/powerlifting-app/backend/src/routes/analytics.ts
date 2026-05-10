@@ -68,6 +68,16 @@ async function snapshotCompetitionProjection(pk: string, date: string): Promise<
   }
 }
 
+// POST /api/analytics/e1rm-multiplier/suggestions
+analyticsRouter.post('/e1rm-multiplier/suggestions', async (req, res) => {
+  try {
+    const result = await invokeToolDirect('health_suggest_e1rm_multipliers', {})
+    res.json({ data: result })
+  } catch (error) {
+    res.status(500).json({ error: String(error) })
+  }
+})
+
 // GET /api/analytics/analysis/weekly-bundle?asOfDate=YYYY-MM-DD
 analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
   try {
