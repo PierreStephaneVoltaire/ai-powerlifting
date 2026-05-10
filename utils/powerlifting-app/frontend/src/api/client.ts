@@ -30,6 +30,7 @@ import type {
   TemplateListEntry,
   ConflictResolution,
   PostMeetReport,
+  WeekStartDay,
 } from '@powerlifting/types'
 
 const api = axios.create({
@@ -677,7 +678,7 @@ export async function evaluateTemplate(sk: string): Promise<AiTemplateEvaluation
 export async function applyTemplate(sk: string, body: {
   target: string;
   start_date?: string;
-  week_start_day: string;
+  week_start_day: WeekStartDay;
 }): Promise<any> {
   const res = await api.post(templatePath(sk, '/apply'), body)
   return res.data
@@ -686,7 +687,8 @@ export async function applyTemplate(sk: string, body: {
 export async function confirmApplyTemplate(sk: string, body: {
   backfilled_maxes?: Record<string, number>;
   start_date?: string;
-  week_start_day: string;
+  week_start_day: WeekStartDay;
+  target?: string;
 }): Promise<{ program_sk: string }> {
   const res = await api.post(templatePath(sk, '/apply/confirm'), body)
   return res.data

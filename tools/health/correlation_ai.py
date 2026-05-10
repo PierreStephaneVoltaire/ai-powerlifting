@@ -134,6 +134,14 @@ _TOOL_SCHEMA = {
 }
 
 
+def _executed_sets(ex: dict) -> float:
+    """Count completed or failed sets."""
+    statuses = ex.get("set_statuses")
+    if statuses and isinstance(statuses, list):
+        return float(sum(1 for status in statuses if status in {"completed", "failed"}))
+    return float(ex.get("sets") or 0)
+
+
 def _build_weekly_e1rm(sessions: list[dict], cutoff_str: str) -> dict[int, dict[str, float]]:
     """Build weekly best e1RM estimates per big lift from sessions."""
     weekly: dict[int, dict[str, float]] = {}
@@ -152,7 +160,7 @@ def _build_weekly_e1rm(sessions: list[dict], cutoff_str: str) -> dict[int, dict[
             name_lower = ex.get("name", "").lower()
             kg = ex.get("kg") or 0
             reps = ex.get("reps") or 0
-            if kg <= 0 or reps <= 0:
+            if kg <= 0 or reps <= 0 or _executed_sets(ex) <= 0:
                 continue
 
             # Estimate e1RM via Epley formula
@@ -204,7 +212,7 @@ def _build_weekly_accessory_volume(sessions: list[dict], cutoff_str: str) -> dic
             if name_lower in ("squat", "bench press", "deadlift"):
                 continue
 
-            vol = (ex.get("sets") or 0) * (ex.get("reps") or 0) * (ex.get("kg") or 0)
+            vol = _executed_sets(ex) * (ex.get("reps") or 0) * (ex.get("kg") or 0)
             if vol <= 0:
                 continue
 

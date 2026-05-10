@@ -133,6 +133,14 @@ export interface WeeklyAnalysis {
   selected_week_count?: number | null
   window_start?: string | null
   window_end?: string | null
+  selected_session_context?: Array<{
+    date?: string
+    week_number?: number
+    status?: string
+    completed?: boolean
+    session_notes?: string
+    planned_exercises?: Array<Record<string, unknown>>
+  }>
   block: string
   lifts: Record<string, {
     progression_rate_kg_per_week?: number | null
@@ -175,7 +183,17 @@ export interface WeeklyAnalysis {
     phase: string
     planned: number
     completed: number
+    missed?: number
     pct: number
+    planned_sets?: number
+    completed_sets?: number
+    set_pct?: number
+    planned_reps?: number
+    completed_reps?: number
+    rep_pct?: number
+    planned_volume?: number
+    completed_volume?: number
+    vol_pct?: number
   } | null
   current_maxes: {
     squat?: number

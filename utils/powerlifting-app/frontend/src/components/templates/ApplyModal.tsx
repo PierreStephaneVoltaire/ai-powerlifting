@@ -1,7 +1,10 @@
-import React, { useState } from 'react'
-import { Modal, Select, Button, Stack, Group, Text, Radio } from '@mantine/core'
+import React, { useEffect, useState } from 'react'
+import { Modal, Select, Button, Stack, Group } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { applyTemplate } from '../../api/client'
+import { useProgramStore } from '../../store/programStore'
+import { WEEK_START_DAYS, weekStartForBlock } from '../../utils/weekStart'
+import type { WeekStartDay } from '@powerlifting/types'
 
 interface Props {
   opened: boolean
@@ -13,8 +16,13 @@ interface Props {
 export const ApplyModal: React.FC<Props> = ({ opened, onClose, sk, onApply }) => {
   const [target, setTarget] = useState<string>('new_block')
   const [startDate, setStartDate] = useState<string | null>(new Date().toISOString().split('T')[0])
-  const [weekStartDay, setWeekStartDay] = useState<string>('Monday')
+  const [weekStartDay, setWeekStartDay] = useState<WeekStartDay>('Monday')
   const [loading, setLoading] = useState(false)
+  const { program } = useProgramStore()
+
+  useEffect(() => {
+    if (opened) setWeekStartDay(weekStartForBlock(program, 'current'))
+  }, [opened, program])
 
   const handleSubmit = async () => {
     setLoading(true)
@@ -53,16 +61,12 @@ export const ApplyModal: React.FC<Props> = ({ opened, onClose, sk, onApply }) =>
           onChange={setStartDate} 
         />
 
-        <Radio.Group 
+        <Select
           label="Week Start Day" 
           value={weekStartDay} 
-          onChange={setWeekStartDay}
-        >
-        <Group mt="xs">
-            <Radio value="Monday" label="Monday" />
-            <Radio value="Sunday" label="Sunday" />
-          </Group>
-        </Radio.Group>
+          onChange={(value) => value && setWeekStartDay(value as WeekStartDay)}
+          data={WEEK_START_DAYS.map((day) => ({ value: day, label: day }))}
+        />
 
         <Group justify="flex-end" mt="xl">
           <Button variant="subtle" onClick={onClose}>Cancel</Button>

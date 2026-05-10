@@ -8,7 +8,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "seed:glossary": "tsx src/scripts/seedGlossary.ts",
-    "backfill:planned": "tsx src/scripts/backfillPlanned.ts"
+    "backfill:planned": "tsx src/scripts/backfillPlanned.ts",
+    "set:week-start": "tsx src/scripts/setCurrentWeekStart.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.0.0",

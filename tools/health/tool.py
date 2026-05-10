@@ -3310,7 +3310,8 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                     "sk": {"type": "string"},
                     "backfilled_maxes": {"type": "object"},
                     "start_date": {"type": "string"},
-                    "week_start_day": {"type": "string"}
+                    "week_start_day": {"type": "string"},
+                    "target": {"type": "string", "description": "Apply strategy", "default": "new_block"}
                 },
                 "required": ["sk"],
             },
@@ -4019,8 +4020,8 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "import_get_pending": lambda: import_get_pending(args["import_id"]),
         "template_list": lambda: template_list(args.get("include_archived", False)),
         "template_get": lambda: template_get(args["sk"]),
-        "template_apply": lambda: template_apply(args["sk"], args.get("target", "new_block"), args.get("start_date"), args.get("week_start_day", "Monday")),
-        "template_apply_confirm": lambda: template_apply_confirm(args["sk"], args.get("backfilled_maxes"), args.get("start_date"), args.get("week_start_day", "Monday")),
+        "template_apply": lambda: template_apply(args["sk"], args.get("target", "new_block"), args.get("start_date"), args.get("week_start_day")),
+        "template_apply_confirm": lambda: template_apply_confirm(args["sk"], args.get("backfilled_maxes"), args.get("start_date"), args.get("week_start_day"), args.get("target", "new_block")),
         "template_evaluate": lambda: template_evaluate(args["sk"]),
         "template_create_from_block": lambda: template_create_from_block(args["name"], args.get("program_sk")),
         "template_copy": lambda: template_copy(args["sk"], args["new_name"]),
@@ -4277,7 +4278,7 @@ class TemplateApplyAction(Action):
     sk: str = Field(description="SK of the template to apply")
     target: str = Field(default="new_block", description="Target: new_block, append, replace_planned")
     start_date: Optional[str] = Field(default=None, description="Start date (YYYY-MM-DD)")
-    week_start_day: str = Field(default="Monday", description="Week start day: Saturday, Monday, Sunday")
+    week_start_day: str = Field(default="Monday", description="Week start day")
 
 
 class TemplateApplyObservation(Observation):
@@ -4308,6 +4309,7 @@ class TemplateApplyConfirmAction(Action):
     backfilled_maxes: Optional[Dict[str, float]] = Field(default=None, description="Manual or AI backfilled maxes")
     start_date: Optional[str] = Field(default=None, description="Start date (YYYY-MM-DD)")
     week_start_day: str = Field(default="Monday", description="Week start day")
+    target: str = Field(default="new_block", description="Target: new_block, append, replace_planned")
 
 
 class TemplateApplyConfirmObservation(Observation):
@@ -4317,7 +4319,7 @@ class TemplateApplyConfirmObservation(Observation):
 class TemplateApplyConfirmExecutor(ToolExecutor[TemplateApplyConfirmAction, TemplateApplyConfirmObservation]):
     def __call__(self, action: TemplateApplyConfirmAction, conversation=None) -> TemplateApplyConfirmObservation:
         from core import template_apply_confirm
-        result = _run_async(template_apply_confirm(action.sk, action.backfilled_maxes, action.start_date, action.week_start_day))
+        result = _run_async(template_apply_confirm(action.sk, action.backfilled_maxes, action.start_date, action.week_start_day, action.target))
         return TemplateApplyConfirmObservation.from_text(_format_result(result))
 
 
@@ -4746,6 +4748,38 @@ class GlossaryEstimateMusclesTool(ToolDefinition[GlossaryEstimateMusclesAction, 
         )]
 
 
+class HealthGetLifetimeComparisonAction(Action):
+    block_keys: list[str] = Field(description="Keys of the blocks to compare.")
+
+
+class HealthGetLifetimeComparisonObservation(Observation):
+    pass
+
+
+class HealthGetLifetimeComparisonExecutor(ToolExecutor[HealthGetLifetimeComparisonAction, HealthGetLifetimeComparisonObservation]):
+    def __call__(self, action: HealthGetLifetimeComparisonAction, conversation=None) -> HealthGetLifetimeComparisonObservation:
+        from core import health_get_lifetime_comparison
+        result = _run_async(health_get_lifetime_comparison(action.block_keys))
+        return HealthGetLifetimeComparisonObservation.from_text(_format_result(result))
+
+
+class HealthGetLifetimeComparisonTool(ToolDefinition[HealthGetLifetimeComparisonAction, HealthGetLifetimeComparisonObservation]):
+    @classmethod
+    def create(cls, conv_state=None, **params) -> Sequence["HealthGetLifetimeComparisonTool"]:
+        return [cls(
+            description=(
+                "Generate a consolidated lifetime comparison report for multiple training blocks. "
+                "Aggregates trends (SBD total, dots, volume, fatigue), exercise ROI signals, "
+                "dose-response efficiency, and training patterns across the selected blocks. "
+                "Requires cached analysis for each block."
+            ),
+            action_type=HealthGetLifetimeComparisonAction,
+            observation_type=HealthGetLifetimeComparisonObservation,
+            executor=HealthGetLifetimeComparisonExecutor(),
+        )]
+
+
+register_tool("HealthGetLifetimeComparisonTool", HealthGetLifetimeComparisonTool)
 register_tool("GlossarySetE1rmTool", GlossarySetE1rmTool)
 register_tool("GlossaryEstimateE1rmTool", GlossaryEstimateE1rmTool)
 register_tool("GlossaryEstimateFatigueTool", GlossaryEstimateFatigueTool)

@@ -415,7 +415,7 @@ export function allTimeMaxByExercise(
   for (const session of filterByBlock(sessions, block)) {
     if (!session.completed) continue
     for (const ex of session.exercises) {
-      if (ex.kg == null) continue
+      if (ex.kg == null || executedSets(ex) <= 0) continue
       const key = normalizeExerciseName(ex.name)
       const existing = maxes.get(key)
       if (!existing || ex.kg > existing.kg) {
@@ -445,7 +445,7 @@ export function maxByCategoryInWindow(
     if (!session.completed) continue
     if (session.date < startDate || session.date > endDate) continue
     for (const ex of session.exercises) {
-      if (ex.kg == null) continue
+      if (ex.kg == null || executedSets(ex) <= 0) continue
       const cat = categorizeExercise(ex.name)
       if (cat in result && ex.kg > result[cat]) {
         result[cat] = ex.kg

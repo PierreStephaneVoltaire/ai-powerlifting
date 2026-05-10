@@ -15,8 +15,9 @@ import { calculateDots } from '@/utils/dots'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit, displayWeight } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
+import { programWeekEndDate, programWeekStartDate, resolveTrainingWeekForDate, trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
-import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session } from '@powerlifting/types'
+import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session, WeekStartDay } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
 import {
   Stack, Group, Paper, SimpleGrid, Text, Title, Badge, Table,
@@ -136,34 +137,20 @@ function toDateStr(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-function isCompletedOrDue(session: Session, todayStr: string): boolean {
-  return Boolean(
-    session.completed ||
-    session.status === 'logged' ||
-    session.status === 'completed' ||
-    session.date <= todayStr,
-  )
-}
-
-function getCurrentTrainingWeek(sessions: Session[], todayStr: string): number {
-  const currentOrPastWeeks = sessions
-    .filter(s => (s.block ?? 'current') === 'current' && s.week_number > 0 && isCompletedOrDue(s, todayStr))
-    .map(s => s.week_number)
-  if (currentOrPastWeeks.length) return Math.max(...currentOrPastWeeks)
-
-  const allWeeks = sessions
-    .filter(s => (s.block ?? 'current') === 'current' && s.week_number > 0)
-    .map(s => s.week_number)
-  return allWeeks.length ? Math.min(...allWeeks) : 1
-}
-
 function getAnalysisWindow(
   mode: WeeksMode,
   sessions: Session[] = [],
   programStart?: string | null,
+  weekStartDay: WeekStartDay = 'Monday',
+  asOfDate = toDateStr(new Date()),
 ) {
-  const todayStr = toDateStr(new Date())
-  const currentWeek = getCurrentTrainingWeek(sessions, todayStr)
+  const currentWeek = resolveTrainingWeekForDate(
+    asOfDate,
+    programStart ?? sessions[0]?.date ?? asOfDate,
+    weekStartDay,
+    sessions,
+    'current',
+  )
   let weekStart: number
   let weekEnd: number
 
@@ -175,22 +162,15 @@ function getAnalysisWindow(
     weekEnd = currentWeek
   } else {
     const weeks = Math.max(1, mode)
-    weekEnd = Math.max(1, currentWeek - 1)
-    weekStart = Math.max(1, weekEnd - weeks + 1)
+    weekEnd = currentWeek
+    weekStart = Math.max(1, currentWeek - weeks)
   }
 
-  const selectedSessions = sessions
-    .filter(s => (s.block ?? 'current') === 'current' && s.week_number >= weekStart && s.week_number <= weekEnd)
-    .sort((a, b) => a.date.localeCompare(b.date))
-  const selectedDates = selectedSessions.map(s => s.date).filter(Boolean)
-  const start = selectedDates[0] ?? programStart ?? todayStr
-  const rawEnd = mode === 'current' || mode === 'block'
-    ? todayStr
-    : selectedDates[selectedDates.length - 1] ?? todayStr
-  const end = rawEnd > todayStr ? todayStr : rawEnd
+  const start = programWeekStartDate(programStart ?? sessions[0]?.date ?? asOfDate, weekStart, weekStartDay)
+  const end = programWeekEndDate(programStart ?? sessions[0]?.date ?? asOfDate, weekEnd, weekStartDay)
 
   return {
-    start,
+    start: programStart && start < programStart ? programStart : start,
     end,
     weekStart,
     weekEnd,
@@ -325,6 +305,8 @@ export default function AnalysisPage() {
   const [error, setError] = useState<string | null>(null)
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
+  const asOfDate = useMemo(() => toDateStr(new Date()), [])
+  const currentWeekStartDay = weekStartForBlock(program, 'current')
 
   const updateAnalysisParams = (updates: { type?: AnalysisSection; weeks?: WeeksMode; view?: AnalysisViewMode }) => {
     setSearchParams((current) => {
@@ -348,10 +330,10 @@ export default function AnalysisPage() {
   }
 
   const analysisWindow = useMemo(
-    () => getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start),
-    [program?.meta?.program_start, program?.sessions, weeksMode],
+    () => analysisBundle?.windows[analysisKeyForMode(weeksMode)]
+      ?? getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start, currentWeekStartDay, asOfDate),
+    [analysisBundle?.windows, asOfDate, currentWeekStartDay, program?.meta?.program_start, program?.sessions, weeksMode],
   )
-  const asOfDate = useMemo(() => toDateStr(new Date()), [])
   const analysisKey = analysisKeyForMode(weeksMode)
   const data = analysisBundle?.results[analysisKey] ?? null
 
@@ -362,9 +344,8 @@ export default function AnalysisPage() {
   }, [program?.competitions])
 
   const upcomingCompetition = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    return competitions.find(c => (c.status === 'confirmed' || c.status === 'optional') && c.date >= today) || null
-  }, [competitions])
+    return competitions.find(c => (c.status === 'confirmed' || c.status === 'optional') && c.date >= asOfDate) || null
+  }, [asOfDate, competitions])
 
   const analysisWindowStartStr = useMemo(
     () => analysisWindow.start,
@@ -471,13 +452,14 @@ export default function AnalysisPage() {
       for (const s of filteredSessions) {
         let hasLift = false
         for (const ex of s.exercises || []) {
+          const sets = executedSets(ex)
+          if (sets <= 0) continue
           const exLower = ex.name.toLowerCase().trim()
           const info = glossaryCategory.get(normalizeExerciseName(ex.name))
           const isMainLift = exLower === liftName || (liftName === 'bench' && exLower === 'bench press')
           if (isMainLift || (info && info === category)) hasLift = true
-          if (isMainLift) rawSets += executedSets(ex)
+          if (isMainLift) rawSets += sets
           if (info && info === category && !isMainLift) {
-            const sets = executedSets(ex)
             const vol = exerciseVolume(ex)
             if (!accessoryMap[ex.name]) accessoryMap[ex.name] = { sets: 0, volume: 0 }
             accessoryMap[ex.name].sets += sets
@@ -514,10 +496,7 @@ export default function AnalysisPage() {
 
     const weeklyMap = new Map<string, { calories: number[]; water: number[]; protein: number[]; carb: number[]; fat: number[]; sleep: number[]; consistent: number; total: number }>()
     for (const note of inWindow) {
-      const d = new Date(note.date)
-      const day = d.getDay() || 7
-      d.setDate(d.getDate() - day + 1)
-      const weekKey = d.toISOString().slice(0, 10)
+      const weekKey = trainingWeekStartForDate(note.date, program.meta.program_start, currentWeekStartDay)
       const bucket = weeklyMap.get(weekKey) || { calories: [], water: [], protein: [], carb: [], fat: [], sleep: [], consistent: 0, total: 0 }
       if (note.avg_daily_calories != null) bucket.calories.push(note.avg_daily_calories)
       if (note.water_intake != null) bucket.water.push(note.water_intake)
@@ -571,7 +550,7 @@ export default function AnalysisPage() {
       consistencyPct: inWindow.length ? Math.round((consistent / inWindow.length) * 100) : null,
       entries: inWindow.length,
     }
-  }, [program?.diet_notes, analysisWindowEndStr, analysisWindowStartStr])
+  }, [currentWeekStartDay, program, analysisWindowEndStr, analysisWindowStartStr])
 
   const bodyweightEntries = useMemo(
     () => mergeBodyweightEntries(weightLog, bodyweightSessions),
@@ -615,6 +594,7 @@ export default function AnalysisPage() {
         const name = ex.name.toLowerCase()
         const kg = ex.kg || 0
         const reps = ex.reps || 0
+        if (executedSets(ex) <= 0) continue
         const rpe = (ex as { rpe?: number | null }).rpe ?? s.session_rpe
         const e1rm = estimateAnalysisE1rm(kg, reps, rpe)
         if (e1rm == null) continue
@@ -851,16 +831,33 @@ export default function AnalysisPage() {
             </Paper>
 
             <Paper withBorder p="md">
-              <Group gap="xs" mb="xs">
+              <Group gap="xs" mb="sm">
                 <CheckCircle size={18} />
                 <Text fw={500}>Compliance</Text>
               </Group>
               {data.compliance ? (
-                <Stack gap={2}>
-                  <Text fz="2rem" fw={700} c={complianceBadgeColor(data.compliance.pct)}>{data.compliance.pct.toFixed(0)}%</Text>
-                  <Text fz="sm" c="dimmed">{data.compliance.completed}/{data.compliance.planned} sessions</Text>
-                  <Text fz="xs" c="dimmed">{data.compliance.phase} block</Text>
-                  {avgSessionsPerWeek !== null && <Text fz="xs" c="dimmed">Avg {avgSessionsPerWeek} sessions/wk</Text>}
+                <Stack gap="sm">
+                  <SimpleGrid cols={3} spacing="xs">
+                    <Stack gap={0} ta="center">
+                      <Text fz="xs" c="dimmed">Sessions</Text>
+                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.pct)}>{data.compliance.pct.toFixed(0)}%</Text>
+                      <Text fz="xs" c="dimmed">{data.compliance.completed}/{data.compliance.planned}</Text>
+                    </Stack>
+                    <Stack gap={0} ta="center">
+                      <Text fz="xs" c="dimmed">Sets</Text>
+                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.set_pct ?? 0)}>{data.compliance.set_pct?.toFixed(0)}%</Text>
+                      <Text fz="xs" c="dimmed">{data.compliance.completed_sets}/{data.compliance.planned_sets}</Text>
+                    </Stack>
+                    <Stack gap={0} ta="center">
+                      <Text fz="xs" c="dimmed">Volume</Text>
+                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.vol_pct ?? 0)}>{data.compliance.vol_pct?.toFixed(0)}%</Text>
+                      <Text fz="xs" c="dimmed" truncate>{Math.round(toDisplayUnit(data.compliance.completed_volume ?? 0, unit)).toLocaleString()} {unit}</Text>
+                    </Stack>
+                  </SimpleGrid>
+                  <Box>
+                    <Text fz="xs" c="dimmed" ta="center">{data.compliance.phase} block</Text>
+                    {avgSessionsPerWeek !== null && <Text fz="xs" c="dimmed" ta="center">Avg {avgSessionsPerWeek} sessions/wk</Text>}
+                  </Box>
                 </Stack>
               ) : <Text fz="sm" c="dimmed">No compliance data</Text>}
             </Paper>

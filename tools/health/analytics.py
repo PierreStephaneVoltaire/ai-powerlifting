@@ -433,7 +433,7 @@ def _best_primary_e1rm_for_sessions(w_sessions: list[dict]) -> Optional[float]:
         for ex in s.get("exercises", []):
             if ex.get("name", "").lower().strip() not in _PRIMARY_LIFT_NAMES:
                 continue
-            if _count_failed_sets(ex) > 0:
+            if _count_failed_sets(ex) > 0 or _executed_sets(ex) <= 0:
                 continue
             kg = _num(ex.get("kg", 0))
             reps = int(_num(ex.get("reps", 0)))
@@ -477,30 +477,31 @@ def _detect_deloads(
         program_start = _infer_program_start(sessions)
 
     week_sessions: dict[int, list[dict]] = {}
+    last_wk = 1
     for s in sessions:
-        if not (s.get("completed") or s.get("status") in ("logged", "completed")):
-            continue
         wk = _session_week_num(s, program_start)
         if wk is None:
             continue
+        if wk > last_wk:
+            last_wk = wk
+        if not (s.get("completed") or s.get("status") in ("logged", "completed")):
+            continue
         week_sessions.setdefault(wk, []).append(s)
 
-    if not week_sessions:
-        return []
-
-    sorted_weeks = sorted(week_sessions.keys())
+    all_wks = list(range(1, last_wk + 1))
     results = []
     prev_non_deload_vls: list[float] = []
     prev_non_deload_e1rms: list[float] = []
 
-    for wk in sorted_weeks:
-        w_sessions = week_sessions[wk]
+    for wk in all_wks:
+        w_sessions = week_sessions.get(wk, [])
 
         vl = sum(_executed_volume(ex) for s in w_sessions for ex in s.get("exercises", []))
         is_break = vl == 0.0
 
         has_main_lift = any(
             ex.get("name", "").lower().strip() in _PRIMARY_LIFT_NAMES
+            and _executed_sets(ex) > 0
             for s in w_sessions for ex in s.get("exercises", [])
         )
 
@@ -1117,7 +1118,7 @@ def progression_rate(
         for ex in s.get("exercises", []):
             if ex.get("name", "").lower() != name_lower:
                 continue
-            if _count_failed_sets(ex) > 0:
+            if _count_failed_sets(ex) > 0 or _executed_sets(ex) <= 0:
                 continue
             kg = _num(ex.get("kg", 0))
             reps = int(_num(ex.get("reps", 0)))
@@ -1499,10 +1500,16 @@ def fatigue_index(
         acwr_result = compute_acwr(history_sessions, glossary, program_start, current_maxes or {}, ref_date=wk_end_date)
         acwr_val = acwr_result.get("composite", 0) or 0
         is_overload = False
-        if chronic_load_stress >= 0.35: is_overload = True
-        elif acwr_val >= 1.15: is_overload = True
-        elif intensity_density_stress >= 0.50: is_overload = True
-        elif med_strain > 0 and strain >= med_strain * 1.25: is_overload = True
+        if wk in deload_weeks:
+            is_overload = False
+        elif chronic_load_stress >= 0.35:
+            is_overload = True
+        elif acwr_val >= 1.15:
+            is_overload = True
+        elif intensity_density_stress >= 0.50:
+            is_overload = True
+        elif med_strain > 0 and strain >= med_strain * 1.25:
+            is_overload = True
         
         if is_overload:
             streak += 1
@@ -1600,15 +1607,47 @@ def fatigue_index(
         "window_weighted_fi": round(final_fi, 3),
         "window_mean_fi": round(window_mean, 3),
         "window_peak_fi": round(window_peak, 3),
+        "weekly_fis": window_fis,
         "components": components,
         "flags": flags,
     }
 
 
-def session_compliance(sessions: list[dict], phases: list[dict], program_start: str, weeks: int = 4) -> dict:
+def _get_session_compliance_stats(session: dict) -> dict:
+    planned_exs = session.get("planned_exercises") or []
+    actual_exs = session.get("exercises") or []
+
+    # If no planned exercises but session is completed, assume 100% compliance for this session's volume
+    if not planned_exs and _is_completed_session(session):
+        exec_sets = sum(_executed_sets(ex) for ex in actual_exs)
+        exec_reps = sum(_executed_sets(ex) * _num(ex.get("reps", 0)) for ex in actual_exs)
+        exec_vol = sum(_executed_volume(ex) for ex in actual_exs)
+        return {
+            "p_sets": exec_sets, "c_sets": exec_sets,
+            "p_reps": exec_reps, "c_reps": exec_reps,
+            "p_vol": exec_vol, "c_vol": exec_vol,
+        }
+
+    p_sets = sum(_num(ex.get("sets", 0)) for ex in planned_exs)
+    p_reps = sum(_num(ex.get("sets", 0)) * _num(ex.get("reps", 0)) for ex in planned_exs)
+    p_vol = sum(_num(ex.get("sets", 0)) * _num(ex.get("reps", 0)) * _num(ex.get("kg", 0)) for ex in planned_exs)
+
+    c_sets = sum(_executed_sets(ex) for ex in actual_exs)
+    c_reps = sum(_executed_sets(ex) * _num(ex.get("reps", 0)) for ex in actual_exs)
+    c_vol = sum(_executed_volume(ex) for ex in actual_exs)
+
+    return {
+        "p_sets": p_sets, "c_sets": c_sets,
+        "p_reps": p_reps, "c_reps": c_reps,
+        "p_vol": p_vol, "c_vol": c_vol,
+    }
+
+
+def session_compliance(sessions: list[dict], phases: list[dict], program_start: str, weeks: int = 4, ref_date: date | None = None) -> dict:
     """All weeks counted — no deload/break exclusions."""
     current_week = _calculate_current_week(program_start, sessions)
     cutoff_week = max(1, current_week - weeks + 1)
+    ref = ref_date or date.today()
 
     sessions_in_window = [
         s for s in sessions
@@ -1616,8 +1655,34 @@ def session_compliance(sessions: list[dict], phases: list[dict], program_start: 
         and cutoff_week <= int(s.get("week_number", 0)) <= current_week
     ]
     planned_count = len(sessions_in_window)
-    completed_count = sum(1 for s in sessions_in_window if s.get("completed") or s.get("status") in ("logged", "completed"))
+    completed_count = sum(1 for s in sessions_in_window if _is_completed_session(s))
+    missed_count = sum(
+        1 for s in sessions_in_window
+        if s.get("status") == "skipped"
+        or s.get("_inferred_skipped")
+        or (not _is_completed_session(s) and (d := _parse_date(s.get("date", ""))) and d < ref)
+    )
+
+    total_p_sets = 0.0
+    total_c_sets = 0.0
+    total_p_reps = 0.0
+    total_c_reps = 0.0
+    total_p_vol = 0.0
+    total_c_vol = 0.0
+
+    for s in sessions_in_window:
+        stats = _get_session_compliance_stats(s)
+        total_p_sets += stats["p_sets"]
+        total_c_sets += stats["c_sets"]
+        total_p_reps += stats["p_reps"]
+        total_c_reps += stats["c_reps"]
+        total_p_vol += stats["p_vol"]
+        total_c_vol += stats["c_vol"]
+
     compliance_pct = round((completed_count / planned_count) * 100, 1) if planned_count > 0 else 0
+    set_compliance_pct = round((total_c_sets / total_p_sets) * 100, 1) if total_p_sets > 0 else (100.0 if completed_count > 0 else 0.0)
+    rep_compliance_pct = round((total_c_reps / total_p_reps) * 100, 1) if total_p_reps > 0 else (100.0 if completed_count > 0 else 0.0)
+    vol_compliance_pct = round((total_c_vol / total_p_vol) * 100, 1) if total_p_vol > 0 else (100.0 if completed_count > 0 else 0.0)
 
     current_phase = _find_current_phase(phases, current_week)
     phase_name = current_phase.get("name", "Unknown") if current_phase else "Unknown"
@@ -1626,7 +1691,17 @@ def session_compliance(sessions: list[dict], phases: list[dict], program_start: 
         "phase": phase_name,
         "planned_sessions": planned_count,
         "completed_sessions": completed_count,
+        "missed_sessions": missed_count,
         "compliance_pct": compliance_pct,
+        "planned_sets": total_p_sets,
+        "completed_sets": total_c_sets,
+        "set_compliance_pct": set_compliance_pct,
+        "planned_reps": total_p_reps,
+        "completed_reps": total_c_reps,
+        "rep_compliance_pct": rep_compliance_pct,
+        "planned_volume": total_p_vol,
+        "completed_volume": total_c_vol,
+        "vol_compliance_pct": vol_compliance_pct,
     }
 
 
@@ -1635,8 +1710,10 @@ def session_compliance_for_week_window(
     phases: list[dict],
     week_start: int,
     week_end: int,
+    ref_date: date | None = None,
 ) -> dict:
     """Compliance for an explicit inclusive training-week range."""
+    ref = ref_date or date.today()
     sessions_in_window = [
         s for s in sessions
         if (s.get("status") in ("planned", "logged", "completed", "skipped") or not s.get("status"))
@@ -1644,7 +1721,33 @@ def session_compliance_for_week_window(
     ]
     planned_count = len(sessions_in_window)
     completed_count = sum(1 for s in sessions_in_window if _is_completed_session(s))
+    missed_count = sum(
+        1 for s in sessions_in_window
+        if s.get("status") == "skipped"
+        or s.get("_inferred_skipped")
+        or (not _is_completed_session(s) and (d := _parse_date(s.get("date", ""))) and d < ref)
+    )
+
+    total_p_sets = 0.0
+    total_c_sets = 0.0
+    total_p_reps = 0.0
+    total_c_reps = 0.0
+    total_p_vol = 0.0
+    total_c_vol = 0.0
+
+    for s in sessions_in_window:
+        stats = _get_session_compliance_stats(s)
+        total_p_sets += stats["p_sets"]
+        total_c_sets += stats["c_sets"]
+        total_p_reps += stats["p_reps"]
+        total_c_reps += stats["c_reps"]
+        total_p_vol += stats["p_vol"]
+        total_c_vol += stats["c_vol"]
+
     compliance_pct = round((completed_count / planned_count) * 100, 1) if planned_count > 0 else 0
+    set_compliance_pct = round((total_c_sets / total_p_sets) * 100, 1) if total_p_sets > 0 else (100.0 if completed_count > 0 else 0.0)
+    rep_compliance_pct = round((total_c_reps / total_p_reps) * 100, 1) if total_p_reps > 0 else (100.0 if completed_count > 0 else 0.0)
+    vol_compliance_pct = round((total_c_vol / total_p_vol) * 100, 1) if total_p_vol > 0 else (100.0 if completed_count > 0 else 0.0)
 
     if week_start == week_end:
         phase = _find_current_phase(phases, week_end)
@@ -1663,7 +1766,17 @@ def session_compliance_for_week_window(
         "phase": phase_name,
         "planned_sessions": planned_count,
         "completed_sessions": completed_count,
+        "missed_sessions": missed_count,
         "compliance_pct": compliance_pct,
+        "planned_sets": total_p_sets,
+        "completed_sets": total_c_sets,
+        "set_compliance_pct": set_compliance_pct,
+        "planned_reps": total_p_reps,
+        "completed_reps": total_c_reps,
+        "rep_compliance_pct": rep_compliance_pct,
+        "planned_volume": total_p_vol,
+        "completed_volume": total_c_vol,
+        "vol_compliance_pct": vol_compliance_pct,
     }
 
 
@@ -1731,7 +1844,7 @@ def _readiness_performance_trend_component(
         for ex in session.get("exercises", []):
             name_lower = ex.get("name", "").lower().strip()
             canonical = {"squat": "squat", "bench press": "bench", "bench": "bench", "deadlift": "deadlift"}.get(name_lower)
-            if canonical is None or _count_failed_sets(ex) > 0:
+            if canonical is None or _count_failed_sets(ex) > 0 or _executed_sets(ex) <= 0:
                 continue
             kg = _num(ex.get("kg", 0))
             reps = int(_num(ex.get("reps", 0)))
@@ -1864,6 +1977,8 @@ def _estimate_maxes_from_comps(competitions: list[dict], reference_date: date | 
     best: dict[str, float] = {}
     ref = reference_date or date.today()
     for c in sorted(competitions, key=lambda c: c.get("date", ""), reverse=True):
+        if c.get("status") == "skipped":
+            continue
         comp_date = _parse_date(c.get("date", ""))
         if comp_date is None or comp_date > ref:
             continue
@@ -1900,7 +2015,7 @@ def _estimate_maxes_from_sessions(
             continue
         session_rpe = s.get("session_rpe")
         for ex in s.get("exercises", []):
-            if _count_failed_sets(ex) > 0:
+            if _count_failed_sets(ex) > 0 or _executed_sets(ex) <= 0:
                 continue
             name = ex.get("name", "").lower().strip()
             kg = _num(ex.get("kg", 0))
@@ -3644,6 +3759,8 @@ def weekly_analysis(
             sets = _executed_sets(ex)
             reps = _num(ex.get("reps", 0))
             vol = sets * reps * kg
+            if sets <= 0:
+                continue
             if name not in exercise_stats:
                 exercise_stats[name] = {"total_sets": 0, "total_volume": 0.0, "max_kg": 0.0}
             exercise_stats[name]["total_sets"] += int(sets)
@@ -3657,7 +3774,7 @@ def weekly_analysis(
     sessions_analyzed = len(completed_in_window)
 
     # Identify main lifts (from completed sessions only)
-    exercise_names = {ex.get("name", "").lower().strip() for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name")}
+    exercise_names = {ex.get("name", "").lower().strip() for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name") and _executed_sets(ex) > 0}
     tracked_lifts = []
     lift_alias_map = {}
     for canonical, output_key in [("squat", "squat"), ("bench press", "bench"), ("deadlift", "deadlift"), ("bench", "bench")]:
@@ -3710,6 +3827,21 @@ def weekly_analysis(
             for ex in s.get("exercises", [])
             if ex.get("name", "").lower().strip() == ex_name
         ))
+        lift_data["executed_sets"] = int(sum(
+            _executed_sets(ex)
+            for s in completed_in_window
+            for ex in s.get("exercises", [])
+            if ex.get("name", "").lower().strip() == ex_name
+        ))
+        lift_data["planned_sets"] = int(sum(
+            _num(ex.get("sets", 0))
+            for s in completed_in_window
+            for ex in s.get("exercises", [])
+            if ex.get("name", "").lower().strip() == ex_name
+        ))
+        # Add actual executed metrics to the report
+        lift_data["max_kg"] = round(float(max([_num(ex.get("kg", 0)) for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name", "").lower().strip() == ex_name and _executed_sets(ex) > 0] or [0.0])), 1)
+        lift_data["total_volume"] = round(float(sum([_executed_volume(ex) for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name", "").lower().strip() == ex_name])), 1)
         lifts_report[ex_name] = lift_data
 
     # Maxes are estimated from the latest completed competition when possible,
@@ -3748,14 +3880,25 @@ def weekly_analysis(
             phases,
             selected_week_start,
             selected_week_end,
+            ref_date=ref,
         )
     else:
-        compliance_result = session_compliance(sessions, phases, program_start, weeks=selected_week_count)
+        compliance_result = session_compliance(sessions, phases, program_start, weeks=selected_week_count, ref_date=ref)
     compliance_obj = {
         "phase": compliance_result.get("phase", "Unknown"),
         "planned": compliance_result.get("planned_sessions", 0),
         "completed": compliance_result.get("completed_sessions", 0),
+        "missed": compliance_result.get("missed_sessions", 0),
         "pct": compliance_result.get("compliance_pct", 0),
+        "planned_sets": compliance_result.get("planned_sets", 0),
+        "completed_sets": compliance_result.get("completed_sets", 0),
+        "set_pct": compliance_result.get("set_compliance_pct", 0),
+        "planned_reps": compliance_result.get("planned_reps", 0),
+        "completed_reps": compliance_result.get("completed_reps", 0),
+        "rep_pct": compliance_result.get("rep_compliance_pct", 0),
+        "planned_volume": compliance_result.get("planned_volume", 0),
+        "completed_volume": compliance_result.get("completed_volume", 0),
+        "vol_pct": compliance_result.get("vol_compliance_pct", 0),
     }
 
     # Deload detection (from full block history for accurate detection)
@@ -3992,6 +4135,7 @@ def weekly_analysis(
         "selected_week_count": selected_week_count,
         "window_start": window_start,
         "window_end": window_end,
+        "selected_session_context": recent_sessions,
         "block": phase_name,
         "lifts": lifts_report,
         "fatigue_index": fatigue_score,

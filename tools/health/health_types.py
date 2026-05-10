@@ -7,12 +7,13 @@ from typing import Any, List, Optional, Union, Literal
 # LoadSource = "absolute" | "rpe" | "percentage" | "unresolvable"
 LoadSource = Literal["absolute", "rpe", "percentage", "unresolvable"]
 LoadType = LoadSource
+WeekStartDay = Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 @dataclass
 class TemplateLineage:
     applied_template_sk: str
     applied_at: str
-    week_start_day: Literal["Saturday", "Monday", "Sunday"]
+    week_start_day: WeekStartDay
     start_date: str
 
 @dataclass

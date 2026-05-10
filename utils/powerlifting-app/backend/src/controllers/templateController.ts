@@ -123,13 +123,14 @@ export async function applyTemplate(req: Request, res: Response) {
 
 export async function confirmApplyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
-  const { backfilled_maxes, start_date, week_start_day } = req.body
+  const { backfilled_maxes, start_date, week_start_day, target } = req.body
   try {
     const result = await invokeToolDirect('template_apply_confirm', {
       sk,
       backfilled_maxes,
       start_date,
       week_start_day,
+      target,
       pk: req.effectivePk,
     })
     res.json(result)

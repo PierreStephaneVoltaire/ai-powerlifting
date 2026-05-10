@@ -24,14 +24,24 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
   const navigate = useNavigate()
   const resolvedTemplateSk = template.sk || templateSk
 
-  const handleApply = (res: any) => {
+  const handleApply = async (res: any) => {
     if (res.missing_maxes && res.missing_maxes.length > 0) {
       setMissingMaxes(res.missing_maxes)
       setApplyData(res)
       setApplyModalOpened(false)
     } else {
-      // Direct success
-      navigate(`/designer/sessions?version=${res.program_version}`)
+      if (!resolvedTemplateSk) return
+      setLoading(true)
+      try {
+        const applied = await confirmApplyTemplate(resolvedTemplateSk, {
+          start_date: res.start_date,
+          week_start_day: res.week_start_day,
+          target: res.target,
+        })
+        navigate(`/designer/sessions?version=${applied.program_sk}`)
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
@@ -43,6 +53,7 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         backfilled_maxes,
         start_date: applyData.start_date,
         week_start_day: applyData.week_start_day,
+        target: applyData.target,
       })
       navigate(`/designer/sessions?version=${res.program_sk}`)
     } catch (err) {

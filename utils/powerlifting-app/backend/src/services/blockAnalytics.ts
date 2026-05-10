@@ -997,15 +997,32 @@ export async function getCachedBlockAnalysisBundle(
 ): Promise<BlockAnalysisBundle | null> {
   try {
     const pk = cachePk(userPk)
-    const sk = blockAnalysisSk(blockKey)
-    const response = await docClient.send(new GetCommand({
+    
+    // Find the latest version of this block analysis
+    const response = await docClient.send(new QueryCommand({
       TableName: ANALYSIS_CACHE_TABLE,
-      Key: { pk, sk },
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      FilterExpression: 'contains(sk, :blockKey)',
+      ExpressionAttributeValues: {
+        ':pk': pk,
+        ':prefix': 'block_analysis#',
+        ':blockKey': `#${blockKey}`,
+      },
     }))
 
-    const item = response.Item
-    if (!item) return null
+    const items = response.Items || []
+    if (!items.length) return null
 
+    // Sort by schema_version desc, then generated_at desc
+    const sorted = items.sort((a, b) => {
+      const vA = Number(a.schema_version || 0)
+      const vB = Number(b.schema_version || 0)
+      if (vA !== vB) return vB - vA
+      return String(b.generated_at || '').localeCompare(String(a.generated_at || ''))
+    })
+
+    const item = sorted[0]
+    const sk = item.sk as string
     let payload = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
     const shardCount = Number(item.shard_count || 0)
     if (!payload && shardCount > 0) {
@@ -1023,7 +1040,7 @@ export async function getCachedBlockAnalysisBundle(
 
     if (!payload) return null
     const bundle = decodePayload(payload)
-    if (bundle.schemaVersion !== CACHE_SCHEMA_VERSION || bundle.block.blockKey !== blockKey) return null
+    if (bundle.block.blockKey !== blockKey) return null
     if (expectedSourceFingerprint && bundle.sourceFingerprint !== expectedSourceFingerprint && !options?.allowStale) return null
     return { ...bundle, cached: true }
   } catch (error) {
@@ -1505,6 +1522,14 @@ export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntr
   const competitions = blockCompetitionWindow(program, entry.startDate, competitionContextEndDate, entry.linkedCompetition)
   const goals = blockGoalsForCompetitions(program, competitions)
   const meta = blockScopedMeta(program, entry, analysisEndDate, competitions, goals)
+  if (normalizeToCurrent) {
+    const storedWeekStarts = { ...(program.meta.block_week_start_days ?? {}) }
+    const entryWeekStart = storedWeekStarts[entry.block]
+    meta.block_week_start_days = {
+      ...storedWeekStarts,
+      ...(entryWeekStart ? { [DEFAULT_BLOCK]: entryWeekStart } : {}),
+    }
+  }
   return {
     ...program,
     sessions: normalizeToCurrent

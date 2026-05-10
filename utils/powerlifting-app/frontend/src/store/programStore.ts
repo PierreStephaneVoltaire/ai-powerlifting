@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Program, Session, Exercise, Phase, MaxEntry, WeightEntry, ProgramListItem, SupplementPhase, DietNote, Competition, SessionVideo, LiftResults, LiftProfile, Sex, AthleteGoal, PostMeetReport } from '@powerlifting/types'
+import type { Program, Session, Exercise, Phase, MaxEntry, WeightEntry, ProgramListItem, SupplementPhase, DietNote, Competition, SessionVideo, LiftResults, LiftProfile, Sex, AthleteGoal, PostMeetReport, WeekStartDay } from '@powerlifting/types'
 import * as api from '@/api/client'
 
 interface ProgramState {
@@ -57,6 +57,7 @@ interface ProgramState {
 
   // Sex
   setSex: (sex: Sex) => Promise<void>
+  setWeekStartDay: (day: WeekStartDay) => Promise<void>
 
   // Diet Notes
   updateDietNotes: (dietNotes: DietNote[]) => Promise<void>
@@ -371,6 +372,31 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
           meta: {
             ...state.program.meta,
             sex,
+          },
+        },
+      }
+    })
+  },
+
+  setWeekStartDay: async (day: WeekStartDay) => {
+    const { version, program } = get()
+    const nextBlockWeekStarts = {
+      ...(program?.meta.block_week_start_days ?? {}),
+      current: day,
+    }
+
+    await api.updateMetaField(version, 'program_week_start_day', day)
+    await api.updateMetaField(version, 'block_week_start_days', nextBlockWeekStarts)
+
+    set((state) => {
+      if (!state.program) return state
+      return {
+        program: {
+          ...state.program,
+          meta: {
+            ...state.program.meta,
+            program_week_start_day: day,
+            block_week_start_days: nextBlockWeekStarts,
           },
         },
       }

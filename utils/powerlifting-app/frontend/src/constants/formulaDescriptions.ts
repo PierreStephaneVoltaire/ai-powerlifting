@@ -11,12 +11,12 @@ export const FORMULA_DESCRIPTIONS: FormulaDescription[] = [
   {
     id: 'estimated_1rm',
     title: 'Estimated 1RM',
-    summary: 'Estimated one-rep max from RPE table (reps <= 6) or conservative table (reps <= 5). 90th percentile of qualifying sets over 6 weeks. No Epley/Brzycki.',
+    summary: 'Estimated one-rep max from RPE table (reps <= 6) or conservative table (reps <= 5). 90th percentile of executed sets (completed or failed) over 6 weeks. No Epley/Brzycki.',
     formula: `E1RM = weight / pct(reps, rpe)
 
 -- RPE table (reps <= 6, RPE 6-10)
 -- Conservative table (reps <= 5, no RPE)
--- Final = P90(all qualifying estimates, last 42 days)`,
+-- Final = P90(all executed estimates, last 42 days)`,
     variables: [
       { name: 'weight', description: 'Load lifted in kg' },
       { name: 'reps', description: 'Repetitions performed' },
@@ -27,7 +27,7 @@ export const FORMULA_DESCRIPTIONS: FormulaDescription[] = [
   {
     id: 'progression_rate',
     title: 'Progression Rate',
-    summary: 'Theil-Sen regression on e1RM per effective training week. Deloads and break weeks excluded; fit quality is reported with Kendall tau.',
+    summary: 'Theil-Sen regression on e1RM per effective training week. Deloads and break weeks excluded; only executed sets contribute to the session e1RM.',
     formula: `slope = theilsen_median(e1RM ~ effective_week)
 kendall_tau = KendallTau(effective_week, e1RM)
 fit_quality = 1 - MAD(residuals) / MAD(series)`,
@@ -82,14 +82,14 @@ Calibrated if at least 2 completed meets have valid total PRR`,
   {
     id: 'volume_landmarks',
     title: 'Volume Landmarks',
-    summary: 'Per-lift MV / MEV / MAV / MRV estimates from whole-program history, excluding deload and break weeks.',
+    summary: 'Per-lift MV / MEV / MAV / MRV estimates from whole-program history, excluding deload and break weeks. Only executed sets are counted toward weekly volume.',
     formula: `weekly_sets_bin = floor(weekly_sets / 2) * 2
 MV = first bin with delta_e1rm >= 0
 MEV = first bin with delta_e1rm > 0
 MAV = bin with max delta_e1rm
 MRV = first bin where next_week_fi > 0.60 or delta_e1rm < 0`,
     variables: [
-      { name: 'weekly_sets', description: 'Main-lift sets accumulated inside a training week' },
+      { name: 'weekly_sets', description: 'Main-lift sets actually executed (completed or failed) inside a training week' },
       { name: 'delta_e1rm', description: 'Week-over-week main-lift e1RM change' },
       { name: 'next_week_fi', description: 'Fatigue index for the following week' },
       { name: 'history_weeks', description: 'Eligible weeks with lift data after excluding deloads and breaks' },
@@ -306,7 +306,7 @@ Light: RI < 0.70`,
   {
     id: 'specificity_ratio',
     title: 'Specificity Ratio',
-    summary: 'Measures direct and broad powerlifting specificity against the selected target competition timeline, preferring primary-goal meets over nearest meets.',
+    summary: 'Measures direct and broad powerlifting specificity against the selected target competition timeline. Only executed sets are counted toward the ratio.',
     formula: `SR_narrow = SBD sets / total sets
 SR_broad = (SBD + secondary category) / total sets
 Expected band selected by weeks_to_comp:
@@ -316,16 +316,16 @@ Expected band selected by weeks_to_comp:
   4-8 weeks   -> narrow 0.60-0.75, broad 0.80-0.90
   0-4 weeks   -> narrow 0.70-0.85, broad 0.85-0.95`,
     variables: [
-      { name: 'SBD sets', description: 'Sets of squat, bench, or deadlift' },
-      { name: 'secondary', description: 'Same-category exercises (e.g. close-grip bench)' },
-      { name: 'total sets', description: 'All working sets across all exercises' },
+      { name: 'SBD sets', description: 'Executed sets of squat, bench, or deadlift' },
+      { name: 'secondary', description: 'Same-category exercises actually performed (e.g. close-grip bench)' },
+      { name: 'total sets', description: 'All working sets actually executed across all exercises' },
       { name: 'weeks_to_comp', description: 'Weeks remaining until the next competition, if one exists' },
     ],
   },
   {
     id: 'readiness_score',
     title: 'Readiness Score',
-    summary: 'Composite score predicting training readiness. Missing data re-weights available components without penalizing.',
+    summary: 'Composite score predicting training readiness. Missing data re-weights available components without penalizing. Performance trend component only uses executed sets.',
     formula: `TrainingReadiness = 100 * (1 - weighted_penalty(fatigue, rpe_drift, performance_trend))
 ExternalReadiness = 100 * (1 - weighted_penalty(wellness, bodyweight))
 OverallReadiness = 0.70*TrainingReadiness + 0.30*ExternalReadiness`,
@@ -346,10 +346,10 @@ OverallReadiness = 0.70*TrainingReadiness + 0.30*ExternalReadiness`,
   {
     id: 'dots_score',
     title: 'DOTS Score',
-    summary: 'Strength-to-bodyweight coefficient using polynomial formula with sex-specific coefficients.',
+    summary: 'Strength-to-bodyweight coefficient using polynomial formula with sex-specific coefficients. Best e1RM per session only considers executed sets.',
     formula: `DOTS = 500 * total / (a + b*bw + c*bw^2 + d*bw^3 + e*bw^4)`,
     variables: [
-      { name: 'total', description: 'Squat + Bench + Deadlift total (kg)' },
+      { name: 'total', description: 'Squat + Bench + Deadlift total (kg) from best executed sets' },
       { name: 'bw', description: 'Bodyweight in kg' },
       { name: 'a-e', description: 'Sex-specific polynomial coefficients' },
     ],
@@ -357,10 +357,10 @@ OverallReadiness = 0.70*TrainingReadiness + 0.30*ExternalReadiness`,
   {
     id: 'ipf_gl_score',
     title: 'IPF GL Score',
-    summary: 'IPF relative scoring coefficient for classic powerlifting totals or classic bench-only results.',
+    summary: 'IPF relative scoring coefficient for classic powerlifting totals or classic bench-only results. Best results only consider executed sets.',
     formula: `GL = result * 100 / (A - B * e^(-C * bw))`,
     variables: [
-      { name: 'result', description: 'SBD total for classic powerlifting, or bench result for bench-only scoring' },
+      { name: 'result', description: 'SBD total for classic powerlifting, or bench result for bench-only scoring, from best executed sets' },
       { name: 'bw', description: 'Bodyweight in kg' },
       { name: 'A-C', description: 'Sex- and discipline-specific coefficients' },
     ],
@@ -368,7 +368,7 @@ OverallReadiness = 0.70*TrainingReadiness + 0.30*ExternalReadiness`,
   {
     id: 'rpe_drift',
     title: 'RPE Drift',
-    summary: 'Residual regression comparing actual RPE to phase target midpoint. Detects fatigue or adaptation trends and reports fit quality with Kendall tau.',
+    summary: 'Residual regression comparing actual RPE to phase target midpoint. Only executed sets contribute to avg_rpe.',
     formula: `residual = avg_rpe - phase_target_midpoint
 slope = Theil-Sen(residual ~ week)
 kendall_tau = KendallTau(week, residual)
@@ -376,7 +376,7 @@ fit_quality = 1 - MAD(residuals) / MAD(series)
 slope >= 0.1 -> fatigue
 slope <= -0.1 -> adaptation`,
     variables: [
-      { name: 'avg_rpe', description: 'Average session RPE' },
+      { name: 'avg_rpe', description: 'Average session RPE from executed sets' },
       { name: 'phase_target_midpoint', description: '(target_rpe_min + target_rpe_max) / 2' },
       { name: 'slope', description: 'Theil-Sen regression slope over time' },
       { name: 'kendall_tau', description: 'Rank correlation between week and RPE residuals' },
@@ -391,12 +391,19 @@ slope <= -0.1 -> adaptation`,
   {
     id: 'compliance',
     title: 'Compliance',
-    summary: 'Completed vs planned session ratio. All weeks counted — deloads and programmed breaks are NOT excluded.',
-    formula: `compliance = (completed_sessions / planned_sessions) * 100
-All weeks included. A week with no planned sessions contributes nothing.`,
+    summary: 'Ratio of work completed vs planned. Includes session attendance, sets performed, and total volume load. All weeks counted — deloads and programmed breaks are NOT excluded.',
+    formula: `session_compliance = (completed_sessions / planned_sessions) * 100
+set_compliance = (executed_sets / planned_sets) * 100
+volume_compliance = (executed_volume / planned_volume) * 100
+
+All metrics are aggregated across the selected analysis window.`,
     variables: [
-      { name: 'completed', description: 'Sessions with status logged or completed' },
-      { name: 'planned', description: 'Total sessions in the selected compliance window; deloads and breaks are included' },
+      { name: 'completed_sessions', description: 'Sessions with status logged or completed' },
+      { name: 'planned_sessions', description: 'Total sessions in the window' },
+      { name: 'executed_sets', description: 'Total sets with status completed or failed' },
+      { name: 'planned_sets', description: 'Total sets originally programmed' },
+      { name: 'executed_volume', description: 'Sum of sets * reps * kg for executed work' },
+      { name: 'planned_volume', description: 'Sum of sets * reps * kg for planned work' },
     ],
   },
 ]

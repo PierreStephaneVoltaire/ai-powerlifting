@@ -88,6 +88,8 @@ Storage conventions:
   `program_name`, `version_label`, `updated_at`, `archived`, `archived_at`
 - Timeline:
   `program_start`, `comp_date`, `weight_class_confirm_by`
+- Training-week boundaries:
+  `program_week_start_day`, `block_week_start_days`
 - Federation / class context:
   `federation`, `practicing_for`, `weight_class_kg`
 - Bodyweight context:
@@ -108,6 +110,12 @@ Storage conventions:
 
 Important nuance:
 
+- Powerlifting weeks are program/block-defined, not standard calendar weeks.
+  Analysis and planning must use the stored `block_week_start_days[block]`
+  value plus the caller's `asOfDate`. Missing historical block values fall
+  back to Monday; do not infer Saturday from the block name. To set the current
+  block explicitly in DynamoDB, run
+  `npm run set:week-start --workspace=backend -- Saturday`.
 - The typed schema does not currently declare `meta.sex`.
 - Backend projection and backend `estimated_dots` still look for `meta.sex`.
 - Frontend DOTS and IPF GL calculations instead use `settingsStore.sex`.
@@ -414,9 +422,10 @@ AI cards are loaded separately by `AiAnalysis.tsx`:
 
 Windowing behavior:
 
-- `1`, `2`, `4`, `8` week modes use a simple rolling date cutoff
-- `Full Block` computes the number of weeks from `program.meta.program_start`
-  to today and passes that week count to the backend
+- `Current Week` is the block week containing the frontend `asOfDate`
+- `1`, `2`, `4`, `8` modes count positional training weeks before current,
+  including empty gaps
+- `Full Block` spans Week 1 through the current positional block week
 
 Important distinction:
 

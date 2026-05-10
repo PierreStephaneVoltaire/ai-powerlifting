@@ -8,7 +8,7 @@ import {
 import { createHash } from 'crypto'
 import { gzipSync, gunzipSync } from 'zlib'
 import { docClient, TABLE as HEALTH_TABLE } from '../db/dynamo'
-import type { Program, Session } from '@powerlifting/types'
+import type { Program, Session, WeekStartDay } from '@powerlifting/types'
 
 export type AnalysisWindowKey =
   | 'current'
@@ -39,7 +39,7 @@ export interface WeeklyAnalysisBundle<T = unknown> {
   results: Record<AnalysisWindowKey, T>
 }
 
-const CACHE_SCHEMA_VERSION = 1
+const CACHE_SCHEMA_VERSION = 4
 const ANALYSIS_CACHE_TABLE = process.env.ANALYSIS_CACHE_TABLE_NAME || 'if-powerlifting-analysis-cache'
 const CACHE_TTL_DAYS = Number.parseInt(process.env.ANALYSIS_CACHE_TTL_DAYS || '30', 10)
 const MAX_INLINE_PAYLOAD_CHARS = 300_000
@@ -52,6 +52,111 @@ const WINDOW_SPECS: Array<{ key: AnalysisWindowKey; label: string; mode: number 
   { key: 'previous_8', label: 'Previous 8 Weeks', mode: 8 },
   { key: 'block', label: 'Full Block', mode: 'block' },
 ]
+
+const WEEK_START_DAYS: WeekStartDay[] = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+]
+
+const UTC_DAY_INDEX: Record<WeekStartDay, number> = {
+  Sunday: 0,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function normalizeWeekStartDay(value: unknown, fallback: WeekStartDay): WeekStartDay {
+  return typeof value === 'string' && WEEK_START_DAYS.includes(value as WeekStartDay)
+    ? value as WeekStartDay
+    : fallback
+}
+
+function weekStartForBlock(program: Program, block = 'current'): WeekStartDay {
+  const blockValue = block || 'current'
+  const stored = program.meta?.block_week_start_days?.[blockValue]
+  if (stored) return normalizeWeekStartDay(stored, 'Monday')
+  return 'Monday'
+}
+
+function parseIsoDate(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`)
+}
+
+function formatIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function addDaysIso(value: string, days: number): string {
+  const date = parseIsoDate(value)
+  date.setUTCDate(date.getUTCDate() + days)
+  return formatIsoDate(date)
+}
+
+function diffDays(end: string, start: string): number {
+  return Math.floor((parseIsoDate(end).getTime() - parseIsoDate(start).getTime()) / MS_PER_DAY)
+}
+
+function maxIso(a: string, b: string): string {
+  return a > b ? a : b
+}
+
+function minIso(a: string, b: string): string {
+  return a < b ? a : b
+}
+
+function programWeekAnchorDate(programStart: string, weekStartDay: WeekStartDay): string {
+  const start = parseIsoDate(programStart)
+  const currentIndex = start.getUTCDay()
+  const targetIndex = UTC_DAY_INDEX[weekStartDay]
+  const offset = (currentIndex - targetIndex + 7) % 7
+  return addDaysIso(programStart, -offset)
+}
+
+function programWeekStartDate(programStart: string, week: number, weekStartDay: WeekStartDay): string {
+  return addDaysIso(programWeekAnchorDate(programStart, weekStartDay), (Math.max(1, week) - 1) * 7)
+}
+
+function trainingWeekForDate(dateStr: string, programStart: string, weekStartDay: WeekStartDay): number {
+  const anchor = programWeekAnchorDate(programStart, weekStartDay)
+  return Math.max(1, Math.floor(diffDays(dateStr, anchor) / 7) + 1)
+}
+
+function parseWeekNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function resolveCurrentWeek(program: Program, asOfDate: string, programStart: string, weekStartDay: WeekStartDay): number {
+  const calculatedWeek = trainingWeekForDate(asOfDate, programStart, weekStartDay)
+  const calculatedStart = programWeekStartDate(programStart, calculatedWeek, weekStartDay)
+  const calculatedEnd = addDaysIso(calculatedStart, 6)
+  const dueWeekNumbers = (program.sessions ?? [])
+    .filter((session) => (session.block ?? 'current') === 'current')
+    .filter((session) =>
+      session.date >= calculatedStart &&
+      session.date <= calculatedEnd &&
+      session.date <= asOfDate
+    )
+    .map((session) => parseWeekNumber(session.week_number))
+    .filter((week): week is number => week !== null)
+
+  if (dueWeekNumbers.length) return Math.max(...dueWeekNumbers)
+  return calculatedWeek
+}
 
 export function analysisSourceFingerprint(program: Program): string {
   const sessions = (program.sessions ?? [])
@@ -77,6 +182,8 @@ export function analysisSourceFingerprint(program: Program): string {
 
   const source = {
     meta_updated_at: program.meta?.updated_at ?? null,
+    program_week_start_day: program.meta?.program_week_start_day ?? null,
+    block_week_start_days: program.meta?.block_week_start_days ?? null,
     competitions: program.competitions ?? [],
     phases: program.phases ?? [],
     sessions,
@@ -189,37 +296,11 @@ export function isIsoDate(value: string | undefined): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
-function isCompletedOrDue(session: Session, todayStr: string): boolean {
-  return Boolean(
-    session.completed ||
-    session.status === 'logged' ||
-    session.status === 'completed' ||
-    session.date <= todayStr,
-  )
-}
-
-function currentTrainingWeek(sessions: Session[], todayStr: string): number {
-  const currentOrPastWeeks = sessions
-    .filter((session) =>
-      (session.block ?? 'current') === 'current' &&
-      session.week_number > 0 &&
-      isCompletedOrDue(session, todayStr),
-    )
-    .map((session) => session.week_number)
-
-  if (currentOrPastWeeks.length) return Math.max(...currentOrPastWeeks)
-
-  const allWeeks = sessions
-    .filter((session) => (session.block ?? 'current') === 'current' && session.week_number > 0)
-    .map((session) => session.week_number)
-
-  return allWeeks.length ? Math.min(...allWeeks) : 1
-}
-
 export function buildAnalysisWindows(program: Program, asOfDate: string): Record<AnalysisWindowKey, AnalysisWindow> {
   const sessions = program.sessions ?? []
-  const programStart = program.meta?.program_start || null
-  const currentWeek = currentTrainingWeek(sessions, asOfDate)
+  const programStart = program.meta?.program_start || sessions.find((session) => (session.block ?? 'current') === 'current')?.date || asOfDate
+  const weekStartDay = weekStartForBlock(program, 'current')
+  const currentWeek = resolveCurrentWeek(program, asOfDate, programStart, weekStartDay)
   const windows = {} as Record<AnalysisWindowKey, AnalysisWindow>
 
   for (const spec of WINDOW_SPECS) {
@@ -233,24 +314,14 @@ export function buildAnalysisWindows(program: Program, asOfDate: string): Record
       weekStart = 1
       weekEnd = currentWeek
     } else {
-      weekEnd = Math.max(1, currentWeek - 1)
-      weekStart = Math.max(1, weekEnd - spec.mode + 1)
+      weekEnd = currentWeek
+      weekStart = Math.max(1, currentWeek - spec.mode)
     }
 
-    const selectedSessions = sessions
-      .filter((session) =>
-        (session.block ?? 'current') === 'current' &&
-        session.week_number >= weekStart &&
-        session.week_number <= weekEnd,
-      )
-      .sort((a, b) => a.date.localeCompare(b.date))
-
-    const selectedDates = selectedSessions.map((session) => session.date).filter(Boolean)
-    const start = selectedDates[0] ?? programStart ?? asOfDate
-    const rawEnd = spec.mode === 'current' || spec.mode === 'block'
-      ? asOfDate
-      : selectedDates[selectedDates.length - 1] ?? asOfDate
-    const end = rawEnd > asOfDate ? asOfDate : rawEnd
+    const weekStartDate = programWeekStartDate(programStart, weekStart, weekStartDay)
+    const weekEndDate = addDaysIso(programWeekStartDate(programStart, weekEnd, weekStartDay), 6)
+    const start = maxIso(weekStartDate, programStart)
+    const end = weekEndDate
 
     windows[spec.key] = {
       key: spec.key,

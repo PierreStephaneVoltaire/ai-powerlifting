@@ -49,12 +49,23 @@ export interface ProgramMeta {
   archived?: boolean
   archived_at?: string | null
   template_lineage?: TemplateLineage
+  program_week_start_day?: WeekStartDay
+  block_week_start_days?: Record<string, WeekStartDay>
 }
+
+export type WeekStartDay =
+  | 'Monday'
+  | 'Tuesday'
+  | 'Wednesday'
+  | 'Thursday'
+  | 'Friday'
+  | 'Saturday'
+  | 'Sunday'
 
 export interface TemplateLineage {
   applied_template_sk: string
   applied_at: string
-  week_start_day: 'Saturday' | 'Monday' | 'Sunday'
+  week_start_day: WeekStartDay
   start_date: string
 }
 

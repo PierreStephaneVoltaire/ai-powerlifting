@@ -1,9 +1,11 @@
-import { Drawer, SegmentedControl, NumberInput, Text, Stack, Group, Button } from '@mantine/core'
+import { Drawer, SegmentedControl, NumberInput, Text, Stack, Group, Button, Select } from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
 import { defaultBarWeightKgForUnit, useSettingsStore, type Theme } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
+import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
 import { Sun, Moon, Monitor } from 'lucide-react'
+import type { WeekStartDay } from '@powerlifting/types'
 
 const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: 'light', label: 'Light', icon: Sun },
@@ -14,7 +16,7 @@ const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
 export default function SettingsDrawer() {
   const { drawerOpen, drawerType, closeDrawer } = useUiStore()
   const { unit, theme, setTheme, sex, setSex, barWeightKg, setBarWeight } = useSettingsStore()
-  const { setSex: programSetSex } = useProgramStore()
+  const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
 
   const isOpen = drawerOpen && drawerType === 'settings'
 
@@ -69,6 +71,17 @@ export default function SettingsDrawer() {
               { label: 'Female', value: 'female' },
             ]}
             fullWidth
+          />
+        </div>
+
+        <div>
+          <Text size="sm" fw={500} mb="xs">
+            Training Week Start
+          </Text>
+          <Select
+            value={weekStartForBlock(program, 'current')}
+            onChange={(value) => value && setWeekStartDay(value as WeekStartDay).catch(console.error)}
+            data={WEEK_START_DAYS.map((day) => ({ value: day, label: day }))}
           />
         </div>
 

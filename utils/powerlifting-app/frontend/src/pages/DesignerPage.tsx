@@ -29,11 +29,10 @@ import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { sessionMuscleSets } from '@/utils/sessionWorkload'
 import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
+import { programWeekStartDate, weekStartForBlock } from '@/utils/weekStart'
 import { toDisplayUnit, fromDisplayUnit, displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
 import type { Session, PlannedExercise, GlossaryExercise } from '@powerlifting/types'
-
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 const MUSCLE_LABELS: Record<string, string> = {
   quads: 'Quads',
@@ -74,11 +73,6 @@ function toIsoDate(date: Date): string {
 
 function addDaysIso(date: string, days: number): string {
   return toIsoDate(addDays(parseLocalDate(date), days))
-}
-
-function programWeekStartDate(programStart: string | undefined, week: number): string {
-  const start = programStart || toIsoDate(new Date())
-  return addDaysIso(start, (week - 1) * 7)
 }
 
 // Helper to add IDs to planned exercises for stable DND
@@ -313,13 +307,20 @@ export default function DesignerPage() {
       .filter(s => (s.block ?? 'current') === block)
   }, [program?.sessions, selectedWeek, block])
 
+  const selectedWeekStartDay = useMemo(() => weekStartForBlock(program, block), [program, block])
+
   const selectedWeekStartDate = useMemo(() => {
-    return programWeekStartDate(program?.meta?.program_start, selectedWeek)
-  }, [program?.meta?.program_start, selectedWeek])
+    return programWeekStartDate(program?.meta?.program_start, selectedWeek, selectedWeekStartDay)
+  }, [program?.meta?.program_start, selectedWeek, selectedWeekStartDay])
 
   const selectedWeekDates = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDaysIso(selectedWeekStartDate, i))
   }, [selectedWeekStartDate])
+
+  const selectableWeekDates = useMemo(() => {
+    const programStart = program?.meta?.program_start
+    return programStart ? selectedWeekDates.filter((date) => date >= programStart) : selectedWeekDates
+  }, [program?.meta?.program_start, selectedWeekDates])
 
   const selectedWeekEndDate = selectedWeekDates[6] ?? selectedWeekStartDate
   const inferredSessionDay = sessionDate ? getDayOfWeek(sessionDate) : null
@@ -385,14 +386,15 @@ export default function DesignerPage() {
           }
         } else {
           // Create new session for that day in the target week
-          const sourceWeekStart = programWeekStartDate(program?.meta?.program_start, copySourceWeek)
-          const dayIndex = DAYS.indexOf(src.day)
+          const sourceWeekStart = programWeekStartDate(program?.meta?.program_start, copySourceWeek, selectedWeekStartDay)
+          const dayIndex = selectedWeekDates.findIndex((date) => getDayOfWeek(date) === src.day)
           const dateOffset = differenceInCalendarDays(
             parseLocalDate(src.date),
             parseLocalDate(sourceWeekStart)
           )
           const targetOffset = dateOffset >= 0 && dateOffset <= 6 ? dateOffset : Math.max(dayIndex, 0)
           const dateStr = addDaysIso(selectedWeekStartDate, targetOffset)
+          if (program?.meta?.program_start && dateStr < program.meta.program_start) continue
           const day = getDayOfWeek(dateStr)
 
           await api.createSession(version, {
@@ -434,7 +436,7 @@ export default function DesignerPage() {
       setEditingSessionDate('')
       setEditingSessionGlobalIndex(-1)
       const usedDates = new Set(weekSessions.map((s) => s.date))
-      setSessionDate(selectedWeekDates.find((date) => !usedDates.has(date)) ?? selectedWeekStartDate)
+      setSessionDate(selectableWeekDates.find((date) => !usedDates.has(date)) ?? selectableWeekDates[0] ?? selectedWeekStartDate)
       setPlannedExercises([])
     }
     setIsSessionEditorOpen(true)
@@ -457,6 +459,10 @@ export default function DesignerPage() {
       }
 
       const dateStr = sessionDate
+      if (program?.meta?.program_start && dateStr < program.meta.program_start) {
+        pushToast({ message: 'Session date is before program start', type: 'error' })
+        return
+      }
       const day = getDayOfWeek(dateStr)
       
       // Strip IDs before saving
@@ -727,7 +733,7 @@ export default function DesignerPage() {
               onChange={setSessionDate}
               valueFormat="ddd MMM D, YYYY"
               defaultDate={selectedWeekStartDate}
-              minDate={selectedWeekStartDate}
+              minDate={selectableWeekDates[0] ?? selectedWeekStartDate}
               maxDate={selectedWeekEndDate}
               clearable={false}
             />

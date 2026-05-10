@@ -977,6 +977,7 @@ def _serialize_planned_exercise_for_prompt(ex: dict[str, Any]) -> dict[str, Any]
             "load": f"@RPE {rpe}",
             "load_type": "rpe",
             "rpe_target": rpe,
+            "set_statuses": ex.get("set_statuses"),
         }
     if load_source == "unresolvable" or (kg == 0 and rpe is None):
         return {
@@ -985,6 +986,7 @@ def _serialize_planned_exercise_for_prompt(ex: dict[str, Any]) -> dict[str, Any]
             "reps": ex.get("reps"),
             "load": "unspecified",
             "load_type": "unspecified",
+            "set_statuses": ex.get("set_statuses"),
         }
     return {
         "name": ex["name"],
@@ -994,6 +996,7 @@ def _serialize_planned_exercise_for_prompt(ex: dict[str, Any]) -> dict[str, Any]
         "load_type": "absolute",
         "kg": kg,
         "rpe_target": rpe,
+        "set_statuses": ex.get("set_statuses"),
     }
 
 
@@ -1055,6 +1058,7 @@ def summarize_completed_sessions(
                     "failed": ex.get("failed", False),
                     "failed_sets": ex.get("failed_sets"),
                     "failed_set_reasons": ex.get("failed_set_reasons"),
+                    "set_statuses": ex.get("set_statuses"),
                 }
                 for ex in exercises
                 if ex.get("name")

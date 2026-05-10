@@ -50,7 +50,12 @@ export default function WeightTracker() {
 
   // Get current body weight and target
   const meta = program?.meta
-  const currentBW = meta?.current_body_weight_kg || entries[0]?.kg || 0
+  const sortedEntries = useMemo(
+    () => [...entries].sort((a, b) => b.date.localeCompare(a.date)),
+    [entries],
+  )
+
+  const currentBW = sortedEntries[0]?.kg || meta?.current_body_weight_kg || 0
   const targetClass = meta?.weight_class_kg || 74
 
   const confirmBy = useMemo(() => {
@@ -79,10 +84,9 @@ export default function WeightTracker() {
 
   // Calculate rate of change (kg/week)
   const rateOfChange = useMemo(() => {
-    if (entries.length < 2) return null
-    const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date))
-    const newest = sorted[0]
-    const oldest = sorted[sorted.length - 1]
+    if (sortedEntries.length < 2) return null
+    const newest = sortedEntries[0]
+    const oldest = sortedEntries[sortedEntries.length - 1]
     const daysDiff = Math.abs(new Date(newest.date).getTime() - new Date(oldest.date).getTime()) / (1000 * 60 * 60 * 24)
     if (daysDiff === 0) return null
     const kgDiff = newest.kg - oldest.kg
@@ -90,7 +94,7 @@ export default function WeightTracker() {
       kgPerWeek: parseFloat(((kgDiff / daysDiff) * 7).toFixed(2)),
       losing: kgDiff < 0,
     }
-  }, [entries])
+  }, [sortedEntries])
 
   // Peak week estimate
   const peakWeekWeight = useMemo(() => {
@@ -111,9 +115,12 @@ export default function WeightTracker() {
     const kg = fromDisplayUnit(Number(newWeight), unit)
     try {
       await api.addWeightEntry(version, { date: newDate, kg })
-      setEntries((prev) => [...prev, { date: newDate, kg }].sort((a, b) => b.date.localeCompare(a.date)))
+      setEntries((prev) => {
+        const withoutDate = prev.filter((entry) => entry.date !== newDate)
+        return [...withoutDate, { date: newDate, kg }].sort((a, b) => b.date.localeCompare(a.date))
+      })
       setNewWeight('')
-      pushToast({ message: 'Weight entry added', type: 'success' })
+      pushToast({ message: 'Weight entry saved', type: 'success' })
     } catch (err) {
       pushToast({ message: 'Failed to add entry', type: 'error' })
     }
@@ -268,15 +275,16 @@ export default function WeightTracker() {
       </Paper>
 
       {/* Weight Log */}
-      {entries.length > 0 && (
+      {sortedEntries.length > 0 && (
         <Paper withBorder radius="md" style={{ overflow: 'hidden' }}>
           <Paper bg="var(--mantine-color-default)" px="md" py="sm">
-            <Text size="sm" fw={500}>History</Text>
+            <Group justify="space-between">
+              <Text size="sm" fw={500}>History</Text>
+              <Text size="xs" c="dimmed">{sortedEntries.length} entries</Text>
+            </Group>
           </Paper>
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-            {entries
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .slice(0, 20)
+          <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+            {sortedEntries
               .map((entry) => (
                 <Group
                   key={entry.date}
@@ -306,7 +314,7 @@ export default function WeightTracker() {
         </Paper>
       )}
 
-      {entries.length === 0 && (
+      {sortedEntries.length === 0 && (
         <Text c="dimmed" ta="center" py="xl">
           No weight entries yet. Start logging to track progress.
         </Text>

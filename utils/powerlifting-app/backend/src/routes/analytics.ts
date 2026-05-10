@@ -97,7 +97,7 @@ analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
         block: 'current',
         window_start: window.start,
         window_end: window.end,
-        ref_date: window.end,
+        ref_date: asOfDate,
         week_start: window.weekStart,
         week_end: window.weekEnd,
         refresh_program: false,
@@ -127,8 +127,8 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const weekEndRaw = parseInt(req.query.weekEnd as string)
     const weekStart = Number.isFinite(weekStartRaw) && weekStartRaw > 0 ? weekStartRaw : undefined
     const weekEnd = Number.isFinite(weekEndRaw) && weekEndRaw > 0 ? weekEndRaw : undefined
-    const today = todayIso()
-    await snapshotCompetitionProjection(req.effectivePk!, today)
+    const projectionDate = isIsoDate(refDate) ? refDate : todayIso()
+    await snapshotCompetitionProjection(req.effectivePk!, projectionDate)
     const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
     const data = await invokeToolDirect('weekly_analysis', {
       weeks,

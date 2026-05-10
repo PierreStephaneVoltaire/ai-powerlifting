@@ -8,6 +8,8 @@ import math
 from datetime import date, timedelta
 from typing import Any, Literal, List
 
+from training_weeks import WEEKDAY_INDEX, normalize_week_start_day, week_start_date
+
 def round_to_2_5(kg: float) -> float:
     """Round a weight to the nearest 2.5kg (standard plate increment)."""
     return round(kg / 2.5) * 2.5
@@ -59,41 +61,35 @@ def concretize(
     current_maxes: dict[str, float],
     glossary_exercises: list[dict[str, Any]],
     start_date: date,
-    week_start_day: Literal["Saturday", "Monday", "Sunday"] = "Monday",
+    week_start_day: str = "Monday",
 ) -> list[dict[str, Any]]:
     """Map template sessions to calendar dates and resolve loads."""
     glossary_map = {ex["id"]: ex for ex in glossary_exercises}
-    
-    # Map week_start_day to weekday int (Monday=0, Sunday=6)
-    wd_map = {"Monday": 0, "Sunday": 6, "Saturday": 5}
-    target_start_wd = wd_map[week_start_day]
-    
-    # Calculate the anchor: the Monday of the week containing start_date
-    # based on the week_start_day rule.
-    # If week_start_day is Monday, and start_date is a Sunday, it's the end of previous week.
-    
-    # Simpler approach: find the "Day 1" of the template and map it to start_date.
-    # Then all other sessions are relative to that.
-    
+    resolved_week_start_day = normalize_week_start_day(week_start_day)
+    anchor = week_start_date(start_date, 1, resolved_week_start_day)
+
     sessions = template.get("sessions", [])
     if not sessions:
         return []
-        
-    # Find the earliest session in the template
-    sessions_sorted = sorted(sessions, key=lambda s: (s["week_number"], s["day_index"]))
-    first_session = sessions_sorted[0]
-    
-    base_week = first_session["week_number"]
-    base_day_idx = first_session["day_index"]
-    
+
+    def day_offset(tpl_sess: dict[str, Any]) -> int:
+        day_name = tpl_sess.get("day_of_week")
+        if isinstance(day_name, str) and day_name in WEEKDAY_INDEX:
+            return (WEEKDAY_INDEX[day_name] - WEEKDAY_INDEX[resolved_week_start_day]) % 7
+        raw_idx = tpl_sess.get("day_index", 0)
+        try:
+            idx = int(raw_idx)
+        except (TypeError, ValueError):
+            return 0
+        return idx - 1 if 1 <= idx <= 7 else max(0, min(6, idx))
+
     concrete_sessions = []
     
     for tpl_sess in sessions:
-        # Date calculation: offset from start_date
-        week_offset = tpl_sess["week_number"] - base_week
-        day_offset = tpl_sess["day_index"] - base_day_idx
-        
-        sess_date = start_date + timedelta(weeks=week_offset, days=day_offset)
+        week_number = int(tpl_sess.get("week_number") or 1)
+        sess_date = anchor + timedelta(weeks=week_number - 1, days=day_offset(tpl_sess))
+        if sess_date < start_date:
+            continue
         
         exercises = []
         for tpl_ex in tpl_sess.get("exercises", []):
@@ -130,8 +126,8 @@ def concretize(
         concrete_sessions.append({
             "date": sess_date.isoformat(),
             "day": sess_date.strftime("%A"),
-            "week": tpl_sess.get("label", f"W{tpl_sess['week_number']}"),
-            "week_number": tpl_sess["week_number"],
+            "week": tpl_sess.get("label", f"W{week_number}"),
+            "week_number": week_number,
             "status": "planned",
             "completed": False,
             "planned_exercises": exercises,

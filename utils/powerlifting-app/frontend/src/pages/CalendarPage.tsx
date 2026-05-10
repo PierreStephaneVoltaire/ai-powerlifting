@@ -15,8 +15,9 @@ import {
 import { Calendar } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { phaseColor } from '@/utils/phases'
-import { startOfWeek, format } from 'date-fns'
+import { format } from 'date-fns'
 import { findClosestSessionToToday, parseLocalDate } from '@/utils/dates'
+import { trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { normalizeExerciseName } from '@/utils/volume'
 import { Check } from 'lucide-react'
 import dayjs from 'dayjs'
@@ -97,11 +98,12 @@ export default function CalendarPage() {
   )
 
   const weeklyGroups = useMemo(() => {
-    if (!currentSessions.length) return []
+    if (!program || !currentSessions.length) return []
     const groups = new Map<string, Session[]>()
+    const weekStartDay = weekStartForBlock(program, 'current')
 
     for (const session of currentSessions) {
-      const weekStart = format(startOfWeek(parseLocalDate(session.date), { weekStartsOn: 0 }), 'yyyy-MM-dd')
+      const weekStart = trainingWeekStartForDate(session.date, program.meta.program_start, weekStartDay)
       const existing = groups.get(weekStart)
       if (existing) {
         existing.push(session)
@@ -115,7 +117,7 @@ export default function CalendarPage() {
       weekLabel: format(parseLocalDate(weekStart), 'MMM d'),
       sessions,
     }))
-  }, [currentSessions])
+  }, [currentSessions, program])
 
   const dateColorMap = useMemo(() => {
     const map = new Map<string, string>()

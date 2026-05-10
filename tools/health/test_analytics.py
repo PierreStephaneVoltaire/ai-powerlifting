@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import analytics  # noqa: E402
 import core  # noqa: E402
+import template_apply  # noqa: E402
 
 
 TODAY = date(2026, 4, 24)
@@ -148,20 +149,50 @@ def make_sbd_session(
     )
 
 
-def make_volume_landmark_sessions(weeks: int) -> list[dict]:
-    sessions: list[dict] = []
-    for week_idx in range(weeks):
-        days_ago = (weeks - 1 - week_idx) * 7
-        for offset in (2, 0):
+def test_fatigue_index_resets_streak_on_skipped_week() -> None:
+    # 5 weeks of heavy training
+    sessions = []
+    for week_idx in range(1, 6):
+        for day in range(3):
             sessions.append(
                 make_session(
-                    days_ago + offset,
-                    [make_exercise("Squat", 100 + (week_idx * 5), 5, sets=4, failed=True)],
+                    (6 - week_idx) * 7 + day,
+                    [make_exercise("Squat", 200, 5, sets=5)],
                     session_rpe=10,
-                    week_number=week_idx + 1,
+                    week_number=week_idx
                 )
             )
-    return sessions
+    
+    program_start = (TODAY - timedelta(days=42)).isoformat()
+    
+    # Check streak at week 5
+    fi_w5 = analytics.fatigue_index(sessions, program_start=program_start, ref_date=TODAY, days=60)
+    # week 5 is index 5
+    w5_data = next(f for wk, f in fi_w5["weekly_fis"] if wk == 5)
+    assert w5_data["components"]["overload_streak"] > 0
+    
+    # Now skip week 6
+    # week 7 has training again
+    for day in range(3):
+        sessions.append(
+            make_session(
+                -7 + day, 
+                [make_exercise("Squat", 200, 5, sets=5)],
+                session_rpe=10,
+                week_number=7
+            )
+        )
+    
+    # Week 6 is missing (skipped)
+    # The streak should reset at week 6 and be low at week 7
+    ref_future = TODAY + timedelta(days=14)
+    fi_w7 = analytics.fatigue_index(sessions, program_start=program_start, ref_date=ref_future, days=60)
+    
+    w6_data = next(f for wk, f in fi_w7["weekly_fis"] if wk == 6)
+    w7_data = next(f for wk, f in fi_w7["weekly_fis"] if wk == 7)
+    
+    assert w6_data["components"]["overload_streak"] == 0
+    assert w7_data["components"]["overload_streak"] == 0.25 # Streak starts over
 
 
 def test_fatigue_physics_is_nonlinear() -> None:
@@ -239,6 +270,86 @@ def test_progression_rate_returns_fit_metrics() -> None:
     assert result["fit_quality"] == pytest.approx(1.0, abs=1e-6)
     assert result["r2"] == pytest.approx(1.0, abs=1e-6)
     assert result["r_squared"] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_exercise_stats_ignores_skipped_sets() -> None:
+    # Exercise with 1 completed set at 200kg and 1 skipped set at 231kg
+    ex = make_exercise("Deadlift", 200, 1)
+    ex["set_statuses"] = ["completed", "skipped"]
+    ex["sets"] = 2
+    # In this case, 'kg' in exercise usually refers to the intended load.
+    # If the user performed 200 and skipped 231, they might have updated the exercise kg to 231
+    # but only completed the first set at a lower weight or intended to do 231 but skipped it.
+    # Usually, 'kg' is the actual load for the executed sets.
+    # Let's simulate the scenario where kg=231 is in the exercise but the executed sets don't count it.
+    ex_skipped = {
+        "name": "Deadlift",
+        "kg": 231,
+        "reps": 1,
+        "sets": 1,
+        "set_statuses": ["skipped"]
+    }
+    ex_completed = {
+        "name": "Deadlift",
+        "kg": 200,
+        "reps": 1,
+        "sets": 1,
+        "set_statuses": ["completed"]
+    }
+
+    program = {
+        "meta": {"program_start": "2026-04-01"},
+        "phases": [],
+        "sessions": [],
+    }
+    sessions = [
+        {
+            "date": "2026-04-15",
+            "week_number": 3,
+            "completed": True,
+            "status": "completed",
+            "exercises": [ex_completed, ex_skipped]
+        }
+    ]
+
+    result = analytics.weekly_analysis(program, sessions, ref_date="2026-04-15")
+
+    # The max_kg should be 200, not 231
+    assert result["exercise_stats"]["Deadlift"]["max_kg"] == 200
+    assert result["exercise_stats"]["Deadlift"]["total_sets"] == 1
+    # Check lifts report as well
+    assert result["lifts"]["deadlift"]["max_kg"] == 200
+
+
+def test_estimate_maxes_from_comps_ignores_skipped_status() -> None:
+    competitions = [
+        {
+            "name": "Skipped Meet",
+            "date": "2026-05-01",
+            "status": "skipped",
+            "results": {
+                "squat_kg": 300,
+                "bench_kg": 200,
+                "deadlift_kg": 350,
+            }
+        },
+        {
+            "name": "Real Meet",
+            "date": "2026-04-01",
+            "status": "completed",
+            "results": {
+                "squat_kg": 200,
+                "bench_kg": 100,
+                "deadlift_kg": 250,
+            }
+        }
+    ]
+    
+    # Should pick Real Meet results, not Skipped Meet
+    maxes = analytics._estimate_maxes_from_comps(competitions, reference_date=date(2026, 5, 10))
+    assert maxes["squat"] == 200
+    assert maxes["bench"] == 100
+    assert maxes["deadlift"] == 250
 
 
 def test_rpe_drift_returns_fit_metrics() -> None:
@@ -363,6 +474,7 @@ def test_weekly_analysis_respects_requested_window() -> None:
     program = {
         "meta": {
             "program_start": (TODAY - timedelta(days=83)).isoformat(),
+            "block_week_start_days": {"current": "Saturday"},
         },
         "phases": [],
         "competitions": [],
@@ -511,6 +623,276 @@ def test_weekly_analysis_training_week_window_overrides_calendar_start() -> None
     assert result["exercise_stats"]["Squat"]["max_kg"] == 140
     assert result["compliance"]["planned"] == 2
     assert result["compliance"]["completed"] == 2
+
+
+def test_weekly_analysis_uses_stored_saturday_week_start_for_current_block() -> None:
+    program = {
+        "meta": {
+            "program_start": "2026-04-01",
+            "block_week_start_days": {"current": "Saturday"},
+        },
+        "phases": [{"name": "Build", "intent": "", "start_week": 1, "end_week": 8}],
+        "sessions": [],
+    }
+    sessions = [
+        {"date": "2026-04-24", "week_number": 4, "block": "current", "completed": True, "status": "completed", "exercises": [make_exercise("Squat", 140, 1)]},
+        {"date": "2026-04-25", "week_number": 5, "block": "current", "completed": True, "status": "completed", "exercises": [make_exercise("Bench Press", 100, 1)]},
+    ]
+
+    result = analytics.weekly_analysis(
+        program,
+        sessions,
+        ref_date="2026-04-25",
+        weeks=1,
+        block="current",
+    )
+
+    assert result["week"] == 5
+    assert result["selected_week_start"] == 5
+    assert result["sessions_analyzed"] == 1
+    assert "Bench Press" in result["exercise_stats"]
+    assert "Squat" not in result["exercise_stats"]
+
+
+def test_weekly_analysis_ref_date_drives_current_week_instead_of_today() -> None:
+    program = {
+        "meta": {"program_start": "2026-04-01"},
+        "phases": [],
+        "sessions": [],
+    }
+    sessions = [
+        {"date": "2026-04-17", "week_number": 3, "block": "current", "completed": True, "status": "completed", "exercises": [make_exercise("Squat", 100, 1)]},
+        {"date": "2026-04-24", "week_number": 4, "block": "current", "completed": True, "status": "completed", "exercises": [make_exercise("Squat", 120, 1)]},
+    ]
+
+    result = analytics.weekly_analysis(
+        program,
+        sessions,
+        ref_date="2026-04-17",
+        weeks=1,
+        block="current",
+    )
+
+    assert result["week"] == 3
+    assert result["selected_week_start"] == 3
+    assert result["sessions_analyzed"] == 1
+    assert result["exercise_stats"]["Squat"]["max_kg"] == 100
+
+
+def test_weekly_analysis_week_gaps_count_positionally() -> None:
+    program = {
+        "meta": {"program_start": "2026-04-01"},
+        "phases": [],
+        "sessions": [],
+    }
+    sessions = [
+        {"date": "2026-04-08", "week_number": 2, "block": "current", "completed": True, "status": "completed", "exercises": [make_exercise("Squat", 100, 1)]},
+        {"date": "2026-04-29", "week_number": 5, "block": "current", "completed": True, "status": "completed", "exercises": [make_exercise("Squat", 120, 1)]},
+    ]
+
+    result = analytics.weekly_analysis(
+        program,
+        sessions,
+        ref_date="2026-05-03",
+        week_start=2,
+        week_end=5,
+        weeks=4,
+        block="current",
+    )
+
+    assert result["selected_week_start"] == 2
+    assert result["selected_week_end"] == 5
+    assert result["selected_week_count"] == 4
+    assert result["sessions_analyzed"] == 2
+
+
+def test_weekly_analysis_saturday_current_week_uses_week_13_after_skipped_week_12() -> None:
+    program = {
+        "meta": {
+            "program_start": "2026-02-15",
+            "block_week_start_days": {"current": "Saturday"},
+        },
+        "phases": [],
+        "sessions": [],
+    }
+    sessions = [
+        {
+            "date": "2026-05-05",
+            "week_number": 12,
+            "block": "current",
+            "completed": False,
+            "status": "planned",
+            "exercises": [],
+            "planned_exercises": [make_exercise("Squat", 100, 1)],
+        },
+        {
+            "date": "2026-05-06",
+            "week_number": 12,
+            "block": "current",
+            "completed": False,
+            "status": "planned",
+            "exercises": [],
+            "planned_exercises": [make_exercise("Bench Press", 80, 1)],
+        },
+        {
+            "date": "2026-05-09",
+            "week_number": 13,
+            "block": "current",
+            "completed": True,
+            "status": "completed",
+            "exercises": [make_exercise("Deadlift", 220, 1)],
+        },
+        {
+            "date": "2026-05-10",
+            "week_number": 13,
+            "block": "current",
+            "completed": True,
+            "status": "completed",
+            "session_notes": "Logged after a timezone boundary.",
+            "exercises": [make_exercise("Bench Press", 125, 1)],
+        },
+        {
+            "date": "2026-05-12",
+            "week_number": 13,
+            "block": "current",
+            "completed": False,
+            "status": "planned",
+            "session_notes": "Keep this paused deadlift variation in the analysis context.",
+            "exercises": [],
+            "planned_exercises": [make_exercise("Paused Deadlift", 180, 3, notes="Watch lockout position.")],
+        },
+    ]
+
+    result = analytics.weekly_analysis(
+        program,
+        sessions,
+        window_start="2026-05-09",
+        window_end="2026-05-15",
+        ref_date="2026-05-09",
+        week_start=13,
+        week_end=13,
+        weeks=1,
+        block="current",
+    )
+
+    assert result["week"] == 13
+    assert result["selected_week_start"] == 13
+    assert result["selected_week_end"] == 13
+    assert result["sessions_analyzed"] == 2
+    assert result["compliance"]["planned"] == 3
+    assert result["compliance"]["completed"] == 2
+    assert "Deadlift" in result["exercise_stats"]
+    assert "Bench Press" in result["exercise_stats"]
+    assert "Squat" not in result["exercise_stats"]
+    assert any(
+        session["date"] == "2026-05-12"
+        and "paused deadlift" in session["session_notes"].lower()
+        for session in result["selected_session_context"]
+    )
+
+
+def test_weekly_analysis_empty_current_week_keeps_history_current_state() -> None:
+    program = {
+        "meta": {
+            "program_start": "2026-04-01",
+            "block_week_start_days": {"current": "Saturday"},
+        },
+        "phases": [],
+        "sessions": [],
+    }
+    sessions = []
+    for idx, lift in enumerate(("Squat", "Bench Press", "Squat", "Bench Press", "Squat", "Bench Press")):
+        sessions.append({
+            "date": f"2026-04-{18 + idx:02d}",
+            "week_number": 4,
+            "block": "current",
+            "completed": True,
+            "status": "completed",
+            "exercises": [make_exercise(lift, 100 + idx, 1)],
+        })
+
+    result = analytics.weekly_analysis(
+        program,
+        sessions,
+        ref_date="2026-04-25",
+        weeks=1,
+        block="current",
+    )
+
+    assert result["week"] == 5
+    assert result["sessions_analyzed"] == 0
+    assert result["current_maxes"]["method"] == "session_estimated"
+    assert result["current_maxes"]["squat"] > 0
+    assert result["current_maxes"]["bench"] > 0
+
+
+def test_weekly_analysis_infers_skipped_compliance_without_mutating_sessions() -> None:
+    planned = {
+        "date": "2026-04-08",
+        "week_number": 2,
+        "block": "current",
+        "completed": False,
+        "status": "planned",
+        "exercises": [],
+        "planned_exercises": [make_exercise("Squat", 100, 1)],
+    }
+    sessions = [
+        planned,
+        {"date": "2026-04-15", "week_number": 3, "block": "current", "completed": True, "status": "completed", "exercises": [make_exercise("Squat", 120, 1)]},
+    ]
+    program = {"meta": {"program_start": "2026-04-01"}, "phases": [], "sessions": []}
+
+    result = analytics.weekly_analysis(
+        program,
+        sessions,
+        ref_date="2026-04-15",
+        week_start=2,
+        week_end=3,
+        weeks=2,
+        block="current",
+    )
+
+    assert result["compliance"]["planned"] == 2
+    assert result["compliance"]["completed"] == 1
+    assert result["compliance"]["missed"] == 1
+    assert planned["status"] == "planned"
+    assert "_inferred_skipped" not in planned
+
+
+def test_template_concretize_accepts_all_week_start_days() -> None:
+    template = {
+        "sessions": [
+            {
+                "id": "tpl-1",
+                "week_number": 1,
+                "day_of_week": "Monday",
+                "day_index": 1,
+                "label": "W1",
+                "exercises": [
+                    {"name": "Squat", "sets": 3, "reps": 5, "load_type": "absolute", "load_value": 100}
+                ],
+            }
+        ]
+    }
+
+    for week_start_day in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"):
+        sessions = template_apply.concretize(template, {}, [], date(2026, 4, 1), week_start_day)
+        assert isinstance(sessions, list)
+
+
+def test_template_concretize_shifted_week_one_drops_pre_program_start_sessions() -> None:
+    template = {
+        "sessions": [
+            {"id": "sat", "week_number": 1, "day_of_week": "Saturday", "day_index": 6, "label": "W1", "exercises": []},
+            {"id": "sun", "week_number": 1, "day_of_week": "Sunday", "day_index": 7, "label": "W1", "exercises": []},
+            {"id": "wed", "week_number": 1, "day_of_week": "Wednesday", "day_index": 3, "label": "W1", "exercises": []},
+        ]
+    }
+
+    sessions = template_apply.concretize(template, {}, [], date(2026, 4, 1), "Saturday")
+
+    assert [session["date"] for session in sessions] == ["2026-04-01"]
+    assert sessions[0]["day"] == "Wednesday"
 
 
 def test_compute_banister_ffm_constant_load_stays_balanced() -> None:

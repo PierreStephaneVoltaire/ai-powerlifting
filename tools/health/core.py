@@ -29,6 +29,7 @@ _template_store: Optional[Any] = None
 _import_store: Optional[Any] = None
 _glossary_store: Optional[Any] = None
 _federation_store: Optional[Any] = None
+_analysis_cache_store: Optional[Any] = None
 _rag: Optional[Any] = None  # HealthDocsRAG type, avoid circular import
 
 
@@ -93,6 +94,38 @@ def _get_federation_store():
             region=os.environ.get("AWS_REGION", "ca-central-1"),
         )
     return _federation_store
+
+def _get_analysis_cache_store():
+    global _analysis_cache_store
+    if _analysis_cache_store is None:
+        import os
+        from analysis_cache import AnalysisCacheStore
+        _analysis_cache_store = AnalysisCacheStore(
+            table_name=os.environ.get("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"),
+            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+            region=os.environ.get("AWS_REGION", "ca-central-1"),
+        )
+    return _analysis_cache_store
+
+async def health_get_lifetime_comparison(block_keys: list[str]) -> dict:
+    """Get a consolidated lifetime comparison report for the given block keys."""
+    cache_store = _get_analysis_cache_store()
+    bundles = []
+    for bk in block_keys:
+        bundle = await asyncio.get_running_loop().run_in_executor(
+            None, cache_store.get_cached_block_analysis, bk
+        )
+        if bundle:
+            bundles.append(bundle)
+    
+    if not bundles:
+        return {
+            "error": "No cached block analysis found for the given keys. Please run block analysis first."
+        }
+    
+    from comparison import build_block_comparison
+    comparison = build_block_comparison(bundles)
+    return comparison
 
 def _get_rag():
     """Lazily create and return the HealthDocsRAG singleton."""
@@ -2302,10 +2335,11 @@ async def template_apply(
     sk: str, 
     target: str = "new_block", 
     start_date: str | None = None, 
-    week_start_day: str = "Monday"
+    week_start_day: str | None = None,
 ) -> dict:
     """Run max resolution gate and return missing or preview."""
     from template_apply import check_max_resolution_gate, concretize
+    from training_weeks import normalize_week_start_day
     
     template_store = _get_template_store()
     template = await template_store.get_template(sk)
@@ -2313,29 +2347,48 @@ async def template_apply(
     store = _get_store()
     program = await store.get_program()
     current_maxes = program.get("current_maxes", {})
+    resolved_week_start_day = normalize_week_start_day(
+        week_start_day,
+        "Monday",
+    )
     
     glossary_store = _get_glossary_store()
     glossary = await glossary_store.get_glossary()
     
     missing = check_max_resolution_gate(template, current_maxes, glossary)
     if missing:
-        return {"status": "gate_blocked", "missing_exercises": missing}
+        return {
+            "status": "gate_blocked",
+            "missing_exercises": missing,
+            "missing_maxes": missing,
+            "target": target,
+            "start_date": start_date,
+            "week_start_day": resolved_week_start_day,
+        }
         
     # Preview concretization
     from datetime import date
     s_date = date.fromisoformat(start_date) if start_date else date.today()
     
-    sessions = concretize(template, current_maxes, glossary, s_date, week_start_day)
-    return {"status": "ready", "preview_sessions": sessions[:5]} # Return first 5 for preview
+    sessions = concretize(template, current_maxes, glossary, s_date, resolved_week_start_day)
+    return {
+        "status": "ready",
+        "preview_sessions": sessions[:5],
+        "target": target,
+        "start_date": s_date.isoformat(),
+        "week_start_day": resolved_week_start_day,
+    }
 
 async def template_apply_confirm(
     sk: str, 
     backfilled_maxes: dict | None = None,
     start_date: str | None = None,
-    week_start_day: str = "Monday"
+    week_start_day: str | None = None,
+    target: str = "new_block",
 ) -> dict:
     """Concretize and write new program version."""
     from template_apply import concretize
+    from training_weeks import normalize_week_start_day
     from datetime import date
     
     template_store = _get_template_store()
@@ -2344,6 +2397,10 @@ async def template_apply_confirm(
     store = _get_store()
     program = await store.get_program()
     current_maxes = dict(program.get("current_maxes", {}))
+    resolved_week_start_day = normalize_week_start_day(
+        week_start_day,
+        "Monday",
+    )
     if backfilled_maxes:
         current_maxes.update(backfilled_maxes)
         
@@ -2351,21 +2408,32 @@ async def template_apply_confirm(
     glossary = await glossary_store.get_glossary()
     
     s_date = date.fromisoformat(start_date) if start_date else date.today()
-    sessions = concretize(template, current_maxes, glossary, s_date, week_start_day)
+    sessions = concretize(template, current_maxes, glossary, s_date, resolved_week_start_day)
+    for session in sessions:
+        session["block"] = "current"
     
     # Create new program version
     # Stripping existing sessions if it's a new block
     new_program = copy.deepcopy(program)
     new_program["sessions"] = sessions
+    new_program.setdefault("meta", {})
+    block_week_start_days = dict(new_program["meta"].get("block_week_start_days") or {})
+    block_week_start_days["current"] = resolved_week_start_day
+    new_program["meta"]["program_week_start_day"] = resolved_week_start_day
+    new_program["meta"]["block_week_start_days"] = block_week_start_days
     new_program["meta"]["template_lineage"] = {
         "applied_template_sk": sk,
         "applied_at": datetime.now(timezone.utc).isoformat(),
-        "week_start_day": week_start_day,
+        "week_start_day": resolved_week_start_day,
         "start_date": s_date.isoformat()
     }
     
     await store._write_new_version(new_program, minor=False)
-    return {"status": "applied", "program_version": new_program["meta"]["version_label"]}
+    return {
+        "status": "applied",
+        "program_version": new_program["meta"]["version_label"],
+        "program_sk": new_program.get("sk") or new_program["meta"]["version_label"],
+    }
 
 async def template_evaluate(sk: str) -> dict:
     from template_evaluate_ai import generate_template_evaluate_report
