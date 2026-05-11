@@ -1,10 +1,10 @@
 import { v4 as uuidv4 } from 'uuid'
 import { GetCommand } from '@aws-sdk/lib-dynamodb'
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
-import { listSessions, patchSessionByDate } from '../services/sessionStore'
+import { listSessions, patchSessionByDate, transformVideo, getProxyUrl } from '../services/sessionStore'
 import type { Phase, Session, SessionVideo, VideoLibraryItem } from '@powerlifting/types'
 
 const S3_BUCKET = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
@@ -20,6 +20,26 @@ const s3Client = new S3Client({
       }
     : undefined,
 })
+
+/**
+ * Fetch media from S3 and return as a stream
+ */
+export async function streamMedia(key: string): Promise<{ body: any; contentType: string }> {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+    })
+    const response = await s3Client.send(command)
+    return {
+      body: response.Body,
+      contentType: response.ContentType || 'application/octet-stream',
+    }
+  } catch (err) {
+    console.error(`[VideoController] Failed to fetch media from S3: ${key}`, err)
+    throw new AppError('Media not found', 404)
+  }
+}
 
 function stripUndefined(obj: any): any {
   if (obj === null || typeof obj !== 'object') return obj
@@ -117,12 +137,10 @@ export async function uploadSessionVideo(
     throw new AppError(`Failed to upload video to storage: ${String(err)}`, 500)
   }
 
-  const videoUrl = `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${s3Key}`
-
   const video: SessionVideo = {
     video_id: videoId,
     s3_key: s3Key,
-    video_url: videoUrl,
+    video_url: getProxyUrl(s3Key),
     ...(exerciseName !== undefined && { exercise_name: exerciseName }),
     ...(setNumber !== undefined && { set_number: setNumber }),
     ...(notes !== undefined && { notes }),
@@ -134,7 +152,7 @@ export async function uploadSessionVideo(
     videos: [...(session.videos || []), video],
   } as Partial<Session>, phases)
 
-  return video
+  return transformVideo(video)
 }
 
 /**
@@ -222,7 +240,7 @@ export async function updateVideoThumbnail(
 
   videos[videoIndex] = {
     ...videos[videoIndex],
-    thumbnail_url: thumbnailUrl,
+    thumbnail_url: getProxyUrl(thumbnailS3Key),
     thumbnail_s3_key: thumbnailS3Key,
     thumbnail_status: status,
   }
@@ -259,7 +277,7 @@ export async function getVideoLibrary(
       if (video.exercise_name) exerciseSet.add(video.exercise_name)
 
       items.push({
-        video,
+        video: transformVideo(video),
         session_date: session.date,
         day: session.day,
         week_number: session.week_number,

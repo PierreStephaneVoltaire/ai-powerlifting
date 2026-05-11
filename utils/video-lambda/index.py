@@ -42,27 +42,84 @@ def handler(event, context):
                 print(f"Missing required metadata: video_id={video_id}, session_date={session_date}, pk={pk}, sk={sk}")
                 continue
 
-            # Generate thumbnail
-            thumbnail_key = f"thumbnails/{session_date}/{video_id}.jpg"
-            thumbnail_data = generate_thumbnail(bucket, key)
+            # 1. Transcode video to MP4 for maximum compatibility
+            # We skip if it's already an MP4 to save time/cost, unless it's a MOV that might need container fix
+            is_mov = key.lower().endswith('.mov')
+            target_video_key = f"processed/{session_date}/{video_id}.mp4"
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                input_path = os.path.join(tmpdir, "input")
+                output_path = os.path.join(tmpdir, "output.mp4")
+                thumbnail_path = os.path.join(tmpdir, "thumbnail.jpg")
+                
+                print(f"Downloading input: {key}")
+                s3.download_file(bucket, key, input_path)
+                
+                ffmpeg_path = '/opt/bin/ffmpeg' if os.path.exists('/opt/bin/ffmpeg') else 'ffmpeg'
+                
+                # Transcode command: H.264 video, AAC audio, FastStart for web streaming
+                print(f"Transcoding to: {target_video_key}")
+                transcode_cmd = [
+                    ffmpeg_path,
+                    '-i', input_path,
+                    '-c:v', 'libx264',
+                    '-preset', 'veryfast',
+                    '-crf', '23',
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
+                    '-movflags', '+faststart',
+                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', # Ensure even dimensions for H.264
+                    '-y', output_path
+                ]
+                subprocess.run(transcode_cmd, capture_output=True, check=True)
+                
+                # Generate thumbnail from the processed video
+                print("Generating thumbnail...")
+                thumb_cmd = [
+                    ffmpeg_path,
+                    '-i', output_path,
+                    '-ss', '00:00:01',
+                    '-vframes', '1',
+                    '-vf', 'scale=320:-1',
+                    '-q:v', '5',
+                    '-y', thumbnail_path
+                ]
+                subprocess.run(thumb_cmd, capture_output=True, check=True)
+                
+                # 2. Upload processed video
+                with open(output_path, 'rb') as f:
+                    s3.put_object(
+                        Bucket=bucket,
+                        Key=target_video_key,
+                        Body=f.read(),
+                        ContentType='video/mp4'
+                    )
+                
+                # 3. Upload thumbnail
+                thumbnail_key = f"thumbnails/{session_date}/{video_id}.jpg"
+                with open(thumbnail_path, 'rb') as f:
+                    s3.put_object(
+                        Bucket=bucket,
+                        Key=thumbnail_key,
+                        Body=f.read(),
+                        ContentType='image/jpeg'
+                    )
 
-            # Upload thumbnail to S3
-            s3.put_object(
-                Bucket=bucket,
-                Key=thumbnail_key,
-                Body=thumbnail_data,
-                ContentType='image/jpeg'
-            )
+            video_url = f"/api/videos/media/{target_video_key}"
+            thumbnail_url = f"/api/videos/media/{thumbnail_key}"
 
-            thumbnail_url = f"https://{bucket}.s3.{os.environ.get('AWS_REGION', 'us-east-1')}.amazonaws.com/{thumbnail_key}"
+            # 4. Update DynamoDB with both NEW video URL and thumbnail
+            update_video_metadata(pk, sk, session_date, video_id, video_url, thumbnail_url, thumbnail_key, 'ready')
 
-            # Update DynamoDB
-            update_video_thumbnail(pk, sk, session_date, video_id, thumbnail_url, thumbnail_key, 'ready')
-
-            print(f"Successfully generated thumbnail for video {video_id}")
+            print(f"Successfully processed video {video_id}")
+            
+            # Optionally delete the original if it was a MOV or raw upload to save space
+            if is_mov or "uploads/" in key:
+                print(f"Cleaning up original: {key}")
+                s3.delete_object(Bucket=bucket, Key=key)
 
         except Exception as e:
-            print(f"Thumbnail generation failed: {e}")
+            print(f"Processing failed: {e}")
 
             # Try to mark as failed if we have the metadata
             try:
@@ -70,65 +127,34 @@ def handler(event, context):
                 metadata = response.get('Metadata', {})
 
                 if metadata.get('video_id') and metadata.get('session_date') and metadata.get('sk'):
-                    update_video_thumbnail(
+                    update_video_metadata(
                         metadata.get('pk'),
                         metadata.get('sk'),
                         metadata.get('session_date'),
                         metadata.get('video_id'),
-                        '', '', 'failed'
+                        '', # video_url
+                        '', # thumbnail_url
+                        '', # thumbnail_s3_key
+                        'failed'
                     )
             except Exception as update_err:
                 print(f"Failed to mark video as failed: {update_err}")
 
 
-def generate_thumbnail(bucket: str, key: str) -> bytes:
-    """Download video and extract thumbnail frame using ffmpeg."""
-    ext = key.split('.')[-1] if '.' in key else 'mp4'
-    ffmpeg_path = '/opt/bin/ffmpeg'
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = os.path.join(tmpdir, f'input.{ext}')
-        thumbnail_path = os.path.join(tmpdir, 'thumbnail.jpg')
-
-        # Download video
-        s3.download_file(bucket, key, video_path)
-
-        # Extract frame at 2 seconds using ffmpeg
-        cmd = [
-            ffmpeg_path if os.path.exists(ffmpeg_path) else 'ffmpeg',
-            '-i', video_path,
-            '-ss', '00:00:02',
-            '-vframes', '1',
-            '-vf', 'scale=320:-1',
-            '-q:v', '5',
-            '-y', thumbnail_path
-        ]
-
-        try:
-            subprocess.run(cmd, capture_output=True, check=True)
-        except subprocess.CalledProcessError:
-            # Try extracting from the beginning if 2 seconds fails
-            cmd[4] = '00:00:00'
-            subprocess.run(cmd, capture_output=True, check=True)
-
-        with open(thumbnail_path, 'rb') as f:
-            return f.read()
-
-
-def update_video_thumbnail(
+def update_video_metadata(
     pk: str,
     program_sk: str,
     session_date: str,
     video_id: str,
+    video_url: str,
     thumbnail_url: str,
     thumbnail_s3_key: str,
     status: str
 ):
-    """Update video thumbnail metadata in DynamoDB (if-sessions table)."""
+    """Update video metadata in DynamoDB (if-sessions table)."""
     table = dynamodb.Table(SESSIONS_TABLE_NAME)
 
     try:
-        # 1. Find the session item in if-sessions
         # SK format: session#{program_sk}#{date}#...
         prefix = f"session#{program_sk}#{session_date}#"
         
@@ -141,12 +167,12 @@ def update_video_thumbnail(
             print(f"Session item not found: pk={pk}, prefix={prefix}")
             return
 
-        # Usually there's only one session per date/program, but we check all just in case
         for item in items:
             videos = item.get('videos', [])
             updated = False
             for video in videos:
                 if video.get('video_id') == video_id:
+                    video['video_url'] = video_url # Update to the processed MP4 URL
                     video['thumbnail_url'] = thumbnail_url
                     video['thumbnail_s3_key'] = thumbnail_s3_key
                     video['thumbnail_status'] = status
@@ -154,7 +180,6 @@ def update_video_thumbnail(
                     break
             
             if updated:
-                # 2. Update the session item
                 table.update_item(
                     Key={'pk': pk, 'sk': item['sk']},
                     UpdateExpression='SET videos = :videos, updated_at = :updated_at',

@@ -238,7 +238,7 @@ sessionsRouter.post('/:version', async (req, res, next) => {
       date: session.date,
       day: session.day || 'Monday',
       week: session.week || 'W1',
-      week_number: 1,
+      week_number: session.week_number || 1,
       phase: session.phase || { name: 'Unknown', intent: '', start_week: 1, end_week: 1 },
       status: session.status || 'planned',
       completed: false,

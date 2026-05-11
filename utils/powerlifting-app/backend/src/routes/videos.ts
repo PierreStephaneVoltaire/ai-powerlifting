@@ -110,3 +110,30 @@ videosRouter.patch('/:version/:sessionDate/:videoId/thumbnail', async (req, res,
     next(err)
   }
 })
+// GET /api/videos/media/* - Proxy media from S3
+videosRouter.get('/media/:path*', async (req, res, next) => {
+  try {
+    let path = (req.params as any).path
+    if (Array.isArray(path)) {
+      path = path.join('/')
+    }
+    const { body, contentType } = await videoController.streamMedia(path)
+    res.setHeader('Content-Type', contentType)
+    // Add caching headers for efficiency
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    if (body) {
+      body.on('error', (err: any) => {
+        console.error(`[MediaProxy] Stream error for ${path}:`, err)
+        if (!res.headersSent) {
+          res.status(500).end()
+        }
+      })
+      body.pipe(res)
+    } else {
+      res.status(404).end()
+    }
+  } catch (err) {
+    next(err)
+  }
+})
+

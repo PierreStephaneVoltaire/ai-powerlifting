@@ -1101,7 +1101,23 @@ export default function SessionDrawer({
           </Stack>
         </Paper>
 
-        <Group justify="flex-end" wrap="wrap">
+        <Group justify="space-between" wrap="wrap">
+          <Button
+            variant="default"
+            color="red"
+            onClick={async () => {
+              if (confirm('Are you sure you want to delete this entire session? This cannot be undone.')) {
+                await deleteSession(localSession.date, sessionArrayIndex)
+                pushToast({ message: 'Session deleted successfully', type: 'success' })
+                onClose()
+                if (onDeleteSuccess) onDeleteSuccess()
+              }
+            }}
+            leftSection={<Trash2 size={16} />}
+          >
+            Delete
+          </Button>
+          <Group gap="sm">
           <Button
             variant="default"
             color="gray"
@@ -1125,6 +1141,7 @@ export default function SessionDrawer({
           >
             {localSession.completed ? 'Done' : 'Mark Done'}
           </Button>
+          </Group>
         </Group>
       </Stack>
   )

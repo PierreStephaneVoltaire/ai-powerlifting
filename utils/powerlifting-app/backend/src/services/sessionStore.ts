@@ -76,6 +76,16 @@ function stripUndefined(value: any): any {
   return out
 }
 
+export const getProxyUrl = (key: string) => `/api/videos/media/${key}`
+
+export function transformVideo(video: any): any {
+  return {
+    ...video,
+    video_url: video.s3_key ? getProxyUrl(video.s3_key) : video.video_url,
+    thumbnail_url: video.thumbnail_s3_key ? getProxyUrl(video.thumbnail_s3_key) : video.thumbnail_url,
+  }
+}
+
 function publicSession(item: RawSessionItem, phases: Phase[]): Session {
   const session: RawSessionItem = { ...item }
   session.id = session.id || session.session_id
@@ -104,6 +114,7 @@ function publicSession(item: RawSessionItem, phases: Phase[]): Session {
   session.phase_name = phase.name
   session.planned_exercises = Array.isArray(session.planned_exercises) ? session.planned_exercises : []
   session.exercises = Array.isArray(session.exercises) ? session.exercises : []
+  session.videos = (Array.isArray(session.videos) ? session.videos : []).map(transformVideo)
   session.status = session.status || (session.completed ? 'completed' : 'planned')
   session.completed = Boolean(session.completed || session.status === 'logged' || session.status === 'completed')
   return session as Session

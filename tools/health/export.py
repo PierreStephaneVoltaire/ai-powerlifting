@@ -826,9 +826,10 @@ def _md_sessions(sessions: list[dict]) -> str:
                         ex.get("kg", ""),
                         ex.get("rpe", ""),
                         notes_value,
+                        session.get("status", ""),
                     ])
                 lines.append("")
-                lines.append(_md_table(["Exercise", "Sets x Reps", "kg", "RPE", "Notes"], ex_rows))
+                lines.append(_md_table(["Exercise", "Sets x Reps", "kg", "RPE", "Notes", "Status"], ex_rows))
 
             lines.append("")
 
@@ -2385,7 +2386,7 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
     ws = wb.create_sheet("Exercises")
     headers = [
         "Date", "Week", "Block", "Phase", "Exercise", "Sets", "Reps", "Weight (kg)",
-        "Failed", "Failed Sets", "Failed Set Reasons", "RPE", "Notes", "Volume",
+        "Failed", "Failed Sets", "Failed Set Reasons", "RPE", "Notes", "Volume", "Session Status",
     ]
     rows = []
     for session in sessions:
@@ -2413,9 +2414,10 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
                 ex.get("rpe", ""),
                 ex.get("notes", ""),
                 round(sets_f * reps_f * kg_f, 1),
+                session.get("status", ""),
             ])
     if not rows:
-        rows.append(["—", "", "", "", "No exercises recorded", "", "", "", "", "", "", "", "", ""])
+        rows.append(["—", "", "", "", "No exercises recorded", "", "", "", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={11: 36, 13: 40})
 
 

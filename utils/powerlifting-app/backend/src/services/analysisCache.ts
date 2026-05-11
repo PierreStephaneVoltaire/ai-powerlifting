@@ -197,7 +197,7 @@ function cachePk(userPk: string): string {
 }
 
 function bundleSk(asOfDate: string): string {
-  return `weekly_bundle#v${CACHE_SCHEMA_VERSION}#${asOfDate}`
+  return `weekly_bundle#${asOfDate}`
 }
 
 function partSk(baseSk: string, index: number): string {
@@ -345,32 +345,27 @@ export async function getCachedWeeklyAnalysisBundle(
 ): Promise<WeeklyAnalysisBundle | null> {
   try {
     const pk = cachePk(userPk)
-    const skPrefix = `weekly_bundle#v${CACHE_SCHEMA_VERSION}#`
+    const skPrefix = `weekly_bundle#`
     
-    const exactSk = bundleSk(asOfDate)
-    const exactResponse = await docClient.send(new GetCommand({
+    // Query for ALL weekly bundles to find the latest
+    const queryResponse = await docClient.send(new QueryCommand({
       TableName: ANALYSIS_CACHE_TABLE,
-      Key: { pk, sk: exactSk },
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': pk,
+        ':prefix': skPrefix,
+      },
     }))
     
-    let item = exactResponse.Item
+    const items = queryResponse.Items || []
+    if (items.length === 0) return null
 
-    // If exact not found, query for the latest one
-    if (!item) {
-      const queryResponse = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': skPrefix,
-        },
-        ScanIndexForward: false, 
-        Limit: 1,
-      }))
-      item = queryResponse.Items?.[0]
-    }
-
-    if (!item) return null
+    // Sort by generated_at desc
+    const sorted = items.sort((a, b) => {
+      return String(b.generated_at || '').localeCompare(String(a.generated_at || ''))
+    })
+    
+    const item = sorted[0]
 
     let payload = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
     const shardCount = Number(item.shard_count || 0)
@@ -379,7 +374,7 @@ export async function getCachedWeeklyAnalysisBundle(
         Array.from({ length: shardCount }, async (_, index) => {
           const part = await docClient.send(new GetCommand({
             TableName: ANALYSIS_CACHE_TABLE,
-            Key: { pk, sk: partSk(item!.sk as string, index) },
+            Key: { pk, sk: partSk(item.sk as string, index) },
           }))
           return String(part.Item?.payload_gzip_b64 ?? '')
         }),
@@ -412,7 +407,6 @@ export async function putCachedWeeklyAnalysisBundle(userPk: string, bundle: Week
         Item: {
           pk,
           sk,
-          schema_version: CACHE_SCHEMA_VERSION,
           as_of_date: bundle.asOfDate,
           generated_at: bundle.generatedAt,
           encoding: 'gzip+base64',
@@ -429,7 +423,6 @@ export async function putCachedWeeklyAnalysisBundle(userPk: string, bundle: Week
       Item: {
         pk,
         sk,
-        schema_version: CACHE_SCHEMA_VERSION,
         as_of_date: bundle.asOfDate,
         generated_at: bundle.generatedAt,
         encoding: 'gzip+base64-sharded',
