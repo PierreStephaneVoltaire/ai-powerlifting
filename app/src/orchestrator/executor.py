@@ -35,6 +35,7 @@ from config import (
 from models.router import resolve_preset_to_model, is_context_limit_error, select_model_by_context
 from app_sandbox import get_local_sandbox
 from files import strip_files_line, FileRef
+from agent.prompts.loader import render_template
 
 if TYPE_CHECKING:
     from openhands.sdk.conversation.state import ConversationState
@@ -313,42 +314,13 @@ def build_subagent_prompt(
     step: PlanStep,
     previous: List[StepResult],
 ) -> str:
-    parts = [
-        "You are an autonomous execution agent. Complete the assigned task using the terminal.",
-        "",
-        f"## Overall Goal\n{plan.goal}",
-    ]
-    
-    if plan.context:
-        parts.append(f"\n## Context\n{plan.context}")
-    
-    if previous:
-        parts.append("\n## Previous Steps")
-        for r in previous:
-            status = "completed" if r.success else "FAILED"
-            parts.append(f"- Step {r.step_index} ({status}): {r.summary[:200]}")
-            for f in r.files:
-                parts.append(f"  Created: {f.path}")
-    
-    parts.append(f"\n## Your Task — Step {step.index}: {step.title}")
-    parts.append(step.description)
-    
-    if step.expected_outputs:
-        parts.append("\n## Expected Outputs")
-        for o in step.expected_outputs:
-            parts.append(f"- {o}")
-    
-    parts.append(
-        "\n## Rules\n"
-        "1. Use terminal_execute for all commands.\n"
-        "2. Work in /home/user/workspace/.\n"
-        "3. Verify outputs exist before finishing (ls, cat, test -f).\n"
-        "4. If something fails, try to fix it. After 3 failed attempts at the same thing, stop and explain.\n"
-        "5. End with a FILES: line listing files you created or modified.\n"
-        "   Format: FILES: /path/to/file (description), /path/to/another (description)"
+    return render_template(
+        "subagent_step.j2",
+        goal=plan.goal,
+        context=plan.context,
+        previous_steps=previous,
+        step=step,
     )
-    
-    return "\n".join(parts)
 
 
 def parse_plan(goal: str, context: str, steps: List[Dict[str, Any]]) -> ExecutionPlan:

@@ -164,28 +164,10 @@ async def condense_with_openrouter(
         content = msg.get("content", "")
         conversation_text += f"{role.upper()}: {content}\n\n"
     
-    # System prompt for condensation
-    system_prompt = """You are a conversation condenser. Your task is to create a concise summary of a conversation that preserves:
-
-1. The core topic and intent of the conversation
-2. Key decisions and outcomes
-3. Any personal context the operator disclosed (preferences, background, etc.)
-4. Important context needed for continuity
-
-Guidelines:
-- Be concise but comprehensive
-- Preserve specific details that might be referenced later
-- Note any operator preferences or background mentioned
-- Highlight any decisions or conclusions reached
-- Do NOT include transient details (temporary debugging context, etc.)
-
-Format the summary as a structured overview, not a narrative."""
-
-    user_prompt = f"""Summarize the following conversation history for context preservation:
-
-{conversation_text}
-
-Provide a concise summary that captures the essential information needed for continuity."""
+    # Load prompts from templates
+    from agent.prompts.loader import load_prompt, render_template
+    system_prompt = load_prompt("condenser_system.j2")
+    user_prompt = render_template("condenser_user.j2", conversation_text=conversation_text)
 
     # Call OpenRouter API
     try:

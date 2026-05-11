@@ -13,6 +13,7 @@ from config import (
     LLM_BASE_URL,
     OPENROUTER_API_KEY,
 )
+from prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -49,34 +50,7 @@ _DEFAULT_RESULT = {
     "reasoning": "",
 }
 
-_SYSTEM_PROMPT = """\
-You are a biomechanics expert classifying resistance-training exercises into muscle groups.
-
-Return exactly 3 buckets:
-- primary_muscles: main drivers
-- secondary_muscles: meaningful contributors
-- tertiary_muscles: minor but real contributors/stabilizers
-
-Allowed muscle groups only:
-quads, hamstrings, glutes, calves, tibialis_anterior, hip_flexors, adductors,
-chest, triceps, front_delts, side_delts, rear_delts, lats, traps, rhomboids,
-teres_major, biceps, forearms, erectors, lower_back, core, obliques, serratus
-
-Rules:
-- Do not use left/right, medial/lateral, or interior/exterior variants.
-- Use at most 4 primary, 5 secondary, and 5 tertiary muscles.
-- The same muscle must not appear in multiple buckets.
-- Put a muscle in a higher bucket only if its contribution is clearly larger.
-- Front knees belong with quads.
-- Back knees belong with hamstrings because hamstrings drive knee flexion.
-- Adductor-heavy squat/deadlift variations should use adductors.
-- Serratus can appear on pressing, protraction, and overhead stability work.
-- Tibialis anterior can appear on dorsiflexion, tibialis raises, and shin-demanding squat/deadlift variations.
-
-Athlete metrics and lift profiles, when present, are soft modifiers only. Use them to bias bucket placement for relevant barbell lifts, not to hallucinate muscles.
-
-Provide brief reasoning.
-"""
+_SYSTEM_PROMPT = load_system_prompt("muscle_group_system")
 
 _TOOL_SCHEMA = {
     "type": "function",
@@ -207,26 +181,13 @@ def _build_user_message(
     program_meta: dict | None = None,
     lift_profiles: list[dict] | None = None,
 ) -> str:
-    parts = [f"Exercise: {exercise.get('name', 'Unknown')}"]
-    if exercise.get("category"):
-        parts.append(f"Category: {exercise['category']}")
-    if exercise.get("equipment"):
-        parts.append(f"Equipment: {exercise['equipment']}")
-    if exercise.get("primary_muscles"):
-        parts.append(f"Existing primary muscles: {', '.join(exercise['primary_muscles'])}")
-    if exercise.get("secondary_muscles"):
-        parts.append(f"Existing secondary muscles: {', '.join(exercise['secondary_muscles'])}")
-    if exercise.get("tertiary_muscles"):
-        parts.append(f"Existing tertiary muscles: {', '.join(exercise['tertiary_muscles'])}")
-    if exercise.get("cues"):
-        parts.append(f"Cues: {', '.join(exercise['cues'])}")
-    if exercise.get("notes"):
-        parts.append(f"Notes: {exercise['notes']}")
-
     related_lifts, contextual_profiles = _select_lift_profiles(exercise, lift_profiles)
-    parts.extend(_format_athlete_context(program_meta))
-    parts.extend(_format_lift_profiles(related_lifts, contextual_profiles))
-    return "\n".join(parts)
+    return render_prompt(
+        "muscle_group_user",
+        exercise=exercise,
+        athlete_metrics_lines=_format_athlete_context(program_meta),
+        lift_profile_lines=_format_lift_profiles(related_lifts, contextual_profiles),
+    )
 
 
 def _normalize_muscle(value: str) -> str | None:

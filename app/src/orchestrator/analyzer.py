@@ -31,6 +31,7 @@ from config import (
 )
 from models.router import resolve_preset_to_model
 from app_sandbox import get_local_sandbox
+from agent.prompts.loader import render_template, load_prompt
 
 from .executor import run_subagent, StepResult
 
@@ -44,56 +45,14 @@ logger = logging.getLogger(__name__)
 # Perspective Prompts
 # =============================================================================
 
-PERSPECTIVE_PROMPTS: Dict[str, str] = {
-    "security": (
-        "You are a security reviewer. Use the terminal to inspect the codebase. Focus on:\n"
-        "- Input validation, injection vectors\n"
-        "- Auth/authz gaps\n"
-        "- Hardcoded secrets\n"
-        "- Dependency vulnerabilities (check with pip audit, npm audit, etc.)\n"
-        "- Data exposure, overly verbose errors\n\n"
-        "Write findings to /home/user/workspace/findings/security.md\n"
-        "Format: ## Critical / ## High / ## Medium / ## Low with file:line references."
-    ),
-    "performance": (
-        "You are a performance engineer. Use the terminal to inspect the codebase. Focus on:\n"
-        "- Algorithmic complexity (O(n²) loops, redundant work)\n"
-        "- Database query patterns (N+1, unbounded selects)\n"
-        "- Memory (large allocs, unbounded caches)\n"
-        "- I/O (blocking in async paths, missing pooling)\n"
-        "- Concurrency (lock contention, race conditions)\n\n"
-        "Write findings to /home/user/workspace/findings/performance.md\n"
-        "Format: ## Critical / ## High / ## Medium / ## Low with specific examples."
-    ),
-    "architecture": (
-        "You are a software architect. Use the terminal to inspect the codebase. Focus on:\n"
-        "- Coupling, circular dependencies\n"
-        "- Leaky abstractions, god classes/modules\n"
-        "- Error handling consistency\n"
-        "- Testability, missing seams\n"
-        "- Scalability bottlenecks\n\n"
-        "Write findings to /home/user/workspace/findings/architecture.md\n"
-        "Format: ## Critical / ## High / ## Medium / ## Low with recommendations."
-    ),
-    "testing": (
-        "You are a QA engineer. Use the terminal to inspect the codebase. Focus on:\n"
-        "- Test coverage gaps\n"
-        "- Missing edge case tests\n"
-        "- Test quality (are assertions meaningful?)\n"
-        "- Integration vs unit test balance\n\n"
-        "Write findings to /home/user/workspace/findings/testing.md\n"
-        "Format: ## Critical / ## High / ## Medium / ## Low with specific test suggestions."
-    ),
-    "documentation": (
-        "You are a documentation reviewer. Use the terminal to inspect the codebase. Focus on:\n"
-        "- Missing or outdated docstrings\n"
-        "- README accuracy\n"
-        "- API documentation completeness\n"
-        "- Confusing naming that needs explanation\n\n"
-        "Write findings to /home/user/workspace/findings/documentation.md\n"
-        "Format: ## Critical / ## High / ## Medium / ## Low with specific improvements."
-    ),
-}
+def _load_perspective_prompts() -> Dict[str, str]:
+    """Load all perspective prompt templates."""
+    return {
+        p: load_prompt(f"analyzer_{p}.j2")
+        for p in ("security", "performance", "architecture", "testing", "documentation")
+    }
+
+PERSPECTIVE_PROMPTS: Dict[str, str] = _load_perspective_prompts()
 
 
 # =============================================================================
@@ -284,7 +243,7 @@ async def _analyze_parallel_impl(
         
         tasks = []
         for p in valid_perspectives:
-            prompt = PERSPECTIVE_PROMPTS[p] + f"\n\n## Context\n{full_context}"
+            prompt = render_template(f"analyzer_{p}.j2", context=full_context)
             output_file = f"findings/{p}.md"
             
             tasks.append(
@@ -314,25 +273,7 @@ async def _analyze_parallel_impl(
         
         logger.info("[Analyzer] Running synthesizer...")
         synth_result = await run_subagent(
-            system_prompt=(
-                "You are a technical lead. Read all files in /home/user/workspace/findings/. "
-                "Synthesize into a single prioritized report. Deduplicate. Note which perspectives "
-                "flagged each issue. Add a Recommended Action Plan. "
-                "Write to /home/user/workspace/findings/synthesized.md\n\n"
-                "Format:\n"
-                "## Executive Summary\n"
-                "Brief overview of findings.\n\n"
-                "## Critical Issues\n"
-                "Issues that need immediate attention.\n\n"
-                "## High Priority\n"
-                "Important issues to address soon.\n\n"
-                "## Medium Priority\n"
-                "Issues to address in upcoming iterations.\n\n"
-                "## Low Priority / Nice to Have\n"
-                "Minor improvements.\n\n"
-                "## Recommended Action Plan\n"
-                "Ordered list of steps to address the findings."
-            ),
+            system_prompt=load_prompt("synthesizer.j2"),
             user_message="Synthesize all analysis findings from /home/user/workspace/findings/.",
             chat_id=chat_id,
             model=resolve_preset_to_model(ORCHESTRATOR_SYNTHESIS_MODEL),

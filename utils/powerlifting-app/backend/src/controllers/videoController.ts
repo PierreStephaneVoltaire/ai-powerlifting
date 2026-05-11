@@ -21,21 +21,40 @@ const s3Client = new S3Client({
     : undefined,
 })
 
+export interface StreamMediaResult {
+  body: any
+  contentType: string
+  contentLength?: number
+  contentRange?: string
+  acceptRanges?: string
+  statusCode: number
+}
+
 /**
- * Fetch media from S3 and return as a stream
+ * Fetch media from S3 and return as a stream.
+ * Supports HTTP Range requests so browsers can seek in videos without
+ * downloading the entire file.
  */
-export async function streamMedia(key: string): Promise<{ body: any; contentType: string }> {
+export async function streamMedia(key: string, range?: string): Promise<StreamMediaResult> {
   try {
     const command = new GetObjectCommand({
       Bucket: S3_BUCKET,
       Key: key,
+      ...(range ? { Range: range } : {}),
     })
     const response = await s3Client.send(command)
     return {
       body: response.Body,
       contentType: response.ContentType || 'application/octet-stream',
+      contentLength: response.ContentLength,
+      contentRange: response.ContentRange,
+      acceptRanges: response.AcceptRanges ?? 'bytes',
+      statusCode: range && response.ContentRange ? 206 : 200,
     }
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) {
+      throw new AppError('Media not found', 404)
+    }
     console.error(`[VideoController] Failed to fetch media from S3: ${key}`, err)
     throw new AppError('Media not found', 404)
   }

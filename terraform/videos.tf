@@ -74,13 +74,16 @@ resource "aws_iam_role_policy" "video_thumbnail_lambda" {
       },
       {
         Effect   = "Allow"
-        Action   = ["s3:GetObject"]
+        Action   = ["s3:GetObject", "s3:DeleteObject"]
         Resource = "${aws_s3_bucket.session_videos.arn}/videos/*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject"]
-        Resource = "${aws_s3_bucket.session_videos.arn}/thumbnails/*"
+        Effect = "Allow"
+        Action = ["s3:PutObject"]
+        Resource = [
+          "${aws_s3_bucket.session_videos.arn}/thumbnails/*",
+          "${aws_s3_bucket.session_videos.arn}/processed/*"
+        ]
       },
       {
         Effect = "Allow"
@@ -117,8 +120,8 @@ resource "aws_lambda_function" "video_thumbnail" {
   role          = aws_iam_role.video_thumbnail_lambda.arn
   handler       = "index.handler"
   runtime       = "python3.12"
-  memory_size   = 1024
-  timeout       = 60
+  memory_size   = 2048
+  timeout       = 900
 
   filename         = data.archive_file.video_lambda.output_path
   source_code_hash = data.archive_file.video_lambda.output_base64sha256

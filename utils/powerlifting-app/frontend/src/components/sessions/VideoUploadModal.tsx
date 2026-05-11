@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Modal,
   Button,
@@ -43,6 +43,22 @@ export default function VideoUploadModal({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Reset all form state whenever the modal is closed so a second upload
+  // starts fresh rather than showing stale file/exercise from the previous one.
+  useEffect(() => {
+    if (!isOpen) {
+      setFile(null)
+      setExerciseName('')
+      setSetNumber(undefined)
+      setNotes('')
+      setUploadProgress(0)
+      setIsUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 

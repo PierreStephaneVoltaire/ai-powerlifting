@@ -12,7 +12,10 @@ If you want the current truth, treat these files as the real sources of truth:
 - `frontend/src/components/analysis/WeeklyData.tsx`
 - `frontend/src/components/analysis/AiAnalysis.tsx`
 - `frontend/src/constants/formulaDescriptions.ts`
+- `frontend/src/App.tsx`
 - `backend/src/routes/analytics.ts`
+- `backend/src/services/blockAnalytics.ts`
+- `backend/src/services/analysisCache.ts`
 - `tools/health/analytics.py`
 - `tools/health/*_ai.py`
 - `packages/types/index.ts`
@@ -24,11 +27,15 @@ The powerlifting app is a single-athlete training portal that combines:
 - deterministic analytics for progress, workload, fatigue, readiness, scoring,
   competition projection, PRR calibration, volume landmarks, and specificity
   bands
-- narrow AI tools for fatigue-profile estimation, lift-profile cleanup and
-  stimulus estimation, accessory ROI analysis, program evaluation, template
-  evaluation, and spreadsheet import
+- narrow AI tools for fatigue-profile estimation, muscle-group estimation,
+  lift-profile cleanup and stimulus estimation, accessory ROI analysis, block
+  program evaluation, multi-block lifetime comparison, template evaluation, and
+  spreadsheet import
 - DynamoDB-backed storage for the full training record
+- separate DynamoDB table (`if-powerlifting-analysis-cache`) for pre-computed
+  analytics windows and AI report caches
 - optional S3-backed video attachments
+- Discord OAuth authentication with per-user settings (nickname)
 
 The frontend is React 19 + Vite + TypeScript + Mantine. The backend is
 Express/TypeScript. Most serious analytics and AI work does not happen inside
@@ -47,11 +54,12 @@ React page
             -> JSON back to frontend
 ```
 
-For the Analysis page specifically there are three separate computation paths:
+For the Analysis page specifically there are four separate computation paths:
 
-1. Backend deterministic analysis via `weekly_analysis`
+1. Backend deterministic analysis via `weekly_analysis` (6 windows pre-computed by `weekly-bundle`)
 2. Frontend-local derivations from program data, glossary data, and weight log
 3. Separate AI reports for correlation analysis and full-block program evaluation
+4. Block/lifetime analytics via `blockAnalytics.ts` service — powers the Blocks and Compare tabs
 
 ## Storage And Data Model
 
@@ -102,6 +110,8 @@ Storage conventions:
   `height_cm`, `arm_wingspan_cm`, `leg_length_cm`
 - Manual and lift-specific max helpers:
   `manual_maxes`, `lift_attempt_settings`
+- Per-block start maxes (manually pinned, for block-relative analytics):
+  `block_start_maxes[blockKey].squat_kg`, `.bench_kg`, `.deadlift_kg`, `.total_kg`, `.source`, `.updated_at`
 - Program history/context:
   `training_notes[]`, `change_log[]`, `last_comp`
 - Template lineage:
@@ -257,6 +267,64 @@ Competition data drives:
 - DOTS/IPF GL interpretations
 - AI program evaluation competition-alignment output
 
+### Goals
+
+`AthleteGoal` captures explicit block goals linked to competitions and qualification standards:
+
+- Identity: `goal_id`, `title`, `goal_type` (10 variants: `qualify_for_federation`,
+  `hit_total`, `peak_for_meet`, `make_podium`, `conservative_pr`, `train_through`,
+  `rank_percentile`, `improve_dots`, `maintain_weight_class`, `coach_defined`)
+- Priority and timing: `priority` (primary/secondary/optional), `target_competition_dates[]`
+- Target federation and standards: `target_federation`, `qualification_standards[]`
+  (multi-select from federation library)
+- Numerical targets: `target_total_kg`, `target_dots`, `target_ipf_gl`
+- Weight class context: `target_weight_class_kg`, `acceptable_weight_classes[]`
+- Strategy: `strategy_mode` (max_total/qualify/minimum_total/podium/train_through/
+  conservative_pr), `risk_tolerance` (low/medium/high)
+- Weight management constraints: `max_bodyweight_loss_pct`, `max_water_cut_pct`
+- Notes
+
+Goals are stored in `Program.goals[]` and are injected into the program evaluation
+AI prompt. They drive `goal_status[]` in the evaluation output and affect competition
+strategy recommendations.
+
+### Federations
+
+`FederationLibrary` captures:
+
+- `federations[]`: `FederationRecord` with id, name, abbreviation, region, status
+  (active/archived), timestamps
+- `qualification_standards[]`: `QualificationStandard` with federation_id,
+  competition_name, season_year, sex, equipment, event, age_class, division,
+  weight_class_kg, required_total_kg, qualifying date range, source URL/label
+
+`Competition` has been extended with:
+- `federation_id`: the host federation
+- `counts_toward_federation_ids[]`: additional federations the meet counts toward
+  (used for goal eligibility determination)
+- `projected_at_t_minus_1w` / `projection_snapshot_date`: for PRR calibration
+
+### Session wellness
+
+`SessionWellness` captures per-session subjective state on a 1-5 scale:
+
+- `sleep`, `soreness`, `mood`, `stress`, `energy`
+- `recorded_at`
+
+### Set-level detail
+
+`SetStatus`: `pending | completed | failed | skipped`
+
+`LoadSource`: `absolute | rpe | percentage | unresolvable`
+
+`PlannedExercise` is a separate type from logged `Exercise` — used in
+`session.planned_exercises[]`.
+
+`SessionVideo` captures per-video metadata:
+- `video_id`, `s3_key`, `thumbnail_s3_key`, `video_url`, `thumbnail_url`
+- `exercise_name`, `set_number`
+- `thumbnail_status`: `pending | ready | failed`
+
 ### Diet notes
 
 `DietNote` captures averaged recovery/nutrition context, not meal-by-meal logging:
@@ -403,13 +471,20 @@ prompts, but the deterministic fatigue math does not directly adjust for them.
 
 ## Analysis Page: Data Sources And Render Path
 
-`frontend/src/pages/AnalysisPage.tsx` pulls data from three places:
+`frontend/src/pages/AnalysisPage.tsx` has three top-level section tabs (Weekly,
+Blocks, Compare) toggled via `?type=` URL param.
 
-1. `fetchWeeklyAnalysis(effectiveWeeks, 'current')`
-   - route: `GET /api/analytics/analysis/weekly`
-   - backend tool: `weekly_analysis`
-   - primary source for fatigue, compliance, readiness, INOL, ACWR, specificity,
-     projections, per-lift stats, flags, and backend current maxes
+### Weekly tab data sources
+
+1. `GET /api/analytics/analysis/weekly-bundle?asOfDate=YYYY-MM-DD`
+   - backend service: `analysisCache.ts`
+   - computes all 6 window analyses in one request; returns from cache if fresh
+   - window keys: `current`, `previous_1`, `previous_2`, `previous_4`,
+     `previous_8`, `block`
+   - backend tool for each window: `weekly_analysis`
+   - cache table: `if-powerlifting-analysis-cache` (DynamoDB), TTL 7 days
+   - `POST /api/analytics/analysis/regenerate` force-regenerates all 6 windows
+     plus AI correlation reports and the markdown export
 2. `fetchWeightLog(version)`
    - used for the bodyweight trend and as fallback bodyweight for local DOTS/IPF GL
 3. `fetchGlossary()`
@@ -433,6 +508,35 @@ Important distinction:
 - several cards on the page are frontend-derived and can disagree with backend
   values
 - AI sections are cached separately and regenerated on demand
+
+### Blocks tab
+
+Powered by `blockAnalytics.ts` service. Calls:
+
+- `GET /api/analytics/blocks` — builds the `ProgramBlockIndexEntry[]` from
+  program sessions, grouped by block name
+- `GET /api/analytics/blocks/:blockKey/analysis` — per-block deterministic
+  analytics bundle (calls `weekly_analysis` tool scoped to block date range)
+- `GET /api/analytics/blocks/:blockKey/correlation` — per-block correlation AI
+- `GET /api/analytics/blocks/:blockKey/program-evaluation` — per-block program
+  evaluation AI
+- `PUT /api/analytics/blocks/:blockKey/start-maxes` — manually pin block-start
+  maxes for relative progression tracking
+- `POST /api/analytics/blocks/:blockKey/regenerate` — force-regenerates all
+  block caches
+
+`DataQualityFlag` codes surface per-block data quality issues:
+`no_sessions`, `low_session_count`, `no_completed_sessions`, `short_block`,
+`missing_exercises`, `no_rpe_data`, `low_exercise_diversity`.
+
+### Compare tab
+
+Powered by `blockAnalytics.ts`. Calls:
+
+- `POST /api/analytics/block-comparison` — deterministic cross-block metrics
+- `POST /api/analytics/block-comparison/ai` — AI lifetime block comparison
+  (calls IF tool `multi_block_comparison_analysis`; cached separately, never
+  regenerated by the main `/analysis/regenerate` endpoint)
 
 ## Analysis Page: Every Section And What It Means
 
@@ -1449,6 +1553,79 @@ Important implementation detail:
 
 ## Where And How AI Is Used
 
+### 7. Muscle-group estimation
+
+User-visible surface:
+
+- auto-trigger when a new glossary exercise is added without muscle assignments
+- explicit estimate button in the glossary flows
+- route: `POST /api/analytics/muscle-groups/estimate`
+- route: `POST /api/exercises/:id/estimate-muscles`
+
+Tool/module path:
+
+- `muscle_group_estimate`
+- `tools/health/muscle_group_ai.py`
+
+Inputs:
+
+- exercise name, category, equipment
+- optional lift profiles
+
+Outputs:
+
+- `primary_muscles[]`, `secondary_muscles[]`, `tertiary_muscles[]`
+- reasoning string
+
+### 8. Multi-block lifetime comparison AI
+
+User-visible surface:
+
+- Analysis page Compare tab -> `AI Lifetime Comparison` button
+
+Route:
+
+- `POST /api/analytics/block-comparison/ai`
+
+Tool/module path:
+
+- `multi_block_comparison_analysis`
+- `tools/health/multi_block_comparison_ai.py`
+
+Inputs:
+
+- deterministic comparison payload from all selected blocks
+- per-block correlation reports
+- per-block program evaluation reports
+- per-block context (competition outcomes, phase definitions, date ranges)
+
+Outputs:
+
+- cross-block strength progression narrative
+- accessory ROI trends across blocks
+- key observations and coaching signals
+
+Cache behavior:
+
+- cached as lifetime compare key; never regenerated by `/analysis/regenerate`
+- only on-demand via the Compare tab AI button
+
+### 9. Lift-profile AI tools
+
+Routes:
+
+- `POST /api/analytics/lift-profile/review` → `lift_profile_review`
+- `POST /api/analytics/lift-profile/rewrite` → `lift_profile_rewrite`
+- `POST /api/analytics/lift-profile/estimate-stimulus` → `lift_profile_estimate_stimulus`
+- `POST /api/analytics/lift-profile/rewrite-and-estimate` → `lift_profile_rewrite_and_estimate`
+
+Tool/module path:
+
+- `tools/health/lift_profile_ai.py`
+
+The `rewrite-and-estimate` endpoint combines lift-profile style rewrite and
+stimulus-coefficient estimation in a single round-trip.
+
 ### AI execution model
 
 The app has multiple AI entry points, but each is narrow.
@@ -1534,7 +1711,7 @@ Boundary:
 - `planned_exercises[]` is never mutated. Applying the result updates only the
   executed `exercises[]` list and appends concise reasoning to exercise notes.
 
-### 1. Exercise fatigue-profile estimation
+### 1. Exercise fatigue-profile estimation (legacy numbering — see sections 7-9 above for new AI tools)
 
 User-visible surfaces:
 
@@ -1995,16 +2172,125 @@ Prompt summaries:
 - glossary resolution handles abbreviations and nicknames, but only suggests
   new entry `name`, `category`, and `equipment`
 
-## Other Important User-Facing Surfaces
+## Pages And Routes
+
+Full route list from `frontend/src/App.tsx`:
+
+| Route | Component | Notes |
+|-------|-----------|-------|
+| `/login` | `LoginPage` | Discord OAuth entry point |
+| `/auth/callback` | `AuthCallbackPage` | OAuth callback, verifies session cookie |
+| `/` | `Dashboard` | Main hub |
+| `/lift-profiles/:lift` | `LiftProfilePage` | Per-lift profile editor (squat/bench/deadlift) |
+| `/sessions` | `CalendarPage` | Session calendar (Month/Agenda/Compact views) |
+| `/calendar` | redirect | → `/sessions` |
+| `/session/:date/:index?` | `SessionDetailPage` | Full-page session editor |
+| `/list/:date/:index?` | `SessionDetailPage` | Legacy alias |
+| `/list` | `ListPage` | Redirect → `/sessions?view=Compact` |
+| `/analysis` | `AnalysisPage` | Full analytics hub (Weekly/Blocks/Compare tabs) |
+| `/maxes` | `MaxesPage` | Max history viewer |
+| `/supplements` | `SupplementsPage` | Supplement phase CRUD |
+| `/biometrics` | `BiometricsPage` | Diet and biometrics notes |
+| `/diet` | `BiometricsPage` | Alias |
+| `/videos` | `VideosPage` | Video library |
+| `/rankings` | `RankingsPage` | OpenPowerlifting rankings lookup |
+| `/tools` | `ToolsPage` | Tool hub |
+| `/tools/plate` | `PlateCalculator` | |
+| `/tools/dots` | `DotsCalculator` | |
+| `/tools/weight` | `WeightTracker` | |
+| `/tools/percent` | `PercentTable` | |
+| `/tools/converter` | `UnitConverter` | |
+| `/tools/attempts` | `AttemptSelector` | |
+| `/about` | `AboutPage` | Formula documentation |
+| `/designer` | `DesignerLanding` | Designer hub |
+| `/designer/phases` | `DesignerPhases` | Phase CRUD per block |
+| `/designer/sessions` | `DesignerPage` | Session designer with drag-and-drop |
+| `/designer/goals` | `GoalsPage` | Athlete goal CRUD |
+| `/designer/federations` | `FederationsPage` | Federation library + qual standards |
+| `/designer/competitions` | `CompetitionsPage` | Competition CRUD + post-meet reports |
+| `/designer/glossary` | `GlossaryPage` | Exercise glossary CRUD |
+| `/designer/import` | `ImportWizardPage` | Spreadsheet import wizard |
+| `/designer/templates` | `TemplateLibraryPage` | Template library |
+| `/designer/templates/new` | `TemplateCreatePage` | |
+| `/designer/templates/:sk/edit` | `TemplateEditPage` | |
+| `/designer/templates/:sk` | `TemplateDetailPage` | |
+
+Unreachable pages (no registered route): `TimelinePage.tsx`, `DietNotesPage.tsx`.
+
+### Authentication
+
+Discord OAuth2. The `LoginPage` triggers the flow; `AuthCallbackPage` receives the
+redirect and verifies the session via `GET /api/auth/me`. Sessions are stored as
+httpOnly cookies. Per-user settings (DynamoDB) store `discord_id`,
+`discord_username`, `avatar_url`, and a 2-32 char alphanumeric nickname.
 
 ### Dashboard
 
 The Dashboard is the main control surface for:
 
 - program meta edits
-- weight log interaction
-- lift-profile review / rewrite / stimulus estimation
-- anthropometrics
+- competition countdown and block analysis summary panel
+- body-weight trend
+- phase timeline bar
+- lift-profile cards with AI review/rewrite/stimulus-estimate actions
+- training notes and change log
+
+It calls `fetchBlockAnalysis` and `fetchProgramBlocks` — it is analytics-heavy,
+not just a static overview.
+
+### CalendarPage (`/sessions`)
+
+Primary session management interface. Three view modes:
+
+- `Month`: Mantine calendar with session dots (color-coded by phase/status)
+- `Agenda`: chronological scrollable list with muscle-volume chart
+- `Compact`: table view
+
+Navigates to `/session/:date/:index` on click.
+
+### CompetitionsPage
+
+Full competition management with post-meet reporting. Fields include the 9-attempt
+grid (squat/bench/deadlift × 3 attempts), per-attempt result (made/missed/not_taken),
+miss categories and reasons, sleep/travel/warmup/food/caffeine/equipment notes,
+attempt-selection grade, between-comp plan, and comp-day protocol.
+
+### GoalsPage
+
+Athlete goal CRUD. 10 goal types, 3 priority levels, multi-competition and
+multi-standard linking, strategy mode (6 options), risk tolerance.
+
+### FederationsPage
+
+Federation library and qualification standard CRUD. Standards have federation,
+season, sex, equipment, event, age class, division, weight class, required total,
+and date range. Standards are referenced by goals and used in the program evaluation
+AI prompt.
+
+### LiftProfilePage (`/lift-profiles/:lift`)
+
+Dedicated per-lift profile editor (squat/bench/deadlift). Includes:
+
+- style notes, sticking points, primary muscle, volume tolerance
+- stimulus coefficient with confidence and reasoning
+- INOL low/high threshold overrides
+- e1RM multiplier with AI suggestions from `fetchE1rmMultiplierSuggestions()`
+
+### MaxesPage (`/maxes`)
+
+All-time and windowed max history. Windows: 1 week / 1 month / 3 months / 6 months /
+1 year / all time. Includes a Big 3 pie chart (squat/bench/deadlift proportions).
+All data is derived locally from program store sessions.
+
+### SupplementsPage (`/supplements`)
+
+Block-scoped supplement phase CRUD. Per phase: name, notes, week range, peak-week
+protocol (dynamic key-value pairs), supplement items (name, dose, notes).
+
+### BiometricsPage (`/biometrics`, `/diet`)
+
+Date-keyed diet and biometrics entries: avg daily calories, protein, carbs, fat,
+sleep hours, water intake (with unit), consistency flag, free-text notes.
 
 ### Glossary page
 
@@ -2016,6 +2302,7 @@ The Glossary page is where exercise intelligence lives:
 - fatigue-profile reasoning
 - accessory e1RM estimates
 - archive state
+- AI estimate muscle groups button
 
 ### Template library and designer
 
@@ -2044,6 +2331,12 @@ The Rankings page is separate from the core training analytics. It compares user
 totals and DOTS to the OpenPowerlifting dataset with filterable federation,
 country, region, equipment, sex, age class, year, and event type.
 
+### AboutPage (`/about`)
+
+Informational page documenting all formula descriptions from `formulaDescriptions.ts`,
+modality descriptions, and data source credits. Also the place where formula-touching
+PRs should update prose.
+
 ### Videos
 
 Videos are stored and displayed, but no computer-vision analysis is currently
@@ -2066,21 +2359,65 @@ or temporary mismatches:
 4. Program-evaluation gating differs between frontend and backend.
 5. Template evaluation still passes mocked, minimal athlete context.
 6. The glossary fatigue-estimation path is rougher than the auto-add path.
+7. `TimelinePage.tsx` exists in `frontend/src/pages/` but has no registered
+   route in `App.tsx` — it is unreachable via navigation.
+8. `DietNotesPage.tsx` exists but is also unrouted — `/diet` and `/biometrics`
+   both point to `BiometricsPage` instead.
+9. The media proxy route was previously registered as `/media/:path*`, which is
+   invalid in Express 5 / path-to-regexp v8. Fixed to `/media/{*path}`.
 
 Consistency rule:
 
 - every formula-touching change must update `README.md`, `AboutPage.tsx`, and
   `formulaDescriptions.ts` in the same PR
 
+## Backend Services Summary
+
+| Service | File | Purpose |
+|---------|------|---------|
+| Analysis cache | `backend/src/services/analysisCache.ts` | DynamoDB cache for 6 window analyses + markdown export. Sharding for large payloads. |
+| Block analytics | `backend/src/services/blockAnalytics.ts` | Cross-block index, per-block bundles, correlation, program-eval, AI lifetime compare |
+| Session store | `backend/src/services/sessionStore.ts` | Separate DynamoDB session storage (sessions are NOT embedded in program document) |
+| User settings | `backend/src/services/userSettings.ts` | Per-Discord-user settings with nickname and 60s in-memory cache |
+
+Important: sessions are stored in a separate DynamoDB table (env var `SESSION_TABLE`),
+not inside the program document. `programController.getProgram()` does not return
+sessions by itself; callers must merge from `sessionStore` or pass `sessions` explicitly.
+
+## Backend Routes Summary
+
+| Router | Key endpoints |
+|--------|---------------|
+| `analytics.ts` | 21 endpoints: weekly-bundle, weekly, blocks/*, block-comparison, correlation, program-evaluation, fatigue-profile, muscle-groups, lift-profile/*, e1rm-multiplier |
+| `sessions.ts` | 12 endpoints: CRUD + reschedule + status + complete + AI notes/autoregulation + exercise CRUD |
+| `programs.ts` | 11 endpoints: CRUD + fork + phases + lift-profiles + designer |
+| `auth.ts` | 4 endpoints: Discord OAuth login/callback/me/logout |
+| `exercises.ts` | 12 endpoints: glossary CRUD + archive + e1rm + AI estimate |
+| `competitions.ts` | 4 endpoints: CRUD + migrate + complete (triggers projection snapshot) |
+| `goals.ts` | 2 endpoints: get/put |
+| `federations.ts` | 2 endpoints: get/put |
+| `template.ts` | 10+ endpoints: list/get/create/update/apply/confirm/evaluate/convert/copy/archive |
+| `import.ts` | 5 endpoints: upload/pending/get/apply/reject |
+| `export.ts` | 2 endpoints: xlsx/markdown |
+| `videos.ts` | 5 endpoints: list/upload/delete/thumbnail/media-proxy |
+| `maxes.ts` | 3 endpoints: get/put/history |
+| `weight.ts` | 3 endpoints: get/post/delete |
+| `supplements.ts` | 2 endpoints: get/put |
+| `dietNotes.ts` | 2 endpoints: get/put |
+| `stats.ts` | 2 endpoints: categories/analyze (proxy to OpenPowerlifting) |
+| `settings.ts` | 2 endpoints: get/nickname |
+
 ## Bottom Line
 
 The powerlifting app is not just a logbook. It is a layered system:
 
-- raw training data and meet data in DynamoDB
+- raw training data and meet data in DynamoDB (program document)
+- sessions in a separate DynamoDB table (not embedded in program)
+- pre-computed analytics cached in `if-powerlifting-analysis-cache`
 - glossary metadata for anatomy and fatigue semantics
-- deterministic analysis in `tools/health/analytics.py`
+- deterministic analysis in `tools/health/analytics.py` (85+ tools)
 - narrow AI interpretation layers in `tools/health/*_ai.py`
-- a React Analysis page that mixes backend analytics with additional local trends
+- a React Analysis page with Weekly, Blocks, and Compare tabs
 
 The most important customizations are the ones that make the portal athlete-
 specific instead of textbook-generic:
@@ -2092,6 +2429,7 @@ specific instead of textbook-generic:
 - stimulus-adjusted INOL from lift profiles
 - phase-aware RPE drift and readiness
 - DOTS-sensitive, taper-aware meet projection
+- block-scoped analytics with per-block start max pinning
 
 If you are changing the analytics or the AI prompts, update this README at the
 same time. The portal's behavior is now too custom for a short marketing README

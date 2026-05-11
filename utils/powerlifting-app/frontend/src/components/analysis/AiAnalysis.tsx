@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useProgramStore } from '@/store/programStore';
 import { fetchCorrelationReport, fetchProgramEvaluation, type CorrelationReport, type ProgramEvaluationReport } from '@/api/analytics';
-import { Paper, Group, Text, Badge, Button, Loader, Box, Table, Stack, SimpleGrid } from '@mantine/core';
-import { Brain, RefreshCw, Trophy } from 'lucide-react';
+import { Paper, Group, Text, Badge, Loader, Box, Table, Stack, SimpleGrid } from '@mantine/core';
+import { Brain, Trophy } from 'lucide-react';
 
 const CORR_DIR_BADGE: Record<string, string> = {
   positive: 'green',
@@ -19,9 +19,11 @@ const CORR_STRENGTH_BADGE: Record<string, string> = {
 interface AiAnalysisProps {
   effectiveWeeks: number;
   weeksMode: number | 'current' | 'block';
+  /** When true, the parent is running a full regeneration — show spinners and reload when it completes. */
+  isRegenerating?: boolean;
 }
 
-export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
+export function AiAnalysis({ effectiveWeeks, weeksMode, isRegenerating = false }: AiAnalysisProps) {
   const { program } = useProgramStore();
 
   // Correlation report state
@@ -34,38 +36,31 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
 
-  // Fetch correlation report when weeks >= 4
+  // Fetch correlation report when weeks >= 4.
+  // Also re-fetches after a regeneration completes (isRegenerating transitions false→true→false).
   useEffect(() => {
     if (effectiveWeeks < 4) {
       setCorrReport(null);
       return;
     }
+    if (isRegenerating) return; // don't fetch while parent is regenerating
     setCorrLoading(true);
     setCorrError(null);
     fetchCorrelationReport(effectiveWeeks, 'current', false, true)
       .then(setCorrReport)
       .catch((e) => setCorrError(e.message))
       .finally(() => setCorrLoading(false));
-  }, [effectiveWeeks]);
+  }, [effectiveWeeks, isRegenerating]);
 
-  const refreshCorrelation = () => {
-    if (effectiveWeeks < 4) return;
-    setCorrLoading(true);
-    setCorrError(null);
-    setCorrReport(null);
-    fetchCorrelationReport(effectiveWeeks, 'current', true)
-      .then(setCorrReport)
-      .catch((e) => setCorrError(e.message))
-      .finally(() => setCorrLoading(false));
-  };
-
-  // Program evaluation — fetch when in Full Block mode
+  // Program evaluation — fetch when in Full Block mode.
+  // Also re-fetches after a regeneration completes.
   useEffect(() => {
     if (weeksMode !== 'block') {
       setEvalReport(null);
       setEvalError(null);
       return;
     }
+    if (isRegenerating) return; // don't fetch while parent is regenerating
     const completedCount = (program?.sessions ?? []).filter(
       s => (s.block ?? 'current') === 'current' && s.completed,
     ).length;
@@ -79,18 +74,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
       .then(setEvalReport)
       .catch((e) => setEvalError(e.message))
       .finally(() => setEvalLoading(false));
-  }, [weeksMode, program?.meta?.program_start, program?.sessions]);
-
-  const refreshEvaluation = () => {
-    if (weeksMode !== 'block') return;
-    setEvalLoading(true);
-    setEvalError(null);
-    setEvalReport(null);
-    fetchProgramEvaluation(true)
-      .then(setEvalReport)
-      .catch((e) => setEvalError(e.message))
-      .finally(() => setEvalLoading(false));
-  };
+  }, [weeksMode, program?.meta?.program_start, program?.sessions, isRegenerating]);
 
   const STANCE_COLORS: Record<string, string> = { continue: 'green', monitor: 'blue', adjust: 'yellow', critical: 'red' };
   const ALIGN_COLORS: Record<string, string> = { good: 'green', mixed: 'yellow', poor: 'red' };
@@ -125,31 +109,22 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
           <Group gap="xs">
             <Brain size={18} />
             <Text fw={500}>Exercise ROI Correlation</Text>
-            {corrReport && (
+            {isRegenerating ? (
+              <Badge color="orange" variant="light" size="sm">Regenerating…</Badge>
+            ) : corrReport && (
               <Badge color={corrReport.cached ? 'blue' : 'green'} variant="light" size="sm">
                 {corrReport.cached ? `Cached ${corrReport.generated_at ? new Date(corrReport.generated_at).toLocaleDateString() : ''}` : 'Just generated'}
               </Badge>
             )}
           </Group>
-          {effectiveWeeks >= 4 && (
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={refreshCorrelation}
-              disabled={corrLoading}
-              leftSection={<RefreshCw size={14} style={corrLoading ? { animation: 'spin 1s linear infinite' } : undefined} />}
-            >
-              {corrReport?.cache_miss ? 'Generate' : 'Regenerate'}
-            </Button>
-          )}
         </Group>
 
         {effectiveWeeks < 4 ? (
           <Text size="sm" c="dimmed">Correlation analysis requires at least 4 weeks of data. Select 4+ weeks or Full Block.</Text>
-        ) : corrLoading ? (
+        ) : isRegenerating || corrLoading ? (
           <Group gap="xs" py="md">
             <Loader size="xs" />
-            <Text size="sm" c="dimmed">Loading cached ROI analysis...</Text>
+            <Text size="sm" c="dimmed">{isRegenerating ? 'Regenerating AI analysis…' : 'Loading cached ROI analysis…'}</Text>
           </Group>
         ) : corrError ? (
           <Text size="sm" c="red">{corrError}</Text>
@@ -212,34 +187,27 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
             <Group gap="xs">
               <Trophy size={18} />
               <Text fw={500}>Program Evaluation</Text>
-              {evalReport && (
+              {isRegenerating ? (
+                <Badge color="orange" variant="light" size="sm">Regenerating…</Badge>
+              ) : evalReport && (
                 <Badge color={evalReport.cached ? 'blue' : 'green'} variant="light" size="sm">
                   {evalReport.cached ? `Cached ${evalReport.generated_at ? new Date(evalReport.generated_at).toLocaleDateString() : ''}` : 'Just generated'}
                 </Badge>
               )}
-              {evalReport?.stance && (
+              {evalReport?.stance && !isRegenerating && (
                 <Badge color={STANCE_COLORS[evalReport.stance] || 'gray'} variant="light" size="sm" style={{ textTransform: 'capitalize' }}>
                   {evalReport.stance}
                 </Badge>
               )}
             </Group>
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={refreshEvaluation}
-              disabled={evalLoading || completedCount < 4}
-              leftSection={<RefreshCw size={14} style={evalLoading ? { animation: 'spin 1s linear infinite' } : undefined} />}
-            >
-              {evalReport?.cache_miss ? 'Generate' : 'Regenerate'}
-            </Button>
           </Group>
 
           {completedCount < 4 ? (
             <Text size="sm" c="dimmed">Program evaluation requires at least 4 completed sessions in the current block. Complete more sessions and return here.</Text>
-          ) : evalLoading ? (
+          ) : isRegenerating || evalLoading ? (
             <Group gap="xs" py="md">
               <Loader size="xs" />
-              <Text size="sm" c="dimmed">Loading cached program evaluation...</Text>
+              <Text size="sm" c="dimmed">{isRegenerating ? 'Regenerating AI analysis…' : 'Loading cached program evaluation…'}</Text>
             </Group>
           ) : evalError ? (
             <Text size="sm" c="red">{evalError}</Text>

@@ -18,6 +18,7 @@ from config import (
     LLM_BASE_URL,
     OPENROUTER_API_KEY,
 )
+from prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -25,89 +26,10 @@ LIFTS = {"squat", "bench", "deadlift"}
 CONFIDENCE = {"low", "medium", "high"}
 ESTIMATE_READY_THRESHOLD = 55
 
-_REVIEW_SYSTEM_PROMPT = """\
-You review powerlifting lift style profiles for analysis usefulness.
-
-The goal is not grammar. The goal is enough biomechanical detail to estimate
-how much raw INOL under- or overstates the actual stimulus for this lifter.
-
-Required useful details:
-- Style and setup: competition-standard movement, stance/grip, depth/touch/lockout,
-  arch/torso angle, bar path, and effective ROM compared with standard execution.
-- Sticking point: precise ROM region where the lift slows or fails, plus whether
-  the issue is position, bracing, speed, or a muscle group.
-- Primary driver: muscles or positions that meaningfully drive the lift.
-
-Return concise prompts for missing information. Do not coach programming.
-"""
-
-_REWRITE_ESTIMATE_SYSTEM_PROMPT = """\
-You are estimating a powerlifting lift-profile stimulus coefficient for INOL.
-
-Output a coefficient from 1.0 to 2.0. Baseline is 1.0:
-- competition-standard depth/ROM
-- conventional grip/stance for the lift
-- no notable mechanical advantage or disadvantage
-- average effective muscle mass and time under tension
-
-Raise the coefficient when the profile implies raw INOL understates stimulus:
-- longer effective ROM than competition standard
-- more total muscle mass under meaningful tension
-- higher eccentric loading or longer controlled eccentric
-- more time under tension near the sticking point
-- larger mechanical disadvantage at the weakest ROM point
-- lower volume recovery tolerance, because the same raw INOL creates more recoverability cost
-
-Keep the coefficient closer to 1.0 when raw INOL would otherwise overstate stimulus:
-- shorter effective ROM
-- strong mechanical advantage
-- reduced meaningful muscle mass under tension
-- technique that bypasses the reported weak point
-- higher volume recovery tolerance, because the lifter can absorb more raw INOL before it has the same practical stimulus cost
-
-Volume recovery tolerance is a small modifier, not the primary driver:
-low usually nudges coefficient upward, high usually nudges it downward toward
-1.0, and moderate is neutral unless the biomechanics clearly say otherwise.
-
-Rewrite fields to be clean and analysis-ready, preserving meaning. Do not add
-facts that are not present. If input is sparse, keep coefficient close to 1.0
-and confidence low.
-"""
-
-_REWRITE_SYSTEM_PROMPT = """\
-Rewrite powerlifting lift-profile fields to be clean and analysis-ready.
-
-Preserve meaning. Do not add facts that are not present. Do not estimate a
-stimulus coefficient. Grammar is secondary to making the biomechanics clear.
-"""
-
-_ESTIMATE_SYSTEM_PROMPT = """\
-Estimate a powerlifting lift-profile stimulus coefficient for INOL.
-
-Output only the coefficient, confidence, and reasoning. Range is 1.0 to 2.0. Baseline is 1.0:
-- competition-standard depth/ROM
-- conventional grip/stance for the lift
-- no notable mechanical advantage or disadvantage
-- average effective muscle mass and time under tension
-
-Raise the coefficient when raw INOL understates stimulus:
-- longer effective ROM than competition standard
-- more total muscle mass under meaningful tension
-- higher eccentric loading or longer controlled eccentric
-- more time under tension near the sticking point
-- larger mechanical disadvantage at the weakest ROM point
-- low volume recovery tolerance, as the same raw INOL carries more practical stimulus/recovery cost
-
-Keep the coefficient closer to 1.0 when raw INOL would otherwise overstate stimulus:
-- shorter effective ROM
-- strong mechanical advantage
-- reduced meaningful muscle mass under tension
-- technique that bypasses the reported weak point
-- high volume recovery tolerance, as the lifter can absorb more raw INOL for the same practical effect
-
-Volume recovery tolerance is a small modifier. Keep moderate neutral. Mention
-how tolerance affected the estimate in the reasoning.
-"""
+_REVIEW_SYSTEM_PROMPT = load_system_prompt("lift_profile_review_system")
+_REWRITE_ESTIMATE_SYSTEM_PROMPT = load_system_prompt("lift_profile_rewrite_estimate_system")
+_REWRITE_SYSTEM_PROMPT = load_system_prompt("lift_profile_rewrite_system")
+_ESTIMATE_SYSTEM_PROMPT = load_system_prompt("lift_profile_estimate_system")
 
 _REVIEW_TOOL_SCHEMA = {
     "type": "function",
@@ -449,7 +371,7 @@ async def review_lift_profile(profile: dict[str, Any], *, use_helper_model: bool
         } if use_helper_model else {}
         args = await _call_tool(
             _REVIEW_SYSTEM_PROMPT,
-            f"Review this lift profile:\n{_profile_payload(profile)}",
+            render_prompt("lift_profile_user", action_verb="Review this lift profile", profile_payload=_profile_payload(profile)),
             _REVIEW_TOOL_SCHEMA,
             "review_lift_profile",
             **model_kwargs,
@@ -483,7 +405,7 @@ async def rewrite_lift_profile(profile: dict[str, Any]) -> dict[str, Any]:
     try:
         args = await _call_tool(
             _REWRITE_SYSTEM_PROMPT,
-            f"Rewrite this lift profile without estimating a coefficient:\n{_profile_payload(profile)}",
+            render_prompt("lift_profile_user", action_verb="Rewrite this lift profile without estimating a coefficient", profile_payload=_profile_payload(profile)),
             _REWRITE_TOOL_SCHEMA,
             "rewrite_lift_profile",
             model=HEALTH_HELPER_MODEL,
@@ -525,7 +447,7 @@ async def estimate_lift_profile_stimulus(profile: dict[str, Any]) -> dict[str, A
     try:
         args = await _call_tool(
             _ESTIMATE_SYSTEM_PROMPT,
-            f"Estimate the stimulus coefficient for this lift profile:\n{_profile_payload(profile)}",
+            render_prompt("lift_profile_user", action_verb="Estimate the stimulus coefficient for this lift profile", profile_payload=_profile_payload(profile)),
             _ESTIMATE_TOOL_SCHEMA,
             "estimate_lift_profile_stimulus",
         )
@@ -562,7 +484,7 @@ async def rewrite_and_estimate_lift_profile(profile: dict[str, Any]) -> dict[str
     try:
         args = await _call_tool(
             _REWRITE_ESTIMATE_SYSTEM_PROMPT,
-            f"Rewrite and estimate this lift profile:\n{_profile_payload(profile)}",
+            render_prompt("lift_profile_user", action_verb="Rewrite and estimate this lift profile", profile_payload=_profile_payload(profile)),
             _REWRITE_ESTIMATE_TOOL_SCHEMA,
             "rewrite_and_estimate_lift_profile",
             model=HEALTH_HELPER_MODEL,

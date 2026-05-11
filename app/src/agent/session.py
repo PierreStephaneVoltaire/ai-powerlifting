@@ -32,6 +32,7 @@ from config import (
     LLM_REASONING_EFFORT,
 )
 from presets.loader import PresetManager
+from agent.prompts.loader import load_prompt
 from mcp_servers.config import resolve_mcp_config, get_preset_servers
 from agent.memory_tools import get_memory_tools
 from agent.tools.user_facts import get_user_facts_tools, set_session_context
@@ -293,54 +294,9 @@ def assemble_system_prompt(
     except Exception as e:
         logger.error(f"[Session] Failed to get directives for preset '{preset_slug}': {e}")
     
-    # Add memory protocol
-    memory_protocol = """
-MEMORY PROTOCOL:
-You have access to a persistent memory store containing facts
-about the operator — preferences, life events, profession,
-skill levels, opinions, mental state, and similar context.
-
-USE memory_search WHEN:
-  - The conversation would benefit from knowing the operator's
-    background, preferences, or history.
-  - The operator references something previously discussed
-    across sessions.
-  - You need to tailor tone, depth, or framing to the operator's
-    known level of understanding.
-
-DO NOT USE memory_search WHEN:
-  - The task is purely technical with no personalization benefit
-    (code generation, architecture review, shell commands).
-  - The operator's background is irrelevant to the task.
-
-USE memory_add WHEN:
-  - The operator shares personal information with cross-session
-    value (preferences, life events, opinions).
-  - The operator explicitly asks you to remember something.
-  - A pattern emerges across multiple interactions that would
-    benefit future sessions.
-
-DO NOT USE memory_add FOR:
-  - Task-specific details (code snippets, debugging context).
-  - Transient conversation artifacts.
-  - Information the operator might want to forget.
-"""
-    prompt_parts.append(memory_protocol)
-
-    media_protocol = """
-MEDIA PROTOCOL:
-When the operator sends files or images, they appear as [Attachment: filename — uploads/filename].
-The file is stored in your terminal workspace under uploads/.
-
-USE read_media WHEN:
-  - You need to examine the contents of an image or file
-  - The operator asks about a specific attachment
-  - You need visual information from a screenshot, diagram, or photo
-
-Each call to read_media spawns a vision model. Ask specific, targeted questions.
-Multiple questions about the same file require separate calls.
-"""
-    prompt_parts.append(media_protocol)
+    # Add memory and media protocols from templates
+    prompt_parts.append(load_prompt("memory_protocol.j2"))
+    prompt_parts.append(load_prompt("media_protocol.j2"))
 
     # Add memory context if provided
     if memory_context:

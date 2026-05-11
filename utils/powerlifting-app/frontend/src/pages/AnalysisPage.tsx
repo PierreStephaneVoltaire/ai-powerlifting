@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Activity, Download, AlertTriangle, CheckCircle, TrendingUp, Dumbbell, Trophy,
-  Scale, Moon, Beef, Ruler, Utensils, Info,
+  Scale, Moon, Beef, Ruler, Utensils, Info, RefreshCw,
 } from 'lucide-react'
 import {
-  fetchWeeklyAnalysisBundle, type AnalysisWindowKey, type WeeklyAnalysisBundle,
+  fetchWeeklyAnalysisBundle, regenerateAnalysis, type AnalysisWindowKey, type WeeklyAnalysisBundle,
 } from '@/api/analytics'
 import { useProgramStore } from '@/store/programStore'
 import { fetchWeightLog, fetchGlossary } from '@/api/client'
@@ -302,6 +302,7 @@ export default function AnalysisPage() {
   const activeSection = parseAnalysisSection(searchParams)
   const [analysisBundle, setAnalysisBundle] = useState<WeeklyAnalysisBundle | null>(null)
   const [loading, setLoading] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
@@ -369,12 +370,29 @@ export default function AnalysisPage() {
       .then(setAnalysisBundle)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [asOfDate, program?.meta?.updated_at, version])
+    // Only re-fetch on mount or when asOfDate changes.
+    // Analysis is NO LONGER auto-invalidated on program mutations.
+    // Use the "Regenerate Analysis" button to force a fresh generation.
+  }, [asOfDate])
 
   useEffect(() => {
     fetchWeightLog(version).then(setWeightLog).catch(console.error)
     fetchGlossary().then(setGlossary).catch(console.error)
   }, [version])
+
+  const handleRegenerateAnalysis = async () => {
+    setRegenerating(true)
+    setError(null)
+    try {
+      await regenerateAnalysis()
+      const bundle = await fetchWeeklyAnalysisBundle(asOfDate)
+      setAnalysisBundle(bundle)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRegenerating(false)
+    }
+  }
 
   const filteredSessions = useMemo(() => {
     if (!program?.sessions) return []
@@ -755,6 +773,21 @@ export default function AnalysisPage() {
           >
             Export Markdown
           </Button>
+          <Button
+            size="sm"
+            variant="light"
+            color="orange"
+            leftSection={<RefreshCw size={16} />}
+            loading={regenerating}
+            onClick={handleRegenerateAnalysis}
+          >
+            Regenerate Analysis
+          </Button>
+          {analysisBundle?.generatedAt && !regenerating && (
+            <Badge color="gray" variant="light" size="sm">
+              Generated {new Date(analysisBundle.generatedAt).toLocaleDateString()}
+            </Badge>
+          )}
         </Group>
       </Group>
 
@@ -1846,7 +1879,7 @@ export default function AnalysisPage() {
             analysisWeeks={effectiveWeeks}
             unit={unit}
           />
-          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} />
+          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} isRegenerating={regenerating} />
 
           {/* Formula Reference */}
           <Accordion mt="xl" variant="separated" defaultValue="formulas-outer">
