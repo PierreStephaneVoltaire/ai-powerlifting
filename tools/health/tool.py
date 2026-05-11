@@ -4779,6 +4779,39 @@ class HealthGetLifetimeComparisonTool(ToolDefinition[HealthGetLifetimeComparison
         )]
 
 
+# --- health_suggest_e1rm_multipliers ---
+
+class HealthSuggestE1rmMultipliersAction(Action):
+    pass
+
+
+class HealthSuggestE1rmMultipliersObservation(Observation):
+    pass
+
+
+class HealthSuggestE1rmMultipliersExecutor(ToolExecutor[HealthSuggestE1rmMultipliersAction, HealthSuggestE1rmMultipliersObservation]):
+    def __call__(self, action: HealthSuggestE1rmMultipliersAction, conversation=None) -> HealthSuggestE1rmMultipliersObservation:
+        from core import health_suggest_e1rm_multipliers
+        result = _run_async(health_suggest_e1rm_multipliers())
+        return HealthSuggestE1rmMultipliersObservation.from_text(_format_result(result))
+
+
+class HealthSuggestE1rmMultipliersTool(ToolDefinition[HealthSuggestE1rmMultipliersAction, HealthSuggestE1rmMultipliersObservation]):
+    @classmethod
+    def create(cls, conv_state=None, **params) -> Sequence["HealthSuggestE1rmMultipliersTool"]:
+        return [cls(
+            description=(
+                "Suggest per-lift e1RM manual correction multipliers based on known competition results "
+                "and max history. Compares actual maxes against raw session-derived e1RM estimates near the same date. "
+                "Returns suggestions for squat, bench, and deadlift if data is available."
+            ),
+            action_type=HealthSuggestE1rmMultipliersAction,
+            observation_type=HealthSuggestE1rmMultipliersObservation,
+            executor=HealthSuggestE1rmMultipliersExecutor(),
+        )]
+
+
+register_tool("HealthSuggestE1rmMultipliersTool", HealthSuggestE1rmMultipliersTool)
 register_tool("HealthGetLifetimeComparisonTool", HealthGetLifetimeComparisonTool)
 register_tool("GlossarySetE1rmTool", GlossarySetE1rmTool)
 register_tool("GlossaryEstimateE1rmTool", GlossaryEstimateE1rmTool)

@@ -6,7 +6,6 @@ import {
   Badge,
   Button,
   Group,
-  NumberInput,
   Paper,
   Select,
   SimpleGrid,
@@ -373,11 +372,12 @@ export default function FederationsPage() {
                                 value={item.federation_id}
                                 onChange={(value) => updateStandard(item.id, { federation_id: value || '' })}
                               />
-                              <NumberInput
+                              <TextInput
+                                type="number"
                                 label="Season Year"
                                 value={item.season_year}
-                                onChange={(value) => updateStandard(item.id, {
-                                  season_year: typeof value === 'number' ? value : item.season_year,
+                                onChange={(e) => updateStandard(item.id, {
+                                  season_year: Number(e.currentTarget.value) || item.season_year,
                                 })}
                               />
                               <Select
@@ -420,18 +420,20 @@ export default function FederationsPage() {
                             </SimpleGrid>
 
                             <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                              <NumberInput
+                              <TextInput
+                                type="number"
                                 label="Weight Class (kg)"
                                 value={item.weight_class_kg}
-                                onChange={(value) => updateStandard(item.id, {
-                                  weight_class_kg: typeof value === 'number' ? value : item.weight_class_kg,
+                                onChange={(e) => updateStandard(item.id, {
+                                  weight_class_kg: Number(e.currentTarget.value) || item.weight_class_kg,
                                 })}
                               />
-                              <NumberInput
+                              <TextInput
+                                type="number"
                                 label="Required Total (kg)"
                                 value={item.required_total_kg}
-                                onChange={(value) => updateStandard(item.id, {
-                                  required_total_kg: typeof value === 'number' ? value : item.required_total_kg,
+                                onChange={(e) => updateStandard(item.id, {
+                                  required_total_kg: Number(e.currentTarget.value) || item.required_total_kg,
                                 })}
                               />
                               <DatePickerInput

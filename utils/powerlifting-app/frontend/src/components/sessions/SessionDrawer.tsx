@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
-import { Drawer, Button, Group, Stack, Paper, SimpleGrid, NumberInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip, Checkbox } from '@mantine/core'
+import { Drawer, Button, Group, Stack, Paper, SimpleGrid, TextInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip, Checkbox } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -8,7 +8,24 @@ import { getDayOfWeek } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
-import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal } from 'lucide-react'
+import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal, AlertTriangle } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { Session, Exercise, SessionVideo, SessionWellness, GlossaryExercise, SetStatus, FailedSetReason } from '@powerlifting/types'
 import VideoGrid from './VideoGrid'
 import VideoUploadModal from './VideoUploadModal'
@@ -151,6 +168,147 @@ interface SessionDrawerProps {
   onDeleteSuccess?: () => void
 }
 
+function SortableExerciseItem({ 
+  exercise, 
+  index, 
+  onRemove, 
+  onUpdate, 
+  onUpdateSets,
+  glossaryNames,
+  unit,
+  renderMobileMenu,
+  renderDesktopActions,
+  renderSetStatusControls,
+  renderStatusBadges
+}: { 
+  exercise: Exercise;
+  index: number;
+  onRemove: (i: number) => void;
+  onUpdate: (i: number, field: keyof Exercise, v: any) => void;
+  onUpdateSets: (i: number, sets: number) => void;
+  glossaryNames: string[];
+  unit: string;
+  renderMobileMenu: (ex: Exercise, i: number) => React.ReactNode;
+  renderDesktopActions: (ex: Exercise, i: number) => React.ReactNode;
+  renderSetStatusControls: (ex: Exercise, i: number) => React.ReactNode;
+  renderStatusBadges: (ex: Exercise) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: exercise.id || `ex-${index}` })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1000 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  const setStatuses = normalizeSetStatuses(exercise)
+
+  return (
+    <Paper ref={setNodeRef} style={style} withBorder p="sm" radius="md">
+      <Group gap="xs" mb="xs">
+        <Box {...attributes} {...listeners} style={{ cursor: 'grab', padding: '4px 0', opacity: 0.5 }}>
+          <GripVertical size={16} />
+        </Box>
+        <Autocomplete
+          value={exercise.name}
+          onChange={(newName) => onUpdate(index, 'name', newName)}
+          data={glossaryNames}
+          placeholder="Exercise name"
+          size="sm"
+          style={{ flex: 1 }}
+        />
+        <Group gap={4} wrap="nowrap">
+          {renderMobileMenu(exercise, index)}
+          {renderDesktopActions(exercise, index)}
+          <ActionIcon
+            visibleFrom="sm"
+            variant="subtle"
+            color="red"
+            size="sm"
+            onClick={() => onRemove(index)}
+          >
+            <Trash2 size={16} />
+          </ActionIcon>
+        </Group>
+      </Group>
+
+      <Box>
+        <Group justify="space-between" align="flex-start" gap={4} mb="xs" wrap="nowrap">
+          <SimpleGrid cols={3} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
+            <Box>
+              <Text size="xs" c="dimmed">Sets</Text>
+              <TextInput
+                type="number"
+                value={exercise.sets || ''}
+                onChange={(e) => onUpdateSets(index, Number(e.currentTarget.value) || 0)}
+                size="sm"
+              />
+            </Box>
+            <Box>
+              <Text size="xs" c="dimmed">Reps</Text>
+              <TextInput
+                type="number"
+                value={exercise.reps || ''}
+                onChange={(e) => onUpdate(index, 'reps', Number(e.currentTarget.value) || 0)}
+                size="sm"
+              />
+            </Box>
+            <Box>
+              <Text size="xs" c="dimmed">{unit}</Text>
+              <TextInput
+                type="number"
+                value={exercise.kg !== null && exercise.kg !== undefined ? toDisplayUnit(exercise.kg, unit as 'kg' | 'lb') : ''}
+                onChange={(e) => onUpdate(index, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
+                size="sm"
+                step={0.5}
+                rightSection={setStatuses.includes('failed') ? (
+                  <Tooltip label="Contains failed sets">
+                    <AlertTriangle size={14} color="var(--mantine-color-red-6)" />
+                  </Tooltip>
+                ) : null}
+              />
+            </Box>
+          </SimpleGrid>
+        </Group>
+        
+        <Box mt="xs">
+          <Text size="xs" c="dimmed">Notes</Text>
+          <Textarea
+            value={exercise.notes || ''}
+            onChange={(e) => onUpdate(index, 'notes', e.currentTarget.value)}
+            placeholder="Exercise notes..."
+            size="sm"
+            autosize
+            minRows={1}
+            maxRows={4}
+            variant="filled"
+          />
+        </Box>
+
+        {setStatuses.length > 0 && (
+          <Box mt={6}>
+            <Group gap={4} align="center" wrap="nowrap">
+              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
+              <Box style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+                {renderSetStatusControls(exercise, index)}
+              </Box>
+            </Group>
+            {renderStatusBadges(exercise)}
+          </Box>
+        )}
+      </Box>
+    </Paper>
+  )
+}
+
 export default function SessionDrawer({
   isOpen,
   onClose,
@@ -179,13 +337,39 @@ export default function SessionDrawer({
     isBarbell: boolean
   } | null>(null)
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      setLocalSession((prev) => {
+        if (!prev) return prev
+        const items = prev.exercises
+        const oldIndex = items.findIndex(i => i.id === active.id)
+        const newIndex = items.findIndex(i => i.id === over.id)
+        const nextExercises = arrayMove(items, oldIndex, newIndex)
+        return { ...prev, exercises: nextExercises }
+      })
+      setHasChanges(true)
+    }
+  }
+
   useEffect(() => {
     fetchGlossary()
       .then((exercises) => setGlossary(exercises))
       .catch(() => {})
   }, [])
 
-  const glossaryNames = useMemo(() => glossary.map((e) => e.name).sort(), [glossary])
+  const glossaryNames = useMemo(() => Array.from(new Set(glossary.map((e) => e.name))).sort(), [glossary])
   const glossaryLookup = useMemo(() => {
     const lookup = new Map<string, GlossaryExercise>()
     for (const exercise of glossary) {
@@ -211,7 +395,10 @@ export default function SessionDrawer({
           failed_set_reasons: Array.from({ length: pe.sets }, () => []),
         }))
       }
-      clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
+      clone.exercises = clone.exercises.map((ex) => ({
+        ...withSetStatusFields(ex, clone.completed),
+        id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      }))
       setLocalSession(clone)
       setOriginalDate(session.date)
       setHasChanges(false)
@@ -295,6 +482,7 @@ export default function SessionDrawer({
         exercises: [
           ...prev.exercises,
           {
+            id: `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             name: '',
             sets: 3,
             reps: 5,
@@ -485,6 +673,14 @@ export default function SessionDrawer({
           onClick={() => openToolkitForExercise(exercise)}
         >
           Toolkit
+        </Menu.Item>
+        <Menu.Divider />
+        <Menu.Item
+          color="red"
+          leftSection={<Trash2 size={14} />}
+          onClick={() => removeExercise(exerciseIndex)}
+        >
+          Delete Exercise
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>
@@ -780,240 +976,43 @@ export default function SessionDrawer({
               <Group gap="md" wrap="wrap">
                 {localSession.planned_exercises!.map((pe, i) => (
                   <Text key={i} size="xs" c="dimmed" span>
-                    {pe.name} {pe.sets}x{pe.reps}{pe.kg !== null ? ` @${toDisplayUnit(pe.kg, unit)}${unit}` : ''}
+                    {pe.name} {pe.sets}x{pe.reps}{pe.kg !== null ? ` @${toDisplayUnit(pe.kg, unit as 'kg' | 'lb')}${unit}` : ''}
                   </Text>
                 ))}
               </Group>
             </Paper>
           )}
-          {(() => {
-            const groups: Array<{ name: string; entries: Array<{ exercise: Exercise; originalIndex: number }> }> = []
-            for (let i = 0; i < localSession.exercises.length; i++) {
-              const exercise = localSession.exercises[i]
-              const existing = groups.find(g => g.name === exercise.name)
-              if (existing) {
-                existing.entries.push({ exercise, originalIndex: i })
-              } else {
-                groups.push({ name: exercise.name, entries: [{ exercise, originalIndex: i }] })
-              }
-            }
-            return groups.map((group, groupIdx) => (
-              <Paper key={group.name || `ungrouped-${groupIdx}`} withBorder p="sm" radius="md">
-                <Group gap="xs" mb="xs">
-                  <GripVertical size={16} style={{ cursor: 'move', opacity: 0.5 }} />
-                  <Autocomplete
-                    value={group.name}
-                    onChange={(newName) => {
-                      setLocalSession((prev) => {
-                        if (!prev) return prev
-                        const exercises = prev.exercises.map((ex, i) =>
-                          group.entries.some(entry => entry.originalIndex === i)
-                            ? { ...ex, name: newName }
-                            : ex
-                        )
-                        return { ...prev, exercises }
-                      })
-                      setHasChanges(true)
-                    }}
-                    data={glossaryNames}
-                    placeholder="Exercise name"
-                    size="sm"
-                    style={{ flex: 1 }}
-                  />
-                  {group.entries.length === 1 && (
-                    <Group gap={4} wrap="nowrap">
-                      {renderMobileExerciseMenu(group.entries[0].exercise, group.entries[0].originalIndex)}
-                      {renderDesktopExerciseActions(group.entries[0].exercise, group.entries[0].originalIndex)}
-                      <ActionIcon
-                        variant="subtle"
-                        color="red"
-                        size="sm"
-                        onClick={() => removeExercise(group.entries[0].originalIndex)}
-                      >
-                        <Trash2 size={16} />
-                      </ActionIcon>
-                    </Group>
-                  )}
-                </Group>
-                {group.entries.length > 1 ? (
-                  <Box style={{ overflowX: 'auto' }}>
-                    <Table fz="sm" mb={4} style={{ minWidth: 360 }}>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th w={80}>Sets</Table.Th>
-                          <Table.Th w={80}>Reps</Table.Th>
-                          <Table.Th w={96}>{unit}</Table.Th>
-                          <Table.Th w={150} visibleFrom="sm">Set Status</Table.Th>
-                          <Table.Th w={40} />
-                          <Table.Th w={40} visibleFrom="sm" />
-                          <Table.Th w={40} />
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {group.entries.map((entry) => (
-                          <Fragment key={entry.originalIndex}>
-                            <Table.Tr>
-                              <Table.Td>
-                                <NumberInput
-                                  value={entry.exercise.sets || ''}
-                                  onChange={(v) => updateSetsWithResize(entry.originalIndex, Number(v) || 0)}
-                                  size="sm"
-                                  min={0}
-                                />
-                              </Table.Td>
-                              <Table.Td>
-                                <NumberInput
-                                  value={entry.exercise.reps || ''}
-                                  onChange={(v) => updateExercise(entry.originalIndex, 'reps', Number(v) || 0)}
-                                  size="sm"
-                                  min={0}
-                                />
-                              </Table.Td>
-                              <Table.Td>
-                                <NumberInput
-                                  value={entry.exercise.kg !== null && entry.exercise.kg !== undefined ? toDisplayUnit(entry.exercise.kg, unit) : ''}
-                                  onChange={(v) => updateExercise(entry.originalIndex, 'kg', v !== '' ? fromDisplayUnit(Number(v), unit) : null)}
-                                  size="sm"
-                                  decimalScale={2}
-                                />
-                              </Table.Td>
-                              <Table.Td visibleFrom="sm">
-                                {renderSetStatusControls(entry.exercise, entry.originalIndex, 'sm')}
-                              </Table.Td>
-                              <Table.Td>
-                                {renderMobileExerciseMenu(entry.exercise, entry.originalIndex)}
-                                <ActionIcon
-                                  visibleFrom="sm"
-                                  variant="subtle"
-                                  color="grape"
-                                  size="sm"
-                                  onClick={() => setAutoRegExerciseIndex(entry.originalIndex)}
-                                  title="Auto-regulation"
-                                >
-                                  <Bot size={14} />
-                                </ActionIcon>
-                              </Table.Td>
-                              <Table.Td visibleFrom="sm">
-                                <ActionIcon
-                                  variant="subtle"
-                                  color="blue"
-                                  size="sm"
-                                  onClick={() => openToolkitForExercise(entry.exercise)}
-                                  title="Open toolkit"
-                                >
-                                  <Calculator size={14} />
-                                </ActionIcon>
-                              </Table.Td>
-                              <Table.Td>
-                                <ActionIcon
-                                  variant="subtle"
-                                  color="red"
-                                  size="sm"
-                                  onClick={() => removeExercise(entry.originalIndex)}
-                                >
-                                  <Trash2 size={14} />
-                                </ActionIcon>
-                              </Table.Td>
-                            </Table.Tr>
-                            <Table.Tr>
-                              <Table.Td colSpan={7} pt={4} pb={12} style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-                                {normalizeSetStatuses(entry.exercise).length > 0 && (
-                                  <Box hiddenFrom="sm" mb="xs">
-                                    <Group gap={4} align="center" wrap="nowrap">
-                                      <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
-                                      <Box style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
-                                        {renderSetStatusControls(entry.exercise, entry.originalIndex)}
-                                      </Box>
-                                    </Group>
-                                    {renderStatusBadges(entry.exercise)}
-                                  </Box>
-                                )}
-                                <Textarea
-                                  value={entry.exercise.notes || ''}
-                                  onChange={(e) => updateExercise(entry.originalIndex, 'notes', e.currentTarget.value)}
-                                  placeholder="Exercise notes..."
-                                  size="sm"
-                                  autosize
-                                  minRows={1}
-                                  maxRows={mode === 'page' ? 3 : 4}
-                                  variant="filled"
-                                  style={{ width: '100%' }}
-                                />
-                              </Table.Td>
-                            </Table.Tr>
-                          </Fragment>
-                        ))}
-                      </Table.Tbody>
-                    </Table>
-                  </Box>
-                ) : (
-                  <Box>
-                    <Group justify="space-between" align="flex-start" gap={4} mb="xs" wrap="nowrap">
-                      <SimpleGrid cols={{ base: 3, sm: 3 }} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
-                      <Box>
-                        <Text size="xs" c="dimmed">Sets</Text>
-                        <NumberInput
-                          value={group.entries[0].exercise.sets || ''}
-                          onChange={(v) => updateSetsWithResize(group.entries[0].originalIndex, Number(v) || 0)}
-                          size="sm"
-                          min={0}
-                        />
-                      </Box>
-                      <Box>
-                        <Text size="xs" c="dimmed">Reps</Text>
-                        <NumberInput
-                          value={group.entries[0].exercise.reps || ''}
-                          onChange={(v) => updateExercise(group.entries[0].originalIndex, 'reps', Number(v) || 0)}
-                          size="sm"
-                          min={0}
-                        />
-                      </Box>
-                      <Box>
-                        <Text size="xs" c="dimmed">{unit}</Text>
-                        <NumberInput
-                          value={group.entries[0].exercise.kg !== null && group.entries[0].exercise.kg !== undefined ? toDisplayUnit(group.entries[0].exercise.kg, unit) : ''}
-                          onChange={(v) => updateExercise(group.entries[0].originalIndex, 'kg', v !== '' ? fromDisplayUnit(Number(v), unit) : null)}
-                          size="sm"
-                          decimalScale={2}
-                        />
-                      </Box>
-                      </SimpleGrid>
-                      <Group gap={4} wrap="nowrap">
-                        {renderMobileExerciseMenu(group.entries[0].exercise, group.entries[0].originalIndex)}
-                        {renderDesktopExerciseActions(group.entries[0].exercise, group.entries[0].originalIndex)}
-                      </Group>
-                    </Group>
-                    
-                    <Box mt="xs">
-                      <Text size="xs" c="dimmed">Notes</Text>
-                      <Textarea
-                        value={group.entries[0].exercise.notes || ''}
-                        onChange={(e) => updateExercise(group.entries[0].originalIndex, 'notes', e.currentTarget.value)}
-                        placeholder="Exercise notes..."
-                        size="sm"
-                        autosize
-                        minRows={1}
-                        maxRows={mode === 'page' ? 3 : 4}
-                        variant="filled"
-                      />
-                    </Box>
-
-                    {normalizeSetStatuses(group.entries[0].exercise).length > 0 && (
-                      <Box mt={6}>
-                        <Group gap={4} align="center" wrap="nowrap">
-                          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
-                          <Box style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
-                            {renderSetStatusControls(group.entries[0].exercise, group.entries[0].originalIndex)}
-                          </Box>
-                        </Group>
-                        {renderStatusBadges(group.entries[0].exercise)}
-                      </Box>
-                    )}
-                  </Box>
-                )}
-              </Paper>
-            ))
-          })()}
+          <Stack gap="xs">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={localSession.exercises.map((ex, i) => ex.id || `ex-${i}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                <Stack gap="sm">
+                  {localSession.exercises.map((ex, i) => (
+                    <SortableExerciseItem
+                      key={ex.id || `ex-${i}`}
+                      exercise={ex}
+                      index={i}
+                      onRemove={removeExercise}
+                      onUpdate={updateExercise}
+                      onUpdateSets={updateSetsWithResize}
+                      glossaryNames={glossaryNames}
+                      unit={unit}
+                      renderMobileMenu={renderMobileExerciseMenu}
+                      renderDesktopActions={renderDesktopExerciseActions}
+                      renderSetStatusControls={renderSetStatusControls}
+                      renderStatusBadges={renderStatusBadges}
+                    />
+                  ))}
+                </Stack>
+              </SortableContext>
+            </DndContext>
+          </Stack>
 
           {/* Videos Section */}
           <Divider my="sm" />
@@ -1061,29 +1060,28 @@ export default function SessionDrawer({
           <SimpleGrid cols={2} spacing="sm">
             <Box>
               <Text size="xs" c="dimmed">Session RPE</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={localSession.session_rpe || ''}
-                onChange={(v) => updateRpe(Number(v) || null)}
+                onChange={(e) => updateRpe(Number(e.currentTarget.value) || null)}
                 placeholder="1-10"
                 size="sm"
-                min={1}
-                max={10}
                 step={0.5}
               />
             </Box>
             <Box>
               <Text size="xs" c="dimmed">Body Weight ({unit})</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={
                   localSession.body_weight_kg
-                    ? toDisplayUnit(localSession.body_weight_kg, unit)
+                    ? toDisplayUnit(localSession.body_weight_kg, unit as 'kg' | 'lb')
                     : ''
                 }
-                onChange={(v) => updateBodyWeight(v !== '' ? fromDisplayUnit(Number(v), unit) : null)}
+                onChange={(e) => updateBodyWeight(e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
                 placeholder={unit}
                 size="sm"
                 step={0.1}
-                decimalScale={1}
               />
             </Box>
           </SimpleGrid>

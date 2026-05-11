@@ -4,7 +4,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import {
   Paper, Title, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
-  NumberInput, Textarea, Select, SegmentedControl, Box,
+  TextInput, Textarea, Select, SegmentedControl, Box,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { DietNote } from '@powerlifting/types'
@@ -138,10 +138,11 @@ export default function DietNotesPage() {
                     <Flame size={12} />
                     Avg Daily Calories
                   </Text>
-                  <NumberInput
+                  <TextInput
+                    type="number"
                     value={note.avg_daily_calories ?? ''}
-                    onChange={(v) => updateNote(note.date, {
-                      avg_daily_calories: v === '' ? undefined : Number(v),
+                    onChange={(e) => updateNote(note.date, {
+                      avg_daily_calories: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
                     })}
                     placeholder="e.g. 2500"
                     size="xs"
@@ -154,10 +155,11 @@ export default function DietNotesPage() {
                     Water Intake
                   </Text>
                   <Group gap="xs" wrap="nowrap">
-                    <NumberInput
+                    <TextInput
+                      type="number"
                       value={note.water_intake ?? ''}
-                      onChange={(v) => updateNote(note.date, {
-                        water_intake: v === '' ? undefined : Number(v),
+                      onChange={(e) => updateNote(note.date, {
+                        water_intake: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
                       })}
                       placeholder="e.g. 2.5"
                       step={0.1}

@@ -118,6 +118,24 @@ function programVersionNumber(programSk: string): number | null {
   return match ? parseInt(match[1], 10) : null
 }
 
+function mergeVideos(incoming: any[] | undefined, existing: any[] | undefined): any[] | undefined {
+  if (!incoming || !Array.isArray(incoming)) return incoming
+  if (!existing || !Array.isArray(existing)) return incoming
+
+  return incoming.map(video => {
+    const exVideo = existing.find(v => v.video_id === video.video_id)
+    if (exVideo && video.thumbnail_status === 'pending' && exVideo.thumbnail_status === 'ready') {
+      return {
+        ...video,
+        thumbnail_status: exVideo.thumbnail_status,
+        thumbnail_url: exVideo.thumbnail_url,
+        thumbnail_s3_key: exVideo.thumbnail_s3_key
+      }
+    }
+    return video
+  })
+}
+
 function buildItem(
   pk: string,
   programSk: string,
@@ -163,6 +181,7 @@ function buildItem(
     phase_ref: phaseRef(phase),
     planned_exercises: Array.isArray(session.planned_exercises) ? session.planned_exercises : [],
     exercises: Array.isArray(session.exercises) ? session.exercises : [],
+    videos: mergeVideos(session.videos, existing?.videos),
     updated_at: new Date().toISOString(),
     ...(existing?.migrated_at ? { migrated_at: existing.migrated_at } : {}),
   })

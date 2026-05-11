@@ -5,7 +5,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import {
   Paper, Title, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
-  NumberInput, TextInput, Textarea, Modal, Box, Select,
+  TextInput, Textarea, Modal, Box, Select,
 } from '@mantine/core'
 import type { Phase } from '@powerlifting/types'
 
@@ -225,17 +225,19 @@ export default function DesignerPhases() {
           <SimpleGrid cols={2} spacing="md">
             <Box>
               <Text size="sm" c="dimmed" mb={4}>Start Week</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.start_week || 1}
-                onChange={(v) => setPhaseForm(p => ({ ...p, start_week: Number(v) }))}
+                onChange={(e) => setPhaseForm(p => ({ ...p, start_week: Number(e.currentTarget.value) }))}
                 size="sm"
               />
             </Box>
             <Box>
               <Text size="sm" c="dimmed" mb={4}>End Week</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.end_week || 4}
-                onChange={(v) => setPhaseForm(p => ({ ...p, end_week: Number(v) }))}
+                onChange={(e) => setPhaseForm(p => ({ ...p, end_week: Number(e.currentTarget.value) }))}
                 size="sm"
               />
             </Box>
@@ -258,25 +260,30 @@ export default function DesignerPhases() {
           <SimpleGrid cols={3} spacing="md">
             <Box>
               <Text size="sm" c="dimmed" mb={4}>RPE Min</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.target_rpe_min ?? ''}
-                onChange={(v) => setPhaseForm(p => ({ ...p, target_rpe_min: v === '' ? undefined : Number(v) }))}
+                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
+                step={0.5}
               />
             </Box>
             <Box>
               <Text size="sm" c="dimmed" mb={4}>RPE Max</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.target_rpe_max ?? ''}
-                onChange={(v) => setPhaseForm(p => ({ ...p, target_rpe_max: v === '' ? undefined : Number(v) }))}
+                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
+                step={0.5}
               />
             </Box>
             <Box>
               <Text size="sm" c="dimmed" mb={4}>Days/Wk</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={phaseForm.days_per_week ?? ''}
-                onChange={(v) => setPhaseForm(p => ({ ...p, days_per_week: v === '' ? undefined : Number(v) }))}
+                onChange={(e) => setPhaseForm(p => ({ ...p, days_per_week: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
               />
             </Box>

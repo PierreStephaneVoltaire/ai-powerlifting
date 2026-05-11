@@ -4,7 +4,7 @@ import {
   Box,
   Group,
   Modal,
-  NumberInput,
+  TextInput,
   Paper,
   SimpleGrid,
   Stack,
@@ -132,28 +132,25 @@ export default function SessionToolkitModal({
             <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
               <Box>
                 <Text size="sm" c="dimmed" mb={4}>Target Weight ({unit})</Text>
-                <NumberInput
-                  value={weightKg !== null ? toDisplayUnit(weightKg, unit) : ''}
-                  onChange={(value) => setWeightKg(typeof value === 'number' ? fromDisplayUnit(value, unit) : null)}
-                  min={0}
-                  step={0.25}
-                  decimalScale={2}
-                  hideControls
+                <TextInput
+                  type="number"
+                  value={weightKg != null ? toDisplayUnit(weightKg, unit) : ''}
+                  onChange={(e) => setWeightKg(e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
+                  step={0.5}
                 />
-              </Box>
+                </Box>
 
-              <Box>
+                <Box>
                 <Text size="sm" c="dimmed" mb={4}>Bar Weight ({unit})</Text>
-                <NumberInput
+                <TextInput
+                  type="number"
                   value={toDisplayUnit(barWeightKgInput, unit)}
-                  onChange={(value) => setBarWeightKgInput(
-                    typeof value === 'number' ? fromDisplayUnit(value, unit) : 0,
+                  onChange={(e) => setBarWeightKgInput(
+                    e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : 0,
                   )}
-                  min={0}
                   step={unit === 'kg' ? 0.25 : 0.5}
-                  decimalScale={2}
-                  hideControls
                 />
+
                 {!isBarbell && (
                   <Text size="xs" c="dimmed" mt={4}>
                     Non-barbell exercise defaulted to 0.
@@ -279,37 +276,30 @@ export default function SessionToolkitModal({
             <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
               <Box>
                 <Text size="sm" c="dimmed" mb={4}>Set Weight ({unit})</Text>
-                <NumberInput
+                <TextInput
+                  type="number"
                   value={weightKg !== null ? toDisplayUnit(weightKg, unit) : ''}
-                  onChange={(value) => setWeightKg(typeof value === 'number' ? fromDisplayUnit(value, unit) : null)}
-                  min={0}
+                  onChange={(e) => setWeightKg(e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
                   step={0.25}
-                  decimalScale={2}
-                  hideControls
                 />
               </Box>
 
               <Box>
                 <Text size="sm" c="dimmed" mb={4}>Reps</Text>
-                <NumberInput
+                <TextInput
+                  type="number"
                   value={repsInput ?? ''}
-                  onChange={(value) => setRepsInput(typeof value === 'number' ? value : null)}
-                  min={0}
-                  step={1}
-                  hideControls
+                  onChange={(e) => setRepsInput(e.currentTarget.value ? Number(e.currentTarget.value) : null)}
                 />
               </Box>
 
               <Box>
                 <Text size="sm" c="dimmed" mb={4}>RPE</Text>
-                <NumberInput
+                <TextInput
+                  type="number"
                   value={rpeInput ?? ''}
-                  onChange={(value) => setRpeInput(typeof value === 'number' ? value : null)}
-                  min={6}
-                  max={10}
+                  onChange={(e) => setRpeInput(e.currentTarget.value ? Number(e.currentTarget.value) : null)}
                   step={0.5}
-                  decimalScale={1}
-                  hideControls
                 />
               </Box>
             </SimpleGrid>

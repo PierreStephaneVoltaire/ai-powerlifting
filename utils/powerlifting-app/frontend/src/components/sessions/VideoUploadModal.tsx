@@ -6,7 +6,6 @@ import {
   Stack,
   Paper,
   Select,
-  NumberInput,
   TextInput,
   Progress,
   Text,
@@ -47,7 +46,7 @@ export default function VideoUploadModal({
 
   if (!isOpen) return null
 
-  const exerciseOptions = session.exercises.map((e) => e.name)
+  const exerciseOptions = Array.from(new Set(session.exercises.map((e) => e.name)))
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0]
@@ -158,11 +157,11 @@ export default function VideoUploadModal({
         />
 
         {/* Set Number */}
-        <NumberInput
+        <TextInput
+          type="number"
           label="Set Number (optional)"
-          min={1}
-          value={setNumber}
-          onChange={(value) => setSetNumber(typeof value === 'number' ? value : undefined)}
+          value={setNumber ?? ''}
+          onChange={(e) => setSetNumber(e.currentTarget.value ? Number(e.currentTarget.value) : undefined)}
           placeholder="e.g., 1, 2, 3..."
           disabled={isUploading}
         />

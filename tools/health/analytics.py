@@ -2479,6 +2479,100 @@ def _lift_stimulus_coefficients(lift_profiles: list[dict] | None) -> dict[str, f
     return coeffs
 
 
+def compute_e1rm_multiplier_suggestions(
+    program: dict,
+    max_history: list[dict] | None = None,
+    reference_date: date | None = None,
+) -> dict[str, Any]:
+    """Suggest per-lift e1RM multipliers based on actual results vs raw session estimates."""
+    ref = reference_date or date.today()
+    sessions = program.get("sessions", [])
+    competitions = program.get("competitions", [])
+    lift_profiles = program.get("lift_profiles", [])
+    current_multipliers = _lift_e1rm_multipliers(lift_profiles)
+
+    # 1. Gather all actuals (comps and max history)
+    actuals = []
+    for c in competitions:
+        if c.get("status") == "completed" and (c_date := _parse_date(c.get("date", ""))):
+            results = c.get("results", {})
+            actuals.append({
+                "date": c_date,
+                "source": f"Competition: {c.get('name')}",
+                "squat": _num(results.get("squat_kg")),
+                "bench": _num(results.get("bench_kg")),
+                "deadlift": _num(results.get("deadlift_kg")),
+            })
+
+    for entry in max_history or []:
+        if e_date := _parse_date(entry.get("date", "")):
+            actuals.append({
+                "date": e_date,
+                "source": f"Max History: {entry.get('context', 'Manual')}",
+                "squat": _num(entry.get("squat_kg")),
+                "bench": _num(entry.get("bench_kg")),
+                "deadlift": _num(entry.get("deadlift_kg")),
+            })
+
+    # 2. Compute ratios per lift
+    ratios_by_lift: dict[str, list[float]] = {"squat": [], "bench": [], "deadlift": []}
+    sources_by_lift: dict[str, list[str]] = {"squat": [], "bench": [], "deadlift": []}
+
+    for act in sorted(actuals, key=lambda x: x["date"], reverse=True):
+        act_date = act["date"]
+        # Skip if too far in the future
+        if act_date > ref:
+            continue
+
+        # Find raw session estimates as of that date
+        raw_estimates = _estimate_maxes_from_sessions(sessions, lookback_days=42, reference_date=act_date)
+
+        for lift in ["squat", "bench", "deadlift"]:
+            act_val = act[lift]
+            raw_val = raw_estimates.get(lift, 0)
+
+            if act_val > 0 and raw_val > 0:
+                ratio = act_val / raw_val
+                # Sanity check: 0.80 to 1.15
+                if 0.80 <= ratio <= 1.15:
+                    ratios_by_lift[lift].append(ratio)
+                    sources_by_lift[lift].append(act["source"])
+
+    # 3. Generate suggestions
+    suggestions = {}
+    for lift in ["squat", "bench", "deadlift"]:
+        ratios = ratios_by_lift[lift]
+        current = current_multipliers.get(lift, 1.0)
+
+        if not ratios:
+            suggestions[lift] = None
+            continue
+
+        # Use median ratio for stability
+        suggested = median(ratios)
+        # Final clamp to 0.85 - 1.10
+        clamped = round(_clamp(suggested, 0.85, 1.10), 2)
+        diff = round(clamped - current, 2)
+
+        basis = f"Based on {len(ratios)} comparison point(s) from "
+        unique_sources = sorted(list(set(sources_by_lift[lift])))
+        if len(unique_sources) > 2:
+            basis += f"{unique_sources[0]}, {unique_sources[1]}, and {len(unique_sources)-2} more."
+        else:
+            basis += " and ".join(unique_sources) + "."
+
+        suggestions[lift] = {
+            "lift": lift,
+            "suggested_multiplier": clamped,
+            "current_multiplier": current,
+            "difference": diff,
+            "basis": basis,
+            "sample_size": len(ratios),
+        }
+
+    return suggestions
+
+
 def _lift_inol_thresholds(lift_profiles: list[dict] | None) -> dict[str, dict[str, float]]:
     """Return per-lift INOL thresholds, applying lift-profile overrides when present."""
     thresholds = {lift: dict(bounds) for lift, bounds in _DEFAULT_INOL_THRESHOLDS.items()}

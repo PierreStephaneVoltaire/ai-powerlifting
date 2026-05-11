@@ -8,7 +8,7 @@ import {
   Group,
   Stack,
   SimpleGrid,
-  NumberInput,
+  TextInput,
   Table,
   Text,
   Title,
@@ -96,16 +96,15 @@ export default function PercentTable() {
           <Stack gap={4}>
             <Text size="xs" c="dimmed">Squat</Text>
             {isEditing ? (
-              <NumberInput
+              <TextInput
+                type="number"
                 value={toDisplayUnit(editValues.squat, unit) || ''}
-                onChange={(val) => setEditValues((v) => ({
+                onChange={(e) => setEditValues((v) => ({
                   ...v,
-                  squat: typeof val === 'number' ? val / (unit === 'lb' ? 2.20462 : 1) : 0
+                  squat: Number(e.currentTarget.value) / (unit === 'lb' ? 2.20462 : 1) || 0
                 }))}
-                step={unit === 'kg' ? 2.5 : 5}
                 size="md"
-                fw={700}
-                hideControls
+                style={{ fontWeight: 700 }}
               />
             ) : (
               <Text fz="lg" fw={700}>{displayWeight(maxes.squat, unit)}</Text>
@@ -114,16 +113,15 @@ export default function PercentTable() {
           <Stack gap={4}>
             <Text size="xs" c="dimmed">Bench</Text>
             {isEditing ? (
-              <NumberInput
+              <TextInput
+                type="number"
                 value={toDisplayUnit(editValues.bench, unit) || ''}
-                onChange={(val) => setEditValues((v) => ({
+                onChange={(e) => setEditValues((v) => ({
                   ...v,
-                  bench: typeof val === 'number' ? val / (unit === 'lb' ? 2.20462 : 1) : 0
+                  bench: Number(e.currentTarget.value) / (unit === 'lb' ? 2.20462 : 1) || 0
                 }))}
-                step={unit === 'kg' ? 2.5 : 5}
                 size="md"
-                fw={700}
-                hideControls
+                style={{ fontWeight: 700 }}
               />
             ) : (
               <Text fz="lg" fw={700}>{displayWeight(maxes.bench, unit)}</Text>
@@ -132,16 +130,15 @@ export default function PercentTable() {
           <Stack gap={4}>
             <Text size="xs" c="dimmed">Deadlift</Text>
             {isEditing ? (
-              <NumberInput
+              <TextInput
+                type="number"
                 value={toDisplayUnit(editValues.deadlift, unit) || ''}
-                onChange={(val) => setEditValues((v) => ({
+                onChange={(e) => setEditValues((v) => ({
                   ...v,
-                  deadlift: typeof val === 'number' ? val / (unit === 'lb' ? 2.20462 : 1) : 0
+                  deadlift: Number(e.currentTarget.value) / (unit === 'lb' ? 2.20462 : 1) || 0
                 }))}
-                step={unit === 'kg' ? 2.5 : 5}
                 size="md"
-                fw={700}
-                hideControls
+                style={{ fontWeight: 700 }}
               />
             ) : (
               <Text fz="lg" fw={700}>{displayWeight(maxes.deadlift, unit)}</Text>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react'
 import {
-  Modal, Stack, Group, Button, TextInput, NumberInput, Select, Autocomplete, ActionIcon, Text, Divider,
+  Modal, Stack, Group, Button, TextInput, Select, Autocomplete, ActionIcon, Text, Divider,
 } from '@mantine/core'
 import type { TemplateSession, TemplateExercise, GlossaryExercise } from '@powerlifting/types'
 
@@ -36,7 +36,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
 
   if (!editing) return null
 
-  const glossaryNames = glossary.map(g => g.name)
+  const glossaryNames = Array.from(new Set(glossary.map(g => g.name)))
 
   function updateExercise(index: number, patch: Partial<TemplateExercise>) {
     setEditing(s => {
@@ -103,26 +103,26 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
           value={editing.label}
           onChange={(e) => setEditing(s => s ? { ...s, label: e.currentTarget.value } : s)}
         />
-        <Group gap="md" grow>
-          <NumberInput
+        <Group gap="xs" grow>
+          <TextInput
+            type="number"
             label="Week Number"
             value={editing.week_number}
-            onChange={(v) => setEditing(s => s ? { ...s, week_number: Number(v) || 1 } : s)}
-            min={1}
+            onChange={(e) => setEditing(s => s ? { ...s, week_number: Number(e.currentTarget.value) || 1 } : s)}
           />
           <TextInput
             label="Day of Week"
             value={editing.day_of_week}
             onChange={(e) => setEditing(s => s ? { ...s, day_of_week: e.currentTarget.value } : s)}
           />
-          <NumberInput
+          <TextInput
+            type="number"
             label="Day Index"
             value={editing.day_index}
-            onChange={(v) => setEditing(s => s ? { ...s, day_index: Number(v) } : s)}
-            min={0}
-            max={6}
+            onChange={(e) => setEditing(s => s ? { ...s, day_index: Number(e.currentTarget.value) } : s)}
           />
         </Group>
+
 
         <Divider />
 
@@ -171,17 +171,17 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
               </Group>
 
               <Group gap="xs" grow>
-                <NumberInput
+                <TextInput
+                  type="number"
                   label="Sets"
                   value={ex.sets}
-                  onChange={(v) => updateExercise(i, { sets: Number(v) || 1 })}
-                  min={1}
+                  onChange={(e) => updateExercise(i, { sets: Number(e.currentTarget.value) || 1 })}
                 />
-                <NumberInput
+                <TextInput
+                  type="number"
                   label="Reps"
                   value={ex.reps}
-                  onChange={(v) => updateExercise(i, { reps: Number(v) || 1 })}
-                  min={1}
+                  onChange={(e) => updateExercise(i, { reps: Number(e.currentTarget.value) || 1 })}
                 />
                 <Select
                   label="Load Type"
@@ -191,18 +191,20 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                   allowDeselect={false}
                 />
                 {ex.load_type === 'rpe' && (
-                  <NumberInput
+                  <TextInput
+                    type="number"
                     label="RPE Target"
                     value={ex.rpe_target ?? ''}
-                    onChange={(v) => updateExercise(i, { rpe_target: v === '' ? null : Number(v) })}
+                    onChange={(e) => updateExercise(i, { rpe_target: e.currentTarget.value === '' ? null : Number(e.currentTarget.value) })}
                     step={0.5}
                   />
                 )}
                 {(ex.load_type === 'absolute' || ex.load_type === 'percentage') && (
-                  <NumberInput
+                  <TextInput
+                    type="number"
                     label={ex.load_type === 'absolute' ? 'Load (kg)' : 'Load (%)'}
                     value={ex.load_value ?? ''}
-                    onChange={(v) => updateExercise(i, { load_value: v === '' ? null : Number(v) })}
+                    onChange={(e) => updateExercise(i, { load_value: e.currentTarget.value === '' ? null : Number(e.currentTarget.value) })}
                   />
                 )}
               </Group>

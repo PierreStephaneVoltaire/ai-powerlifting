@@ -52,6 +52,7 @@ spec:
     - context: http.server.location
       value: |
         auth_request /_tinyauth;
+        client_max_body_size 500M;
         error_page 401 =302 /auth/?rd=$scheme://$http_host$request_uri;
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header X-Content-Type-Options "nosniff" always;
@@ -76,6 +77,7 @@ spec:
     - context: http.server.location
       value: |
         proxy_read_timeout 300s;
+        client_max_body_size 500M;
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;

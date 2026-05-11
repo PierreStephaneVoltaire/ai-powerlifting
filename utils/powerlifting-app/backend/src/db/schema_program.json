@@ -261,7 +261,8 @@
       "style_notes": "High bar, beltless",
       "sticking_points": "Parallel",
       "primary_muscle": "Quads",
-      "volume_tolerance": "moderate"
+      "volume_tolerance": "moderate",
+      "e1rm_multiplier": 1.0
     }
   ],
 

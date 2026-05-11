@@ -127,6 +127,27 @@ async def health_get_lifetime_comparison(block_keys: list[str]) -> dict:
     comparison = build_block_comparison(bundles)
     return comparison
 
+async def health_suggest_e1rm_multipliers() -> dict:
+    """Generate e1RM multiplier suggestions based on comps and max history."""
+    store = _get_store()
+    program = await store.get_program()
+    if not program:
+        return {"error": "Program not found."}
+
+    # Fetch max history
+    max_history_item = await asyncio.get_running_loop().run_in_executor(
+        None,
+        _get_versioned_item_sync,
+        os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        store.pk,
+        f"max_history#{program['meta']['version_label']}"
+    )
+    max_history = (max_history_item or {}).get("entries", [])
+
+    from analytics import compute_e1rm_multiplier_suggestions
+    suggestions = compute_e1rm_multiplier_suggestions(program, max_history)
+    return suggestions
+
 def _get_rag():
     """Lazily create and return the HealthDocsRAG singleton."""
     global _rag
@@ -200,11 +221,6 @@ def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
         )
     store.invalidate_cache()
-    try:
-        from cache_invalidation import invalidate_analysis_caches
-        invalidate_analysis_caches(active_pk, getattr(store, "_table_name", None), getattr(store, "_region", None))
-    except Exception as exc:
-        logger.warning("[HealthTools] Analysis cache invalidation failed: %s", exc)
 
 
 GOAL_TYPES = {
@@ -1590,7 +1606,6 @@ async def health_create_session(
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).create_session(program_sk, new_session, program.get("phases", []))
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return created
 
 
@@ -1618,7 +1633,6 @@ async def health_delete_session(date: str) -> dict:
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).delete_session(program_sk, date)
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return result
 
 
@@ -1658,7 +1672,6 @@ async def health_reschedule_session(old_date: str, new_date: str) -> dict:
         program.get("phases", []),
     )
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return updated
 
 
@@ -1693,7 +1706,6 @@ async def health_add_exercise(date: str, exercise: dict) -> dict:
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return {"date": date, "exercises": updated.get("exercises", [])}
 
 
@@ -1729,7 +1741,6 @@ async def health_remove_exercise(date: str, exercise_index: int) -> dict:
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
     ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
     store.invalidate_cache()
-    store._invalidate_analysis_cache()
     return {"date": date, "exercises": exercises}
 
 

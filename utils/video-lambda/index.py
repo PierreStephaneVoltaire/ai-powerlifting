@@ -4,12 +4,14 @@ import subprocess
 import tempfile
 import urllib.parse
 import boto3
+from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
 s3 = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
 
 TABLE_NAME = os.environ.get('TABLE_NAME', 'if-health')
+SESSIONS_TABLE_NAME = os.environ.get('SESSIONS_TABLE_NAME', 'if-sessions')
 VIDEOS_BUCKET = os.environ.get('VIDEOS_BUCKET', 'powerlifting-session-videos')
 
 
@@ -81,17 +83,20 @@ def handler(event, context):
 
 def generate_thumbnail(bucket: str, key: str) -> bytes:
     """Download video and extract thumbnail frame using ffmpeg."""
+    ext = key.split('.')[-1] if '.' in key else 'mp4'
+    ffmpeg_path = '/opt/bin/ffmpeg'
+
     with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = os.path.join(tmpdir, 'input.mp4')
+        video_path = os.path.join(tmpdir, f'input.{ext}')
         thumbnail_path = os.path.join(tmpdir, 'thumbnail.jpg')
 
         # Download video
         s3.download_file(bucket, key, video_path)
 
         # Extract frame at 2 seconds using ffmpeg
-        # If video is shorter than 2 seconds, it will use the last frame
         cmd = [
-            'ffmpeg', '-i', video_path,
+            ffmpeg_path if os.path.exists(ffmpeg_path) else 'ffmpeg',
+            '-i', video_path,
             '-ss', '00:00:02',
             '-vframes', '1',
             '-vf', 'scale=320:-1',
@@ -112,52 +117,54 @@ def generate_thumbnail(bucket: str, key: str) -> bytes:
 
 def update_video_thumbnail(
     pk: str,
-    sk: str,
+    program_sk: str,
     session_date: str,
     video_id: str,
     thumbnail_url: str,
     thumbnail_s3_key: str,
     status: str
 ):
-    """Update video thumbnail metadata in DynamoDB.
-
-    Since DynamoDB doesn't support updating nested array elements directly,
-    we need to read-modify-write the sessions array.
-    """
-    table = dynamodb.Table(TABLE_NAME)
+    """Update video thumbnail metadata in DynamoDB (if-sessions table)."""
+    table = dynamodb.Table(SESSIONS_TABLE_NAME)
 
     try:
-        # Get the current program
-        response = table.get_item(Key={'pk': pk, 'sk': sk})
-        item = response.get('Item')
-
-        if not item:
-            print(f"Item not found: pk={pk}, sk={sk}")
+        # 1. Find the session item in if-sessions
+        # SK format: session#{program_sk}#{date}#...
+        prefix = f"session#{program_sk}#{session_date}#"
+        
+        response = table.query(
+            KeyConditionExpression=Key('pk').eq(pk) & Key('sk').begins_with(prefix)
+        )
+        items = response.get('Items', [])
+        
+        if not items:
+            print(f"Session item not found: pk={pk}, prefix={prefix}")
             return
 
-        sessions = item.get('sessions', [])
-
-        # Find the session and update the video
-        for session in sessions:
-            if session.get('date') == session_date:
-                videos = session.get('videos', [])
-                for video in videos:
-                    if video.get('video_id') == video_id:
-                        video['thumbnail_url'] = thumbnail_url
-                        video['thumbnail_s3_key'] = thumbnail_s3_key
-                        video['thumbnail_status'] = status
-                        break
+        # Usually there's only one session per date/program, but we check all just in case
+        for item in items:
+            videos = item.get('videos', [])
+            updated = False
+            for video in videos:
+                if video.get('video_id') == video_id:
+                    video['thumbnail_url'] = thumbnail_url
+                    video['thumbnail_s3_key'] = thumbnail_s3_key
+                    video['thumbnail_status'] = status
+                    updated = True
+                    break
+            
+            if updated:
+                # 2. Update the session item
+                table.update_item(
+                    Key={'pk': pk, 'sk': item['sk']},
+                    UpdateExpression='SET videos = :videos, updated_at = :updated_at',
+                    ExpressionAttributeValues={
+                        ':videos': videos,
+                        ':updated_at': datetime.utcnow().isoformat()
+                    }
+                )
+                print(f"Updated session item {item['sk']}")
                 break
-
-        # Update the item
-        table.update_item(
-            Key={'pk': pk, 'sk': sk},
-            UpdateExpression='SET sessions = :sessions, updated_at = :updated_at',
-            ExpressionAttributeValues={
-                ':sessions': sessions,
-                ':updated_at': datetime.utcnow().isoformat()
-            }
-        )
 
     except ClientError as e:
         print(f"DynamoDB update failed: {e}")

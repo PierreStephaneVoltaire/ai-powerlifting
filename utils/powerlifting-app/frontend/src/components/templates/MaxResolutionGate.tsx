@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Modal, Text, Stack, NumberInput, Button, Group, Table, Alert, Badge } from '@mantine/core'
+import { Modal, Text, Stack, TextInput, Button, Group, Table, Alert, Badge } from '@mantine/core'
 import { Info } from 'lucide-react'
 import { estimateExerciseE1rm, setExerciseE1rm } from '../../api/client'
 
@@ -59,12 +59,11 @@ export const MaxResolutionGate: React.FC<Props> = ({ missingMaxes, onResolved, o
               <tr key={m}>
                 <td>{m}</td>
                 <td>
-                  <NumberInput 
+                  <TextInput 
+                    type="number"
                     value={values[m] ?? ''}
-                    onChange={(v) => handleManualChange(m, v)}
-                    min={0}
+                    onChange={(e) => handleManualChange(m, Number(e.currentTarget.value) || 0)}
                     placeholder="e.g. 140"
-                    decimalScale={1}
                     step={2.5}
                   />
                 </td>

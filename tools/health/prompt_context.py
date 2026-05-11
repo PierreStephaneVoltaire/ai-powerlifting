@@ -94,6 +94,7 @@ def summarize_lift_profiles(lift_profiles: list[dict[str, Any]] | None) -> list[
             "sticking_points": profile.get("sticking_points") or "",
             "primary_muscle": profile.get("primary_muscle") or "",
             "volume_tolerance": profile.get("volume_tolerance") or "moderate",
+            "e1rm_multiplier": profile.get("e1rm_multiplier", 1.0),
             "stimulus_coefficient": profile.get("stimulus_coefficient", 1.0),
         })
     return ordered

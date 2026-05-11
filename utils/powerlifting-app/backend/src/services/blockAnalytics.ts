@@ -2520,6 +2520,40 @@ export async function getOrCreateAiBlockComparison(
         sourceFingerprint,
       }
     }
+    
+    try {
+      const pk = `analysis#${userPk}`
+      const prefix = `block_compare_ai#v${CACHE_SCHEMA_VERSION}#`
+      const response = await docClient.send(new QueryCommand({
+        TableName: ANALYSIS_CACHE_TABLE,
+        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+        ExpressionAttributeValues: {
+          ':pk': pk,
+          ':prefix': prefix,
+        },
+      }))
+      
+      const items = response.Items || []
+      if (items.length > 0) {
+        const sorted = items.sort((a, b) => {
+          return String(b.generated_at || '').localeCompare(String(a.generated_at || ''))
+        })
+        const latestItem = sorted[0]
+        const fallbackSk = latestItem.sk as string
+        const fallbackCached = await getCachedJsonPayload<AiBlockComparisonResult>(userPk, fallbackSk)
+        if (fallbackCached) {
+           return {
+             ...fallbackCached,
+             cached: true,
+             deterministic,
+             selectedBlockKeys,
+             sourceFingerprint,
+           }
+        }
+      }
+    } catch (error) {
+      console.warn('Block compare fallback cache read failed:', error)
+    }
   }
 
   if (cacheOnly) {

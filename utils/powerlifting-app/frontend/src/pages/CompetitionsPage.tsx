@@ -9,7 +9,6 @@ import {
   Group,
   Modal,
   MultiSelect,
-  NumberInput,
   Paper,
   Select,
   SimpleGrid,
@@ -497,17 +496,18 @@ export default function CompetitionsPage() {
                     </SimpleGrid>
 
                     <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-                      <NumberInput
+                      <TextInput
+                        type="number"
                         label="Weight Class (kg)"
                         value={comp.weight_class_kg}
-                        onChange={(v) => updateComp(comp.date, { weight_class_kg: Number(v) || 0 })}
+                        onChange={(e) => updateComp(comp.date, { weight_class_kg: Number(e.currentTarget.value) || 0 })}
                       />
                       {comp.status === 'completed' && (
-                        <NumberInput
+                        <TextInput
+                          type="number"
                           label="Body Weight (kg)"
-                          decimalScale={1}
-                          value={comp.body_weight_kg || undefined}
-                          onChange={(v) => updateComp(comp.date, { body_weight_kg: v ? Number(v) : undefined })}
+                          value={comp.body_weight_kg || ''}
+                          onChange={(e) => updateComp(comp.date, { body_weight_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
                         />
                       )}
                       <TextInput
@@ -529,15 +529,17 @@ export default function CompetitionsPage() {
                       </Text>
                       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
                         {(['squat_kg', 'bench_kg', 'deadlift_kg', 'total_kg'] as const).map((lift) => (
-                          <NumberInput
+                          <TextInput
                             key={lift}
+                            type="number"
                             label={lift.replace('_kg', '')}
                             value={
                               comp.status === 'completed'
                                 ? comp.results?.[lift] || 0
                                 : comp.targets?.[lift] || 0
                             }
-                            onChange={(value) => {
+                            onChange={(e) => {
+                              const value = e.currentTarget.value
                               const v = Number(value) || 0
                               const field = comp.status === 'completed' ? 'results' : 'targets'
                               const currentField = comp[field] || {
@@ -733,26 +735,23 @@ export default function CompetitionsPage() {
           </Text>
 
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-            <NumberInput
+            <TextInput
+              type="number"
               label="Body Weight at Weigh-in (kg)"
-              decimalScale={1}
               value={completeForm.body_weight_kg}
-              onChange={(v) => setCompleteForm((p) => ({ ...p, body_weight_kg: Number(v) || 0 }))}
+              onChange={(e) => setCompleteForm((p) => ({ ...p, body_weight_kg: Number(e.currentTarget.value) || 0 }))}
             />
-            <NumberInput
+            <TextInput
+              type="number"
               label="Sleep before meet (hours)"
-              min={0}
-              max={24}
-              decimalScale={1}
               value={completeForm.report.sleep_hours ?? ''}
-              onChange={(v) => updateCompleteReport({ sleep_hours: v !== '' ? Number(v) : null })}
+              onChange={(e) => updateCompleteReport({ sleep_hours: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })}
             />
-            <NumberInput
+            <TextInput
+              type="number"
               label="Attempt selection grade"
-              min={1}
-              max={5}
               value={completeForm.report.attempt_selection_grade ?? ''}
-              onChange={(v) => updateCompleteReport({ attempt_selection_grade: v !== '' ? Math.max(1, Math.min(5, Math.round(Number(v)))) as 1 | 2 | 3 | 4 | 5 : null })}
+              onChange={(e) => updateCompleteReport({ attempt_selection_grade: e.currentTarget.value !== '' ? Math.max(1, Math.min(5, Math.round(Number(e.currentTarget.value)))) as 1 | 2 | 3 | 4 | 5 : null })}
             />
 
           </SimpleGrid>
@@ -774,11 +773,10 @@ export default function CompetitionsPage() {
                     <Text size="sm" fw={500}>{LIFT_LABELS[attempt.lift]} {attempt.attempt_number}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <NumberInput
+                    <TextInput
+                      type="number"
                       value={attempt.kg ?? ''}
-                      onChange={(v) => updateCompleteAttempt(index, { kg: v !== '' ? Number(v) : null })}
-                      decimalScale={1}
-                      min={0}
+                      onChange={(e) => updateCompleteAttempt(index, { kg: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })}
                       size="xs"
                     />
                   </Table.Td>
@@ -843,11 +841,11 @@ export default function CompetitionsPage() {
               autosize
               minRows={2}
             />
-            <NumberInput
+            <TextInput
+              type="number"
               label="Caffeine total (mg)"
               value={completeForm.report.caffeine_mg ?? ''}
-              onChange={(v) => updateCompleteReport({ caffeine_mg: v !== '' ? Number(v) : null })}
-              min={0}
+              onChange={(e) => updateCompleteReport({ caffeine_mg: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })}
             />
             <Textarea
               label="Caffeine timing"

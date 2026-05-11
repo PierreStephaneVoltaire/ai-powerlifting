@@ -288,7 +288,6 @@ class ProgramStore:
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
         )
         self.invalidate_cache()
-        self._invalidate_analysis_cache()
         return await self.get_program()
     
     async def new_version(self, patches: list[dict], change_reason: str) -> dict:
@@ -512,15 +511,9 @@ class ProgramStore:
         }
         
         logger.debug(f"[ProgramStore] Updating pointer to version={new_version_int}")
-        self.table.put_item(Item=pointer_item)
-        self._invalidate_analysis_cache()
-        
-        # Update cache
-        self._cache = program
-        self._cache_version = new_version_int
-        
+        self.table.put_item(Item=program)
         logger.info(f"[ProgramStore] Created new {'minor' if minor else 'major'} version: {new_label} (v{new_version_int})")
-        
+
         return program
 
     async def archive(self, sk: str) -> None:
@@ -579,7 +572,6 @@ class ProgramStore:
         program["meta"]["archived_at"] = now
         
         self.table.put_item(Item=program)
-        self._invalidate_analysis_cache()
         logger.info(f"[ProgramStore] Archived program {sk}")
         
         if is_current:
@@ -641,7 +633,6 @@ class ProgramStore:
         program["meta"]["archived_at"] = None
         
         self.table.put_item(Item=program)
-        self._invalidate_analysis_cache()
         logger.info(f"[ProgramStore] Unarchived program {sk}")
 
     async def list_programs(self, include_archived: bool = False) -> list[dict]:

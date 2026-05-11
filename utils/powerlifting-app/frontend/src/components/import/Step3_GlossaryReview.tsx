@@ -30,7 +30,7 @@ export const Step3_GlossaryReview: React.FC<Props> = ({
     return map
   }, [glossary])
 
-  const autocompleteData = useMemo(() => glossary.map((g) => g.name), [glossary])
+  const autocompleteData = useMemo(() => Array.from(new Set(glossary.map((g) => g.name))), [glossary])
 
   if (!pendingImport) return null
 

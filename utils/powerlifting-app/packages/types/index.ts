@@ -310,6 +310,7 @@ export interface BetweenCompPlan {
 // ─── Session & Exercise ───────────────────────────────────────────────────────
 
 export interface Exercise {
+  id?: string
   name: string
   sets: number
   reps: number
@@ -340,6 +341,7 @@ export type LoadSource = 'absolute' | 'rpe' | 'percentage' | 'unresolvable'
 export type LoadType = LoadSource
 
 export interface PlannedExercise {
+  id?: string
   name: string
   sets: number
   reps: number
@@ -428,6 +430,12 @@ export interface Program {
   supplements: Supplement[]
   supplement_phases: SupplementPhase[]
   lift_profiles?: LiftProfile[]
+  current_maxes?: {
+    squat: number | null
+    bench: number | null
+    deadlift: number | null
+    method: string
+  }
 }
 
 export interface DietNote {
@@ -451,6 +459,7 @@ export interface LiftProfile {
   sticking_points: string     // where in the lift they struggle most
   primary_muscle: string      // e.g. "quad dominant", "tricep dominant"
   volume_tolerance: 'low' | 'moderate' | 'high'
+  e1rm_multiplier?: number    // manual correction for raw estimates (0.85-1.10)
   stimulus_coefficient?: number
   stimulus_coefficient_reasoning?: string
   stimulus_coefficient_confidence?: 'low' | 'medium' | 'high'

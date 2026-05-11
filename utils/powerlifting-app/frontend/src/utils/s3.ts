@@ -33,6 +33,7 @@ export async function uploadVideo(
   // Use XMLHttpRequest for progress tracking
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
+    xhr.withCredentials = true
 
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable && onProgress) {

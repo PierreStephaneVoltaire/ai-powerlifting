@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Sparkles } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, RotateCcw } from 'lucide-react'
 import {
   Alert,
   Badge,
@@ -10,7 +10,6 @@ import {
   Grid,
   Group,
   Loader,
-  NumberInput,
   Paper,
   SegmentedControl,
   SimpleGrid,
@@ -19,19 +18,32 @@ import {
   Textarea,
   TextInput,
   Title,
+  ActionIcon,
 } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import {
   estimateLiftProfileStimulus,
+  fetchE1rmMultiplierSuggestions,
   reviewLiftProfile,
   rewriteLiftProfile,
   type LiftProfileReview,
 } from '@/api/client'
 import type { LiftProfile } from '@powerlifting/types'
+import { toDisplayUnit } from '@/utils/units'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 const PROFILE_ESTIMATE_READY_SCORE = 55
+
+export interface MultiplierSuggestion {
+  lift: string
+  suggested_multiplier: number
+  current_multiplier: number
+  difference: number
+  basis: string
+  sample_size: number
+}
 
 const LIFT_LABELS: Record<LiftProfile['lift'], string> = {
   squat: 'Squat',
@@ -59,14 +71,19 @@ function defaultProfile(lift: LiftProfile['lift']): LiftProfile {
     primary_muscle: '',
     volume_tolerance: 'moderate',
     stimulus_coefficient: 1,
+    e1rm_multiplier: 1.00,
   }
 }
 
 function normalizeProfile(profile: LiftProfile): LiftProfile {
+  const multiplier = profile.e1rm_multiplier ?? 1.00
+  const clampedMultiplier = Math.max(0.85, Math.min(1.10, multiplier))
+
   return {
     ...defaultProfile(profile.lift),
     ...profile,
     stimulus_coefficient: Math.max(1, Math.min(2, profile.stimulus_coefficient ?? 1)),
+    e1rm_multiplier: Number(clampedMultiplier.toFixed(2)),
   }
 }
 
@@ -75,6 +92,11 @@ function mergeProfiles(profiles: LiftProfile[] | undefined, replacement: LiftPro
     if (lift === replacement.lift) return normalizeProfile(replacement)
     return normalizeProfile(profiles?.find((profile) => profile.lift === lift) ?? defaultProfile(lift))
   })
+}
+
+function multiplierValue(value: string | number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 1.00
+  return Math.max(0.85, Math.min(1.10, value))
 }
 
 function coefficientValue(value: string | number): number {
@@ -87,12 +109,20 @@ export default function LiftProfilePage() {
   const navigate = useNavigate()
   const { program, updateLiftProfiles } = useProgramStore()
   const { pushToast } = useUiStore()
+  const { unit } = useSettingsStore()
 
   const lift = LIFT_ORDER.includes(liftParam as LiftProfile['lift'])
     ? liftParam as LiftProfile['lift']
     : null
 
   const [draft, setDraft] = useState<LiftProfile | null>(null)
+  const [suggestions, setSuggestions] = useState<Record<string, MultiplierSuggestion | null>>({})
+  const [ignoredSuggestion, setIgnoredSuggestion] = useState(false)
+  
+  // Current max preview data
+  const rawMax = lift ? program?.current_maxes?.[lift] ?? program?.meta.manual_maxes?.[lift] ?? 0 : 0
+  const adjustedMax = rawMax * (draft?.e1rm_multiplier ?? 1.00)
+
   const [review, setReview] = useState<LiftProfileReview | null>(null)
   const [reviewing, setReviewing] = useState(false)
   const [rewriting, setRewriting] = useState(false)
@@ -115,9 +145,20 @@ export default function LiftProfilePage() {
     const initial = normalizeProfile(program.lift_profiles?.find((profile) => profile.lift === lift) ?? defaultProfile(lift))
     setDraft(initial)
     setReview(null)
+    setIgnoredSuggestion(false)
     if (Math.abs((initial.stimulus_coefficient ?? 1) - 1) < 0.001) {
       void runReview(initial, false)
     }
+
+    const loadSuggestions = async () => {
+      try {
+        const result = await fetchE1rmMultiplierSuggestions()
+        setSuggestions(result)
+      } catch (err) {
+        console.warn('Failed to load multiplier suggestions', err)
+      }
+    }
+    void loadSuggestions()
   }, [lift, program])
 
   const updateDraft = (updates: Partial<LiftProfile>, resetReview = true) => {
@@ -183,12 +224,24 @@ export default function LiftProfilePage() {
   const score = review?.completeness_score ?? 0
   const canEstimate = score >= PROFILE_ESTIMATE_READY_SCORE
 
+  const suggestion = lift ? suggestions[lift] : null
+  const showSuggestion = suggestion && !ignoredSuggestion && Math.abs(suggestion.difference) >= 0.01
+
   const sidePanel = (
     <Paper withBorder p="md" style={{ minHeight: '100%' }}>
       <Stack gap="md" h="100%">
+        <SimpleGrid cols={2}>
+          <Stack gap={0}>
+            <Text size="xs" c="dimmed">Stimulus Coeff.</Text>
+            <Text fz="xl" fw={700}>x{(draft?.stimulus_coefficient ?? 1).toFixed(2)}</Text>
+          </Stack>
+          <Stack gap={0}>
+            <Text size="xs" c="dimmed">e1RM Multiplier</Text>
+            <Text fz="xl" fw={700}>x{(draft?.e1rm_multiplier ?? 1).toFixed(2)}</Text>
+          </Stack>
+        </SimpleGrid>
+
         <Stack gap="xs">
-          <Text size="sm" c="dimmed">Stimulus Coefficient</Text>
-          <Text fz="2rem" fw={700}>x{(draft?.stimulus_coefficient ?? 1).toFixed(2)}</Text>
           <Badge color={canEstimate ? 'green' : 'yellow'} variant="light" w="fit-content">
             {review ? (canEstimate ? 'Estimate ready' : `Needs ${PROFILE_ESTIMATE_READY_SCORE}%`) : 'Review needed'}
           </Badge>
@@ -291,6 +344,39 @@ export default function LiftProfilePage() {
           <Stack gap="lg" style={{ minWidth: 0 }}>
           <Paper withBorder p="md">
             <Stack gap="lg">
+              {showSuggestion && suggestion && (
+                <Alert 
+                  color="blue" 
+                  title="Suggested Calibration" 
+                  variant="light"
+                  icon={<Sparkles size={16} />}
+                >
+                  <Stack gap="xs">
+                    <Text size="sm">
+                      We suggest a multiplier of <b>{suggestion.suggested_multiplier.toFixed(2)}</b>.
+                    </Text>
+                    <Text size="xs" c="dimmed">{suggestion.basis}</Text>
+                    <Group gap="xs">
+                      <Button 
+                        size="compact-xs" 
+                        variant="filled" 
+                        onClick={() => updateDraft({ e1rm_multiplier: suggestion.suggested_multiplier }, false)}
+                      >
+                        Apply
+                      </Button>
+                      <Button 
+                        size="compact-xs" 
+                        variant="subtle" 
+                        color="gray"
+                        onClick={() => setIgnoredSuggestion(true)}
+                      >
+                        Ignore
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Alert>
+              )}
+
               <Textarea
                 label="Style & Setup"
                 value={draft.style_notes}
@@ -319,6 +405,49 @@ export default function LiftProfilePage() {
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             <Paper withBorder p="md">
               <Stack gap="xs">
+                <Group justify="space-between">
+                  <Text size="sm" fw={500}>e1RM Multiplier</Text>
+                  <ActionIcon 
+                    variant="subtle" 
+                    color="gray" 
+                    size="sm" 
+                    onClick={() => updateDraft({ e1rm_multiplier: 1.00 }, false)}
+                    title="Reset to 1.00"
+                  >
+                    <RotateCcw size={14} />
+                  </ActionIcon>
+                </Group>
+                <TextInput
+                  type="number"
+                  step={0.01}
+                  value={draft.e1rm_multiplier ?? 1.00}
+                  onChange={(e) => updateDraft({ e1rm_multiplier: multiplierValue(Number(e.currentTarget.value)) }, false)}
+                />
+                <Text size="xs" c="dimmed">
+                  Use this if the app consistently overestimates or underestimates your real
+                  max for this lift. 1.00 means no adjustment. 0.96 lowers estimates by 4%.
+                </Text>
+
+                {rawMax > 0 && (
+                  <Box mt="xs" p="xs" style={{ background: 'var(--mantine-color-gray-0)', borderRadius: '4px' }}>
+                    <Text size="xs" fw={500} mb={4}>Preview Impact:</Text>
+                    <Group justify="space-between">
+                      <Stack gap={0}>
+                        <Text size="10px" tt="uppercase" c="dimmed">Raw e1RM</Text>
+                        <Text size="sm" fw={700}>{toDisplayUnit(rawMax, unit).toFixed(1)} {unit}</Text>
+                      </Stack>
+                      <Stack gap={0} ta="right">
+                        <Text size="10px" tt="uppercase" c="dimmed">Adjusted e1RM</Text>
+                        <Text size="sm" fw={700} c="blue">{toDisplayUnit(adjustedMax, unit).toFixed(1)} {unit}</Text>
+                      </Stack>
+                    </Group>
+                  </Box>
+                )}
+              </Stack>
+            </Paper>
+
+            <Paper withBorder p="md">
+              <Stack gap="xs">
                 <Text size="sm" fw={500}>Volume Recovery Tolerance</Text>
                 <SegmentedControl
                   fullWidth
@@ -332,17 +461,17 @@ export default function LiftProfilePage() {
                 />
               </Stack>
             </Paper>
+          </SimpleGrid>
 
+          <SimpleGrid cols={1} spacing="md">
             <Paper withBorder p="md">
               <Stack gap="xs">
                 <Text size="sm" fw={500}>Stimulus Coefficient</Text>
-                <NumberInput
-                  min={1}
-                  max={2}
+                <TextInput
+                  type="number"
                   step={0.05}
-                  decimalScale={2}
                   value={draft.stimulus_coefficient ?? 1}
-                  onChange={(value) => updateDraft({ stimulus_coefficient: coefficientValue(value) }, false)}
+                  onChange={(e) => updateDraft({ stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) }, false)}
                 />
                 <Text size="xs" c="dimmed">Range is 1.00 to 2.00. Baseline competition-standard stimulus is 1.00.</Text>
               </Stack>

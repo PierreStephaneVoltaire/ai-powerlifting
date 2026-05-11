@@ -10,6 +10,7 @@ import {
   isIsoDate,
   makeWeeklyAnalysisBundle,
   putCachedWeeklyAnalysisBundle,
+  invalidateAnalysisCache,
   type AnalysisWindowKey,
 } from '../services/analysisCache'
 import {
@@ -25,6 +26,16 @@ import {
 } from '../services/blockAnalytics'
 
 export const analyticsRouter = Router()
+
+analyticsRouter.post('/cache/invalidate', async (req, res) => {
+  try {
+    const pk = req.effectivePk!
+    await invalidateAnalysisCache(pk)
+    res.json({ data: { success: true } })
+  } catch (error) {
+    res.status(500).json({ error: String(error) })
+  }
+})
 
 type ProgramWithWeightLog = Program & { weight_log: WeightEntry[] }
 
@@ -67,6 +78,16 @@ async function snapshotCompetitionProjection(pk: string, date: string): Promise<
     console.warn('Failed to snapshot competition projections before weekly analysis:', snapshotErr)
   }
 }
+
+// POST /api/analytics/e1rm-multiplier/suggestions
+analyticsRouter.post('/e1rm-multiplier/suggestions', async (req, res) => {
+  try {
+    const result = await invokeToolDirect('health_suggest_e1rm_multipliers', {})
+    res.json({ data: result })
+  } catch (error) {
+    res.status(500).json({ error: String(error) })
+  }
+})
 
 // GET /api/analytics/analysis/weekly-bundle?asOfDate=YYYY-MM-DD
 analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {

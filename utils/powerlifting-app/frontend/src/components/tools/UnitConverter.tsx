@@ -6,7 +6,7 @@ import {
   Group,
   Stack,
   SimpleGrid,
-  NumberInput,
+  TextInput,
   Text,
   Title,
   ActionIcon,
@@ -88,16 +88,15 @@ export default function UnitConverter() {
           Enter weight in {mode === 'kg-to-lb' ? 'kilograms' : 'pounds'}
         </Text>
         <Group gap="md" align="center">
-          <NumberInput
+          <TextInput
+            type="number"
             flex={1}
             value={inputValue}
-            onChange={(val) => setInputValue(typeof val === 'string' ? val : String(val ?? ''))}
+            onChange={(e) => setInputValue(e.currentTarget.value)}
             placeholder={mode === 'kg-to-lb' ? 'e.g., 100' : 'e.g., 225'}
             step={mode === 'kg-to-lb' ? 0.5 : 1}
             size="xl"
-            ta="center"
-            fw={700}
-            hideControls
+            style={{ textAlign: 'center', fontWeight: 700 }}
           />
           <Text size="lg" fw={500} c="dimmed">
             {mode === 'kg-to-lb' ? 'kg' : 'lb'}

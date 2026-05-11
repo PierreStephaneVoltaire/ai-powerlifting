@@ -15,7 +15,7 @@ import {
   Group,
   Stack,
   SimpleGrid,
-  NumberInput,
+  TextInput,
   Table,
   Text,
   Title,
@@ -92,37 +92,37 @@ export default function DotsCalculator() {
       <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md">
         <Stack gap="xs">
           <Text size="sm" fw={500}>Body Weight ({unit})</Text>
-          <NumberInput
+          <TextInput
+            type="number"
             value={toDisplayUnit(bodyweightKg, unit) || ''}
-            onChange={(val) => setBodyweightKg(typeof val === 'number' ? val / (unit === 'lb' ? 2.20462 : 1) : 0)}
-            hideControls
+            onChange={(e) => setBodyweightKg(Number(e.currentTarget.value) / (unit === 'lb' ? 2.20462 : 1) || 0)}
           />
         </Stack>
 
         <Stack gap="xs">
           <Text size="sm" fw={500}>Squat ({unit})</Text>
-          <NumberInput
+          <TextInput
+            type="number"
             value={toDisplayUnit(squatKg, unit) || ''}
-            onChange={(val) => setSquatKg(typeof val === 'number' ? val / (unit === 'lb' ? 2.20462 : 1) : 0)}
-            hideControls
+            onChange={(e) => setSquatKg(Number(e.currentTarget.value) / (unit === 'lb' ? 2.20462 : 1) || 0)}
           />
         </Stack>
 
         <Stack gap="xs">
           <Text size="sm" fw={500}>Bench ({unit})</Text>
-          <NumberInput
+          <TextInput
+            type="number"
             value={toDisplayUnit(benchKg, unit) || ''}
-            onChange={(val) => setBenchKg(typeof val === 'number' ? val / (unit === 'lb' ? 2.20462 : 1) : 0)}
-            hideControls
+            onChange={(e) => setBenchKg(Number(e.currentTarget.value) / (unit === 'lb' ? 2.20462 : 1) || 0)}
           />
         </Stack>
 
         <Stack gap="xs">
           <Text size="sm" fw={500}>Deadlift ({unit})</Text>
-          <NumberInput
+          <TextInput
+            type="number"
             value={toDisplayUnit(deadliftKg, unit) || ''}
-            onChange={(val) => setDeadliftKg(typeof val === 'number' ? val / (unit === 'lb' ? 2.20462 : 1) : 0)}
-            hideControls
+            onChange={(e) => setDeadliftKg(Number(e.currentTarget.value) / (unit === 'lb' ? 2.20462 : 1) || 0)}
           />
         </Stack>
       </SimpleGrid>
@@ -182,15 +182,15 @@ export default function DotsCalculator() {
           </Text>
 
           <Group align="flex-end" gap="md">
-            <Stack gap="xs" flex={1}>
+            <Stack gap="xs">
               <Text size="sm" fw={500}>Target DOTS</Text>
-              <NumberInput
+              <TextInput
+                type="number"
                 value={targetDots || ''}
-                onChange={(val) => setTargetDots(typeof val === 'number' ? val : 0)}
-                step={5}
-                hideControls
+                onChange={(e) => setTargetDots(Number(e.currentTarget.value) || 0)}
               />
             </Stack>
+
             {totalNeeded && (
               <div style={{ textAlign: 'center', flex: 1 }}>
                 <Text size="sm" c="dimmed">Required Total</Text>
