@@ -80,51 +80,42 @@ async function runFullCurrentBlockRegeneration(
   const windows = buildAnalysisWindows(program, asOfDate)
   const sessions = program.sessions ?? []
 
-  // Compute all 6 deterministic windows in parallel
-  const windowResults = await Promise.all(
-    ALL_WINDOW_KEYS.map(async (key) => {
-      const window = windows[key]
-      const result = await invokeToolDirect('weekly_analysis', {
-        weeks: window.weeks,
-        block: 'current',
-        window_start: window.start,
-        window_end: window.end,
-        ref_date: asOfDate,
-        week_start: window.weekStart,
-        week_end: window.weekEnd,
-        refresh_program: false,
-        program,
-        sessions,
-        pk,
-      })
-      return { key, result }
-    }),
-  )
-
+  // Compute all 6 deterministic windows sequentially to avoid overloading the server
   const results = {} as Record<AnalysisWindowKey, unknown>
-  for (const { key, result } of windowResults) {
-    results[key] = result
+  for (const key of ALL_WINDOW_KEYS) {
+    const window = windows[key]
+    results[key] = await invokeToolDirect('weekly_analysis', {
+      weeks: window.weeks,
+      block: 'current',
+      window_start: window.start,
+      window_end: window.end,
+      ref_date: asOfDate,
+      week_start: window.weekStart,
+      week_end: window.weekEnd,
+      refresh_program: false,
+      program,
+      sessions,
+      pk,
+    })
   }
 
   // Store window results
   await putAllCachedWindowAnalyses(pk, results)
 
-  // Compute AI correlation for applicable windows (4w, 8w, full block) in parallel
-  await Promise.all(
-    CORRELATION_WINDOW_KEYS.map(async (key) => {
-      try {
-        await invokeToolDirect('correlation_analysis', {
-          weeks: windows[key].weeks,
-          block: 'current',
-          refresh: true,
-          cache_only: false,
-          pk,
-        })
-      } catch (err) {
-        console.warn(`Correlation analysis failed for window ${key}:`, err)
-      }
-    }),
-  )
+  // Compute AI correlation for applicable windows sequentially to avoid overloading the server
+  for (const key of CORRELATION_WINDOW_KEYS) {
+    try {
+      await invokeToolDirect('correlation_analysis', {
+        weeks: windows[key].weeks,
+        block: 'current',
+        refresh: true,
+        cache_only: false,
+        pk,
+      })
+    } catch (err) {
+      console.warn(`Correlation analysis failed for window ${key}:`, err)
+    }
+  }
 
   // Compute full-block program evaluation
   try {
@@ -136,20 +127,21 @@ async function runFullCurrentBlockRegeneration(
   // Regenerate block_analysis#v1#current (Dashboard reads this — not weekly_analysis#*)
   // Regenerate block_correlation#v1#current (Lifetime Compare exerciseRoi reads this)
   // Regenerate block_program_eval#v1#current (Lifetime Compare per-block eval reads this)
-  // These three run in parallel — they write to independent DynamoDB SKs.
-  const [blockBundleResult, blockCorrResult, blockEvalResult] = await Promise.allSettled([
-    getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false),
-    getOrCreateBlockCorrelationReport(pk, program, 'current', invokeToolDirect, true, false),
-    getOrCreateBlockProgramEvaluation(pk, program, 'current', invokeToolDirect, true, false),
-  ])
-  if (blockBundleResult.status === 'rejected') {
-    console.warn('block_analysis#v1#current regeneration failed:', blockBundleResult.reason)
+  // These run sequentially to avoid overloading the server.
+  try {
+    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false)
+  } catch (err) {
+    console.warn('block_analysis#v1#current regeneration failed:', err)
   }
-  if (blockCorrResult.status === 'rejected') {
-    console.warn('block_correlation#v1#current regeneration failed:', blockCorrResult.reason)
+  try {
+    await getOrCreateBlockCorrelationReport(pk, program, 'current', invokeToolDirect, true, false)
+  } catch (err) {
+    console.warn('block_correlation#v1#current regeneration failed:', err)
   }
-  if (blockEvalResult.status === 'rejected') {
-    console.warn('block_program_eval#v1#current regeneration failed:', blockEvalResult.reason)
+  try {
+    await getOrCreateBlockProgramEvaluation(pk, program, 'current', invokeToolDirect, true, false)
+  } catch (err) {
+    console.warn('block_program_eval#v1#current regeneration failed:', err)
   }
 
   // Generate and cache markdown export (uses the full-block analysis as context)
@@ -233,24 +225,25 @@ analyticsRouter.get('/analysis/markdown', async (req, res) => {
   try {
     const pk = req.effectivePk!
 
-    const cached = await getCachedMarkdownExport(pk)
-    if (cached) {
-      return res.json({ data: { markdown: cached.markdown, generatedAt: cached.generatedAt, cached: true }, error: null })
-    }
-
-    // Generate on the fly (no full analysis context — just program state)
-    const markdownResult = await invokeToolDirect('export_program_markdown', {
-      version: 'current',
-      include_analysis: false,
+    // The Python tool `get_analysis_markdown` handles reading cached analysis 
+    // while computing fresh sessions and regenerating the markdown string.
+    const markdownResult = await invokeToolDirect('get_analysis_markdown', {
       pk,
-    }) as { markdown?: string; content?: string } | null
-    const markdown = markdownResult?.markdown ?? markdownResult?.content ?? ''
+    }) as { markdown?: string; generated_at?: string; cached?: boolean } | null
+
+    const markdown = markdownResult?.markdown ?? ''
     if (!markdown) {
       return res.status(502).json({ data: null, error: 'Markdown export returned empty content' })
     }
-    const generatedAt = new Date().toISOString()
-    await putCachedMarkdownExport(pk, markdown, 'current')
-    return res.json({ data: { markdown, generatedAt, cached: false }, error: null })
+    
+    return res.json({ 
+      data: { 
+        markdown, 
+        generatedAt: markdownResult?.generated_at ?? new Date().toISOString(), 
+        cached: markdownResult?.cached ?? false 
+      }, 
+      error: null 
+    })
   } catch (err) {
     res.status(502).json({ data: null, error: `Markdown export error: ${err}` })
   }
@@ -332,13 +325,29 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     const { blockKey } = req.params
     const program = await getProgramWithWeightLog(pk, 'current')
 
-    const [bundle, corrReport, evalReport] = await Promise.allSettled([
-      getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, true, false),
-      getOrCreateBlockCorrelationReport(pk, program, blockKey, invokeToolDirect, true, false),
-      getOrCreateBlockProgramEvaluation(pk, program, blockKey, invokeToolDirect, true, false),
-    ])
+    let bundle: Awaited<ReturnType<typeof getOrCreateBlockAnalysisBundle>> = null
+    let corrReport: Awaited<ReturnType<typeof getOrCreateBlockCorrelationReport>> = null
+    let evalReport: Awaited<ReturnType<typeof getOrCreateBlockProgramEvaluation>> = null
 
-    if (bundle.status === 'rejected' || !('value' in bundle) || !bundle.value) {
+    try {
+      bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, true, false)
+    } catch (err) {
+      return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
+    }
+
+    try {
+      corrReport = await getOrCreateBlockCorrelationReport(pk, program, blockKey, invokeToolDirect, true, false)
+    } catch (err) {
+      console.warn(`Block correlation regeneration failed for ${blockKey}:`, err)
+    }
+
+    try {
+      evalReport = await getOrCreateBlockProgramEvaluation(pk, program, blockKey, invokeToolDirect, true, false)
+    } catch (err) {
+      console.warn(`Block program evaluation regeneration failed for ${blockKey}:`, err)
+    }
+
+    if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
     }
 
@@ -362,8 +371,8 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
         success: true,
         blockKey,
         generatedAt: new Date().toISOString(),
-        correlationRegenerated: corrReport.status === 'fulfilled',
-        evaluationRegenerated: evalReport.status === 'fulfilled',
+        correlationRegenerated: corrReport !== null,
+        evaluationRegenerated: evalReport !== null,
       },
       error: null,
     })

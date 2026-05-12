@@ -4094,7 +4094,7 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Return the cached markdown export for the current block, generating it if absent."""
+    """Return a freshly generated markdown export for the current block, utilizing cached analysis where available."""
     import json
     import time as _time
     import boto3
@@ -4113,30 +4113,14 @@ def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
 
-    # Try cache first
-    item = table.get_item(Key={"pk": cache_pk, "sk": "markdown_export#current"}).get("Item")
-    if item:
-        payload_str = item.get("payload", "")
-        if payload_str:
-            try:
-                data = json.loads(payload_str)
-                markdown = data.get("markdown", "")
-                if markdown:
-                    return {
-                        "markdown": markdown,
-                        "generated_at": item.get("generated_at", ""),
-                        "cached": True,
-                    }
-            except Exception:
-                pass
-
-    # Generate fresh markdown (without full analysis context for speed)
+    # Generate fresh markdown (utilizing cached analysis components for speed)
     store.invalidate_cache()
     program = _run_async(store.get_program())
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
     analysis = _build_analysis_bundle(program, sessions)
+    scoped_program = _scope_program_to_current_block(program)
     out_path = os.path.join(tempfile.gettempdir(), "program_history_live.md")
-    build_program_markdown(program, out_path, analysis=analysis, export_context=analysis)
+    build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
     with open(out_path, "r", encoding="utf-8") as f:
         markdown = f.read()
 

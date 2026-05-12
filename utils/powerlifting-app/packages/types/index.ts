@@ -322,6 +322,7 @@ export interface Exercise {
   failed_set_reasons?: FailedSetReason[][] // per failed set, aligned to set_statuses
   load_source?: LoadSource
   rpe_target?: number | null
+  rpe?: number | null       // executed RPE for the exercise (4-10, 0.5 increments)
 }
 
 export type SetStatus = 'pending' | 'completed' | 'failed' | 'skipped'

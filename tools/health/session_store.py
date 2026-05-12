@@ -58,17 +58,26 @@ def _phase_block(phase: dict[str, Any]) -> str:
     return str(phase.get("block") or DEFAULT_BLOCK)
 
 
-def resolve_phase(session: dict[str, Any], phases: list[dict[str, Any]]) -> dict[str, Any]:
+def resolve_phase(session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
     week_number = parse_week_number(session)
     block = str(session.get("block") or DEFAULT_BLOCK)
 
-    for phase in phases:
-        if not isinstance(phase, dict) or _phase_block(phase) != block:
-            continue
-        start_week = _int_value(phase.get("start_week"))
-        end_week = _int_value(phase.get("end_week"))
-        if start_week <= week_number <= end_week:
-            return copy.deepcopy(phase)
+    if phases is not None:
+        for phase in phases:
+            if not isinstance(phase, dict) or _phase_block(phase) != block:
+                continue
+            start_week = _int_value(phase.get("start_week"))
+            end_week = _int_value(phase.get("end_week"))
+            if start_week <= week_number <= end_week:
+                return copy.deepcopy(phase)
+        
+        return {
+            "name": "Unscheduled",
+            "intent": "",
+            "start_week": week_number,
+            "end_week": week_number,
+            "block": block,
+        }
 
     existing_phase = session.get("phase")
     if isinstance(existing_phase, dict) and existing_phase:
@@ -112,7 +121,7 @@ def _program_version_number(program_sk: str) -> int | None:
         return None
 
 
-def _public_session(item: dict[str, Any], phases: list[dict[str, Any]]) -> dict[str, Any]:
+def _public_session(item: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
     session = copy.deepcopy(item)
     if "session_id" in session and "id" not in session:
         session["id"] = str(session["session_id"])
@@ -199,7 +208,7 @@ class SessionStore:
         )
 
     def list_sessions_sync(self, program_sk: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
-        return [_public_session(item, phases or []) for item in self._query_items_sync(program_sk)]
+        return [_public_session(item, phases) for item in self._query_items_sync(program_sk)]
 
     def _same_day_ordinal_sync(self, program_sk: str, date_value: str) -> int:
         return len(self._query_items_sync(program_sk, date_prefix=date_value)) + 1
@@ -224,7 +233,7 @@ class SessionStore:
         block = str(session_copy.get("block") or DEFAULT_BLOCK)
         status = str(session_copy.get("status") or ("completed" if session_copy.get("completed") else "planned"))
         completed = bool(session_copy.get("completed")) or status in {"logged", "completed"}
-        phase = resolve_phase({**session_copy, "block": block}, phases or [])
+        phase = resolve_phase({**session_copy, "block": block}, phases)
         planned_exercises = session_copy.get("planned_exercises")
 
         session_copy.update({
@@ -281,7 +290,7 @@ class SessionStore:
 
     async def get_session(self, program_sk: str, date_value: str, phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: _public_session(self._find_item_sync(program_sk, date_value), phases or [])
+            None, lambda: _public_session(self._find_item_sync(program_sk, date_value), phases)
         )
 
     async def get_sessions_range(
@@ -310,7 +319,7 @@ class SessionStore:
             Item=_to_dynamo(item),
             ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
         )
-        return _public_session(item, phases or [])
+        return _public_session(item, phases)
 
     async def patch_session(
         self,
@@ -333,7 +342,7 @@ class SessionStore:
         index: int | None = None,
     ) -> dict[str, Any]:
         existing = self._find_item_sync(program_sk, date_value, index)
-        session = _public_session(existing, phases or [])
+        session = _public_session(existing, phases)
         session.update(copy.deepcopy(patch))
         item = self._build_item(program_sk, session, phases, existing_item=existing)
         if item["sk"] != existing["sk"]:
@@ -341,7 +350,7 @@ class SessionStore:
             self.table.delete_item(Key={"pk": self._pk, "sk": existing["sk"]})
         else:
             self.table.put_item(Item=_to_dynamo(item))
-        return _public_session(item, phases or [])
+        return _public_session(item, phases)
 
     async def delete_session(self, program_sk: str, date_value: str, index: int | None = None) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(

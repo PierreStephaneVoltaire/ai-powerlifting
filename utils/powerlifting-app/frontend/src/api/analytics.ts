@@ -845,6 +845,7 @@ export async function fetchWeeklyAnalysisBundle(asOfDate?: string): Promise<Week
 export async function fetchProgramBlocks(): Promise<ProgramBlockIndexEntry[]> {
   const res = await api.get('/analytics/blocks')
   const body = res.data
+  console.log(body)
   if (body.error) throw new Error(body.error)
   return body.data
 }

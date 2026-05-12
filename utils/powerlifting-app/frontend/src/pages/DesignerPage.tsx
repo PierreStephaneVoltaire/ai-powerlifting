@@ -29,7 +29,7 @@ import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { sessionMuscleSets } from '@/utils/sessionWorkload'
 import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
-import { programWeekStartDate, weekStartForBlock } from '@/utils/weekStart'
+import { programWeekStartDate, trainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
 import { toDisplayUnit, fromDisplayUnit, displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
 import type { Session, PlannedExercise, GlossaryExercise } from '@powerlifting/types'
@@ -222,10 +222,25 @@ export default function DesignerPage() {
   const { program, version, createSession } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [block, setBlock] = useState('current')
-  const [selectedWeek, setSelectedWeek] = useState(1)
+  const block = 'current'
+  const weekStartDay = useMemo(() => weekStartForBlock(program, block), [program])
+  const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
+  const defaultWeek = useMemo(() => {
+    const weekParam = searchParams.get('week')
+    if (weekParam) {
+      const week = parseInt(weekParam, 10)
+      if (!isNaN(week) && week > 0) return week
+    }
+    const calculated = trainingWeekForDate(todayStr, program?.meta?.program_start, weekStartDay)
+    const totalWeeks = program?.phases?.length
+      ? Math.max(...program.phases.map(p => p.end_week))
+      : 12
+    return Math.min(calculated, totalWeeks)
+  }, [searchParams, todayStr, program?.meta?.program_start, weekStartDay, program?.phases])
+
+  const [selectedWeek, setSelectedWeek] = useState(defaultWeek)
   const [editingSession, setEditingSession] = useState<Session | null>(null)
   const [editingSessionGlobalIndex, setEditingSessionGlobalIndex] = useState<number>(-1)
   const [editingSessionDate, setEditingSessionDate] = useState<string>('')
@@ -265,16 +280,16 @@ export default function DesignerPage() {
     api.fetchGlossary().then(setGlossary).catch(console.error)
   }, [])
 
-  // Read week from URL query params
   useEffect(() => {
-    const weekParam = searchParams.get('week')
-    if (weekParam) {
-      const week = parseInt(weekParam, 10)
-      if (!isNaN(week) && week > 0) {
-        setSelectedWeek(week)
-      }
+    const current = searchParams.get('week')
+    if (current !== String(selectedWeek)) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('week', String(selectedWeek))
+        return next
+      }, { replace: true })
     }
-  }, [searchParams])
+  }, [selectedWeek])
 
   const totalWeeks = useMemo(() => {
     if (!phases.length) return 12
@@ -284,12 +299,6 @@ export default function DesignerPage() {
   const weekOptions = useMemo(() => {
     return Array.from({ length: totalWeeks }, (_, i) => i + 1)
   }, [totalWeeks])
-
-  const blocks = useMemo(() => {
-    const s = new Set<string>()
-    for (const session of (program?.sessions || [])) s.add(session.block ?? 'current')
-    return Array.from(s)
-  }, [program?.sessions])
 
   const selectedPhase = useMemo(() => {
     return phases.find(
@@ -556,18 +565,12 @@ export default function DesignerPage() {
           <Text fw={700} size="xl">Session Design</Text>
         </Group>
         <Group gap="sm" wrap="wrap">
-          {blocks.length > 1 && (
-            <Select
-              value={block}
-              onChange={(v) => setBlock(v ?? 'current')}
-              data={blocks.map(b => ({ value: b, label: b === 'current' ? 'Current Block' : b }))}
-              size="sm"
-              w={160}
-            />
-          )}
           <Select
             value={String(selectedWeek)}
-            onChange={(v) => setSelectedWeek(Number(v ?? 1))}
+            onChange={(v) => {
+              const w = Number(v ?? 1)
+              setSelectedWeek(w)
+            }}
             data={weekOptions.map(w => ({ value: String(w), label: `Week ${w}` }))}
             size="sm"
             w={120}

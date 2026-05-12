@@ -174,6 +174,7 @@ function SortableExerciseItem({
   onRemove, 
   onUpdate, 
   onUpdateSets,
+  onUpdateRpe,
   glossaryNames,
   unit,
   renderMobileMenu,
@@ -186,6 +187,7 @@ function SortableExerciseItem({
   onRemove: (i: number) => void;
   onUpdate: (i: number, field: keyof Exercise, v: any) => void;
   onUpdateSets: (i: number, sets: number) => void;
+  onUpdateRpe: (i: number, rpe: number | null) => void;
   glossaryNames: string[];
   unit: string;
   renderMobileMenu: (ex: Exercise, i: number) => React.ReactNode;
@@ -212,7 +214,7 @@ function SortableExerciseItem({
   const setStatuses = normalizeSetStatuses(exercise)
 
   return (
-    <Paper ref={setNodeRef} style={style} withBorder p="sm" radius="md">
+    <Paper ref={setNodeRef} style={{ ...style, overflow: 'hidden' }} withBorder p="sm" radius="md">
       <Group gap="xs" mb="xs">
         <Box {...attributes} {...listeners} style={{ cursor: 'grab', padding: '4px 0', opacity: 0.5 }}>
           <GripVertical size={16} />
@@ -242,7 +244,7 @@ function SortableExerciseItem({
 
       <Box>
         <Group justify="space-between" align="flex-start" gap={4} mb="xs" wrap="nowrap">
-          <SimpleGrid cols={3} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
+          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
             <Box>
               <Text size="xs" c="dimmed">Sets</Text>
               <TextInput
@@ -276,6 +278,22 @@ function SortableExerciseItem({
                 ) : null}
               />
             </Box>
+            <Box>
+              <Text size="xs" c="dimmed">RPE</Text>
+              <TextInput
+                type="text"
+                inputMode="decimal"
+                value={exercise.rpe != null ? String(exercise.rpe) : ''}
+                onChange={(e) => {
+                  const raw = e.currentTarget.value.trim()
+                  if (raw === '') { onUpdateRpe(index, null); return }
+                  const parsed = Number(raw)
+                  if (!isNaN(parsed)) onUpdateRpe(index, parsed)
+                }}
+                placeholder="4-10"
+                size="sm"
+              />
+            </Box>
           </SimpleGrid>
         </Group>
         
@@ -297,7 +315,7 @@ function SortableExerciseItem({
           <Box mt={6}>
             <Group gap={4} align="center" wrap="nowrap">
               <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
-              <Box style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+              <Box style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                 {renderSetStatusControls(exercise, index)}
               </Box>
             </Group>
@@ -412,6 +430,12 @@ export default function SessionDrawer({
 
   const handleSave = async () => {
     try {
+      const rpeError = validateRpeValues()
+      if (rpeError) {
+        pushToast({ message: rpeError, type: 'error' })
+        return
+      }
+
       // Check if date changed
       if (localSession.date !== originalDate) {
         // First reschedule, then save content
@@ -576,6 +600,29 @@ export default function SessionDrawer({
     setHasChanges(true)
   }
 
+  const updateExerciseRpe = (index: number, rpe: number | null) => {
+    setLocalSession((prev) => {
+      if (!prev) return prev
+      const exercises = [...prev.exercises]
+      exercises[index] = { ...exercises[index], rpe }
+      return { ...prev, exercises }
+    })
+    setHasChanges(true)
+  }
+
+  const validateRpeValues = (): string | null => {
+    for (let i = 0; i < localSession.exercises.length; i++) {
+      const rpe = localSession.exercises[i].rpe
+      if (rpe != null && (rpe < 4 || rpe > 10)) {
+        return `Exercise "${localSession.exercises[i].name || 'unnamed'}" has RPE ${rpe}, must be 4-10.`
+      }
+      if (rpe != null && (rpe * 2) % 1 !== 0) {
+        return `Exercise "${localSession.exercises[i].name || 'unnamed'}" has RPE ${rpe}, must be in 0.5 increments.`
+      }
+    }
+    return null
+  }
+
   const updateDate = (newDate: string) => {
     if (newDate && newDate !== localSession.date) {
       const newDay = getDayOfWeek(newDate)
@@ -722,7 +769,7 @@ export default function SessionDrawer({
     const statuses = normalizeSetStatuses(exercise, localSession.completed)
     const failedReasons = normalizeFailedSetReasons(exercise, statuses)
     return (
-      <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+      <Group gap={2} wrap="wrap" style={{ flexShrink: 0 }}>
         {statuses.map((status, setIndex) => {
           const reasonLabel = failedReasonLabels(failedReasons[setIndex] || [])
           const tooltip = reasonLabel
@@ -872,9 +919,10 @@ export default function SessionDrawer({
       <Stack
         gap="lg"
         pb={mode === 'page' ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : undefined}
+        style={{ maxWidth: '100vw', overflowX: 'hidden' }}
       >
-        <Group justify="space-between" wrap="nowrap" align="flex-start">
-          <Group gap="sm" align="flex-start">
+        <Group justify="space-between" wrap="wrap" align="flex-start">
+          <Group gap="sm" align="flex-start" wrap="nowrap">
             <Box
               w={12}
               h={12}
@@ -1001,6 +1049,7 @@ export default function SessionDrawer({
                       onRemove={removeExercise}
                       onUpdate={updateExercise}
                       onUpdateSets={updateSetsWithResize}
+                      onUpdateRpe={updateExerciseRpe}
                       glossaryNames={glossaryNames}
                       unit={unit}
                       renderMobileMenu={renderMobileExerciseMenu}
@@ -1101,7 +1150,7 @@ export default function SessionDrawer({
           </Stack>
         </Paper>
 
-        <Group justify="space-between" wrap="wrap">
+        <Stack gap="sm">
           <Button
             variant="default"
             color="red"
@@ -1117,7 +1166,7 @@ export default function SessionDrawer({
           >
             Delete
           </Button>
-          <Group gap="sm">
+          <Group gap="sm" wrap="wrap">
           <Button
             variant="default"
             color="gray"
@@ -1142,7 +1191,7 @@ export default function SessionDrawer({
             {localSession.completed ? 'Done' : 'Mark Done'}
           </Button>
           </Group>
-        </Group>
+        </Stack>
       </Stack>
   )
 
@@ -1156,6 +1205,18 @@ export default function SessionDrawer({
           size="xl"
           withCloseButton={false}
           overlayProps={{ backgroundOpacity: 0.25 }}
+          styles={{
+            inner: {
+              overflow: 'hidden',
+            },
+            content: {
+              maxWidth: '100vw',
+              overflowX: 'hidden',
+            },
+            body: {
+              overflowX: 'hidden',
+            },
+          }}
         >
           {editorContent}
         </Drawer>

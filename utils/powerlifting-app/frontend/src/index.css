@@ -99,6 +99,24 @@
   }
 }
 
+/* Prevent iOS auto-zoom on input focus using the 16px + transform-scale hack.
+   iOS auto-zooms when an input font-size is below 16px. Mantine size="sm" renders ~14px.
+   We set 16px to prevent the zoom, then scale(0.875) back to ~14px visually.
+   Width is divided by 0.875 so the element still fits in its grid cell. */
+@media (max-width: 639px) {
+  .mantine-TextInput-input,
+  .mantine-Textarea-input,
+  .mantine-Select-input,
+  .mantine-Autocomplete-input,
+  .mantine-NumberInput-input,
+  .mantine-DatePickerInput-input {
+    font-size: 16px;
+    transform: scale(0.875);
+    transform-origin: left center;
+    width: calc(100% / 0.875);
+  }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

@@ -242,6 +242,7 @@ export default function Dashboard() {
     fetchProgramBlocks()
       .then((blocks) => {
         const currentBlock = blocks.find((block) => block.isCurrent)
+        console.log(currentBlock)
         if (!currentBlock?.cacheStatus?.cached) {
           if (!cancelled) {
             setCurrentBlockBundle(null)
@@ -253,6 +254,7 @@ export default function Dashboard() {
       })
       .then((bundle) => {
         if (!cancelled && bundle) {
+          console.log(bundle)
           setCurrentBlockBundle(bundle)
           setCurrentBlockCacheMissing(false)
         }

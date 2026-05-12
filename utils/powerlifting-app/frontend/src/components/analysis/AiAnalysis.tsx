@@ -36,31 +36,44 @@ export function AiAnalysis({ effectiveWeeks, weeksMode, isRegenerating = false }
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
 
-  // Fetch correlation report when weeks >= 4.
+  // Fetch correlation report when weeks >= 4, then fetch program evaluation sequentially.
   // Also re-fetches after a regeneration completes (isRegenerating transitions false→true→false).
   useEffect(() => {
+    if (isRegenerating) return;
+
     if (effectiveWeeks < 4) {
       setCorrReport(null);
+      setCorrLoading(false);
       return;
     }
-    if (isRegenerating) return; // don't fetch while parent is regenerating
+
+    let cancelled = false;
     setCorrLoading(true);
     setCorrError(null);
     fetchCorrelationReport(effectiveWeeks, 'current', false, true)
-      .then(setCorrReport)
-      .catch((e) => setCorrError(e.message))
-      .finally(() => setCorrLoading(false));
+      .then((report) => {
+        if (cancelled) return;
+        setCorrReport(report);
+        setCorrLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setCorrError(e.message);
+        setCorrLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [effectiveWeeks, isRegenerating]);
 
-  // Program evaluation — fetch when in Full Block mode.
-  // Also re-fetches after a regeneration completes.
+  // Program evaluation — fetch when in Full Block mode, after correlation completes.
   useEffect(() => {
     if (weeksMode !== 'block') {
       setEvalReport(null);
       setEvalError(null);
       return;
     }
-    if (isRegenerating) return; // don't fetch while parent is regenerating
+    if (isRegenerating) return;
+    if (corrLoading) return;
     const completedCount = (program?.sessions ?? []).filter(
       s => (s.block ?? 'current') === 'current' && s.completed,
     ).length;
@@ -74,7 +87,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode, isRegenerating = false }
       .then(setEvalReport)
       .catch((e) => setEvalError(e.message))
       .finally(() => setEvalLoading(false));
-  }, [weeksMode, program?.meta?.program_start, program?.sessions, isRegenerating]);
+  }, [weeksMode, program?.meta?.program_start, program?.sessions, isRegenerating, corrLoading]);
 
   const STANCE_COLORS: Record<string, string> = { continue: 'green', monitor: 'blue', adjust: 'yellow', critical: 'red' };
   const ALIGN_COLORS: Record<string, string> = { good: 'green', mixed: 'yellow', poor: 'red' };
