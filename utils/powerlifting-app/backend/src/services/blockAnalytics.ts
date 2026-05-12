@@ -997,15 +997,15 @@ export async function getCachedBlockAnalysisBundle(
   try {
     const pk = cachePk(userPk)
     
-    // Find the latest version of this block analysis
+    // Find the latest version of this block analysis.
+    // FilterExpression cannot reference primary key attributes (sk) — blockKey filtering
+    // is done via the KeyConditionExpression prefix so DynamoDB uses the primary key index.
     const response = await docClient.send(new QueryCommand({
       TableName: ANALYSIS_CACHE_TABLE,
       KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      FilterExpression: 'contains(sk, :blockKey)',
       ExpressionAttributeValues: {
         ':pk': pk,
-        ':prefix': 'block_analysis#',
-        ':blockKey': `#${blockKey}`,
+        ':prefix': `block_analysis#v${CACHE_SCHEMA_VERSION}#${blockKey}`,
       },
     }))
 

@@ -1685,6 +1685,14 @@ def _read_cached_correlation(weeks: int = 4) -> dict | None:
     return _sanitize_decimals(report)
 
 
+def _scope_program_to_current_block(program: dict) -> dict:
+    """Return a shallow copy of program with phases and sessions filtered to the current block only."""
+    scoped = dict(program)
+    scoped["phases"] = [p for p in program.get("phases", []) if (p.get("block") or "current") == "current"]
+    scoped["sessions"] = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
+    return scoped
+
+
 def _normalize_export_format(format_value: str | None) -> str:
     export_format = str(format_value or "xlsx").strip().lower()
     if export_format in ("md", "markdown"):
@@ -1699,19 +1707,21 @@ def _write_program_export(program: dict, sessions: list[dict], out_dir: str, for
     from export import build_program_markdown, build_program_xlsx
 
     export_format = _normalize_export_format(format_value)
+    scoped_program = _scope_program_to_current_block(program)
+    scoped_sessions = scoped_program["sessions"]
     analysis = _build_analysis_bundle(program, sessions)
 
     if export_format == "markdown":
         filename = "program_history.md"
-        description = "Markdown export of full program history"
+        description = "Markdown export of current block"
         out_path = os.path.join(out_dir, filename)
-        build_program_markdown(program, out_path, analysis=analysis, export_context=analysis)
+        build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
         return filename, description, export_format
 
     filename = "program_history.xlsx"
-    description = "Excel export of full program history"
+    description = "Excel export of current block"
     out_path = os.path.join(out_dir, filename)
-    build_program_xlsx(program, out_path, analysis=analysis, export_context=analysis)
+    build_program_xlsx(scoped_program, out_path, analysis=analysis, export_context=analysis)
     return filename, description, export_format
 
 
@@ -3923,8 +3933,9 @@ def _do_export_program_markdown(args: Dict[str, Any]) -> str:
     program = _run_async(_get_store().get_program())
     sessions = program.get("sessions", []) if isinstance(program, dict) else []
     analysis = _build_analysis_bundle(program, sessions)
+    scoped_program = _scope_program_to_current_block(program)
     out_path = os.path.join(tempfile.gettempdir(), "program_history_cache.md")
-    build_program_markdown(program, out_path, analysis=analysis, export_context=analysis)
+    build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
     with open(out_path, "r", encoding="utf-8") as f:
         markdown = f.read()
     return {"markdown": markdown, "length": len(markdown)}
@@ -4054,7 +4065,8 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     # Generate markdown export
     try:
         out_path = os.path.join(tempfile.gettempdir(), "program_history_regen.md")
-        build_program_markdown(program, out_path, analysis=block_analysis_result)
+        scoped_program = _scope_program_to_current_block(program)
+        build_program_markdown(scoped_program, out_path, analysis=block_analysis_result)
         with open(out_path, "r", encoding="utf-8") as f:
             markdown = f.read()
         if markdown:

@@ -65,7 +65,10 @@ async function snapshotCompetitionProjection(pk: string, date: string): Promise<
 /**
  * Core regeneration function: computes all 6 analysis windows, their AI reports,
  * and the markdown export, then stores everything in the current-block cache.
- * NEVER touches past-block or lifetime-compare caches.
+ * Also regenerates block_analysis#v1#current, block_correlation#v1#current, and
+ * block_program_eval#v1#current so the Dashboard and Lifetime Compare exerciseRoi
+ * section stay in sync after regeneration.
+ * NEVER touches past-block or lifetime-compare (AI comparison) caches.
  */
 async function runFullCurrentBlockRegeneration(
   pk: string,
@@ -128,6 +131,25 @@ async function runFullCurrentBlockRegeneration(
     await invokeToolDirect('program_evaluation', { refresh: true, cache_only: false, pk })
   } catch (err) {
     console.warn('Program evaluation failed during regeneration:', err)
+  }
+
+  // Regenerate block_analysis#v1#current (Dashboard reads this — not weekly_analysis#*)
+  // Regenerate block_correlation#v1#current (Lifetime Compare exerciseRoi reads this)
+  // Regenerate block_program_eval#v1#current (Lifetime Compare per-block eval reads this)
+  // These three run in parallel — they write to independent DynamoDB SKs.
+  const [blockBundleResult, blockCorrResult, blockEvalResult] = await Promise.allSettled([
+    getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false),
+    getOrCreateBlockCorrelationReport(pk, program, 'current', invokeToolDirect, true, false),
+    getOrCreateBlockProgramEvaluation(pk, program, 'current', invokeToolDirect, true, false),
+  ])
+  if (blockBundleResult.status === 'rejected') {
+    console.warn('block_analysis#v1#current regeneration failed:', blockBundleResult.reason)
+  }
+  if (blockCorrResult.status === 'rejected') {
+    console.warn('block_correlation#v1#current regeneration failed:', blockCorrResult.reason)
+  }
+  if (blockEvalResult.status === 'rejected') {
+    console.warn('block_program_eval#v1#current regeneration failed:', blockEvalResult.reason)
   }
 
   // Generate and cache markdown export (uses the full-block analysis as context)

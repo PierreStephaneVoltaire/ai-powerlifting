@@ -8,7 +8,7 @@ import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile,
 import { fetchBlockAnalysis, fetchProgramBlocks, type BlockAnalysisBundle, type WeeklyAnalysis } from '@/api/analytics'
 import { daysUntil } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
-import { phaseColor } from '@/utils/phases'
+import { phaseColor, phasesForBlock } from '@/utils/phases'
 import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse } from 'lucide-react'
 import {
   Stack,
@@ -282,6 +282,7 @@ export default function Dashboard() {
   }
 
   const { meta, sessions, phases, competitions } = program
+  const currentBlockPhases = phasesForBlock(phases)
 
   const upcomingComps = competitions
     .filter((c) => c.status !== 'skipped' && new Date(c.date) >= new Date())
@@ -357,13 +358,13 @@ export default function Dashboard() {
   }
 
   const startEditingPhases = () => {
-    setLocalPhases([...phases])
+    setLocalPhases([...currentBlockPhases])
     setEditingPhases(true)
   }
 
   const savePhases = async () => {
     try {
-      await updatePhases(localPhases)
+      await updatePhases(localPhases, 'current')
       pushToast({ message: 'Phases updated', type: 'success' })
       setEditingPhases(false)
     } catch (err) {
@@ -382,7 +383,7 @@ export default function Dashboard() {
   const addPhase = () => {
     const lastPhase = localPhases[localPhases.length - 1]
     const newStart = lastPhase ? lastPhase.end_week + 1 : 1
-    setLocalPhases(prev => [...prev, { name: 'New Phase', intent: '', start_week: newStart, end_week: newStart + 3 }])
+    setLocalPhases(prev => [...prev, { name: 'New Phase', intent: '', start_week: newStart, end_week: newStart + 3, block: 'current' }])
   }
 
   const removePhase = (index: number) => setLocalPhases(prev => prev.filter((_, i) => i !== index))
@@ -940,7 +941,7 @@ export default function Dashboard() {
             <Stack gap="xs">
               {localPhases.map((phase, idx) => (
                 <Group key={idx} gap="xs" p="xs" style={{ backgroundColor: 'var(--mantine-color-default)', borderRadius: 'var(--mantine-radius-sm)' }}>
-                  <Box w={12} h={12} style={{ borderRadius: '50%', backgroundColor: phaseColor(phase, localPhases) }} />
+                  <Box w={12} h={12} style={{ borderRadius: '50%', backgroundColor: phaseColor({ ...phase, block: 'current' }, localPhases) }} />
                   <TextInput
                     style={{ flex: 1 }}
                     value={phase.name}
@@ -969,12 +970,16 @@ export default function Dashboard() {
             </Stack>
           ) : (
             <Stack gap={4}>
-              {phases.map((phase, idx) => (
-                <Group key={idx} gap="xs">
-                  <Box w={12} h={12} style={{ borderRadius: '50%', backgroundColor: phaseColor(phase, phases) }} />
-                  <Text size="sm">W{phase.start_week}-W{phase.end_week}: {phase.name}</Text>
-                </Group>
-              ))}
+              {currentBlockPhases.length === 0 ? (
+                <Text size="sm" c="dimmed">No phases defined for the current block.</Text>
+              ) : (
+                currentBlockPhases.map((phase, idx) => (
+                  <Group key={idx} gap="xs">
+                    <Box w={12} h={12} style={{ borderRadius: '50%', backgroundColor: phaseColor(phase, currentBlockPhases) }} />
+                    <Text size="sm">W{phase.start_week}-W{phase.end_week}: {phase.name}</Text>
+                  </Group>
+                ))
+              )}
             </Stack>
           )}
         </Paper>

@@ -88,8 +88,8 @@ def _build_weekly_e1rm(sessions: list[dict], cutoff_str: str) -> dict[int, dict[
 
         for ex in s.get("exercises", []):
             name_lower = ex.get("name", "").lower()
-            kg = ex.get("kg") or 0
-            reps = ex.get("reps") or 0
+            kg = float(ex.get("kg") or 0)
+            reps = float(ex.get("reps") or 0)
             if kg <= 0 or reps <= 0 or _executed_sets(ex) <= 0:
                 continue
 
@@ -142,7 +142,7 @@ def _build_weekly_accessory_volume(sessions: list[dict], cutoff_str: str) -> dic
             if name_lower in ("squat", "bench press", "deadlift"):
                 continue
 
-            vol = _executed_sets(ex) * (ex.get("reps") or 0) * (ex.get("kg") or 0)
+            vol = _executed_sets(ex) * float(ex.get("reps") or 0) * float(ex.get("kg") or 0)
             if vol <= 0:
                 continue
 
