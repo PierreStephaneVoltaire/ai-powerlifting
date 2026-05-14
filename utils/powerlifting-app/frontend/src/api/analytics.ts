@@ -832,9 +832,10 @@ export async function fetchWeeklyAnalysis(
   return body.data
 }
 
-export async function fetchWeeklyAnalysisBundle(asOfDate?: string): Promise<WeeklyAnalysisBundle> {
+export async function fetchWeeklyAnalysisBundle(asOfDate?: string, refresh = false): Promise<WeeklyAnalysisBundle> {
   const params = new URLSearchParams()
   if (asOfDate) params.set('asOfDate', asOfDate)
+  if (refresh) params.set('refresh', 'true')
   const qs = params.toString()
   const res = await api.get(`/analytics/analysis/weekly-bundle${qs ? `?${qs}` : ''}`)
   const body = res.data
@@ -845,15 +846,13 @@ export async function fetchWeeklyAnalysisBundle(asOfDate?: string): Promise<Week
 export async function fetchProgramBlocks(): Promise<ProgramBlockIndexEntry[]> {
   const res = await api.get('/analytics/blocks')
   const body = res.data
-  console.log(body)
   if (body.error) throw new Error(body.error)
   return body.data
 }
 
-export async function fetchBlockAnalysis(blockKey: string, refresh = false, cacheOnly = false): Promise<BlockAnalysisBundle> {
+export async function fetchBlockAnalysis(blockKey: string, refresh = false): Promise<BlockAnalysisBundle> {
   const params = new URLSearchParams({
     refresh: String(refresh),
-    cacheOnly: String(cacheOnly),
   })
   const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/analysis?${params.toString()}`)
   const body = res.data
@@ -953,12 +952,11 @@ export async function fetchProgramEvaluation(refresh = false, cacheOnly = false)
 }
 
 /**
- * Trigger full regeneration of all current-block analysis caches:
- * 6 weekly windows, AI correlation, program evaluation, and markdown export.
- * Never invalidates past-block or lifetime-compare caches.
+ * Regenerate current-block analysis. Pass `windows` to regenerate only
+ * specific window keys (e.g. ['previous_4']); omit to regenerate all.
  */
-export async function regenerateAnalysis(): Promise<{ success: boolean; generatedAt: string }> {
-  const res = await api.post('/analytics/analysis/regenerate')
+export async function regenerateAnalysis(windows?: string[]): Promise<{ success: boolean; generatedAt: string }> {
+  const res = await api.post('/analytics/analysis/regenerate', windows?.length ? { windows } : undefined)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return body.data

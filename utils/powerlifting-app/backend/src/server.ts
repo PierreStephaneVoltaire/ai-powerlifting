@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import pinoHttp from 'pino-http'
+import { logger } from './utils/logger'
 import { programsRouter } from './routes/programs'
 import { sessionsRouter } from './routes/sessions'
 import { exercisesRouter } from './routes/exercises'
@@ -8,6 +10,7 @@ import { maxesRouter } from './routes/maxes'
 import { weightRouter } from './routes/weight'
 import { supplementsRouter } from './routes/supplements'
 import { dietNotesRouter } from './routes/dietNotes'
+import { blockNotesRouter } from './routes/blockNotes'
 import { competitionsRouter } from './routes/competitions'
 import { videosRouter } from './routes/videos'
 import { analyticsRouter } from './routes/analytics'
@@ -26,7 +29,8 @@ const app = express()
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
-// Middleware
+app.use(pinoHttp({ logger }))
+
 app.use(cors({
   origin: FRONTEND_URL,
   credentials: true,
@@ -34,18 +38,14 @@ app.use(cors({
 app.use(cookieParser())
 app.use(express.json())
 
-// Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Auth routes (before identity middleware — callback handles its own flow)
 app.use('/api/auth', authRouter)
 
-// Identity resolution for all domain routes
 app.use(requireUserOptional, resolvePk)
 
-// Domain routes
 app.use('/api/settings', settingsRouter)
 app.use('/api/programs', programsRouter)
 app.use('/api/goals', goalsRouter)
@@ -56,6 +56,7 @@ app.use('/api/maxes', maxesRouter)
 app.use('/api/weight', weightRouter)
 app.use('/api/supplements', supplementsRouter)
 app.use('/api/diet-notes', dietNotesRouter)
+app.use('/api/block-notes', blockNotesRouter)
 app.use('/api/competitions', competitionsRouter)
 app.use('/api/videos', videosRouter)
 app.use('/api/analytics', analyticsRouter)
@@ -64,10 +65,8 @@ app.use('/api/import', importRouter)
 app.use('/api/templates', templateRouter)
 app.use('/api/stats', statsRouter)
 
-// Error handler
 app.use(errorHandler)
 
-// 404 handler
 app.use((_req, res) => {
   res.status(404).json({
     data: null,
@@ -78,6 +77,5 @@ app.use((_req, res) => {
 const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
-  console.log(`Powerlifting API running on port ${PORT}`)
-  console.log(`Health check: http://localhost:${PORT}/health`)
+  logger.info({ port: PORT, url: `http://localhost:${PORT}` }, 'Powerlifting API started')
 })

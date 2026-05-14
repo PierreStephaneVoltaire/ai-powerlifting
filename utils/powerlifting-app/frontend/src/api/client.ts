@@ -12,6 +12,7 @@ import type {
   Phase,
   SupplementPhase,
   DietNote,
+  BlockNote,
   Competition,
   AthleteGoal,
   FederationLibrary,
@@ -350,6 +351,20 @@ export async function updateDietNotes(
   dietNotes: DietNote[]
 ): Promise<void> {
   await api.put(`/diet-notes/${version}`, { dietNotes })
+}
+
+// ─── Block Notes ───────────────────────────────────────────────────────────────
+
+export async function fetchBlockNotes(version: string): Promise<BlockNote[]> {
+  const res = await api.get<ApiResponse<BlockNote[]>>(`/block-notes/${version}`)
+  return res.data.data
+}
+
+export async function updateBlockNotes(
+  version: string,
+  blockNotes: BlockNote[]
+): Promise<void> {
+  await api.put(`/block-notes/${version}`, { blockNotes })
 }
 
 // ─── Goals ───────────────────────────────────────────────────────────────────

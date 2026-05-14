@@ -209,7 +209,6 @@ export default function Dashboard() {
   const [profileGuideEstimating, setProfileGuideEstimating] = useState(false)
   const [currentBlockBundle, setCurrentBlockBundle] = useState<BlockAnalysisBundle | null>(null)
   const [currentBlockLoading, setCurrentBlockLoading] = useState(false)
-  const [currentBlockCacheMissing, setCurrentBlockCacheMissing] = useState(false)
 
   useEffect(() => {
     if (version) {
@@ -232,38 +231,26 @@ export default function Dashboard() {
 
     if (!version) {
       setCurrentBlockBundle(null)
-      setCurrentBlockCacheMissing(false)
       return
     }
 
     setCurrentBlockLoading(true)
-    setCurrentBlockCacheMissing(false)
 
     fetchProgramBlocks()
       .then((blocks) => {
         const currentBlock = blocks.find((block) => block.isCurrent)
-        console.log(currentBlock)
-        if (!currentBlock?.cacheStatus?.cached) {
-          if (!cancelled) {
-            setCurrentBlockBundle(null)
-            setCurrentBlockCacheMissing(true)
-          }
-          return null
-        }
-        return fetchBlockAnalysis(currentBlock.blockKey, false, true)
+        if (!currentBlock) return null
+        return fetchBlockAnalysis(currentBlock.blockKey, false)
       })
       .then((bundle) => {
         if (!cancelled && bundle) {
-          console.log(bundle)
           setCurrentBlockBundle(bundle)
-          setCurrentBlockCacheMissing(false)
         }
       })
       .catch((error) => {
-        console.warn('Failed to load cached current block analysis:', error)
+        console.warn('Failed to load current block analysis:', error)
         if (!cancelled) {
           setCurrentBlockBundle(null)
-          setCurrentBlockCacheMissing(true)
         }
       })
       .finally(() => {
@@ -816,19 +803,17 @@ export default function Dashboard() {
         </Paper>
 
         {/* Current Fatigue State */}
-        {!currentBlockCacheMissing && (
-          <Paper withBorder p="md">
+        <Paper withBorder p="md">
             <Group justify="space-between" mb="sm" align="flex-start">
               <Group gap="xs">
                 <HeartPulse size={20} />
                 <Text fw={500}>Current Fatigue State</Text>
               </Group>
-              {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
             </Group>
             {currentBlockLoading ? (
               <Group gap="xs">
                 <Loader size="sm" />
-                <Text size="sm" c="dimmed">Loading cached block analysis...</Text>
+                <Text size="sm" c="dimmed">Loading block analysis...</Text>
               </Group>
             ) : currentBlockWeekly ? (
               <Stack gap="xs">
@@ -870,26 +855,23 @@ export default function Dashboard() {
               </Stack>
             ) : (
               <Text size="sm" c="dimmed">
-                Cached block analysis unavailable.
+                Block analysis unavailable.
               </Text>
             )}
           </Paper>
-        )}
 
         {/* Per-Lift Breakdown */}
-        {!currentBlockCacheMissing && (
-          <Paper withBorder p="md" style={{ minWidth: 0 }}>
+        <Paper withBorder p="md" style={{ minWidth: 0 }}>
             <Group justify="space-between" mb="sm" align="flex-start">
               <Group gap="xs">
                 <Activity size={20} />
                 <Text fw={500}>Per-Lift Breakdown</Text>
               </Group>
-              {currentBlockBundle?.cached && <Badge color="blue" variant="light" size="sm">Cached</Badge>}
             </Group>
             {currentBlockLoading ? (
               <Group gap="xs">
                 <Loader size="sm" />
-                <Text size="sm" c="dimmed">Loading cached lift data...</Text>
+                <Text size="sm" c="dimmed">Loading lift data...</Text>
               </Group>
             ) : currentBlockWeekly ? (
               <Box style={{ overflowX: 'auto' }}>
@@ -916,11 +898,10 @@ export default function Dashboard() {
               </Box>
             ) : (
               <Text size="sm" c="dimmed">
-                Cached lift breakdown unavailable.
+                Lift breakdown unavailable.
               </Text>
             )}
           </Paper>
-        )}
 
         {/* Program Phases */}
         <Paper withBorder p="md">

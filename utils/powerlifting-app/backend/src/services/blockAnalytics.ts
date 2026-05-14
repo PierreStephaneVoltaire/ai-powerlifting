@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger'
 import {
   BatchWriteCommand,
   DeleteCommand,
@@ -875,7 +876,7 @@ export async function listBlockCacheStatuses(userPk: string): Promise<Map<string
       ExclusiveStartKey = response.LastEvaluatedKey
     } while (ExclusiveStartKey)
   } catch (error) {
-    console.warn('Block analysis cache status read failed:', error)
+    logger.warn({ err: error, userPk }, 'Block analysis cache status read failed')
   }
   return statuses
 }
@@ -907,7 +908,7 @@ export async function listBlockProgramEvaluationCacheStatuses(userPk: string): P
       ExclusiveStartKey = response.LastEvaluatedKey
     } while (ExclusiveStartKey)
   } catch (error) {
-    console.warn('Block program evaluation cache status read failed:', error)
+    logger.warn({ err: error, userPk }, 'Block program evaluation cache status read failed')
   }
   return statuses
 }
@@ -1058,7 +1059,7 @@ export async function getCachedBlockAnalysisBundle(
     if (bundle.block.blockKey !== blockKey) return null
     return { ...bundle, cached: true }
   } catch (error) {
-    console.warn('Block analysis cache read failed:', error)
+    logger.warn({ err: error, userPk, blockKey }, 'Block analysis cache read failed')
     return null
   }
 }
@@ -1121,7 +1122,7 @@ export async function putCachedBlockAnalysisBundle(userPk: string, bundle: Block
       }))
     }
   } catch (error) {
-    console.warn('Block analysis cache write failed:', error)
+    logger.warn({ err: error, userPk, blockKey: bundle.block.blockKey }, 'Block analysis cache write failed')
   }
 }
 
@@ -1172,7 +1173,7 @@ async function getCachedJsonPayload<T>(
 
     return payloadStr ? decodeJsonPayload<T>(payloadStr) : null
   } catch (error) {
-    console.warn('Block JSON cache read failed:', error)
+    logger.warn({ err: error, userPk, sk }, 'Block JSON cache read failed')
     return null
   }
 }
@@ -1238,7 +1239,7 @@ async function putCachedJsonPayload(
       }))
     }
   } catch (error) {
-    console.warn('Block JSON cache write failed:', error)
+    logger.warn({ err: error, userPk, sk }, 'Block JSON cache write failed')
   }
 }
 
@@ -1596,9 +1597,16 @@ export async function getOrCreateBlockAnalysisBundle(
 
   if (!refresh || cacheOnly) {
     const cached = await getCachedBlockAnalysisBundle(userPk, blockKey)
-    if (cached && (cacheOnly || !hasPastDateProjectionFailure(cached, entry))) return cached
+    if (cached && (cacheOnly || !hasPastDateProjectionFailure(cached, entry))) {
+      if (!entry.isCurrent) {
+        logger.info({ userPk, blockKey, cached: true }, 'Block analysis cache hit')
+      }
+      return cached
+    }
   }
   if (cacheOnly) return null
+
+  logger.info({ userPk, blockKey, isCurrent: entry.isCurrent, weeks: entry.weekCount }, 'Computing block analysis')
 
   const programForBlock = buildBlockProgram(program, entry, { includeSyntheticCompetition: false })
   const sessions = programForBlock.sessions ?? []
@@ -2571,7 +2579,7 @@ export async function getOrCreateAiBlockComparison(
         }
       }
     } catch (error) {
-      console.warn('Block compare fallback cache read failed:', error)
+      logger.warn({ err: error, userPk }, 'Block compare fallback cache read failed')
     }
   }
 

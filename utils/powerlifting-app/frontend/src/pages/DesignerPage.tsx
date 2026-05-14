@@ -341,11 +341,20 @@ export default function DesignerPage() {
       .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
       .map(([muscle, sets]) => ({ label: MUSCLE_LABELS[muscle] || muscle, sets: Number(sets) || 0 }))
 
-    if (sorted.length <= 5) return sorted
-    const top5 = sorted.slice(0, 5)
-    const others = sorted.slice(5).reduce((sum, item) => sum + item.sets, 0)
-    return [...top5, { label: 'Others', sets: others }]
+    return sorted.slice(0, 5)
   }, [weekSessions, glossary])
+
+  const plannedSbdSets = useMemo(() => {
+    const plannedEntries = weekSessions.flatMap((s) => s.planned_exercises ?? [])
+    const counts = { squat: 0, bench: 0, deadlift: 0 }
+    for (const ex of plannedEntries) {
+      const name = (ex.name || '').toLowerCase().trim()
+      if (name.includes('squat') && !name.includes('split') && !name.includes('hack')) counts.squat += (ex.sets ?? 0)
+      else if (name === 'bench' || name === 'bench press') counts.bench += (ex.sets ?? 0)
+      else if ((name === 'deadlift' || name.includes('deadlift')) && !name.includes('romanian') && !name.includes('rdl')) counts.deadlift += (ex.sets ?? 0)
+    }
+    return counts
+  }, [weekSessions])
 
   // Copy session state
   const [copySourceWeek, setCopySourceWeek] = useState<number | null>(null)
@@ -630,25 +639,32 @@ export default function DesignerPage() {
       </Group>
 
       {/* Planned Volume Graph */}
-      {plannedMuscleVolume.length > 0 && (
+      {(plannedMuscleVolume.length > 0 || plannedSbdSets.squat + plannedSbdSets.bench + plannedSbdSets.deadlift > 0) && (
         <Paper withBorder p="md">
           <Group gap="xs" mb="md">
             <BarChart3 size={18} />
-            <Text fw={500}>Planned Weekly Volume (Sets)</Text>
+            <Text fw={500}>Planned Weekly Volume</Text>
           </Group>
           <Stack gap="xs">
             {(() => {
-              const maxSets = Math.max(...plannedMuscleVolume.map(v => v.sets), 1)
-              return plannedMuscleVolume.map((item, i) => (
+              const allItems = [
+                ...plannedMuscleVolume,
+                { label: 'Squat', sets: plannedSbdSets.squat },
+                { label: 'Bench', sets: plannedSbdSets.bench },
+                { label: 'Deadlift', sets: plannedSbdSets.deadlift },
+              ].filter(item => item.sets > 0)
+              const maxSets = Math.max(...allItems.map(v => v.sets), 1)
+              const sbdLabels = new Set(['Squat', 'Bench', 'Deadlift'])
+              return allItems.map((item, i) => (
                 <Box key={i}>
                   <Group justify="space-between" mb={2}>
                     <Text size="xs" fw={500}>{item.label}</Text>
                     <Text size="xs" c="dimmed">{item.sets.toFixed(1)} sets</Text>
                   </Group>
-                  <Progress 
-                    value={(item.sets / maxSets) * 100} 
-                    size="sm" 
-                    color={item.label === 'Others' ? 'gray' : 'blue'}
+                  <Progress
+                    value={(item.sets / maxSets) * 100}
+                    size="sm"
+                    color={sbdLabels.has(item.label) ? 'teal' : 'blue'}
                     radius="xl"
                   />
                 </Box>

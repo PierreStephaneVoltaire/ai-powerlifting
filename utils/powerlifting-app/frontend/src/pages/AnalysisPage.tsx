@@ -384,8 +384,8 @@ export default function AnalysisPage() {
     setRegenerating(true)
     setError(null)
     try {
-      await regenerateAnalysis()
-      const bundle = await fetchWeeklyAnalysisBundle(asOfDate)
+      await regenerateAnalysis([analysisKey])
+      const bundle = await fetchWeeklyAnalysisBundle(asOfDate, true)
       setAnalysisBundle(bundle)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))

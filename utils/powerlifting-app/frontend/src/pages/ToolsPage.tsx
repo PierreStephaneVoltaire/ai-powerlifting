@@ -10,6 +10,7 @@ export default function ToolsPage() {
     { to: '/tools/percent', icon: Percent, title: '% of Max', desc: 'Calculate percentages of your 1RM for different lifts.' },
     { to: '/tools/converter', icon: ArrowRightLeft, title: 'Unit Converter', desc: 'Convert weights between kilograms and pounds.' },
     { to: '/tools/attempts', icon: Trophy, title: 'Attempt Selector', desc: 'Plan your competition attempts based on projected maxes.' },
+    { to: '/rankings', icon: Trophy, title: 'Rankings', desc: 'Browse OpenPowerlifting rankings and find lifters.' },
   ]
 
   return (

@@ -21,6 +21,7 @@ import {
   Info,
   MoreHorizontal,
   ClipboardList,
+  BookOpen,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -56,7 +57,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { to: '/sessions', icon: Calendar, label: 'Sessions' },
   { to: '/designer', icon: ClipboardList, label: 'Designer' },
   { to: '/analysis', icon: Activity, label: 'Analysis' },
-  { to: '/rankings', icon: Trophy, label: 'Rankings' },
+  { to: '/notes', icon: BookOpen, label: 'Notes' },
   { to: '/supplements', icon: Pill, label: 'Supplements' },
   { to: '/biometrics', icon: Utensils, label: 'Biometrics' },
   { to: '/maxes', icon: TrendingUp, label: 'Maxes' },

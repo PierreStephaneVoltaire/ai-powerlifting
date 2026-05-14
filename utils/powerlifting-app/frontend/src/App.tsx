@@ -27,6 +27,7 @@ import TemplateDetailPage from '@/pages/TemplateDetailPage'
 import TemplateCreatePage from '@/pages/TemplateCreatePage'
 import TemplateEditPage from '@/pages/TemplateEditPage'
 import RankingsPage from '@/pages/RankingsPage'
+import NotesPage from '@/pages/NotesPage'
 import LoginPage from '@/pages/LoginPage'
 import AuthCallbackPage from '@/pages/AuthCallbackPage'
 import LiftProfilePage from '@/pages/LiftProfilePage'
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/list/:date/:index?" element={<SessionDetailPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/rankings" element={<RankingsPage />} />
+          <Route path="/notes" element={<NotesPage />} />
           <Route path="/supplements" element={<SupplementsPage />} />
           <Route path="/biometrics" element={<BiometricsPage />} />
           <Route path="/diet" element={<BiometricsPage />} />

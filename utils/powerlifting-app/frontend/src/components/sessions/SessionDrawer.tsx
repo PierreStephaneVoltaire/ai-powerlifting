@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, Fragment, useRef } from 'react'
 import { Drawer, Button, Group, Stack, Paper, SimpleGrid, TextInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip, Checkbox } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
@@ -44,6 +44,17 @@ const WELLNESS_FIELDS: Array<{
   { key: 'stress', label: 'Stress' },
   { key: 'energy', label: 'Energy' },
 ]
+
+function sanitizeRpe(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed)) return null
+  if (parsed < 1 || parsed > 10) return null
+  const decimal = Math.round((parsed % 1) * 10)
+  if (decimal !== 0 && decimal !== 5) return null
+  return parsed
+}
 
 function clampWellnessScore(value: number): 1 | 2 | 3 | 4 | 5 {
   return Math.max(1, Math.min(5, Math.round(value))) as 1 | 2 | 3 | 4 | 5
@@ -281,16 +292,21 @@ function SortableExerciseItem({
             <Box>
               <Text size="xs" c="dimmed">RPE</Text>
               <TextInput
-                type="text"
+                type="number"
                 inputMode="decimal"
+                step={0.5}
                 value={exercise.rpe != null ? String(exercise.rpe) : ''}
                 onChange={(e) => {
-                  const raw = e.currentTarget.value.trim()
-                  if (raw === '') { onUpdateRpe(index, null); return }
+                  const raw = e.currentTarget.value
+                  if (raw.trim() === '') { onUpdateRpe(index, null); return }
                   const parsed = Number(raw)
-                  if (!isNaN(parsed)) onUpdateRpe(index, parsed)
+                  if (Number.isFinite(parsed)) onUpdateRpe(index, parsed)
                 }}
-                placeholder="4-10"
+                onBlur={(e) => {
+                  const sanitized = sanitizeRpe(e.currentTarget.value)
+                  onUpdateRpe(index, sanitized)
+                }}
+                placeholder="1-10"
                 size="sm"
               />
             </Box>
@@ -334,8 +350,9 @@ export default function SessionDrawer({
   sessionArrayIndex,
   mode = 'drawer',
   onSaveSuccess,
+  onDeleteSuccess,
 }: SessionDrawerProps) {
-  const { program, version, updateSession, saveSession, rescheduleSession } = useProgramStore()
+  const { program, version, updateSession, saveSession, rescheduleSession, deleteSession } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const [localSession, setLocalSession] = useState<Session | null>(null)
@@ -423,6 +440,25 @@ export default function SessionDrawer({
     }
   }, [session])
 
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleSaveRef = useRef<(() => Promise<void>) | null>(null)
+
+  useEffect(() => {
+    if (!hasChanges || !session || !localSession || !program) return
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
+      void handleSaveRef.current?.()
+    }, 1500)
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+        autoSaveTimerRef.current = null
+      }
+    }
+  }, [hasChanges, localSession, program, session])
+
   const phaseColorValue = session && program ? phaseColor(session.phase, program.phases) : 'var(--mantine-color-gray-6)'
 
   if (!session || !localSession || !program) return null
@@ -436,14 +472,16 @@ export default function SessionDrawer({
         return
       }
 
-      // Check if date changed
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+        autoSaveTimerRef.current = null
+      }
+
       if (localSession.date !== originalDate) {
-        // First reschedule, then save content
         const newDay = getDayOfWeek(localSession.date)
         await rescheduleSession(originalDate, sessionArrayIndex, localSession.date, newDay)
       }
 
-      // Update session content
       const sessionToSave = finalizeSessionForSave(localSession)
       updateSession(sessionToSave.date, sessionArrayIndex, sessionToSave)
       await saveSession(localSession.date, sessionArrayIndex)
@@ -462,6 +500,8 @@ export default function SessionDrawer({
       pushToast({ message: 'Failed to save session', type: 'error' })
     }
   }
+
+  handleSaveRef.current = handleSave
 
   const handleDiscard = () => {
     const clone = JSON.parse(JSON.stringify(session)) as Session
@@ -613,12 +653,18 @@ export default function SessionDrawer({
   const validateRpeValues = (): string | null => {
     for (let i = 0; i < localSession.exercises.length; i++) {
       const rpe = localSession.exercises[i].rpe
-      if (rpe != null && (rpe < 4 || rpe > 10)) {
-        return `Exercise "${localSession.exercises[i].name || 'unnamed'}" has RPE ${rpe}, must be 4-10.`
+      if (rpe != null && (rpe < 1 || rpe > 10)) {
+        return `Exercise "${localSession.exercises[i].name || 'unnamed'}" has RPE ${rpe}, must be 1-10.`
       }
       if (rpe != null && (rpe * 2) % 1 !== 0) {
         return `Exercise "${localSession.exercises[i].name || 'unnamed'}" has RPE ${rpe}, must be in 0.5 increments.`
       }
+    }
+    if (localSession.session_rpe != null && (localSession.session_rpe < 1 || localSession.session_rpe > 10)) {
+      return `Session RPE ${localSession.session_rpe}, must be 1-10.`
+    }
+    if (localSession.session_rpe != null && (localSession.session_rpe * 2) % 1 !== 0) {
+      return `Session RPE ${localSession.session_rpe}, must be in 0.5 increments.`
     }
     return null
   }
@@ -1112,7 +1158,16 @@ export default function SessionDrawer({
               <TextInput
                 type="number"
                 value={localSession.session_rpe || ''}
-                onChange={(e) => updateRpe(Number(e.currentTarget.value) || null)}
+                onChange={(e) => {
+                  const raw = e.currentTarget.value
+                  const parsed = Number(raw)
+                  if (raw.trim() === '' || !Number.isFinite(parsed)) { updateRpe(null); return }
+                  updateRpe(parsed)
+                }}
+                onBlur={(e) => {
+                  const sanitized = sanitizeRpe(e.currentTarget.value)
+                  updateRpe(sanitized)
+                }}
                 placeholder="1-10"
                 size="sm"
                 step={0.5}

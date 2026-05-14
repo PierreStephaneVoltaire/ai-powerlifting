@@ -342,7 +342,7 @@ MODEL_ROUTER_ENABLED: bool = os.getenv("MODEL_ROUTER_ENABLED", "true").lower() =
 
 # Model for AI-powered health analytics (correlation analysis, program evaluation)
 # Defaults to Claude Sonnet with extended thinking enabled
-ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "openai/gpt-5.5")
+ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "z-ai/glm-5.1")
 ANALYSIS_MODEL_THINKING_BUDGET = int(os.getenv("ANALYSIS_MODEL_THINKING_BUDGET", "16000"))
 ANALYSIS_CACHE_TABLE_NAME = os.getenv("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache")
 

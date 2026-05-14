@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Group,
@@ -10,6 +10,8 @@ import {
   ThemeIcon,
   UnstyledButton,
   Center,
+  Select,
+  ActionIcon,
 } from '@mantine/core'
 import { Calendar } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
@@ -19,7 +21,7 @@ import { format } from 'date-fns'
 import { findClosestSessionToToday, parseLocalDate } from '@/utils/dates'
 import { trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { normalizeExerciseName } from '@/utils/volume'
-import { Check } from 'lucide-react'
+import { Check, ArrowUp } from 'lucide-react'
 import dayjs from 'dayjs'
 import type { Session } from '@powerlifting/types'
 import MuscleVolumeChart from '@/components/charts/MuscleVolumeChart'
@@ -52,12 +54,39 @@ export default function CalendarPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const agendaTargetRef = useRef<HTMLButtonElement | null>(null)
   const hasScrolledAgendaRef = useRef(false)
+  const [showScrollTop, setShowScrollTop] = useState(false)
   const view = parseSessionView(searchParams.get('view')) || defaultSessionsView
   const calendarDate = parseDateParam(searchParams.get('date'))
   const sessionsBackTo = useMemo(() => {
     const query = searchParams.toString()
     return query ? `/sessions?${query}` : '/sessions'
   }, [searchParams])
+
+  const availableBlocks = useMemo(() => {
+    if (!program) return ['current']
+    const blocks = new Set<string>()
+    for (const s of program.sessions) blocks.add(s.block ?? 'current')
+    return Array.from(blocks).sort()
+  }, [program])
+
+  const requestedBlock = searchParams.get('block') || 'current'
+  const block = availableBlocks.includes(requestedBlock) ? requestedBlock : 'current'
+
+  const updateBlockParam = (nextBlock: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      nextBlock === 'current' ? next.delete('block') : next.set('block', nextBlock)
+      return next
+    })
+  }
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const updateSessionParams = (updates: { date?: string | null }) => {
     setSearchParams((current) => {
@@ -75,19 +104,19 @@ export default function CalendarPage() {
     const map = new Map<string, Session>()
     if (!program) return map
     for (const session of program.sessions) {
-      if ((session.block ?? 'current') === 'current') {
+      if ((session.block ?? 'current') === block) {
         map.set(session.date, session)
       }
     }
     return map
-  }, [program])
+  }, [program, block])
 
   const currentSessions = useMemo(() => {
     if (!program) return []
     return program.sessions
-      .filter((session) => (session.block ?? 'current') === 'current')
+      .filter((session) => (session.block ?? 'current') === block)
       .sort((a, b) => a.date.localeCompare(b.date))
-  }, [program])
+  }, [program, block])
 
   const closestAgendaSession = useMemo(
     () => findClosestSessionToToday(currentSessions),
@@ -97,7 +126,7 @@ export default function CalendarPage() {
   const weeklyGroups = useMemo(() => {
     if (!program || !currentSessions.length) return []
     const groups = new Map<string, Session[]>()
-    const weekStartDay = weekStartForBlock(program, 'current')
+    const weekStartDay = weekStartForBlock(program, block)
 
     for (const session of currentSessions) {
       const weekStart = trainingWeekStartForDate(session.date, program.meta.program_start, weekStartDay)
@@ -114,7 +143,7 @@ export default function CalendarPage() {
       weekLabel: format(parseLocalDate(weekStart), 'MMM d'),
       sessions,
     }))
-  }, [currentSessions, program])
+  }, [currentSessions, program, block])
 
   const dateColorMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -252,6 +281,18 @@ export default function CalendarPage() {
     <Stack gap="md">
       <Group justify="space-between" wrap="nowrap">
         <Text size="xl" fw={700}>Sessions</Text>
+        {view !== 'Compact' && availableBlocks.length > 1 && (
+          <Select
+            value={block}
+            onChange={(v) => updateBlockParam(v || 'current')}
+            data={availableBlocks.map((b) => ({
+              value: b,
+              label: b === 'current' ? 'Current Block' : b,
+            }))}
+            size="sm"
+            style={{ width: 160 }}
+          />
+        )}
       </Group>
 
       {view === 'Compact' ? (
@@ -284,6 +325,26 @@ export default function CalendarPage() {
       )}
 
       <MuscleVolumeChart />
+
+      {showScrollTop && (
+        <ActionIcon
+          size="lg"
+          radius="xl"
+          variant="filled"
+          color="dark"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          style={{
+            position: 'fixed',
+            bottom: 'calc(76px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px) + 56px)',
+            right: 16,
+            zIndex: 120,
+            opacity: 0.7,
+          }}
+          aria-label="Scroll to top"
+        >
+          <ArrowUp size={20} />
+        </ActionIcon>
+      )}
     </Stack>
   )
 }

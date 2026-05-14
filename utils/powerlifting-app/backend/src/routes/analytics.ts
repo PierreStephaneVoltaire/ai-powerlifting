@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { invokeToolDirect } from '../utils/agent'
+import { logger } from '../utils/logger'
 import * as programController from '../controllers/programController'
 import * as weightController from '../controllers/weightController'
 import type { Program, WeightEntry } from '@powerlifting/types'
@@ -7,10 +8,7 @@ import {
   ALL_WINDOW_KEYS,
   CORRELATION_WINDOW_KEYS,
   buildAnalysisWindows,
-  getCachedAllWindowAnalyses,
   putAllCachedWindowAnalyses,
-  getCachedMarkdownExport,
-  putCachedMarkdownExport,
   isIsoDate,
   makeWeeklyAnalysisBundle,
   type AnalysisWindowKey,
@@ -44,7 +42,7 @@ async function getProgramWithWeightLog(pk: string, version = 'current'): Promise
       weight_log: Array.isArray(log.entries) ? log.entries : [],
     }
   } catch (error) {
-    console.warn('Failed to load weight log for analytics context:', error)
+    logger.warn({ error, pk }, 'Failed to load weight log for analytics context')
     return { ...program, weight_log: [] }
   }
 }
@@ -58,32 +56,25 @@ async function snapshotCompetitionProjection(pk: string, date: string): Promise<
       pk,
     })
   } catch (snapshotErr) {
-    console.warn('Failed to snapshot competition projections before weekly analysis:', snapshotErr)
+    logger.warn({ err: snapshotErr, pk, date }, 'Failed to snapshot competition projections before weekly analysis')
   }
 }
 
-/**
- * Core regeneration function: computes all 6 analysis windows, their AI reports,
- * and the markdown export, then stores everything in the current-block cache.
- * Also regenerates block_analysis#v1#current, block_correlation#v1#current, and
- * block_program_eval#v1#current so the Dashboard and Lifetime Compare exerciseRoi
- * section stay in sync after regeneration.
- * NEVER touches past-block or lifetime-compare (AI comparison) caches.
- */
-async function runFullCurrentBlockRegeneration(
+async function runTargetedRegeneration(
   pk: string,
   asOfDate: string,
+  targetWindows?: AnalysisWindowKey[],
 ): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows> }> {
-  await snapshotCompetitionProjection(pk, asOfDate)
   const program = await getProgramWithWeightLog(pk, 'current')
-
   const windows = buildAnalysisWindows(program, asOfDate)
   const sessions = program.sessions ?? []
+  const keys = targetWindows ?? ALL_WINDOW_KEYS
+  const needCorrelation = keys.some((k) => CORRELATION_WINDOW_KEYS.includes(k))
 
-  // Compute all 6 deterministic windows sequentially to avoid overloading the server
   const results = {} as Record<AnalysisWindowKey, unknown>
-  for (const key of ALL_WINDOW_KEYS) {
+  for (const key of keys) {
     const window = windows[key]
+    logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window')
     results[key] = await invokeToolDirect('weekly_analysis', {
       weeks: window.weeks,
       block: 'current',
@@ -99,11 +90,9 @@ async function runFullCurrentBlockRegeneration(
     })
   }
 
-  // Store window results
   await putAllCachedWindowAnalyses(pk, results)
 
-  // Compute AI correlation for applicable windows sequentially to avoid overloading the server
-  for (const key of CORRELATION_WINDOW_KEYS) {
+  for (const key of keys.filter((k) => CORRELATION_WINDOW_KEYS.includes(k))) {
     try {
       await invokeToolDirect('correlation_analysis', {
         weeks: windows[key].weeks,
@@ -113,38 +102,49 @@ async function runFullCurrentBlockRegeneration(
         pk,
       })
     } catch (err) {
-      console.warn(`Correlation analysis failed for window ${key}:`, err)
+      logger.warn({ err, pk, window: key }, 'Correlation analysis failed for window')
     }
   }
 
-  // Compute full-block program evaluation
-  try {
-    await invokeToolDirect('program_evaluation', { refresh: true, cache_only: false, pk })
-  } catch (err) {
-    console.warn('Program evaluation failed during regeneration:', err)
+  if (needCorrelation) {
+    try {
+      await getOrCreateBlockCorrelationReport(pk, program, 'current', invokeToolDirect, true, false)
+    } catch (err) {
+      logger.warn({ err, pk }, 'block_correlation#v1#current regeneration failed')
+    }
   }
 
-  // Regenerate block_analysis#v1#current (Dashboard reads this — not weekly_analysis#*)
-  // Regenerate block_correlation#v1#current (Lifetime Compare exerciseRoi reads this)
-  // Regenerate block_program_eval#v1#current (Lifetime Compare per-block eval reads this)
-  // These run sequentially to avoid overloading the server.
   try {
     await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false)
   } catch (err) {
-    console.warn('block_analysis#v1#current regeneration failed:', err)
+    logger.warn({ err, pk }, 'block_analysis#v1#current regeneration failed')
   }
+
+  const generatedAt = new Date().toISOString()
+  logger.info({ pk, generatedAt, windows: keys }, 'Targeted regeneration complete')
+  return { generatedAt, windows }
+}
+
+async function runFullCurrentBlockRegeneration(
+  pk: string,
+  asOfDate: string,
+): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows> }> {
+  await snapshotCompetitionProjection(pk, asOfDate)
+  const program = await getProgramWithWeightLog(pk, 'current')
+  const { generatedAt, windows } = await runTargetedRegeneration(pk, asOfDate)
+
   try {
-    await getOrCreateBlockCorrelationReport(pk, program, 'current', invokeToolDirect, true, false)
+    await invokeToolDirect('program_evaluation', { refresh: true, cache_only: false, pk })
   } catch (err) {
-    console.warn('block_correlation#v1#current regeneration failed:', err)
+    logger.warn({ err, pk }, 'Program evaluation failed during regeneration')
   }
+
   try {
     await getOrCreateBlockProgramEvaluation(pk, program, 'current', invokeToolDirect, true, false)
   } catch (err) {
-    console.warn('block_program_eval#v1#current regeneration failed:', err)
+    logger.warn({ err, pk }, 'block_program_eval#v1#current regeneration failed')
   }
 
-  // Generate and cache markdown export (uses the full-block analysis as context)
   try {
     const markdownResult = await invokeToolDirect('export_program_markdown', {
       version: 'current',
@@ -154,17 +154,17 @@ async function runFullCurrentBlockRegeneration(
     }) as { markdown?: string; content?: string } | null
     const markdown = markdownResult?.markdown ?? markdownResult?.content ?? ''
     if (markdown) {
+      const { putCachedMarkdownExport } = await import('../services/analysisCache')
       await putCachedMarkdownExport(pk, markdown, 'current')
     }
   } catch (err) {
-    console.warn('Markdown export failed during regeneration:', err)
+    logger.warn({ err, pk }, 'Markdown export failed during regeneration')
   }
 
-  const generatedAt = new Date().toISOString()
+  logger.info({ pk, generatedAt }, 'Full current block regeneration complete')
   return { generatedAt, windows }
 }
 
-// POST /api/analytics/e1rm-multiplier/suggestions
 analyticsRouter.post('/e1rm-multiplier/suggestions', async (req, res) => {
   try {
     const result = await invokeToolDirect('health_suggest_e1rm_multipliers', {})
@@ -174,43 +174,47 @@ analyticsRouter.post('/e1rm-multiplier/suggestions', async (req, res) => {
   }
 })
 
-// GET /api/analytics/analysis/weekly-bundle?asOfDate=YYYY-MM-DD
-// Returns all 6 window analyses from cache. On any miss, regenerates all windows first.
 analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
   try {
     const pk = req.effectivePk!
     const requestedAsOfDate = req.query.asOfDate as string | undefined
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
+    const forceRefresh = req.query.refresh === 'true'
 
-    // Check if all 6 windows are cached
-    const cached = await getCachedAllWindowAnalyses(pk)
-    if (cached) {
-      const program = await getProgramWithWeightLog(pk, 'current')
-      const windows = buildAnalysisWindows(program, asOfDate)
-      const bundle = makeWeeklyAnalysisBundle(asOfDate, windows, cached.results)
-      return res.json({ data: { ...bundle, cached: true, generatedAt: cached.generatedAt }, error: null })
+    if (!forceRefresh) {
+      const cached = await import('../services/analysisCache').then(m => m.getCachedAllWindowAnalyses(pk))
+      if (cached) {
+        const program = await getProgramWithWeightLog(pk, 'current')
+        const windows = buildAnalysisWindows(program, asOfDate)
+        const bundle = makeWeeklyAnalysisBundle(asOfDate, windows, cached.results)
+        return res.json({ data: { ...bundle, cached: true, generatedAt: cached.generatedAt }, error: null })
+      }
     }
 
-    // Cache miss — regenerate everything
+    logger.info({ pk, asOfDate, forceRefresh }, 'Computing weekly bundle')
     const { generatedAt, windows } = await runFullCurrentBlockRegeneration(pk, asOfDate)
-    const fresh = await getCachedAllWindowAnalyses(pk)
-    if (!fresh) {
-      return res.status(502).json({ data: null, error: 'Analysis generation failed: cache write error' })
+    const fresh = await import('../services/analysisCache').then(m => m.getCachedAllWindowAnalyses(pk))
+    if (fresh) {
+      const bundle = makeWeeklyAnalysisBundle(asOfDate, windows, fresh.results)
+      return res.json({ data: { ...bundle, cached: false, generatedAt }, error: null })
     }
-    const bundle = makeWeeklyAnalysisBundle(asOfDate, windows, fresh.results)
-    return res.json({ data: { ...bundle, cached: false, generatedAt }, error: null })
+    return res.status(502).json({ data: null, error: 'Analysis generation failed: cache write error' })
   } catch (err) {
+    logger.error({ err }, 'Weekly bundle computation failed')
     res.status(502).json({ data: null, error: `Analysis error: ${err}` })
   }
 })
 
-// POST /api/analytics/analysis/regenerate
-// Force-regenerates all current-block window analyses + AI reports + markdown.
-// NEVER touches past-block or lifetime-compare caches.
 analyticsRouter.post('/analysis/regenerate', async (req, res) => {
   try {
     const pk = req.effectivePk!
     const asOfDate = todayIso()
+    const requestedWindows = req.body?.windows
+    if (Array.isArray(requestedWindows) && requestedWindows.length > 0) {
+      const valid = requestedWindows.filter((w: string) => ALL_WINDOW_KEYS.includes(w as AnalysisWindowKey)) as AnalysisWindowKey[]
+      const { generatedAt } = await runTargetedRegeneration(pk, asOfDate, valid)
+      return res.json({ data: { success: true, generatedAt, windowsRegenerated: valid.length }, error: null })
+    }
     const { generatedAt } = await runFullCurrentBlockRegeneration(pk, asOfDate)
     res.json({ data: { success: true, generatedAt, windowsRegenerated: ALL_WINDOW_KEYS.length }, error: null })
   } catch (err) {
@@ -218,15 +222,10 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
   }
 })
 
-// GET /api/analytics/analysis/markdown
-// Returns cached markdown export for current block (used by powerlifting coach).
-// If not cached, generates and caches before returning.
 analyticsRouter.get('/analysis/markdown', async (req, res) => {
   try {
     const pk = req.effectivePk!
 
-    // The Python tool `get_analysis_markdown` handles reading cached analysis 
-    // while computing fresh sessions and regenerating the markdown string.
     const markdownResult = await invokeToolDirect('get_analysis_markdown', {
       pk,
     }) as { markdown?: string; generated_at?: string; cached?: boolean } | null
@@ -249,7 +248,6 @@ analyticsRouter.get('/analysis/markdown', async (req, res) => {
   }
 })
 
-// GET /api/analytics/analysis/weekly?weeks=N&block=X
 analyticsRouter.get('/analysis/weekly', async (req, res) => {
   try {
     const weeks = parseInt(req.query.weeks as string) || 1
@@ -283,7 +281,6 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
   }
 })
 
-// GET /api/analytics/blocks
 analyticsRouter.get('/blocks', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
@@ -294,31 +291,36 @@ analyticsRouter.get('/blocks', async (req, res) => {
   }
 })
 
-// GET /api/analytics/blocks/:blockKey/analysis?refresh=false
 analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
+    const pk = req.effectivePk!
+    const { blockKey } = req.params
+    const program = await getProgramWithWeightLog(pk, 'current')
+    const blocks = await buildCurrentProgramBlockIndex(pk, program)
+    const blockEntry = blocks.find((b) => b.blockKey === blockKey)
+    const isCurrent = blockEntry?.isCurrent ?? (blockKey === 'current')
+
     const refresh = req.query.refresh === 'true'
-    const cacheOnly = req.query.cacheOnly === 'true'
-    const bundle = await getOrCreateBlockAnalysisBundle(
-      req.effectivePk!,
-      program,
-      req.params.blockKey,
-      invokeToolDirect,
-      refresh,
-      cacheOnly,
-    )
+
+    if (isCurrent) {
+      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, refresh, false)
+      if (!bundle) {
+        return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
+      }
+      return res.json({ data: bundle, error: null })
+    }
+
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, refresh, false)
     if (!bundle) {
-      return res.status(404).json({ data: null, error: `Block ${req.params.blockKey} not found` })
+      return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
     }
     res.json({ data: bundle, error: null })
   } catch (err) {
+    logger.error({ err, blockKey: req.params.blockKey }, 'Block analysis error')
     res.status(502).json({ data: null, error: `Block analysis error: ${err}` })
   }
 })
 
-// POST /api/analytics/blocks/:blockKey/regenerate
-// Portal-only: force-regenerates a specific past-block analysis, correlation, and program eval.
 analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
   try {
     const pk = req.effectivePk!
@@ -338,20 +340,19 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     try {
       corrReport = await getOrCreateBlockCorrelationReport(pk, program, blockKey, invokeToolDirect, true, false)
     } catch (err) {
-      console.warn(`Block correlation regeneration failed for ${blockKey}:`, err)
+      logger.warn({ err, pk, blockKey }, 'Block correlation regeneration failed')
     }
 
     try {
       evalReport = await getOrCreateBlockProgramEvaluation(pk, program, blockKey, invokeToolDirect, true, false)
     } catch (err) {
-      console.warn(`Block program evaluation regeneration failed for ${blockKey}:`, err)
+      logger.warn({ err, pk, blockKey }, 'Block program evaluation regeneration failed')
     }
 
     if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
     }
 
-    // Generate and cache block markdown
     try {
       const markdownResult = await invokeToolDirect('export_program_markdown', {
         version: 'current',
@@ -360,10 +361,11 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
       }) as { markdown?: string; content?: string } | null
       const markdown = markdownResult?.markdown ?? markdownResult?.content ?? ''
       if (markdown) {
+        const { putCachedMarkdownExport } = await import('../services/analysisCache')
         await putCachedMarkdownExport(pk, markdown, blockKey)
       }
     } catch (mdErr) {
-      console.warn('Markdown export failed for block regeneration:', mdErr)
+      logger.warn({ err: mdErr, pk, blockKey }, 'Markdown export failed for block regeneration')
     }
 
     res.json({
@@ -381,7 +383,6 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
   }
 })
 
-// GET /api/analytics/blocks/:blockKey/program-evaluation?refresh=false
 analyticsRouter.get('/blocks/:blockKey/program-evaluation', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
@@ -404,7 +405,6 @@ analyticsRouter.get('/blocks/:blockKey/program-evaluation', async (req, res) => 
   }
 })
 
-// PUT /api/analytics/blocks/:blockKey/start-maxes
 analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
@@ -455,7 +455,6 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
   }
 })
 
-// GET /api/analytics/blocks/:blockKey/correlation
 analyticsRouter.get('/blocks/:blockKey/correlation', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
@@ -478,7 +477,6 @@ analyticsRouter.get('/blocks/:blockKey/correlation', async (req, res) => {
   }
 })
 
-// POST /api/analytics/block-comparison
 analyticsRouter.post('/block-comparison', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
@@ -493,22 +491,19 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
     if (current) selected.add(current.blockKey)
 
     const selectedBlocks = blocks.filter((block) => selected.has(block.blockKey))
-    const cacheOnly = req.body?.cacheOnly === true
     const bundles = []
     const correlationReports = new Map<string, Record<string, unknown> | null>()
     const contexts = new Map()
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
-      const bundle = cacheOnly
-        ? await getCachedBlockAnalysisBundle(req.effectivePk!, block.blockKey)
-        : await getOrCreateBlockAnalysisBundle(
-            req.effectivePk!,
-            program,
-            block.blockKey,
-            invokeToolDirect,
-            false,
-          )
+      const bundle = await getOrCreateBlockAnalysisBundle(
+          req.effectivePk!,
+          program,
+          block.blockKey,
+          invokeToolDirect,
+          block.isCurrent,
+        )
       if (bundle) bundles.push(bundle)
       correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(
         req.effectivePk!,
@@ -526,8 +521,6 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
   }
 })
 
-// POST /api/analytics/block-comparison/ai
-// Lifetime compare — strictly on-demand. Never regenerated by /analysis/regenerate.
 analyticsRouter.post('/block-comparison/ai', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
@@ -549,7 +542,6 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
-      // Always read from cache for lifetime compare — never regenerates block analyses
       const bundle = await getCachedBlockAnalysisBundle(req.effectivePk!, block.blockKey)
       if (bundle) bundles.push(bundle)
       if (bundle) {
@@ -588,7 +580,6 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
   }
 })
 
-// GET /api/analytics/correlation?weeks=N&block=X&refresh=bool
 analyticsRouter.get('/correlation', async (req, res) => {
   try {
     const weeks = parseInt(req.query.weeks as string) || 4
@@ -602,7 +593,6 @@ analyticsRouter.get('/correlation', async (req, res) => {
   }
 })
 
-// POST /api/analytics/fatigue-profile/estimate
 analyticsRouter.post('/fatigue-profile/estimate', async (req, res) => {
   try {
     const exercise = req.body?.exercise ?? req.body
@@ -613,7 +603,6 @@ analyticsRouter.post('/fatigue-profile/estimate', async (req, res) => {
   }
 })
 
-// POST /api/analytics/muscle-groups/estimate
 analyticsRouter.post('/muscle-groups/estimate', async (req, res) => {
   try {
     const body = req.body ?? {}
@@ -630,7 +619,6 @@ analyticsRouter.post('/muscle-groups/estimate', async (req, res) => {
   }
 })
 
-// POST /api/analytics/lift-profile/review
 analyticsRouter.post('/lift-profile/review', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
@@ -641,7 +629,6 @@ analyticsRouter.post('/lift-profile/review', async (req, res) => {
   }
 })
 
-// POST /api/analytics/lift-profile/rewrite
 analyticsRouter.post('/lift-profile/rewrite', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
@@ -652,7 +639,6 @@ analyticsRouter.post('/lift-profile/rewrite', async (req, res) => {
   }
 })
 
-// POST /api/analytics/lift-profile/estimate-stimulus
 analyticsRouter.post('/lift-profile/estimate-stimulus', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
@@ -663,7 +649,6 @@ analyticsRouter.post('/lift-profile/estimate-stimulus', async (req, res) => {
   }
 })
 
-// POST /api/analytics/lift-profile/rewrite-and-estimate
 analyticsRouter.post('/lift-profile/rewrite-and-estimate', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
@@ -674,7 +659,6 @@ analyticsRouter.post('/lift-profile/rewrite-and-estimate', async (req, res) => {
   }
 })
 
-// GET /api/analytics/program-evaluation?refresh=bool
 analyticsRouter.get('/program-evaluation', async (req, res) => {
   try {
     const refresh = req.query.refresh === 'true'

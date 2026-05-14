@@ -23,6 +23,7 @@ export interface ProgramMeta {
   }
   training_notes: string[]
   change_log: ChangeLogEntry[]
+  block_notes: BlockNote[]
   updated_at: string
   last_comp: LastComp
   height_cm?: number
@@ -74,6 +75,12 @@ export interface ChangeLogEntry {
   source?: string
   date: string
   note?: string
+}
+
+export interface BlockNote {
+  block: string
+  notes: string
+  updated_at: string
 }
 
 export interface LastComp {
