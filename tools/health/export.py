@@ -426,7 +426,7 @@ def _build_program_workbook(
     if version_token:
         meta.setdefault("program_version", version_token)
 
-    prepared_sessions = _prepare_sessions_for_export(sessions, weight_log, meta)
+    prepared_sessions = _prepare_sessions_for_export(sessions, weight_log, meta, phases)
 
     # ---- Base program sheets ----
     _write_meta_sheet(wb, meta, creator=creator, program_pk=program_pk, version_token=version_token, sex=sex)
@@ -535,7 +535,7 @@ def build_program_markdown(
     if version_token and not version_token.startswith("v") and version_token.isdigit():
         version_token = f"v{int(version_token):03d}"
 
-    prepared_sessions = _prepare_sessions_for_export(sessions_raw, weight_log, meta)
+    prepared_sessions = _prepare_sessions_for_export(sessions_raw, weight_log, meta, phases)
 
     sections = [
         _md_overview(meta, creator, version_token, sex),
@@ -769,7 +769,7 @@ def _md_sessions(sessions: list[dict]) -> str:
         week_sessions = weeks[week_key]
         phase_name = ""
         for s in week_sessions:
-            pn = _extract_phase_name(s.get("phase", ""))
+            pn = s.get("phase_name", "")
             if pn:
                 phase_name = pn
                 break
@@ -812,6 +812,8 @@ def _md_sessions(sessions: list[dict]) -> str:
                 lines.append(f"  _{notes}_")
 
             exercises = session.get("exercises") or []
+            planned = session.get("planned_exercises") or []
+            
             if exercises:
                 ex_rows = []
                 for ex in exercises:
@@ -826,9 +828,23 @@ def _md_sessions(sessions: list[dict]) -> str:
                         ex.get("kg", ""),
                         ex.get("rpe", ""),
                         notes_value,
+                        session.get("status", ""),
                     ])
                 lines.append("")
-                lines.append(_md_table(["Exercise", "Sets x Reps", "kg", "RPE", "Notes"], ex_rows))
+                lines.append(_md_table(["Exercise", "Sets x Reps", "kg", "RPE", "Notes", "Status"], ex_rows))
+            elif planned:
+                ex_rows = []
+                for ex in planned:
+                    ex_rows.append([
+                        ex.get("name", ""),
+                        f"{ex.get('sets', '')} x {ex.get('reps', '')}",
+                        ex.get("kg", ""),
+                        ex.get("rpe_target", ""),
+                        _first_line(ex.get("notes", "")),
+                        session.get("status", ""),
+                    ])
+                lines.append("")
+                lines.append(_md_table(["Exercise", "Sets x Reps", "kg", "Target RPE", "Notes", "Status"], ex_rows))
 
             lines.append("")
 
@@ -1105,6 +1121,7 @@ def _md_lift_profiles(lift_profiles: list[dict]) -> str:
 
         if parts:
             lines.append(f"**{lift}:** {'; '.join(parts)}.")
+            lines.append("")
 
     return "\n".join(lines).rstrip()
 
@@ -1935,6 +1952,7 @@ def _prepare_sessions_for_export(
     sessions: list[dict[str, Any]],
     weight_log: list[dict[str, Any]],
     meta: dict[str, Any],
+    phases: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     ordered = sorted(_deepcopy_rows(sessions), key=lambda s: str(s.get("date", "")))
 
@@ -1947,7 +1965,28 @@ def _prepare_sessions_for_export(
         session["body_weight_kg"] = bodyweight
         session["body_weight_source"] = bodyweight_source
         session["block"] = _first_non_blank(session.get("block"), "current")
-        session["phase_name"] = _extract_phase_name(session.get("phase", ""))
+        
+        phase_name = _extract_phase_name(session.get("phase", ""))
+        week_val = session.get("week_number") or session.get("week")
+        if phases and week_val is not None:
+            try:
+                week_num = int(week_val)
+                for p in phases:
+                    try:
+                        start_w = int(p.get("start_week", 0))
+                        end_w = int(p.get("end_week", 0))
+                        if start_w <= week_num <= end_w:
+                            pn = _extract_phase_name(p.get("name", ""))
+                            if pn:
+                                phase_name = pn
+                            break
+                    except (ValueError, TypeError):
+                        continue
+            except (ValueError, TypeError):
+                pass
+                
+        session["phase_name"] = phase_name
+        
         if session.get("wellness") and isinstance(session["wellness"], dict):
             wellness = session["wellness"]
             session["wellness"] = {
@@ -2335,7 +2374,7 @@ def _write_sessions_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
             session.get("week", ""),
             session.get("week_number", ""),
             session.get("block", ""),
-            _extract_phase_name(session.get("phase", "")),
+            session.get("phase_name", ""),
             session.get("day", ""),
             session.get("status", ""),
             session.get("completed", ""),
@@ -2385,7 +2424,7 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
     ws = wb.create_sheet("Exercises")
     headers = [
         "Date", "Week", "Block", "Phase", "Exercise", "Sets", "Reps", "Weight (kg)",
-        "Failed", "Failed Sets", "Failed Set Reasons", "RPE", "Notes", "Volume",
+        "Failed", "Failed Sets", "Failed Set Reasons", "RPE", "Notes", "Volume", "Session Status",
     ]
     rows = []
     for session in sessions:
@@ -2413,9 +2452,10 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
                 ex.get("rpe", ""),
                 ex.get("notes", ""),
                 round(sets_f * reps_f * kg_f, 1),
+                session.get("status", ""),
             ])
     if not rows:
-        rows.append(["—", "", "", "", "No exercises recorded", "", "", "", "", "", "", "", "", ""])
+        rows.append(["—", "", "", "", "No exercises recorded", "", "", "", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={11: 36, 13: 40})
 
 

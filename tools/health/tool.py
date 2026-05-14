@@ -1685,6 +1685,14 @@ def _read_cached_correlation(weeks: int = 4) -> dict | None:
     return _sanitize_decimals(report)
 
 
+def _scope_program_to_current_block(program: dict) -> dict:
+    """Return a shallow copy of program with phases and sessions filtered to the current block only."""
+    scoped = dict(program)
+    scoped["phases"] = [p for p in program.get("phases", []) if (p.get("block") or "current") == "current"]
+    scoped["sessions"] = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
+    return scoped
+
+
 def _normalize_export_format(format_value: str | None) -> str:
     export_format = str(format_value or "xlsx").strip().lower()
     if export_format in ("md", "markdown"):
@@ -1699,19 +1707,21 @@ def _write_program_export(program: dict, sessions: list[dict], out_dir: str, for
     from export import build_program_markdown, build_program_xlsx
 
     export_format = _normalize_export_format(format_value)
+    scoped_program = _scope_program_to_current_block(program)
+    scoped_sessions = scoped_program["sessions"]
     analysis = _build_analysis_bundle(program, sessions)
 
     if export_format == "markdown":
         filename = "program_history.md"
-        description = "Markdown export of full program history"
+        description = "Markdown export of current block"
         out_path = os.path.join(out_dir, filename)
-        build_program_markdown(program, out_path, analysis=analysis, export_context=analysis)
+        build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
         return filename, description, export_format
 
     filename = "program_history.xlsx"
-    description = "Excel export of full program history"
+    description = "Excel export of current block"
     out_path = os.path.join(out_dir, filename)
-    build_program_xlsx(program, out_path, analysis=analysis, export_context=analysis)
+    build_program_xlsx(scoped_program, out_path, analysis=analysis, export_context=analysis)
     return filename, description, export_format
 
 
@@ -2013,8 +2023,9 @@ class CorrelationAnalysisObservation(Observation):
 class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, CorrelationAnalysisObservation]):
     def __call__(self, action: CorrelationAnalysisAction, conversation=None) -> CorrelationAnalysisObservation:
         from datetime import datetime, timedelta
+        import time
 
-        from core import _get_store
+        from core import _get_store, _floats_to_decimals
         from correlation_ai import generate_correlation_report
         from config import IF_HEALTH_TABLE_NAME, AWS_REGION
         import boto3
@@ -2070,14 +2081,16 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
 
         generated_at = datetime.utcnow().isoformat() + "Z"
 
-        table.put_item(Item={
+        table.put_item(Item=_floats_to_decimals({
             "pk": active_pk,
             "sk": cache_sk,
             "report": report,
             "generated_at": generated_at,
             "window_start": window_start_str,
             "weeks": action.weeks,
-        })
+            # 7-day TTL — not invalidated by session changes
+            "expires_at": int(time.time()) + 7 * 86400,
+        }))
 
         report["cached"] = False
         report["generated_at"] = generated_at
@@ -2502,6 +2515,34 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 },
                 "required": [],
             },
+        },
+        "export_program_markdown": {
+            "name": "export_program_markdown",
+            "description": (
+                "Generate the markdown export of the current program and return its content as a string. "
+                "Used internally by regenerate_analysis."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        "regenerate_analysis": {
+            "name": "regenerate_analysis",
+            "description": (
+                "Regenerate all current-block analysis caches: 6 weekly windows (deterministic), "
+                "AI correlation reports for 4w/8w/full-block windows, full-block program evaluation, "
+                "and the markdown export. Call this when the operator asks to refresh or regenerate "
+                "their training analysis. Only touches current-block caches — never affects past blocks "
+                "or the lifetime compare AI cache."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        "get_analysis_markdown": {
+            "name": "get_analysis_markdown",
+            "description": (
+                "Return the cached markdown export of the full training program (current block). "
+                "This is the primary reference document for coaching decisions. "
+                "ALWAYS call this before answering any training question."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
         },
         "health_get_program": {
             "name": "health_get_program",
@@ -3874,12 +3915,229 @@ def _do_analyze_powerlifting_stats(args):
     )
     return analyze_stats(
         filtered_df,
-        squat_kg=args.get("squat_kg"),
-        bench_kg=args.get("bench_kg"),
-        deadlift_kg=args.get("deadlift_kg"),
-        bodyweight_kg=args.get("bodyweight_kg"),
-        sex_code=args.get("sex_code"),
+         squat_kg=args.get("squat_kg"),
+         bench_kg=args.get("bench_kg"),
+         deadlift_kg=args.get("deadlift_kg"),
+         bodyweight_kg=args.get("bodyweight_kg"),
+         sex_code=args.get("sex_code"),
+     )
+
+
+def _do_export_program_markdown(args: Dict[str, Any]) -> str:
+    """Generate a markdown export of the current program and return its content as a string."""
+    import os
+    import tempfile
+    from core import _get_store
+    from export import build_program_markdown
+
+    program = _run_async(_get_store().get_program())
+    sessions = program.get("sessions", []) if isinstance(program, dict) else []
+    analysis = _build_analysis_bundle(program, sessions)
+    scoped_program = _scope_program_to_current_block(program)
+    out_path = os.path.join(tempfile.gettempdir(), "program_history_cache.md")
+    build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
+    with open(out_path, "r", encoding="utf-8") as f:
+        markdown = f.read()
+    return {"markdown": markdown, "length": len(markdown)}
+
+
+async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Regenerate all current-block analysis caches: 6 windows, AI correlation,
+    program evaluation, and markdown export. NEVER touches past-block caches."""
+    import os
+    import json
+    import tempfile
+    import time as _time
+    import boto3
+    from datetime import datetime, timedelta
+    from core import _get_store, _floats_to_decimals
+    from analytics import weekly_analysis
+    from correlation_ai import generate_correlation_report
+    from export import build_program_markdown
+
+    from config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
+
+    store = _get_store()
+    store.invalidate_cache()
+    program = await store.get_program()
+    pk = store.pk
+    sessions = program.get("sessions", [])
+    glossary = _run_async(_get_glossary_store().get_glossary()) if hasattr(_get_glossary_store(), "get_glossary") else []
+
+    dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+    table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
+    cache_pk = f"analysis#{pk}"
+    expires_at = int(_time.time()) + 7 * 86400
+
+    # Build analysis windows from program (replicate TypeScript buildAnalysisWindows logic)
+    program_start = (program.get("meta") or {}).get("program_start") or next(
+        (s.get("date") for s in sessions if (s.get("block") or "current") == "current"), None
+    ) or datetime.utcnow().date().isoformat()
+
+    current_sessions = [s for s in sessions if (s.get("block") or "current") == "current"]
+    # Sort by week_number to find current week
+    current_week = max(
+        (int(s.get("week_number", 0)) for s in current_sessions if s.get("week_number")),
+        default=1
     )
+
+    window_specs = [
+        ("current", current_week, current_week),
+        ("previous_1", max(1, current_week - 1), current_week),
+        ("previous_2", max(1, current_week - 2), current_week),
+        ("previous_4", max(1, current_week - 4), current_week),
+        ("previous_8", max(1, current_week - 8), current_week),
+        ("block", 1, current_week),
+    ]
+
+    today_iso = datetime.utcnow().date().isoformat()
+    errors = []
+    block_analysis_result = None
+
+    for window_key, week_start, week_end in window_specs:
+        try:
+            result = weekly_analysis(
+                program=program,
+                sessions=sessions,
+                weeks=max(1, week_end - week_start + 1),
+                block="current",
+                week_start=week_start,
+                week_end=week_end,
+                ref_date=today_iso,
+                glossary=glossary,
+            )
+            if window_key == "block":
+                block_analysis_result = result
+
+            payload_str = json.dumps(result)
+            sk = f"weekly_analysis#{window_key}"
+            item = {
+                "pk": cache_pk,
+                "sk": sk,
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "expires_at": expires_at,
+                "payload": payload_str,
+            }
+            table.put_item(Item=_floats_to_decimals(item))
+        except Exception as exc:
+            errors.append(f"window {window_key}: {exc}")
+
+    # AI correlation for windows with 4+ weeks
+    for window_key, week_start, week_end in window_specs:
+        n_weeks = max(1, week_end - week_start + 1)
+        if n_weeks < 4:
+            continue
+        try:
+            corr = await generate_correlation_report(
+                sessions=current_sessions,
+                lift_profiles=program.get("lift_profiles", []),
+                weeks=n_weeks,
+                window_start=today_iso,
+                program=program,
+            )
+            # Store in if-health using the same sk pattern as CorrelationAnalysisExecutor
+            from config import IF_HEALTH_TABLE_NAME
+            health_table = dynamodb.Table(IF_HEALTH_TABLE_NAME)
+            today = datetime.utcnow().date()
+            raw_cutoff = today - timedelta(weeks=n_weeks)
+            days_since_monday = raw_cutoff.weekday()
+            window_start_date = (raw_cutoff - timedelta(days=days_since_monday)).isoformat()
+            cache_sk = f"corr_report#{window_start_date}_{n_weeks}w"
+            health_table.put_item(Item=_floats_to_decimals({
+                "pk": pk,
+                "sk": cache_sk,
+                "report": corr,
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "window_start": window_start_date,
+                "weeks": n_weeks,
+                "expires_at": expires_at,
+            }))
+        except Exception as exc:
+            errors.append(f"correlation {window_key}: {exc}")
+
+    # Program evaluation (full block)
+    try:
+        from core import health_program_evaluation
+        await health_program_evaluation(refresh=True)
+    except Exception as exc:
+        errors.append(f"program_evaluation: {exc}")
+
+    # Generate markdown export
+    try:
+        out_path = os.path.join(tempfile.gettempdir(), "program_history_regen.md")
+        scoped_program = _scope_program_to_current_block(program)
+        build_program_markdown(scoped_program, out_path, analysis=block_analysis_result)
+        with open(out_path, "r", encoding="utf-8") as f:
+            markdown = f.read()
+        if markdown:
+            md_item = {
+                "pk": cache_pk,
+                "sk": "markdown_export#current",
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "expires_at": expires_at,
+                "payload": json.dumps({"markdown": markdown}),
+            }
+            table.put_item(Item=_floats_to_decimals(md_item))
+    except Exception as exc:
+        errors.append(f"markdown_export: {exc}")
+
+    return {
+        "success": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "windows_regenerated": 6,
+        "errors": errors,
+        "message": (
+            f"Regenerated 6 analysis windows, AI correlations, program evaluation, and markdown export."
+            + (f" {len(errors)} non-fatal errors: {'; '.join(errors)}" if errors else "")
+        ),
+    }
+
+
+def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a freshly generated markdown export for the current block, utilizing cached analysis where available."""
+    import json
+    import time as _time
+    import boto3
+    from datetime import datetime
+    from core import _get_store, _floats_to_decimals
+    from export import build_program_markdown
+    import tempfile
+    import os
+
+    from config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
+
+    store = _get_store()
+    pk = store.pk
+    cache_pk = f"analysis#{pk}"
+
+    dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+    table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
+
+    # Generate fresh markdown (utilizing cached analysis components for speed)
+    store.invalidate_cache()
+    program = _run_async(store.get_program())
+    sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
+    analysis = _build_analysis_bundle(program, sessions)
+    scoped_program = _scope_program_to_current_block(program)
+    out_path = os.path.join(tempfile.gettempdir(), "program_history_live.md")
+    build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
+    with open(out_path, "r", encoding="utf-8") as f:
+        markdown = f.read()
+
+    generated_at = datetime.utcnow().isoformat() + "Z"
+    expires_at = int(_time.time()) + 7 * 86400
+    try:
+        table.put_item(Item=_floats_to_decimals({
+            "pk": cache_pk,
+            "sk": "markdown_export#current",
+            "generated_at": generated_at,
+            "expires_at": expires_at,
+            "payload": json.dumps({"markdown": markdown}),
+        }))
+    except Exception:
+        pass
+
+    return {"markdown": markdown, "generated_at": generated_at, "cached": False}
 
 
 # =============================================================================
@@ -3997,6 +4255,9 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "calculate_attempts": lambda: calculate_attempts(args["lift"], args["opener_kg"], args.get("j1_override"), args.get("j2_override"), args.get("last_felt")),
         "days_until": lambda: days_until(args["target_date"], args.get("label", "target")),
         "export_program_history": lambda: _do_export(args),
+        "export_program_markdown": lambda: _do_export_program_markdown(args),
+        "regenerate_analysis": lambda: _do_regenerate_analysis(args),
+        "get_analysis_markdown": lambda: _do_get_analysis_markdown(args),
         "analyze_progression": lambda: _do_analyze_progression(args),
         "analyze_rpe_drift": lambda: _do_analyze_rpe_drift(args),
         "estimate_1rm": lambda: _do_estimate_1rm(args),

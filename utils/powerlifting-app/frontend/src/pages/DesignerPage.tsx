@@ -29,7 +29,7 @@ import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { sessionMuscleSets } from '@/utils/sessionWorkload'
 import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
-import { programWeekStartDate, weekStartForBlock } from '@/utils/weekStart'
+import { programWeekStartDate, trainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
 import { toDisplayUnit, fromDisplayUnit, displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
 import type { Session, PlannedExercise, GlossaryExercise } from '@powerlifting/types'
@@ -222,10 +222,25 @@ export default function DesignerPage() {
   const { program, version, createSession } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [block, setBlock] = useState('current')
-  const [selectedWeek, setSelectedWeek] = useState(1)
+  const block = 'current'
+  const weekStartDay = useMemo(() => weekStartForBlock(program, block), [program])
+  const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
+  const defaultWeek = useMemo(() => {
+    const weekParam = searchParams.get('week')
+    if (weekParam) {
+      const week = parseInt(weekParam, 10)
+      if (!isNaN(week) && week > 0) return week
+    }
+    const calculated = trainingWeekForDate(todayStr, program?.meta?.program_start, weekStartDay)
+    const totalWeeks = program?.phases?.length
+      ? Math.max(...program.phases.map(p => p.end_week))
+      : 12
+    return Math.min(calculated, totalWeeks)
+  }, [searchParams, todayStr, program?.meta?.program_start, weekStartDay, program?.phases])
+
+  const [selectedWeek, setSelectedWeek] = useState(defaultWeek)
   const [editingSession, setEditingSession] = useState<Session | null>(null)
   const [editingSessionGlobalIndex, setEditingSessionGlobalIndex] = useState<number>(-1)
   const [editingSessionDate, setEditingSessionDate] = useState<string>('')
@@ -265,16 +280,16 @@ export default function DesignerPage() {
     api.fetchGlossary().then(setGlossary).catch(console.error)
   }, [])
 
-  // Read week from URL query params
   useEffect(() => {
-    const weekParam = searchParams.get('week')
-    if (weekParam) {
-      const week = parseInt(weekParam, 10)
-      if (!isNaN(week) && week > 0) {
-        setSelectedWeek(week)
-      }
+    const current = searchParams.get('week')
+    if (current !== String(selectedWeek)) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('week', String(selectedWeek))
+        return next
+      }, { replace: true })
     }
-  }, [searchParams])
+  }, [selectedWeek])
 
   const totalWeeks = useMemo(() => {
     if (!phases.length) return 12
@@ -284,12 +299,6 @@ export default function DesignerPage() {
   const weekOptions = useMemo(() => {
     return Array.from({ length: totalWeeks }, (_, i) => i + 1)
   }, [totalWeeks])
-
-  const blocks = useMemo(() => {
-    const s = new Set<string>()
-    for (const session of (program?.sessions || [])) s.add(session.block ?? 'current')
-    return Array.from(s)
-  }, [program?.sessions])
 
   const selectedPhase = useMemo(() => {
     return phases.find(
@@ -365,57 +374,66 @@ export default function DesignerPage() {
         .filter(s => s.week_number === copySourceWeek)
         .filter(s => (s.block ?? 'current') === block)
       
-      const targetSessions = weekSessions
-      
+      const offset = selectedWeek > copySourceWeek ? 7 : -7
+
       for (const src of sourceSessions) {
-        // Find if target session exists on same day
-        const existing = targetSessions.find(t => t.day === src.day)
+        const targetDate = addDaysIso(src.date, offset)
         
-        if (existing) {
-          if (existing.completed) {
-            console.log(`Skipping completed session on ${existing.day}`)
-            continue
-          }
-
-          if (copyCollisionMode === 'overwrite') {
-            await api.updatePlannedExercises(version, existing.date, program?.sessions.indexOf(existing) ?? -1, src.planned_exercises || [])
-          } else {
-            const combined = [...(existing.planned_exercises || []), ...(src.planned_exercises || [])]
-            await api.updatePlannedExercises(version, existing.date, program?.sessions.indexOf(existing) ?? -1, combined)
-          }
-        } else {
-          // Create new session for that day in the target week
-          const sourceWeekStart = programWeekStartDate(program?.meta?.program_start, copySourceWeek, selectedWeekStartDay)
-          const dayIndex = selectedWeekDates.findIndex((date) => getDayOfWeek(date) === src.day)
-          const dateOffset = differenceInCalendarDays(
-            parseLocalDate(src.date),
-            parseLocalDate(sourceWeekStart)
-          )
-          const targetOffset = dateOffset >= 0 && dateOffset <= 6 ? dateOffset : Math.max(dayIndex, 0)
-          const dateStr = addDaysIso(selectedWeekStartDate, targetOffset)
-          if (program?.meta?.program_start && dateStr < program.meta.program_start) continue
-          const day = getDayOfWeek(dateStr)
-
+        try {
+          // Optimistically attempt to create
           await api.createSession(version, {
-            date: dateStr,
-            day,
+            date: targetDate,
+            day: getDayOfWeek(targetDate),
             week: `W${selectedWeek}`,
             week_number: selectedWeek,
+            phase: selectedPhase ?? undefined,
             block: block,
             status: 'planned',
             completed: false,
             planned_exercises: src.planned_exercises || [],
             exercises: [],
+            session_notes: '',
+            session_rpe: null,
+            body_weight_kg: null,
           })
+        } catch (err: any) {
+          // If 400 "already exists", fallback to updating
+          if (err.response?.status === 400 && err.response?.data?.error?.includes('already exists')) {
+            const existing = program?.sessions.find(s => s.date === targetDate)
+            if (existing && !existing.completed) {
+              const existingIndex = program?.sessions.findIndex(s => s.date === targetDate) ?? -1
+
+              if (copyCollisionMode === 'overwrite') {
+                await api.updateSession(version, targetDate, existingIndex, {
+                  ...existing,
+                  week: `W${selectedWeek}`,
+                  week_number: selectedWeek,
+                  phase: selectedPhase || existing.phase,
+                  planned_exercises: src.planned_exercises || [],
+                })
+              } else {
+                const combined = [...(existing.planned_exercises || []), ...(src.planned_exercises || [])]
+                await api.updateSession(version, targetDate, existingIndex, {
+                  ...existing,
+                  week: `W${selectedWeek}`,
+                  week_number: selectedWeek,
+                  phase: selectedPhase || existing.phase,
+                  planned_exercises: combined,
+                })
+              }
+            }
+          } else {
+            throw err
+          }
         }
       }
 
       setIsCopyModalOpen(false)
-      pushToast({ message: `Sessions copied from Week ${copySourceWeek}`, type: 'success' })
+      pushToast({ message: `Sessions copied to Week ${selectedWeek}`, type: 'success' })
       useProgramStore.getState().loadProgram(version)
     } catch (err) {
       console.error('Copy failed:', err)
-      pushToast({ message: 'Failed to copy sessions', type: 'error' })
+      pushToast({ message: 'Failed to copy sessions: ' + err, type: 'error' })
     }
   }
 
@@ -479,6 +497,8 @@ export default function DesignerPage() {
         exercises: [],
         session_notes: '',
       }
+
+      console.log('Sending sessionData:', sessionData)
 
       if (editingSession) {
         if (editingSessionGlobalIndex < 0) {
@@ -545,18 +565,12 @@ export default function DesignerPage() {
           <Text fw={700} size="xl">Session Design</Text>
         </Group>
         <Group gap="sm" wrap="wrap">
-          {blocks.length > 1 && (
-            <Select
-              value={block}
-              onChange={(v) => setBlock(v ?? 'current')}
-              data={blocks.map(b => ({ value: b, label: b === 'current' ? 'Current Block' : b }))}
-              size="sm"
-              w={160}
-            />
-          )}
           <Select
             value={String(selectedWeek)}
-            onChange={(v) => setSelectedWeek(Number(v ?? 1))}
+            onChange={(v) => {
+              const w = Number(v ?? 1)
+              setSelectedWeek(w)
+            }}
             data={weekOptions.map(w => ({ value: String(w), label: `Week ${w}` }))}
             size="sm"
             w={120}
@@ -802,16 +816,41 @@ export default function DesignerPage() {
 
           <Divider mt="md" />
 
-          <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={closeSessionEditor}>
-              Cancel
-            </Button>
-            <Button
-              leftSection={<Save size={16} />}
-              onClick={saveSession}
-            >
-              {editingSession ? 'Update' : 'Create'} Session
-            </Button>
+          <Group justify="space-between" mt="md">
+            {editingSession ? (
+              <Button
+                color="red"
+                variant="subtle"
+                leftSection={<Trash2 size={16} />}
+                onClick={async () => {
+                  if (confirm('Are you sure you want to delete this session? This cannot be undone.')) {
+                    try {
+                      await api.deleteSession(version, editingSessionDate, editingSessionGlobalIndex)
+                      pushToast({ message: 'Session deleted successfully', type: 'success' })
+                      closeSessionEditor()
+                      useProgramStore.getState().loadProgram(version)
+                    } catch (err) {
+                      console.error('Failed to delete session:', err)
+                      pushToast({ message: 'Failed to delete session', type: 'error' })
+                    }
+                  }
+                }}
+              >
+                Delete Session
+              </Button>
+            ) : <Box />}
+            
+            <Group gap="sm">
+              <Button variant="default" onClick={closeSessionEditor}>
+                Cancel
+              </Button>
+              <Button
+                leftSection={<Save size={16} />}
+                onClick={saveSession}
+              >
+                {editingSession ? 'Update' : 'Create'} Session
+              </Button>
+            </Group>
           </Group>
         </Stack>
       </Modal>

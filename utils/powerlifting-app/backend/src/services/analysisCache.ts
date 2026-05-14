@@ -1,14 +1,11 @@
 import {
   BatchWriteCommand,
-  DeleteCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb'
-import { createHash } from 'crypto'
-import { gzipSync, gunzipSync } from 'zlib'
-import { docClient, TABLE as HEALTH_TABLE } from '../db/dynamo'
-import type { Program, Session, WeekStartDay } from '@powerlifting/types'
+import { docClient } from '../db/dynamo'
+import type { Program, Session, WeightEntry } from '@powerlifting/types'
 
 export type AnalysisWindowKey =
   | 'current'
@@ -34,15 +31,17 @@ export interface WeeklyAnalysisBundle<T = unknown> {
   asOfDate: string
   generatedAt: string
   cached: boolean
-  sourceFingerprint?: string
   windows: Record<AnalysisWindowKey, AnalysisWindow>
   results: Record<AnalysisWindowKey, T>
 }
 
-const CACHE_SCHEMA_VERSION = 4
+const CACHE_SCHEMA_VERSION = 5
 const ANALYSIS_CACHE_TABLE = process.env.ANALYSIS_CACHE_TABLE_NAME || 'if-powerlifting-analysis-cache'
-const CACHE_TTL_DAYS = Number.parseInt(process.env.ANALYSIS_CACHE_TTL_DAYS || '30', 10)
-const MAX_INLINE_PAYLOAD_CHARS = 300_000
+// Current-block window caches expire after 7 days. Past-block caches have no TTL.
+const CACHE_TTL_DAYS = 7
+// Shard size: keep individual DynamoDB string attributes under 400KB.
+// ~350_000 JSON chars is a safe ceiling before sharding kicks in.
+const MAX_SHARD_CHARS = 350_000
 
 const WINDOW_SPECS: Array<{ key: AnalysisWindowKey; label: string; mode: number | 'current' | 'block' }> = [
   { key: 'current', label: 'Current Week', mode: 'current' },
@@ -52,6 +51,20 @@ const WINDOW_SPECS: Array<{ key: AnalysisWindowKey; label: string; mode: number 
   { key: 'previous_8', label: 'Previous 8 Weeks', mode: 8 },
   { key: 'block', label: 'Full Block', mode: 'block' },
 ]
+
+export const ALL_WINDOW_KEYS: AnalysisWindowKey[] = WINDOW_SPECS.map((spec) => spec.key)
+
+// Windows that receive correlation AI analysis (4+ weeks needed)
+export const CORRELATION_WINDOW_KEYS: AnalysisWindowKey[] = ['previous_4', 'previous_8', 'block']
+
+type WeekStartDay =
+  | 'Monday'
+  | 'Tuesday'
+  | 'Wednesday'
+  | 'Thursday'
+  | 'Friday'
+  | 'Saturday'
+  | 'Sunday'
 
 const WEEK_START_DAYS: WeekStartDay[] = [
   'Monday',
@@ -110,27 +123,6 @@ function maxIso(a: string, b: string): string {
   return a > b ? a : b
 }
 
-function minIso(a: string, b: string): string {
-  return a < b ? a : b
-}
-
-function programWeekAnchorDate(programStart: string, weekStartDay: WeekStartDay): string {
-  const start = parseIsoDate(programStart)
-  const currentIndex = start.getUTCDay()
-  const targetIndex = UTC_DAY_INDEX[weekStartDay]
-  const offset = (currentIndex - targetIndex + 7) % 7
-  return addDaysIso(programStart, -offset)
-}
-
-function programWeekStartDate(programStart: string, week: number, weekStartDay: WeekStartDay): string {
-  return addDaysIso(programWeekAnchorDate(programStart, weekStartDay), (Math.max(1, week) - 1) * 7)
-}
-
-function trainingWeekForDate(dateStr: string, programStart: string, weekStartDay: WeekStartDay): number {
-  const anchor = programWeekAnchorDate(programStart, weekStartDay)
-  return Math.max(1, Math.floor(diffDays(dateStr, anchor) / 7) + 1)
-}
-
 function parseWeekNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
@@ -158,138 +150,21 @@ function resolveCurrentWeek(program: Program, asOfDate: string, programStart: st
   return calculatedWeek
 }
 
-export function analysisSourceFingerprint(program: Program): string {
-  const sessions = (program.sessions ?? [])
-    .map((session) => ({
-      id: session.id ?? null,
-      date: session.date,
-      week: session.week,
-      week_number: session.week_number,
-      block: session.block ?? 'current',
-      status: session.status ?? null,
-      completed: Boolean(session.completed),
-      updated_at: (session as unknown as Record<string, unknown>).updated_at ?? null,
-      session_rpe: session.session_rpe ?? null,
-      body_weight_kg: session.body_weight_kg ?? null,
-      exercises: session.exercises ?? [],
-      planned_exercises: session.planned_exercises ?? [],
-    }))
-    .sort((a, b) =>
-      `${a.block}:${a.week_number}:${a.date}:${a.id ?? ''}`.localeCompare(
-        `${b.block}:${b.week_number}:${b.date}:${b.id ?? ''}`,
-      ),
-    )
-
-  const source = {
-    meta_updated_at: program.meta?.updated_at ?? null,
-    program_week_start_day: program.meta?.program_week_start_day ?? null,
-    block_week_start_days: program.meta?.block_week_start_days ?? null,
-    competitions: program.competitions ?? [],
-    phases: program.phases ?? [],
-    sessions,
-  }
-
-  return createHash('sha256').update(JSON.stringify(source)).digest('hex')
+function programWeekAnchorDate(programStart: string, weekStartDay: WeekStartDay): string {
+  const start = parseIsoDate(programStart)
+  const currentIndex = start.getUTCDay()
+  const targetIndex = UTC_DAY_INDEX[weekStartDay]
+  const offset = (currentIndex - targetIndex + 7) % 7
+  return addDaysIso(programStart, -offset)
 }
 
-function cachePk(userPk: string): string {
-  return `analysis#${userPk}`
+function programWeekStartDate(programStart: string, week: number, weekStartDay: WeekStartDay): string {
+  return addDaysIso(programWeekAnchorDate(programStart, weekStartDay), (Math.max(1, week) - 1) * 7)
 }
 
-function bundleSk(asOfDate: string): string {
-  return `weekly_bundle#v${CACHE_SCHEMA_VERSION}#${asOfDate}`
-}
-
-function partSk(baseSk: string, index: number): string {
-  return `${baseSk}#part#${String(index).padStart(3, '0')}`
-}
-
-function expiresAt(): number {
-  const ttlDays = Number.isFinite(CACHE_TTL_DAYS) && CACHE_TTL_DAYS > 0 ? CACHE_TTL_DAYS : 30
-  return Math.floor(Date.now() / 1000) + ttlDays * 24 * 60 * 60
-}
-
-function encodePayload(bundle: WeeklyAnalysisBundle): string {
-  return gzipSync(Buffer.from(JSON.stringify(bundle), 'utf8')).toString('base64')
-}
-
-function decodePayload(payload: string): WeeklyAnalysisBundle {
-  return JSON.parse(gunzipSync(Buffer.from(payload, 'base64')).toString('utf8')) as WeeklyAnalysisBundle
-}
-
-function chunkString(value: string, chunkSize: number): string[] {
-  const chunks: string[] = []
-  for (let index = 0; index < value.length; index += chunkSize) {
-    chunks.push(value.slice(index, index + chunkSize))
-  }
-  return chunks
-}
-
-async function batchDelete(tableName: string, keys: Array<{ pk: string; sk: string }>): Promise<void> {
-  for (let index = 0; index < keys.length; index += 25) {
-    const batch = keys.slice(index, index + 25)
-    if (!batch.length) continue
-    await docClient.send(new BatchWriteCommand({
-      RequestItems: {
-        [tableName]: batch.map((Key) => ({ DeleteRequest: { Key } })),
-      },
-    }))
-  }
-}
-
-async function deleteBundleObject(pk: string, sk: string): Promise<void> {
-  await docClient.send(new DeleteCommand({
-    TableName: ANALYSIS_CACHE_TABLE,
-    Key: { pk, sk },
-  }))
-
-  const partKeys: Array<{ pk: string; sk: string }> = []
-  let ExclusiveStartKey: Record<string, unknown> | undefined
-  do {
-    const response = await docClient.send(new QueryCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      ExpressionAttributeValues: {
-        ':pk': pk,
-        ':prefix': `${sk}#part#`,
-      },
-      ProjectionExpression: 'pk, sk',
-      ExclusiveStartKey,
-    }))
-    for (const item of response.Items || []) {
-      if (typeof item.pk === 'string' && typeof item.sk === 'string') {
-        partKeys.push({ pk: item.pk, sk: item.sk })
-      }
-    }
-    ExclusiveStartKey = response.LastEvaluatedKey
-  } while (ExclusiveStartKey)
-
-  await batchDelete(ANALYSIS_CACHE_TABLE, partKeys)
-}
-
-async function deleteHealthReportPrefix(userPk: string, prefix: string): Promise<void> {
-  const keys: Array<{ pk: string; sk: string }> = []
-  let ExclusiveStartKey: Record<string, unknown> | undefined
-  do {
-    const response = await docClient.send(new QueryCommand({
-      TableName: HEALTH_TABLE,
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      ExpressionAttributeValues: {
-        ':pk': userPk,
-        ':prefix': prefix,
-      },
-      ProjectionExpression: 'pk, sk',
-      ExclusiveStartKey,
-    }))
-    for (const item of response.Items || []) {
-      if (typeof item.pk === 'string' && typeof item.sk === 'string') {
-        keys.push({ pk: item.pk, sk: item.sk })
-      }
-    }
-    ExclusiveStartKey = response.LastEvaluatedKey
-  } while (ExclusiveStartKey)
-
-  await batchDelete(HEALTH_TABLE, keys)
+function trainingWeekForDate(dateStr: string, programStart: string, weekStartDay: WeekStartDay): number {
+  const anchor = programWeekAnchorDate(programStart, weekStartDay)
+  return Math.max(1, Math.floor(diffDays(dateStr, anchor) / 7) + 1)
 }
 
 export function isIsoDate(value: string | undefined): value is string {
@@ -338,180 +213,254 @@ export function buildAnalysisWindows(program: Program, asOfDate: string): Record
   return windows
 }
 
-export async function getCachedWeeklyAnalysisBundle(
-  userPk: string,
-  asOfDate: string,
-  expectedSourceFingerprint?: string,
-): Promise<WeeklyAnalysisBundle | null> {
-  try {
-    const pk = cachePk(userPk)
-    const skPrefix = `weekly_bundle#v${CACHE_SCHEMA_VERSION}#`
-    
-    const exactSk = bundleSk(asOfDate)
-    const exactResponse = await docClient.send(new GetCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      Key: { pk, sk: exactSk },
-    }))
-    
-    let item = exactResponse.Item
-
-    // If exact not found, query for the latest one
-    if (!item) {
-      const queryResponse = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': skPrefix,
-        },
-        ScanIndexForward: false, 
-        Limit: 1,
-      }))
-      item = queryResponse.Items?.[0]
-    }
-
-    if (!item) return null
-
-    let payload = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
-    const shardCount = Number(item.shard_count || 0)
-    if (!payload && shardCount > 0) {
-      const parts = await Promise.all(
-        Array.from({ length: shardCount }, async (_, index) => {
-          const part = await docClient.send(new GetCommand({
-            TableName: ANALYSIS_CACHE_TABLE,
-            Key: { pk, sk: partSk(item!.sk as string, index) },
-          }))
-          return String(part.Item?.payload_gzip_b64 ?? '')
-        }),
-      )
-      payload = parts.join('')
-    }
-
-    if (!payload) return null
-    const bundle = decodePayload(payload)
-    if (expectedSourceFingerprint && bundle.sourceFingerprint !== expectedSourceFingerprint) return null
-    return { ...bundle, cached: true }
-  } catch (error) {
-    console.warn('Analysis cache read failed:', error)
-    return null
-  }
-}
-
-export async function putCachedWeeklyAnalysisBundle(userPk: string, bundle: WeeklyAnalysisBundle): Promise<void> {
-  try {
-    const pk = cachePk(userPk)
-    const sk = bundleSk(bundle.asOfDate)
-    const encoded = encodePayload({ ...bundle, cached: false })
-    const expiry = expiresAt()
-
-    await deleteBundleObject(pk, sk)
-
-    if (encoded.length <= MAX_INLINE_PAYLOAD_CHARS) {
-      await docClient.send(new PutCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        Item: {
-          pk,
-          sk,
-          schema_version: CACHE_SCHEMA_VERSION,
-          as_of_date: bundle.asOfDate,
-          generated_at: bundle.generatedAt,
-          encoding: 'gzip+base64',
-          payload_gzip_b64: encoded,
-          expires_at: expiry,
-        },
-      }))
-      return
-    }
-
-    const chunks = chunkString(encoded, MAX_INLINE_PAYLOAD_CHARS)
-    await docClient.send(new PutCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      Item: {
-        pk,
-        sk,
-        schema_version: CACHE_SCHEMA_VERSION,
-        as_of_date: bundle.asOfDate,
-        generated_at: bundle.generatedAt,
-        encoding: 'gzip+base64-sharded',
-        shard_count: chunks.length,
-        expires_at: expiry,
-      },
-    }))
-
-    for (let index = 0; index < chunks.length; index += 25) {
-      const batch = chunks.slice(index, index + 25)
-      await docClient.send(new BatchWriteCommand({
-        RequestItems: {
-          [ANALYSIS_CACHE_TABLE]: batch.map((payload, batchIndex) => ({
-            PutRequest: {
-              Item: {
-                pk,
-                sk: partSk(sk, index + batchIndex),
-                payload_gzip_b64: payload,
-                expires_at: expiry,
-              },
-            },
-          })),
-        },
-      }))
-    }
-  } catch (error) {
-    console.warn('Analysis cache write failed:', error)
-  }
-}
-
-export async function invalidateAnalysisCache(userPk: string): Promise<void> {
-  try {
-    const pk = cachePk(userPk)
-    const keys: Array<{ pk: string; sk: string }> = []
-    let ExclusiveStartKey: Record<string, unknown> | undefined
-    do {
-      const response = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': 'weekly_bundle#',
-        },
-        ProjectionExpression: 'pk, sk',
-        ExclusiveStartKey,
-      }))
-      for (const item of response.Items || []) {
-        if (typeof item.pk === 'string' && typeof item.sk === 'string') {
-          keys.push({ pk: item.pk, sk: item.sk })
-        }
-      }
-      ExclusiveStartKey = response.LastEvaluatedKey
-    } while (ExclusiveStartKey)
-
-    await batchDelete(ANALYSIS_CACHE_TABLE, keys)
-  } catch (error) {
-    console.warn('Analysis bundle cache invalidation failed:', error)
-  }
-
-  try {
-    await Promise.all([
-      deleteHealthReportPrefix(userPk, 'corr_report#'),
-      deleteHealthReportPrefix(userPk, 'program_eval#'),
-    ])
-  } catch (error) {
-    console.warn('Analysis report cache invalidation failed:', error)
-  }
-}
-
 export function makeWeeklyAnalysisBundle<T>(
   asOfDate: string,
   windows: Record<AnalysisWindowKey, AnalysisWindow>,
   results: Record<AnalysisWindowKey, T>,
-  sourceFingerprint?: string,
 ): WeeklyAnalysisBundle<T> {
   return {
     schemaVersion: CACHE_SCHEMA_VERSION,
     asOfDate,
     generatedAt: new Date().toISOString(),
     cached: false,
-    sourceFingerprint,
     windows,
     results,
   }
+}
+
+// ─── DynamoDB helpers ──────────────────────────────────────────────────────────
+
+function cachePk(userPk: string): string {
+  return `analysis#${userPk}`
+}
+
+/** SK for a weekly analysis window on the current block. */
+function windowSk(windowKey: AnalysisWindowKey): string {
+  return `weekly_analysis#${windowKey}`
+}
+
+/** SK for a cached markdown export. blockKey defaults to 'current'. */
+function markdownSk(blockKey = 'current'): string {
+  return `markdown_export#${blockKey}`
+}
+
+/** SK segment for a shard of a large payload. */
+function shardSk(baseSk: string, index: number): string {
+  return `${baseSk}#shard#${String(index).padStart(3, '0')}`
+}
+
+function currentBlockExpiresAt(): number {
+  return Math.floor(Date.now() / 1000) + CACHE_TTL_DAYS * 24 * 60 * 60
+}
+
+async function batchDeleteByPrefix(pk: string, prefix: string): Promise<void> {
+  const keys: Array<{ pk: string; sk: string }> = []
+  let ExclusiveStartKey: Record<string, unknown> | undefined
+  do {
+    const response = await docClient.send(new QueryCommand({
+      TableName: ANALYSIS_CACHE_TABLE,
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: { ':pk': pk, ':prefix': prefix },
+      ProjectionExpression: 'pk, sk',
+      ExclusiveStartKey,
+    }))
+    for (const item of response.Items || []) {
+      if (typeof item.pk === 'string' && typeof item.sk === 'string') {
+        keys.push({ pk: item.pk, sk: item.sk })
+      }
+    }
+    ExclusiveStartKey = response.LastEvaluatedKey
+  } while (ExclusiveStartKey)
+
+  for (let i = 0; i < keys.length; i += 25) {
+    const batch = keys.slice(i, i + 25)
+    if (!batch.length) continue
+    await docClient.send(new BatchWriteCommand({
+      RequestItems: {
+        [ANALYSIS_CACHE_TABLE]: batch.map((Key) => ({ DeleteRequest: { Key } })),
+      },
+    }))
+  }
+}
+
+/**
+ * Write a JSON-serialisable value to DynamoDB.
+ * Shards the payload if it exceeds MAX_SHARD_CHARS.
+ * expiresAt is only set for current-block items (undefined = no TTL = permanent past-block storage).
+ */
+async function putJsonItem(
+  pk: string,
+  sk: string,
+  data: unknown,
+  expiresAtUnix: number | undefined,
+  extraFields: Record<string, unknown> = {},
+): Promise<void> {
+  const jsonStr = JSON.stringify(data)
+
+  // Delete old item + any shards with this sk prefix before writing
+  await batchDeleteByPrefix(pk, sk)
+
+  const baseItem: Record<string, unknown> = {
+    pk,
+    sk,
+    generated_at: new Date().toISOString(),
+    ...extraFields,
+  }
+  if (expiresAtUnix !== undefined) {
+    baseItem.expires_at = expiresAtUnix
+  }
+
+  if (jsonStr.length <= MAX_SHARD_CHARS) {
+    await docClient.send(new PutCommand({
+      TableName: ANALYSIS_CACHE_TABLE,
+      Item: { ...baseItem, payload: jsonStr },
+    }))
+    return
+  }
+
+  // Write shard manifest + individual shards
+  const shards: string[] = []
+  for (let i = 0; i < jsonStr.length; i += MAX_SHARD_CHARS) {
+    shards.push(jsonStr.slice(i, i + MAX_SHARD_CHARS))
+  }
+
+  await docClient.send(new PutCommand({
+    TableName: ANALYSIS_CACHE_TABLE,
+    Item: { ...baseItem, shard_count: shards.length },
+  }))
+
+  for (let i = 0; i < shards.length; i += 25) {
+    const batch = shards.slice(i, i + 25)
+    await docClient.send(new BatchWriteCommand({
+      RequestItems: {
+        [ANALYSIS_CACHE_TABLE]: batch.map((shard, batchIdx) => ({
+          PutRequest: {
+            Item: {
+              pk,
+              sk: shardSk(sk, i + batchIdx),
+              payload: shard,
+              ...(expiresAtUnix !== undefined ? { expires_at: expiresAtUnix } : {}),
+            },
+          },
+        })),
+      },
+    }))
+  }
+}
+
+/** Read a JSON item that may be sharded. Returns null on miss or parse error. */
+async function getJsonItem<T>(pk: string, sk: string): Promise<{ data: T; generatedAt: string } | null> {
+  try {
+    const response = await docClient.send(new GetCommand({
+      TableName: ANALYSIS_CACHE_TABLE,
+      Key: { pk, sk },
+    }))
+    const item = response.Item
+    if (!item) return null
+
+    const generatedAt = typeof item.generated_at === 'string' ? item.generated_at : ''
+
+    // Sharded item
+    const shardCount = Number(item.shard_count || 0)
+    if (shardCount > 0) {
+      const parts = await Promise.all(
+        Array.from({ length: shardCount }, async (_, index) => {
+          const part = await docClient.send(new GetCommand({
+            TableName: ANALYSIS_CACHE_TABLE,
+            Key: { pk, sk: shardSk(sk, index) },
+          }))
+          return String(part.Item?.payload ?? '')
+        }),
+      )
+      const joined = parts.join('')
+      if (!joined) return null
+      return { data: JSON.parse(joined) as T, generatedAt }
+    }
+
+    // Inline item
+    const payload = item.payload
+    if (typeof payload !== 'string' || !payload) return null
+    return { data: JSON.parse(payload) as T, generatedAt }
+  } catch {
+    return null
+  }
+}
+
+// ─── Window analysis cache (current block only) ───────────────────────────────
+
+/**
+ * Read a single analysis window from cache.
+ * Returns the window result and generatedAt, or null on miss.
+ */
+export async function getCachedWindowAnalysis(
+  userPk: string,
+  windowKey: AnalysisWindowKey,
+): Promise<{ data: unknown; generatedAt: string } | null> {
+  return getJsonItem(cachePk(userPk), windowSk(windowKey))
+}
+
+/**
+ * Read all 6 window analyses from cache.
+ * Returns null if ANY window is missing (treat as full cache miss).
+ */
+export async function getCachedAllWindowAnalyses(
+  userPk: string,
+): Promise<{ results: Record<AnalysisWindowKey, unknown>; generatedAt: string } | null> {
+  const entries = await Promise.all(
+    ALL_WINDOW_KEYS.map(async (key) => ({ key, result: await getCachedWindowAnalysis(userPk, key) })),
+  )
+
+  if (entries.some((e) => e.result === null)) return null
+
+  const results = {} as Record<AnalysisWindowKey, unknown>
+  let generatedAt = ''
+  for (const { key, result } of entries) {
+    results[key] = result!.data
+    if (!generatedAt) generatedAt = result!.generatedAt
+  }
+  return { results, generatedAt }
+}
+
+/**
+ * Write all 6 window analyses to cache with 7-day TTL.
+ * Past-block caches are handled separately by blockAnalytics.ts.
+ */
+export async function putAllCachedWindowAnalyses(
+  userPk: string,
+  results: Record<AnalysisWindowKey, unknown>,
+): Promise<void> {
+  const expiry = currentBlockExpiresAt()
+  await Promise.all(
+    ALL_WINDOW_KEYS.map((key) =>
+      putJsonItem(cachePk(userPk), windowSk(key), results[key], expiry),
+    ),
+  )
+}
+
+// ─── Markdown export cache ─────────────────────────────────────────────────────
+
+/**
+ * Read the cached markdown export.
+ * blockKey defaults to 'current'. Returns null on miss.
+ */
+export async function getCachedMarkdownExport(
+  userPk: string,
+  blockKey = 'current',
+): Promise<{ markdown: string; generatedAt: string } | null> {
+  const result = await getJsonItem<{ markdown: string }>(cachePk(userPk), markdownSk(blockKey))
+  if (!result) return null
+  return { markdown: result.data.markdown, generatedAt: result.generatedAt }
+}
+
+/**
+ * Write the markdown export to cache.
+ * Current block uses 7-day TTL; past blocks are permanent.
+ */
+export async function putCachedMarkdownExport(
+  userPk: string,
+  markdown: string,
+  blockKey = 'current',
+): Promise<void> {
+  const expiry = blockKey === 'current' ? currentBlockExpiresAt() : undefined
+  await putJsonItem(cachePk(userPk), markdownSk(blockKey), { markdown }, expiry)
 }

@@ -47,6 +47,8 @@ tools:
   - correlation_analysis
   - fatigue_profile_estimate
   - program_evaluation
+  - get_analysis_markdown
+  - regenerate_analysis
   # New Template Tools (Read-only for coach)
   - template_list
   - template_get

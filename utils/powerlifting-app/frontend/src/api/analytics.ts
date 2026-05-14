@@ -845,6 +845,7 @@ export async function fetchWeeklyAnalysisBundle(asOfDate?: string): Promise<Week
 export async function fetchProgramBlocks(): Promise<ProgramBlockIndexEntry[]> {
   const res = await api.get('/analytics/blocks')
   const body = res.data
+  console.log(body)
   if (body.error) throw new Error(body.error)
   return body.data
 }
@@ -941,15 +942,35 @@ export async function fetchBlockCorrelationReport(
 }
 
 export async function fetchProgramEvaluation(refresh = false, cacheOnly = false): Promise<ProgramEvaluationReport> {
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api'
   const params = new URLSearchParams({
     refresh: String(refresh),
     cacheOnly: String(cacheOnly),
   })
-  const res = await fetch(`${apiBase}/analytics/program-evaluation?${params.toString()}`, {
-    headers: { 'Content-Type': 'application/json' },
-  })
-  const body = await res.json()
+  const res = await api.get(`/analytics/program-evaluation?${params.toString()}`)
+  const body = res.data
   if (body.error) throw new Error(body.error)
   return normalizeProgramEvaluation(body.data)
+}
+
+/**
+ * Trigger full regeneration of all current-block analysis caches:
+ * 6 weekly windows, AI correlation, program evaluation, and markdown export.
+ * Never invalidates past-block or lifetime-compare caches.
+ */
+export async function regenerateAnalysis(): Promise<{ success: boolean; generatedAt: string }> {
+  const res = await api.post('/analytics/analysis/regenerate')
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+/**
+ * Re-generate a specific past block's analysis, correlation, and program evaluation.
+ * Portal-only action — not triggered by the bulk regenerate.
+ */
+export async function regenerateBlockAnalysis(blockKey: string): Promise<{ success: boolean; generatedAt: string }> {
+  const res = await api.post(`/analytics/blocks/${encodeURIComponent(blockKey)}/regenerate`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
 }

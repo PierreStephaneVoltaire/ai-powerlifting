@@ -11,66 +11,11 @@ from typing import Any
 import httpx
 
 from config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
+from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """\
-You are a powerlifting program parser. Extract structured training data
-from the provided spreadsheet content.
-
-OUTPUT RULES:
-- Return valid JSON only. No prose, no markdown fences.
-- All load values: if percentage, express as decimal (0.75 not 75%).
-- load_type must be one of: "rpe" | "percentage" | "absolute" | "unresolvable"
-- If a set has kg values that are clearly absolute weights (not percentages),
-  use load_type "absolute" — this is a warning condition for templates.
-- Do not invent exercises, phases, or sessions not present in the source.
-- If a field is genuinely absent, use null — do not guess.
-- Weeks must be relative integers (1, 2, 3...) for templates.
-  For session imports, use ISO date strings (YYYY-MM-DD).
-
-WARNINGS to include in output:
-- absolute_weights_in_template: list of exercises with hard kg in a template file
-- missing_load_info: exercises with neither kg, %, nor RPE
-- ambiguous_structure: anything structurally unclear
-
-Return schema:
-{
-  "phases": [
-    {
-      "name": "string",
-      "week_start": number,
-      "week_end": number,
-      "target_rpe_min": number | null,
-      "target_rpe_max": number | null,
-      "intent": "string"
-    }
-  ],
-  "sessions": [
-    {
-      "week_number": number,
-      "date": "YYYY-MM-DD" | null,
-      "day_of_week": "string",
-      "label": "string",
-      "exercises": [
-        {
-          "name": "string",
-          "sets": number,
-          "reps": number,
-          "load_type": "string",
-          "load_value": number | null,
-          "rpe_target": number | null,
-          "notes": "string"
-        }
-      ]
-    }
-  ],
-  "warnings": [
-    { "type": "string", "exercises": ["string"], "message": "string" }
-  ],
-  "parse_notes": "string — brief summary of what was detected"
-}
-"""
+_SYSTEM_PROMPT = load_system_prompt("import_parse_system")
 
 _TOOL_SCHEMA = {
     "type": "function",

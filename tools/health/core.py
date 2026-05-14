@@ -2014,6 +2014,7 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
 
     This tool is intentionally gated to the current block / full report and is
     cached on a weekly cadence so it does not re-run on every request.
+    Cache is never invalidated by session changes — only by explicit refresh or TTL expiry.
     """
     import boto3
 
@@ -2025,8 +2026,6 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
     program = await store.get_program()
     federation_library = await _get_federation_store().get_library()
     active_pk = store.pk
-    program_updated_at = str((program.get("meta") or {}).get("updated_at") or "")
-    federation_library_updated_at = str(federation_library.get("updated_at") or "")
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
 
     completed_weeks = sorted({
@@ -2056,11 +2055,7 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
         cached = table.get_item(Key={"pk": active_pk, "sk": cache_sk}).get("Item")
         if cached and cached.get("report"):
             report = cached["report"]
-            if (
-                isinstance(report, dict)
-                and str(cached.get("program_updated_at") or "") == program_updated_at
-                and str(cached.get("federation_library_updated_at") or "") == federation_library_updated_at
-            ):
+            if isinstance(report, dict):
                 report["cached"] = True
                 report["generated_at"] = cached.get("generated_at", "")
                 report["window_start"] = window_start
@@ -2085,6 +2080,7 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
     report["window_start"] = window_start
     report["weeks"] = len(completed_weeks)
 
+    import time as _time
     if not (report.get("insufficient_data") and str(report.get("insufficient_data_reason", "")).startswith("AI evaluation failed")):
         # DynamoDB does not support Python float — convert all floats to Decimal before writing
         dynamo_item = _floats_to_decimals({
@@ -2094,8 +2090,8 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
             "generated_at": generated_at,
             "window_start": window_start,
             "weeks": len(completed_weeks),
-            "program_updated_at": program_updated_at,
-            "federation_library_updated_at": federation_library_updated_at,
+            # 7-day TTL — cache is intentionally not invalidated on session changes
+            "expires_at": int(_time.time()) + 7 * 86400,
         })
         table.put_item(Item=dynamo_item)
 

@@ -110,3 +110,45 @@ videosRouter.patch('/:version/:sessionDate/:videoId/thumbnail', async (req, res,
     next(err)
   }
 })
+// GET /api/videos/media/* - Proxy media from S3 with range request support
+// Range support is required for video seeking in browsers.
+// Express 5 / path-to-regexp v8: use {*path} for named wildcards (`:path*` is invalid in v8).
+videosRouter.get('/media/{*path}', async (req, res, next) => {
+  try {
+    let path = (req.params as any).path
+    if (Array.isArray(path)) {
+      path = path.join('/')
+    }
+
+    const range = req.headers.range as string | undefined
+    const { body, contentType, contentLength, contentRange, acceptRanges, statusCode } =
+      await videoController.streamMedia(path, range)
+
+    res.status(statusCode)
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Accept-Ranges', acceptRanges ?? 'bytes')
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+
+    if (contentLength !== undefined) {
+      res.setHeader('Content-Length', contentLength)
+    }
+    if (contentRange) {
+      res.setHeader('Content-Range', contentRange)
+    }
+
+    if (body) {
+      body.on('error', (err: any) => {
+        console.error(`[MediaProxy] Stream error for ${path}:`, err)
+        if (!res.headersSent) {
+          res.status(500).end()
+        }
+      })
+      body.pipe(res)
+    } else {
+      res.status(404).end()
+    }
+  } catch (err) {
+    next(err)
+  }
+})
+

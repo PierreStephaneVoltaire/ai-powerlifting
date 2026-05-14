@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, List, Dict
 from dataclasses import dataclass
 
 from config import REFLECTION_MODEL
-from agent.prompts.loader import render_template
+from agent.prompts.loader import render_template, load_prompt
 
 from config import REFLECTION_CONTEXT_ID
 
@@ -141,7 +141,7 @@ class OpinionFormer:
             payload = {
                 "model": self.llm_model,
                 "messages": [
-                    {"role": "system", "content": "You are a thoughtful AI assistant forming reasoned opinions."},
+                    {"role": "system", "content": load_prompt("opinion_formation_system.j2")},
                     {"role": "user", "content": prompt},
                 ],
                 "max_tokens": 500,

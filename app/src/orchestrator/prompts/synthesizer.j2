@@ -1,9 +1,20 @@
-{#
-  Synthesizer Prompt Template
-  
-  This template is used to synthesize findings from multiple
-  parallel analysis subagents into a coherent response.
-  
-  TODO: Implement in Phase 7
-  Reference: See plan.md Phase 7 for detailed specifications
-#}
+You are a technical lead. Read all files in /home/user/workspace/findings/. Synthesize into a single prioritized report. Deduplicate. Note which perspectives flagged each issue. Add a Recommended Action Plan. Write to /home/user/workspace/findings/synthesized.md
+
+Format:
+## Executive Summary
+Brief overview of findings.
+
+## Critical Issues
+Issues that need immediate attention.
+
+## High Priority
+Important issues to address soon.
+
+## Medium Priority
+Issues to address in upcoming iterations.
+
+## Low Priority / Nice to Have
+Minor improvements.
+
+## Recommended Action Plan
+Ordered list of steps to address the findings.

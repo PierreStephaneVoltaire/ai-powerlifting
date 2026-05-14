@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 
 from config import MODEL_ROUTER_MODEL, MODEL_ROUTER_ENABLED, LLM_API_KEY
 from models.loader import ModelPreset, TierConfig, get_model_preset_manager, get_tier_config_manager
+from models.prompts.loader import render_prompt as _render_router_prompt
 from storage.model_registry import ModelInfo
 
 logger = logging.getLogger(__name__)
@@ -22,32 +23,24 @@ def _build_router_prompt(
     sort_strategy: str,
     models: List[ModelInfo],
 ) -> str:
-    """Build a compact prompt for the router model."""
-    lines = [
-        "You are a model router. Given a task and candidate models, select the best one.",
-        "",
-        f"Task: {condensed_intent}",
-        f"Category: {preset_name} (pre-sorted by {sort_strategy})",
-        "",
-        "Candidates:",
-    ]
-    for i, m in enumerate(models, 1):
+    """Build a compact prompt for the router model from the router.j2 template."""
+    model_rows = []
+    for m in models:
         price = m.avg_price()
-        price_str = f"${price * 1_000_000:.2f}/M" if price < float("inf") else "N/A"
-        ctx_str = f"{m.context_size // 1000}K"
-        lat_str = f"{int(m.latency)}ms" if m.latency else "N/A"
-        tools_str = "yes" if m.tool_support else "no"
-        lines.append(
-            f"  {i}. {m.model_id}  context={ctx_str}  price={price_str}  "
-            f"latency={lat_str}  tools={tools_str}"
-        )
-
-    lines.extend([
-        "",
-        "Select the best model for this task. Consider capability needs, cost, and speed.",
-        "Respond with ONLY the model ID. No explanation.",
-    ])
-    return "\n".join(lines)
+        model_rows.append({
+            "model_id": m.model_id,
+            "context_str": f"{m.context_size // 1000}K",
+            "price_str": f"${price * 1_000_000:.2f}/M" if price < float("inf") else "N/A",
+            "latency_str": f"{int(m.latency)}ms" if m.latency else "N/A",
+            "tools_str": "yes" if m.tool_support else "no",
+        })
+    return _render_router_prompt(
+        "router",
+        condensed_intent=condensed_intent,
+        preset_name=preset_name,
+        sort_strategy=sort_strategy,
+        models=model_rows,
+    )
 
 
 async def select_model(

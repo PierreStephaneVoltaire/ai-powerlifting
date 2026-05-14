@@ -333,8 +333,8 @@ Domain experts spawned by the main agent. Each has its own `specialist.yaml` con
 | `career_advisor` | Career strategy — trajectory analysis, skill gaps, market positioning | write_file, user facts | standard |
 | `consensus_builder` | Multi-source synthesis — spawns 2-3 specialists, collects outputs, synthesizes | spawn_specialist(s), write_file | standard |
 | `self_improver` | Analyzes IF's own performance and proposes improvements to directives and prompts | read/write/search files | standard |
-| `health_write` | Training program mutations (log sessions, RPE, body weight) | Health DynamoDB tools | standard |
-| `powerlifting_coach` | Read-only training queries and coaching advice — fetch program state, sessions, current maxes, competition countdown, fatigue/correlation/program analysis. Write counterpart: health_write. | health read tools, weekly_analysis, correlation_analysis, fatigue_profile_estimate, program_evaluation | `@preset/health` |
+| `health_write` | Training program mutations (log sessions, RPE, body weight, competition results, diet notes, supplements, glossary, templates, imports) — `agentic: true`, max 25 iterations | health write tools + import/template/glossary tools, supplement_search | `@preset/health` |
+| `powerlifting_coach` | Read-only training queries and coaching advice — fetch program state, sessions, current maxes, competition countdown, fatigue/correlation/program analysis. Write counterpart: health_write. | health read tools, weekly_analysis, correlation_analysis, fatigue_profile_estimate, program_evaluation, get_analysis_markdown, regenerate_analysis, template_list/get/evaluate | `@preset/health` |
 | `finance_write` | Finance snapshot mutations (balances, holdings, goals) | Finance DynamoDB tools | standard |
 | `financial_analyst` | Market research and financial analysis | Yahoo Finance + Alpha Vantage MCPs | standard |
 | `research_assistant` | Web research + Examine.com supplement corpus. Native web search via research model pool (Perplexity Sonar / :online suffix). | read/write files, supplement_search, plan_append, plan_read | `@preset/research` |
@@ -414,7 +414,7 @@ Plugins declare their execution mode via `tool.yaml`:
 
 | Plugin | Scope | Tools | Description |
 |--------|-------|-------|-------------|
-| `tools/health/` | specialist | 35 | Training program CRUD, session logging, RAG search, unit conversions |
+| `tools/health/` | specialist | 85+ | Training program CRUD, session logging, glossary management, goal/federation library CRUD, import pipeline, template CRUD, block analytics, lift-profile AI, muscle-group AI, multi-block comparison, stats analysis, unit conversions |
 | `tools/finance/` | specialist | 21 | Financial profile, investments, goals, cashflow, holdings |
 | `tools/diary/` | specialist | 2 | Write-only diary entries, signal computation |
 | `tools/proposals/` | specialist | 4 | Proposal CRUD, implementation plan generation |
@@ -599,7 +599,7 @@ TypeScript/Node.js apps in `utils/`:
 | Finance | 3002 | Net worth, investments, cashflow | `if-finance` |
 | Diary | 3003 | Mental health journaling and signals | `if-diary-entries`, `if-diary-signals` |
 | Proposals | 3004 | Kanban for agent-proposed directives | `if-proposals` |
-| Powerlifting | 3005 | Training tracking and analytics | `if-health` |
+| Powerlifting | 3005 | Training tracking, analytics, block comparison, rankings | `if-health` |
 
 ## Commands
 

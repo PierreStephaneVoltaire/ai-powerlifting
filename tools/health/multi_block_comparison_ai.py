@@ -8,41 +8,11 @@ from typing import Any
 import httpx
 
 from config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
+from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
 
-
-_SYSTEM_PROMPT = """\
-You are an objective sports scientist comparing multiple powerlifting training
-blocks for the same athlete.
-
-Use the supplied saved block analysis data as the source of truth. Do not
-invent sessions, lifts, maxes, bodyweight trends, or competition outcomes.
-Treat correlations as low sample signals unless multiple blocks point in the
-same direction. If data is sparse, say exactly what is missing and keep the
-conclusion conservative.
-
-The athlete wants to know:
-- which blocks looked similar or different,
-- what training seemed to work and what did not,
-- lift-specific patterns for squat, bench, and deadlift,
-- multi-block exercise ROI signals,
-- cross-block correlations and repeated pattern detection,
-- volume dose response, including likely minimal effective and maximum
-  tolerable volume ranges per squat, bench, and deadlift when the data supports it,
-- whether bodyweight or training-day count related to max increases,
-- how linked competitions and goals lined up with each block outcome,
-- which block provided the best value,
-- whether projections matched competition results,
-- which lift lagged at competitions,
-- when progress or fatigue started to deteriorate,
-- factual data limits only. Do not recommend next experiments or programming changes.
-
-Prefer concrete references to block names, dates, lifts, volume, INOL, fatigue,
-ACWR, compliance, bodyweight, and competition results. Avoid generic coaching
-advice. Do not describe the storage/cache mechanism, and avoid the word
-"cached" in findings.
-"""
+_SYSTEM_PROMPT = load_system_prompt("multi_block_comparison_system")
 
 
 _INSIGHT_OBJECT = {

@@ -511,7 +511,7 @@ class ProgramStore:
         }
         
         logger.debug(f"[ProgramStore] Updating pointer to version={new_version_int}")
-        self.table.put_item(Item=program)
+        self.table.put_item(Item=pointer_item)
         logger.info(f"[ProgramStore] Created new {'minor' if minor else 'major'} version: {new_label} (v{new_version_int})")
 
         return program

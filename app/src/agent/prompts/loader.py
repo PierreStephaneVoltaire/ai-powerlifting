@@ -1,7 +1,7 @@
 """Prompt template loader for externalized prompts.
 
 Provides utilities to load static prompts (.md) and render Jinja2 templates (.j2)
-from the src/agent/prompts/ directory.
+from the src/agent/prompts/ directory, with fallback to src/orchestrator/prompts/.
 """
 from __future__ import annotations
 
@@ -13,8 +13,14 @@ from jinja2 import Environment, FileSystemLoader, Template, TemplateNotFound
 
 logger = logging.getLogger(__name__)
 
-# Directory containing prompt templates
+# Primary directory containing prompt templates
 PROMPTS_DIR = Path(__file__).parent
+
+# Fallback directory for orchestrator-specific prompts (analyzer_*.j2, synthesizer.j2, etc.)
+_ORCHESTRATOR_PROMPTS_DIR = PROMPTS_DIR.parent.parent / "orchestrator" / "prompts"
+
+# Search order: agent/prompts first, orchestrator/prompts second
+_SEARCH_DIRS = [d for d in (PROMPTS_DIR, _ORCHESTRATOR_PROMPTS_DIR) if d.exists()]
 
 # Jinja2 environment for .j2 templates
 _jinja_env: Optional[Environment] = None
@@ -29,7 +35,7 @@ def _get_jinja_env() -> Environment:
     global _jinja_env
     if _jinja_env is None:
         _jinja_env = Environment(
-            loader=FileSystemLoader(str(PROMPTS_DIR)),
+            loader=FileSystemLoader([str(d) for d in _SEARCH_DIRS]),
             autoescape=False,  # Don't auto-escape HTML
             trim_blocks=True,
             lstrip_blocks=True,
@@ -42,6 +48,7 @@ def load_prompt(name: str) -> str:
     """Load a static prompt file.
     
     Loads .md or .txt files that don't require template rendering.
+    Searches agent/prompts/ first, then orchestrator/prompts/.
     
     Args:
         name: Filename (with or without extension), e.g., "reflection.md"
@@ -50,20 +57,20 @@ def load_prompt(name: str) -> str:
         Content of the prompt file
         
     Raises:
-        FileNotFoundError: If the prompt file doesn't exist
+        FileNotFoundError: If the prompt file doesn't exist in any search dir
     """
-    # Try with and without extension
-    if not name.endswith(('.md', '.txt', '.j2')):
-        # Try .md first for static prompts
-        path = PROMPTS_DIR / f"{name}.md"
+    for search_dir in _SEARCH_DIRS:
+        # Try with and without extension
+        if not name.endswith(('.md', '.txt', '.j2')):
+            path = search_dir / f"{name}.md"
+            if path.exists():
+                return path.read_text(encoding='utf-8').strip()
+
+        path = search_dir / name
         if path.exists():
             return path.read_text(encoding='utf-8').strip()
-    
-    path = PROMPTS_DIR / name
-    if not path.exists():
-        raise FileNotFoundError(f"Prompt file not found: {path}")
-    
-    return path.read_text(encoding='utf-8').strip()
+
+    raise FileNotFoundError(f"Prompt file not found: {name} (searched: {[str(d) for d in _SEARCH_DIRS]})")
 
 
 def render_template(name: str, **kwargs) -> str:

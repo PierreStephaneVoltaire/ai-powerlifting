@@ -4,8 +4,7 @@ import * as sessionController from '../controllers/sessionController'
 import * as programController from '../controllers/programController'
 import { invokeSpecialistJson } from '../utils/agent'
 import {
-  analysisSourceFingerprint,
-  getCachedWeeklyAnalysisBundle,
+  getCachedWindowAnalysis,
 } from '../services/analysisCache'
 import type { Session, Exercise, SessionStatus, SessionWellness, FailedSetReason } from '@powerlifting/types'
 
@@ -238,7 +237,7 @@ sessionsRouter.post('/:version', async (req, res, next) => {
       date: session.date,
       day: session.day || 'Monday',
       week: session.week || 'W1',
-      week_number: 1,
+      week_number: session.week_number || 1,
       phase: session.phase || { name: 'Unknown', intent: '', start_week: 1, end_week: 1 },
       status: session.status || 'planned',
       completed: false,
@@ -479,9 +478,8 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
 
     let cachedAnalysis: unknown = null
     try {
-      const fingerprint = analysisSourceFingerprint(program)
-      const bundle = await getCachedWeeklyAnalysisBundle(req.effectivePk!, todayIso(), fingerprint)
-      cachedAnalysis = bundle?.results?.current ?? null
+      const cached = await getCachedWindowAnalysis(req.effectivePk!, 'current')
+      cachedAnalysis = cached?.data ?? null
     } catch (error) {
       console.warn('Cached weekly analysis unavailable for auto-regulation:', error)
     }

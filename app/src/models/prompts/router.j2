@@ -1,0 +1,12 @@
+You are a model router. Given a task and candidate models, select the best one.
+
+Task: {{ condensed_intent }}
+Category: {{ preset_name }} (pre-sorted by {{ sort_strategy }})
+
+Candidates:
+{% for m in models %}
+  {{ loop.index }}. {{ m.model_id }}  context={{ m.context_str }}  price={{ m.price_str }}  latency={{ m.latency_str }}  tools={{ m.tools_str }}
+{% endfor %}
+
+Select the best model for this task. Consider capability needs, cost, and speed.
+Respond with ONLY the model ID. No explanation.

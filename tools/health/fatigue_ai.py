@@ -17,6 +17,7 @@ from config import (
     LLM_BASE_URL,
     OPENROUTER_API_KEY,
 )
+from prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -27,64 +28,7 @@ _DEFAULT_FATIGUE_PROFILE = {
     "systemic": 0.3,
 }
 
-_SYSTEM_PROMPT = """\
-You are a sports science expert estimating fatigue profiles for resistance training exercises.
-
-For each exercise, estimate 4 fatigue dimensions on a 0.0-1.0 scale:
-
-1. **Axial** (0.0-1.0): Spinal compression loading. How much compressive force goes through the spine.
-   - Squats/Deadlifts: 0.7-0.9
-   - Overhead press: 0.4-0.6
-   - Bench press: 0.1-0.3
-   - Isolation exercises: 0.0-0.1
-
-2. **Neural** (0.0-1.0): Central nervous system demand baseline (before intensity scaling).
-   - Heavy compounds near 1RM: 0.7-0.9
-   - Moderate compounds: 0.4-0.6
-   - Machine/isolation: 0.1-0.3
-   - Cardio-only movements: 0.0-0.1
-
-3. **Peripheral** (0.0-1.0): Local muscle damage potential. How much muscle tissue is stressed.
-   - Big compound movements: 0.6-0.8
-   - Medium compounds: 0.4-0.6
-   - Isolation: 0.3-0.5
-   - Bodyweight/rehab: 0.1-0.3
-
-4. **Systemic** (0.0-1.0): Cardiovascular/metabolic demand.
-   - Deadlifts: 0.7-0.9
-   - Squats: 0.5-0.7
-   - Upper body compounds: 0.3-0.5
-   - Isolation: 0.1-0.3
-
-Calibration anchors:
-- Competition squat: axial=0.85, neural=0.80, peripheral=0.75, systemic=0.60
-- Competition bench: axial=0.20, neural=0.70, peripheral=0.65, systemic=0.35
-- Competition deadlift: axial=0.90, neural=0.90, peripheral=0.80, systemic=0.80
-- Bicep curl: axial=0.00, neural=0.10, peripheral=0.40, systemic=0.10
-- Face pulls: axial=0.00, neural=0.05, peripheral=0.25, systemic=0.05
-
-ATHLETE CONTEXT (when provided):
-If the user message includes athlete body metrics (bodyweight, height, arm wingspan, leg
-length) or a lift profile (style notes, sticking points, volume tolerance), treat them as
-soft modifiers — not hard overrides — on the estimate for exercises where those leverages
-matter. Examples: long femurs relative to torso tend to shift squat fatigue toward axial
-and systemic; short arms on a bench presser reduce bar path length and can lower peripheral
-on bench variations; a reported quad-dominant squat style raises peripheral on squat
-variations. When metrics are missing, ignore leverages entirely — do not speculate.
-
-DO NOT FACTOR IN:
-- Diet, calories, macros, water intake, or sleep — these are tracked separately and are
-  out of scope for this estimate.
-- Supplements or ergogenic aids — not in scope here.
-- Training history, recent fatigue, or programming context — estimate the exercise in
-  isolation.
-
-Rules:
-- Round all values to nearest 0.05
-- Consider equipment, muscles involved, and movement pattern
-- Provide brief reasoning for the estimate; if athlete metrics or lift profile influenced
-  the estimate, say which field and in which direction
-"""
+_SYSTEM_PROMPT = load_system_prompt("fatigue_system")
 
 _TOOL_SCHEMA = {
     "type": "function",
@@ -170,26 +114,12 @@ def _build_user_message(
     program_meta: dict | None = None,
     lift_profiles: list[dict] | None = None,
 ) -> str:
-    parts = [f"Exercise: {exercise.get('name', 'Unknown')}"]
-    if exercise.get("category"):
-        parts.append(f"Category: {exercise['category']}")
-    if exercise.get("equipment"):
-        parts.append(f"Equipment: {exercise['equipment']}")
-    if exercise.get("primary_muscles"):
-        parts.append(f"Primary muscles: {', '.join(exercise['primary_muscles'])}")
-    if exercise.get("secondary_muscles"):
-        parts.append(f"Secondary muscles: {', '.join(exercise['secondary_muscles'])}")
-    if exercise.get("tertiary_muscles"):
-        parts.append(f"Tertiary muscles: {', '.join(exercise['tertiary_muscles'])}")
-    if exercise.get("cues"):
-        parts.append(f"Cues: {', '.join(exercise['cues'])}")
-    if exercise.get("notes"):
-        parts.append(f"Notes: {exercise['notes']}")
-
-    parts.extend(_format_athlete_context(program_meta))
-    parts.extend(_format_lift_profile(_match_lift_profile(exercise, lift_profiles)))
-
-    return "\n".join(parts)
+    return render_prompt(
+        "fatigue_user",
+        exercise=exercise,
+        athlete_metrics_lines=_format_athlete_context(program_meta),
+        lift_profile_lines=_format_lift_profile(_match_lift_profile(exercise, lift_profiles)),
+    )
 
 
 async def estimate_fatigue_profile(

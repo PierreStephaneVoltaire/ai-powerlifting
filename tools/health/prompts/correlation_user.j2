@@ -1,0 +1,84 @@
+## Analysis window: Last {{ weeks }} weeks (from {{ window_start }})
+
+{% if weeks_to_primary_comp is not none %}
+**Weeks to primary competition:** {{ "%.1f"|format(weeks_to_primary_comp) }}
+
+{% endif %}
+{% if lift_profiles %}
+## Athlete Lift Profiles
+
+{% for p in lift_profiles %}
+### {{ p.get("lift", "?") | title }}
+{% if p.get("style_notes") %}
+  Style: {{ p.style_notes }}
+{% endif %}
+{% if p.get("sticking_points") %}
+  Sticking points: {{ p.sticking_points }}
+{% endif %}
+{% if p.get("primary_muscle") %}
+  Primary muscle: {{ p.primary_muscle }}
+{% endif %}
+{% if p.get("volume_tolerance") %}
+  Volume tolerance: {{ p.volume_tolerance }}
+{% endif %}
+
+{% endfor %}
+{% endif %}
+{% if athlete_measurements and athlete_measurements.values() | select | list %}
+## Athlete Measurements
+
+{% for k, v in athlete_measurements.items() %}
+{% if v is not none %}
+  {{ k | replace("_", " ") }}: {{ v }}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% if caloric_status %}
+**Caloric status:** {{ caloric_status }}
+
+{% endif %}
+{% if bodyweight_trend %}
+{% set bw = bodyweight_trend %}
+{% if bw.get("latest") is not none %}
+**Body weight trend:** {{ bw.get("latest") }} kg, {{ bw.get("direction", "unclear") }}{% if bw.get("change") is not none %} ({{ "+" if bw.change > 0 else "" }}{{ bw.change }} kg over window){% endif %}
+
+{% endif %}
+{% endif %}
+## Weekly e1RM Estimates (kg)
+
+| Week | Squat | Bench | Deadlift |
+|------|-------|-------|----------|
+{% for wn in all_weeks %}
+{% set e = weekly_e1rm.get(wn, {}) %}
+| W{{ wn }} | {{ "%.1f"|format(e.squat) if e.get("squat") else "-" }} | {{ "%.1f"|format(e.bench) if e.get("bench") else "-" }} | {{ "%.1f"|format(e.deadlift) if e.get("deadlift") else "-" }} |
+{% endfor %}
+
+{% if top_accessories %}
+## Weekly Accessory Volume (sets × reps × kg) — Top 20
+
+| Week | {% for name, _ in top_accessories %}{{ name }} | {% endfor %}
+
+|------|{% for _ in top_accessories %}---|{% endfor %}
+
+{% for wn in all_weeks %}
+| W{{ wn }} | {% for name, _ in top_accessories %}{% set vol = weekly_accessory.get(wn, {}).get(name, 0) %}{{ "%.0f"|format(vol) if vol else "-" }} | {% endfor %}
+
+{% endfor %}
+{% endif %}
+{% if exercise_roi %}
+## Accessory Exercise ROI (pearson r between weekly volume and avg intensity)
+
+| Exercise | Pearson r | Weeks |
+|----------|-----------|-------|
+{% for row in exercise_roi %}
+| {{ row.get("exercise", "?") }} | {{ "%+.3f"|format(row.get("pearson_r", 0)) }} | {{ row.get("weeks_observed", 0) }} |
+{% endfor %}
+
+{% endif %}
+## Task
+Analyze the data above. Identify which accessory exercises have volume trends
+that plausibly correlate with changes in Squat, Bench, or Deadlift e1RM.
+Only report anatomically relevant correlations as per the system instructions.
+Where the exercise ROI table gives a strong |r|, use it to upgrade confidence on
+anatomically-plausible findings — never invent correlations from ROI alone.

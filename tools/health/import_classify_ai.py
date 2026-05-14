@@ -12,28 +12,11 @@ from typing import Any
 import httpx
 
 from config import LLM_BASE_URL, OPENROUTER_API_KEY, IMPORT_FAST_MODEL
+from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """\
-You are classifying a training program spreadsheet.
-
-CLASSIFICATION RULES:
-- "template": program has no real calendar dates; loads are expressed as
-  percentages of max (e.g. "75%", "0.75") or RPE targets (e.g. "@8", "RPE 8").
-  Week references are relative (Week 1, W1, Day 1) not calendar dates.
-- "session_import": program contains real calendar dates and absolute kg values.
-  It is a training log of what was or will be done on specific days.
-- "ambiguous": cannot determine confidently from the data alone.
-
-Return JSON only:
-{
-  "classification": "template | session_import | ambiguous",
-  "confidence": 0.0-1.0,
-  "reasoning": "one sentence",
-  "ambiguity_reason": "if ambiguous, what is unclear"
-}
-"""
+_SYSTEM_PROMPT = load_system_prompt("import_classify_system")
 
 _TOOL_SCHEMA = {
     "type": "function",
