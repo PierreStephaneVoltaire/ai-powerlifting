@@ -19,11 +19,19 @@ import {
   buildBlockComparisonContext,
   buildCurrentProgramBlockIndex,
   getCachedBlockAnalysisBundle,
+  getCachedBlockCorrelationReport,
+  getCachedBlockProgramEvaluationReport,
   getOrCreateAiBlockComparison,
   getOrCreateBlockAnalysisBundle,
   getOrCreateBlockCorrelationReport,
   getOrCreateBlockProgramEvaluation,
 } from '../services/blockAnalytics'
+import {
+  blockAnalysisExportContentType,
+  blockAnalysisExportFilename,
+  buildBlockAnalysisMarkdownExport,
+  buildBlockAnalysisWorkbookExport,
+} from '../services/blockAnalysisExport'
 
 export const analyticsRouter = Router()
 
@@ -474,6 +482,50 @@ analyticsRouter.get('/blocks/:blockKey/correlation', async (req, res) => {
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Block correlation error: ${err}` })
+  }
+})
+
+analyticsRouter.get('/blocks/:blockKey/export/:format', async (req, res) => {
+  try {
+    const pk = req.effectivePk!
+    const { blockKey, format } = req.params
+    if (format !== 'xlsx' && format !== 'markdown') {
+      return res.status(400).json({ data: null, error: 'Unsupported export format. Use xlsx or markdown.' })
+    }
+
+    const bundle = await getCachedBlockAnalysisBundle(pk, blockKey)
+    if (!bundle) {
+      return res.status(404).json({
+        data: null,
+        error: `No cached block analysis found for ${blockKey}. Open or generate the past block analysis before exporting.`,
+      })
+    }
+
+    if (bundle.block.isCurrent) {
+      return res.status(400).json({
+        data: null,
+        error: 'Use the existing current-block program export for current analysis.',
+      })
+    }
+
+    const [programEvaluation, correlation] = await Promise.all([
+      getCachedBlockProgramEvaluationReport(pk, blockKey),
+      getCachedBlockCorrelationReport(pk, blockKey),
+    ])
+    const filename = blockAnalysisExportFilename(bundle, format)
+
+    res.setHeader('Content-Type', blockAnalysisExportContentType(format))
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+
+    if (format === 'markdown') {
+      res.send(buildBlockAnalysisMarkdownExport(bundle, programEvaluation, correlation))
+      return
+    }
+
+    res.end(buildBlockAnalysisWorkbookExport(bundle, programEvaluation, correlation))
+  } catch (err) {
+    logger.error({ err, blockKey: req.params.blockKey }, 'Block analysis export failed')
+    res.status(502).json({ data: null, error: `Block analysis export error: ${err}` })
   }
 })
 

@@ -860,6 +860,10 @@ export async function fetchBlockAnalysis(blockKey: string, refresh = false): Pro
   return body.data
 }
 
+export function blockAnalysisExportUrl(blockKey: string, format: 'xlsx' | 'markdown'): string {
+  return `/api/analytics/blocks/${encodeURIComponent(blockKey)}/export/${format}`
+}
+
 export async function fetchBlockProgramEvaluation(
   blockKey: string,
   refresh = false,

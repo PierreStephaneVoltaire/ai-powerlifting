@@ -5,6 +5,7 @@ import {
   Brain,
   CheckCircle,
   Database,
+  Download,
   Eye,
   GitCompare,
   History,
@@ -46,6 +47,7 @@ import {
   fetchBlockAnalysis,
   fetchBlockProgramEvaluation,
   fetchProgramBlocks,
+  blockAnalysisExportUrl,
   updateBlockStartMaxes,
   type AiBlockComparisonResult,
   type BlockAnalysisBundle,
@@ -272,6 +274,27 @@ function BlockAnalysisDetails({
 
   return (
     <Stack gap="md">
+      <Group justify="flex-end" wrap="wrap">
+        <Button
+          component="a"
+          href={blockAnalysisExportUrl(bundle.block.blockKey, 'xlsx')}
+          download
+          size="sm"
+          leftSection={<Download size={16} />}
+        >
+          Export Excel
+        </Button>
+        <Button
+          component="a"
+          href={blockAnalysisExportUrl(bundle.block.blockKey, 'markdown')}
+          download
+          size="sm"
+          variant="light"
+          leftSection={<Download size={16} />}
+        >
+          Export Markdown
+        </Button>
+      </Group>
       <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }}>
         <Paper withBorder p="md">
           <Group gap="xs" mb="xs">

@@ -1178,6 +1178,28 @@ async function getCachedJsonPayload<T>(
   }
 }
 
+export async function getCachedBlockProgramEvaluationReport(
+  userPk: string,
+  blockKey: string,
+): Promise<Record<string, unknown> | null> {
+  const cached = await getCachedJsonPayload<Record<string, unknown>>(
+    userPk,
+    blockProgramEvaluationSk(blockKey),
+  )
+  return cached ? { ...cached, cached: true } : null
+}
+
+export async function getCachedBlockCorrelationReport(
+  userPk: string,
+  blockKey: string,
+): Promise<Record<string, unknown> | null> {
+  const cached = await getCachedJsonPayload<Record<string, unknown>>(
+    userPk,
+    blockCorrelationSk(blockKey),
+  )
+  return cached ? { ...cached, cached: true } : null
+}
+
 async function putCachedJsonPayload(
   userPk: string,
   sk: string,
