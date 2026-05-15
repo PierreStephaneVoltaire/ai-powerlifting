@@ -21,7 +21,7 @@ const EXPORT_DEFAULTS: Record<ExportFormat, { filename: string; contentType: str
 
 async function proxyExport(req: Request, res: Response, format: ExportFormat): Promise<void> {
   try {
-    const pk = req.effectivePk || 'operator'
+    const pk = req.mapped_pk || 'operator'
     const defaults = EXPORT_DEFAULTS[format]
     const toolArgs = JSON.stringify({ pk, format })
     // Step 1: invoke the export tool via X-Direct-Tool-Invoke

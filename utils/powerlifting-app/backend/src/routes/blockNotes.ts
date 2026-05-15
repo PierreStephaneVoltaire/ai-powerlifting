@@ -6,7 +6,7 @@ export const blockNotesRouter = Router({ mergeParams: true })
 
 blockNotesRouter.get('/:version', async (req, res, next) => {
   try {
-    const notes = await blockNotesController.getBlockNotes(req.effectivePk!, req.params.version)
+    const notes = await blockNotesController.getBlockNotes(req.mapped_pk!, req.params.version)
     res.json({ data: notes, error: null })
   } catch (err) {
     next(err)
@@ -25,7 +25,7 @@ blockNotesRouter.put('/:version', async (req, res, next) => {
     }
 
     await blockNotesController.updateBlockNotes(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       blockNotes as BlockNote[]
     )

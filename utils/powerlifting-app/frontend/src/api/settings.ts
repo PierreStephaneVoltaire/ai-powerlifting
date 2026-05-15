@@ -11,6 +11,10 @@ export interface UserSettings {
   discord_username: string
   avatar_url: string | null
   nickname: string
+  profile_visibility: 'private' | 'public'
+  display_name: string
+  bio: string
+  public_training_summary_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -22,5 +26,15 @@ export async function getSettings(): Promise<UserSettings> {
 
 export async function updateNickname(nickname: string): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/nickname', { nickname })
+  return res.data.data
+}
+
+export async function updateProfile(input: {
+  profile_visibility: 'private' | 'public'
+  display_name: string
+  bio: string
+  public_training_summary_enabled: boolean
+}): Promise<UserSettings> {
+  const res = await api.put<{ data: UserSettings }>('/settings/profile', input)
   return res.data.data
 }

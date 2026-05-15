@@ -19,6 +19,7 @@ import {
   Activity,
   Film,
   Info,
+  Users,
   MoreHorizontal,
   ClipboardList,
   BookOpen,
@@ -63,6 +64,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { to: '/maxes', icon: TrendingUp, label: 'Maxes' },
   { to: '/tools', icon: Wrench, label: 'Tools' },
   { to: '/videos', icon: Film, label: 'Videos' },
+  { to: '/profiles', icon: Users, label: 'Profiles' },
   { to: '/about', icon: Info, label: 'About' },
 ]
 

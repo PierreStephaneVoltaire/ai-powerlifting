@@ -6,7 +6,7 @@ export const federationsRouter = Router()
 
 federationsRouter.get('/', async (req, res, next) => {
   try {
-    const library = await federationsController.getFederationLibrary(req.effectivePk!)
+    const library = await federationsController.getFederationLibrary(req.mapped_pk!)
     res.json({ data: library, error: null })
   } catch (err) {
     next(err)
@@ -24,7 +24,7 @@ federationsRouter.put('/', async (req, res, next) => {
       })
     }
 
-    const nextLibrary = await federationsController.updateFederationLibrary(req.effectivePk!, {
+    const nextLibrary = await federationsController.updateFederationLibrary(req.mapped_pk!, {
       federations: library.federations,
       qualification_standards: library.qualification_standards,
     })

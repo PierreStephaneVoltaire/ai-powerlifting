@@ -208,7 +208,7 @@ sessionsRouter.get('/:version/:date/:index', async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     const session = await sessionController.getSession(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index
@@ -249,7 +249,7 @@ sessionsRouter.post('/:version', async (req, res, next) => {
       wellness: session.wellness ?? undefined,
     }
 
-    await sessionController.createSession(req.effectivePk!, req.params.version, newSession)
+    await sessionController.createSession(req.mapped_pk!, req.params.version, newSession)
     res.json({ data: { success: true, session: newSession }, error: null })
   } catch (err) {
     next(err)
@@ -261,7 +261,7 @@ sessionsRouter.delete('/:version/:date/:index', async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     await sessionController.deleteSession(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index
@@ -286,7 +286,7 @@ sessionsRouter.put('/:version/:date/:index', async (req, res, next) => {
     }
 
     await sessionController.updateSession(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,
@@ -312,7 +312,7 @@ sessionsRouter.patch('/:version/:date/:index/reschedule', async (req, res, next)
     }
 
     await sessionController.rescheduleSession(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,
@@ -340,7 +340,7 @@ sessionsRouter.patch('/:version/:date/:index/status', async (req, res, next) => 
     }
 
     await sessionController.updateSessionStatus(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,
@@ -364,7 +364,7 @@ sessionsRouter.patch('/:version/:date/:index/complete', async (req, res, next) =
     const index = parseInt(req.params.index, 10)
 
     await sessionController.completeSession(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,
@@ -381,7 +381,7 @@ sessionsRouter.post('/:version/:date/:index/notes/draft', async (req, res, next)
   try {
     const index = parseInt(req.params.index, 10)
     const storedSession = await sessionController.getSession(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index
@@ -416,7 +416,7 @@ sessionsRouter.post('/:version/:date/:index/notes/draft', async (req, res, next)
       const result = await invokeSpecialistJson(
         'powerlifting_coach',
         JSON.stringify(prompt),
-        `powerlifting-notes-${req.effectivePk}-${req.params.date}-${index}`,
+        `powerlifting-notes-${req.mapped_pk}-${req.params.date}-${index}`,
         true,
       )
       notes = String(result?.notes || '').trim()
@@ -440,9 +440,9 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
       return res.status(400).json({ data: null, error: 'exerciseIndex is required' })
     }
 
-    const program = await programController.getProgram(req.effectivePk!, req.params.version)
+    const program = await programController.getProgram(req.mapped_pk!, req.params.version)
     const storedSession = await sessionController.getSession(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index
@@ -478,7 +478,7 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
 
     let cachedAnalysis: unknown = null
     try {
-      const cached = await getCachedWindowAnalysis(req.effectivePk!, 'current')
+      const cached = await getCachedWindowAnalysis(req.mapped_pk!, 'current')
       cachedAnalysis = cached?.data ?? null
     } catch (error) {
       console.warn('Cached weekly analysis unavailable for auto-regulation:', error)
@@ -533,7 +533,7 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
       response = normalizeCoachResponse(await invokeSpecialistJson(
         'powerlifting_coach',
         JSON.stringify(task),
-        `powerlifting-autoreg-${req.effectivePk}-${req.params.date}-${index}-${exerciseIndex}`,
+        `powerlifting-autoreg-${req.mapped_pk}-${req.params.date}-${index}-${exerciseIndex}`,
         true,
       ), session, exerciseIndex)
     } catch (error) {
@@ -573,7 +573,7 @@ sessionsRouter.post('/:version/:date/:index/exercise', async (req, res, next) =>
     }
 
     await sessionController.addExercise(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,
@@ -600,7 +600,7 @@ sessionsRouter.patch('/:version/:date/:index/exercise/:exerciseIndex', async (re
     }
 
     await sessionController.updateExerciseField(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,
@@ -621,7 +621,7 @@ sessionsRouter.delete('/:version/:date/:index/exercise/:exerciseIndex', async (r
     const exerciseIndex = parseInt(req.params.exerciseIndex, 10)
 
     await sessionController.removeExercise(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,

@@ -9,6 +9,7 @@ import { fetchBlockAnalysis, fetchProgramBlocks, type BlockAnalysisBundle, type 
 import { daysUntil } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
+import SetupOnboarding from '@/components/setup/SetupOnboarding'
 import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse } from 'lucide-react'
 import {
   Stack,
@@ -184,7 +185,7 @@ function findLiftAnalysis(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift
 }
 
 export default function Dashboard() {
-  const { program, version, isLoading, updateMaxes, updateBodyWeight, updatePhases, updateLiftProfiles } = useProgramStore()
+  const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases, updateLiftProfiles } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
 
@@ -211,12 +212,12 @@ export default function Dashboard() {
   const [currentBlockLoading, setCurrentBlockLoading] = useState(false)
 
   useEffect(() => {
-    if (version) {
+    if (version && program && !needsSetup) {
       fetchWeightLog(version)
         .then(setWeightLog)
         .catch((e) => console.error('Failed to load weight log:', e))
     }
-  }, [version])
+  }, [version, program, needsSetup])
 
   useEffect(() => {
     if (program?.lift_profiles) {
@@ -229,8 +230,9 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false
 
-    if (!version) {
+    if (!version || !program || needsSetup) {
       setCurrentBlockBundle(null)
+      setCurrentBlockLoading(false)
       return
     }
 
@@ -260,7 +262,11 @@ export default function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [version])
+  }, [version, program, needsSetup])
+
+  if (needsSetup) {
+    return <SetupOnboarding />
+  }
 
   if (isLoading || !program) {
     return (
@@ -278,6 +284,9 @@ export default function Dashboard() {
     .sort((a, b) => a.date.localeCompare(b.date))
 
   const latestWeightKg = weightLog.length > 0 ? weightLog[0].kg : meta.current_body_weight_kg
+  const weightClassProgress = meta.weight_class_kg > 0
+    ? Math.min(100, (latestWeightKg / meta.weight_class_kg) * 100)
+    : 0
 
   const actualMaxes = { squat: 0, bench: 0, deadlift: 0 }
   for (const session of sessions) {
@@ -627,7 +636,7 @@ export default function Dashboard() {
                       <Text size="sm" c="dimmed">Target: {displayWeight(target, unit)}</Text>
                     </Group>
                     <Progress
-                      value={Math.min(100, (actual / target) * 100)}
+                      value={target > 0 ? Math.min(100, (actual / target) * 100) : 0}
                       color={actual >= target ? 'green' : 'blue'}
                       size="sm"
                     />
@@ -676,7 +685,7 @@ export default function Dashboard() {
           )}
           <Text size="sm" c="dimmed">Target: {meta.weight_class_kg} kg class</Text>
           <Progress
-            value={Math.min(100, (latestWeightKg / meta.weight_class_kg) * 100)}
+            value={weightClassProgress}
             mt="sm"
             size="md"
           />

@@ -8,12 +8,16 @@ interface ProgramState {
   versions: ProgramListItem[]
   isLoading: boolean
   error: string | null
+  needsSetup: boolean
+  setupStatus: api.SetupStatus | null
   isDirty: boolean
   activeSessionDate: string | null
   activeSessionIndex: number | null
 
   // Actions
   loadProgram: (version: string) => Promise<void>
+  loadSetupStatus: () => Promise<api.SetupStatus>
+  initializeSetup: (input: api.InitializeSetupInput) => Promise<api.InitializeSetupResult>
   loadVersions: () => Promise<void>
   setActiveSession: (date: string | null, index: number | null) => void
   createSession: (session: Partial<Session> & { date: string }) => Promise<Session>
@@ -81,6 +85,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   versions: [],
   isLoading: false,
   error: null,
+  needsSetup: false,
+  setupStatus: null,
   isDirty: false,
   activeSessionDate: null,
   activeSessionIndex: null,
@@ -89,10 +95,31 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const program = await api.fetchProgram(version)
-      set({ program, version, isLoading: false })
+      set({ program, version, isLoading: false, needsSetup: false })
     } catch (e) {
+      if (version === 'current' && api.isApiNotFound(e)) {
+        set({ program: null, version, isLoading: false, needsSetup: true, error: null })
+        return
+      }
       set({ error: String(e), isLoading: false })
     }
+  },
+
+  loadSetupStatus: async () => {
+    const status = await api.fetchSetupStatus()
+    set({
+      setupStatus: status,
+      needsSetup: status.needsSetup,
+    })
+    return status
+  },
+
+  initializeSetup: async (input) => {
+    const result = await api.initializeSetup(input)
+    if (result.status === 'initialized') {
+      set({ needsSetup: false, setupStatus: null })
+    }
+    return result
   },
 
   loadVersions: async () => {
@@ -527,6 +554,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       versions: [],
       isLoading: false,
       error: null,
+      needsSetup: false,
+      setupStatus: null,
       isDirty: false,
       activeSessionDate: null,
       activeSessionIndex: null,

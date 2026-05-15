@@ -184,7 +184,7 @@ analyticsRouter.post('/e1rm-multiplier/suggestions', async (req, res) => {
 
 analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
   try {
-    const pk = req.effectivePk!
+    const pk = req.mapped_pk!
     const requestedAsOfDate = req.query.asOfDate as string | undefined
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const forceRefresh = req.query.refresh === 'true'
@@ -215,7 +215,7 @@ analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
 
 analyticsRouter.post('/analysis/regenerate', async (req, res) => {
   try {
-    const pk = req.effectivePk!
+    const pk = req.mapped_pk!
     const asOfDate = todayIso()
     const requestedWindows = req.body?.windows
     if (Array.isArray(requestedWindows) && requestedWindows.length > 0) {
@@ -232,7 +232,7 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
 
 analyticsRouter.get('/analysis/markdown', async (req, res) => {
   try {
-    const pk = req.effectivePk!
+    const pk = req.mapped_pk!
 
     const markdownResult = await invokeToolDirect('get_analysis_markdown', {
       pk,
@@ -268,8 +268,8 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const weekStart = Number.isFinite(weekStartRaw) && weekStartRaw > 0 ? weekStartRaw : undefined
     const weekEnd = Number.isFinite(weekEndRaw) && weekEndRaw > 0 ? weekEndRaw : undefined
     const projectionDate = isIsoDate(refDate) ? refDate : todayIso()
-    await snapshotCompetitionProjection(req.effectivePk!, projectionDate)
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
+    await snapshotCompetitionProjection(req.mapped_pk!, projectionDate)
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
     const data = await invokeToolDirect('weekly_analysis', {
       weeks,
       block,
@@ -281,7 +281,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
       refresh_program: false,
       program,
       sessions: program.sessions ?? [],
-      pk: req.effectivePk,
+      pk: req.mapped_pk,
     })
     res.json({ data, error: null })
   } catch (err) {
@@ -291,17 +291,20 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
 
 analyticsRouter.get('/blocks', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
+    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program)
     res.json({ data: blocks, error: null })
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode === 404) {
+      return res.json({ data: [], error: null })
+    }
     res.status(502).json({ data: null, error: `Block analytics error: ${err}` })
   }
 })
 
 analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
   try {
-    const pk = req.effectivePk!
+    const pk = req.mapped_pk!
     const { blockKey } = req.params
     const program = await getProgramWithWeightLog(pk, 'current')
     const blocks = await buildCurrentProgramBlockIndex(pk, program)
@@ -331,7 +334,7 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
 
 analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
   try {
-    const pk = req.effectivePk!
+    const pk = req.mapped_pk!
     const { blockKey } = req.params
     const program = await getProgramWithWeightLog(pk, 'current')
 
@@ -393,11 +396,11 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
 
 analyticsRouter.get('/blocks/:blockKey/program-evaluation', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.query.cacheOnly === 'true'
     const report = await getOrCreateBlockProgramEvaluation(
-      req.effectivePk!,
+      req.mapped_pk!,
       program,
       req.params.blockKey,
       invokeToolDirect,
@@ -415,8 +418,8 @@ analyticsRouter.get('/blocks/:blockKey/program-evaluation', async (req, res) => 
 
 analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
+    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program)
     const block = blocks.find((entry) => entry.blockKey === req.params.blockKey)
     if (!block) {
       return res.status(404).json({ data: null, error: `Block ${req.params.blockKey} not found` })
@@ -448,7 +451,7 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
 
     const currentStartMaxes = (program.meta as { block_start_maxes?: Record<string, unknown> }).block_start_maxes || {}
     await programController.updateMetaField(
-      req.effectivePk!,
+      req.mapped_pk!,
       'current',
       'block_start_maxes',
       {
@@ -465,11 +468,11 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
 
 analyticsRouter.get('/blocks/:blockKey/correlation', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.query.cacheOnly === 'true'
     const data = await getOrCreateBlockCorrelationReport(
-      req.effectivePk!,
+      req.mapped_pk!,
       program,
       req.params.blockKey,
       invokeToolDirect,
@@ -487,7 +490,7 @@ analyticsRouter.get('/blocks/:blockKey/correlation', async (req, res) => {
 
 analyticsRouter.get('/blocks/:blockKey/export/:format', async (req, res) => {
   try {
-    const pk = req.effectivePk!
+    const pk = req.mapped_pk!
     const { blockKey, format } = req.params
     if (format !== 'xlsx' && format !== 'markdown') {
       return res.status(400).json({ data: null, error: 'Unsupported export format. Use xlsx or markdown.' })
@@ -531,8 +534,8 @@ analyticsRouter.get('/blocks/:blockKey/export/:format', async (req, res) => {
 
 analyticsRouter.post('/block-comparison', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
+    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program)
     const requestedKeys = Array.isArray(req.body?.blockKeys)
       ? req.body.blockKeys.filter((key: unknown): key is string => typeof key === 'string')
       : []
@@ -550,7 +553,7 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
       const bundle = await getOrCreateBlockAnalysisBundle(
-          req.effectivePk!,
+          req.mapped_pk!,
           program,
           block.blockKey,
           invokeToolDirect,
@@ -558,7 +561,7 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
         )
       if (bundle) bundles.push(bundle)
       correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(
-        req.effectivePk!,
+        req.mapped_pk!,
         program,
         block.blockKey,
         invokeToolDirect,
@@ -575,8 +578,8 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
 
 analyticsRouter.post('/block-comparison/ai', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.effectivePk!, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(req.effectivePk!, program)
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
+    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program)
     const requestedKeys = Array.isArray(req.body?.blockKeys)
       ? req.body.blockKeys.filter((key: unknown): key is string => typeof key === 'string')
       : []
@@ -594,11 +597,11 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
-      const bundle = await getCachedBlockAnalysisBundle(req.effectivePk!, block.blockKey)
+      const bundle = await getCachedBlockAnalysisBundle(req.mapped_pk!, block.blockKey)
       if (bundle) bundles.push(bundle)
       if (bundle) {
         correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(
-          req.effectivePk!,
+          req.mapped_pk!,
           program,
           block.blockKey,
           invokeToolDirect,
@@ -606,7 +609,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
           true,
         ))
         programEvaluationReports.set(block.blockKey, await getOrCreateBlockProgramEvaluation(
-          req.effectivePk!,
+          req.mapped_pk!,
           program,
           block.blockKey,
           invokeToolDirect,
@@ -617,7 +620,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     }
 
     const comparison = await getOrCreateAiBlockComparison(
-      req.effectivePk!,
+      req.mapped_pk!,
       bundles,
       invokeToolDirect,
       req.body?.refresh === true,
@@ -638,7 +641,7 @@ analyticsRouter.get('/correlation', async (req, res) => {
     const block = (req.query.block as string) || 'current'
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.query.cacheOnly === 'true'
-    const data = await invokeToolDirect('correlation_analysis', { weeks, block, refresh, cache_only: cacheOnly, pk: req.effectivePk })
+    const data = await invokeToolDirect('correlation_analysis', { weeks, block, refresh, cache_only: cacheOnly, pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
@@ -648,7 +651,7 @@ analyticsRouter.get('/correlation', async (req, res) => {
 analyticsRouter.post('/fatigue-profile/estimate', async (req, res) => {
   try {
     const exercise = req.body?.exercise ?? req.body
-    const data = await invokeToolDirect('fatigue_profile_estimate', { exercise, pk: req.effectivePk })
+    const data = await invokeToolDirect('fatigue_profile_estimate', { exercise, pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
@@ -663,7 +666,7 @@ analyticsRouter.post('/muscle-groups/estimate', async (req, res) => {
     const data = await invokeToolDirect('muscle_group_estimate', {
       exercise,
       ...(lift_profiles ? { lift_profiles } : {}),
-      pk: req.effectivePk,
+      pk: req.mapped_pk,
     })
     res.json({ data, error: null })
   } catch (err) {
@@ -682,7 +685,7 @@ analyticsRouter.post('/glossary/text/generate', async (req, res) => {
     const data = await invokeToolDirect('glossary_generate_text', {
       exercise,
       ...(lift_profiles ? { lift_profiles } : {}),
-      pk: req.effectivePk,
+      pk: req.mapped_pk,
     })
     res.json({ data, error: null })
   } catch (err) {
@@ -693,7 +696,7 @@ analyticsRouter.post('/glossary/text/generate', async (req, res) => {
 analyticsRouter.post('/lift-profile/review', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
-    const data = await invokeToolDirect('lift_profile_review', { profile, pk: req.effectivePk })
+    const data = await invokeToolDirect('lift_profile_review', { profile, pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
@@ -703,7 +706,7 @@ analyticsRouter.post('/lift-profile/review', async (req, res) => {
 analyticsRouter.post('/lift-profile/rewrite', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
-    const data = await invokeToolDirect('lift_profile_rewrite', { profile, pk: req.effectivePk })
+    const data = await invokeToolDirect('lift_profile_rewrite', { profile, pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
@@ -713,7 +716,7 @@ analyticsRouter.post('/lift-profile/rewrite', async (req, res) => {
 analyticsRouter.post('/lift-profile/estimate-stimulus', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
-    const data = await invokeToolDirect('lift_profile_estimate_stimulus', { profile, pk: req.effectivePk })
+    const data = await invokeToolDirect('lift_profile_estimate_stimulus', { profile, pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
@@ -723,7 +726,7 @@ analyticsRouter.post('/lift-profile/estimate-stimulus', async (req, res) => {
 analyticsRouter.post('/lift-profile/rewrite-and-estimate', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
-    const data = await invokeToolDirect('lift_profile_rewrite_and_estimate', { profile, pk: req.effectivePk })
+    const data = await invokeToolDirect('lift_profile_rewrite_and_estimate', { profile, pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
@@ -734,7 +737,7 @@ analyticsRouter.get('/program-evaluation', async (req, res) => {
   try {
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.query.cacheOnly === 'true'
-    const data = await invokeToolDirect('program_evaluation', { refresh, cache_only: cacheOnly, pk: req.effectivePk })
+    const data = await invokeToolDirect('program_evaluation', { refresh, cache_only: cacheOnly, pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })

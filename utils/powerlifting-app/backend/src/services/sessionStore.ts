@@ -176,7 +176,7 @@ function buildItem(
     sk,
     entity_type: 'session',
     source_pk: pk,
-    source_table: process.env.DYNAMO_TABLE || 'if-health',
+    source_table: process.env.DYNAMO_TABLE || process.env.DYNAMODB_TABLE || 'if-health',
     program_sk: programSk,
     program_version: programVersion(programSk),
     program_version_number: programVersionNumber(programSk),

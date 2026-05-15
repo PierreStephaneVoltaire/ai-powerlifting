@@ -21,6 +21,10 @@ resource "kubernetes_deployment" "if_agent_api" {
         labels = {
           app = "if-agent-api"
         }
+        annotations = {
+          "checksum/config"       = sha1(jsonencode(kubernetes_config_map.if_agent_api_config.data))
+          "checksum/model-config" = sha1(jsonencode(kubernetes_config_map.if_agent_api_model_config.data))
+        }
       }
 
       spec {
@@ -129,6 +133,12 @@ resource "kubernetes_deployment" "if_agent_api" {
           env_from {
             config_map_ref {
               name = kubernetes_config_map.if_agent_api_config.metadata[0].name
+            }
+          }
+
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.if_agent_api_model_config.metadata[0].name
             }
           }
 
@@ -249,6 +259,14 @@ locals {
       db_table = "powerlifting"
     }
   }
+
+  portal_backend_config_checksums = {
+    "main-portal"      = sha1(jsonencode(kubernetes_config_map.main_portal_config.data))
+    "finance-portal"   = sha1(jsonencode(kubernetes_config_map.finance_portal_config.data))
+    "diary-portal"     = sha1(jsonencode(kubernetes_config_map.diary_portal_config.data))
+    "proposals-portal" = sha1(jsonencode(kubernetes_config_map.proposals_portal_config.data))
+    "powerlifting-app" = nonsensitive(sha1(jsonencode(kubernetes_config_map.powerlifting_app_config.data)))
+  }
 }
 
 resource "kubernetes_deployment" "portal_backends" {
@@ -280,6 +298,7 @@ resource "kubernetes_deployment" "portal_backends" {
           "prometheus.io/scrape" = "true"
           "prometheus.io/port"   = tostring(each.value.port)
           "prometheus.io/path"   = "/metrics"
+          "checksum/config"      = local.portal_backend_config_checksums[each.key]
         }
       }
 

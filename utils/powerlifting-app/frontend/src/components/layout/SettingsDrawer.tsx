@@ -1,8 +1,23 @@
-import { Drawer, SegmentedControl, Text, Stack, Group, Button, Select, Divider, Avatar, TextInput } from '@mantine/core'
+import { useEffect, useState } from 'react'
+import {
+  Avatar,
+  Button,
+  Divider,
+  Drawer,
+  Group,
+  SegmentedControl,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
 import { defaultBarWeightKgForUnit, useSettingsStore, type Theme } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
+import { getSettings, updateProfile, type UserSettings } from '@/api/settings'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
 import { Sun, Moon, Monitor, LogIn, LogOut } from 'lucide-react'
@@ -15,15 +30,74 @@ const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
 ]
 
 export default function SettingsDrawer() {
-  const { drawerOpen, drawerType, closeDrawer } = useUiStore()
+  const { drawerOpen, drawerType, closeDrawer, pushToast } = useUiStore()
   const {
-    unit, theme, setTheme, sex, setSex, barWeightKg, setBarWeight,
+    unit,
+    theme,
+    setTheme,
+    sex,
+    setSex,
+    barWeightKg,
+    setBarWeight,
     defaultSessionsView, setDefaultSessionsView,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
   const { user, loading, signIn, signOut } = useAuth()
+  const [accountSettings, setAccountSettings] = useState<UserSettings | null>(null)
+  const [profileVisibility, setProfileVisibility] = useState<'private' | 'public'>('private')
+  const [displayName, setDisplayName] = useState('')
+  const [bio, setBio] = useState('')
+  const [publicSummary, setPublicSummary] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
 
   const isOpen = drawerOpen && drawerType === 'settings'
+
+  useEffect(() => {
+    if (!isOpen || !user) {
+      setAccountSettings(null)
+      return
+    }
+
+    let cancelled = false
+    getSettings()
+      .then((settings) => {
+        if (cancelled) return
+        setAccountSettings(settings)
+        setProfileVisibility(settings.profile_visibility)
+        setDisplayName(settings.display_name)
+        setBio(settings.bio)
+        setPublicSummary(settings.public_training_summary_enabled)
+      })
+      .catch(() => {
+        if (!cancelled) setAccountSettings(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, user])
+
+  const saveProfile = async () => {
+    setSavingProfile(true)
+    try {
+      const settings = await updateProfile({
+        profile_visibility: profileVisibility,
+        display_name: displayName,
+        bio,
+        public_training_summary_enabled: publicSummary,
+      })
+      setAccountSettings(settings)
+      setProfileVisibility(settings.profile_visibility)
+      setDisplayName(settings.display_name)
+      setBio(settings.bio)
+      setPublicSummary(settings.public_training_summary_enabled)
+      pushToast({ message: 'Profile updated', type: 'success' })
+    } catch {
+      pushToast({ message: 'Failed to update profile', type: 'error' })
+    } finally {
+      setSavingProfile(false)
+    }
+  }
 
   return (
     <Drawer
@@ -68,6 +142,49 @@ export default function SettingsDrawer() {
               >
                 Sign out
               </Button>
+              {accountSettings && (
+                <Stack gap="xs" mt="xs">
+                  <Divider />
+                  <Text size="sm" fw={500}>Public Profile</Text>
+                  <SegmentedControl
+                    value={profileVisibility}
+                    onChange={(value) => setProfileVisibility(value as 'private' | 'public')}
+                    data={[
+                      { label: 'Private', value: 'private' },
+                      { label: 'Public', value: 'public' },
+                    ]}
+                    fullWidth
+                  />
+                  <TextInput
+                    label="Display name"
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.currentTarget.value)}
+                    maxLength={80}
+                  />
+                  <Textarea
+                    label="Bio"
+                    value={bio}
+                    onChange={(event) => setBio(event.currentTarget.value)}
+                    maxLength={280}
+                    minRows={2}
+                  />
+                  <Switch
+                    label="Show training summary when public"
+                    checked={publicSummary}
+                    onChange={(event) => setPublicSummary(event.currentTarget.checked)}
+                    disabled={profileVisibility !== 'public'}
+                  />
+                  <Button
+                    variant="light"
+                    size="sm"
+                    onClick={saveProfile}
+                    loading={savingProfile}
+                    fullWidth
+                  >
+                    Save profile
+                  </Button>
+                </Stack>
+              )}
             </Stack>
           ) : (
             <Button

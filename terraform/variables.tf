@@ -101,10 +101,22 @@ variable "dynamodb_powerlifting_table" {
   default     = "powerlifting"
 }
 
+variable "dynamodb_user_table" {
+  description = "DynamoDB table for user identity mappings and public profiles"
+  type        = string
+  default     = "if-user"
+}
+
 variable "tier_upgrade_threshold" {
   description = "Fraction of context limit before tier upgrade"
   type        = number
   default     = 0.65
+}
+
+variable "if_agent_api_model_env" {
+  description = "Model, router, tier, and model-adjacent environment variables for the IF agent API pod. ConfigMap values must be strings."
+  type        = map(string)
+  default     = {}
 }
 
 variable "tier_air_limit" {

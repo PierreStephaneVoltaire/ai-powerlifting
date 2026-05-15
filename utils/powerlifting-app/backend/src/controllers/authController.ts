@@ -110,7 +110,11 @@ export async function discordCallback(req: Request, res: Response): Promise<void
 }
 
 export function getMe(req: Request, res: Response): void {
-  res.json({ user: req.user ?? null })
+  res.json({
+    user: req.user ?? null,
+    mapped_pk: req.mapped_pk ?? 'operator',
+    readOnly: req.readOnly ?? true,
+  })
 }
 
 export function logout(_req: Request, res: Response): void {

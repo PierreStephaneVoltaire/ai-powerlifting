@@ -7,7 +7,7 @@ const FASTAPI_URL = 'http://if-agent-api:8000/api/health/stats'
 statsRouter.get('/categories', async (req, res, next) => {
   try {
     const url = new URL(`${FASTAPI_URL}/categories`)
-    if (req.effectivePk) url.searchParams.set('pk', req.effectivePk)
+    if (req.mapped_pk) url.searchParams.set('pk', req.mapped_pk)
     const response = await fetch(url.toString())
     if (!response.ok) {
       const body = await response.json().catch(() => ({ detail: response.statusText }))
@@ -27,7 +27,7 @@ statsRouter.post('/analyze', async (req, res, next) => {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ ...req.body, pk: req.effectivePk })
+      body: JSON.stringify({ ...req.body, pk: req.mapped_pk })
     })
     if (!response.ok) {
       const body = await response.json().catch(() => ({ detail: response.statusText }))

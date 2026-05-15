@@ -20,10 +20,12 @@ import { templateRouter } from './routes/template'
 import { statsRouter } from './routes/stats'
 import { authRouter } from './routes/auth'
 import { settingsRouter } from './routes/settings'
+import { profilesRouter } from './routes/profiles'
 import { goalsRouter } from './routes/goals'
 import { federationsRouter } from './routes/federations'
+import { setupRouter } from './routes/setup'
 import { errorHandler } from './middleware/errorHandler'
-import { requireUserOptional, resolvePk } from './middleware/auth'
+import { requireUserOptional, requireWriteAuth, resolvePk } from './middleware/auth'
 
 const app = express()
 
@@ -45,8 +47,11 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRouter)
 
 app.use(requireUserOptional, resolvePk)
+app.use(requireWriteAuth)
 
 app.use('/api/settings', settingsRouter)
+app.use('/api/profiles', profilesRouter)
+app.use('/api/setup', setupRouter)
 app.use('/api/programs', programsRouter)
 app.use('/api/goals', goalsRouter)
 app.use('/api/federations', federationsRouter)

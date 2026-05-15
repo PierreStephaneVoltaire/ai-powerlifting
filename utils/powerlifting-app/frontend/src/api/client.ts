@@ -46,6 +46,50 @@ function templatePath(sk: string, suffix = ''): string {
   return `/templates/${encodeURIComponent(sk)}${suffix}`
 }
 
+export function isApiNotFound(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404
+}
+
+// ─── Setup ──────────────────────────────────────────────────────────────────
+
+export interface SetupStatus {
+  mapped_pk: string
+  authenticated: boolean
+  readOnly: boolean
+  hasCurrentProgram: boolean
+  needsSetup: boolean
+}
+
+export interface InitializeSetupInput {
+  mode: 'blank' | 'manual_sessions' | 'template'
+  programName?: string
+  startDate: string
+  weekStartDay: WeekStartDay
+  templateSk?: string
+  maxes?: Record<string, number>
+}
+
+export interface InitializeSetupResult {
+  status: 'initialized' | 'gate_blocked'
+  mode?: InitializeSetupInput['mode']
+  programSk?: string
+  sessionCount?: number
+  missingMaxes?: string[]
+  templateSk?: string
+  startDate?: string
+  weekStartDay?: WeekStartDay
+}
+
+export async function fetchSetupStatus(): Promise<SetupStatus> {
+  const res = await api.get<ApiResponse<SetupStatus>>('/setup/status')
+  return res.data.data
+}
+
+export async function initializeSetup(input: InitializeSetupInput): Promise<InitializeSetupResult> {
+  const res = await api.post<ApiResponse<InitializeSetupResult>>('/setup/initialize', input)
+  return res.data.data
+}
+
 // ─── Programs ────────────────────────────────────────────────────────────────
 
 export async function fetchPrograms(): Promise<ProgramListItem[]> {

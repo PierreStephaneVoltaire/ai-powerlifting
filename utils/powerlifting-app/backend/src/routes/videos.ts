@@ -26,7 +26,7 @@ videosRouter.get('/', async (req, res, next) => {
     const exercise = req.query.exercise as string | undefined
     const sort = (req.query.sort as 'newest' | 'oldest') || 'newest'
 
-    const result = await videoController.getVideoLibrary(req.effectivePk!, version, exercise, sort)
+    const result = await videoController.getVideoLibrary(req.mapped_pk!, version, exercise, sort)
     res.json({ data: result, error: null })
   } catch (err) {
     next(err)
@@ -51,7 +51,7 @@ videosRouter.post(
       const { exerciseName, setNumber, notes } = req.body
 
       const video = await videoController.uploadSessionVideo(
-        req.effectivePk!,
+        req.mapped_pk!,
         req.params.version,
         req.params.sessionDate,
         file.buffer,
@@ -73,7 +73,7 @@ videosRouter.post(
 videosRouter.delete('/:version/:sessionDate/:videoId', async (req, res, next) => {
   try {
     await videoController.removeSessionVideo(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.sessionDate,
       req.params.videoId
@@ -97,7 +97,7 @@ videosRouter.patch('/:version/:sessionDate/:videoId/thumbnail', async (req, res,
     }
 
     await videoController.updateVideoThumbnail(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       req.params.sessionDate,
       req.params.videoId,

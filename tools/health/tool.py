@@ -177,6 +177,74 @@ class HealthGetProgramTool(ToolDefinition[HealthGetProgramAction, HealthGetProgr
         )]
 
 
+# --- health_setup_status ---
+
+class HealthSetupStatusAction(Action):
+    pass
+
+
+class HealthSetupStatusObservation(Observation):
+    pass
+
+
+class HealthSetupStatusExecutor(ToolExecutor[HealthSetupStatusAction, HealthSetupStatusObservation]):
+    def __call__(self, action: HealthSetupStatusAction, conversation=None) -> HealthSetupStatusObservation:
+        from core import health_setup_status
+        result = _run_async(health_setup_status())
+        return HealthSetupStatusObservation.from_text(_format_result(result))
+
+
+class HealthSetupStatusTool(ToolDefinition[HealthSetupStatusAction, HealthSetupStatusObservation]):
+    @classmethod
+    def create(cls, conv_state=None, **params) -> Sequence["HealthSetupStatusTool"]:
+        return [cls(
+            description="Return no-data onboarding setup state for the active training data partition.",
+            action_type=HealthSetupStatusAction,
+            observation_type=HealthSetupStatusObservation,
+            executor=HealthSetupStatusExecutor(),
+        )]
+
+
+# --- health_setup_initialize ---
+
+class HealthSetupInitializeAction(Action):
+    mode: str = Field(description="Initialization mode: blank, manual_sessions, or template")
+    start_date: str = Field(description="Program start date (YYYY-MM-DD)")
+    week_start_day: str = Field(description="Week start day, e.g. Monday")
+    program_name: Optional[str] = Field(default=None, description="Optional program/block name")
+    template_sk: Optional[str] = Field(default=None, description="Required when mode=template")
+    maxes: Optional[Dict[str, float]] = Field(default=None, description="Optional maxes/e1RMs keyed by squat, bench, deadlift, or template glossary IDs")
+
+
+class HealthSetupInitializeObservation(Observation):
+    pass
+
+
+class HealthSetupInitializeExecutor(ToolExecutor[HealthSetupInitializeAction, HealthSetupInitializeObservation]):
+    def __call__(self, action: HealthSetupInitializeAction, conversation=None) -> HealthSetupInitializeObservation:
+        from core import health_setup_initialize
+        result = _run_async(health_setup_initialize(
+            action.mode,
+            action.start_date,
+            action.week_start_day,
+            action.program_name,
+            action.template_sk,
+            action.maxes,
+        ))
+        return HealthSetupInitializeObservation.from_text(_format_result(result))
+
+
+class HealthSetupInitializeTool(ToolDefinition[HealthSetupInitializeAction, HealthSetupInitializeObservation]):
+    @classmethod
+    def create(cls, conv_state=None, **params) -> Sequence["HealthSetupInitializeTool"]:
+        return [cls(
+            description="Initialize the first valid training block for a no-data user.",
+            action_type=HealthSetupInitializeAction,
+            observation_type=HealthSetupInitializeObservation,
+            executor=HealthSetupInitializeExecutor(),
+        )]
+
+
 # --- health_comp_countdown ---
 
 class HealthCompCountdownAction(Action):
@@ -1493,6 +1561,8 @@ class HealthUpdateCurrentMaxesTool(ToolDefinition[HealthUpdateCurrentMaxesAction
 # =============================================================================
 
 register_tool("HealthGetProgramTool", HealthGetProgramTool)
+register_tool("HealthSetupStatusTool", HealthSetupStatusTool)
+register_tool("HealthSetupInitializeTool", HealthSetupInitializeTool)
 register_tool("HealthCompCountdownTool", HealthCompCountdownTool)
 register_tool("HealthUpdateSessionTool", HealthUpdateSessionTool)
 register_tool("HealthNewVersionTool", HealthNewVersionTool)
@@ -2450,6 +2520,8 @@ def get_tools() -> List[Tool]:
     """Get all health SDK Tool objects (side effect: register_tool already called above)."""
     return [
         Tool(name="HealthGetProgramTool"),
+        Tool(name="HealthSetupStatusTool"),
+        Tool(name="HealthSetupInitializeTool"),
         Tool(name="HealthCompCountdownTool"),
         Tool(name="HealthUpdateSessionTool"),
         Tool(name="HealthNewVersionTool"),
@@ -2590,6 +2662,27 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "Returns the cached program dict with all sessions, phases, meta, and preferences."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        "health_setup_status": {
+            "name": "health_setup_status",
+            "description": "Return no-data onboarding setup state for the active training data partition.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        "health_setup_initialize": {
+            "name": "health_setup_initialize",
+            "description": "Initialize the first valid current training block for a no-data user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {"type": "string", "description": "blank, manual_sessions, or template"},
+                    "program_name": {"type": "string", "description": "Optional program/block name"},
+                    "start_date": {"type": "string", "description": "Program start date (YYYY-MM-DD)"},
+                    "week_start_day": {"type": "string", "description": "Week start day, e.g. Monday"},
+                    "template_sk": {"type": "string", "description": "Required when mode=template"},
+                    "maxes": {"type": "object", "description": "Optional maxes/e1RMs keyed by squat, bench, deadlift, or template glossary IDs"},
+                },
+                "required": ["mode", "start_date", "week_start_day"],
+            },
         },
         "health_get_session": {
             "name": "health_get_session",
@@ -4231,6 +4324,8 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
     """Route health tool calls to the underlying health module functions."""
     from core import(
         health_get_program,
+        health_setup_status,
+        health_setup_initialize,
         health_get_session,
         health_update_session as do_update_session,
         health_rag_search,
@@ -4297,6 +4392,15 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
 
     ROUTES = {
         "health_get_program": lambda: health_get_program(),
+        "health_setup_status": lambda: health_setup_status(),
+        "health_setup_initialize": lambda: health_setup_initialize(
+            args["mode"],
+            args["start_date"],
+            args["week_start_day"],
+            args.get("program_name"),
+            args.get("template_sk"),
+            args.get("maxes"),
+        ),
         "health_invalidate_program_cache": lambda: _do_health_invalidate_program_cache(args),
         "health_get_session": lambda: health_get_session(args["date"]),
         "health_update_session": lambda: do_update_session(args["date"], args["patch"]),

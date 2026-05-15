@@ -6,7 +6,7 @@ description: >
   block goals, federation and qualifying-standard management, attempt calculation, supplement
   protocol, diet notes, IPF weight classes, RPE/e1RM calculations, weekly training analysis,
   exercise ROI correlation analysis, fatigue profile estimation, and IPF rulebook semantic
-  search.
+  search. Also owns no-data user onboarding setup and first-block initialization.
 version: 1.0.0
 scope: specialist
 execution: in_process

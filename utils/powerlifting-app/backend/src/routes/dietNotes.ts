@@ -7,7 +7,7 @@ export const dietNotesRouter = Router({ mergeParams: true })
 // GET /api/diet-notes/:version - Get diet notes
 dietNotesRouter.get('/:version', async (req, res, next) => {
   try {
-    const notes = await dietNotesController.getDietNotes(req.effectivePk!, req.params.version)
+    const notes = await dietNotesController.getDietNotes(req.mapped_pk!, req.params.version)
     res.json({ data: notes, error: null })
   } catch (err) {
     next(err)
@@ -27,7 +27,7 @@ dietNotesRouter.put('/:version', async (req, res, next) => {
     }
 
     await dietNotesController.updateDietNotes(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       dietNotes as DietNote[]
     )

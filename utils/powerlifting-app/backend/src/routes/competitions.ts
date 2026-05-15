@@ -8,7 +8,7 @@ export const competitionsRouter = Router({ mergeParams: true })
 // GET /api/competitions/:version - Get competitions
 competitionsRouter.get('/:version', async (req, res, next) => {
   try {
-    const competitions = await competitionController.getCompetitions(req.effectivePk!, req.params.version)
+    const competitions = await competitionController.getCompetitions(req.mapped_pk!, req.params.version)
     res.json({ data: competitions, error: null })
   } catch (err) {
     next(err)
@@ -28,7 +28,7 @@ competitionsRouter.put('/:version', async (req, res, next) => {
     }
 
     await competitionController.updateCompetitions(
-      req.effectivePk!,
+      req.mapped_pk!,
       req.params.version,
       competitions as Competition[]
     )
@@ -41,7 +41,7 @@ competitionsRouter.put('/:version', async (req, res, next) => {
 // POST /api/competitions/:version/migrate - Migrate last_comp into competitions
 competitionsRouter.post('/:version/migrate', async (req, res, next) => {
   try {
-    const competitions = await competitionController.migrateLastComp(req.effectivePk!, req.params.version)
+    const competitions = await competitionController.migrateLastComp(req.mapped_pk!, req.params.version)
     res.json({ data: competitions, error: null })
   } catch (err) {
     next(err)
@@ -69,7 +69,7 @@ competitionsRouter.patch('/:version/:date/complete', async (req, res, next) => {
         date: snapshotDate,
         version: req.params.version,
         allow_retrospective: true,
-        pk: req.effectivePk,
+        pk: req.mapped_pk,
       })
     } catch (snapshotErr) {
       console.warn('Failed to snapshot competition projection before completion:', snapshotErr)
@@ -82,7 +82,7 @@ competitionsRouter.patch('/:version/:date/complete', async (req, res, next) => {
       post_meet_report: postMeetReport as PostMeetReport | undefined,
       version: req.params.version,
       allow_retrospective: true,
-      pk: req.effectivePk,
+      pk: req.mapped_pk,
     })
 
     res.json({ data: updatedCompetition, error: null })

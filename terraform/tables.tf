@@ -55,6 +55,26 @@ resource "aws_dynamodb_table" "if_powerlifting_analysis_cache" {
   }
 }
 
+resource "aws_dynamodb_table" "if_user" {
+  name         = var.dynamodb_user_table
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "mapped_pk"
+
+  attribute {
+    name = "mapped_pk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "user"
+  }
+}
+
 resource "aws_dynamodb_table" "if_finance" {
   name         = var.dynamodb_finance_table
   billing_mode = "PAY_PER_REQUEST"

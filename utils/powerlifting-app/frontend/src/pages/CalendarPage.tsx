@@ -26,6 +26,7 @@ import dayjs from 'dayjs'
 import type { Session } from '@powerlifting/types'
 import MuscleVolumeChart from '@/components/charts/MuscleVolumeChart'
 import { SessionsCompactView } from '@/components/sessions/SessionsCompactView'
+import SetupOnboarding from '@/components/setup/SetupOnboarding'
 
 type ViewType = 'Month' | 'Agenda' | 'Compact'
 const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
@@ -48,7 +49,7 @@ function sessionRoute(session: Session, index: number): string {
 }
 
 export default function CalendarPage() {
-  const { program, isLoading } = useProgramStore()
+  const { program, isLoading, needsSetup } = useProgramStore()
   const { defaultSessionsView } = useSettingsStore()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -169,6 +170,10 @@ export default function CalendarPage() {
 
     return () => window.clearTimeout(timeoutId)
   }, [closestAgendaSession, view])
+
+  if (needsSetup) {
+    return <SetupOnboarding compact />
+  }
 
   if (isLoading || !program) {
     return (

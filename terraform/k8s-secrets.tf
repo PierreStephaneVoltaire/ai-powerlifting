@@ -59,39 +59,12 @@ resource "kubernetes_config_map" "if_agent_api_config" {
     IF_DIARY_ENTRIES_TABLE_NAME = var.dynamodb_diary_entries_table
     IF_DIARY_SIGNALS_TABLE_NAME = var.dynamodb_diary_signals_table
     IF_PROPOSALS_TABLE_NAME     = var.dynamodb_proposals_table
+    IF_MODELS_TABLE_NAME        = var.dynamodb_models_table
     POWERLIFTING_S3_BUCKET      = aws_s3_bucket.powerlifting_data.id
-
-    API_MODEL_NAME  = var.api_model_name
-    TOKENIZER_MODEL = var.tokenizer_model
-    EMBEDDING_MODEL = var.embedding_model
-
-    DIRECTIVE_REWRITE_MODEL = var.directive_rewrite_model
-    MODEL_ROUTER_MODEL      = var.model_router_model
-    HEALTH_HELPER_MODEL     = var.health_helper_model
-    CONDENSER_MODEL         = var.condenser_model
-    REFLECTION_MODEL        = var.reflection_model
-    RESEARCH_AGENT_MODEL    = var.research_agent_model
-    DIARY_SIGNAL_MODEL      = var.diary_signal_model
-
-    TIER_UPGRADE_THRESHOLD = tostring(var.tier_upgrade_threshold)
-    TIER_AIR_LIMIT         = tostring(var.tier_air_limit)
-    TIER_STANDARD_LIMIT    = tostring(var.tier_standard_limit)
-    TIER_HEAVY_LIMIT       = tostring(var.tier_heavy_limit)
-    TIER_AIR_PRESET        = var.tier_air_preset
-    TIER_STANDARD_PRESET   = var.tier_standard_preset
-    TIER_HEAVY_PRESET      = var.tier_heavy_preset
-
-    SPECIALIST_PRESET    = var.specialist_preset
-    SPECIALIST_MAX_TURNS = tostring(var.specialist_max_turns)
-    SPECIALISTS_PATH     = var.specialists_path
-    EXTERNAL_TOOLS_PATH  = var.tools_path
-    MODELS_PATH          = var.models_path
-    SCRIPTS_PATH         = var.scripts_path
-    THINKING_PRESET      = var.thinking_preset
-    THINKING_MAX_TURNS   = tostring(var.thinking_max_turns)
-
-    ORCHESTRATOR_MAX_TURNS          = tostring(var.orchestrator_max_turns)
-    ORCHESTRATOR_ANALYSIS_MAX_TURNS = tostring(var.orchestrator_analysis_max_turns)
+    SPECIALISTS_PATH            = var.specialists_path
+    EXTERNAL_TOOLS_PATH         = var.tools_path
+    MODELS_PATH                 = var.models_path
+    SCRIPTS_PATH                = var.scripts_path
 
     CONTEXT_CONDENSE_THRESHOLD = tostring(var.context_condense_threshold)
     MESSAGE_WINDOW             = tostring(var.message_window)
@@ -102,7 +75,6 @@ resource "kubernetes_config_map" "if_agent_api_config" {
 
     CHANNEL_DEBOUNCE_SECONDS = tostring(var.channel_debounce_seconds)
     CHANNEL_MAX_CHUNK_CHARS  = tostring(var.channel_max_chunk_chars)
-    LLM_REASONING_EFFORT     = var.llm_reasoning_effort
 
     HEARTBEAT_ENABLED        = tostring(var.heartbeat_enabled)
     HEARTBEAT_IDLE_HOURS     = tostring(var.heartbeat_idle_hours)
@@ -125,6 +97,49 @@ resource "kubernetes_config_map" "if_agent_api_config" {
 
     LOG_LEVEL = var.log_level
   }
+}
+
+resource "kubernetes_config_map" "if_agent_api_model_config" {
+  metadata {
+    name      = "if-agent-api-model-config"
+    namespace = kubernetes_namespace.if_portals.metadata[0].name
+  }
+
+  data = merge({
+    API_MODEL_NAME  = var.api_model_name
+    TOKENIZER_MODEL = var.tokenizer_model
+    EMBEDDING_MODEL = var.embedding_model
+
+    SUGGESTION_MODEL        = var.suggestion_model
+    DIRECTIVE_REWRITE_MODEL = var.directive_rewrite_model
+    CONDENSER_MODEL         = var.condenser_model
+    REFLECTION_MODEL        = var.reflection_model
+    RESEARCH_AGENT_MODEL    = var.research_agent_model
+    DIARY_SIGNAL_MODEL      = var.diary_signal_model
+    MODEL_ROUTER_MODEL      = var.model_router_model
+    HEALTH_HELPER_MODEL     = var.health_helper_model
+
+    TIER_UPGRADE_THRESHOLD = tostring(var.tier_upgrade_threshold)
+    TIER_AIR_LIMIT         = tostring(var.tier_air_limit)
+    TIER_STANDARD_LIMIT    = tostring(var.tier_standard_limit)
+    TIER_HEAVY_LIMIT       = tostring(var.tier_heavy_limit)
+    TIER_AIR_PRESET        = var.tier_air_preset
+    TIER_STANDARD_PRESET   = var.tier_standard_preset
+    TIER_HEAVY_PRESET      = var.tier_heavy_preset
+
+    SPECIALIST_PRESET    = var.specialist_preset
+    SPECIALIST_MAX_TURNS = tostring(var.specialist_max_turns)
+    THINKING_PRESET      = var.thinking_preset
+    THINKING_MAX_TURNS   = tostring(var.thinking_max_turns)
+
+    ORCHESTRATOR_SUBAGENT_MODEL     = var.orchestrator_subagent_model
+    ORCHESTRATOR_ANALYSIS_MODEL     = var.orchestrator_analysis_model
+    ORCHESTRATOR_SYNTHESIS_MODEL    = var.orchestrator_synthesis_model
+    ORCHESTRATOR_MAX_TURNS          = tostring(var.orchestrator_max_turns)
+    ORCHESTRATOR_ANALYSIS_MAX_TURNS = tostring(var.orchestrator_analysis_max_turns)
+
+    LLM_REASONING_EFFORT = var.llm_reasoning_effort
+  }, var.if_agent_api_model_env)
 }
 
 resource "kubernetes_config_map" "main_portal_config" {
@@ -198,11 +213,12 @@ resource "kubernetes_config_map" "powerlifting_app_config" {
   data = {
     AWS_REGION                = var.region
     DYNAMODB_TABLE            = var.dynamodb_powerlifting_table
+    IF_USER_TABLE             = var.dynamodb_user_table
     IF_SESSIONS_TABLE_NAME    = var.dynamodb_sessions_table
     ANALYSIS_CACHE_TABLE_NAME = var.dynamodb_analysis_cache_table
     NODE_ENV                  = "production"
     PORT                      = "3005"
-    FRONTEND_URL              = "http://powerlifting-app-frontend:3001"
+    FRONTEND_URL              = "https://${local.app_domains["powerlifting-app"].domain}"
     DISCORD_CLIENT_ID         = var.discord_client_id
     DISCORD_CLIENT_SECRET     = var.discord_client_secret
     DISCORD_REDIRECT_URI      = var.discord_redirect_uri

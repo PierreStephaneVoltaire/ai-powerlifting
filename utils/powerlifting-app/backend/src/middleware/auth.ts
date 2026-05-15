@@ -1,12 +1,15 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-import { getSettings, getOrCreateSettings } from '../services/userSettings'
+import { resolveMappedPk } from '../services/userSettings'
+import { AppError } from './errorHandler'
 
 declare global {
   namespace Express {
     interface Request {
       user?: { discord_id: string; username: string; avatar: string | null } | null
-      effectivePk?: string
+      mapped_pk?: string
+      isAuthenticated?: boolean
+      readOnly?: boolean
     }
   }
 }
@@ -49,35 +52,51 @@ export async function requireUserOptional(req: Request, _res: Response, next: Ne
   const token = req.cookies?.pl_auth
   if (!token) {
     req.user = null
+    req.isAuthenticated = false
     return next()
   }
 
   const payload = verifyToken(token)
   if (!payload) {
     req.user = null
+    req.isAuthenticated = false
     return next()
   }
 
   req.user = { discord_id: payload.discord_id, username: payload.username, avatar: payload.avatar }
+  req.isAuthenticated = true
   next()
 }
 
 export async function resolvePk(req: Request, _res: Response, next: NextFunction): Promise<void> {
   if (!req.user) {
-    req.effectivePk = 'operator'
+    req.mapped_pk = 'operator'
+    req.readOnly = true
     return next()
   }
 
   try {
-    const settings = await getOrCreateSettings(
+    req.mapped_pk = await resolveMappedPk(
       req.user.discord_id,
       req.user.username,
       req.user.avatar,
     )
-    req.effectivePk = settings.nickname
+    req.readOnly = false
   } catch (err) {
     console.error('Failed to resolve PK for user', req.user.discord_id, err)
-    req.effectivePk = 'operator'
+    return next(new AppError('Failed to resolve authenticated user settings', 500, 'AUTH_CONTEXT_FAILED'))
+  }
+
+  next()
+}
+
+export function requireWriteAuth(req: Request, _res: Response, next: NextFunction): void {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next()
+  }
+
+  if (req.readOnly || !req.user) {
+    return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
   }
 
   next()
