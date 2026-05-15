@@ -557,8 +557,9 @@ export interface GlossaryExercise {
   secondary_muscles: MuscleGroup[]
   tertiary_muscles?: MuscleGroup[]
   equipment: Equipment
-  cues: string[]
-  notes: string
+  description: string
+  how_to_perform: string
+  why_do_it: string
   video_url?: string
   fatigue_profile?: FatigueProfile
   fatigue_profile_source?: FatigueProfileSource

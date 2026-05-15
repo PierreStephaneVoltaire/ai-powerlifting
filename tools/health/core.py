@@ -2584,6 +2584,22 @@ async def glossary_set_e1rm(exercise_id: str, value_kg: float, method: str = "ma
     await glossary_store.set_e1rm(exercise_id, value_kg, method=method)
     return {"status": "e1rm_set", "id": exercise_id, "value_kg": value_kg}
 
+async def glossary_generate_text(exercise: dict, lift_profiles: list[dict] | None = None) -> dict:
+    from glossary_text_ai import generate_glossary_text
+
+    if not exercise.get("name"):
+        raise ValueError("Exercise name is required")
+
+    if lift_profiles is None:
+        try:
+            program = await _get_store().get_program()
+            lift_profiles = program.get("lift_profiles", [])
+        except Exception:
+            lift_profiles = []
+
+    result = await generate_glossary_text(exercise, lift_profiles=lift_profiles)
+    return {"status": "generated", **result}
+
 async def glossary_estimate_e1rm(exercise_id: str) -> dict:
     from e1rm_backfill_ai import generate_e1rm_backfill_report
     

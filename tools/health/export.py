@@ -2623,7 +2623,7 @@ def _write_exercise_glossary_sheet(wb: Workbook, glossary: list[dict[str, Any]])
     ws = wb.create_sheet("Exercise Glossary")
     headers = [
         "ID", "Name", "Category", "Fatigue Category", "Primary Muscles", "Secondary Muscles", "Tertiary Muscles",
-        "Equipment", "Cues", "Notes", "Video URL", "Fatigue Axial", "Fatigue Neural",
+        "Equipment", "Description", "How To Perform", "Why Do It", "Video URL", "Fatigue Axial", "Fatigue Neural",
         "Fatigue Peripheral", "Fatigue Systemic", "Fatigue Source", "Fatigue Reasoning",
         "E1RM Value", "E1RM Method", "E1RM Basis", "E1RM Confidence", "E1RM Updated At", "Archived",
     ]
@@ -2640,8 +2640,9 @@ def _write_exercise_glossary_sheet(wb: Workbook, glossary: list[dict[str, Any]])
             _fmt(ex.get("secondary_muscles", [])),
             _fmt(ex.get("tertiary_muscles", [])),
             ex.get("equipment", ""),
-            _fmt(ex.get("cues", [])),
-            ex.get("notes", ""),
+            ex.get("description", ""),
+            ex.get("how_to_perform", ""),
+            ex.get("why_do_it", ""),
             ex.get("video_url", ""),
             fatigue.get("axial", ""),
             fatigue.get("neural", ""),
@@ -2657,8 +2658,8 @@ def _write_exercise_glossary_sheet(wb: Workbook, glossary: list[dict[str, Any]])
             ex.get("archived", ""),
         ])
     if not rows:
-        rows.append(["—", "", "", "", "", "", "", "", "", "No glossary entries recorded", "", "", "", "", "", "", "", "", "", "", "", "", ""])
-    _write_sheet(ws, headers, rows, col_widths={2: 34, 9: 34, 10: 40, 17: 38})
+        rows.append(["—", "", "", "", "", "", "", "", "No glossary entries recorded", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""])
+    _write_sheet(ws, headers, rows, col_widths={2: 34, 9: 34, 10: 44, 11: 38, 18: 38})
 
 
 def _write_videos_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:

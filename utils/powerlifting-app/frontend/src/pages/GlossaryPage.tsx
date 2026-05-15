@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Plus, X, Trash2, Edit2, RefreshCw, Info } from 'lucide-react'
+import { Search, Plus, Trash2, Edit2, RefreshCw, Info, Wand2, ExternalLink } from 'lucide-react'
 import {
   Stack,
   Group,
@@ -14,9 +14,7 @@ import {
   Paper,
   Accordion,
   Slider,
-  ActionIcon,
   Loader,
-  CloseButton,
   SimpleGrid,
   Box,
   Divider,
@@ -25,6 +23,7 @@ import {
   Progress,
 } from '@mantine/core'
 import * as api from '@/api/client'
+import { ExerciseMuscleMap } from '@/components/glossary/ExerciseMuscleMap'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import type { GlossaryExercise, MuscleGroup, ExerciseCategory, Equipment, FatigueProfile, FatigueProfileSource } from '@powerlifting/types'
@@ -110,6 +109,35 @@ const EQUIPMENT_LABELS: Record<Equipment, string> = {
   kettlebell: 'Kettlebell',
 }
 
+const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'])
+
+function validateYoutubeUrl(value: string | undefined): string | undefined {
+  const raw = (value || '').trim()
+  if (!raw) return undefined
+  try {
+    const parsed = new URL(raw)
+    if (!YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase())) return undefined
+    return parsed.toString()
+  } catch {
+    return undefined
+  }
+}
+
+function emptyExerciseForm(): Partial<GlossaryExercise> {
+  return {
+    name: '',
+    category: 'squat',
+    primary_muscles: [],
+    secondary_muscles: [],
+    tertiary_muscles: [],
+    equipment: 'barbell',
+    description: '',
+    how_to_perform: '',
+    why_do_it: '',
+    video_url: '',
+  }
+}
+
 export default function GlossaryPage() {
   const { pushToast } = useUiStore()
   const liftProfiles = useProgramStore((state) => state.program?.lift_profiles ?? [])
@@ -121,17 +149,7 @@ export default function GlossaryPage() {
   const [showAddForm, setShowAddForm] = useState(false)
 
   // Form state for add/edit
-  const [formData, setFormData] = useState<Partial<GlossaryExercise>>({
-    name: '',
-    category: 'squat',
-    primary_muscles: [],
-    secondary_muscles: [],
-    tertiary_muscles: [],
-    equipment: 'barbell',
-    cues: [],
-    notes: '',
-  })
-  const [cueInput, setCueInput] = useState('')
+  const [formData, setFormData] = useState<Partial<GlossaryExercise>>(emptyExerciseForm())
   const [fatigueProfile, setFatigueProfile] = useState<FatigueProfile | null>(null)
   const [fatigueSource, setFatigueSource] = useState<FatigueProfileSource | null>(null)
   const [fatigueReasoning, setFatigueReasoning] = useState<string | null>(null)
@@ -141,6 +159,7 @@ export default function GlossaryPage() {
   const [isEstimating, setIsEstimating] = useState(false)
   const [isEstimatingMuscles, setIsEstimatingMuscles] = useState(false)
   const [isEstimatingE1rm, setIsEstimatingE1rm] = useState(false)
+  const [isGeneratingText, setIsGeneratingText] = useState(false)
   const [isBulkEstimatingFatigue, setIsBulkEstimatingFatigue] = useState(false)
   const [isBulkEstimatingE1rm, setIsBulkEstimatingE1rm] = useState(false)
   const [isBulkEstimatingMuscles, setIsBulkEstimatingMuscles] = useState(false)
@@ -183,6 +202,12 @@ export default function GlossaryPage() {
       return
     }
 
+    const videoUrl = validateYoutubeUrl(formData.video_url)
+    if ((formData.video_url || '').trim() && !videoUrl) {
+      pushToast({ message: 'Use a valid YouTube URL', type: 'error' })
+      return
+    }
+
     try {
       const exercise: GlossaryExercise = {
         ...(isEditing || {}),
@@ -194,8 +219,10 @@ export default function GlossaryPage() {
         secondary_muscles: formData.secondary_muscles || [],
         tertiary_muscles: formData.tertiary_muscles || [],
         equipment: formData.equipment || 'barbell',
-        cues: formData.cues || [],
-        notes: formData.notes || '',
+        description: formData.description || '',
+        how_to_perform: formData.how_to_perform || '',
+        why_do_it: formData.why_do_it || '',
+        video_url: videoUrl,
         fatigue_profile: fatigueProfile || undefined,
         fatigue_profile_source: fatigueSource || undefined,
         fatigue_profile_reasoning: fatigueReasoning,
@@ -209,16 +236,7 @@ export default function GlossaryPage() {
       })
       setShowAddForm(false)
       setIsEditing(null)
-      setFormData({
-        name: '',
-        category: 'squat',
-        primary_muscles: [],
-        secondary_muscles: [],
-        tertiary_muscles: [],
-        equipment: 'barbell',
-        cues: [],
-        notes: '',
-      })
+      setFormData(emptyExerciseForm())
       setFatigueProfile(null)
       setFatigueSource(null)
       setFatigueReasoning(null)
@@ -250,30 +268,16 @@ export default function GlossaryPage() {
       secondary_muscles: exercise.secondary_muscles,
       tertiary_muscles: exercise.tertiary_muscles ?? [],
       equipment: exercise.equipment,
-      cues: exercise.cues,
-      notes: exercise.notes,
+      description: exercise.description ?? '',
+      how_to_perform: exercise.how_to_perform ?? '',
+      why_do_it: exercise.why_do_it ?? '',
+      video_url: exercise.video_url ?? '',
     })
     setFatigueProfile(exercise.fatigue_profile || null)
     setFatigueSource(exercise.fatigue_profile_source || null)
     setFatigueReasoning(exercise.fatigue_profile_reasoning || null)
     setE1rmEstimate(exercise.e1rm_estimate || null)
     setShowAddForm(true)
-  }
-
-  function addCue() {
-    if (!cueInput.trim()) return
-    setFormData((prev) => ({
-      ...prev,
-      cues: [...(prev.cues || []), cueInput.trim()],
-    }))
-    setCueInput('')
-  }
-
-  function removeCue(index: number) {
-    setFormData((prev) => ({
-      ...prev,
-      cues: (prev.cues || []).filter((_, i) => i !== index),
-    }))
   }
 
   function toggleMuscle(muscle: MuscleGroup, field: 'primary_muscles' | 'secondary_muscles' | 'tertiary_muscles') {
@@ -310,8 +314,9 @@ export default function GlossaryPage() {
         primary_muscles: formData.primary_muscles,
         secondary_muscles: formData.secondary_muscles,
         tertiary_muscles: formData.tertiary_muscles,
-        cues: formData.cues,
-        notes: formData.notes,
+        description: formData.description,
+        how_to_perform: formData.how_to_perform,
+        why_do_it: formData.why_do_it,
       })
       setFatigueProfile({
         axial: result.axial,
@@ -338,8 +343,9 @@ export default function GlossaryPage() {
         primary_muscles: formData.primary_muscles,
         secondary_muscles: formData.secondary_muscles,
         tertiary_muscles: formData.tertiary_muscles,
-        cues: formData.cues,
-        notes: formData.notes,
+        description: formData.description,
+        how_to_perform: formData.how_to_perform,
+        why_do_it: formData.why_do_it,
         lift_profiles: liftProfiles,
       })
       setFormData((prev) => ({
@@ -352,6 +358,48 @@ export default function GlossaryPage() {
       pushToast({ message: 'Muscle group estimation failed', type: 'error' })
     } finally {
       setIsEstimatingMuscles(false)
+    }
+  }
+
+  async function handleGenerateText() {
+    if (!formData.name) {
+      pushToast({ message: 'Exercise name is required', type: 'error' })
+      return
+    }
+
+    const hasExistingText = Boolean(
+      formData.description?.trim() ||
+      formData.how_to_perform?.trim() ||
+      formData.why_do_it?.trim()
+    )
+    if (hasExistingText && !window.confirm('Replace the existing exercise text with AI-generated text?')) {
+      return
+    }
+
+    setIsGeneratingText(true)
+    try {
+      const result = await api.generateGlossaryText({
+        name: formData.name,
+        category: formData.category,
+        equipment: formData.equipment,
+        primary_muscles: formData.primary_muscles,
+        secondary_muscles: formData.secondary_muscles,
+        tertiary_muscles: formData.tertiary_muscles,
+        description: formData.description,
+        how_to_perform: formData.how_to_perform,
+        why_do_it: formData.why_do_it,
+        lift_profiles: liftProfiles,
+      })
+      setFormData((prev) => ({
+        ...prev,
+        description: result.description || '',
+        how_to_perform: result.how_to_perform || '',
+        why_do_it: result.why_do_it || '',
+      }))
+    } catch {
+      pushToast({ message: 'Glossary text generation failed', type: 'error' })
+    } finally {
+      setIsGeneratingText(false)
     }
   }
 
@@ -482,6 +530,9 @@ export default function GlossaryPage() {
       (e) =>
         e.name.toLowerCase().includes(query) ||
         e.category.toLowerCase().includes(query) ||
+        e.description.toLowerCase().includes(query) ||
+        e.how_to_perform.toLowerCase().includes(query) ||
+        e.why_do_it.toLowerCase().includes(query) ||
         e.primary_muscles.some((m) => m.toLowerCase().includes(query)) ||
         e.secondary_muscles.some((m) => m.toLowerCase().includes(query)) ||
         (e.tertiary_muscles ?? []).some((m) => m.toLowerCase().includes(query))
@@ -563,16 +614,11 @@ export default function GlossaryPage() {
             onClick={() => {
               setShowAddForm(true)
               setIsEditing(null)
-              setFormData({
-                name: '',
-                category: 'squat',
-                primary_muscles: [],
-                secondary_muscles: [],
-                tertiary_muscles: [],
-                equipment: 'barbell',
-                cues: [],
-                notes: '',
-              })
+              setFormData(emptyExerciseForm())
+              setFatigueProfile(null)
+              setFatigueSource(null)
+              setFatigueReasoning(null)
+              setE1rmEstimate(null)
             }}
           >
             Add Exercise
@@ -872,49 +918,60 @@ export default function GlossaryPage() {
             </Paper>
           </Stack>
 
-          <div>
-            <Text size="sm" fw={500} mb={4}>Training Cues</Text>
-            <Group gap="xs" mb="xs">
-              <TextInput
-                placeholder="e.g., Chest up, Big air..."
-                value={cueInput}
-                onChange={(e) => setCueInput(e.currentTarget.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addCue()}
-                style={{ flex: 1 }}
-              />
-              <Button variant="default" onClick={addCue}>Add</Button>
-            </Group>
-            <Group gap="xs">
-              {formData.cues?.map((cue, i) => (
-                <Badge
-                  key={i}
-                  variant="light"
-                  pr={4}
-                  rightSection={
-                    <ActionIcon size="xs" variant="transparent" color="blue" onClick={() => removeCue(i)}>
-                      <X size={10} />
-                    </ActionIcon>
-                  }
-                >
-                  {cue}
-                </Badge>
-              ))}
-            </Group>
-          </div>
+          <ExerciseMuscleMap
+            primary={formData.primary_muscles ?? []}
+            secondary={formData.secondary_muscles ?? []}
+            tertiary={formData.tertiary_muscles ?? []}
+          />
 
-          <div>
-            <Text size="sm" fw={500} mb={4}>Notes</Text>
-            <Textarea
-              placeholder="Any additional details..."
-              autosize
-              minRows={3}
-              value={formData.notes || ''}
-              onChange={(e) => {
-                const val = e.currentTarget.value;
-                setFormData((p) => ({ ...p, notes: val }));
-              }}
-            />
-          </div>
+          <Paper withBorder p="md">
+            <Stack gap="md">
+              <Group justify="space-between" align="center">
+                <Text size="sm" fw={600}>AI Generate</Text>
+                <Button
+                  size="compact-xs"
+                  variant="light"
+                  leftSection={isGeneratingText ? <Loader size={12} /> : <Wand2 size={12} />}
+                  onClick={handleGenerateText}
+                  disabled={isGeneratingText || !formData.name}
+                >
+                  {isGeneratingText ? 'Generating...' : 'AI Generate'}
+                </Button>
+              </Group>
+
+              <Textarea
+                label="What it is"
+                placeholder="Short description of the movement."
+                autosize
+                minRows={2}
+                value={formData.description || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, description: e.currentTarget.value }))}
+              />
+              <Textarea
+                label="How to perform it"
+                placeholder="Concise setup and execution steps."
+                autosize
+                minRows={3}
+                value={formData.how_to_perform || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, how_to_perform: e.currentTarget.value }))}
+              />
+              <Textarea
+                label="Why we do it"
+                placeholder="Training purpose and how it supports the program."
+                autosize
+                minRows={2}
+                value={formData.why_do_it || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, why_do_it: e.currentTarget.value }))}
+              />
+              <TextInput
+                label="YouTube URL"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={formData.video_url || ''}
+                error={(formData.video_url || '').trim() && !validateYoutubeUrl(formData.video_url) ? 'Use a valid YouTube URL' : undefined}
+                onChange={(e) => setFormData((p) => ({ ...p, video_url: e.currentTarget.value }))}
+              />
+            </Stack>
+          </Paper>
 
           <Divider mt="md" />
 
@@ -1011,24 +1068,43 @@ export default function GlossaryPage() {
                         )}
                       </SimpleGrid>
 
-                      {/* Cues */}
-                      {exercise.cues.length > 0 && (
-                        <div>
-                          <Text size="xs" c="dimmed" mb={4}>Cues</Text>
-                          <Stack gap={4}>
-                            {exercise.cues.map((cue, i) => (
-                              <Text key={i} size="sm">- {cue}</Text>
-                            ))}
-                          </Stack>
-                        </div>
-                      )}
-
-                      {/* Notes */}
-                      {exercise.notes && (
-                        <div>
-                          <Text size="xs" c="dimmed" mb={4}>Notes</Text>
-                          <Text size="sm">{exercise.notes}</Text>
-                        </div>
+                      {(exercise.description || exercise.how_to_perform || exercise.why_do_it || exercise.video_url) && (
+                        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+                          {exercise.description && (
+                            <div>
+                              <Text size="xs" c="dimmed" mb={4}>What It Is</Text>
+                              <Text size="sm">{exercise.description}</Text>
+                            </div>
+                          )}
+                          {exercise.how_to_perform && (
+                            <div>
+                              <Text size="xs" c="dimmed" mb={4}>How To Perform</Text>
+                              <Text size="sm">{exercise.how_to_perform}</Text>
+                            </div>
+                          )}
+                          {exercise.why_do_it && (
+                            <div>
+                              <Text size="xs" c="dimmed" mb={4}>Why We Do It</Text>
+                              <Text size="sm">{exercise.why_do_it}</Text>
+                            </div>
+                          )}
+                          {exercise.video_url && (
+                            <div>
+                              <Text size="xs" c="dimmed" mb={4}>Example Video</Text>
+                              <Button
+                                component="a"
+                                href={exercise.video_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                size="compact-sm"
+                                variant="light"
+                                leftSection={<ExternalLink size={12} />}
+                              >
+                                Open YouTube
+                              </Button>
+                            </div>
+                          )}
+                        </SimpleGrid>
                       )}
 
                       {/* Actions */}

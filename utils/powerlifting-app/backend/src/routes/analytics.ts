@@ -671,6 +671,25 @@ analyticsRouter.post('/muscle-groups/estimate', async (req, res) => {
   }
 })
 
+analyticsRouter.post('/glossary/text/generate', async (req, res) => {
+  try {
+    const body = req.body ?? {}
+    const exercise = body.exercise ?? body
+    if (!exercise?.name) {
+      return res.status(400).json({ data: null, error: 'Exercise name is required' })
+    }
+    const lift_profiles = Array.isArray(body.lift_profiles) ? body.lift_profiles : undefined
+    const data = await invokeToolDirect('glossary_generate_text', {
+      exercise,
+      ...(lift_profiles ? { lift_profiles } : {}),
+      pk: req.effectivePk,
+    })
+    res.json({ data, error: null })
+  } catch (err) {
+    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
+  }
+})
+
 analyticsRouter.post('/lift-profile/review', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body

@@ -14,11 +14,14 @@ Secondary muscles: {{ exercise.secondary_muscles | join(", ") }}
 {% if exercise.get("tertiary_muscles") %}
 Tertiary muscles: {{ exercise.tertiary_muscles | join(", ") }}
 {% endif %}
-{% if exercise.get("cues") %}
-Cues: {{ exercise.cues | join(", ") }}
+{% if exercise.get("description") %}
+Description: {{ exercise.description }}
 {% endif %}
-{% if exercise.get("notes") %}
-Notes: {{ exercise.notes }}
+{% if exercise.get("how_to_perform") %}
+How performed: {{ exercise.how_to_perform }}
+{% endif %}
+{% if exercise.get("why_do_it") %}
+Training purpose: {{ exercise.why_do_it }}
 {% endif %}
 {% if athlete_metrics_lines %}
 

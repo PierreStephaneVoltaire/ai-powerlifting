@@ -574,8 +574,9 @@ export async function estimateFatigueProfile(exercise: {
   primary_muscles?: string[]
   secondary_muscles?: string[]
   tertiary_muscles?: string[]
-  cues?: string[]
-  notes?: string
+  description?: string
+  how_to_perform?: string
+  why_do_it?: string
 }): Promise<FatigueProfile & { reasoning: string }> {
   const res = await api.post<ApiResponse<FatigueProfile & { reasoning: string }>>(
     '/analytics/fatigue-profile/estimate',
@@ -588,8 +589,9 @@ export async function estimateMuscleGroups(exercise: {
   name: string
   category?: string
   equipment?: string
-  cues?: string[]
-  notes?: string
+  description?: string
+  how_to_perform?: string
+  why_do_it?: string
   primary_muscles?: string[]
   secondary_muscles?: string[]
   tertiary_muscles?: string[]
@@ -607,6 +609,35 @@ export async function estimateMuscleGroups(exercise: {
     tertiary_muscles: string[]
     reasoning: string
   }>>('/analytics/muscle-groups/estimate', {
+    exercise: exercisePayload,
+    lift_profiles,
+  })
+  return res.data.data
+}
+
+export async function generateGlossaryText(exercise: {
+  name: string
+  category?: string
+  equipment?: string
+  primary_muscles?: string[]
+  secondary_muscles?: string[]
+  tertiary_muscles?: string[]
+  description?: string
+  how_to_perform?: string
+  why_do_it?: string
+  lift_profiles?: LiftProfile[]
+}): Promise<{
+  description: string
+  how_to_perform: string
+  why_do_it: string
+}> {
+  const { lift_profiles, ...exercisePayload } = exercise
+  const res = await api.post<ApiResponse<{
+    status?: string
+    description: string
+    how_to_perform: string
+    why_do_it: string
+  }>>('/analytics/glossary/text/generate', {
     exercise: exercisePayload,
     lift_profiles,
   })

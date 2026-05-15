@@ -2118,7 +2118,7 @@ class CorrelationAnalysisTool(ToolDefinition[CorrelationAnalysisAction, Correlat
 
 class FatigueProfileEstimateAction(Action):
     exercise: dict = Field(
-        description="Exercise metadata: name, category, equipment, primary_muscles, secondary_muscles, tertiary_muscles, cues, notes"
+        description="Exercise metadata: name, category, equipment, muscles, description, how_to_perform, why_do_it"
     )
 
 
@@ -2154,7 +2154,7 @@ class FatigueProfileEstimateTool(ToolDefinition[FatigueProfileEstimateAction, Fa
 
 class MuscleGroupEstimateAction(Action):
     exercise: dict = Field(
-        description="Exercise metadata: name, category, equipment, cues, notes, and any existing muscle annotations"
+        description="Exercise metadata: name, category, equipment, description, how_to_perform, why_do_it, and any existing muscle annotations"
     )
     lift_profiles: list[dict[str, Any]] | None = Field(
         default=None,
@@ -2186,6 +2186,43 @@ class MuscleGroupEstimateTool(ToolDefinition[MuscleGroupEstimateAction, MuscleGr
             action_type=MuscleGroupEstimateAction,
             observation_type=MuscleGroupEstimateObservation,
             executor=MuscleGroupEstimateExecutor(),
+        )]
+
+
+class GlossaryGenerateTextAction(Action):
+    exercise: dict = Field(
+        description="Exercise metadata: name, category, equipment, primary_muscles, secondary_muscles, tertiary_muscles"
+    )
+    lift_profiles: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Optional squat/bench/deadlift lift profiles to use as brief context",
+    )
+
+
+class GlossaryGenerateTextObservation(Observation):
+    pass
+
+
+class GlossaryGenerateTextExecutor(ToolExecutor[GlossaryGenerateTextAction, GlossaryGenerateTextObservation]):
+    def __call__(self, action: GlossaryGenerateTextAction, conversation=None) -> GlossaryGenerateTextObservation:
+        result = _do_glossary_generate_text({
+            "exercise": action.exercise,
+            "lift_profiles": action.lift_profiles,
+        })
+        return GlossaryGenerateTextObservation.from_text(_format_result(result))
+
+
+class GlossaryGenerateTextTool(ToolDefinition[GlossaryGenerateTextAction, GlossaryGenerateTextObservation]):
+    @classmethod
+    def create(cls, conv_state=None, **params) -> Sequence["GlossaryGenerateTextTool"]:
+        return [cls(
+            description=(
+                "Generate concise glossary text fields for an exercise: what it is, "
+                "how to perform it, and why to use it."
+            ),
+            action_type=GlossaryGenerateTextAction,
+            observation_type=GlossaryGenerateTextObservation,
+            executor=GlossaryGenerateTextExecutor(),
         )]
 
 
@@ -2250,6 +2287,7 @@ class LiftProfileRewriteEstimateTool(ToolDefinition[LiftProfileRewriteEstimateAc
 register_tool("CorrelationAnalysisTool", CorrelationAnalysisTool)
 register_tool("FatigueProfileEstimateTool", FatigueProfileEstimateTool)
 register_tool("MuscleGroupEstimateTool", MuscleGroupEstimateTool)
+register_tool("GlossaryGenerateTextTool", GlossaryGenerateTextTool)
 register_tool("LiftProfileReviewTool", LiftProfileReviewTool)
 register_tool("LiftProfileRewriteEstimateTool", LiftProfileRewriteEstimateTool)
 
@@ -2462,6 +2500,7 @@ def get_tools() -> List[Tool]:
         Tool(name="CorrelationAnalysisTool"),
         Tool(name="FatigueProfileEstimateTool"),
         Tool(name="MuscleGroupEstimateTool"),
+        Tool(name="GlossaryGenerateTextTool"),
         Tool(name="LiftProfileReviewTool"),
         Tool(name="LiftProfileRewriteEstimateTool"),
         Tool(name="ProgramEvaluationTool"),
@@ -3085,8 +3124,9 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                             "primary_muscles": {"type": "array", "items": {"type": "string"}},
                             "secondary_muscles": {"type": "array", "items": {"type": "string"}},
                             "tertiary_muscles": {"type": "array", "items": {"type": "string"}},
-                            "cues": {"type": "array", "items": {"type": "string"}},
-                            "notes": {"type": "string"},
+                            "description": {"type": "string"},
+                            "how_to_perform": {"type": "string"},
+                            "why_do_it": {"type": "string"},
                         },
                     },
                 },
@@ -3112,8 +3152,9 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                             "primary_muscles": {"type": "array", "items": {"type": "string"}},
                             "secondary_muscles": {"type": "array", "items": {"type": "string"}},
                             "tertiary_muscles": {"type": "array", "items": {"type": "string"}},
-                            "cues": {"type": "array", "items": {"type": "string"}},
-                            "notes": {"type": "string"},
+                            "description": {"type": "string"},
+                            "how_to_perform": {"type": "string"},
+                            "why_do_it": {"type": "string"},
                         },
                     },
                     "lift_profiles": {
@@ -3129,6 +3170,36 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                                 "volume_tolerance": {"type": "string"},
                             },
                         },
+                    },
+                },
+                "required": ["exercise"],
+            },
+        },
+        "glossary_generate_text": {
+            "name": "glossary_generate_text",
+            "description": "Generate concise editable glossary text for what an exercise is, how to perform it, and why to use it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "exercise": {
+                        "type": "object",
+                        "description": "Exercise metadata dict",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "category": {"type": "string"},
+                            "equipment": {"type": "string"},
+                            "primary_muscles": {"type": "array", "items": {"type": "string"}},
+                            "secondary_muscles": {"type": "array", "items": {"type": "string"}},
+                            "tertiary_muscles": {"type": "array", "items": {"type": "string"}},
+                            "description": {"type": "string"},
+                            "how_to_perform": {"type": "string"},
+                            "why_do_it": {"type": "string"},
+                        },
+                    },
+                    "lift_profiles": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "Optional squat/bench/deadlift lift profiles",
                     },
                 },
                 "required": ["exercise"],
@@ -3819,6 +3890,18 @@ def _do_muscle_group_estimate(args):
     ))
 
 
+def _do_glossary_generate_text(args):
+    from glossary_text_ai import generate_glossary_text
+    _, stored_lift_profiles = _fatigue_context()
+    lift_profiles = args.get("lift_profiles")
+    if not isinstance(lift_profiles, list) or not lift_profiles:
+        lift_profiles = stored_lift_profiles
+    return _run_async(generate_glossary_text(
+        args["exercise"],
+        lift_profiles=lift_profiles,
+    ))
+
+
 def _do_lift_profile_review(args):
     from lift_profile_ai import review_lift_profile
     return _run_async(review_lift_profile(args["profile"]))
@@ -4206,6 +4289,7 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         glossary_add,
         glossary_update,
         glossary_set_e1rm,
+        glossary_generate_text,
         glossary_estimate_e1rm,
         glossary_estimate_fatigue,
         glossary_estimate_muscles,
@@ -4295,6 +4379,7 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "glossary_add": lambda: glossary_add(args["exercise"]),
         "glossary_update": lambda: glossary_update(args["id"], args["fields"]),
         "glossary_set_e1rm": lambda: glossary_set_e1rm(args["id"], args["value_kg"], args.get("method", "manual")),
+        "glossary_generate_text": lambda: glossary_generate_text(args["exercise"], args.get("lift_profiles")),
         "glossary_estimate_e1rm": lambda: glossary_estimate_e1rm(args["id"]),
         "glossary_estimate_fatigue": lambda: glossary_estimate_fatigue(args["id"]),
         "glossary_estimate_muscles": lambda: glossary_estimate_muscles(args["id"]),

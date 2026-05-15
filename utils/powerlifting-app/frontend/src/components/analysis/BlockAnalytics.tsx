@@ -606,6 +606,30 @@ export function PastBlocksPanel({ unit }: { unit: WeightUnit }) {
                       <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} onClick={() => loadAnalysis(block.blockKey, true)}>
                         Refresh
                       </Button>
+                      {block.cacheStatus?.cached && (
+                        <>
+                          <Button
+                            component="a"
+                            href={blockAnalysisExportUrl(block.blockKey, 'xlsx')}
+                            download
+                            size="xs"
+                            variant="subtle"
+                            leftSection={<Download size={14} />}
+                          >
+                            Excel
+                          </Button>
+                          <Button
+                            component="a"
+                            href={blockAnalysisExportUrl(block.blockKey, 'markdown')}
+                            download
+                            size="xs"
+                            variant="subtle"
+                            leftSection={<Download size={14} />}
+                          >
+                            Markdown
+                          </Button>
+                        </>
+                      )}
                     </Group>
                   </Table.Td>
                 </Table.Tr>

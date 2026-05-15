@@ -1,10 +1,62 @@
 import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, TABLE } from '../db/dynamo'
 import { invokeToolDirect } from '../utils/agent'
+import { AppError } from '../middleware/errorHandler'
 import type { GlossaryExercise, GlossaryStore } from '@powerlifting/types'
 import { v4 as uuidv4 } from 'uuid'
 
 const GLOSSARY_SK = 'glossary#v1'
+const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'])
+
+function sanitizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeVideoUrl(value: unknown): string | undefined {
+  const raw = sanitizeText(value)
+  if (!raw) return undefined
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    throw new AppError('Video URL must be a valid YouTube URL', 400)
+  }
+  if (!YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase())) {
+    throw new AppError('Video URL must be from YouTube', 400)
+  }
+  return parsed.toString()
+}
+
+function normalizeExercise(raw: GlossaryExercise): GlossaryExercise {
+  const videoUrl = normalizeVideoUrl(raw.video_url)
+  const normalized: GlossaryExercise = {
+    ...raw,
+    name: sanitizeText(raw.name),
+    primary_muscles: Array.isArray(raw.primary_muscles) ? raw.primary_muscles : [],
+    secondary_muscles: Array.isArray(raw.secondary_muscles) ? raw.secondary_muscles : [],
+    tertiary_muscles: Array.isArray(raw.tertiary_muscles) ? raw.tertiary_muscles : [],
+    description: sanitizeText(raw.description),
+    how_to_perform: sanitizeText(raw.how_to_perform),
+    why_do_it: sanitizeText(raw.why_do_it),
+  }
+  if (videoUrl) {
+    normalized.video_url = videoUrl
+  } else {
+    delete normalized.video_url
+  }
+  delete (normalized as GlossaryExercise & { cues?: unknown }).cues
+  delete (normalized as GlossaryExercise & { notes?: unknown }).notes
+  return normalized
+}
+
+function normalizeStoredExercise(raw: GlossaryExercise): GlossaryExercise {
+  try {
+    return normalizeExercise(raw)
+  } catch {
+    const fallback = { ...raw, video_url: undefined }
+    return normalizeExercise(fallback)
+  }
+}
 
 /**
  * Get the exercise glossary
@@ -30,7 +82,11 @@ export async function getGlossary(pk: string): Promise<GlossaryStore> {
     }
   }
 
-  return result.Item as GlossaryStore
+  const glossary = result.Item as GlossaryStore
+  return {
+    ...glossary,
+    exercises: (glossary.exercises ?? []).map(normalizeStoredExercise),
+  }
 }
 
 /**
@@ -38,7 +94,7 @@ export async function getGlossary(pk: string): Promise<GlossaryStore> {
  */
 export async function upsertExercise(pk: string, exercise: GlossaryExercise): Promise<void> {
   const glossary = await getGlossary(pk)
-  exercise.tertiary_muscles = exercise.tertiary_muscles ?? []
+  exercise = normalizeExercise(exercise)
 
   // Generate ID if not provided
   if (!exercise.id) {
@@ -77,8 +133,9 @@ export async function upsertExercise(pk: string, exercise: GlossaryExercise): Pr
         primary_muscles: exercise.primary_muscles,
         secondary_muscles: exercise.secondary_muscles,
         tertiary_muscles: exercise.tertiary_muscles,
-        cues: exercise.cues,
-        notes: exercise.notes,
+        description: exercise.description,
+        how_to_perform: exercise.how_to_perform,
+        why_do_it: exercise.why_do_it,
       },
       pk,
     })
@@ -147,6 +204,9 @@ export async function searchExercises(pk: string, query: string): Promise<Glossa
 
   return glossary.exercises.filter(e =>
     e.name.toLowerCase().includes(lowerQuery) ||
+    e.description.toLowerCase().includes(lowerQuery) ||
+    e.how_to_perform.toLowerCase().includes(lowerQuery) ||
+    e.why_do_it.toLowerCase().includes(lowerQuery) ||
     e.primary_muscles.some(m => m.toLowerCase().includes(lowerQuery)) ||
     e.secondary_muscles.some(m => m.toLowerCase().includes(lowerQuery)) ||
     (e.tertiary_muscles ?? []).some(m => m.toLowerCase().includes(lowerQuery))

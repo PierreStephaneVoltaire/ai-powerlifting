@@ -15,6 +15,7 @@ If you want the current truth, treat these files as the real sources of truth:
 - `frontend/src/App.tsx`
 - `backend/src/routes/analytics.ts`
 - `backend/src/services/blockAnalytics.ts`
+- `backend/src/services/blockAnalysisExport.ts`
 - `backend/src/services/analysisCache.ts`
 - `tools/health/analytics.py`
 - `tools/health/*_ai.py`
@@ -34,6 +35,7 @@ The powerlifting app is a single-athlete training portal that combines:
 - DynamoDB-backed storage for the full training record
 - separate DynamoDB table (`if-powerlifting-analysis-cache`) for pre-computed
   analytics windows and AI report caches
+- current-program exports plus cache-only past-block analysis exports
 - optional S3-backed video attachments
 - Discord OAuth authentication with per-user settings (nickname)
 
@@ -71,6 +73,9 @@ The app stores its main state in DynamoDB table `if-health`. Important records:
   Active-program pointer. Resolves to the latest concrete program version.
 - `program#vNNN`
   Full program snapshot. New versions are written instead of updating in place.
+- `if-sessions` / `IF_SESSIONS_TABLE_NAME`
+  Separate session table. Sessions are keyed by program version and merged into
+  `Program.sessions` by `programController.getProgram()`.
 - `weight_log#vNNN`
   Bodyweight history for the same program version.
 - `max_history#vNNN`
@@ -299,6 +304,7 @@ strategy recommendations.
   weight_class_kg, required_total_kg, qualifying date range, source URL/label
 
 `Competition` has been extended with:
+
 - `federation_id`: the host federation
 - `counts_toward_federation_ids[]`: additional federations the meet counts toward
   (used for goal eligibility determination)
@@ -321,6 +327,7 @@ strategy recommendations.
 `session.planned_exercises[]`.
 
 `SessionVideo` captures per-video metadata:
+
 - `video_id`, `s3_key`, `thumbnail_s3_key`, `video_url`, `thumbnail_url`
 - `exercise_name`, `set_number`
 - `thumbnail_status`: `pending | ready | failed`
@@ -401,9 +408,9 @@ bodyweight trends only from `program.meta.current_body_weight_kg`.
 - Identity and classification:
   `id`, `name`, `category`, `fatigue_category`, `equipment`
 - Muscle mapping:
-  `primary_muscles[]`, `secondary_muscles[]`
-- Coaching metadata:
-  `cues[]`, `notes`, `video_url`
+  `primary_muscles[]`, `secondary_muscles[]`, `tertiary_muscles[]`
+- Exercise text and media:
+  `description`, `how_to_perform`, `why_do_it`, `video_url`
 - Fatigue metadata:
   `fatigue_profile`, `fatigue_profile_source`, `fatigue_profile_reasoning`
 - Accessory e1RM metadata:
@@ -520,10 +527,18 @@ Powered by `blockAnalytics.ts` service. Calls:
 - `GET /api/analytics/blocks/:blockKey/correlation` — per-block correlation AI
 - `GET /api/analytics/blocks/:blockKey/program-evaluation` — per-block program
   evaluation AI
+- `GET /api/analytics/blocks/:blockKey/export/:format` — cache-only past-block
+  export where `:format` is `xlsx` or `markdown`
 - `PUT /api/analytics/blocks/:blockKey/start-maxes` — manually pin block-start
   maxes for relative progression tracking
 - `POST /api/analytics/blocks/:blockKey/regenerate` — force-regenerates all
   block caches
+
+Past-block exports intentionally do not pull full session history. They render
+only the already cached material shown on the Blocks tab: block summary,
+strength start/end, competition outcome, data quality, weekly analysis, optional
+program evaluation, and optional ROI correlation. The current-block program
+export remains `/api/export/xlsx` and `/api/export/markdown`.
 
 `DataQualityFlag` codes surface per-block data quality issues:
 `no_sessions`, `low_session_count`, `no_completed_sessions`, `short_block`,
@@ -547,7 +562,7 @@ This top card is not a pure pass-through of backend `current_maxes`.
 Render priority:
 
 1. If local `dotsTrend` rows exist, the card uses `highestMaxes`, which scans the
-   locally-computed weekly Epley trend rows and takes the highest squat, bench,
+   locally-computed weekly e1RM trend rows and takes the highest squat, bench,
    and deadlift value seen in the selected window.
 2. If there is no local trend data, the card falls back to backend
    `data.current_maxes`.
@@ -556,7 +571,8 @@ Local trend rules:
 
 - built from completed sessions only
 - main-lift matching is name-based
-- Epley formula is `kg * (1 + reps / 30)`
+- if an RPE is present, reps 1-6 at RPE 6-10 use the primary RPE percentage table
+- without RPE, reps 1-5 use conservative rep-percent fallbacks
 - local DOTS is then computed from local total plus latest bodyweight from
   weight log or session bodyweight
 
@@ -759,7 +775,8 @@ Source: frontend-local `dotsTrend` / `ipfGlTrend`
 
 Displayed:
 
-- weekly local Epley-estimated squat, bench, deadlift, and total
+- weekly local RPE-table/conservative-percent estimated squat, bench, deadlift,
+  and total
 - local DOTS trend
 - local IPF GL trend
 - weekly change badges
@@ -918,7 +935,7 @@ Where used:
 - backend current maxes
 - backend meet projection
 - backend INOL / ACWR / RI distribution
-- frontend trend table uses a separate local Epley path
+- frontend trend table uses a separate local RPE-table/conservative-percent path
 
 Backend session estimate:
 
@@ -1570,6 +1587,7 @@ Tool/module path:
 Inputs:
 
 - exercise name, category, equipment
+- optional `description`, `how_to_perform`, `why_do_it`
 - optional lift profiles
 
 Outputs:
@@ -1577,7 +1595,44 @@ Outputs:
 - `primary_muscles[]`, `secondary_muscles[]`, `tertiary_muscles[]`
 - reasoning string
 
-### 8. Multi-block lifetime comparison AI
+### 8. Glossary text generation
+
+User-visible surface:
+
+- Glossary add/edit modal -> `AI Generate`
+
+Route:
+
+- `POST /api/analytics/glossary/text/generate`
+
+Tool/module path:
+
+- `glossary_generate_text`
+- `tools/health/glossary_text_ai.py`
+
+Model:
+
+- `GLOSSARY_TEXT_MODEL`, default `google/gemini-3.1-flash-lite-preview`
+
+Inputs:
+
+- exercise name, category, equipment
+- primary, secondary, and tertiary muscles
+- optional lift profiles
+
+Outputs:
+
+- `description`
+- `how_to_perform`
+- `why_do_it`
+
+Persistence:
+
+- generation returns editable draft text only
+- saving the glossary exercise persists the three text fields and strips legacy
+  `cues` and `notes`
+
+### 9. Multi-block lifetime comparison AI
 
 User-visible surface:
 
@@ -1610,7 +1665,7 @@ Cache behavior:
 - cached as lifetime compare key; never regenerated by `/analysis/regenerate`
 - only on-demand via the Compare tab AI button
 
-### 9. Lift-profile AI tools
+### 10. Lift-profile AI tools
 
 Routes:
 
@@ -1711,7 +1766,7 @@ Boundary:
 - `planned_exercises[]` is never mutated. Applying the result updates only the
   executed `exercises[]` list and appends concise reasoning to exercise notes.
 
-### 1. Exercise fatigue-profile estimation (legacy numbering — see sections 7-9 above for new AI tools)
+### 1. Exercise fatigue-profile estimation (legacy numbering — see sections 7-10 above for new AI tools)
 
 User-visible surfaces:
 
@@ -1729,6 +1784,7 @@ Inputs:
 
 - exercise name, category, equipment
 - muscle groups (primary, secondary, tertiary)
+- optional `description`, `how_to_perform`, `why_do_it`
 - optional athlete body metrics (bodyweight, height, arm wingspan, leg length)
 - optional lift profiles (style notes, sticking points, volume tolerance)
 
@@ -2176,44 +2232,44 @@ Prompt summaries:
 
 Full route list from `frontend/src/App.tsx`:
 
-| Route | Component | Notes |
-|-------|-----------|-------|
-| `/login` | `LoginPage` | Discord OAuth entry point |
-| `/auth/callback` | `AuthCallbackPage` | OAuth callback, verifies session cookie |
-| `/` | `Dashboard` | Main hub |
-| `/lift-profiles/:lift` | `LiftProfilePage` | Per-lift profile editor (squat/bench/deadlift) |
-| `/sessions` | `CalendarPage` | Session calendar (Month/Agenda/Compact views) |
-| `/calendar` | redirect | → `/sessions` |
-| `/session/:date/:index?` | `SessionDetailPage` | Full-page session editor |
-| `/list/:date/:index?` | `SessionDetailPage` | Legacy alias |
-| `/list` | `ListPage` | Redirect → `/sessions?view=Compact` |
-| `/analysis` | `AnalysisPage` | Full analytics hub (Weekly/Blocks/Compare tabs) |
-| `/maxes` | `MaxesPage` | Max history viewer |
-| `/supplements` | `SupplementsPage` | Supplement phase CRUD |
-| `/biometrics` | `BiometricsPage` | Diet and biometrics notes |
-| `/diet` | `BiometricsPage` | Alias |
-| `/videos` | `VideosPage` | Video library |
-| `/rankings` | `RankingsPage` | OpenPowerlifting rankings lookup |
-| `/tools` | `ToolsPage` | Tool hub |
-| `/tools/plate` | `PlateCalculator` | |
-| `/tools/dots` | `DotsCalculator` | |
-| `/tools/weight` | `WeightTracker` | |
-| `/tools/percent` | `PercentTable` | |
-| `/tools/converter` | `UnitConverter` | |
-| `/tools/attempts` | `AttemptSelector` | |
-| `/about` | `AboutPage` | Formula documentation |
-| `/designer` | `DesignerLanding` | Designer hub |
-| `/designer/phases` | `DesignerPhases` | Phase CRUD per block |
-| `/designer/sessions` | `DesignerPage` | Session designer with drag-and-drop |
-| `/designer/goals` | `GoalsPage` | Athlete goal CRUD |
-| `/designer/federations` | `FederationsPage` | Federation library + qual standards |
-| `/designer/competitions` | `CompetitionsPage` | Competition CRUD + post-meet reports |
-| `/designer/glossary` | `GlossaryPage` | Exercise glossary CRUD |
-| `/designer/import` | `ImportWizardPage` | Spreadsheet import wizard |
-| `/designer/templates` | `TemplateLibraryPage` | Template library |
-| `/designer/templates/new` | `TemplateCreatePage` | |
-| `/designer/templates/:sk/edit` | `TemplateEditPage` | |
-| `/designer/templates/:sk` | `TemplateDetailPage` | |
+| Route                          | Component             | Notes                                           |
+| ------------------------------ | --------------------- | ----------------------------------------------- |
+| `/login`                       | `LoginPage`           | Discord OAuth entry point                       |
+| `/auth/callback`               | `AuthCallbackPage`    | OAuth callback, verifies session cookie         |
+| `/`                            | `Dashboard`           | Main hub                                        |
+| `/lift-profiles/:lift`         | `LiftProfilePage`     | Per-lift profile editor (squat/bench/deadlift)  |
+| `/sessions`                    | `CalendarPage`        | Session calendar (Month/Agenda/Compact views)   |
+| `/calendar`                    | redirect              | → `/sessions`                                   |
+| `/session/:date/:index?`       | `SessionDetailPage`   | Full-page session editor                        |
+| `/list/:date/:index?`          | `SessionDetailPage`   | Legacy alias                                    |
+| `/list`                        | `ListPage`            | Redirect → `/sessions?view=Compact`             |
+| `/analysis`                    | `AnalysisPage`        | Full analytics hub (Weekly/Blocks/Compare tabs) |
+| `/maxes`                       | `MaxesPage`           | Max history viewer                              |
+| `/supplements`                 | `SupplementsPage`     | Supplement phase CRUD                           |
+| `/biometrics`                  | `BiometricsPage`      | Diet and biometrics notes                       |
+| `/diet`                        | `BiometricsPage`      | Alias                                           |
+| `/videos`                      | `VideosPage`          | Video library                                   |
+| `/rankings`                    | `RankingsPage`        | OpenPowerlifting rankings lookup                |
+| `/tools`                       | `ToolsPage`           | Tool hub                                        |
+| `/tools/plate`                 | `PlateCalculator`     |                                                 |
+| `/tools/dots`                  | `DotsCalculator`      |                                                 |
+| `/tools/weight`                | `WeightTracker`       |                                                 |
+| `/tools/percent`               | `PercentTable`        |                                                 |
+| `/tools/converter`             | `UnitConverter`       |                                                 |
+| `/tools/attempts`              | `AttemptSelector`     |                                                 |
+| `/about`                       | `AboutPage`           | Formula documentation                           |
+| `/designer`                    | `DesignerLanding`     | Designer hub                                    |
+| `/designer/phases`             | `DesignerPhases`      | Phase CRUD per block                            |
+| `/designer/sessions`           | `DesignerPage`        | Session designer with drag-and-drop             |
+| `/designer/goals`              | `GoalsPage`           | Athlete goal CRUD                               |
+| `/designer/federations`        | `FederationsPage`     | Federation library + qual standards             |
+| `/designer/competitions`       | `CompetitionsPage`    | Competition CRUD + post-meet reports            |
+| `/designer/glossary`           | `GlossaryPage`        | Exercise glossary CRUD                          |
+| `/designer/import`             | `ImportWizardPage`    | Spreadsheet import wizard                       |
+| `/designer/templates`          | `TemplateLibraryPage` | Template library                                |
+| `/designer/templates/new`      | `TemplateCreatePage`  |                                                 |
+| `/designer/templates/:sk/edit` | `TemplateEditPage`    |                                                 |
+| `/designer/templates/:sk`      | `TemplateDetailPage`  |                                                 |
 
 Unreachable pages (no registered route): `TimelinePage.tsx`, `DietNotesPage.tsx`.
 
@@ -2298,11 +2354,15 @@ The Glossary page is where exercise intelligence lives:
 
 - canonical exercise definitions
 - category and muscle mapping
+- form-only muscle map for primary, secondary, and tertiary muscles
+- generated exercise text: what it is, how to perform it, why it is used
+- optional YouTube example URL
 - fatigue profile
 - fatigue-profile reasoning
 - accessory e1RM estimates
 - archive state
 - AI estimate muscle groups button
+- AI generate text button
 
 ### Template library and designer
 
@@ -2353,8 +2413,8 @@ or temporary mismatches:
    bodyweight sources. That is why backend DOTS can be null while the local
    trend DOTS still renders.
 2. The top max card is not the same thing as backend `current_maxes`. It prefers
-   local Epley-based trend maxima when those exist, then falls back to backend
-   current maxes.
+   local RPE-table/conservative-percent trend maxima when those exist, then
+   falls back to backend current maxes.
 3. `attempt_selection` is computed but not rendered on the Analysis page.
 4. Program-evaluation gating differs between frontend and backend.
 5. Template evaluation still passes mocked, minimal athlete context.
@@ -2373,39 +2433,42 @@ Consistency rule:
 
 ## Backend Services Summary
 
-| Service | File | Purpose |
-|---------|------|---------|
-| Analysis cache | `backend/src/services/analysisCache.ts` | DynamoDB cache for 6 window analyses + markdown export. Sharding for large payloads. |
-| Block analytics | `backend/src/services/blockAnalytics.ts` | Cross-block index, per-block bundles, correlation, program-eval, AI lifetime compare |
-| Session store | `backend/src/services/sessionStore.ts` | Separate DynamoDB session storage (sessions are NOT embedded in program document) |
-| User settings | `backend/src/services/userSettings.ts` | Per-Discord-user settings with nickname and 60s in-memory cache |
+| Service               | File                                          | Purpose                                                                                     |
+| --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Analysis cache        | `backend/src/services/analysisCache.ts`       | DynamoDB cache for 6 window analyses + markdown export. Sharding for large payloads.        |
+| Block analytics       | `backend/src/services/blockAnalytics.ts`      | Cross-block index, per-block bundles, correlation, program-eval, AI lifetime compare        |
+| Block analysis export | `backend/src/services/blockAnalysisExport.ts` | XLSX/Markdown rendering for cached past-block analysis bundles; does not load full sessions |
+| Session store         | `backend/src/services/sessionStore.ts`        | Separate DynamoDB session storage (sessions are NOT embedded in program document)           |
+| User settings         | `backend/src/services/userSettings.ts`        | Per-Discord-user settings with nickname and 60s in-memory cache                             |
 
-Important: sessions are stored in a separate DynamoDB table (env var `SESSION_TABLE`),
-not inside the program document. `programController.getProgram()` does not return
-sessions by itself; callers must merge from `sessionStore` or pass `sessions` explicitly.
+Important: sessions are stored in a separate DynamoDB table (env var
+`IF_SESSIONS_TABLE_NAME`, default `if-sessions`), not inside the program
+document. `programController.getProgram()` now merges sessions from
+`sessionStore` into `Program.sessions`; lower-level callers that bypass the
+controller must still merge or pass sessions explicitly.
 
 ## Backend Routes Summary
 
-| Router | Key endpoints |
-|--------|---------------|
-| `analytics.ts` | 21 endpoints: weekly-bundle, weekly, blocks/*, block-comparison, correlation, program-evaluation, fatigue-profile, muscle-groups, lift-profile/*, e1rm-multiplier |
-| `sessions.ts` | 12 endpoints: CRUD + reschedule + status + complete + AI notes/autoregulation + exercise CRUD |
-| `programs.ts` | 11 endpoints: CRUD + fork + phases + lift-profiles + designer |
-| `auth.ts` | 4 endpoints: Discord OAuth login/callback/me/logout |
-| `exercises.ts` | 12 endpoints: glossary CRUD + archive + e1rm + AI estimate |
-| `competitions.ts` | 4 endpoints: CRUD + migrate + complete (triggers projection snapshot) |
-| `goals.ts` | 2 endpoints: get/put |
-| `federations.ts` | 2 endpoints: get/put |
-| `template.ts` | 10+ endpoints: list/get/create/update/apply/confirm/evaluate/convert/copy/archive |
-| `import.ts` | 5 endpoints: upload/pending/get/apply/reject |
-| `export.ts` | 2 endpoints: xlsx/markdown |
-| `videos.ts` | 5 endpoints: list/upload/delete/thumbnail/media-proxy |
-| `maxes.ts` | 3 endpoints: get/put/history |
-| `weight.ts` | 3 endpoints: get/post/delete |
-| `supplements.ts` | 2 endpoints: get/put |
-| `dietNotes.ts` | 2 endpoints: get/put |
-| `stats.ts` | 2 endpoints: categories/analyze (proxy to OpenPowerlifting) |
-| `settings.ts` | 2 endpoints: get/nickname |
+| Router            | Key endpoints                                                                                                                                                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `analytics.ts`    | 23 endpoints: weekly-bundle, weekly, current markdown, blocks/_ including cache-only past-block export, block-comparison, correlation, program-evaluation, fatigue-profile, muscle-groups, glossary text generation, lift-profile/_, e1rm-multiplier |
+| `sessions.ts`     | 12 endpoints: CRUD + reschedule + status + complete + AI notes/autoregulation + exercise CRUD                                                                                                                                                        |
+| `programs.ts`     | 11 endpoints: CRUD + fork + phases + lift-profiles + designer                                                                                                                                                                                        |
+| `auth.ts`         | 4 endpoints: Discord OAuth login/callback/me/logout                                                                                                                                                                                                  |
+| `exercises.ts`    | 12 endpoints: glossary CRUD + archive + e1rm + AI estimate                                                                                                                                                                                           |
+| `competitions.ts` | 4 endpoints: CRUD + migrate + complete (triggers projection snapshot)                                                                                                                                                                                |
+| `goals.ts`        | 2 endpoints: get/put                                                                                                                                                                                                                                 |
+| `federations.ts`  | 2 endpoints: get/put                                                                                                                                                                                                                                 |
+| `template.ts`     | 10+ endpoints: list/get/create/update/apply/confirm/evaluate/convert/copy/archive                                                                                                                                                                    |
+| `import.ts`       | 5 endpoints: upload/pending/get/apply/reject                                                                                                                                                                                                         |
+| `export.ts`       | 2 endpoints: current-program xlsx/markdown                                                                                                                                                                                                           |
+| `videos.ts`       | 5 endpoints: list/upload/delete/thumbnail/media-proxy                                                                                                                                                                                                |
+| `maxes.ts`        | 3 endpoints: get/put/history                                                                                                                                                                                                                         |
+| `weight.ts`       | 3 endpoints: get/post/delete                                                                                                                                                                                                                         |
+| `supplements.ts`  | 2 endpoints: get/put                                                                                                                                                                                                                                 |
+| `dietNotes.ts`    | 2 endpoints: get/put                                                                                                                                                                                                                                 |
+| `stats.ts`        | 2 endpoints: categories/analyze (proxy to OpenPowerlifting)                                                                                                                                                                                          |
+| `settings.ts`     | 2 endpoints: get/nickname                                                                                                                                                                                                                            |
 
 ## Bottom Line
 

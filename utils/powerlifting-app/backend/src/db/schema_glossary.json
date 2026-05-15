@@ -16,9 +16,10 @@
       "secondary_muscles": ["hamstrings", "erectors", "core"],
       "tertiary_muscles": ["adductors"],
       "equipment": "barbell",
-      "cues": ["brace core", "break at hips and knees simultaneously", "drive knees out"],
-      "notes": "Competition lift",
-      "video_url": "https://example.com/squat-video.mp4",
+      "description": "A barbell squat variation performed with the bar on the upper back.",
+      "how_to_perform": "Set the bar across the upper back, brace, descend under control, then drive back to standing.",
+      "why_do_it": "It builds competition squat strength and lower-body force production.",
+      "video_url": "https://www.youtube.com/watch?v=example",
       "fatigue_profile": {
         "axial": 0.9,
         "neural": 0.8,

@@ -62,6 +62,22 @@ class GlossaryStore:
             return [self._sanitize_decimals(v) for v in obj]
         return obj
 
+    def _normalize_exercise(self, exercise: dict) -> dict:
+        normalized = dict(exercise)
+        normalized.pop("cues", None)
+        normalized.pop("notes", None)
+        normalized["description"] = str(normalized.get("description") or "")
+        normalized["how_to_perform"] = str(normalized.get("how_to_perform") or "")
+        normalized["why_do_it"] = str(normalized.get("why_do_it") or "")
+        normalized["tertiary_muscles"] = normalized.get("tertiary_muscles") or []
+        if "video_url" in normalized:
+            video_url = str(normalized.get("video_url") or "").strip()
+            if video_url:
+                normalized["video_url"] = video_url
+            else:
+                normalized.pop("video_url", None)
+        return normalized
+
     def _slugify(self, text: str) -> str:
         text = text.lower()
         text = re.sub(r"[^\w\s-]", "", text)
@@ -104,11 +120,11 @@ class GlossaryStore:
                 i += 1
             exercise_id = f"{exercise_id}_{i}"
             
-        new_exercise = {
+        new_exercise = self._normalize_exercise({
             **exercise,
             "id": exercise_id,
             "name": name,
-        }
+        })
         
         exercises.append(new_exercise)
         
@@ -133,7 +149,9 @@ class GlossaryStore:
         found = False
         for i, ex in enumerate(exercises):
             if ex.get("id") == exercise_id:
-                exercises[i].update(fields)
+                next_exercise = dict(ex)
+                next_exercise.update(fields)
+                exercises[i] = self._normalize_exercise(next_exercise)
                 found = True
                 break
                 

@@ -360,6 +360,9 @@ HEALTH_HELPER_MODEL = os.getenv("HEALTH_HELPER_MODEL", "openai/gpt-5.4-mini")
 HEALTH_HELPER_MODEL_REASONING_EFFORT = os.getenv("HEALTH_HELPER_MODEL_REASONING_EFFORT", "low")
 HEALTH_HELPER_MODEL_VERBOSITY = os.getenv("HEALTH_HELPER_MODEL_VERBOSITY", "low")
 
+# Cheap, low-context model for exercise glossary prose generation.
+GLOSSARY_TEXT_MODEL = os.getenv("GLOSSARY_TEXT_MODEL", "google/gemini-3.1-flash-lite")
+
 # Fast model for import classification and resolution
 IMPORT_FAST_MODEL = os.getenv("IMPORT_FAST_MODEL", "anthropic/claude-haiku-4.5")
 
