@@ -10,6 +10,8 @@ httpx>=0.27.0
 
 # Data Validation
 pydantic>=2.5.0
+PyYAML>=6.0.0
+Jinja2>=3.1.0
 
 # Database ORM (SQLite + SQLModel for storage abstraction)
 sqlmodel>=0.0.22
@@ -62,5 +64,4 @@ python-dateutil>=2.8.0
 # Optional: For development and testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
-
 
