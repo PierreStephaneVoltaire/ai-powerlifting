@@ -125,7 +125,14 @@ async def dispatch_channel_batch(
     from channels.attachments import download_discord_attachments
     pending = request_data.pop("_pending_uploads", [])
     if pending:
-        downloaded = await download_discord_attachments(pending, conversation_id)
+        from flow.session_dirs import resolve_session_dir
+
+        session_dir = resolve_session_dir(request_data, webhook=None, cache_key=conversation_id)
+        downloaded = await download_discord_attachments(
+            pending,
+            conversation_id,
+            target_uploads_dir=session_dir / "uploads",
+        )
         
         # Inject system nudge for any spreadsheets found
         for att in downloaded:
