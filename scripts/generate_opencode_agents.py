@@ -19,8 +19,6 @@ def _load_yaml(path: Path) -> dict:
 
 def _clean_template(text: str) -> str:
     text = text.replace("@preset/", "")
-    text = text.replace("OpenHands SDK", "opencode")
-    text = text.replace("run_subagent_sdk()", "opencode build mode")
     return text.strip()
 
 

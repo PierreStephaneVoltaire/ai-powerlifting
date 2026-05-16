@@ -130,7 +130,7 @@ SPECIALIST_PRESET = os.getenv("SPECIALIST_PRESET", "general")
 # Maximum turns per specialist subagent
 SPECIALIST_MAX_TURNS = int(os.getenv("SPECIALIST_MAX_TURNS", "15"))
 
-# Agentic specialist configuration (SDK Conversation.run() loop)
+# Legacy agentic specialist limits retained for specialist metadata compatibility.
 AGENTIC_MAX_ITERATIONS = int(os.getenv("AGENTIC_MAX_ITERATIONS", "25"))
 
 # Deep thinker (pondering) configuration

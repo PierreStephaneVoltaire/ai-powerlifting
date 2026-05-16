@@ -1,10 +1,4 @@
-"""Small compatibility types for legacy SDK-style tool adapters.
-
-The MCP migration no longer depends on OpenHands. Some plugin files still
-contain legacy SDK adapter classes next to the real `get_schemas()` and
-`execute()` business logic, so these no-op types keep those modules importable
-without pulling in the OpenHands SDK.
-"""
+"""Small compatibility types for legacy adapter classes in tool plugins."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -51,4 +45,3 @@ class ToolDefinition:
 
 def register_tool(_name: str, _tool: Any) -> None:
     return None
-
