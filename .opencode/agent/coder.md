@@ -343,7 +343,7 @@ GUARDRAILS:
 - Tools: terminal_execute, read_file, write_file, search_files, terminal_list_files
 - Skills: none declared
 
-Model selection is supplied by `plan.md`. Do not use router presets, tier presets, or `@preset/*` model references.
+Model selection is supplied by `plan.md`.
 
 ## Specialist Directives
 

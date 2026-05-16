@@ -74,9 +74,7 @@ TOPIC_SHIFT_MODEL = os.getenv("TOPIC_SHIFT_MODEL", "z-ai/glm-4.7-flash")
 # Context Condensation
 CONTEXT_CONDENSE_THRESHOLD = int(os.getenv("CONTEXT_CONDENSE_THRESHOLD", "250000"))
 
-# Maximum characters for tool output before OpenHands SDK truncates it.
-# Default SDK value is 50000 which silently clips large tool results
-# (e.g. health_get_program ~95K) causing hallucinations from incomplete data.
+# Maximum characters retained for tool output in direct/MCP flows.
 TOOL_OUTPUT_CHAR_LIMIT = int(os.getenv("TOOL_OUTPUT_CHAR_LIMIT", "200000"))
 
 # =============================================================================
@@ -229,7 +227,7 @@ PRESET_FALLBACK_MODEL = os.getenv("PRESET_FALLBACK_MODEL", "openrouter/@preset/g
 # Model for reflection engine and opinion formation
 REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "openrouter/@preset/general")
 
-# Reasoning effort passed to the OpenHands LLM for the main agent.
+# Reasoning effort retained for direct OpenRouter callers that support it.
 # Valid values: "high", "medium", "low" (silently ignored for models that don't support it).
 LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "high")
 

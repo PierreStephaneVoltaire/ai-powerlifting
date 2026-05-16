@@ -57,7 +57,7 @@ def render_agent(slug: str, config: dict, template: str, personality: str) -> st
         f"- Tools: {', '.join(tools) if tools else 'none declared'}",
         f"- Skills: {', '.join(skills) if skills else 'none declared'}",
         "",
-        "Model selection is supplied by `plan.md`. Do not use router presets, tier presets, or `@preset/*` model references.",
+        "Model selection is supplied by `plan.md`.",
         "",
         "## Specialist Directives",
         "",
@@ -93,4 +93,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

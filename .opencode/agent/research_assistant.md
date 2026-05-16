@@ -343,7 +343,7 @@ GUARDRAILS:
 - Tools: read_file, write_file, supplement_search, plan_append, plan_read
 - Skills: none declared
 
-Model selection is supplied by `plan.md`. Do not use router presets, tier presets, or `@preset/*` model references.
+Model selection is supplied by `plan.md`.
 
 ## Specialist Directives
 

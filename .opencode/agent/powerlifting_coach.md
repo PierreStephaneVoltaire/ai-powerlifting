@@ -343,7 +343,7 @@ GUARDRAILS:
 - Tools: health_get_program, health_get_session, health_get_sessions_range, health_get_meta, health_get_phases, health_get_current_maxes, health_get_operator_prefs, health_get_breaks, health_comp_countdown, health_get_competition, health_list_competitions, health_get_diet_notes, health_get_supplements, health_rag_search, get_current_date, kg_to_lb, lb_to_kg, ipf_weight_classes, pct_of_max, calculate_attempts, days_until, weekly_analysis, correlation_analysis, fatigue_profile_estimate, program_evaluation, get_analysis_markdown, regenerate_analysis, template_list, template_get, template_evaluate
 - Skills: none declared
 
-Model selection is supplied by `plan.md`. Do not use router presets, tier presets, or `@preset/*` model references.
+Model selection is supplied by `plan.md`.
 
 ## Specialist Directives
 

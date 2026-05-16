@@ -343,7 +343,7 @@ GUARDRAILS:
 - Tools: finance_get_profile, finance_get_goals, finance_get_accounts, finance_get_investments, finance_get_cashflow, finance_get_tax, finance_get_insurance, finance_get_net_worth, finance_update_profile, finance_update_goals, finance_update_risk_profile, finance_update_net_worth, finance_update_account, finance_add_holding, finance_update_holding, finance_update_watchlist, finance_update_cashflow, finance_update_tax, finance_update_insurance
 - Skills: none declared
 
-Model selection is supplied by `plan.md`. Do not use router presets, tier presets, or `@preset/*` model references.
+Model selection is supplied by `plan.md`.
 
 ## Specialist Directives
 

@@ -80,8 +80,11 @@ class ReflectionEngine:
         """
         # Use config default if no model specified
         if llm_model is None:
-            from models.router import resolve_preset_to_model
-            llm_model = resolve_preset_to_model(REFLECTION_MODEL)
+            from flow.model_catalog import load_model_ids
+
+            model_ids = load_model_ids()
+            candidate = REFLECTION_MODEL.replace("openrouter/", "")
+            llm_model = candidate if candidate in model_ids else (model_ids[0] if model_ids else candidate)
         self.store = store
         self.http_client = http_client
         self.llm_model = llm_model

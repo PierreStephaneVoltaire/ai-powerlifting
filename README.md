@@ -1,6 +1,6 @@
 # IF
 
-A single main agent with context-aware tiering and specialist subagent delegation. Built on the OpenHands SDK, routes through OpenRouter, persists knowledge in LanceDB. Behavior evolves through runtime directives stored in DynamoDB.
+A single IF agent runtime with opencode-backed technical execution, direct OpenRouter conversation, and MCP-backed domain tools. Persists knowledge in LanceDB. Behavior evolves through runtime directives stored in DynamoDB.
 
 ---
 
@@ -19,44 +19,28 @@ It is deployed on a personal Kubernetes (k3s) cluster and used personally, which
 ```
 User message (Discord / OpenWebUI / HTTP API)
   → Channel Listener → Debounce (5s batching) → Dispatcher
-    → Orchestrator (lightweight: sees specialist list + user intent, not full domain context)
-      → condense_intent (strips noise, rewrites as focused task)
-        → Specialist (scoped: only its tools, directives, skills, and MCP servers)
-          → Tool execution (deterministic functions — DynamoDB CRUD, date parsing, file validation)
-          → Agentic loop (multi-turn tool use with stuck detection, for complex tasks)
+    → Plan (opencode plan mode writes history.md + plan.md)
+      → Route
+        → Social: direct OpenRouter call with IF personality + core directives
+        → Domain: direct OpenRouter tool loop with specialist directives + MCP tools
+        → Technical: opencode build mode + opencode reviewer retry
       → Response → Chunker → Delivery back to platform
 ```
 
-The orchestrator never sees all specialist domains at once. It classifies intent, picks a specialist, condenses the context, and hands off. Each specialist receives only:
+The planning stage writes conversation history to `{mount}/{guild_id}/{channel_id}/history.md`, runs opencode with `deepseek/deepseek-v4-flash`, and writes `plan.md`. The plan chooses interaction type, specialist, thinking mode, and the next model from `models/model_ids.txt`.
+
+Specialists are still YAML + Jinja definitions, but they are now rendered into opencode agent markdown files and domain-system prompts. Each specialist receives only:
 
 - Its own system prompt template
 - Directives filtered to its domain (health specialist gets health directives, not finance ones)
-- Its declared tools and MCP servers
-- Any applicable AgentSkills
+- Its declared MCP tools
+- Any applicable skill/directive text
 
 This context scoping is the core architectural choice: it reduces hallucination risk from bloated prompts and keeps token costs proportional to task complexity, not system complexity.
 
-### Tiered Model Selection
+### Model Selection
 
-Models hallucinate more as their context window fills up. The orchestrator auto-upgrades to larger models as conversation context grows:
-
-| Tier         | When          | Why                                                    |
-| ------------ | ------------- | ------------------------------------------------------ |
-| **Air**      | < 100K tokens | Fast, cheap — most single-turn tasks                   |
-| **Standard** | < 200K tokens | Mid-range — multi-turn conversations                   |
-| **Heavy**    | ≥ 200K tokens | Large context window — complex sessions, deep analysis |
-
-Upgrade triggers at 65% capacity. The concrete model for each tier is resolved from a YAML-configured pool sorted by strategy (price, latency, throughput, context size).
-
-### Smart Model Routing for Specialists
-
-Each specialist has a model preset (e.g., `@preset/code`, `@preset/architecture`). At spawn time, a fast LLM selects the best concrete model from the preset's candidate pool using:
-
-- The condensed task intent
-- Model metadata (latency, price, context size, throughput)
-- The preset's sorting strategy
-
-A proofreading task gets a cheap, fast model. A health programming task gets a model ranked highly for that domain. This happens per-request with no code changes — presets are YAML.
+There is no separate model router. The opencode planning stage injects the model list from `models/model_ids.txt`, and `plan.md` selects the concrete model for the next stage.
 
 ### Runtime Directive System
 
@@ -88,21 +72,21 @@ High-frequency capability gaps are auto-promoted to tool suggestions. Gaps that 
 
 | Layer              | Technology                                                                                     |
 | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Core               | Python 3.12, FastAPI, OpenHands SDK 1.11.4                                                     |
-| LLM Routing        | OpenRouter (dynamic model registry, per-provider latency/throughput tracking)                  |
+| Core               | Python 3.12, FastAPI, opencode, Python MCP SDK                                                 |
+| LLM Routing        | opencode plan file + OpenRouter direct calls                                                   |
 | Vector Search      | LanceDB (user facts, all-MiniLM-L6-v2 embeddings)                                              |
 | RAG                | ChromaDB (health docs — Tika PDF extraction, 500-token chunks, 50-token overlap, SHA256 dedup) |
 | Structured Storage | DynamoDB (directives, health, finance, diary, proposals, model registry)                       |
 | Relational         | SQLite with WAL (webhooks, activity)                                                           |
 | Observability      | Prometheus + Loki + Grafana                                                                    |
 | Deployment         | Kubernetes (k3s), Terraform, Docker via Packer                                                 |
-| Shell Access       | OpenHands SDK LocalWorkspace (per-conversation isolated directories)                           |
+| Shell Access       | opencode build sessions in per-channel directories                                             |
 
 ---
 
 ## Specialists
 
-Domain experts spawned by the orchestrator. Each is a YAML config + Jinja2 prompt template — adding one requires no code changes.
+Domain experts selected by `plan.md`. Each is a YAML config + Jinja2 prompt template rendered into opencode agent files and direct-domain system prompts.
 
 <details>
 <summary><strong>Code & Infrastructure (17 specialists)</strong></summary>
@@ -192,7 +176,7 @@ Specialists can be invoked with a skill modifier that shifts their perspective. 
 
 `red_team` · `blue_team` · `pro_con` · `steelman` · `devils_advocate` · `backcast` · `rubber_duck` · `eli5` · `formal` · `speed` · `teach`
 
-Example: `spawn_specialist(specialist_type="architect", skill="red_team")` → adversarial architecture review.
+Example: `/architect red_team: review this deployment plan` → direct specialist domain flow.
 
 ---
 
@@ -200,9 +184,9 @@ Example: `spawn_specialist(specialist_type="architect", skill="red_team")` → a
 
 Deterministic functions the agent calls instead of guessing. Two categories:
 
-**System tools** (loaded in orchestrator): user fact CRUD, directive management, capability gap tracking, opinion logging, context/signal retrieval, specialist delegation (list_specialists, condense_intent, deep_think, spawn_specialist, spawn_specialists), media reading, orchestration.
+**Runtime tools**: domain tools exposed through MCP subprocesses, plus retained reflection/memory slash commands.
 
-**External tool plugins** (loaded per specialist): self-contained packages in `tools/` with `tool.yaml` + `tool.py`. Auto-discovered at startup, hot-reloadable via `POST /admin/reload-tools`.
+**External tool plugins**: self-contained packages in `tools/` with `tool.yaml` + `tool.py`. Each category is wrapped as a thin Python MCP server at startup and hot-reloadable via `POST /admin/reload-tools`.
 
 | Plugin                   | Tools | Purpose                                                                                  |
 | ------------------------ | ----- | ---------------------------------------------------------------------------------------- |
@@ -211,13 +195,9 @@ Deterministic functions the agent calls instead of guessing. Two categories:
 | `diary`                  | 2     | Write-only diary entries, signal computation                                             |
 | `proposals`              | 4     | Proposal CRUD, implementation plan generation                                            |
 | `temporal_*` (7 plugins) | 7     | Date parsing, timezone conversion, duration calculation, age, city time, Unix timestamps |
+| `supplement_research`    | 1     | Hybrid Examine.com supplement corpus retrieval                                          |
 
-Plugins support two execution modes:
-
-- **In-process** — imported directly (heavy plugins already in main venv)
-- **Subprocess** — isolated `uv` venv per plugin, invoked as a subprocess (clean dependency isolation)
-
-All tools follow the OpenHands SDK `Action → Observation → Executor → ToolDefinition` pattern.
+Tool business logic remains in each `tool.py`; MCP is the transport layer.
 
 ---
 
@@ -267,20 +247,20 @@ This project exists to build applied knowledge. Here's what it exercises:
 
 | Concept                              | Where It Lives                                                                          |
 | ------------------------------------ | --------------------------------------------------------------------------------------- |
-| Multi-agent orchestration            | Orchestrator → specialist delegation with context scoping                               |
+| Multi-stage orchestration            | opencode plan → social/domain/technical route → delivery                                |
 | RAG (Retrieval-Augmented Generation) | ChromaDB health docs pipeline — extraction, chunking, dedup, retrieval                  |
 | Vector semantic search               | LanceDB user facts with all-MiniLM-L6-v2 embeddings                                     |
 | Embedding models                     | Sentence transformers for fact/query encoding                                           |
-| Tool use / function calling          | 70+ deterministic tools via OpenHands SDK pattern                                       |
-| Dynamic model routing                | Task-aware model selection from candidate pools using fast LLM                          |
-| Context window management            | Tiered models, conversation summarization, directive scoping per specialist             |
+| Tool use / function calling          | Deterministic tools exposed through Python MCP servers                                  |
+| Dynamic model selection              | Planner chooses from `models/model_ids.txt`                                             |
+| Context window management            | Conversation summarization, directive scoping per specialist                            |
 | Prompt engineering                   | Jinja2 templates, directive injection, skill modifiers, system prompt assembly pipeline |
-| Agentic loops                        | Multi-turn tool execution with stuck detection for complex specialists                  |
+| Technical execution                  | opencode build mode with plan-mode reviewer and one retry                               |
 | Runtime behavior shaping             | DynamoDB directive system with priority-based conflict resolution                       |
 | Behavioral feedback loops            | Reflection pipeline — pattern detection, gap analysis, directive proposals              |
-| Cost optimization                    | Tier-based model selection, context condensation, per-provider price/latency tracking   |
+| Cost optimization                    | Planner-selected models, context condensation, per-provider price/latency tracking      |
 | Plugin architecture                  | Hot-reloadable tool plugins with auto-discovery (YAML + Python)                         |
-| AgentSkills compliance               | Skills portable across 30+ compliant agents (GitHub Copilot, Claude Code, Cursor, etc.) |
+| opencode agent generation            | Specialist YAML/templates rendered into `.opencode/agent/*.md`                          |
 | Multi-platform messaging             | Listener/translator/dispatcher pattern across Discord, OpenWebUI, HTTP                  |
 | Observability                        | Prometheus metrics, Loki logs, Grafana dashboards                                       |
 | Infrastructure as Code               | Terraform (K8s + AWS), Packer (Docker images), k3s deployment                           |
@@ -291,7 +271,8 @@ This project exists to build applied knowledge. Here's what it exercises:
 
 | Document                                             | Contents                                                                                           |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [Architecture Deep Dive](docs/ARCHITECTURE.md)       | System prompt assembly, tool authoring, channel internals, storage details, model router mechanics |
+| [Architecture Deep Dive](docs/ARCHITECTURE.md)       | Runtime flow, tool authoring, channel internals, storage details                         |
+| [opencode/MCP Migration](docs/OPENCODE_MCP_MIGRATION.md) | Migration decisions, route details, verification priorities                           |
 | [Comparative Analysis](docs/COMPARATIVE_ANALYSIS.md) | Detailed comparison with OpenHands, Claude Cowork, OpenClaw, Hermes Agent                          |
 | [Roadmap & Future Work](docs/THINGS_TO_EXPLORE.md)   | Known gaps, planned features, AI concepts to add                                                   |
 

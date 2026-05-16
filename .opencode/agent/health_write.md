@@ -343,7 +343,7 @@ GUARDRAILS:
 - Tools: health_get_program, health_get_session, health_update_session, health_new_version, health_update_competition, health_update_diet_note, health_update_supplements, health_create_session, health_delete_session, health_reschedule_session, health_add_exercise, health_remove_exercise, health_create_competition, import_parse_file, import_apply, import_reject, import_list_pending, template_list, template_get, template_apply, template_apply_confirm, template_evaluate, template_create_from_block, template_copy, template_archive, template_unarchive, program_archive, program_unarchive, glossary_add, glossary_update, glossary_set_e1rm, glossary_estimate_e1rm, glossary_estimate_fatigue, supplement_search
 - Skills: none declared
 
-Model selection is supplied by `plan.md`. Do not use router presets, tier presets, or `@preset/*` model references.
+Model selection is supplied by `plan.md`.
 
 ## Specialist Directives
 
