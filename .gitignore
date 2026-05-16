@@ -43,3 +43,5 @@ app/sandbox/*
 # Local dev copies (source of truth at project root)
 app/src/agent/prompts/specialists/
 
+# Generated from specialists/* at startup
+.opencode/agent/

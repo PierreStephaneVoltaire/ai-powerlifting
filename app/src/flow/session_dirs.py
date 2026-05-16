@@ -5,7 +5,9 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from config import SANDBOX_PATH
+import shutil
+
+from config import OPENCODE_WORKSPACE_BASE, SANDBOX_PATH
 
 if False:  # pragma: no cover
     from storage.models import WebhookRecord
@@ -69,7 +71,20 @@ def resolve_session_dir(
     """Return `{mount}/{guild_id}/{channel_id}` for a request."""
     guild_id = safe_segment(request_guild_id(request_data, webhook), "guild")
     channel_id = safe_segment(request_channel_id(request_data, webhook, cache_key), "channel")
-    path = Path(SANDBOX_PATH) / guild_id / channel_id
+    path = Path(OPENCODE_WORKSPACE_BASE) / guild_id / channel_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def clear_session_dir(
+    request_data: dict[str, Any],
+    webhook: Optional["WebhookRecord"],
+    cache_key: str,
+) -> Path:
+    """Remove the mounted opencode session directory for a channel/conversation."""
+    path = resolve_session_dir(request_data, webhook, cache_key)
+    if path.exists():
+        shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -79,4 +94,3 @@ def resolve_direct_tool_dir(conversation_id: str) -> Path:
     path = Path(SANDBOX_PATH) / safe_segment(conversation_id)
     path.mkdir(parents=True, exist_ok=True)
     return path
-

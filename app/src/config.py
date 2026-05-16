@@ -101,13 +101,19 @@ TIER_HEAVY_PRESET = os.getenv("TIER_HEAVY_PRESET", "@preset/heavy")
 OPENCODE_BIN = os.getenv("OPENCODE_BIN", "")
 OPENCODE_PLANNER_MODEL = os.getenv("OPENCODE_PLANNER_MODEL", "deepseek/deepseek-v4-flash")
 OPENCODE_TIMEOUT_SECONDS = int(os.getenv("OPENCODE_TIMEOUT_SECONDS", "900"))
+OPENCODE_WORKSPACE_BASE = os.getenv(
+    "OPENCODE_WORKSPACE_BASE",
+    os.getenv("WORKSPACE_BASE", "/app/src/data/conversations"),
+)
 IF_DIRECT_LLM_TOOL_ROUNDS = int(os.getenv("IF_DIRECT_LLM_TOOL_ROUNDS", "8"))
 IF_DEFAULT_DIRECT_MODEL = os.getenv("IF_DEFAULT_DIRECT_MODEL", "openai/gpt-5.4-mini")
 IF_TECHNICAL_ARTIFACT_EXCLUDES = {
     "history.md",
+    "history.json",
     "plan.md",
     "review.md",
     "response.md",
+    "status.log",
 }
 
 # MCP tool server categories managed by IF at startup.
@@ -360,9 +366,6 @@ SCRIPTS_PATH = os.getenv(
     "SCRIPTS_PATH",
     str(Path(__file__).parent.parent.parent / "scripts")
 )
-
-MODEL_ROUTER_MODEL = os.getenv("MODEL_ROUTER_MODEL", "anthropic/claude-haiku-4.5")
-MODEL_ROUTER_ENABLED: bool = os.getenv("MODEL_ROUTER_ENABLED", "true").lower() == "true"
 
 # Model for AI-powered health analytics (correlation analysis, program evaluation)
 # Defaults to Claude Sonnet with extended thinking enabled

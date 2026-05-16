@@ -25,6 +25,7 @@ from presets.loader import get_preset_manager
 from files import strip_files_line, log_file_refs, FilesStripBuffer
 from flow import run_if_flow, run_specialist_flow
 from flow.runner import materialize_file_ref
+from flow.session_dirs import clear_session_dir, resolve_session_dir
 from mcp_runtime import get_mcp_manager
 from config import API_MODEL_NAME, HEALTH_HELPER_MODEL
 
@@ -397,8 +398,7 @@ async def process_chat_completion_internal(
             except Exception as e:
                 logger.warning(f"[Cache] Failed to persist eviction: {e}")
             logger.info(f"[Cache] Evicted cache key: {cache_key}")
-
-            # No-op: static sandbox does not require explicit pod teardown on reset.
+            clear_session_dir(request_data, webhook, cache_key)
 
             return cmd.response_text, []
         
@@ -414,6 +414,8 @@ async def process_chat_completion_internal(
             }
             tier = tier_map.get(cmd.preset, cached_state.current_tier)
             cache.pin(cache_key, tier)
+            if cmd.preset == "pondering":
+                cached_state.pondering = True
             try:
                 from storage.factory import get_webhook_store
                 store = get_webhook_store()
@@ -448,9 +450,16 @@ async def process_chat_completion_internal(
                         specialist_slug=specialist_slug,
                         task=task,
                         http_client=http_client,
+                        session_dir=resolve_session_dir(request_data, webhook, cache_key),
+                        context_id=context_id,
+                        cache_key=cache_key,
                         selected_model=_specialist_model_override(request_data),
                     )
-                    return result, []
+                    content, refs = result
+                    if refs:
+                        log_file_refs(cache_key, refs)
+                    attachments = [att for ref in refs if (att := materialize_file_ref(ref, cache_key))]
+                    return content, attachments
 
                 registry = get_mcp_manager()
                 result = await registry.call_tool(cmd.target, args)
@@ -471,9 +480,16 @@ async def process_chat_completion_internal(
                     specialist_slug=cmd.target,
                     task=task,
                     http_client=http_client,
+                    session_dir=resolve_session_dir(request_data, webhook, cache_key),
+                    context_id=context_id,
+                    cache_key=cache_key,
                     selected_model=_specialist_model_override(request_data),
                 )
-                return result, []
+                content, refs = result
+                if refs:
+                    log_file_refs(cache_key, refs)
+                attachments = [att for ref in refs if (att := materialize_file_ref(ref, cache_key))]
+                return content, attachments
             except Exception as e:
                 logger.error(f"[Command] Error executing specialist {cmd.target}: {e}")
                 return f"Error executing /{cmd.target}: {type(e).__name__}: {e}", []
@@ -518,9 +534,11 @@ async def process_chat_completion_internal(
                 return content, []
         return str(response), []
 
-    # Keep cache state for legacy slash commands and heartbeat metadata. The
+    # Keep cache state for slash commands and heartbeat metadata. The
     # opencode planner now selects route/model for the actual response.
-    cache.get_or_create(cache_key)
+    cached_state = cache.get_or_create(cache_key)
+    if cached_state.pondering or (cached_state.pinned and cached_state.pinned_tier == 2):
+        request_data["_thinking_mode_requested"] = True
 
     # Persist cache state
     try:
@@ -554,6 +572,30 @@ async def process_chat_completion_internal(
         )
     except Exception as e:
         logger.debug(f"Failed to queue conversation summary: {e}")
+
+    try:
+        import asyncio
+        from agent.reflection import get_reflection_engine
+
+        reflection_engine = get_reflection_engine()
+        if reflection_engine:
+            turn_count = sum(1 for msg in messages if msg.get("role") in {"user", "assistant"})
+            recent_messages = list(reversed(extract_message_window(messages, window_size=8)))
+            reflection_summary = (
+                "Recent messages:\n"
+                + "\n".join(f"- {item[:500]}" for item in recent_messages)
+                + "\n\nIF response:\n"
+                + flow_result.content[:3000]
+            )
+            asyncio.create_task(
+                reflection_engine.run_post_session(
+                    session_id=cache_key,
+                    turn_count=turn_count,
+                    summary=reflection_summary[:5000],
+                )
+            )
+    except Exception as e:
+        logger.debug(f"Failed to queue post-session reflection: {e}")
     
     attachments = []
     for ref in flow_result.file_refs:

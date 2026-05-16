@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import logging
+import os
+import re
 import shutil
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -12,7 +15,6 @@ import httpx
 from channels.status import StatusType, send_status
 from config import (
     IF_DEFAULT_DIRECT_MODEL,
-    IF_DIRECT_LLM_TOOL_ROUNDS,
     IF_TECHNICAL_ARTIFACT_EXCLUDES,
     OPENCODE_PLANNER_MODEL,
 )
@@ -25,6 +27,7 @@ from .model_catalog import format_model_catalog, load_model_ids
 from .opencode import run_opencode
 from .plan import IFPlan, PlanParseError, fallback_plan, parse_plan_file
 from .session_dirs import resolve_session_dir
+from .context import build_runtime_context, uploaded_file_paths
 
 if False:  # pragma: no cover
     from storage.models import WebhookRecord
@@ -123,10 +126,25 @@ def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str]]
     return prompt, list(spec.tools)
 
 
-def _planner_prompt(history_path: Path, model_ids: list[str], specialist_catalog: str) -> str:
+def _planner_prompt(
+    history_path: Path,
+    model_ids: list[str],
+    specialist_catalog: str,
+    runtime_context: str,
+    *,
+    thinking_mode_requested: bool = False,
+) -> str:
+    thinking_hint = (
+        "\nPondering mode is active for this conversation. Set thinking_mode: true unless the"
+        " latest user message is purely administrative.\n"
+        if thinking_mode_requested
+        else ""
+    )
     return f"""You are IF's planning stage.
 
 Read `{history_path.name}` in the current directory. Write `plan.md` in the same directory.
+`history.md` is incremental and edit-aware: Discord message edits update existing entries instead of creating a second message.
+This directory is a persistent mounted conversation workspace. Previous files may still be present after a restart; use the newest `history.md` as the source of truth.
 
 The file must contain YAML front matter with exactly these fields:
 - intent_summary: short string
@@ -142,6 +160,10 @@ IF personality and core posture:
 
 Core directives:
 {_directive_block(["core"])}
+{thinking_hint}
+
+Runtime compatibility and available context:
+{runtime_context}
 
 Specialists:
 {specialist_catalog}
@@ -153,38 +175,66 @@ Classification guide:
 - social: ordinary conversation, emotional support, general answer, no domain tools.
 - domain: needs a domain specialist or IF MCP tools, especially health, finance, diary, proposals, temporal, supplement research.
 - technical: code, repository edits, shell work, generated files, debugging, build/test work.
+- media/file: domain with specialist `media_reader` unless it is clearly a spreadsheet import or code/data task.
+- memory: if the operator asks IF to remember, update, supersede, or use stored facts, choose domain. Use specialist `general` unless another domain specialist is required.
+- health/finance read-write split: choose read specialists for analysis/advice. Choose write specialists only for explicit mutations such as "log", "update", "apply", "save", "record", or confirmed imports. Read specialists may emit HANDOFF_REQUIRED blocks for writes.
+- thinking_mode: if the operator asks for deep, adversarial, sequential, or multi-perspective reasoning, set true and choose the specialist/skill shape that best fits. The next stage can use the injected thinking skills and handoff blocks.
 
-Select the model yourself from the eligible list. Do not use router presets or @preset names.
+Select the model yourself from the eligible list. Do not use preset aliases or @preset names.
 """
 
 
-async def _run_planner(session_dir: Path, messages: list[dict[str, Any]]) -> IFPlan:
+async def _run_planner(
+    session_dir: Path,
+    messages: list[dict[str, Any]],
+    *,
+    history_events: list[dict[str, Any]] | None = None,
+    runtime_context: str = "",
+    uploaded_files: list[dict[str, Any]] | None = None,
+    thinking_mode_requested: bool = False,
+) -> IFPlan:
     model_ids = load_model_ids()
     selected_fallback = model_ids[0] if model_ids else IF_DEFAULT_DIRECT_MODEL
     known_specialists, catalog = _specialist_catalog()
-    history_path = write_history(session_dir, messages)
+    history_path = write_history(session_dir, messages, history_events=history_events)
+    plan_path = session_dir / "plan.md"
+    plan_path.unlink(missing_ok=True)
 
     try:
         result = await run_opencode(
             agent="plan",
             model=OPENCODE_PLANNER_MODEL,
             session_dir=session_dir,
-            prompt=_planner_prompt(history_path, model_ids, catalog),
+            prompt=_planner_prompt(
+                history_path,
+                model_ids,
+                catalog,
+                runtime_context,
+                thinking_mode_requested=thinking_mode_requested,
+            ),
+            files=uploaded_file_paths(uploaded_files),
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr or result.stdout)
-        plan_path = session_dir / "plan.md"
         if not plan_path.exists():
             raise FileNotFoundError("opencode planner did not write plan.md")
         return parse_plan_file(plan_path, model_ids, known_specialists)
     except (Exception, PlanParseError) as exc:
         logger.warning("Planner failed; using fallback plan: %s", exc)
         prompt = _latest_user_prompt(messages)
+        fallback_specialist = "general"
+        fallback_interaction = "social"
+        if uploaded_files:
+            fallback_specialist = "media_reader"
+            fallback_interaction = "domain"
+        elif thinking_mode_requested:
+            fallback_specialist = "planner"
+            fallback_interaction = "domain"
         return fallback_plan(
             prompt=prompt,
             selected_model=selected_fallback,
-            specialist="general",
-            interaction_type="social",
+            specialist=fallback_specialist,
+            interaction_type=fallback_interaction,
             reason=f"Planner fallback: {type(exc).__name__}",
         )
 
@@ -196,13 +246,14 @@ def _messages_for_direct(system_prompt: str, user_prompt: str) -> list[dict[str,
     ]
 
 
-async def _run_social(plan: IFPlan, http_client: httpx.AsyncClient) -> str:
+async def _run_social(plan: IFPlan, http_client: httpx.AsyncClient, runtime_context: str) -> str:
     system = "\n\n".join(
         part
         for part in (
             _main_system_prompt(),
             "Core directives:",
             _directive_block(["core"]),
+            runtime_context,
         )
         if part
     )
@@ -214,29 +265,240 @@ async def _run_social(plan: IFPlan, http_client: httpx.AsyncClient) -> str:
     )
 
 
-async def _run_domain(plan: IFPlan, http_client: httpx.AsyncClient) -> str:
-    specialist_block, specialist_tools = _specialist_prompt(plan.specialist, plan.prompt)
+def _status_file(session_dir: Path) -> Path:
+    status_dir = session_dir / ".if"
+    status_dir.mkdir(parents=True, exist_ok=True)
+    path = status_dir / "status.log"
+    path.write_text("", encoding="utf-8")
+    return path
+
+
+async def _opencode_status(line: str) -> None:
+    await send_status(StatusType.TOOL_STARTED, "opencode", line)
+
+
+def _tool_protocol_block(tool_names: list[str]) -> str:
+    app_src = _project_root() / "app" / "src"
+    pythonpath = os.pathsep.join([str(app_src), str(_project_root())])
+    invoke = f"PYTHONPATH={pythonpath!r} {sys.executable} -m mcp_runtime.invoke_tool"
     manager = get_mcp_manager()
-    tools = manager.tools_for_names(set(specialist_tools) | {"get_current_date"})
-    system = "\n\n".join(
+    schemas = manager.tools_for_names(set(tool_names) | {"get_current_date"})
+    lines = [
+        "MCP tool protocol:",
+        "- Domain tools are available through this shell command:",
+        f"  `{invoke} <tool_name> '<json_args>'`",
+        "- Example:",
+        f"  `{invoke} get_current_date '{{}}'`",
+        "- Call tools only when they are needed for the task. Keep generated files in this session directory.",
+        "- Before long operations and after tool calls, append a concise progress line to `.if/status.log`.",
+        "",
+        "Available tool schemas for this specialist:",
+    ]
+    if not schemas:
+        lines.append("- No specialist MCP tools declared; `get_current_date` remains available.")
+        return "\n".join(lines)
+
+    for schema in schemas:
+        fn = schema.get("function", {})
+        params = fn.get("parameters") or {}
+        lines.append(f"- {fn.get('name')}: {fn.get('description') or ''}")
+        lines.append(f"  parameters: {params}")
+    return "\n".join(lines)
+
+
+def _domain_prompt(plan: IFPlan, runtime_context: str) -> str:
+    specialist_block, specialist_tools = _specialist_prompt(plan.specialist, plan.prompt)
+    return "\n\n".join(
         part
         for part in (
+            "You are running as IF inside a persistent mounted conversation workspace.",
+            "Read `history.md` for conversation context. It is incremental and edit-aware.",
+            "Write the final user-facing answer to `response.md`.",
+            "Keep any generated deliverable files in this session directory.",
+            "Use the IF personality and current directives below; do not rely on hardcoded generated agent files for personality.",
             _main_system_prompt(),
             "Core directives:",
             _directive_block(["core"]),
             f"Specialist directives for `{plan.specialist}`:",
             specialist_block,
+            "Runtime compatibility, Discord contract, memory/media rules, and thinking skills:",
+            runtime_context,
+            _tool_protocol_block(specialist_tools),
+            "If this task needs another specialist, write one or more HANDOFF_REQUIRED blocks with target, task or intended_change, and context. IF will execute them in order.",
+            "Task prompt:",
+            plan.prompt,
         )
         if part
     )
-    return await call_openrouter_chat(
-        http_client=http_client,
-        model=plan.selected_model,
-        messages=_messages_for_direct(system, plan.prompt),
-        tools=tools,
-        tool_dispatcher=manager.call_tool,
-        max_tool_rounds=IF_DIRECT_LLM_TOOL_ROUNDS,
+
+
+def _parse_handoffs(content: str) -> tuple[str, list[dict[str, str]]]:
+    if "HANDOFF_REQUIRED" not in content:
+        return content, []
+    parts = re.split(r"\n?HANDOFF_REQUIRED:?\s*\n", content)
+    primary = parts[0]
+    blocks = parts[1:]
+    handoffs: list[dict[str, str]] = []
+    for block in blocks:
+        current: dict[str, str] = {}
+        current_key: str | None = None
+        for raw_line in block.splitlines():
+            line = raw_line.rstrip()
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("target:"):
+                current_key = "target"
+                current[current_key] = stripped.split(":", 1)[1].strip().strip("\"'")
+            elif stripped.startswith("task:"):
+                current_key = "task"
+                current[current_key] = stripped.split(":", 1)[1].strip().strip("\"'")
+            elif stripped.startswith("intended_change:"):
+                current_key = "intended_change"
+                current[current_key] = stripped.split(":", 1)[1].strip().strip("\"'")
+            elif stripped.startswith("context:"):
+                current_key = "context"
+                current[current_key] = stripped.split(":", 1)[1].strip().strip("\"'")
+            elif current_key:
+                current[current_key] = f"{current.get(current_key, '')}\n{stripped}".strip()
+        if current.get("target") and (current.get("task") or current.get("intended_change")):
+            if not current.get("task"):
+                current["task"] = current["intended_change"]
+            handoffs.append(current)
+    return primary.strip(), handoffs
+
+
+async def _synthesize_handoffs(
+    plan: IFPlan,
+    session_dir: Path,
+    runtime_context: str,
+    primary: str,
+    child_outputs: list[str],
+    uploaded_files: list[dict[str, Any]] | None,
+) -> str:
+    if not child_outputs:
+        return primary
+
+    status_file = _status_file(session_dir)
+    response_path = session_dir / "response.md"
+    response_path.unlink(missing_ok=True)
+    agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
+    synthesis_prompt = "\n\n".join(
+        [
+            "You are IF integrating completed specialist handoffs.",
+            "Read `history.md` only if needed for context.",
+            "Write the final user-facing answer to `response.md`.",
+            "Do not emit HANDOFF_REQUIRED unless a genuinely new blocking dependency remains.",
+            "Preserve the IF personality, core directives, and domain caveats.",
+            "Runtime context:",
+            runtime_context,
+            "Original specialist output before handoffs:",
+            primary or "(none)",
+            "Completed handoff outputs:",
+            "\n\n---\n\n".join(child_outputs),
+        ]
     )
+    result = await run_opencode(
+        agent=agent,
+        model=plan.selected_model,
+        session_dir=session_dir,
+        prompt=synthesis_prompt,
+        continue_session=True,
+        status_file=status_file,
+        status_callback=_opencode_status,
+        files=uploaded_file_paths(uploaded_files),
+    )
+    if result.returncode != 0:
+        logger.warning("Handoff synthesis failed for %s: %s", plan.specialist, result.stderr[:1000])
+        return "\n\n".join(part for part in [primary, *child_outputs] if part).strip()
+
+    if response_path.exists():
+        return response_path.read_text(encoding="utf-8", errors="replace").strip()
+    return (result.stdout or "").strip() or "\n\n".join(part for part in [primary, *child_outputs] if part).strip()
+
+
+async def _run_domain(
+    plan: IFPlan,
+    session_dir: Path,
+    runtime_context: str,
+    uploaded_files: list[dict[str, Any]] | None = None,
+    handoff_depth: int = 0,
+) -> tuple[str, list[FileRef]]:
+    before = _snapshot_files(session_dir)
+    status_file = _status_file(session_dir)
+    response_path = session_dir / "response.md"
+    response_path.unlink(missing_ok=True)
+    agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
+    await send_status(StatusType.SUBAGENT_SPAWNING, "Domain Agent Started", f"{plan.specialist} / {plan.selected_model}")
+    result = await run_opencode(
+        agent=agent,
+        model=plan.selected_model,
+        session_dir=session_dir,
+        prompt=_domain_prompt(plan, runtime_context),
+        continue_session=True,
+        status_file=status_file,
+        status_callback=_opencode_status,
+        files=uploaded_file_paths(uploaded_files),
+    )
+    if result.returncode != 0:
+        await send_status(StatusType.SUBAGENT_FAILED, "Domain Agent Failed", result.stderr[:500])
+        raise RuntimeError(result.stderr or result.stdout)
+    await send_status(StatusType.SUBAGENT_COMPLETED, "Domain Agent Completed", plan.selected_model)
+
+    if response_path.exists():
+        content = response_path.read_text(encoding="utf-8", errors="replace").strip()
+    else:
+        content = (result.stdout or "").strip() or "Domain task completed, but response.md was not written."
+
+    refs = _artifact_refs(session_dir, before)
+    primary, handoffs = _parse_handoffs(content)
+    if handoffs and handoff_depth < 3:
+        known_specialists, _ = _specialist_catalog()
+        child_outputs: list[str] = []
+        for handoff in handoffs:
+            target = handoff["target"].strip()
+            if target not in known_specialists and target != "general":
+                child_outputs.append(f"[HANDOFF FAILED] No specialist available for: {target}")
+                continue
+            child_prompt = "\n\n".join(
+                [
+                    f"Handoff from `{plan.specialist}`.",
+                    f"Task:\n{handoff['task']}",
+                    f"Intended change:\n{handoff.get('intended_change', '')}",
+                    f"Context:\n{handoff.get('context', '')}",
+                    "Return concise operator-facing output if the handoff produces one. Otherwise write a terse confirmation.",
+                ]
+            )
+            child_plan = fallback_plan(
+                prompt=child_prompt,
+                selected_model=plan.selected_model,
+                specialist=target,
+                interaction_type="domain",
+                reason=f"Handoff from {plan.specialist}",
+            )
+            child_content, child_refs = await _run_domain(
+                child_plan,
+                session_dir,
+                runtime_context,
+                uploaded_files=uploaded_files,
+                handoff_depth=handoff_depth + 1,
+            )
+            refs.extend(child_refs)
+            if child_content.strip():
+                child_outputs.append(child_content.strip())
+        content = await _synthesize_handoffs(
+            plan,
+            session_dir,
+            runtime_context,
+            primary,
+            child_outputs,
+            uploaded_files,
+        )
+    elif handoffs:
+        content = f"{primary}\n\n[HANDOFF FAILED] Maximum handoff depth reached.".strip()
+
+    response_path.write_text(content, encoding="utf-8")
+    return content, refs
 
 
 def _snapshot_files(session_dir: Path) -> set[Path]:
@@ -248,6 +510,9 @@ def _snapshot_files(session_dir: Path) -> set[Path]:
 def _artifact_refs(session_dir: Path, before: set[Path]) -> list[FileRef]:
     refs: list[FileRef] = []
     for path in sorted(p for p in session_dir.rglob("*") if p.is_file()):
+        rel_parts = path.relative_to(session_dir).parts
+        if rel_parts and rel_parts[0].startswith("."):
+            continue
         if path.name in IF_TECHNICAL_ARTIFACT_EXCLUDES:
             continue
         resolved = path.resolve()
@@ -258,12 +523,28 @@ def _artifact_refs(session_dir: Path, before: set[Path]) -> list[FileRef]:
     return refs
 
 
-async def _run_technical(plan: IFPlan, session_dir: Path) -> tuple[str, list[FileRef]]:
+async def _run_technical(
+    plan: IFPlan,
+    session_dir: Path,
+    runtime_context: str,
+    uploaded_files: list[dict[str, Any]] | None = None,
+) -> tuple[str, list[FileRef]]:
     before = _snapshot_files(session_dir)
+    status_file = _status_file(session_dir)
+    response_path = session_dir / "response.md"
+    review_path = session_dir / "review.md"
+    response_path.unlink(missing_ok=True)
+    review_path.unlink(missing_ok=True)
     technical_prompt = f"""Use the current directory as the session workspace.
 
+Read `history.md` for conversation context. It is incremental and edit-aware.
+This directory is a persistent mount for this Discord conversation; previous files may be relevant.
+Append concise progress lines to `.if/status.log` before long-running steps and after important commands.
 Implement the user's request from the prompt below. Write the final user-facing answer to `response.md`.
 Keep any generated deliverable files in this session directory.
+
+Runtime context:
+{runtime_context}
 
 Prompt:
 {plan.prompt}
@@ -274,6 +555,10 @@ Prompt:
         model=plan.selected_model,
         session_dir=session_dir,
         prompt=technical_prompt,
+        continue_session=True,
+        status_file=status_file,
+        status_callback=_opencode_status,
+        files=uploaded_file_paths(uploaded_files),
     )
     if result.returncode != 0:
         await send_status(StatusType.SUBAGENT_FAILED, "Technical Build Failed", result.stderr[:500])
@@ -291,11 +576,11 @@ Otherwise write `OK` on line 1 and a concise review summary after it.
         model=OPENCODE_PLANNER_MODEL,
         session_dir=session_dir,
         prompt=review_prompt,
+        continue_session=True,
     )
     if review.returncode != 0:
         logger.warning("Technical review failed: %s", review.stderr[:1000])
 
-    review_path = session_dir / "review.md"
     if review_path.exists():
         first_line = review_path.read_text(encoding="utf-8", errors="replace").splitlines()[:1]
         if first_line and first_line[0].strip() == "RETRY":
@@ -304,16 +589,20 @@ Otherwise write `OK` on line 1 and a concise review summary after it.
 Reviewer requested one retry. Review context:
 {review_path.read_text(encoding="utf-8", errors="replace")}
 """
+            response_path.unlink(missing_ok=True)
             retry = await run_opencode(
                 agent="build",
                 model=plan.selected_model,
                 session_dir=session_dir,
                 prompt=retry_prompt,
+                continue_session=True,
+                status_file=status_file,
+                status_callback=_opencode_status,
+                files=uploaded_file_paths(uploaded_files),
             )
             if retry.returncode != 0:
                 raise RuntimeError(retry.stderr or retry.stdout)
 
-    response_path = session_dir / "response.md"
     if response_path.exists():
         content = response_path.read_text(encoding="utf-8", errors="replace").strip()
     else:
@@ -330,10 +619,40 @@ async def run_if_flow(
     context_id: str,
     webhook: Optional["WebhookRecord"] = None,
 ) -> FlowResult:
-    del context_id  # reserved for future memory/directive context refinement
     messages = request_data.get("messages") or []
     session_dir = resolve_session_dir(request_data, webhook, cache_key)
-    plan = await _run_planner(session_dir, messages)
+    history_events = request_data.get("_history_events")
+    if not isinstance(history_events, list):
+        history_events = None
+    thinking_mode_requested = bool(request_data.get("_thinking_mode_requested"))
+    uploaded_files = request_data.get("_uploaded_files")
+    if not isinstance(uploaded_files, list):
+        uploaded_files = None
+    runtime_context = build_runtime_context(
+        messages=messages,
+        context_id=context_id,
+        cache_key=cache_key,
+        session_dir=session_dir,
+        uploaded_files=uploaded_files,
+        thinking_mode_requested=thinking_mode_requested,
+    )
+    plan = await _run_planner(
+        session_dir,
+        messages,
+        history_events=history_events,
+        runtime_context=runtime_context,
+        uploaded_files=uploaded_files,
+        thinking_mode_requested=thinking_mode_requested,
+    )
+    if plan.thinking_mode and not thinking_mode_requested:
+        runtime_context = build_runtime_context(
+            messages=messages,
+            context_id=context_id,
+            cache_key=cache_key,
+            session_dir=session_dir,
+            uploaded_files=uploaded_files,
+            thinking_mode_requested=True,
+        )
 
     await send_status(
         StatusType.MODEL_SELECTED,
@@ -342,12 +661,24 @@ async def run_if_flow(
     )
 
     if plan.interaction_type == "technical":
-        content, refs = await _run_technical(plan, session_dir)
+        content, refs = await _run_technical(plan, session_dir, runtime_context, uploaded_files=uploaded_files)
     elif plan.interaction_type == "domain":
-        content = await _run_domain(plan, http_client)
-        refs = []
+        content, refs = await _run_domain(plan, session_dir, runtime_context, uploaded_files=uploaded_files)
+    elif plan.thinking_mode or thinking_mode_requested:
+        content, refs = await _run_domain(
+            fallback_plan(
+                prompt=plan.prompt,
+                selected_model=plan.selected_model,
+                specialist=plan.specialist if plan.specialist != "general" else "planner",
+                interaction_type="domain",
+                reason="Thinking mode social route",
+            ),
+            session_dir,
+            runtime_context,
+            uploaded_files=uploaded_files,
+        )
     else:
-        content = await _run_social(plan, http_client)
+        content = await _run_social(plan, http_client, runtime_context)
         refs = []
 
     cleaned, inline_refs = strip_files_line(content)
@@ -360,8 +691,19 @@ async def run_specialist_flow(
     specialist_slug: str,
     task: str,
     http_client: httpx.AsyncClient,
+    session_dir: Path,
+    context_id: str = "",
+    cache_key: str = "",
     selected_model: str | None = None,
-) -> str:
+) -> tuple[str, list[FileRef]]:
+    del http_client  # specialist slash commands now run through opencode
+    write_history(session_dir, [{"role": "user", "content": task, "source": "direct_specialist"}])
+    runtime_context = build_runtime_context(
+        messages=[{"role": "user", "content": task}],
+        context_id=context_id,
+        cache_key=cache_key,
+        session_dir=session_dir,
+    )
     model_ids = load_model_ids()
     model = selected_model or (model_ids[0] if model_ids else IF_DEFAULT_DIRECT_MODEL)
     plan = fallback_plan(
@@ -371,7 +713,7 @@ async def run_specialist_flow(
         interaction_type="domain",
         reason=f"Direct specialist command: {specialist_slug}",
     )
-    return await _run_domain(plan, http_client)
+    return await _run_domain(plan, session_dir, runtime_context)
 
 
 def materialize_file_ref(ref: FileRef, cache_key: str) -> dict[str, Any] | None:
@@ -398,4 +740,3 @@ def materialize_file_ref(ref: FileRef, cache_key: str) -> dict[str, Any] | None:
         "content_type": "application/octet-stream",
         "description": ref.description,
     }
-

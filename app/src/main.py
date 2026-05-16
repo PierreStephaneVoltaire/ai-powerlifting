@@ -117,6 +117,25 @@ async def lifespan(app: FastAPI):
     except RuntimeError as e:
         logger.error(f"Failed to load presets: {e}")
         raise
+
+    try:
+        generator = Path(SCRIPTS_PATH) / "generate_opencode_agents.py"
+        if generator.exists():
+            result = subprocess.run(
+                [sys.executable, str(generator)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=os.environ.copy(),
+            )
+            if result.returncode == 0:
+                logger.info(result.stdout.strip() or "Generated opencode agent files")
+            else:
+                logger.warning("opencode agent generation failed: %s", result.stderr.strip())
+        else:
+            logger.warning("opencode agent generator not found at %s", generator)
+    except Exception as e:
+        logger.warning(f"opencode agent generation failed: {e}")
     
     sandbox_dir = get_sandbox_directory()
     logger.info(f"Sandbox directory: {sandbox_dir}")
@@ -300,22 +319,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Model stats refresh init failed: {e}")
 
-    # Model preset configuration (subagent presets)
-    try:
-        from models.loader import get_model_preset_manager
-        _model_preset_mgr = get_model_preset_manager()
-        _model_preset_mgr.load()
-    except Exception as e:
-        logger.warning(f"Model preset manager initialization failed: {e}")
-
-    # Tier configuration (internal tiers)
-    try:
-        from models.loader import get_tier_config_manager
-        _tier_config_mgr = get_tier_config_manager()
-        _tier_config_mgr.load()
-    except Exception as e:
-        logger.warning(f"Tier config manager initialization failed: {e}")
-    
     try:
         init_debounce(asyncio.get_running_loop())
         logger.info("Debounce system initialized")

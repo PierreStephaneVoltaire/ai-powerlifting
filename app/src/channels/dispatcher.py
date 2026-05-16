@@ -133,11 +133,17 @@ async def dispatch_channel_batch(
             conversation_id,
             target_uploads_dir=session_dir / "uploads",
         )
+        request_data["_uploaded_files"] = downloaded
         
-        # Inject system nudge for any spreadsheets found
+        # Inject import nudge only for spreadsheets/CSV.
+        from channels.attachments import ALLOWED_CONTENT_TYPES, ALLOWED_EXTENSIONS
         for att in downloaded:
             if "local_path" in att:
                 filename = att["filename"]
+                ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                content_type = att.get("content_type", "")
+                if content_type not in ALLOWED_CONTENT_TYPES and ext not in ALLOWED_EXTENSIONS:
+                    continue
                 size_kb = att.get("size_kb", 0)
                 nudge = f"User uploaded file: {filename} (spreadsheet, {size_kb} KB). Use import_parse_file to process it."
                 request_data["messages"].insert(0, {"role": "system", "content": nudge})

@@ -54,6 +54,17 @@ def setup_command_tree(
     cache_key = str(channel_id)
     context_id = f"discord_{channel_id}"
 
+    def _clear_opencode_session(interaction: discord.Interaction) -> None:
+        from flow.session_dirs import clear_session_dir
+
+        request_data = {
+            "platform": "discord",
+            "channel_id": str(interaction.channel_id or channel_id),
+            "guild_id": str(interaction.guild_id or ""),
+            "conversation_id": str(interaction.channel_id or channel_id),
+        }
+        clear_session_dir(request_data, None, cache_key)
+
     # --- /end_convo ---
     @tree.command(
         name="end_convo",
@@ -74,6 +85,8 @@ def setup_command_tree(
                     await cache.persist_eviction(cache_key, store._backend)
             except Exception as e:
                 logger.warning(f"[SlashCmd] Failed to persist eviction: {e}")
+
+            _clear_opencode_session(interaction)
 
             await interaction.response.send_message(
                 "Acknowledged. Categorisation state cleared. "
@@ -149,6 +162,7 @@ def setup_command_tree(
 
         try:
             deleted = await interaction.channel.purge(limit=amount)
+            _clear_opencode_session(interaction)
             await interaction.followup.send(
                 f"Deleted {len(deleted)} message(s).", ephemeral=True
             )

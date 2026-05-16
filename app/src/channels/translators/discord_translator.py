@@ -30,6 +30,7 @@ def translate_discord_batch(
     """
     pending_uploads: List[Dict[str, Any]] = []
     api_messages: List[Dict[str, Any]] = []
+    history_events: List[Dict[str, Any]] = []
 
     # Get the bot's own user ID directly from the active Discord client.
     # This is reliable regardless of whether IF has sent any messages in
@@ -57,6 +58,7 @@ def translate_discord_batch(
                     "role": "assistant",
                     "content": content,
                 })
+                role = "assistant"
             else:
                 # All other messages (human or other bots) → user role
                 author = msg.author.display_name if msg.author else "unknown"
@@ -64,6 +66,17 @@ def translate_discord_batch(
                     "role": "user",
                     "content": f"[{author}]: {content}",
                 })
+                role = "user"
+
+            history_events.append({
+                "id": str(msg.id),
+                "role": role,
+                "author": msg.author.display_name if msg.author else "",
+                "content": content if role == "assistant" else f"[{msg.author.display_name if msg.author else 'unknown'}]: {content}",
+                "created_at": msg.created_at.isoformat() if msg.created_at else "",
+                "edited_at": msg.edited_at.isoformat() if getattr(msg, "edited_at", None) else "",
+                "source": "discord_history",
+            })
 
     # Append current messages from debounce queue
     for msg in messages:
@@ -73,6 +86,15 @@ def translate_discord_batch(
             api_messages.append({
                 "role": "user",
                 "content": f"[{author}]: {text}",
+            })
+            history_events.append({
+                "id": str(msg.get("message_id") or msg.get("id") or f"current-{len(history_events) + 1}"),
+                "role": "user",
+                "author": author,
+                "content": f"[{author}]: {text}",
+                "created_at": msg.get("timestamp", ""),
+                "edited_at": msg.get("edited_at", ""),
+                "source": "discord_current",
             })
 
         # Extract attachments for upload
@@ -119,5 +141,6 @@ def translate_discord_batch(
         "channel_id": messages[-1].get("channel_id", conversation_id) if messages else conversation_id,
         "conversation_id": conversation_id,
         "_conversation_id": conversation_id,
+        "_history_events": history_events,
         "_pending_uploads": pending_uploads,
     }

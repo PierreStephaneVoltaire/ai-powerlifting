@@ -17,12 +17,7 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _clean_template(text: str) -> str:
-    text = text.replace("@preset/", "")
-    return text.strip()
-
-
-def render_agent(slug: str, config: dict, template: str, personality: str) -> str:
+def render_agent(slug: str, config: dict) -> str:
     description = " ".join(str(config.get("description", slug)).split())
     tools = config.get("tools") or []
     mcp_servers = config.get("mcp_servers") or []
@@ -41,25 +36,30 @@ def render_agent(slug: str, config: dict, template: str, personality: str) -> st
         "",
         f"# {slug}",
         "",
-        "",
-        "",
-        "## IF Personality",
-        "",
-        personality.strip(),
+        f"This file is generated from `specialists/{slug}/specialist.yaml`.",
+        "Do not hardcode IF personality, runtime directives, or model policy here.",
+        "The IF runtime injects the live personality from `app/main_system_prompt.txt`,",
+        f"renders `specialists/{slug}/agent.j2`, and injects current DynamoDB directives",
+        "in the task prompt for each opencode run.",
         "",
         "## Specialist Metadata",
         "",
         f"- Slug: `{slug}`",
+        f"- Template: `specialists/{slug}/agent.j2`",
         f"- Directive types: {', '.join(directive_types) if directive_types else 'core'}",
         f"- MCP servers: {', '.join(mcp_servers) if mcp_servers else 'none declared'}",
         f"- Tools: {', '.join(tools) if tools else 'none declared'}",
         f"- Skills: {', '.join(skills) if skills else 'none declared'}",
         "",
-        "Model selection is supplied by `plan.md`.",
+        "Model selection is supplied by `plan.md`; do not use preset aliases or @preset names.",
         "",
-        "## Specialist Directives",
+        "## Runtime Contract",
         "",
-        _clean_template(template),
+        "- Read `history.md` when the runner tells you to use conversation context.",
+        "- Follow the live IF personality, rendered specialist prompt, and directive block in the task prompt.",
+        "- Use only tools explicitly exposed in the task prompt, normally through the MCP shell bridge.",
+        "- Append concise progress lines to `.if/status.log` when doing long operations or tool calls.",
+        "- Write the final user-facing response to `response.md` when requested.",
         "",
         "## Output",
         "",
@@ -71,7 +71,8 @@ def render_agent(slug: str, config: dict, template: str, personality: str) -> st
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    personality = PERSONALITY_PATH.read_text(encoding="utf-8")
+    if not PERSONALITY_PATH.exists():
+        raise FileNotFoundError(PERSONALITY_PATH)
     written = 0
     for specialist_dir in sorted(SPECIALISTS_DIR.iterdir()):
         if not specialist_dir.is_dir():
@@ -82,8 +83,7 @@ def main() -> None:
             continue
         slug = specialist_dir.name
         config = _load_yaml(config_path)
-        template = template_path.read_text(encoding="utf-8")
-        output = render_agent(slug, config, template, personality)
+        output = render_agent(slug, config)
         (OUTPUT_DIR / f"{slug}.md").write_text(output, encoding="utf-8")
         written += 1
     print(f"Generated {written} opencode agent files in {OUTPUT_DIR}")

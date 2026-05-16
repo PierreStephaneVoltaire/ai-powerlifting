@@ -16,7 +16,7 @@ import httpx
 
 TABLE_NAME = os.getenv("IF_HEALTH_TABLE_NAME", "if-health")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-MODEL_ROUTER_MODEL = os.getenv("MODEL_ROUTER_MODEL", "anthropic/claude-sonnet-4-6")
+BACKFILL_MODEL = os.getenv("BACKFILL_FATIGUE_PROFILE_MODEL", "anthropic/claude-sonnet-4-6")
 OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 
 _SYSTEM_PROMPT = """\
@@ -113,7 +113,7 @@ async def estimate_fatigue_profile(exercise: dict) -> dict:
                 "Content-Type": "application/json",
             },
             json={
-                "model": MODEL_ROUTER_MODEL,
+                "model": BACKFILL_MODEL,
                 "messages": [
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},

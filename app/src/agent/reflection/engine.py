@@ -278,6 +278,26 @@ class ReflectionEngine:
             return None
         
         logger.info(f"[Reflection] Post-session reflection for {session_id}")
+
+        if summary:
+            try:
+                from memory.user_facts import FactCategory, FactSource
+
+                self.store.add(
+                    context_id=REFLECTION_CONTEXT_ID,
+                    content=f"Post-session context for {session_id}:\n{summary[:5000]}",
+                    category=FactCategory.SESSION_REFLECTION,
+                    source=FactSource.CONVERSATION_DERIVED,
+                    confidence=0.8,
+                    cache_key=session_id,
+                    metadata={
+                        "session_id": session_id,
+                        "turn_count": turn_count,
+                        "captured_for_reflection": True,
+                    },
+                )
+            except Exception as exc:
+                logger.warning("[Reflection] Failed to store post-session context: %s", exc)
         
         return await self.run_reflection_cycle(
             reason="post_session",
@@ -367,6 +387,18 @@ class ReflectionEngine:
                     }
                 )
 
+                try:
+                    await self._create_gap_proposal(
+                        gap_id=gap_fact.id,
+                        content=content,
+                        trigger_count=trigger_count,
+                        priority_score=priority_score,
+                        acceptance_criteria=acceptance_criteria,
+                        contexts=contexts,
+                    )
+                except Exception as proposal_error:
+                    logger.warning("[Reflection] Proposal creation failed for gap %s: %s", gap_fact.id, proposal_error)
+
                 promoted_ids.append(gap_fact.id)
                 logger.info(f"[Reflection] Promoted gap {gap_fact.id} (priority={priority_score:.2f})")
                 
@@ -374,6 +406,53 @@ class ReflectionEngine:
             logger.error(f"[Reflection] Gap analysis failed: {e}")
         
         return promoted_ids
+
+    async def _create_gap_proposal(
+        self,
+        *,
+        gap_id: str,
+        content: str,
+        trigger_count: int,
+        priority_score: float,
+        acceptance_criteria: list[str],
+        contexts: list[str],
+    ) -> None:
+        """Create a user-reviewable proposal for a promoted capability gap."""
+        from config import AWS_REGION, IF_PROPOSALS_TABLE_NAME, IF_USER_PK
+        import boto3
+
+        criteria_md = "\n".join(f"- {item}" for item in acceptance_criteria) or "- Define acceptance criteria before implementation."
+        contexts_md = "\n".join(f"- {item}" for item in contexts[:5]) or "- No example context recorded."
+        proposal_body = (
+            "## User Story\n"
+            f"As IF, I need a capability for: {content}\n"
+            "so repeated operator requests can be handled without brittle workarounds.\n\n"
+            "## Acceptance Criteria\n"
+            f"{criteria_md}\n\n"
+            "## Evidence\n"
+            f"- Source gap ID: `{gap_id}`\n"
+            f"- Trigger count: {trigger_count}\n"
+            f"- Priority score: {priority_score:.2f}\n"
+            "- Recent contexts:\n"
+            f"{contexts_md}\n"
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        table = boto3.resource("dynamodb", region_name=AWS_REGION).Table(IF_PROPOSALS_TABLE_NAME)
+        table.put_item(
+            Item={
+                "pk": IF_USER_PK,
+                "sk": f"proposal#{now}",
+                "type": "new_tool",
+                "title": f"Capability gap: {content[:80]}",
+                "rationale": f"Reflection promoted this gap after {trigger_count} trigger(s).",
+                "content": proposal_body,
+                "target_id": gap_id,
+                "status": "pending",
+                "author": "agent",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
     
     def _generate_acceptance_criteria(
         self,

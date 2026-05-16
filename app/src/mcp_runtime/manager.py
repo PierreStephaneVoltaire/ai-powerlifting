@@ -139,17 +139,24 @@ class MCPToolManager:
             return
         for name in list(managed.tools.keys()):
             self._tool_index.pop(name, None)
-        try:
-            if managed.session_cm:
+        if managed.session_cm:
+            try:
                 await managed.session_cm.__aexit__(None, None, None)
-        finally:
-            if managed.client_cm:
+            except BaseException as exc:
+                logger.debug("MCP session close failed for %s: %s", category, exc)
+        if managed.client_cm:
+            try:
                 await managed.client_cm.__aexit__(None, None, None)
+            except BaseException as exc:
+                logger.debug("MCP client close failed for %s: %s", category, exc)
         logger.info("MCP server %s stopped", category)
 
     async def stop_all(self) -> None:
         for category in list(self._servers.keys()):
-            await self.stop(category)
+            try:
+                await self.stop(category)
+            except BaseException as exc:
+                logger.debug("MCP stop failed for %s: %s", category, exc)
 
     async def reload(self, category: str | None = None) -> dict[str, str]:
         targets = [category] if category else list(self.categories)
@@ -230,4 +237,3 @@ async def shutdown_mcp_manager() -> None:
     if _manager is not None:
         await _manager.stop_all()
         _manager = None
-

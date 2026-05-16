@@ -1,5 +1,4 @@
 import logging
-import os
 import httpx
 from pathlib import Path
 from typing import List, Dict, Any
@@ -7,7 +6,7 @@ from app_sandbox.local import get_local_sandbox
 
 logger = logging.getLogger(__name__)
 
-# Spreadsheets/CSV only for this feature
+# These are still used by the dispatcher for spreadsheet-specific import nudges.
 ALLOWED_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",
@@ -44,12 +43,7 @@ async def download_discord_attachments(
         for att in attachments:
             filename = att.get("filename", "unknown_file")
             url = att.get("url")
-            content_type = att.get("content_type", "")
-            
-            ext = Path(filename).suffix.lower()
-            is_spreadsheet = (content_type in ALLOWED_CONTENT_TYPES or ext in ALLOWED_EXTENSIONS)
-            
-            if not url or not is_spreadsheet:
+            if not url:
                 updated_attachments.append(att)
                 continue
                 
