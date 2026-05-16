@@ -4,7 +4,8 @@ import { docClient, USER_TABLE } from '../db/dynamo'
 export type ProfileVisibility = 'private' | 'public'
 
 export interface UserSettings {
-  mapped_pk: string
+  pk: string
+  mapped_pk?: string
   username: string
   discord_id: string
   discord_username: string
@@ -78,9 +79,11 @@ function normalizeSettings(raw: Record<string, unknown>): UserSettings {
   const discordUsername = String(raw.discord_username || raw.username || '')
   const username = usernameKey(String(raw.username || discordUsername || raw.nickname || 'user'))
   const nickname = String(raw.nickname || username)
-  const mappedPk = normalizeMappedPk(raw.mapped_pk) || username
+  const pk = String(raw.pk || username)
+  const mappedPk = normalizeMappedPk(raw.mapped_pk)
   return {
-    mapped_pk: mappedPk,
+    pk,
+    ...(mappedPk ? { mapped_pk: mappedPk } : {}),
     username,
     discord_id: String(raw.discord_id || ''),
     discord_username: discordUsername,
@@ -115,7 +118,7 @@ export async function getSettings(discordUsername: string): Promise<UserSettings
 
   const result = await docClient.send(new GetCommand({
     TableName: USER_TABLE,
-    Key: { mapped_pk: key },
+    Key: { pk: key },
   }))
 
   if (!result.Item) return null
@@ -136,7 +139,7 @@ export async function getOrCreateSettings(
   const now = new Date().toISOString()
   const username = usernameKey(discordUsername)
   const settings: UserSettings = {
-    mapped_pk: username,
+    pk: username,
     username,
     discord_id: discordId,
     discord_username: discordUsername,
@@ -154,7 +157,7 @@ export async function getOrCreateSettings(
   await docClient.send(new PutCommand({
     TableName: USER_TABLE,
     Item: settings,
-    ConditionExpression: 'attribute_not_exists(mapped_pk)',
+    ConditionExpression: 'attribute_not_exists(pk)',
   })).catch(() => {
     // Race: another request created it first. Fetch instead.
     created = false
@@ -170,7 +173,7 @@ export async function getOrCreateSettings(
 }
 
 export function mappedPkForSettings(settings: UserSettings): string {
-  return settings.mapped_pk || settings.nickname || settings.username
+  return settings.mapped_pk || settings.pk
 }
 
 export async function resolveMappedPk(
@@ -195,9 +198,9 @@ export async function updateNickname(discordUsername: string, nickname: string):
   const now = new Date().toISOString()
   await docClient.send(new UpdateCommand({
     TableName: USER_TABLE,
-    Key: { mapped_pk: existing.mapped_pk },
+    Key: { pk: existing.pk },
     UpdateExpression: 'SET #nick = :nick, updated_at = :now',
-    ConditionExpression: 'attribute_exists(mapped_pk)',
+    ConditionExpression: 'attribute_exists(pk)',
     ExpressionAttributeNames: { '#nick': 'nickname' },
     ExpressionAttributeValues: { ':nick': nickname, ':now': now },
   }))
@@ -231,7 +234,7 @@ export async function updateProfile(
 
   await docClient.send(new UpdateCommand({
     TableName: USER_TABLE,
-    Key: { mapped_pk: existing.mapped_pk },
+    Key: { pk: existing.pk },
     UpdateExpression: [
       'SET profile_visibility = :visibility',
       'display_name = :display',
@@ -239,7 +242,7 @@ export async function updateProfile(
       'public_training_summary_enabled = :summary',
       'updated_at = :now',
     ].join(', '),
-    ConditionExpression: 'attribute_exists(mapped_pk)',
+    ConditionExpression: 'attribute_exists(pk)',
     ExpressionAttributeValues: {
       ':visibility': profileVisibility,
       ':display': displayName,

@@ -31,7 +31,7 @@ import {
   Divider,
   Table,
 } from '@mantine/core'
-import type { Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
+import type { Exercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 const PROFILE_ESTIMATE_READY_SCORE = 55
@@ -39,6 +39,29 @@ const LIFT_ALIASES: Record<LiftProfile['lift'], string[]> = {
   squat: ['squat'],
   bench: ['bench'],
   deadlift: ['deadlift'],
+}
+
+function hasCompletedSet(exercise: Exercise): boolean {
+  const setCount = Math.max(0, Math.round(Number(exercise.sets) || 0))
+
+  if (exercise.set_statuses?.length) {
+    for (let index = 0; index < setCount; index += 1) {
+      const status = exercise.set_statuses[index]
+      if (status === 'completed' || status === undefined) return true
+    }
+    return false
+  }
+
+  if (exercise.failed_sets?.length) {
+    const legacySetCount = Math.max(setCount, exercise.failed_sets.length)
+    for (let index = 0; index < legacySetCount; index += 1) {
+      if (exercise.failed_sets[index] !== true) return true
+    }
+    return false
+  }
+
+  if (exercise.failed) return false
+  return setCount > 0
 }
 
 const LIFT_LABELS: Record<LiftProfile['lift'], string> = {
@@ -291,9 +314,11 @@ export default function Dashboard() {
   const actualMaxes = { squat: 0, bench: 0, deadlift: 0 }
   for (const session of sessions) {
     if (!session.completed) continue
+    if (session.status === 'skipped') continue
     if ((session.block || 'current') !== 'current') continue
     for (const exercise of session.exercises) {
       if (exercise.kg == null) continue
+      if (!hasCompletedSet(exercise)) continue
       const name = exercise.name.toLowerCase()
       if (name.includes('squat') && exercise.kg > actualMaxes.squat) actualMaxes.squat = exercise.kg
       if (name.includes('bench') && exercise.kg > actualMaxes.bench) actualMaxes.bench = exercise.kg

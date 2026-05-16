@@ -58,15 +58,11 @@ resource "aws_dynamodb_table" "if_powerlifting_analysis_cache" {
 resource "aws_dynamodb_table" "if_user" {
   name         = var.dynamodb_user_table
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "mapped_pk"
+  hash_key     = "pk"
 
   attribute {
-    name = "mapped_pk"
+    name = "pk"
     type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
   }
 
   tags = {

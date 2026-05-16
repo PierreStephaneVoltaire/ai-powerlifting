@@ -37,7 +37,7 @@ The powerlifting app is a single-athlete training portal that combines:
   analytics windows and AI report caches
 - current-program exports plus cache-only past-block analysis exports
 - optional S3-backed video attachments
-- Discord OAuth authentication with per-user settings (nickname)
+- Discord OAuth authentication with generic user mappings in `if-user`
 
 The frontend is React 19 + Vite + TypeScript + Mantine. The backend is
 Express/TypeScript. Most serious analytics and AI work does not happen inside
@@ -67,7 +67,16 @@ For the Analysis page specifically there are four separate computation paths:
 
 ### Core storage model
 
-The app stores its main state in DynamoDB table `if-health`. Important records:
+The app stores training state in DynamoDB table `if-health`. Training records
+use physical key attributes `pk` and `sk`; the app-level user mapping value that
+feeds `pk` is named `mapped_pk`.
+
+Identity/profile mapping lives in the generic DynamoDB table `if-user`
+(`IF_USER_TABLE`). That table is not powerlifting-specific. Its hash key is
+`pk`. Each record also stores `username`, optional `mapped_pk`, Discord identity
+fields, profile visibility, and display metadata.
+
+Important training records:
 
 - `program#current`
   Active-program pointer. Resolves to the latest concrete program version.
@@ -85,6 +94,16 @@ The app stores its main state in DynamoDB table `if-health`. Important records:
 - Template and import records
   Stored through the health tool layer and exposed in the portal through the
   template and import pages.
+
+`mapped_pk` flow:
+
+- anonymous requests use `mapped_pk = "operator"` and are read-only
+- signed-in requests load or create an `if-user` record keyed by `pk`
+- backend routes store the resolved value on `req.mapped_pk`
+- training reads and writes pass `req.mapped_pk` as the `pk` value for
+  `if-health`, `if-sessions`, and analysis cache records
+- resolution is `mapped_pk || pk`; `mapped_pk` exists only when the user's
+  training data should be redirected to a different partition
 
 Storage conventions:
 
@@ -2277,8 +2296,18 @@ Unreachable pages (no registered route): `TimelinePage.tsx`, `DietNotesPage.tsx`
 
 Discord OAuth2. The `LoginPage` triggers the flow; `AuthCallbackPage` receives the
 redirect and verifies the session via `GET /api/auth/me`. Sessions are stored as
-httpOnly cookies. Per-user settings (DynamoDB) store `discord_id`,
-`discord_username`, `avatar_url`, and a 2-32 char alphanumeric nickname.
+httpOnly cookies.
+
+`GET /api/auth/me` returns `user`, `mapped_pk`, and `readOnly`. The backend
+middleware resolves `req.mapped_pk` before protected app routes run:
+
+- no authenticated user: `mapped_pk = "operator"`, `readOnly = true`
+- authenticated user: load or create the `if-user` record and use
+  `mapped_pk || pk`, `readOnly = false`
+
+The user mapping record stores `pk`, `username`, optional `mapped_pk`,
+`discord_id`, `discord_username`, `avatar_url`, nickname, profile visibility,
+display name, bio, and public training-summary preference.
 
 ### Dashboard
 
@@ -2439,7 +2468,7 @@ Consistency rule:
 | Block analytics       | `backend/src/services/blockAnalytics.ts`      | Cross-block index, per-block bundles, correlation, program-eval, AI lifetime compare        |
 | Block analysis export | `backend/src/services/blockAnalysisExport.ts` | XLSX/Markdown rendering for cached past-block analysis bundles; does not load full sessions |
 | Session store         | `backend/src/services/sessionStore.ts`        | Separate DynamoDB session storage (sessions are NOT embedded in program document)           |
-| User settings         | `backend/src/services/userSettings.ts`        | Per-Discord-user settings with nickname and 60s in-memory cache                             |
+| User mappings         | `backend/src/services/userSettings.ts`        | Generic `if-user` records keyed by `pk`, with optional `mapped_pk`, profile fields, and 60s in-memory cache |
 
 Important: sessions are stored in a separate DynamoDB table (env var
 `IF_SESSIONS_TABLE_NAME`, default `if-sessions`), not inside the program
@@ -2475,6 +2504,7 @@ controller must still merge or pass sessions explicitly.
 The powerlifting app is not just a logbook. It is a layered system:
 
 - raw training data and meet data in DynamoDB (program document)
+- user identity/profile mappings in `if-user`, keyed by `pk`
 - sessions in a separate DynamoDB table (not embedded in program)
 - pre-computed analytics cached in `if-powerlifting-analysis-cache`
 - glossary metadata for anatomy and fatigue semantics
