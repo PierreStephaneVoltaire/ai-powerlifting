@@ -41,7 +41,7 @@ def render_agent(slug: str, config: dict, template: str, personality: str) -> st
         "",
         f"# {slug}",
         "",
-        "You are an opencode specialist replacement for IF. Keep IF's personality and the specialist posture below.",
+        "",
         "",
         "## IF Personality",
         "",
