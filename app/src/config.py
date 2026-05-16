@@ -97,6 +97,32 @@ TIER_STANDARD_PRESET = os.getenv("TIER_STANDARD_PRESET", "@preset/standard")
 TIER_HEAVY_PRESET = os.getenv("TIER_HEAVY_PRESET", "@preset/heavy")
 
 # =============================================================================
+# opencode Flow Configuration
+# =============================================================================
+
+OPENCODE_BIN = os.getenv("OPENCODE_BIN", "")
+OPENCODE_PLANNER_MODEL = os.getenv("OPENCODE_PLANNER_MODEL", "deepseek/deepseek-v4-flash")
+OPENCODE_TIMEOUT_SECONDS = int(os.getenv("OPENCODE_TIMEOUT_SECONDS", "900"))
+IF_DIRECT_LLM_TOOL_ROUNDS = int(os.getenv("IF_DIRECT_LLM_TOOL_ROUNDS", "8"))
+IF_DEFAULT_DIRECT_MODEL = os.getenv("IF_DEFAULT_DIRECT_MODEL", "openai/gpt-5.4-mini")
+IF_TECHNICAL_ARTIFACT_EXCLUDES = {
+    "history.md",
+    "plan.md",
+    "review.md",
+    "response.md",
+}
+
+# MCP tool server categories managed by IF at startup.
+MCP_SERVER_CATEGORIES = [
+    item.strip()
+    for item in os.getenv(
+        "MCP_SERVER_CATEGORIES",
+        "health,finance,diary,proposals,temporal,supplement_research",
+    ).split(",")
+    if item.strip()
+]
+
+# =============================================================================
 # Specialist Subagent Configuration (Phase 4)
 # =============================================================================
 

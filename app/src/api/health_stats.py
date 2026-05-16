@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 
-from agent.tool_registry import get_tool_registry
+from mcp_runtime import get_mcp_manager
 
 router = APIRouter(tags=["health_stats"])
 
@@ -14,8 +14,8 @@ async def diagnostic():
 @router.get("/api/health/stats/categories")
 async def get_categories():
     try:
-        registry = get_tool_registry()
-        result = await registry.execute_tool("powerlifting_filter_categories", {})
+        registry = get_mcp_manager()
+        result = await registry.call_tool("powerlifting_filter_categories", {})
         if result.startswith("ERROR:"):
             if "Dataset not ready" in result:
                 return JSONResponse(
@@ -34,7 +34,7 @@ async def get_categories():
 @router.post("/api/health/stats/analyze")
 async def analyze_powerlifting(data: Dict[str, Any] = Body(...)):
     try:
-        registry = get_tool_registry()
+        registry = get_mcp_manager()
 
         args = {
             "squat_kg": data.get("squat"),
@@ -53,7 +53,7 @@ async def analyze_powerlifting(data: Dict[str, Any] = Body(...)):
             "min_dots": data.get("min_dots"),
         }
 
-        result = await registry.execute_tool("analyze_powerlifting_stats", args)
+        result = await registry.call_tool("analyze_powerlifting_stats", args)
         if result.startswith("ERROR:"):
             if "Dataset not ready" in result:
                 return JSONResponse(

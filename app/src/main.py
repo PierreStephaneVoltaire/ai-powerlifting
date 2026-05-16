@@ -3,20 +3,10 @@ import asyncio
 import os
 import subprocess
 import sys
-import uuid
 from typing import Optional
 from contextlib import asynccontextmanager
 from pathlib import Path
 import logging
-
-# Override OpenHands SDK tool output truncation limit.
-# Default 50K silently truncates large tool results (e.g. health_get_program
-# returns ~95K) causing the model to hallucinate from incomplete data.
-from config import TOOL_OUTPUT_CHAR_LIMIT
-import openhands.sdk.utils.truncate as _oh_truncate
-_oh_truncate.DEFAULT_TEXT_CONTENT_LIMIT = TOOL_OUTPUT_CHAR_LIMIT
-import openhands.sdk.utils as _oh_utils
-_oh_utils.DEFAULT_TEXT_CONTENT_LIMIT = TOOL_OUTPUT_CHAR_LIMIT
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -176,13 +166,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Legacy memory store initialization failed: {e}")
 
-    # External tool plugin initialization
+    # MCP tool server initialization
     try:
-        from agent.tool_registry import init_tool_registry
-        registry = init_tool_registry()
-        logger.info(f"Tool registry: {len(registry.list_tools())} external tools loaded")
+        from mcp_runtime import init_mcp_manager
+
+        manager = init_mcp_manager()
+        await manager.start_all()
+        logger.info("MCP tools loaded: %s tools", len(manager.list_tool_names()))
     except Exception as e:
-        logger.warning(f"Tool registry initialization failed: {e}")
+        logger.warning(f"MCP tool initialization failed: {e}")
 
     try:
         import nltk
@@ -420,6 +412,14 @@ async def lifespan(app: FastAPI):
     if _stats_refresh_task:
         _stats_refresh_task.cancel()
         logger.info("Model stats refresh stopped")
+
+    try:
+        from mcp_runtime import shutdown_mcp_manager
+
+        await shutdown_mcp_manager()
+        logger.info("MCP tool servers stopped")
+    except Exception as e:
+        logger.warning(f"MCP shutdown failed: {e}")
     
     stop_all()
     logger.info("All channel listeners stopped")

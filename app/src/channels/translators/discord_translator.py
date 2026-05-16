@@ -114,6 +114,10 @@ def translate_discord_batch(
         "model": "if-prototype",
         "stream": True,
         "messages": api_messages,
+        "platform": "discord",
+        "guild_id": messages[-1].get("guild_id", "") if messages else "",
+        "channel_id": messages[-1].get("channel_id", conversation_id) if messages else conversation_id,
+        "conversation_id": conversation_id,
         "_conversation_id": conversation_id,
         "_pending_uploads": pending_uploads,
     }

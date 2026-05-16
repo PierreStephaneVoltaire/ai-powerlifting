@@ -138,6 +138,8 @@ def create_discord_listener(
                     "platform": "discord",
                     "webhook_id": webhook_id,
                     "conversation_id": conversation_id,
+                    "guild_id": str(message.guild.id) if message.guild else "",
+                    "channel_id": str(message.channel.id),
                     "author": message.author.display_name,
                     "content": message.clean_content,
                     "attachments": [

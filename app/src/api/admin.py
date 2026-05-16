@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 logger = logging.getLogger(__name__)
 
@@ -12,23 +12,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.post("/reload-tools")
-async def reload_tools() -> Dict[str, str]:
-    """Reload all external tool plugins from disk.
-
-    Re-scans the tools directory, installs any new dependencies,
-    re-imports modules, and re-indexes all plugins.
-
-    Returns per-tool status: "reloaded", "removed", or "failed: <reason>".
-    """
+async def reload_tools(category: Optional[str] = Query(default=None)) -> Dict[str, str]:
+    """Restart MCP tool server subprocesses and refresh the app-side index."""
     try:
-        from agent.tool_registry import get_tool_registry
-        registry = get_tool_registry()
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        from mcp_runtime import get_mcp_manager
 
-    try:
-        statuses = registry.reload()
-        logger.info(f"Tool reload: {statuses}")
+        statuses = await get_mcp_manager().reload(category)
+        logger.info("Tool reload: %s", statuses)
         return statuses
     except Exception as e:
         logger.error(f"Tool reload failed: {e}")

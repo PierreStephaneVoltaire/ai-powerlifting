@@ -30,8 +30,8 @@ sentence-transformers>=2.2.0
 # Token Counting for Context Condensation
 tiktoken>=0.5.0
 
-# OpenHands Agent Runtime
-openhands-sdk==1.11.4
+# MCP tool runtime
+mcp>=1.2.0,<2.0.0
 
 # Discord Integration
 discord.py>=2.3.0
@@ -60,7 +60,6 @@ python-dateutil>=2.8.0
 # Optional: For development and testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
-
 
 
 

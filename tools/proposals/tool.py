@@ -21,14 +21,14 @@ from typing import Any, Dict, List, Literal, Optional, Sequence
 
 from pydantic import Field
 
-from openhands.sdk import (
+from tools.sdk_compat import (
     Action,
     Observation,
     Tool,
     ToolDefinition,
+    ToolExecutor,
     register_tool,
 )
-from openhands.sdk.tool import ToolExecutor
 
 
 # =============================================================================

@@ -4,8 +4,6 @@ import json
 import uuid
 import hashlib
 import logging
-import tempfile
-from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Any, Optional, Tuple, AsyncGenerator
 
 from fastapi import APIRouter, HTTPException, Request
@@ -24,14 +22,10 @@ from routing.interceptor import intercept_request
 from routing.cache import get_cache
 from routing.commands import parse_command, CommandAction
 from presets.loader import get_preset_manager
-from agent.session import get_or_create_session, execute_agent
-from agent.tiering import (
-    estimate_context_tokens,
-    check_tier,
-    get_preset_for_tier,
-    get_tier_for_context,
-)
-from files import strip_files_line, log_file_refs, consume_file_refs, FilesStripBuffer, FileRef
+from files import strip_files_line, log_file_refs, FilesStripBuffer
+from flow import run_if_flow, run_specialist_flow
+from flow.runner import materialize_file_ref
+from mcp_runtime import get_mcp_manager
 from config import API_MODEL_NAME, HEALTH_HELPER_MODEL
 
 if TYPE_CHECKING:
@@ -346,12 +340,11 @@ async def process_chat_completion_internal(
         # Inject sandbox key — file-emitting tools write to SANDBOX_PATH/cache_key/
         args["_conversation_id"] = cache_key
 
-        from agent.tool_registry import get_tool_registry
-        registry = get_tool_registry()
+        registry = get_mcp_manager()
         if not registry.has_tool(tool_name):
             return json.dumps({"error": f"Unknown tool: {tool_name}"}), []
 
-        result = await registry.execute_tool(tool_name, args)
+        result = await registry.call_tool(tool_name, args)
 
         # Strip FILES: lines and log refs (mirrors the normal agent path)
         cleaned, file_refs = strip_files_line(result)
@@ -376,15 +369,7 @@ async def process_chat_completion_internal(
 
     available_tools: list[str] = []
     try:
-        from agent.tool_registry import get_tool_registry
-        registry = get_tool_registry()
-        available_tools = sorted(
-            {
-                tool_name
-                for config in registry._tools.values()
-                for tool_name in config.schemas.keys()
-            }
-        )
+        available_tools = get_mcp_manager().list_tool_names()
     except Exception:
         available_tools = []
 
@@ -453,25 +438,22 @@ async def process_chat_completion_internal(
             try:
                 specialist_slug = _find_specialist_for_tool(cmd.target)
                 if specialist_slug:
-                    from agent.tools.subagents import SpawnSpecialistAction, SpawnSpecialistExecutor
-
                     args_json = json.dumps(args, indent=2, default=str)
                     task = (
                         f"Handle the slash command /{cmd.target}. "
                         f"Call the tool '{cmd.target}' with these exact JSON arguments:\n{args_json}\n\n"
                         "Return the result to the user."
                     )
-                    observation = SpawnSpecialistExecutor(chat_id=cache_key)(
-                        SpawnSpecialistAction(
-                            specialist_type=specialist_slug,
-                            task=task,
-                        )
+                    result = await run_specialist_flow(
+                        specialist_slug=specialist_slug,
+                        task=task,
+                        http_client=http_client,
+                        selected_model=_specialist_model_override(request_data),
                     )
-                    return observation.result, []
+                    return result, []
 
-                from agent.tool_registry import get_tool_registry
-                registry = get_tool_registry()
-                result = await registry.execute_tool(cmd.target, args)
+                registry = get_mcp_manager()
+                result = await registry.call_tool(cmd.target, args)
                 return result, []
             except Exception as e:
                 logger.error(f"[Command] Error executing tool {cmd.target}: {e}")
@@ -485,17 +467,13 @@ async def process_chat_completion_internal(
                 return f"Command /{cmd.target} requires a task description.", []
 
             try:
-                from agent.tools.subagents import SpawnSpecialistAction, SpawnSpecialistExecutor
-                observation = SpawnSpecialistExecutor(
-                    chat_id=cache_key,
-                    model_override=_specialist_model_override(request_data),
-                )(
-                    SpawnSpecialistAction(
-                        specialist_type=cmd.target,
-                        task=task,
-                    )
+                result = await run_specialist_flow(
+                    specialist_slug=cmd.target,
+                    task=task,
+                    http_client=http_client,
+                    selected_model=_specialist_model_override(request_data),
                 )
-                return observation.result, []
+                return result, []
             except Exception as e:
                 logger.error(f"[Command] Error executing specialist {cmd.target}: {e}")
                 return f"Error executing /{cmd.target}: {type(e).__name__}: {e}", []
@@ -540,39 +518,9 @@ async def process_chat_completion_internal(
                 return content, []
         return str(response), []
 
-    # Get or create cached state for tier tracking
-    cached_state = cache.get_or_create(cache_key)
-
-    # Check for pinned tier (e.g., pondering mode)
-    if cached_state.pinned and cached_state.pinned_tier is not None:
-        # Use pinned tier
-        selected_preset = get_preset_for_tier(cached_state.pinned_tier)
-        logger.info(f"[Tiering] Using pinned tier {cached_state.pinned_tier}: {selected_preset}")
-    else:
-        # Estimate context tokens
-        # Get system prompt estimate from session
-        system_prompt = "general"  # Base system prompt, will be assembled by session
-        context_tokens = estimate_context_tokens(system_prompt, messages, tool_overhead=5000)
-
-        # Check tier based on context
-        try_condensation, upgrade_tier = check_tier(context_tokens, cached_state.current_tier)
-
-        if try_condensation:
-            # Context exceeds current tier limit - could trigger condensation here
-            # For now, log and continue with current tier
-            logger.info(f"[Tiering] Context ({context_tokens} tokens) exceeds current tier limit, condensation may be needed")
-
-        if upgrade_tier is not None:
-            # Upgrade tier
-            cached_state.current_tier = upgrade_tier
-            cached_state.context_tokens = context_tokens
-            logger.info(f"[Tiering] Upgraded to tier {upgrade_tier}")
-        else:
-            cached_state.context_tokens = context_tokens
-
-        # Get preset for current tier (always use general preset as main agent)
-        selected_preset = "general"
-        logger.info(f"[Tiering] Using preset: {selected_preset} (tier {cached_state.current_tier})")
+    # Keep cache state for legacy slash commands and heartbeat metadata. The
+    # opencode planner now selects route/model for the actual response.
+    cache.get_or_create(cache_key)
 
     # Persist cache state
     try:
@@ -583,46 +531,13 @@ async def process_chat_completion_internal(
     except Exception as e:
         logger.warning(f"[Cache] Failed to persist entry: {e}")
 
-    # Format conversation history for system prompt injection
-    conversation_history = format_conversation_history(messages)
-    if conversation_history:
-        logger.info(f"[History] Injecting {len(messages) - 1} history messages into system prompt")
-
-    # Resolve concrete model for the main agent via router
-    model_override = None
-    try:
-        from models.router import select_model_for_tier
-        model_override = select_model_for_tier(cached_state.current_tier)
-    except Exception as e:
-        logger.debug(f"[Router] Tier model selection skipped: {e}")
-
-    session = get_or_create_session(
-        conversation_id=cache_key,
-        preset_slug=selected_preset,
-        preset_manager=preset_manager,
-        messages=messages,
-        context_id=context_id,
-        conversation_history=conversation_history,
-        model_override=model_override,
-    )
-    
-    agent_response = await execute_agent(
-        session=session,
-        messages=messages,
+    flow_result = await run_if_flow(
+        request_data=request_data,
         http_client=http_client,
-        stream=stream
+        cache_key=cache_key,
+        context_id=context_id,
+        webhook=webhook,
     )
-    
-    cleaned_content, file_refs = strip_files_line(agent_response.content)
-    agent_response.content = cleaned_content
-    
-    if file_refs:
-        log_file_refs(cache_key, file_refs)
-
-    subagent_refs = consume_file_refs(cache_key)
-    if subagent_refs:
-        logger.info(f"[Attachments] Merging {len(subagent_refs)} subagent file refs")
-        file_refs = list(file_refs) + subagent_refs
 
     try:
         import asyncio
@@ -641,66 +556,13 @@ async def process_chat_completion_internal(
         logger.debug(f"Failed to queue conversation summary: {e}")
     
     attachments = []
+    for ref in flow_result.file_refs:
+        att = materialize_file_ref(ref, cache_key)
+        if att:
+            attachments.append(att)
 
-    for ref in file_refs:
-        filename = ref.path.split("/")[-1] if "/" in ref.path else ref.path
-        local_path = None
-
-        try:
-            from app_sandbox import get_local_sandbox
-            workdir = Path(get_local_sandbox().get_working_dir(cache_key))
-            # Resolve relative paths - try conversation dir first, then workspace
-            if not ref.path.startswith("/"):
-                candidate_paths = [
-                    workdir / ref.path,
-                    Path("/home/user/workspace") / ref.path,
-                ]
-            else:
-                candidate_paths = [Path(ref.path)]
-
-            content = None
-            for candidate in candidate_paths:
-                try:
-                    content = candidate.read_bytes()
-                    break
-                except Exception:
-                    continue
-
-            if content is not None:
-                temp_dir = Path(tempfile.gettempdir()) / "if-attachments" / cache_key
-                temp_dir.mkdir(parents=True, exist_ok=True)
-                local_file = temp_dir / filename
-                local_file.write_bytes(content)
-                local_path = str(local_file)
-        except Exception as e:
-            logger.warning(f"Failed to download attachment {ref.path}: {e}")
-
-        # Strip container-absolute prefixes for URL construction
-        url_path = ref.path
-        for prefix in ["/home/user/workspace/", f"/home/user/conversations/{cache_key}/"]:
-            if url_path.startswith(prefix):
-                url_path = url_path[len(prefix):]
-                break
-
-        attachments.append({
-            "filename": filename,
-            "url": f"/files/workspace/{cache_key}/{url_path}",
-            "local_path": local_path,
-            "content_type": "application/octet-stream",
-            "description": ref.description,
-        })
-    
-    for att_path in agent_response.attachments:
-        if not any(a["local_path"] == att_path for a in attachments):
-            attachments.append({
-                "filename": att_path,
-                "url": f"/files/sandbox/{cache_key}/{att_path}",
-                "local_path": att_path,
-                "content_type": "application/octet-stream",
-            })
-    
-    logger.info(f"[Response] cache_key={cache_key} | content_len={len(agent_response.content)} | attachments={len(attachments)}")
-    return agent_response.content, attachments
+    logger.info(f"[Response] cache_key={cache_key} | content_len={len(flow_result.content)} | attachments={len(attachments)}")
+    return flow_result.content, attachments
 
 
 @router.post("/v1/chat/completions")
