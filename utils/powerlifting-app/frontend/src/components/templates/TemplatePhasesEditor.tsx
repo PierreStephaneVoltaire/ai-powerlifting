@@ -9,6 +9,7 @@ import type { TemplatePhase } from '@powerlifting/types'
 interface Props {
   phases: TemplatePhase[]
   onChange: (phases: TemplatePhase[]) => void
+  disabled?: boolean
 }
 
 const EMPTY_FORM: Partial<TemplatePhase> = {
@@ -20,7 +21,7 @@ const EMPTY_FORM: Partial<TemplatePhase> = {
   intent: '',
 }
 
-export function TemplatePhasesEditor({ phases, onChange }: Props) {
+export function TemplatePhasesEditor({ phases, onChange, disabled }: Props) {
   const [phaseForm, setPhaseForm] = useState<Partial<TemplatePhase>>(EMPTY_FORM)
   const [editingIndex, setEditingIndex] = useState<number>(-1)
   const [isNew, setIsNew] = useState(false)
@@ -71,7 +72,7 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
   return (
     <Stack gap="md">
       <Group justify="flex-end">
-        <Button size="sm" leftSection={<Plus size={16} />} onClick={() => openPhaseEditor()}>
+        <Button size="sm" leftSection={<Plus size={16} />} onClick={() => openPhaseEditor()} disabled={disabled}>
           Add Phase
         </Button>
       </Group>
@@ -94,10 +95,10 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
                   )}
                 </Box>
                 <Group gap="xs" wrap="nowrap">
-                  <ActionIcon variant="subtle" onClick={() => openPhaseEditor(phase, i)}>
+                  <ActionIcon variant="subtle" onClick={() => openPhaseEditor(phase, i)} disabled={disabled}>
                     <Edit2 size={16} />
                   </ActionIcon>
-                  <ActionIcon variant="subtle" color="red" onClick={() => deletePhase(phase.name)}>
+                  <ActionIcon variant="subtle" color="red" onClick={() => deletePhase(phase.name)} disabled={disabled}>
                     <Trash2 size={16} />
                   </ActionIcon>
                 </Group>
@@ -124,6 +125,7 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
               value={phaseForm.name || ''}
               onChange={(e) => { const val = e.currentTarget.value; setPhaseForm(p => ({ ...p, name: val })) }}
               size="sm"
+              disabled={disabled}
             />
           </Box>
 
@@ -135,6 +137,7 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
                 value={phaseForm.week_start || 1}
                 onChange={(e) => setPhaseForm(p => ({ ...p, week_start: Number(e.currentTarget.value) || 1 }))}
                 size="sm"
+                disabled={disabled}
               />
             </Box>
             <Box>
@@ -144,6 +147,7 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
                 value={phaseForm.week_end || 4}
                 onChange={(e) => setPhaseForm(p => ({ ...p, week_end: Number(e.currentTarget.value) || 1 }))}
                 size="sm"
+                disabled={disabled}
               />
             </Box>
           </SimpleGrid>
@@ -157,6 +161,7 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
                 onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
+                disabled={disabled}
               />
             </Box>
             <Box>
@@ -167,6 +172,7 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
                 onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
+                disabled={disabled}
               />
             </Box>
           </SimpleGrid>
@@ -179,12 +185,13 @@ export function TemplatePhasesEditor({ phases, onChange }: Props) {
               autosize
               minRows={2}
               size="sm"
+              disabled={disabled}
             />
           </Box>
 
           <Group justify="flex-end" gap="xs">
             <Button variant="default" onClick={closePhaseEditor}>Cancel</Button>
-            <Button leftSection={<Save size={16} />} onClick={savePhase}>
+            <Button leftSection={<Save size={16} />} onClick={savePhase} disabled={disabled}>
               {isNew ? 'Add' : 'Update'} Phase
             </Button>
           </Group>

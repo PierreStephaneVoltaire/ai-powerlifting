@@ -24,6 +24,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useFederationStore } from '@/store/federationStore'
 import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useAuth } from '@/auth/AuthProvider'
 import { calculateDots } from '@/utils/dots'
 import type {
   Competition,
@@ -198,6 +199,7 @@ function federationNameById(
 }
 
 export default function CompetitionsPage() {
+  const { readOnly } = useAuth()
   const { program, updateCompetitions, migrateLastComp, completeCompetition } = useProgramStore()
   const { library, loadLibrary } = useFederationStore()
   const { pushToast } = useUiStore()
@@ -385,6 +387,7 @@ export default function CompetitionsPage() {
             <Button
               leftSection={<Save size={16} />}
               onClick={handleSave}
+              disabled={readOnly}
             >
               Save
             </Button>
@@ -393,6 +396,7 @@ export default function CompetitionsPage() {
             variant="default"
             leftSection={<Plus size={16} />}
             onClick={addCompetition}
+            disabled={readOnly}
           >
             Add Competition
           </Button>
@@ -440,6 +444,7 @@ export default function CompetitionsPage() {
                         label="Name"
                         value={comp.name}
                         onChange={(e) => updateComp(comp.date, { name: e.currentTarget.value })}
+                        disabled={readOnly}
                       />
                       <DatePickerInput
                         label="Date"
@@ -452,17 +457,20 @@ export default function CompetitionsPage() {
                           }
                           updateComp(comp.date, { date: newDate })
                         }}
+                        disabled={readOnly}
                       />
                       <TextInput
                         label="Federation Label"
                         value={comp.federation}
                         onChange={(e) => updateComp(comp.date, { federation: e.currentTarget.value })}
+                        disabled={readOnly}
                       />
                       <Select
                         label="Status"
                         value={comp.status}
                         onChange={(v) => updateComp(comp.date, { status: v as Competition['status'] })}
                         data={STATUS_OPTIONS}
+                        disabled={readOnly}
                       />
                     </SimpleGrid>
 
@@ -481,6 +489,7 @@ export default function CompetitionsPage() {
                             counts_toward_federation_ids: (comp.counts_toward_federation_ids ?? []).filter(item => item !== value),
                           })
                         }}
+                        disabled={readOnly}
                       />
                       <MultiSelect
                         searchable
@@ -492,6 +501,7 @@ export default function CompetitionsPage() {
                           counts_toward_federation_ids: value.filter(item => item !== comp.federation_id),
                         })}
                         description="Use this when a meet hosted by one federation can satisfy goals for another federation."
+                        disabled={readOnly}
                       />
                     </SimpleGrid>
 
@@ -501,6 +511,7 @@ export default function CompetitionsPage() {
                         label="Weight Class (kg)"
                         value={comp.weight_class_kg}
                         onChange={(e) => updateComp(comp.date, { weight_class_kg: Number(e.currentTarget.value) || 0 })}
+                        disabled={readOnly}
                       />
                       {comp.status === 'completed' && (
                         <TextInput
@@ -508,18 +519,21 @@ export default function CompetitionsPage() {
                           label="Body Weight (kg)"
                           value={comp.body_weight_kg || ''}
                           onChange={(e) => updateComp(comp.date, { body_weight_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
+                          disabled={readOnly}
                         />
                       )}
                       <TextInput
                         label="Location"
                         value={comp.location || ''}
                         onChange={(e) => updateComp(comp.date, { location: e.currentTarget.value })}
+                        disabled={readOnly}
                       />
                       <Checkbox
                         mt={30}
                         label="Hotel required"
                         checked={Boolean(comp.hotel_required)}
                         onChange={(event) => updateComp(comp.date, { hotel_required: event.currentTarget.checked })}
+                        disabled={readOnly}
                       />
                     </SimpleGrid>
 
@@ -563,7 +577,7 @@ export default function CompetitionsPage() {
                                 },
                               })
                             }}
-                            disabled={lift === 'total_kg' || (comp.status === 'completed' && Boolean(comp.post_meet_report))}
+                            disabled={lift === 'total_kg' || (comp.status === 'completed' && Boolean(comp.post_meet_report)) || readOnly}
                           />
                         ))}
                       </SimpleGrid>
@@ -656,6 +670,7 @@ export default function CompetitionsPage() {
                       rows={3}
                       placeholder="Competition notes..."
                       autosize
+                      disabled={readOnly}
                     />
 
                     <Group>
@@ -685,6 +700,7 @@ export default function CompetitionsPage() {
                           size="sm"
                           leftSection={<CheckCircle size={14} />}
                           onClick={() => openCompleteModal(comp)}
+                          disabled={readOnly}
                         >
                           {comp.post_meet_report ? 'Edit Post-Meet Report' : 'Add Post-Meet Report'}
                         </Button>
@@ -696,6 +712,7 @@ export default function CompetitionsPage() {
                           size="sm"
                           leftSection={<CheckCircle size={14} />}
                           onClick={() => openCompleteModal(comp)}
+                          disabled={readOnly}
                         >
                           Mark as Completed
                         </Button>
@@ -707,6 +724,7 @@ export default function CompetitionsPage() {
                         ml="auto"
                         leftSection={<Trash2 size={14} />}
                         onClick={() => removeCompetition(comp.date)}
+                        disabled={readOnly}
                       >
                         Delete
                       </Button>
@@ -740,18 +758,21 @@ export default function CompetitionsPage() {
               label="Body Weight at Weigh-in (kg)"
               value={completeForm.body_weight_kg}
               onChange={(e) => setCompleteForm((p) => ({ ...p, body_weight_kg: Number(e.currentTarget.value) || 0 }))}
+              disabled={readOnly}
             />
             <TextInput
               type="number"
               label="Sleep before meet (hours)"
               value={completeForm.report.sleep_hours ?? ''}
               onChange={(e) => updateCompleteReport({ sleep_hours: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })}
+              disabled={readOnly}
             />
             <TextInput
               type="number"
               label="Attempt selection grade"
               value={completeForm.report.attempt_selection_grade ?? ''}
               onChange={(e) => updateCompleteReport({ attempt_selection_grade: e.currentTarget.value !== '' ? Math.max(1, Math.min(5, Math.round(Number(e.currentTarget.value)))) as 1 | 2 | 3 | 4 | 5 : null })}
+              disabled={readOnly}
             />
 
           </SimpleGrid>
@@ -778,6 +799,7 @@ export default function CompetitionsPage() {
                       value={attempt.kg ?? ''}
                       onChange={(e) => updateCompleteAttempt(index, { kg: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })}
                       size="xs"
+                      disabled={readOnly}
                     />
                   </Table.Td>
                   <Table.Td>
@@ -786,12 +808,13 @@ export default function CompetitionsPage() {
                       data={ATTEMPT_RESULT_OPTIONS}
                       onChange={(value) => updateCompleteAttempt(index, { result: (value || 'not_taken') as CompetitionAttemptResult })}
                       size="xs"
+                      disabled={readOnly}
                     />
                   </Table.Td>
                   <Table.Td>
                     <Select
                       clearable
-                      disabled={attempt.result !== 'missed'}
+                      disabled={attempt.result !== 'missed' || readOnly}
                       value={attempt.miss_category}
                       data={MISS_CATEGORY_OPTIONS}
                       onChange={(value) => updateCompleteAttempt(index, { miss_category: value as CompetitionMissCategory | null })}
@@ -800,7 +823,7 @@ export default function CompetitionsPage() {
                   </Table.Td>
                   <Table.Td>
                     <MultiSelect
-                      disabled={attempt.result !== 'missed'}
+                      disabled={attempt.result !== 'missed' || readOnly}
                       value={attempt.miss_reasons}
                       data={MISS_REASON_OPTIONS}
                       onChange={(value) => updateCompleteAttempt(index, { miss_reasons: value as CompetitionMissReason[] })}
@@ -819,6 +842,7 @@ export default function CompetitionsPage() {
               onChange={(e) => updateCompleteReport({ warmup_timing: e.currentTarget.value })}
               autosize
               minRows={2}
+              disabled={readOnly}
             />
             <Textarea
               label="Sleep / travel"
@@ -826,6 +850,7 @@ export default function CompetitionsPage() {
               onChange={(e) => updateCompleteReport({ travel_notes: e.currentTarget.value })}
               autosize
               minRows={2}
+              disabled={readOnly}
             />
             <Textarea
               label="Food before"
@@ -833,6 +858,7 @@ export default function CompetitionsPage() {
               onChange={(e) => updateCompleteReport({ pre_meet_food: e.currentTarget.value })}
               autosize
               minRows={2}
+              disabled={readOnly}
             />
             <Textarea
               label="Food during"
@@ -840,12 +866,14 @@ export default function CompetitionsPage() {
               onChange={(e) => updateCompleteReport({ during_meet_food: e.currentTarget.value })}
               autosize
               minRows={2}
+              disabled={readOnly}
             />
             <TextInput
               type="number"
               label="Caffeine total (mg)"
               value={completeForm.report.caffeine_mg ?? ''}
               onChange={(e) => updateCompleteReport({ caffeine_mg: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })}
+              disabled={readOnly}
             />
             <Textarea
               label="Caffeine timing"
@@ -853,6 +881,7 @@ export default function CompetitionsPage() {
               onChange={(e) => updateCompleteReport({ caffeine_timing: e.currentTarget.value })}
               autosize
               minRows={2}
+              disabled={readOnly}
             />
             <Textarea
               label="Equipment issues"
@@ -860,6 +889,7 @@ export default function CompetitionsPage() {
               onChange={(e) => updateCompleteReport({ equipment_issues: e.currentTarget.value })}
               autosize
               minRows={2}
+              disabled={readOnly}
             />
             <Textarea
               label="Commands missed"
@@ -867,6 +897,7 @@ export default function CompetitionsPage() {
               onChange={(e) => updateCompleteReport({ commands_missed: e.currentTarget.value })}
               autosize
               minRows={2}
+              disabled={readOnly}
             />
           </SimpleGrid>
 
@@ -876,13 +907,14 @@ export default function CompetitionsPage() {
             onChange={(e) => updateCompleteReport({ notes: e.currentTarget.value })}
             autosize
             minRows={3}
+            disabled={readOnly}
           />
 
           <Group justify="flex-end" gap="sm" pt="sm">
             <Button variant="default" onClick={() => setShowCompleteModal(null)}>
               Cancel
             </Button>
-            <Button onClick={() => showCompleteModal && handleMarkComplete(showCompleteModal)}>
+            <Button onClick={() => showCompleteModal && handleMarkComplete(showCompleteModal)} disabled={readOnly}>
               Complete
             </Button>
           </Group>

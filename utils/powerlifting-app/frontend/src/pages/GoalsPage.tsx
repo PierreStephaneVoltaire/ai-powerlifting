@@ -30,6 +30,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useFederationStore } from '@/store/federationStore'
 import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useAuth } from '@/auth/AuthProvider'
 
 const GOAL_TYPE_OPTIONS: Array<{ value: GoalType; label: string }> = [
   { value: 'hit_total', label: 'Hit Total' },
@@ -134,6 +135,7 @@ function standardLabel(standard: QualificationStandard, library: FederationLibra
 }
 
 export default function GoalsPage() {
+  const { readOnly } = useAuth()
   const { program, updateGoals } = useProgramStore()
   const { library, loadLibrary } = useFederationStore()
   const { pushToast } = useUiStore()
@@ -218,11 +220,11 @@ export default function GoalsPage() {
         </Stack>
         <Group gap="sm">
           {hasChanges && (
-            <Button leftSection={<Save size={16} />} onClick={handleSave}>
+            <Button leftSection={<Save size={16} />} onClick={handleSave} disabled={readOnly}>
               Save
             </Button>
           )}
-          <Button variant="default" leftSection={<Plus size={16} />} onClick={addGoal}>
+          <Button variant="default" leftSection={<Plus size={16} />} onClick={addGoal} disabled={readOnly}>
             Add Goal
           </Button>
         </Group>
@@ -285,24 +287,28 @@ export default function GoalsPage() {
                         label="Title"
                         value={goal.title}
                         onChange={(event) => updateGoal(goal.id, { title: event.currentTarget.value })}
+                        disabled={readOnly}
                       />
                       <Select
                         label="Goal Type"
                         data={GOAL_TYPE_OPTIONS}
                         value={goal.goal_type}
                         onChange={(value) => value && updateGoal(goal.id, { goal_type: value as GoalType })}
+                        disabled={readOnly}
                       />
                       <Select
                         label="Priority"
                         data={PRIORITY_OPTIONS}
                         value={goal.priority}
                         onChange={(value) => value && updateGoal(goal.id, { priority: value as GoalPriority })}
+                        disabled={readOnly}
                       />
                       <Select
                         label="Strategy Mode"
                         data={STRATEGY_OPTIONS}
                         value={goal.strategy_mode}
                         onChange={(value) => value && updateGoal(goal.id, { strategy_mode: value as AttemptStrategyMode })}
+                        disabled={readOnly}
                       />
                     </SimpleGrid>
 
@@ -312,12 +318,14 @@ export default function GoalsPage() {
                         data={competitionOptions}
                         value={goal.target_competition_dates ?? []}
                         onChange={(value) => updateGoal(goal.id, { target_competition_dates: value })}
+                        disabled={readOnly}
                       />
                       <DatePickerInput
                         clearable
                         label="Target Date"
                         value={goal.target_date || null}
                         onChange={(value) => updateGoal(goal.id, { target_date: value || undefined })}
+                        disabled={readOnly}
                       />
                       <Select
                         clearable
@@ -326,6 +334,7 @@ export default function GoalsPage() {
                         data={federationOptions}
                         value={goal.target_federation_id || null}
                         onChange={(value) => updateGoal(goal.id, { target_federation_id: value || undefined })}
+                        disabled={readOnly}
                       />
                       <MultiSelect
                         searchable
@@ -346,6 +355,7 @@ export default function GoalsPage() {
                             target_weight_class_kg: weightClasses.length === 1 ? weightClasses[0] : goal.target_weight_class_kg,
                           })
                         }}
+                        disabled={readOnly}
                       />
                     </SimpleGrid>
 
@@ -372,24 +382,28 @@ export default function GoalsPage() {
                         label="Target Total (kg)"
                         value={goal.target_total_kg ?? ''}
                         onChange={(e) => updateGoal(goal.id, { target_total_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
+                        disabled={readOnly}
                       />
                       <TextInput
                         type="number"
                         label="Target DOTS"
                         value={goal.target_dots ?? ''}
                         onChange={(e) => updateGoal(goal.id, { target_dots: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
+                        disabled={readOnly}
                       />
                       <TextInput
                         type="number"
                         label="Target IPF GL"
                         value={goal.target_ipf_gl ?? ''}
                         onChange={(e) => updateGoal(goal.id, { target_ipf_gl: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
+                        disabled={readOnly}
                       />
                       <TextInput
                         type="number"
                         label="Target Weight Class (kg)"
                         value={goal.target_weight_class_kg ?? ''}
                         onChange={(e) => updateGoal(goal.id, { target_weight_class_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
+                        disabled={readOnly}
                       />
                     </SimpleGrid>
 
@@ -401,12 +415,14 @@ export default function GoalsPage() {
                         onChange={(event) => updateGoal(goal.id, {
                           acceptable_weight_classes_kg: parseNumberList(event.currentTarget.value),
                         })}
+                        disabled={readOnly}
                       />
                       <Select
                         label="Risk Tolerance"
                         data={RISK_OPTIONS}
                         value={goal.risk_tolerance}
                         onChange={(value) => value && updateGoal(goal.id, { risk_tolerance: value as RiskTolerance })}
+                        disabled={readOnly}
                       />
                       <TextInput
                         type="number"
@@ -415,6 +431,7 @@ export default function GoalsPage() {
                         onChange={(e) => updateGoal(goal.id, {
                           max_acceptable_bodyweight_loss_pct: e.currentTarget.value ? Number(e.currentTarget.value) : undefined,
                         })}
+                        disabled={readOnly}
                       />
                       <TextInput
                         type="number"
@@ -423,6 +440,7 @@ export default function GoalsPage() {
                         onChange={(e) => updateGoal(goal.id, {
                           max_acceptable_water_cut_pct: e.currentTarget.value ? Number(e.currentTarget.value) : undefined,
                         })}
+                        disabled={readOnly}
                       />
                     </SimpleGrid>
 
@@ -432,6 +450,7 @@ export default function GoalsPage() {
                       minRows={2}
                       value={goal.notes || ''}
                       onChange={(event) => updateGoal(goal.id, { notes: event.currentTarget.value })}
+                      disabled={readOnly}
                     />
 
                     <Group justify="space-between">
@@ -443,6 +462,7 @@ export default function GoalsPage() {
                         variant="light"
                         leftSection={<Trash2 size={14} />}
                         onClick={() => removeGoal(goal.id)}
+                        disabled={readOnly}
                       >
                         Delete
                       </Button>

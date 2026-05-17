@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, Calendar, Droplets, Flame, CheckCircle, XCircle, Moon, Beef } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
+import { useAuth } from '@/auth/AuthProvider'
 import {
   Paper, Title, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
   TextInput, Textarea, Select, SegmentedControl, Box,
@@ -24,6 +25,7 @@ function toDateString(d: Date): string {
 }
 
 export default function BiometricsPage() {
+  const { readOnly } = useAuth()
   const { program, updateDietNotes } = useProgramStore()
   const { pushToast } = useUiStore()
   const [notes, setNotes] = useState<DietNote[]>([])
@@ -83,11 +85,12 @@ export default function BiometricsPage() {
         </Box>
         <Group gap="xs">
           {hasChanges && (
-            <Button leftSection={<Save size={16} />} onClick={handleSave}>
+            <Button leftSection={<Save size={16} />} onClick={handleSave} disabled={readOnly}>
               Save
             </Button>
           )}
-          <Button variant="light" leftSection={<Plus size={16} />} onClick={addNote}>
+          <Button variant="light" leftSection={<Plus size={16} />}
+          disabled={readOnly} onClick={addNote}>
             Add Entry
           </Button>
         </Group>
@@ -116,12 +119,14 @@ export default function BiometricsPage() {
                     }}
                     size="xs"
                     style={{ width: 'auto' }}
+                    disabled={readOnly}
                   />
                 </Group>
                 <ActionIcon
                   variant="subtle"
                   color="red"
                   onClick={() => removeNote(note.date)}
+                  disabled={readOnly}
                 >
                   <Trash2 size={16} />
                 </ActionIcon>
@@ -142,6 +147,7 @@ export default function BiometricsPage() {
                     })}
                     placeholder="e.g. 2500"
                     size="xs"
+                    disabled={readOnly}
                   />
                 </Box>
 
@@ -158,6 +164,7 @@ export default function BiometricsPage() {
                     })}
                     placeholder="e.g. 180"
                     size="xs"
+                    disabled={readOnly}
                   />
                 </Box>
 
@@ -174,6 +181,7 @@ export default function BiometricsPage() {
                     })}
                     placeholder="e.g. 250"
                     size="xs"
+                    disabled={readOnly}
                   />
                 </Box>
 
@@ -190,6 +198,7 @@ export default function BiometricsPage() {
                     })}
                     placeholder="e.g. 80"
                     size="xs"
+                    disabled={readOnly}
                   />
                 </Box>
               </SimpleGrid>
@@ -210,6 +219,7 @@ export default function BiometricsPage() {
                     placeholder="e.g. 7.5"
                     step={0.5}
                     size="xs"
+                    disabled={readOnly}
                   />
                 </Box>
 
@@ -229,6 +239,7 @@ export default function BiometricsPage() {
                       step={0.1}
                       style={{ flex: 1 }}
                       size="xs"
+                      disabled={readOnly}
                     />
                     <Select
                       value={note.water_unit || 'litres'}
@@ -241,6 +252,7 @@ export default function BiometricsPage() {
                       ]}
                       size="xs"
                       style={{ width: 80 }}
+                      disabled={readOnly}
                     />
                   </Group>
                 </Box>
@@ -279,6 +291,7 @@ export default function BiometricsPage() {
                         ),
                       },
                     ]}
+                    disabled={readOnly}
                   />
                 </Box>
               </SimpleGrid>
@@ -291,6 +304,7 @@ export default function BiometricsPage() {
                 minRows={2}
                 placeholder="Notes, observations, how you felt..."
                 size="xs"
+                disabled={readOnly}
               />
             </Stack>
           </Paper>

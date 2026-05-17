@@ -26,6 +26,7 @@ import * as api from '@/api/client'
 import { ExerciseMuscleMap } from '@/components/glossary/ExerciseMuscleMap'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
+import { useAuth } from '@/auth/AuthProvider'
 import type { GlossaryExercise, MuscleGroup, ExerciseCategory, Equipment, FatigueProfile, FatigueProfileSource } from '@powerlifting/types'
 
 interface FatigueSliderProps {
@@ -33,9 +34,10 @@ interface FatigueSliderProps {
   value: number
   onChange: (v: number) => void
   help?: string
+  disabled?: boolean
 }
 
-function FatigueSlider({ label, value, onChange, help }: FatigueSliderProps) {
+function FatigueSlider({ label, value, onChange, help, disabled }: FatigueSliderProps) {
   return (
     <Stack gap={4}>
       <Group justify="space-between">
@@ -55,6 +57,7 @@ function FatigueSlider({ label, value, onChange, help }: FatigueSliderProps) {
         step={5}
         value={value}
         onChange={onChange}
+        disabled={disabled}
       />
     </Stack>
   )
@@ -139,6 +142,7 @@ function emptyExerciseForm(): Partial<GlossaryExercise> {
 }
 
 export default function GlossaryPage() {
+  const { readOnly } = useAuth()
   const { pushToast } = useUiStore()
   const liftProfiles = useProgramStore((state) => state.program?.lift_profiles ?? [])
   const [exercises, setExercises] = useState<GlossaryExercise[]>([])
@@ -585,7 +589,7 @@ export default function GlossaryPage() {
             leftSection={<RefreshCw size={16} />}
             onClick={handleBulkEstimateFatigue}
             loading={isBulkEstimatingFatigue}
-            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles}
+            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles || readOnly}
           >
             {isBulkEstimatingFatigue && bulkProgress ? `Fatigue (${bulkProgress.current}/${bulkProgress.total})` : 'Estimate Fatigue'}
           </Button>
@@ -595,7 +599,7 @@ export default function GlossaryPage() {
             leftSection={<RefreshCw size={16} />}
             onClick={handleBulkEstimateMuscles}
             loading={isBulkEstimatingMuscles}
-            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles}
+            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles || readOnly}
           >
             {isBulkEstimatingMuscles && bulkProgress ? `Muscles (${bulkProgress.current}/${bulkProgress.total})` : 'Estimate Muscles'}
           </Button>
@@ -605,7 +609,7 @@ export default function GlossaryPage() {
             leftSection={<RefreshCw size={16} />}
             onClick={handleBulkEstimateE1rm}
             loading={isBulkEstimatingE1rm}
-            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles}
+            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles || readOnly}
           >
             {isBulkEstimatingE1rm && bulkProgress ? `e1RM (${bulkProgress.current}/${bulkProgress.total})` : 'Estimate e1RM'}
           </Button>
@@ -620,6 +624,7 @@ export default function GlossaryPage() {
               setFatigueReasoning(null)
               setE1rmEstimate(null)
             }}
+            disabled={readOnly}
           >
             Add Exercise
           </Button>
@@ -686,6 +691,7 @@ export default function GlossaryPage() {
                   const val = e.currentTarget.value;
                   setFormData((p) => ({ ...p, name: val }));
                 }}
+                disabled={readOnly}
               />
             </div>
             <div>
@@ -694,6 +700,7 @@ export default function GlossaryPage() {
                 value={formData.category || 'squat'}
                 onChange={(v) => setFormData((p) => ({ ...p, category: (v || 'squat') as ExerciseCategory }))}
                 data={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))}
+                disabled={readOnly}
               />
             </div>
           </SimpleGrid>
@@ -704,6 +711,7 @@ export default function GlossaryPage() {
               value={formData.equipment || 'barbell'}
               onChange={(v) => setFormData((p) => ({ ...p, equipment: (v || 'barbell') as Equipment }))}
               data={Object.entries(EQUIPMENT_LABELS).map(([value, label]) => ({ value, label }))}
+              disabled={readOnly}
             />
           </div>
 
@@ -726,7 +734,7 @@ export default function GlossaryPage() {
                 size="compact-xs"
                 variant="light"
                 onClick={handleReEstimate}
-                disabled={isEstimating || !formData.name}
+                disabled={isEstimating || !formData.name || readOnly}
                 leftSection={isEstimating ? <Loader size={12} /> : <RefreshCw size={12} />}
               >
                 {isEstimating ? 'Estimating...' : 'AI Estimate'}
@@ -739,24 +747,28 @@ export default function GlossaryPage() {
                 value={Math.round((fatigueProfile?.axial ?? 0) * 100)}
                 onChange={(v) => handleFatigueSliderChange('axial', v)}
                 help="Spinal compressive loading. High on squats and deadlifts where the bar sits on the spine or the erectors brace under load. Low on cable isolations and machines that take the spine out of the equation."
+                disabled={readOnly}
               />
               <FatigueSlider
                 label="Neural (CNS Demand)"
                 value={Math.round((fatigueProfile?.neural ?? 0) * 100)}
                 onChange={(v) => handleFatigueSliderChange('neural', v)}
                 help="Central nervous system demand from high-intensity or technically dense work. High on heavy singles and near-max compounds (>=85% 1RM). Low on pump work, low-load hypertrophy, and machines."
+                disabled={readOnly}
               />
               <FatigueSlider
                 label="Peripheral (Muscle Damage)"
                 value={Math.round((fatigueProfile?.peripheral ?? 0) * 100)}
                 onChange={(v) => handleFatigueSliderChange('peripheral', v)}
                 help="Local muscle damage, soreness, and eccentric stress in the target tissue. High on lengthened-partial hypertrophy work, slow eccentrics, and high-rep compounds. Low on short-range isometrics and explosive work."
+                disabled={readOnly}
               />
               <FatigueSlider
                 label="Systemic (Metabolic Load)"
                 value={Math.round((fatigueProfile?.systemic ?? 0) * 100)}
                 onChange={(v) => handleFatigueSliderChange('systemic', v)}
                 help="Whole-body metabolic and cardiovascular cost. High on deadlifts, conditioning, and high-density circuits. Low on short-set isolations and skill work."
+                disabled={readOnly}
               />
             </Stack>
             
@@ -812,7 +824,7 @@ export default function GlossaryPage() {
                     setIsEstimatingE1rm(false)
                   }
                 }}
-                disabled={isEstimatingE1rm || !isEditing?.id}
+                disabled={isEstimatingE1rm || !isEditing?.id || readOnly}
                 leftSection={isEstimatingE1rm ? <Loader size={12} /> : <RefreshCw size={12} />}
               >
                 {isEstimatingE1rm ? 'Estimating...' : 'AI Estimate'}
@@ -837,6 +849,7 @@ export default function GlossaryPage() {
                       manually_overridden: true
                     }))
                   }}
+                  disabled={readOnly}
                 />
               </Stack>
               {e1rmEstimate && (
@@ -857,7 +870,7 @@ export default function GlossaryPage() {
                   variant="light"
                   color="blue"
                   onClick={handleEstimateMuscles}
-                  disabled={isEstimatingMuscles || !formData.name}
+                  disabled={isEstimatingMuscles || !formData.name || readOnly}
                   leftSection={isEstimatingMuscles ? <Loader size={12} /> : <RefreshCw size={12} />}
                 >
                   {isEstimatingMuscles ? 'Estimating...' : 'AI Estimate'}
@@ -872,6 +885,7 @@ export default function GlossaryPage() {
                       variant={formData.primary_muscles?.includes(value as MuscleGroup) ? 'filled' : 'light'}
                       color={formData.primary_muscles?.includes(value as MuscleGroup) ? 'blue' : 'gray'}
                       onClick={() => toggleMuscle(value as MuscleGroup, 'primary_muscles')}
+                      disabled={readOnly}
                     >
                       {label}
                     </Button>
@@ -890,6 +904,7 @@ export default function GlossaryPage() {
                       variant={formData.secondary_muscles?.includes(value as MuscleGroup) ? 'filled' : 'light'}
                       color={formData.secondary_muscles?.includes(value as MuscleGroup) ? 'blue' : 'gray'}
                       onClick={() => toggleMuscle(value as MuscleGroup, 'secondary_muscles')}
+                      disabled={readOnly}
                     >
                       {label}
                     </Button>
@@ -910,6 +925,7 @@ export default function GlossaryPage() {
                     variant={formData.tertiary_muscles?.includes(value as MuscleGroup) ? 'filled' : 'light'}
                     color={formData.tertiary_muscles?.includes(value as MuscleGroup) ? 'blue' : 'gray'}
                     onClick={() => toggleMuscle(value as MuscleGroup, 'tertiary_muscles')}
+                    disabled={readOnly}
                   >
                     {label}
                   </Button>
@@ -933,7 +949,7 @@ export default function GlossaryPage() {
                   variant="light"
                   leftSection={isGeneratingText ? <Loader size={12} /> : <Wand2 size={12} />}
                   onClick={handleGenerateText}
-                  disabled={isGeneratingText || !formData.name}
+                  disabled={isGeneratingText || !formData.name || readOnly}
                 >
                   {isGeneratingText ? 'Generating...' : 'AI Generate'}
                 </Button>
@@ -946,6 +962,7 @@ export default function GlossaryPage() {
                 minRows={2}
                 value={formData.description || ''}
                 onChange={(e) => setFormData((p) => ({ ...p, description: e.currentTarget.value }))}
+                disabled={readOnly}
               />
               <Textarea
                 label="How to perform it"
@@ -954,6 +971,7 @@ export default function GlossaryPage() {
                 minRows={3}
                 value={formData.how_to_perform || ''}
                 onChange={(e) => setFormData((p) => ({ ...p, how_to_perform: e.currentTarget.value }))}
+                disabled={readOnly}
               />
               <Textarea
                 label="Why we do it"
@@ -962,6 +980,7 @@ export default function GlossaryPage() {
                 minRows={2}
                 value={formData.why_do_it || ''}
                 onChange={(e) => setFormData((p) => ({ ...p, why_do_it: e.currentTarget.value }))}
+                disabled={readOnly}
               />
               <TextInput
                 label="YouTube URL"
@@ -969,6 +988,7 @@ export default function GlossaryPage() {
                 value={formData.video_url || ''}
                 error={(formData.video_url || '').trim() && !validateYoutubeUrl(formData.video_url) ? 'Use a valid YouTube URL' : undefined}
                 onChange={(e) => setFormData((p) => ({ ...p, video_url: e.currentTarget.value }))}
+                disabled={readOnly}
               />
             </Stack>
           </Paper>
@@ -985,7 +1005,7 @@ export default function GlossaryPage() {
             >
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} disabled={readOnly}>
               {isEditing ? 'Update Exercise' : 'Create Exercise'}
             </Button>
           </Group>
@@ -1112,10 +1132,10 @@ export default function GlossaryPage() {
                         <Button
                           size="compact-sm"
                           variant="default"
-                          leftSection={<Edit2 size={12} />}
+                          leftSection={readOnly ? <Search size={12} /> : <Edit2 size={12} />}
                           onClick={() => startEdit(exercise)}
                         >
-                          Edit
+                          {readOnly ? 'View' : 'Edit'}
                         </Button>
                         <Button
                           size="compact-sm"
@@ -1123,6 +1143,7 @@ export default function GlossaryPage() {
                           color="red"
                           leftSection={<Trash2 size={12} />}
                           onClick={() => handleDelete(exercise.id)}
+                          disabled={readOnly}
                         >
                           Delete
                         </Button>
@@ -1144,6 +1165,7 @@ export default function GlossaryPage() {
                               pushToast({ message: 'Failed to update exercise', type: 'error' })
                             }
                           }}
+                          disabled={readOnly}
                         >
                           {exercise.archived ? 'Unarchive' : 'Archive'}
                         </Button>

@@ -32,6 +32,7 @@ import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
 import { programWeekStartDate, trainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
 import { toDisplayUnit, fromDisplayUnit, displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
+import { useAuth } from '@/auth/AuthProvider'
 import type { Session, PlannedExercise, GlossaryExercise } from '@powerlifting/types'
 
 const MUSCLE_LABELS: Record<string, string> = {
@@ -82,7 +83,7 @@ interface PlannedExerciseWithId extends PlannedExercise {
 
 import { LoadTypeBadge } from '@/components/shared/LoadTypeBadge'
 
-function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: { 
+function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, readOnly = false }: { 
   ex: PlannedExerciseWithId; 
   onRemove: (id: string) => void;
   onUpdate: (id: string, f: keyof PlannedExercise, v: any) => void;
@@ -90,6 +91,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
   onMoveDown: (id: string) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  readOnly?: boolean;
 }) {
   const { unit } = useSettingsStore()
   const {
@@ -99,7 +101,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
     transform,
     transition,
     isDragging
-  } = useSortable({ id: ex.id })
+  } = useSortable({ id: ex.id, disabled: readOnly })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -119,6 +121,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
             step={0.5}
             w={70}
             placeholder="RPE"
+            disabled={readOnly}
           />
         )
       case 'percentage':
@@ -132,6 +135,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
               w={70}
               placeholder={unit}
               step={0.5}
+              disabled={readOnly}
             />
           </Group>
         )
@@ -147,6 +151,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
             w={70}
             placeholder={unit}
             step={0.5}
+            disabled={readOnly}
           />
         )
     }
@@ -156,7 +161,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
     <Paper ref={setNodeRef} style={style} withBorder p="xs" radius="sm">
       <Group justify="space-between" gap="xs" mb={4}>
         <Group gap="xs" style={{ flex: 1 }}>
-          <Box {...attributes} {...listeners} style={{ cursor: 'grab', padding: '4px 0' }}>
+          <Box {...(readOnly ? {} : { ...attributes, ...listeners })} style={{ cursor: readOnly ? 'default' : 'grab', padding: '4px 0' }}>
             <GripVertical size={16} color="var(--mantine-color-gray-6)" />
           </Box>
           <Text size="sm" fw={500} truncate>{ex.name}</Text>
@@ -167,7 +172,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
             variant="subtle"
             size="sm"
             onClick={() => onMoveUp(ex.id)}
-            disabled={!canMoveUp}
+            disabled={!canMoveUp || readOnly}
             title="Move exercise up"
             aria-label="Move exercise up"
           >
@@ -177,7 +182,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
             variant="subtle"
             size="sm"
             onClick={() => onMoveDown(ex.id)}
-            disabled={!canMoveDown}
+            disabled={!canMoveDown || readOnly}
             title="Move exercise down"
             aria-label="Move exercise down"
           >
@@ -190,6 +195,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
             onClick={() => onRemove(ex.id)}
             title="Remove exercise"
             aria-label="Remove exercise"
+            disabled={readOnly}
           >
             <Trash2 size={12} />
           </ActionIcon>
@@ -202,6 +208,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
           onChange={(e) => onUpdate(ex.id, 'sets', Number(e.currentTarget.value) || 0)}
           w={60}
           placeholder="Sets"
+          disabled={readOnly}
         />
         <Text size="xs" c="dimmed">x</Text>
         <TextInput
@@ -210,6 +217,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
           onChange={(e) => onUpdate(ex.id, 'reps', Number(e.currentTarget.value) || 0)}
           w={60}
           placeholder="Reps"
+          disabled={readOnly}
         />
         <Text size="xs" c="dimmed">@</Text>
         {renderLoadInput()}
@@ -219,6 +227,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
 }
 
 export default function DesignerPage() {
+  const { readOnly } = useAuth()
   const { program, version, createSession } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
@@ -588,6 +597,7 @@ export default function DesignerPage() {
             leftSection={<Plus size={16} />}
             size="sm"
             onClick={() => openSessionEditor()}
+            disabled={readOnly}
           >
             Add Session
           </Button>
@@ -621,7 +631,7 @@ export default function DesignerPage() {
             variant="light" 
             size="compact-sm" 
             leftSection={<Copy size={14} />}
-            disabled={selectedWeek <= 1}
+            disabled={selectedWeek <= 1 || readOnly}
             onClick={() => handleCopySessions(selectedWeek - 1)}
           >
             Copy Previous
@@ -630,7 +640,7 @@ export default function DesignerPage() {
             variant="light" 
             size="compact-sm" 
             leftSection={<Copy size={14} />}
-            disabled={selectedWeek >= totalWeeks}
+            disabled={selectedWeek >= totalWeeks || readOnly}
             onClick={() => handleCopySessions(selectedWeek + 1)}
           >
             Copy Next
@@ -682,8 +692,8 @@ export default function DesignerPage() {
               key={`${session.date}-${i}`}
               withBorder
               p="md"
-              style={{ cursor: 'pointer' }}
-              onClick={() => openSessionEditor(session, session.date, i)}
+              style={{ cursor: readOnly ? 'default' : 'pointer', opacity: readOnly ? 0.7 : 1 }}
+              onClick={() => !readOnly && openSessionEditor(session, session.date, i)}
             >
               <Group justify="space-between" mb="xs">
                 <Text fw={500}>{session.day}</Text>
@@ -762,6 +772,7 @@ export default function DesignerPage() {
               onChange={setSessionDate}
               valueFormat="ddd MMM D, YYYY"
               defaultDate={selectedWeekStartDate}
+              disabled={readOnly}
               minDate={selectableWeekDates[0] ?? selectedWeekStartDate}
               maxDate={selectedWeekEndDate}
               clearable={false}
@@ -797,6 +808,7 @@ export default function DesignerPage() {
                       onMoveDown={(id) => movePlannedExercise(id, 1)}
                       canMoveUp={index > 0}
                       canMoveDown={index < plannedExercises.length - 1}
+                      readOnly={readOnly}
                     />
                   ))}
                 </Stack>
@@ -810,6 +822,7 @@ export default function DesignerPage() {
               data={autocompleteData}
               placeholder="Search exercises to add..."
               mt="sm"
+              disabled={readOnly}
               onOptionSubmit={(value) => {
                 const match = glossary.find(e => e.name.toLowerCase() === value.toLowerCase())
                 if (match) {
@@ -838,6 +851,7 @@ export default function DesignerPage() {
                 color="red"
                 variant="subtle"
                 leftSection={<Trash2 size={16} />}
+                disabled={readOnly}
                 onClick={async () => {
                   if (confirm('Are you sure you want to delete this session? This cannot be undone.')) {
                     try {
@@ -863,6 +877,7 @@ export default function DesignerPage() {
               <Button
                 leftSection={<Save size={16} />}
                 onClick={saveSession}
+                disabled={readOnly}
               >
                 {editingSession ? 'Update' : 'Create'} Session
               </Button>

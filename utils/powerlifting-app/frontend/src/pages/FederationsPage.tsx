@@ -24,6 +24,7 @@ import type {
 import { useFederationStore } from '@/store/federationStore'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
+import { useAuth } from '@/auth/AuthProvider'
 
 const SEX_OPTIONS = [
   { value: 'male', label: 'Male' },
@@ -92,6 +93,7 @@ function standardStatusColor(status: QualificationStandard['status']): string {
 }
 
 export default function FederationsPage() {
+  const { readOnly } = useAuth()
   const { library, loadLibrary, saveLibrary } = useFederationStore()
   const { program } = useProgramStore()
   const { pushToast } = useUiStore()
@@ -220,14 +222,14 @@ export default function FederationsPage() {
         </Stack>
         <Group gap="sm">
           {hasChanges && (
-            <Button leftSection={<Save size={16} />} onClick={handleSave}>
+            <Button leftSection={<Save size={16} />} onClick={handleSave} disabled={readOnly}>
               Save
             </Button>
           )}
-          <Button variant="default" leftSection={<Plus size={16} />} onClick={addFederation}>
+          <Button variant="default" leftSection={<Plus size={16} />} onClick={addFederation} disabled={readOnly}>
             Add Federation
           </Button>
-          <Button variant="default" leftSection={<Plus size={16} />} onClick={addStandard}>
+          <Button variant="default" leftSection={<Plus size={16} />} onClick={addStandard} disabled={readOnly}>
             Add Standard
           </Button>
         </Group>
@@ -278,22 +280,26 @@ export default function FederationsPage() {
                             label="Name"
                             value={item.name}
                             onChange={(event) => updateFederation(item.id, { name: event.currentTarget.value })}
+                            disabled={readOnly}
                           />
                           <TextInput
                             label="Abbreviation"
                             value={item.abbreviation || ''}
                             onChange={(event) => updateFederation(item.id, { abbreviation: event.currentTarget.value })}
+                            disabled={readOnly}
                           />
                           <TextInput
                             label="Region"
                             value={item.region || ''}
                             onChange={(event) => updateFederation(item.id, { region: event.currentTarget.value })}
+                            disabled={readOnly}
                           />
                           <Select
                             label="Status"
                             data={STATUS_OPTIONS}
                             value={item.status}
                             onChange={(value) => value && updateFederation(item.id, { status: value as FederationRecord['status'] })}
+                            disabled={readOnly}
                           />
                         </SimpleGrid>
                         <Textarea
@@ -302,6 +308,7 @@ export default function FederationsPage() {
                           minRows={2}
                           value={item.notes || ''}
                           onChange={(event) => updateFederation(item.id, { notes: event.currentTarget.value })}
+                          disabled={readOnly}
                         />
                         <Group justify="space-between">
                           <Text size="xs" c="dimmed">
@@ -314,6 +321,7 @@ export default function FederationsPage() {
                             onClick={() => updateFederation(item.id, {
                               status: item.status === 'active' ? 'archived' : 'active',
                             })}
+                            disabled={readOnly}
                           >
                             {item.status === 'active' ? 'Archive' : 'Restore'}
                           </Button>
@@ -371,6 +379,7 @@ export default function FederationsPage() {
                                 data={federationOptions}
                                 value={item.federation_id}
                                 onChange={(value) => updateStandard(item.id, { federation_id: value || '' })}
+                                disabled={readOnly}
                               />
                               <TextInput
                                 type="number"
@@ -379,18 +388,21 @@ export default function FederationsPage() {
                                 onChange={(e) => updateStandard(item.id, {
                                   season_year: Number(e.currentTarget.value) || item.season_year,
                                 })}
+                                disabled={readOnly}
                               />
                               <Select
                                 label="Sex"
                                 data={SEX_OPTIONS}
                                 value={item.sex}
                                 onChange={(value) => value && updateStandard(item.id, { sex: value as QualificationStandard['sex'] })}
+                                disabled={readOnly}
                               />
                               <Select
                                 label="Status"
                                 data={STATUS_OPTIONS}
                                 value={item.status}
                                 onChange={(value) => value && updateStandard(item.id, { status: value as QualificationStandard['status'] })}
+                                disabled={readOnly}
                               />
                             </SimpleGrid>
 
@@ -400,22 +412,26 @@ export default function FederationsPage() {
                                 data={EQUIPMENT_OPTIONS}
                                 value={item.equipment}
                                 onChange={(value) => value && updateStandard(item.id, { equipment: value as QualificationStandard['equipment'] })}
+                                disabled={readOnly}
                               />
                               <Select
                                 label="Event"
                                 data={EVENT_OPTIONS}
                                 value={item.event}
                                 onChange={(value) => value && updateStandard(item.id, { event: value as QualificationStandard['event'] })}
+                                disabled={readOnly}
                               />
                               <TextInput
                                 label="Age Class"
                                 value={item.age_class || ''}
                                 onChange={(event) => updateStandard(item.id, { age_class: event.currentTarget.value || undefined })}
+                                disabled={readOnly}
                               />
                               <TextInput
                                 label="Division"
                                 value={item.division || ''}
                                 onChange={(event) => updateStandard(item.id, { division: event.currentTarget.value || undefined })}
+                                disabled={readOnly}
                               />
                             </SimpleGrid>
 
@@ -427,6 +443,7 @@ export default function FederationsPage() {
                                 onChange={(e) => updateStandard(item.id, {
                                   weight_class_kg: Number(e.currentTarget.value) || item.weight_class_kg,
                                 })}
+                                disabled={readOnly}
                               />
                               <TextInput
                                 type="number"
@@ -435,18 +452,21 @@ export default function FederationsPage() {
                                 onChange={(e) => updateStandard(item.id, {
                                   required_total_kg: Number(e.currentTarget.value) || item.required_total_kg,
                                 })}
+                                disabled={readOnly}
                               />
                               <DatePickerInput
                                 clearable
                                 label="Qualifying Start"
                                 value={item.qualifying_start_date || null}
                                 onChange={(value) => updateStandard(item.id, { qualifying_start_date: value || undefined })}
+                                disabled={readOnly}
                               />
                               <DatePickerInput
                                 clearable
                                 label="Qualifying End"
                                 value={item.qualifying_end_date || null}
                                 onChange={(value) => updateStandard(item.id, { qualifying_end_date: value || undefined })}
+                                disabled={readOnly}
                               />
                             </SimpleGrid>
 
@@ -455,16 +475,19 @@ export default function FederationsPage() {
                                 label="Competition Name"
                                 value={item.competition_name || ''}
                                 onChange={(event) => updateStandard(item.id, { competition_name: event.currentTarget.value || undefined })}
+                                disabled={readOnly}
                               />
                               <TextInput
                                 label="Source Label"
                                 value={item.source_label || ''}
                                 onChange={(event) => updateStandard(item.id, { source_label: event.currentTarget.value || undefined })}
+                                disabled={readOnly}
                               />
                               <TextInput
                                 label="Source URL"
                                 value={item.source_url || ''}
                                 onChange={(event) => updateStandard(item.id, { source_url: event.currentTarget.value || undefined })}
+                                disabled={readOnly}
                               />
                             </SimpleGrid>
 
@@ -479,6 +502,7 @@ export default function FederationsPage() {
                                 onClick={() => updateStandard(item.id, {
                                   status: item.status === 'active' ? 'archived' : 'active',
                                 })}
+                                disabled={readOnly}
                               >
                                 {item.status === 'active' ? 'Archive' : 'Restore'}
                               </Button>

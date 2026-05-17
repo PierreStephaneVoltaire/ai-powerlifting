@@ -42,7 +42,7 @@ export default function SettingsDrawer() {
     defaultSessionsView, setDefaultSessionsView,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
-  const { user, loading, signIn, signOut } = useAuth()
+  const { user, loading, readOnly, signIn, signOut } = useAuth()
   const [accountSettings, setAccountSettings] = useState<UserSettings | null>(null)
   const [profileVisibility, setProfileVisibility] = useState<'private' | 'public'>('private')
   const [displayName, setDisplayName] = useState('')
@@ -154,12 +154,14 @@ export default function SettingsDrawer() {
                       { label: 'Public', value: 'public' },
                     ]}
                     fullWidth
+                    disabled={readOnly}
                   />
                   <TextInput
                     label="Display name"
                     value={displayName}
                     onChange={(event) => setDisplayName(event.currentTarget.value)}
                     maxLength={80}
+                    disabled={readOnly}
                   />
                   <Textarea
                     label="Bio"
@@ -167,12 +169,13 @@ export default function SettingsDrawer() {
                     onChange={(event) => setBio(event.currentTarget.value)}
                     maxLength={280}
                     minRows={2}
+                    disabled={readOnly}
                   />
                   <Switch
                     label="Show training summary when public"
                     checked={publicSummary}
                     onChange={(event) => setPublicSummary(event.currentTarget.checked)}
-                    disabled={profileVisibility !== 'public'}
+                    disabled={profileVisibility !== 'public' || readOnly}
                   />
                   <Button
                     variant="light"
@@ -180,6 +183,7 @@ export default function SettingsDrawer() {
                     onClick={saveProfile}
                     loading={savingProfile}
                     fullWidth
+                    disabled={readOnly}
                   >
                     Save profile
                   </Button>
@@ -238,6 +242,7 @@ export default function SettingsDrawer() {
               { label: 'Month', value: 'Month' },
               { label: 'Compact', value: 'Compact' },
             ]}
+            data-testid="settings-default-sessions-view"
           />
         </div>
 
@@ -258,6 +263,8 @@ export default function SettingsDrawer() {
               { label: 'Female', value: 'female' },
             ]}
             fullWidth
+            disabled={readOnly}
+            data-testid="settings-sex"
           />
         </div>
 
@@ -269,6 +276,8 @@ export default function SettingsDrawer() {
             value={weekStartForBlock(program, 'current')}
             onChange={(value) => value && setWeekStartDay(value as WeekStartDay).catch(console.error)}
             data={WEEK_START_DAYS.map((day) => ({ value: day, label: day }))}
+            disabled={readOnly}
+            data-testid="settings-week-start"
           />
         </div>
 
@@ -286,6 +295,8 @@ export default function SettingsDrawer() {
                 : defaultBarWeightKgForUnit(unit),
             )}
             step={unit === 'kg' ? 0.25 : 0.5}
+            disabled={readOnly}
+            data-testid="settings-bar-weight"
           />
           <Text size="xs" c="dimmed" mt={4}>
             Used for plate calculator. Default is 20kg in metric mode and 45lb in imperial mode.

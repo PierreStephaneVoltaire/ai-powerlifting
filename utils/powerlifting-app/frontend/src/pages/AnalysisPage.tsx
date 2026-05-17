@@ -8,6 +8,7 @@ import {
   fetchWeeklyAnalysisBundle, regenerateAnalysis, type AnalysisWindowKey, type WeeklyAnalysisBundle,
 } from '@/api/analytics'
 import { useProgramStore } from '@/store/programStore'
+import { useAuth } from '@/auth/AuthProvider'
 import { fetchWeightLog, fetchGlossary } from '@/api/client'
 import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -295,6 +296,7 @@ function analysisKeyForMode(mode: WeeksMode): AnalysisWindowKey {
 export default function AnalysisPage() {
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
+  const { readOnly } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
@@ -780,6 +782,7 @@ export default function AnalysisPage() {
             leftSection={<RefreshCw size={16} />}
             loading={regenerating}
             onClick={handleRegenerateAnalysis}
+            disabled={readOnly}
           >
             Regenerate Weekly Analysis
           </Button>
@@ -1879,7 +1882,7 @@ export default function AnalysisPage() {
             analysisWeeks={effectiveWeeks}
             unit={unit}
           />
-          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} />
+          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} readOnly={readOnly} />
 
           {/* Formula Reference */}
           <Accordion mt="xl" variant="separated" defaultValue="formulas-outer">
@@ -1957,8 +1960,8 @@ export default function AnalysisPage() {
         </>
       )}
 
-      {activeSection === 'blocks' && <PastBlocksPanel unit={unit} />}
-      {activeSection === 'compare' && <LifetimeComparePanel unit={unit} />}
+      {activeSection === 'blocks' && <PastBlocksPanel unit={unit} readOnly={readOnly} />}
+      {activeSection === 'compare' && <LifetimeComparePanel unit={unit} readOnly={readOnly} />}
     </Stack>
   )
 }

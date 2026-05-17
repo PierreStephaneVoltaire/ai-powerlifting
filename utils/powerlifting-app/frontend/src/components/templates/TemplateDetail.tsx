@@ -14,9 +14,10 @@ interface Props {
   template: Template
   templateSk?: string
   onRefresh: () => void
+  readOnly?: boolean
 }
 
-export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefresh }) => {
+export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefresh, readOnly }) => {
   const [applyModalOpened, setApplyModalOpened] = useState(false)
   const [missingMaxes, setMissingMaxes] = useState<string[] | null>(null)
   const [applyData, setApplyData] = useState<any>(null)
@@ -82,14 +83,14 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
             variant="default"
             leftSection={<Edit2 size={16} />}
             onClick={() => resolvedTemplateSk && navigate(templateEditRoute(resolvedTemplateSk))}
-            disabled={!resolvedTemplateSk}
+            disabled={!resolvedTemplateSk || readOnly}
           >
             Edit
           </Button>
           <Button
             size="lg"
             onClick={() => setApplyModalOpened(true)}
-            disabled={!resolvedTemplateSk}
+            disabled={!resolvedTemplateSk || readOnly}
           >
             Apply Template
           </Button>
@@ -109,12 +110,12 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         <Grid.Col span={{ base: 12, md: 4 }}>
           <Stack gap="lg">
           <Title order={3}>AI Analysis</Title>
-          <EvaluationPanel 
-            sk={resolvedTemplateSk ?? ''} 
+          <EvaluationPanel
+            sk={resolvedTemplateSk ?? ''}
             evaluation={template.meta.ai_evaluation ?? null}
             onRefresh={onRefresh}
-          />
-          </Stack>
+            readOnly={readOnly}
+          />          </Stack>
         </Grid.Col>
       </Grid>
 

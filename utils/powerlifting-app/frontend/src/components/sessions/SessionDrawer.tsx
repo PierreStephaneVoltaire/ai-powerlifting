@@ -33,6 +33,7 @@ import SessionToolkitModal from './SessionToolkitModal'
 import SessionNotesHelperModal from './SessionNotesHelperModal'
 import AutoRegulationModal from './AutoRegulationModal'
 import { normalizeExerciseName } from '@/utils/volume'
+import { useAuth } from '@/auth/AuthProvider'
 
 const WELLNESS_FIELDS: Array<{
   key: keyof Omit<SessionWellness, 'recorded_at'>
@@ -175,6 +176,7 @@ interface SessionDrawerProps {
   sessionIndex: number
   sessionArrayIndex: number
   mode?: 'drawer' | 'page'
+  readOnly?: boolean
   onSaveSuccess?: () => void
   onDeleteSuccess?: () => void
 }
@@ -191,7 +193,8 @@ function SortableExerciseItem({
   renderMobileMenu,
   renderDesktopActions,
   renderSetStatusControls,
-  renderStatusBadges
+  renderStatusBadges,
+  disabled = false,
 }: { 
   exercise: Exercise;
   index: number;
@@ -205,6 +208,7 @@ function SortableExerciseItem({
   renderDesktopActions: (ex: Exercise, i: number) => React.ReactNode;
   renderSetStatusControls: (ex: Exercise, i: number) => React.ReactNode;
   renderStatusBadges: (ex: Exercise) => React.ReactNode;
+  disabled?: boolean;
 }) {
   const {
     attributes,
@@ -225,9 +229,9 @@ function SortableExerciseItem({
   const setStatuses = normalizeSetStatuses(exercise)
 
   return (
-    <Paper ref={setNodeRef} style={{ ...style, overflow: 'hidden' }} withBorder p="sm" radius="md">
+    <Paper ref={setNodeRef} style={{ ...style, overflow: 'hidden' }} withBorder p="sm" radius="md" data-testid={`session-exercise-${index}`}>
       <Group gap="xs" mb="xs">
-        <Box {...attributes} {...listeners} style={{ cursor: 'grab', padding: '4px 0', opacity: 0.5 }}>
+        <Box {...(disabled ? {} : attributes)} {...(disabled ? {} : listeners)} style={{ cursor: disabled ? 'default' : 'grab', padding: '4px 0', opacity: 0.5 }} data-testid={`exercise-drag-handle-${index}`}>
           <GripVertical size={16} />
         </Box>
         <Autocomplete
@@ -237,6 +241,8 @@ function SortableExerciseItem({
           placeholder="Exercise name"
           size="sm"
           style={{ flex: 1 }}
+          disabled={disabled}
+          data-testid={`exercise-name-${index}`}
         />
         <Group gap={4} wrap="nowrap">
           {renderMobileMenu(exercise, index)}
@@ -247,6 +253,8 @@ function SortableExerciseItem({
             color="red"
             size="sm"
             onClick={() => onRemove(index)}
+            disabled={disabled}
+            data-testid={`exercise-delete-${index}`}
           >
             <Trash2 size={16} />
           </ActionIcon>
@@ -263,6 +271,8 @@ function SortableExerciseItem({
                 value={exercise.sets || ''}
                 onChange={(e) => onUpdateSets(index, Number(e.currentTarget.value) || 0)}
                 size="sm"
+                disabled={disabled}
+                data-testid={`exercise-sets-${index}`}
               />
             </Box>
             <Box>
@@ -272,6 +282,8 @@ function SortableExerciseItem({
                 value={exercise.reps || ''}
                 onChange={(e) => onUpdate(index, 'reps', Number(e.currentTarget.value) || 0)}
                 size="sm"
+                disabled={disabled}
+                data-testid={`exercise-reps-${index}`}
               />
             </Box>
             <Box>
@@ -282,6 +294,8 @@ function SortableExerciseItem({
                 onChange={(e) => onUpdate(index, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
                 size="sm"
                 step={0.5}
+                disabled={disabled}
+                data-testid={`exercise-weight-${index}`}
                 rightSection={setStatuses.includes('failed') ? (
                   <Tooltip label="Contains failed sets">
                     <AlertTriangle size={14} color="var(--mantine-color-red-6)" />
@@ -308,6 +322,8 @@ function SortableExerciseItem({
                 }}
                 placeholder="1-10"
                 size="sm"
+                disabled={disabled}
+                data-testid={`exercise-rpe-${index}`}
               />
             </Box>
           </SimpleGrid>
@@ -324,6 +340,8 @@ function SortableExerciseItem({
             minRows={1}
             maxRows={4}
             variant="filled"
+            disabled={disabled}
+            data-testid={`exercise-notes-${index}`}
           />
         </Box>
 
@@ -349,9 +367,12 @@ export default function SessionDrawer({
   session,
   sessionArrayIndex,
   mode = 'drawer',
+  readOnly: readOnlyProp,
   onSaveSuccess,
   onDeleteSuccess,
 }: SessionDrawerProps) {
+  const { readOnly: authReadOnly } = useAuth()
+  const readOnly = readOnlyProp ?? authReadOnly
   const { program, version, updateSession, saveSession, deleteSession } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
@@ -461,7 +482,7 @@ export default function SessionDrawer({
   const handleSaveRef = useRef<((notify?: boolean, closeOnSuccess?: boolean) => Promise<void>) | null>(null)
 
   useEffect(() => {
-    if (!hasChanges || !session || !localSession || !program) return
+    if (readOnly || !hasChanges || !session || !localSession || !program) return
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
     }
@@ -826,6 +847,7 @@ export default function SessionDrawer({
           size="sm"
           title="Exercise actions"
           aria-label="Exercise actions"
+          disabled={readOnly}
         >
           <MoreHorizontal size={16} />
         </ActionIcon>
@@ -864,6 +886,8 @@ export default function SessionDrawer({
         size="sm"
         onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
         title="Auto-regulation"
+        disabled={readOnly}
+        data-testid={`exercise-autoreg-${exerciseIndex}`}
       >
         <Bot size={iconSize} />
       </ActionIcon>
@@ -874,6 +898,8 @@ export default function SessionDrawer({
         size="sm"
         onClick={() => openToolkitForExercise(exercise)}
         title="Open toolkit"
+        disabled={readOnly}
+        data-testid={`exercise-toolkit-${exerciseIndex}`}
       >
         <Calculator size={iconSize} />
       </ActionIcon>
@@ -905,6 +931,8 @@ export default function SessionDrawer({
                     size={size}
                     variant={status === 'pending' ? 'default' : 'light'}
                     color={SET_STATUS_META[status].color}
+                    disabled={readOnly}
+                    data-testid={`set-status-${exerciseIndex}-${setIndex}`}
                   >
                     {statusIcon(status, size === 'xs' ? 12 : 14)}
                   </ActionIcon>
@@ -1049,6 +1077,7 @@ export default function SessionDrawer({
         gap="lg"
         pb={mode === 'page' ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : undefined}
         style={{ maxWidth: '100vw', overflowX: 'hidden' }}
+        data-testid="session-detail"
       >
         <Group justify="space-between" wrap="wrap" align="flex-start">
           <Group gap="sm" align="flex-start" wrap="nowrap">
@@ -1069,6 +1098,8 @@ export default function SessionDrawer({
                   }}
                   size="sm"
                   style={{ width: 'auto' }}
+                  disabled={readOnly}
+                  data-testid="session-date"
                 />
               </Group>
               <Text size="sm" c="dimmed" mt={4}>
@@ -1096,6 +1127,7 @@ export default function SessionDrawer({
                 { label: 'Skip', value: 'skip' },
                 { label: 'Record', value: 'record' },
               ]}
+              disabled={readOnly}
             />
           </Group>
 
@@ -1121,6 +1153,7 @@ export default function SessionDrawer({
                       { value: 5, label: '5' },
                     ]}
                     color={field.key === 'soreness' || field.key === 'stress' ? 'orange' : 'blue'}
+                    disabled={readOnly}
                   />
                 </Box>
               ))}
@@ -1140,6 +1173,8 @@ export default function SessionDrawer({
               variant="dashed"
               onClick={addExercise}
               leftSection={<Plus size={16} />}
+              disabled={readOnly}
+              data-testid="session-add-exercise"
             >
               Add Exercise
             </Button>
@@ -1185,6 +1220,7 @@ export default function SessionDrawer({
                       renderDesktopActions={renderDesktopExerciseActions}
                       renderSetStatusControls={renderSetStatusControls}
                       renderStatusBadges={renderStatusBadges}
+                      disabled={readOnly}
                     />
                   ))}
                 </Stack>
@@ -1202,12 +1238,14 @@ export default function SessionDrawer({
                 <Text size="xs" c="dimmed" span>({session.videos?.length})</Text>
               )}
             </Group>
-            <Button
-              size="xs"
-              variant="default"
-              onClick={() => setShowVideoUpload(true)}
-              leftSection={<Plus size={12} />}
-            >
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => setShowVideoUpload(true)}
+                leftSection={<Plus size={12} />}
+                disabled={readOnly}
+                data-testid="session-upload-video"
+              >
               Upload
             </Button>
           </Group>
@@ -1231,6 +1269,8 @@ export default function SessionDrawer({
                 variant="light"
                 leftSection={<Wand2 size={14} />}
                 onClick={() => setShowNotesHelper(true)}
+                disabled={readOnly}
+                data-testid="session-notes-helper"
               >
                 Help write notes
               </Button>
@@ -1254,6 +1294,8 @@ export default function SessionDrawer({
                 placeholder="1-10"
                 size="sm"
                 step={0.5}
+                disabled={readOnly}
+                data-testid="session-rpe"
               />
             </Box>
             <Box>
@@ -1269,6 +1311,8 @@ export default function SessionDrawer({
                 placeholder={unit}
                 size="sm"
                 step={0.1}
+                disabled={readOnly}
+                data-testid="session-body-weight"
               />
             </Box>
           </SimpleGrid>
@@ -1283,6 +1327,8 @@ export default function SessionDrawer({
               minRows={1}
               maxRows={mode === 'page' ? 4 : 6}
               size="sm"
+              disabled={readOnly}
+              data-testid="session-notes"
             />
           </Box>
           </Stack>
@@ -1301,6 +1347,8 @@ export default function SessionDrawer({
               }
             }}
             leftSection={<Trash2 size={16} />}
+            disabled={readOnly}
+            data-testid="session-delete"
           >
             Delete
           </Button>
@@ -1312,16 +1360,18 @@ export default function SessionDrawer({
               variant="default"
               color="gray"
               onClick={() => setDiscardIntent('reset')}
-              disabled={!hasChanges || isSaving}
+              disabled={!hasChanges || isSaving || readOnly}
               leftSection={<RotateCcw size={16} />}
+              data-testid="session-discard"
             >
               Discard
             </Button>
             <Button
               onClick={() => void handleSave()}
-              disabled={!hasChanges || isSaving}
+              disabled={!hasChanges || isSaving || readOnly}
               loading={isSaving}
               leftSection={<Save size={16} />}
+              data-testid="session-save"
             >
               Save
             </Button>
@@ -1329,6 +1379,8 @@ export default function SessionDrawer({
               variant={localSession.completed ? 'filled' : 'default'}
               onClick={toggleComplete}
               leftSection={<Check size={16} />}
+              disabled={readOnly}
+              data-testid="session-toggle-complete"
             >
               {localSession.completed ? 'Done' : 'Mark Done'}
             </Button>
@@ -1441,6 +1493,7 @@ export default function SessionDrawer({
           <Checkbox.Group
             value={failedReasonDraft}
             onChange={(value) => setFailedReasonDraft(value as FailedSetReason[])}
+            data-testid="failed-set-reasons"
           >
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
               {FAILED_SET_REASON_OPTIONS.map((option) => (
@@ -1462,7 +1515,7 @@ export default function SessionDrawer({
             >
               Cancel
             </Button>
-            <Button onClick={saveFailedSetReasons} disabled={failedReasonDraft.length === 0}>
+            <Button onClick={saveFailedSetReasons} disabled={failedReasonDraft.length === 0} data-testid="failed-set-reasons-save">
               Save
             </Button>
           </Group>

@@ -88,6 +88,7 @@ export default function PlateCalculator() {
               onChange={(e) => setTargetWeight(Number(e.currentTarget.value) || 0)}
               placeholder={unit === 'kg' ? 'kg' : 'lb'}
               step={unit === 'kg' ? 2.5 : 5}
+              data-testid="plate-target-weight"
             />
             <Paper bg="var(--mantine-color-default)" px="sm" py="xs" radius="sm">
               <Text size="sm">{unit.toUpperCase()}</Text>
@@ -107,6 +108,7 @@ export default function PlateCalculator() {
             ]}
             value={barPreset}
             onChange={(val) => setBarPreset((val ?? 'standard') as BarPreset)}
+            data-testid="plate-bar-preset"
           />
           {barPreset === 'custom' && (
             <TextInput
@@ -129,9 +131,10 @@ export default function PlateCalculator() {
               { label: 'LB Plates', value: 'lb' },
               { label: 'Both', value: 'both' },
             ]}
-            value={plateMode}
-            onChange={(val) => setPlateMode(val as PlateMode)}
-          />
+              value={plateMode}
+              onChange={(val) => setPlateMode(val as PlateMode)}
+              data-testid="plate-mode"
+            />
         </Stack>
       </SimpleGrid>
 
@@ -269,8 +272,8 @@ export default function PlateCalculator() {
                   </Table.Tr>
                   <Table.Tr fw={700} bg="var(--mantine-color-blue-light)">
                     <Table.Td>Grand Total</Table.Td>
-                    <Table.Td ta="right">{loadout.totalKg.toFixed(1)} kg</Table.Td>
-                    <Table.Td ta="right">{kgToLb(loadout.totalKg).toFixed(1)} lb</Table.Td>
+                    <Table.Td ta="right" data-testid="plate-grand-total-kg">{loadout.totalKg.toFixed(1)} kg</Table.Td>
+                    <Table.Td ta="right" data-testid="plate-grand-total-lb">{kgToLb(loadout.totalKg).toFixed(1)} lb</Table.Td>
                   </Table.Tr>
                 </Table.Tbody>
               </Table>

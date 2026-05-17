@@ -7,12 +7,14 @@ interface Props {
   sk: string
   evaluation?: AiTemplateEvaluation | null
   onRefresh: () => void
+  readOnly?: boolean
 }
 
-export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, onRefresh }) => {
+export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, onRefresh, readOnly = false }) => {
   const [loading, setLoading] = React.useState(false)
 
   const handleEvaluate = async () => {
+    if (readOnly) return
     setLoading(true)
     try {
       await evaluateTemplate(sk)
@@ -29,7 +31,7 @@ export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, onRefresh }) 
       <Card withBorder padding="lg" radius="md">
         <Stack align="center" gap="md">
           <Text c="dimmed">No evaluation available yet.</Text>
-          <Button onClick={handleEvaluate}>Generate AI Evaluation</Button>
+          <Button onClick={handleEvaluate} disabled={readOnly}>Generate AI Evaluation</Button>
         </Stack>
       </Card>
     )
@@ -82,7 +84,7 @@ export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, onRefresh }) 
           </List>
         </Stack>
 
-        <Button variant="subtle" size="xs" onClick={handleEvaluate} loading={loading}>
+        <Button variant="subtle" size="xs" onClick={handleEvaluate} loading={loading} disabled={readOnly}>
           Re-evaluate
         </Button>
       </Stack>

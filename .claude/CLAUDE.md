@@ -36,10 +36,22 @@ Requires `OPENROUTER_API_KEY`, `opencode` on `PATH`, and configured AWS/DynamoDB
 - Test API env must set `HEALTH_PROGRAM_PK=test` and `IF_USER_PK=test`.
 - Test powerlifting backend env must set `POWERLIFTING_TEST_MAPPED_PK=test`, so authenticated and unauthenticated test requests resolve to `mapped_pk=test`.
 - Test OpenRouter model envs must use `deepseek/deepseek-v4-flash`; the test planner allowlist is mounted through `MODELS_PATH` and contains only that model.
+- For portal feature changes, local dev servers are not acceptance tests. Do not use local Vite, `npm run dev`, or a locally served frontend as proof that portal work is correct. Local runs are allowed only for quick harness debugging before the real pod verification.
+- Before portal verification, refresh test data with `python scripts/copy_operator_health_to_test.py --replace` so `pk=test` matches the live operator data shape. Confirm the target remains `test`, never `operator`.
+- If a portal change reads or writes a DynamoDB-backed data domain that is not already mirrored by the test-data tooling, update `scripts/copy_operator_health_to_test.py` and any related cleanup/restore script before verification. This includes new or previously omitted tables/entities such as videos, user settings, analysis caches, derived cache records, imports, templates, glossary data, federation data, competitions, goals, and session-adjacent metadata.
+- The copy/cleanup tooling must keep `test` representative of live `operator` data for every touched feature. Do not accept tests that pass only because the test copy omitted the data type under test.
 - Use `scripts/build-test-images.sh` for ad-hoc test image deploys. It builds only `if-agent-api`, `powerlifting-app-backend`, and `powerlifting-app-frontend`, tags them as `test`, pushes to ECR, and patches only `if-portals-test`.
 - Do not use `terraform apply` for ad-hoc test deployments. For Terraform validation, run `terraform fmt`, `terraform validate`, and `terraform plan` only.
-- The test environment stays private: no Cloudflare record, no tunnel ingress rule, and no public `HTTPRoute`. Access it with `kubectl port-forward`.
-- For touched portal features, verify with `if-portals-test` pod logs plus live API calls and browser/UI checks against port-forwarded services. Unit and build checks are supporting evidence, not the main proof.
+- Required portal verification sequence:
+  1. Copy operator data to `test`.
+  2. Build and deploy test images with `scripts/build-test-images.sh`.
+  3. Wait for the `if-portals-test` pods to roll out.
+  4. Port-forward the deployed test services with `kubectl -n if-portals-test port-forward`.
+  5. Run browser/UI checks against the port-forwarded frontend service, not a local frontend.
+  6. Inspect `if-portals-test` pod logs for frontend, backend, and API errors.
+- The test environment stays private: no Cloudflare record, no tunnel ingress rule, and no public `HTTPRoute`. Access it only with `kubectl port-forward`.
+- For touched portal features, verify with `if-portals-test` pod logs plus live API calls and browser/UI checks against port-forwarded pod services. Unit, typecheck, build, and local-browser runs are supporting evidence only, never the main proof.
+- If an existing test script defaults to local Vite, pass its deployed-frontend option such as `POWERLIFTING_TEST_USE_DEPLOYED_FRONTEND=1`, or update the script so deployed pod services are the default and local mode requires an explicit opt-in.
 
 ## Project Layout
 

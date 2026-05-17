@@ -5,8 +5,10 @@ import { useNavigate, Link } from 'react-router-dom'
 import { fetchTemplates } from '../api/client'
 import { TemplateCard } from '../components/templates/TemplateCard'
 import type { TemplateListEntry } from '@powerlifting/types'
+import { useAuth } from '@/auth/AuthProvider'
 
 export default function TemplateLibraryPage() {
+  const { readOnly } = useAuth()
   const [templates, setTemplates] = useState<TemplateListEntry[]>([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
@@ -33,12 +35,14 @@ export default function TemplateLibraryPage() {
             variant="default"
             leftSection={<Plus size={16} />}
             onClick={() => navigate('/designer/templates/new')}
+            disabled={readOnly}
           >
             Create Template
           </Button>
           <Button
             leftSection={<Plus size={16} />}
             onClick={() => navigate('/designer/import')}
+            disabled={readOnly}
           >
             Import Template
           </Button>

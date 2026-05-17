@@ -4,8 +4,10 @@ import { Container, LoadingOverlay } from '@mantine/core'
 import { fetchTemplate } from '../api/client'
 import { TemplateDetail } from '../components/templates/TemplateDetail'
 import type { Template } from '@powerlifting/types'
+import { useAuth } from '@/auth/AuthProvider'
 
 export default function TemplateDetailPage() {
+  const { readOnly } = useAuth()
   const { sk } = useParams<{ sk: string }>()
   const [searchParams] = useSearchParams()
   const resolvedSk = sk ?? searchParams.get('sk') ?? undefined
@@ -39,6 +41,7 @@ export default function TemplateDetailPage() {
           template={template}
           templateSk={resolvedSk}
           onRefresh={loadTemplate}
+          readOnly={readOnly}
         />
       )}
     </Container>

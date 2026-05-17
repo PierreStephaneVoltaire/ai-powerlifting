@@ -11,9 +11,10 @@ interface Props {
   overrides: WizardOverrides
   onPrev: () => void
   onReset: () => void
+  readOnly?: boolean
 }
 
-export const Step6_Apply: React.FC<Props> = ({ pendingImport, overrides, onPrev, onReset }) => {
+export const Step6_Apply: React.FC<Props> = ({ pendingImport, overrides, onPrev, onReset, readOnly }) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -101,7 +102,7 @@ export const Step6_Apply: React.FC<Props> = ({ pendingImport, overrides, onPrev,
 
       <Group justify="space-between" mt="xl">
         <Button variant="outline" onClick={onPrev}>Back</Button>
-        <Button size="lg" color="green" onClick={handleApply}>
+        <Button size="lg" color="green" onClick={handleApply} disabled={readOnly}>
           Apply Import
         </Button>
       </Group>

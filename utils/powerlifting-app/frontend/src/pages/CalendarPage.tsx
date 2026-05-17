@@ -27,6 +27,7 @@ import type { Session } from '@powerlifting/types'
 import MuscleVolumeChart from '@/components/charts/MuscleVolumeChart'
 import { SessionsCompactView } from '@/components/sessions/SessionsCompactView'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
+import { useAuth } from '@/auth/AuthProvider'
 
 type ViewType = 'Month' | 'Agenda' | 'Compact'
 const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
@@ -49,6 +50,7 @@ function sessionRoute(session: Session, index: number): string {
 }
 
 export default function CalendarPage() {
+  const { readOnly } = useAuth()
   const { program, isLoading, needsSetup } = useProgramStore()
   const { defaultSessionsView } = useSettingsStore()
   const navigate = useNavigate()
@@ -296,12 +298,13 @@ export default function CalendarPage() {
             }))}
             size="sm"
             style={{ width: 160 }}
+            data-testid="session-block-select"
           />
         )}
       </Group>
 
       {view === 'Compact' ? (
-        <SessionsCompactView backTo={sessionsBackTo} />
+        <SessionsCompactView backTo={sessionsBackTo} readOnly={readOnly} />
       ) : (
         <Paper withBorder p={{ base: 'xs', sm: 'md' }}>
           {view === 'Month' ? (

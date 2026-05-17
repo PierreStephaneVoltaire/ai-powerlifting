@@ -120,7 +120,7 @@ export default function SessionToolkitModal({
   }
 
   return (
-    <Modal opened={opened} onClose={onClose} title={`${exerciseName} Toolkit`} size="xl" centered>
+    <Modal opened={opened} onClose={onClose} title={`${exerciseName} Toolkit`} size="xl" centered data-testid="session-toolkit-modal">
       <Tabs defaultValue="plates">
         <Tabs.List mb="md">
           <Tabs.Tab value="plates">Plates</Tabs.Tab>
@@ -137,6 +137,7 @@ export default function SessionToolkitModal({
                   value={weightKg != null ? toDisplayUnit(weightKg, unit) : ''}
                   onChange={(e) => setWeightKg(e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
                   step={0.5}
+                  data-testid="toolkit-target-weight"
                 />
                 </Box>
 
@@ -149,6 +150,7 @@ export default function SessionToolkitModal({
                     e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : 0,
                   )}
                   step={unit === 'kg' ? 0.25 : 0.5}
+                  data-testid="toolkit-bar-weight"
                 />
 
                 {!isBarbell && (
@@ -257,11 +259,11 @@ export default function SessionToolkitModal({
                       </Table.Tr>
                       <Table.Tr fw={500} style={{ borderTopWidth: 2 }}>
                         <Table.Td>Bar</Table.Td>
-                        <Table.Td ta="right">{displayWeight(Math.max(0, barWeightKgInput || 0), unit)}</Table.Td>
+                        <Table.Td ta="right" data-testid="toolkit-bar-total">{displayWeight(Math.max(0, barWeightKgInput || 0), unit)}</Table.Td>
                       </Table.Tr>
                       <Table.Tr fw={700} bg="var(--mantine-color-blue-light)">
                         <Table.Td>Grand Total</Table.Td>
-                        <Table.Td ta="right">{displayWeight(loadout.totalKg, unit)}</Table.Td>
+                        <Table.Td ta="right" data-testid="toolkit-grand-total">{displayWeight(loadout.totalKg, unit)}</Table.Td>
                       </Table.Tr>
                     </Table.Tbody>
                   </Table>

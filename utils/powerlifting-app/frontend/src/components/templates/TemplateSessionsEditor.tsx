@@ -10,6 +10,7 @@ import type { TemplateSession, GlossaryExercise } from '@powerlifting/types'
 interface Props {
   sessions: TemplateSession[]
   onChange: (sessions: TemplateSession[]) => void
+  disabled?: boolean
 }
 
 function blankSession(nextWeek: number): TemplateSession {
@@ -23,7 +24,7 @@ function blankSession(nextWeek: number): TemplateSession {
   }
 }
 
-export function TemplateSessionsEditor({ sessions, onChange }: Props) {
+export function TemplateSessionsEditor({ sessions, onChange, disabled }: Props) {
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
   const [glossaryError, setGlossaryError] = useState(false)
   const [editingSession, setEditingSession] = useState<TemplateSession | null>(null)
@@ -65,7 +66,7 @@ export function TemplateSessionsEditor({ sessions, onChange }: Props) {
         </Alert>
       )}
       <Group justify="flex-end">
-        <Button size="sm" leftSection={<Plus size={16} />} onClick={openNew}>
+        <Button size="sm" leftSection={<Plus size={16} />} onClick={openNew} disabled={disabled}>
           Add Session
         </Button>
       </Group>
@@ -87,10 +88,10 @@ export function TemplateSessionsEditor({ sessions, onChange }: Props) {
                   <Group justify="space-between" wrap="nowrap" mb={4}>
                     <Text fw={500} size="sm">Day {session.day_of_week}</Text>
                     <Group gap={4} wrap="nowrap">
-                      <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(session)}>
+                      <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(session)} disabled={disabled}>
                         <Edit2 size={14} />
                       </ActionIcon>
-                      <ActionIcon variant="subtle" color="red" size="sm" onClick={() => handleDelete(session.id, session.label)}>
+                      <ActionIcon variant="subtle" color="red" size="sm" onClick={() => handleDelete(session.id, session.label)} disabled={disabled}>
                         <Trash2 size={14} />
                       </ActionIcon>
                     </Group>
@@ -110,6 +111,7 @@ export function TemplateSessionsEditor({ sessions, onChange }: Props) {
         glossary={glossary}
         onSave={handleSave}
         onClose={() => setEditingSession(null)}
+        disabled={disabled}
       />
     </Stack>
   )

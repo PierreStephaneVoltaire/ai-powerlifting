@@ -5,8 +5,10 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { Copy, Settings, ChevronDown, Check, Archive, BookOpen, RotateCcw } from 'lucide-react'
 import * as api from '@/api/client'
+import { useAuth } from '@/auth/AuthProvider'
 
 export default function TopBar() {
+  const { readOnly } = useAuth()
   const { program, version, versions, isLoading, forkVersion, loadVersions, loadProgram, archiveProgram, unarchiveProgram } = useProgramStore()
   const { unit, toggleUnit } = useSettingsStore()
   const { openDrawer, pushToast } = useUiStore()
@@ -103,7 +105,7 @@ export default function TopBar() {
 
           <Menu.Item
             onClick={handleFork}
-            disabled={forking}
+            disabled={forking || readOnly}
             leftSection={<Copy size={16} />}
           >
             {forking ? 'Forking...' : 'Fork this version'}
@@ -111,7 +113,7 @@ export default function TopBar() {
 
           <Menu.Item
             onClick={handleArchiveToggle}
-            disabled={archiving}
+            disabled={archiving || readOnly}
             leftSection={program?.meta?.archived ? <RotateCcw size={16} /> : <Archive size={16} />}
             color={program?.meta?.archived ? 'blue' : 'red'}
           >
@@ -120,6 +122,7 @@ export default function TopBar() {
 
           <Menu.Item
             onClick={handleConvertToTemplate}
+            disabled={readOnly}
             leftSection={<BookOpen size={16} />}
           >
             Convert to Template
@@ -129,7 +132,7 @@ export default function TopBar() {
 
       {/* Right: Unit toggle + Settings */}
       <Group gap="xs">
-        <Button variant="subtle" size="sm" onClick={toggleUnit}>
+        <Button variant="subtle" size="sm" onClick={toggleUnit} data-testid="unit-toggle">
           {unit.toUpperCase()}
         </Button>
 
@@ -137,6 +140,7 @@ export default function TopBar() {
           variant="subtle"
           size="sm"
           onClick={() => openDrawer('settings')}
+          data-testid="settings-button"
         >
           <Settings size={20} />
         </Button>

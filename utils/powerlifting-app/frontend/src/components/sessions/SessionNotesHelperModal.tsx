@@ -79,6 +79,7 @@ export default function SessionNotesHelperModal({
           onChange={(event) => updateAnswer('overall', event.currentTarget.value)}
           autosize
           minRows={2}
+          data-testid="notes-helper-overall"
         />
         <Textarea
           label="Technique consistency"
@@ -86,6 +87,7 @@ export default function SessionNotesHelperModal({
           onChange={(event) => updateAnswer('technique', event.currentTarget.value)}
           autosize
           minRows={2}
+          data-testid="notes-helper-technique"
         />
         <Textarea
           label="Failed sets or RPE"
@@ -93,6 +95,7 @@ export default function SessionNotesHelperModal({
           onChange={(event) => updateAnswer('failedSets', event.currentTarget.value)}
           autosize
           minRows={2}
+          data-testid="notes-helper-failed-sets"
         />
         <Textarea
           label="Skipped or missed work"
@@ -100,6 +103,7 @@ export default function SessionNotesHelperModal({
           onChange={(event) => updateAnswer('skippedWork', event.currentTarget.value)}
           autosize
           minRows={2}
+          data-testid="notes-helper-skipped-work"
         />
         <Textarea
           label="Load mismatch"
@@ -107,6 +111,7 @@ export default function SessionNotesHelperModal({
           onChange={(event) => updateAnswer('rpeMismatch', event.currentTarget.value)}
           autosize
           minRows={2}
+          data-testid="notes-helper-load-mismatch"
         />
         <Textarea
           label="Planned vs executed"
@@ -114,6 +119,7 @@ export default function SessionNotesHelperModal({
           onChange={(event) => updateAnswer('plannedVsExecuted', event.currentTarget.value)}
           autosize
           minRows={2}
+          data-testid="notes-helper-planned-vs-executed"
         />
         <Textarea
           label="Other"
@@ -121,6 +127,7 @@ export default function SessionNotesHelperModal({
           onChange={(event) => updateAnswer('freeText', event.currentTarget.value)}
           autosize
           minRows={2}
+          data-testid="notes-helper-other"
         />
         {draft && (
           <Textarea
@@ -129,14 +136,15 @@ export default function SessionNotesHelperModal({
             onChange={(event) => setDraft(event.currentTarget.value)}
             autosize
             minRows={4}
+            data-testid="notes-helper-draft"
           />
         )}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Cancel</Button>
-          <Button variant="light" leftSection={<Wand2 size={16} />} loading={isGenerating} onClick={generateDraft}>
+          <Button variant="light" leftSection={<Wand2 size={16} />} loading={isGenerating} onClick={generateDraft} data-testid="notes-helper-draft-button">
             Draft Notes
           </Button>
-          <Button disabled={!draft.trim()} onClick={insertDraft}>
+          <Button disabled={!draft.trim()} onClick={insertDraft} data-testid="notes-helper-insert">
             Insert
           </Button>
         </Group>

@@ -6,9 +6,11 @@ import {
 } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
+import { useAuth } from '@/auth/AuthProvider'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 
 export default function SupplementsPage() {
+  const { readOnly } = useAuth()
   const { program, updateSupplementPhases } = useProgramStore()
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
@@ -174,6 +176,7 @@ export default function SupplementsPage() {
             <Button
               leftSection={<Save size={16} />}
               onClick={handleSave}
+              disabled={readOnly}
             >
               Save
             </Button>
@@ -182,6 +185,7 @@ export default function SupplementsPage() {
             variant="default"
             leftSection={<Plus size={16} />}
             onClick={addPhase}
+            disabled={readOnly}
           >
             Add Phase
           </Button>
@@ -210,15 +214,17 @@ export default function SupplementsPage() {
                         size="sm"
                         w={200}
                         onClick={(e) => e.stopPropagation()}
+                        disabled={readOnly}
                       />
                     ) : (
                       <Group
                         gap={4}
                         onClick={(e) => {
                           e.stopPropagation()
+                          if (readOnly) return
                           setEditingPhase(phase.phase)
                         }}
-                        style={{ cursor: 'text' }}
+                        style={{ cursor: readOnly ? 'default' : 'text' }}
                       >
                         <Text fw={500}>{phase.phase_name}</Text>
                         <Edit2 size={12} style={{ color: 'var(--mantine-color-dimmed)' }} />
@@ -249,6 +255,7 @@ export default function SupplementsPage() {
                           data={weekSelectData}
                           size="sm"
                           w={100}
+                          disabled={readOnly}
                         />
                       </Group>
                       <Text c="dimmed">{'\u2192'}</Text>
@@ -262,6 +269,7 @@ export default function SupplementsPage() {
                           data={weekSelectData}
                           size="sm"
                           w={100}
+                          disabled={readOnly}
                         />
                       </Group>
                     </Group>
@@ -274,6 +282,7 @@ export default function SupplementsPage() {
                       minRows={2}
                       autosize
                       placeholder="Notes about this phase..."
+                      disabled={readOnly}
                     />
 
                     {/* Supplements Table */}
@@ -285,6 +294,7 @@ export default function SupplementsPage() {
                           size="xs"
                           leftSection={<Plus size={12} />}
                           onClick={() => addItem(originalIndex)}
+                          disabled={readOnly}
                         >
                           Add Item
                         </Button>
@@ -310,6 +320,7 @@ export default function SupplementsPage() {
                                       updateItem(originalIndex, itemIndex, { name: e.currentTarget.value })
                                     }
                                     size="xs"
+                                    disabled={readOnly}
                                   />
                                 </Table.Td>
                                 <Table.Td>
@@ -319,6 +330,7 @@ export default function SupplementsPage() {
                                       updateItem(originalIndex, itemIndex, { dose: e.currentTarget.value })
                                     }
                                     size="xs"
+                                    disabled={readOnly}
                                   />
                                 </Table.Td>
                                 <Table.Td>
@@ -331,6 +343,7 @@ export default function SupplementsPage() {
                                     minRows={1}
                                     autosize
                                     size="xs"
+                                    disabled={readOnly}
                                   />
                                 </Table.Td>
                                 <Table.Td>
@@ -339,6 +352,7 @@ export default function SupplementsPage() {
                                     color="red"
                                     size="sm"
                                     onClick={() => removeItem(originalIndex, itemIndex)}
+                                    disabled={readOnly}
                                   >
                                     <Trash2 size={14} />
                                   </ActionIcon>
@@ -363,6 +377,7 @@ export default function SupplementsPage() {
                           size="xs"
                           leftSection={<Plus size={12} />}
                           onClick={() => addProtocolKey(originalIndex)}
+                          disabled={readOnly}
                         >
                           Add Field
                         </Button>
@@ -378,12 +393,14 @@ export default function SupplementsPage() {
                                 onChange={(e) => updateProtocolKey(originalIndex, key, e.currentTarget.value)}
                                 style={{ flex: 1 }}
                                 size="sm"
+                                disabled={readOnly}
                               />
                               <ActionIcon
                                 variant="subtle"
                                 color="red"
                                 size="sm"
                                 onClick={() => removeProtocolKey(originalIndex, key)}
+                                disabled={readOnly}
                               >
                                 <X size={14} />
                               </ActionIcon>
@@ -405,6 +422,7 @@ export default function SupplementsPage() {
                         size="sm"
                         leftSection={<Trash2 size={14} />}
                         onClick={() => removePhase(originalIndex)}
+                        disabled={readOnly}
                       >
                         Delete Phase
                       </Button>

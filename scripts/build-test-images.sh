@@ -8,6 +8,28 @@ NAMESPACE="${NAMESPACE:-if-portals-test}"
 IMAGE_TAG="${IMAGE_TAG:-test}"
 FRONTEND_API_URL="${TEST_FRONTEND_API_URL:-/api}"
 
+# Allow building only specific images
+# Usage: --only frontend  or  --only api,backend,frontend
+BUILD_ONLY="${BUILD_ONLY:-}"
+if [[ "${1:-}" == "--only" && -n "${2:-}" ]]; then
+  BUILD_ONLY="$2"
+  shift 2
+fi
+
+should_build() {
+  local component="$1"
+  if [[ -z "$BUILD_ONLY" ]]; then
+    return 0
+  fi
+  IFS=',' read -ra COMPONENTS <<< "$BUILD_ONLY"
+  for c in "${COMPONENTS[@]}"; do
+    if [[ "$c" == "$component" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Missing required command: $1" >&2

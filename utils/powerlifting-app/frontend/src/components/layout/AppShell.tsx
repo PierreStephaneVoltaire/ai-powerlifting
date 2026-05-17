@@ -3,6 +3,7 @@ import { AppShell as MantineAppShell } from '@mantine/core'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import SettingsDrawer from './SettingsDrawer'
+import ReadOnlyBanner from '@/components/shared/ReadOnlyBanner'
 
 interface AppShellProps {
   children: ReactNode
@@ -76,6 +77,7 @@ export default function AppShell({ children }: AppShellProps) {
         }}
         style={{ flex: 1 }}
       >
+        <ReadOnlyBanner />
         {children}
       </MantineAppShell.Main>
 

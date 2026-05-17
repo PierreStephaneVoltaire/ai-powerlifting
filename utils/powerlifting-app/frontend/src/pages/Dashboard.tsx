@@ -31,6 +31,7 @@ import {
   Divider,
   Table,
 } from '@mantine/core'
+import { useAuth } from '@/auth/AuthProvider'
 import type { Exercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
@@ -208,6 +209,7 @@ function findLiftAnalysis(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift
 }
 
 export default function Dashboard() {
+  const { readOnly } = useAuth()
   const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases, updateLiftProfiles } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
@@ -605,7 +607,7 @@ export default function Dashboard() {
                 <ActionIcon variant="subtle" onClick={() => setEditingMaxes(false)}><X size={16} /></ActionIcon>
               </Group>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingMaxes}><Edit2 size={16} /></ActionIcon>
+              <ActionIcon variant="subtle" onClick={startEditingMaxes} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
             )}
           </Group>
           {editingMaxes ? (
@@ -691,7 +693,7 @@ export default function Dashboard() {
                 <ActionIcon variant="subtle" onClick={() => setEditingWeight(false)}><X size={16} /></ActionIcon>
               </Group>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingWeight}><Edit2 size={16} /></ActionIcon>
+              <ActionIcon variant="subtle" onClick={startEditingWeight} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
             )}
           </Group>
           {editingWeight ? (
@@ -776,7 +778,7 @@ export default function Dashboard() {
                 <ActionIcon variant="subtle" onClick={() => setEditingMeasurements(false)}><X size={16} /></ActionIcon>
               </Group>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingMeasurements}><Edit2 size={16} /></ActionIcon>
+              <ActionIcon variant="subtle" onClick={startEditingMeasurements} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
             )}
           </Group>
           {editingMeasurements ? (
@@ -951,7 +953,7 @@ export default function Dashboard() {
                 <ActionIcon variant="subtle" onClick={() => setEditingPhases(false)}><X size={16} /></ActionIcon>
               </Group>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingPhases}><Edit2 size={16} /></ActionIcon>
+              <ActionIcon variant="subtle" onClick={startEditingPhases} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
             )}
           </Group>
           {editingPhases ? (
@@ -1015,6 +1017,7 @@ export default function Dashboard() {
                 key={lift}
                 component={Link}
                 to={`/lift-profiles/${lift}`}
+                disabled={readOnly}
                 variant="subtle"
                 size="compact-sm"
                 leftSection={<Edit2 size={14} />}
@@ -1281,6 +1284,7 @@ export default function Dashboard() {
                 leftSection={<Sparkles size={16} />}
                 loading={profileGuideLoading}
                 onClick={runProfileGuideReview}
+                disabled={readOnly}
               >
                 Review
               </Button>
@@ -1290,6 +1294,7 @@ export default function Dashboard() {
                   leftSection={<Sparkles size={16} />}
                   loading={profileGuideRewriting}
                   onClick={runRewriteProfile}
+                  disabled={readOnly}
                 >
                   Rewrite
                 </Button>
@@ -1297,12 +1302,12 @@ export default function Dashboard() {
                   variant="light"
                   leftSection={<Sparkles size={16} />}
                   loading={profileGuideEstimating}
-                  disabled={!profileGuideCanEstimate}
+                  disabled={!profileGuideCanEstimate || readOnly}
                   onClick={runEstimateStimulus}
                 >
                   Estimate Stimulus
                 </Button>
-                <Button onClick={applyProfileGuide}>Apply</Button>
+                <Button onClick={applyProfileGuide} disabled={readOnly}>Apply</Button>
               </Group>
             </Group>
           </Stack>

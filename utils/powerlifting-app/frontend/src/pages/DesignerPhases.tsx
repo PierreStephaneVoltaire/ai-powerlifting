@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Edit2, Trash2, X, Save, ExternalLink } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
+import { useAuth } from '@/auth/AuthProvider'
 import { useUiStore } from '@/store/uiStore'
 import {
   Paper, Title, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
@@ -12,6 +13,7 @@ import type { Phase } from '@powerlifting/types'
 const DEFAULT_BLOCK = 'current'
 
 export default function DesignerPhases() {
+  const { readOnly } = useAuth()
   const { program, updatePhases } = useProgramStore()
   const { pushToast } = useUiStore()
 
@@ -144,6 +146,7 @@ export default function DesignerPhases() {
             size="sm"
             leftSection={<Plus size={16} />}
             onClick={() => openPhaseEditor()}
+            disabled={readOnly}
           >
             Add Phase
           </Button>
@@ -181,6 +184,7 @@ export default function DesignerPhases() {
                   <ActionIcon
                     variant="subtle"
                     onClick={() => openPhaseEditor(phase, i)}
+                    disabled={readOnly}
                   >
                     <Edit2 size={16} />
                   </ActionIcon>
@@ -188,6 +192,7 @@ export default function DesignerPhases() {
                     variant="subtle"
                     color="red"
                     onClick={() => deletePhase(phase.name)}
+                    disabled={readOnly}
                   >
                     <Trash2 size={16} />
                   </ActionIcon>
@@ -219,6 +224,7 @@ export default function DesignerPhases() {
                 setPhaseForm(p => ({ ...p, name: val }));
               }}
               size="sm"
+              disabled={readOnly}
             />
           </Box>
 
@@ -230,6 +236,7 @@ export default function DesignerPhases() {
                 value={phaseForm.start_week || 1}
                 onChange={(e) => setPhaseForm(p => ({ ...p, start_week: Number(e.currentTarget.value) }))}
                 size="sm"
+                disabled={readOnly}
               />
             </Box>
             <Box>
@@ -239,6 +246,7 @@ export default function DesignerPhases() {
                 value={phaseForm.end_week || 4}
                 onChange={(e) => setPhaseForm(p => ({ ...p, end_week: Number(e.currentTarget.value) }))}
                 size="sm"
+                disabled={readOnly}
               />
             </Box>
           </SimpleGrid>
@@ -254,6 +262,7 @@ export default function DesignerPhases() {
               autosize
               minRows={2}
               size="sm"
+              disabled={readOnly}
             />
           </Box>
 
@@ -266,6 +275,7 @@ export default function DesignerPhases() {
                 onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
+                disabled={readOnly}
               />
             </Box>
             <Box>
@@ -276,6 +286,7 @@ export default function DesignerPhases() {
                 onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
+                disabled={readOnly}
               />
             </Box>
             <Box>
@@ -285,6 +296,7 @@ export default function DesignerPhases() {
                 value={phaseForm.days_per_week ?? ''}
                 onChange={(e) => setPhaseForm(p => ({ ...p, days_per_week: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
+                disabled={readOnly}
               />
             </Box>
           </SimpleGrid>
@@ -300,6 +312,7 @@ export default function DesignerPhases() {
               autosize
               minRows={2}
               size="sm"
+              disabled={readOnly}
             />
           </Box>
 
@@ -310,6 +323,7 @@ export default function DesignerPhases() {
             <Button
               leftSection={<Save size={16} />}
               onClick={savePhase}
+              disabled={readOnly}
             >
               {isNewPhase ? 'Add' : 'Update'} Phase
             </Button>

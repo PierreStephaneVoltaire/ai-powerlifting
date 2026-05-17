@@ -22,9 +22,10 @@ function countUniqueExerciseNames(session: Session): number {
 
 interface SessionsCompactViewProps {
   backTo?: string
+  readOnly?: boolean
 }
 
-export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: SessionsCompactViewProps) {
+export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnly = false }: SessionsCompactViewProps) {
   const { program, isLoading, createSession } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
@@ -106,8 +107,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
   }, [closestSession, closestWeek, expandedWeeks])
 
   const handleAddSession = async () => {
-    if (!newDate) {
-      pushToast({ message: 'Please select a date', type: 'error' })
+    if (!newDate || readOnly) {
+      if (!newDate) pushToast({ message: 'Please select a date', type: 'error' })
       return
     }
 
@@ -180,6 +181,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                 }))}
                 size="sm"
                 style={{ width: 160 }}
+                data-testid="session-block-select"
               />
             )}
             <Button
@@ -187,6 +189,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
               leftSection={<Plus size={16} />}
               onClick={() => setShowAddModal(true)}
               visibleFrom="sm"
+              disabled={readOnly}
+              data-testid="session-list-add-session"
             >
               Add Session
             </Button>
@@ -201,6 +205,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
         hiddenFrom="sm"
         onClick={() => setShowAddModal(true)}
         aria-label="Add Session"
+        disabled={readOnly}
+        data-testid="session-list-add-session-mobile"
         style={{
           position: 'fixed',
           bottom: 'calc(76px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
@@ -229,6 +235,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
               value={newDate || null}
               valueFormat="YYYY-MM-DD"
               onChange={(d) => setNewDate(d || '')}
+              disabled={readOnly}
+              data-testid="session-create-date"
             />
           </Box>
           <Group justify="flex-end" gap="xs">
@@ -241,7 +249,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
             >
               Cancel
             </Button>
-            <Button onClick={handleAddSession}>
+            <Button onClick={handleAddSession} disabled={readOnly} data-testid="session-create-submit">
               Create Session
             </Button>
           </Group>
@@ -257,7 +265,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
           const phaseColorValue = phase ? phaseColor(phase, program.phases) : undefined
 
           return (
-            <Paper key={week} withBorder>
+            <Paper key={week} withBorder data-testid={`session-week-${week}`}>
               <Box
                 component="button"
                 onClick={() => toggleWeek(week)}
@@ -323,6 +331,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                         onClick={() => navigate(program.sessions.indexOf(session) >= 0 ? `/session/${session.date}/${program.sessions.indexOf(session)}` : `/session/${session.date}`, {
                           state: { backTo },
                         })}
+                        data-testid={`session-list-row-${session.date}`}
                         style={{
                           width: '100%',
                           display: 'flex',

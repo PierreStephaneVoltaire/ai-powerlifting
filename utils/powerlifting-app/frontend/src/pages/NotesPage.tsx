@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo } from 'react'
 import { Save, BookOpen } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
+import { useAuth } from '@/auth/AuthProvider'
 import {
   Paper, Title, Text, Group, Stack, Button, Select, Textarea, Box,
 } from '@mantine/core'
 import type { BlockNote } from '@powerlifting/types'
 
 export default function NotesPage() {
+  const { readOnly } = useAuth()
   const { program, updateBlockNotes } = useProgramStore()
   const { pushToast } = useUiStore()
   const [selectedBlock, setSelectedBlock] = useState<string>('current')
@@ -70,7 +72,8 @@ export default function NotesPage() {
         </Box>
         <Group gap="xs">
           {hasChanges && (
-            <Button leftSection={<Save size={16} />} onClick={handleSave}>
+            <Button leftSection={<Save size={16} />}
+            disabled={readOnly} onClick={handleSave}>
               Save
             </Button>
           )}
@@ -110,6 +113,7 @@ export default function NotesPage() {
             minRows={8}
             autosize
             maxRows={20}
+            disabled={readOnly}
           />
         </Stack>
       </Paper>

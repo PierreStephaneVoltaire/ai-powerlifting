@@ -19,9 +19,10 @@ const CORR_STRENGTH_BADGE: Record<string, string> = {
 interface AiAnalysisProps {
   effectiveWeeks: number;
   weeksMode: number | 'current' | 'block';
+  readOnly?: boolean;
 }
 
-export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
+export function AiAnalysis({ effectiveWeeks, weeksMode, readOnly = false }: AiAnalysisProps) {
   const { program } = useProgramStore();
 
   // Correlation report state
@@ -131,7 +132,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
               variant="subtle"
               size="xs"
               onClick={() => loadCorrelation(true, false)}
-              disabled={corrLoading}
+              disabled={corrLoading || readOnly}
               leftSection={<RefreshCw size={14} style={corrLoading ? { animation: 'spin 1s linear infinite' } : undefined} />}
             >
               {corrReport?.cache_miss ? 'Generate' : 'Refresh'}
@@ -223,7 +224,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode }: AiAnalysisProps) {
                 variant="subtle"
                 size="xs"
                 onClick={() => loadProgramEvaluation(true, false)}
-                disabled={evalLoading}
+                disabled={evalLoading || readOnly}
                 leftSection={<RefreshCw size={14} style={evalLoading ? { animation: 'spin 1s linear infinite' } : undefined} />}
               >
                 {evalReport?.cache_miss ? 'Generate' : 'Refresh'}
