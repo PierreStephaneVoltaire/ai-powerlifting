@@ -6,7 +6,6 @@ import * as weightController from '../controllers/weightController'
 import type { Program, WeightEntry } from '@powerlifting/types'
 import {
   ALL_WINDOW_KEYS,
-  CORRELATION_WINDOW_KEYS,
   buildAnalysisWindows,
   putAllCachedWindowAnalyses,
   isIsoDate,
@@ -77,7 +76,6 @@ async function runTargetedRegeneration(
   const windows = buildAnalysisWindows(program, asOfDate)
   const sessions = program.sessions ?? []
   const keys = targetWindows ?? ALL_WINDOW_KEYS
-  const needCorrelation = keys.some((k) => CORRELATION_WINDOW_KEYS.includes(k))
 
   const results = {} as Record<AnalysisWindowKey, unknown>
   for (const key of keys) {
@@ -100,28 +98,6 @@ async function runTargetedRegeneration(
 
   await putAllCachedWindowAnalyses(pk, results)
 
-  for (const key of keys.filter((k) => CORRELATION_WINDOW_KEYS.includes(k))) {
-    try {
-      await invokeToolDirect('correlation_analysis', {
-        weeks: windows[key].weeks,
-        block: 'current',
-        refresh: true,
-        cache_only: false,
-        pk,
-      })
-    } catch (err) {
-      logger.warn({ err, pk, window: key }, 'Correlation analysis failed for window')
-    }
-  }
-
-  if (needCorrelation) {
-    try {
-      await getOrCreateBlockCorrelationReport(pk, program, 'current', invokeToolDirect, true, false)
-    } catch (err) {
-      logger.warn({ err, pk }, 'block_correlation#v1#current regeneration failed')
-    }
-  }
-
   try {
     await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false)
   } catch (err) {
@@ -138,20 +114,7 @@ async function runFullCurrentBlockRegeneration(
   asOfDate: string,
 ): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows> }> {
   await snapshotCompetitionProjection(pk, asOfDate)
-  const program = await getProgramWithWeightLog(pk, 'current')
   const { generatedAt, windows } = await runTargetedRegeneration(pk, asOfDate)
-
-  try {
-    await invokeToolDirect('program_evaluation', { refresh: true, cache_only: false, pk })
-  } catch (err) {
-    logger.warn({ err, pk }, 'Program evaluation failed during regeneration')
-  }
-
-  try {
-    await getOrCreateBlockProgramEvaluation(pk, program, 'current', invokeToolDirect, true, false)
-  } catch (err) {
-    logger.warn({ err, pk }, 'block_program_eval#v1#current regeneration failed')
-  }
 
   try {
     const markdownResult = await invokeToolDirect('export_program_markdown', {

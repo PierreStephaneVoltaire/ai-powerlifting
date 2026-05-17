@@ -1720,7 +1720,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
 
     try:
         from core import health_program_evaluation
-        bundle["program_evaluation"] = _run_async(health_program_evaluation(refresh=False))
+        bundle["program_evaluation"] = _run_async(health_program_evaluation(refresh=False, cache_only=True))
     except Exception as e:
         logger.warning("export: program_evaluation read failed: %s", e)
 
@@ -1842,8 +1842,8 @@ class ExportProgramHistoryTool(ToolDefinition[ExportProgramHistoryAction, Export
                 "Export the full training program to an Excel (.xlsx) or Markdown (.md) file. "
                 "Sheets: Meta, Current Maxes, Phases, Sessions, Exercises, Competitions, "
                 "Lift Profiles, Weekly Analysis, Per-Lift Metrics, ROI Correlation, Program Evaluation. "
-                "The three AI-driven sheets (Weekly Analysis, ROI Correlation, Program Evaluation) use cached values — "
-                "refresh them on the Analysis page first if you want the freshest data. "
+                "Weekly Analysis is deterministic; ROI Correlation and Program Evaluation use cached AI values only. "
+                "Refresh AI sections from their own Analysis page buttons first if you want the freshest data. "
                 "After calling this tool, emit a FILES: line to deliver the file."
             ),
             action_type=ExportProgramHistoryAction,
@@ -2638,11 +2638,10 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
         "regenerate_analysis": {
             "name": "regenerate_analysis",
             "description": (
-                "Regenerate all current-block analysis caches: 6 weekly windows (deterministic), "
-                "AI correlation reports for 4w/8w/full-block windows, full-block program evaluation, "
-                "and the markdown export. Call this when the operator asks to refresh or regenerate "
-                "their training analysis. Only touches current-block caches — never affects past blocks "
-                "or the lifetime compare AI cache."
+                "Regenerate deterministic current-block analysis caches: 6 weekly windows and the "
+                "markdown export. Call this when the operator asks to refresh or regenerate their "
+                "training analysis. This intentionally does not regenerate AI correlation reports, "
+                "AI program evaluation, past-block caches, or the lifetime compare AI cache."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -4118,17 +4117,20 @@ def _do_export_program_markdown(args: Dict[str, Any]) -> str:
 
 
 async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Regenerate all current-block analysis caches: 6 windows, AI correlation,
-    program evaluation, and markdown export. NEVER touches past-block caches."""
+    """Regenerate deterministic current-block analysis caches and markdown export.
+
+    AI reports are intentionally excluded; they are regenerated only through
+    explicit AI section tools because those calls are comparatively expensive.
+    NEVER touches past-block caches.
+    """
     import os
     import json
     import tempfile
     import time as _time
     import boto3
-    from datetime import datetime, timedelta
+    from datetime import datetime
     from core import _get_store, _floats_to_decimals
     from analytics import weekly_analysis
-    from correlation_ai import generate_correlation_report
     from export import build_program_markdown
 
     from config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
@@ -4198,46 +4200,6 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as exc:
             errors.append(f"window {window_key}: {exc}")
 
-    # AI correlation for windows with 4+ weeks
-    for window_key, week_start, week_end in window_specs:
-        n_weeks = max(1, week_end - week_start + 1)
-        if n_weeks < 4:
-            continue
-        try:
-            corr = await generate_correlation_report(
-                sessions=current_sessions,
-                lift_profiles=program.get("lift_profiles", []),
-                weeks=n_weeks,
-                window_start=today_iso,
-                program=program,
-            )
-            # Store in if-health using the same sk pattern as CorrelationAnalysisExecutor
-            from config import IF_HEALTH_TABLE_NAME
-            health_table = dynamodb.Table(IF_HEALTH_TABLE_NAME)
-            today = datetime.utcnow().date()
-            raw_cutoff = today - timedelta(weeks=n_weeks)
-            days_since_monday = raw_cutoff.weekday()
-            window_start_date = (raw_cutoff - timedelta(days=days_since_monday)).isoformat()
-            cache_sk = f"corr_report#{window_start_date}_{n_weeks}w"
-            health_table.put_item(Item=_floats_to_decimals({
-                "pk": pk,
-                "sk": cache_sk,
-                "report": corr,
-                "generated_at": datetime.utcnow().isoformat() + "Z",
-                "window_start": window_start_date,
-                "weeks": n_weeks,
-                "expires_at": expires_at,
-            }))
-        except Exception as exc:
-            errors.append(f"correlation {window_key}: {exc}")
-
-    # Program evaluation (full block)
-    try:
-        from core import health_program_evaluation
-        await health_program_evaluation(refresh=True)
-    except Exception as exc:
-        errors.append(f"program_evaluation: {exc}")
-
     # Generate markdown export
     try:
         out_path = os.path.join(tempfile.gettempdir(), "program_history_regen.md")
@@ -4263,7 +4225,7 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
         "windows_regenerated": 6,
         "errors": errors,
         "message": (
-            f"Regenerated 6 analysis windows, AI correlations, program evaluation, and markdown export."
+            f"Regenerated 6 deterministic analysis windows and markdown export. AI reports were not regenerated."
             + (f" {len(errors)} non-fatal errors: {'; '.join(errors)}" if errors else "")
         ),
     }

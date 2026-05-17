@@ -179,6 +179,11 @@ interface SessionDrawerProps {
   onDeleteSuccess?: () => void
 }
 
+interface SaveOptions {
+  silent?: boolean
+  closeOnSuccess?: boolean
+}
+
 function SortableExerciseItem({ 
   exercise, 
   index, 
@@ -352,12 +357,13 @@ export default function SessionDrawer({
   onSaveSuccess,
   onDeleteSuccess,
 }: SessionDrawerProps) {
-  const { program, version, updateSession, saveSession, rescheduleSession, deleteSession } = useProgramStore()
+  const { program, version, updateSession, saveSession, deleteSession } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const [localSession, setLocalSession] = useState<Session | null>(null)
   const [originalDate, setOriginalDate] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [showVideoUpload, setShowVideoUpload] = useState(false)
   const [discardIntent, setDiscardIntent] = useState<'reset' | 'close' | null>(null)
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
@@ -371,6 +377,15 @@ export default function SessionDrawer({
     reps: number | null
     isBarbell: boolean
   } | null>(null)
+  const persistedDateRef = useRef('')
+  const editRevisionRef = useRef(0)
+  const pendingSaveRef = useRef<{ session: Session; revision: number } | null>(null)
+  const saveQueueRef = useRef<Promise<void> | null>(null)
+
+  const markChanged = () => {
+    editRevisionRef.current += 1
+    setHasChanges(true)
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -394,7 +409,7 @@ export default function SessionDrawer({
         const nextExercises = arrayMove(items, oldIndex, newIndex)
         return { ...prev, exercises: nextExercises }
       })
-      setHasChanges(true)
+      markChanged()
     }
   }
 
@@ -413,8 +428,11 @@ export default function SessionDrawer({
     return lookup
   }, [glossary])
 
-  // Initialize local state when session changes
+  // Initialize local state when the backing session changes. While local edits
+  // are dirty or saving, keep the editor snapshot instead of replaying an older
+  // store update over it.
   useEffect(() => {
+    if (hasChanges || isSaving) return
     if (session) {
       const clone = JSON.parse(JSON.stringify(session)) as Session
       // Pre-populate exercises from planned_exercises for incomplete sessions
@@ -436,12 +454,14 @@ export default function SessionDrawer({
       }))
       setLocalSession(clone)
       setOriginalDate(session.date)
+      persistedDateRef.current = session.date
+      editRevisionRef.current = 0
       setHasChanges(false)
     }
-  }, [session])
+  }, [hasChanges, isSaving, session])
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const handleSaveRef = useRef<(() => Promise<void>) | null>(null)
+  const handleSaveRef = useRef<((options?: SaveOptions) => Promise<void>) | null>(null)
 
   useEffect(() => {
     if (!hasChanges || !session || !localSession || !program) return
@@ -449,7 +469,7 @@ export default function SessionDrawer({
       clearTimeout(autoSaveTimerRef.current)
     }
     autoSaveTimerRef.current = setTimeout(() => {
-      void handleSaveRef.current?.()
+      void handleSaveRef.current?.({ silent: true })
     }, 1500)
     return () => {
       if (autoSaveTimerRef.current) {
@@ -459,12 +479,55 @@ export default function SessionDrawer({
     }
   }, [hasChanges, localSession, program, session])
 
+  useEffect(() => {
+    if (!hasChanges && !isSaving) return
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasChanges, isSaving])
+
   const phaseColorValue = session && program ? phaseColor(session.phase, program.phases) : 'var(--mantine-color-gray-6)'
 
   if (!session || !localSession || !program) return null
   const wellness = localSession.wellness
 
-  const handleSave = async () => {
+  const queueSessionSave = (sessionToSave: Session, revision: number): Promise<void> => {
+    pendingSaveRef.current = { session: sessionToSave, revision }
+
+    if (!saveQueueRef.current) {
+      saveQueueRef.current = (async () => {
+        setIsSaving(true)
+        try {
+          while (pendingSaveRef.current) {
+            const job = pendingSaveRef.current
+            pendingSaveRef.current = null
+            const lookupDate = persistedDateRef.current || originalDate || job.session.date
+            const savedSession = await saveSession(lookupDate, sessionArrayIndex, job.session)
+            persistedDateRef.current = savedSession.date
+
+            if (job.revision === editRevisionRef.current && !pendingSaveRef.current) {
+              setLocalSession(savedSession)
+              setOriginalDate(savedSession.date)
+              setHasChanges(false)
+            }
+          }
+        } finally {
+          setIsSaving(false)
+          saveQueueRef.current = null
+        }
+      })()
+    }
+
+    return saveQueueRef.current
+  }
+
+  const handleSave = async (options: SaveOptions = {}) => {
+    const { silent = false, closeOnSuccess = mode === 'drawer' && !silent } = options
     try {
       const rpeError = validateRpeValues()
       if (rpeError) {
@@ -477,27 +540,27 @@ export default function SessionDrawer({
         autoSaveTimerRef.current = null
       }
 
-      if (localSession.date !== originalDate) {
-        const newDay = getDayOfWeek(localSession.date)
-        await rescheduleSession(originalDate, sessionArrayIndex, localSession.date, newDay)
-      }
-
       const sessionToSave = finalizeSessionForSave(localSession)
-      updateSession(sessionToSave.date, sessionArrayIndex, sessionToSave)
-      await saveSession(localSession.date, sessionArrayIndex)
+      const revision = editRevisionRef.current
+      await queueSessionSave(sessionToSave, revision)
 
-      setHasChanges(false)
-      setLocalSession(sessionToSave)
-      setOriginalDate(sessionToSave.date)
-      pushToast({ message: 'Session saved successfully', type: 'success' })
-      if (onSaveSuccess) {
-        onSaveSuccess()
-      } else if (mode === 'drawer') {
-        onClose()
+      if (!silent && revision === editRevisionRef.current) {
+        pushToast({ message: 'Session saved successfully', type: 'success' })
+      }
+      if (closeOnSuccess && revision === editRevisionRef.current) {
+        if (onSaveSuccess) {
+          onSaveSuccess()
+        } else {
+          onClose()
+        }
       }
     } catch (err) {
       console.error(err)
-      pushToast({ message: 'Failed to save session', type: 'error' })
+      setHasChanges(true)
+      pushToast({
+        message: silent ? 'Auto-save failed; session has unsaved changes' : 'Failed to save session',
+        type: 'error',
+      })
     }
   }
 
@@ -507,6 +570,7 @@ export default function SessionDrawer({
     const clone = JSON.parse(JSON.stringify(session)) as Session
     clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
     setLocalSession(clone)
+    editRevisionRef.current = 0
     setHasChanges(false)
   }
 
@@ -535,7 +599,7 @@ export default function SessionDrawer({
       exercises[index] = { ...exercises[index], [field]: value }
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const addExercise = () => {
@@ -559,7 +623,7 @@ export default function SessionDrawer({
         ],
       }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const removeExercise = (index: number) => {
@@ -568,7 +632,7 @@ export default function SessionDrawer({
       const exercises = prev.exercises.filter((_, i) => i !== index)
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateSetStatus = (exerciseIndex: number, setIndex: number, status: SetStatus) => {
@@ -582,7 +646,7 @@ export default function SessionDrawer({
       })
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const openFailedSetReasons = (exerciseIndex: number, setIndex: number, exerciseOverride?: Exercise) => {
@@ -618,7 +682,7 @@ export default function SessionDrawer({
       })
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const saveFailedSetReasons = () => {
@@ -637,7 +701,7 @@ export default function SessionDrawer({
       })
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateExerciseRpe = (index: number, rpe: number | null) => {
@@ -647,7 +711,7 @@ export default function SessionDrawer({
       exercises[index] = { ...exercises[index], rpe }
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const validateRpeValues = (): string | null => {
@@ -673,7 +737,7 @@ export default function SessionDrawer({
     if (newDate && newDate !== localSession.date) {
       const newDay = getDayOfWeek(newDate)
       setLocalSession((prev) => prev ? { ...prev, date: newDate, day: newDay } : prev)
-      setHasChanges(true)
+      markChanged()
     }
   }
 
@@ -683,22 +747,22 @@ export default function SessionDrawer({
       const completed = !prev.completed
       return { ...prev, completed, status: completed ? 'completed' : 'planned' }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateRpe = (rpe: number | null) => {
     setLocalSession((prev) => prev ? { ...prev, session_rpe: rpe } : prev)
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateBodyWeight = (kg: number | null) => {
     setLocalSession((prev) => prev ? { ...prev, body_weight_kg: kg } : prev)
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateNotes = (notes: string) => {
     setLocalSession((prev) => prev ? { ...prev, session_notes: notes } : prev)
-    setHasChanges(true)
+    markChanged()
   }
 
   const setWellnessMode = (enabled: boolean) => {
@@ -711,7 +775,7 @@ export default function SessionDrawer({
       }
       return { ...prev, wellness: createDefaultWellness(prev.wellness) }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateWellness = (field: keyof Omit<SessionWellness, 'recorded_at'>, value: number) => {
@@ -727,7 +791,7 @@ export default function SessionDrawer({
         },
       }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const openToolkitForExercise = (exercise: Exercise) => {
@@ -949,15 +1013,17 @@ export default function SessionDrawer({
 
   const applyAutoRegulation = async (proposedExercises: Exercise[], reasoningNote: string) => {
     if (autoRegExerciseIndex === null) return
-    const nextSession = {
-      ...buildAutoRegulatedSession(localSession, proposedExercises, reasoningNote, autoRegExerciseIndex),
-      date: originalDate,
-      day: getDayOfWeek(originalDate),
-    }
+    const nextSession = finalizeSessionForSave(buildAutoRegulatedSession(
+      localSession,
+      proposedExercises,
+      reasoningNote,
+      autoRegExerciseIndex
+    ))
+    editRevisionRef.current += 1
+    const revision = editRevisionRef.current
+    setHasChanges(true)
     setLocalSession(nextSession)
-    updateSession(originalDate, sessionArrayIndex, nextSession)
-    await saveSession(originalDate, sessionArrayIndex)
-    setHasChanges(false)
+    await queueSessionSave(nextSession, revision)
     pushToast({ message: 'Auto-regulation applied', type: 'success' })
   }
 
@@ -1232,8 +1298,9 @@ export default function SessionDrawer({
             Discard
           </Button>
           <Button
-            onClick={handleSave}
-            disabled={!hasChanges}
+            onClick={() => void handleSave()}
+            disabled={!hasChanges || isSaving}
+            loading={isSaving}
             leftSection={<Save size={16} />}
           >
             Save

@@ -781,7 +781,7 @@ export default function AnalysisPage() {
             loading={regenerating}
             onClick={handleRegenerateAnalysis}
           >
-            Regenerate Analysis
+            Regenerate Weekly Analysis
           </Button>
           {analysisBundle?.generatedAt && !regenerating && (
             <Badge color="gray" variant="light" size="sm">
@@ -1879,7 +1879,7 @@ export default function AnalysisPage() {
             analysisWeeks={effectiveWeeks}
             unit={unit}
           />
-          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} isRegenerating={regenerating} />
+          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} />
 
           {/* Formula Reference */}
           <Accordion mt="xl" variant="separated" defaultValue="formulas-outer">
