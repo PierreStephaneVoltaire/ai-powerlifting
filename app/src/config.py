@@ -127,6 +127,7 @@ IF_DEFAULT_DIRECT_MODEL = os.getenv("IF_DEFAULT_DIRECT_MODEL", "openai/gpt-5.4-m
 IF_TECHNICAL_ARTIFACT_EXCLUDES = {
     "history.md",
     "history.json",
+    "opencode.json",
     "plan.md",
     "review.md",
     "response.md",
@@ -138,7 +139,9 @@ MCP_SERVER_CATEGORIES = [
     item.strip()
     for item in os.getenv(
         "MCP_SERVER_CATEGORIES",
-        "health,finance,diary,proposals,temporal,supplement_research",
+        "health,finance,diary,proposals,supplement_research,"
+        "temporal_age,temporal_city_time,temporal_duration,temporal_from_unix,"
+        "temporal_resolve,temporal_timezone,temporal_to_unix",
     ).split(",")
     if item.strip()
 ]

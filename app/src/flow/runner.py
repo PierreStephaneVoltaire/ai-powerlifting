@@ -27,6 +27,7 @@ from .direct_llm import call_openrouter_chat
 from .history import write_history
 from .model_catalog import format_model_catalog, load_model_ids
 from .opencode import run_opencode
+from .opencode_config import write_opencode_config
 from .plan import IFPlan, PlanParseError, fallback_plan, parse_plan_file
 from .session_dirs import resolve_session_dir
 from .context import build_runtime_context, uploaded_file_paths
@@ -43,6 +44,30 @@ class FlowResult:
     file_refs: list[FileRef] = field(default_factory=list)
     attachments: list[dict[str, Any]] = field(default_factory=list)
     plan: Optional[IFPlan] = None
+
+
+class PlannerFailure(RuntimeError):
+    """Raised when the planner cannot produce a trustworthy route."""
+
+    def __init__(self, exc: BaseException):
+        self.detail = _exception_detail(exc)
+        super().__init__(self.detail)
+
+
+def _exception_detail(exc: BaseException) -> str:
+    message = str(exc).strip() or repr(exc)
+    return f"{type(exc).__name__}: {message}"
+
+
+def _planner_failure_response(failure: PlannerFailure) -> str:
+    detail = failure.detail
+    if len(detail) > 900:
+        detail = f"{detail[:897]}..."
+    return (
+        "I couldn't route this request because the planner failed, so I stopped instead "
+        "of guessing an answer that might skip the right tools.\n\n"
+        f"Planner error: `{detail}`"
+    )
 
 
 def _project_root() -> Path:
@@ -110,10 +135,10 @@ def _get_specialist(slug: str):
         return None
 
 
-def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str]]:
+def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str], list[str]]:
     spec = _get_specialist(specialist_slug)
     if spec is None:
-        return "", []
+        return "", [], []
 
     directives = _directive_block(spec.directive_types)
     try:
@@ -127,7 +152,7 @@ def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str]]
     except Exception as exc:
         logger.warning("Specialist prompt render failed for %s: %s", specialist_slug, exc)
         prompt = f"{spec.description}\n\nTask:\n{task}\n\nDirectives:\n{directives}"
-    return prompt, list(spec.tools)
+    return prompt, list(spec.tools), list(spec.mcp_servers)
 
 
 def _planner_prompt(
@@ -181,7 +206,8 @@ Classification guide:
 - technical: code, repository edits, shell work, generated files, debugging, build/test work.
 - media/file: domain with specialist `media_reader` unless it is clearly a spreadsheet import or code/data task.
 - memory: if the operator asks IF to remember, update, supersede, or use stored facts, choose domain. Use specialist `general` unless another domain specialist is required.
-- health/finance read-write split: choose read specialists for analysis/advice. Choose write specialists only for explicit mutations such as "log", "update", "apply", "save", "record", or confirmed imports. Read specialists may emit HANDOFF_REQUIRED blocks for writes.
+- health routing: choose `powerlifting_coach` for health/training reads, coaching, and explicit health mutations such as "log", "update", "apply", "save", "record", or confirmed imports.
+- finance read-write split: choose finance read specialists for analysis/advice. Choose write specialists only for explicit mutations such as "log", "update", "apply", "save", or "record". Read specialists may emit HANDOFF_REQUIRED blocks for writes.
 - thinking_mode: if the operator asks for deep, adversarial, sequential, or multi-perspective reasoning, set true and choose the specialist/skill shape that best fits. The next stage can use the injected thinking skills and handoff blocks.
 
 Select the model yourself from the eligible list. Do not use preset aliases or @preset names.
@@ -198,11 +224,11 @@ async def _run_planner(
     thinking_mode_requested: bool = False,
 ) -> IFPlan:
     model_ids = load_model_ids()
-    selected_fallback = model_ids[0] if model_ids else IF_DEFAULT_DIRECT_MODEL
     known_specialists, catalog = _specialist_catalog()
     history_path = write_history(session_dir, messages, history_events=history_events)
     plan_path = session_dir / "plan.md"
     plan_path.unlink(missing_ok=True)
+    write_opencode_config(session_dir, tool_names=[], mcp_servers=[])
 
     try:
         result = await run_opencode(
@@ -224,23 +250,8 @@ async def _run_planner(
             raise FileNotFoundError("opencode planner did not write plan.md")
         return parse_plan_file(plan_path, model_ids, known_specialists)
     except (Exception, PlanParseError) as exc:
-        logger.warning("Planner failed; using fallback plan: %s", exc)
-        prompt = _latest_user_prompt(messages)
-        fallback_specialist = "general"
-        fallback_interaction = "social"
-        if uploaded_files:
-            fallback_specialist = "media_reader"
-            fallback_interaction = "domain"
-        elif thinking_mode_requested:
-            fallback_specialist = "planner"
-            fallback_interaction = "domain"
-        return fallback_plan(
-            prompt=prompt,
-            selected_model=selected_fallback,
-            specialist=fallback_specialist,
-            interaction_type=fallback_interaction,
-            reason=f"Planner fallback: {type(exc).__name__}",
-        )
+        logger.warning("Planner failed; refusing fallback response: %s", exc)
+        raise PlannerFailure(exc) from exc
 
 
 def _messages_for_direct(system_prompt: str, user_prompt: str) -> list[dict[str, Any]]:
@@ -288,11 +299,14 @@ def _tool_protocol_block(tool_names: list[str]) -> str:
     schemas = manager.tools_for_names(set(tool_names) | {"get_current_date"})
     lines = [
         "MCP tool protocol:",
-        "- Domain tools are available through this shell command:",
+        "- Native MCP tools are attached to this OpenCode run when available.",
+        "- IF local MCP servers are filtered so they only list this specialist's declared tools.",
+        "- Native OpenCode MCP tool names are server-prefixed, e.g. `if_health_health_get_session`.",
+        "- If native MCP tools are unavailable, use this shell bridge fallback:",
         f"  `{invoke} <tool_name> '<json_args>'`",
         "- Example:",
         f"  `{invoke} get_current_date '{{}}'`",
-        "- Call tools only when they are needed for the task. Keep generated files in this session directory.",
+        "- Call only the tools exposed in this run or listed below. Keep generated files in this session directory.",
         "- Before long operations and after tool calls, append a concise progress line to `.if/status.log`.",
         "",
         "Available tool schemas for this specialist:",
@@ -310,7 +324,7 @@ def _tool_protocol_block(tool_names: list[str]) -> str:
 
 
 def _domain_prompt(plan: IFPlan, runtime_context: str) -> str:
-    specialist_block, specialist_tools = _specialist_prompt(plan.specialist, plan.prompt)
+    specialist_block, specialist_tools, _ = _specialist_prompt(plan.specialist, plan.prompt)
     return "\n\n".join(
         part
         for part in (
@@ -385,6 +399,7 @@ async def _synthesize_handoffs(
     status_file = _status_file(session_dir)
     response_path = session_dir / "response.md"
     response_path.unlink(missing_ok=True)
+    write_opencode_config(session_dir, tool_names=[], mcp_servers=[])
     agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
     synthesis_prompt = "\n\n".join(
         [
@@ -431,6 +446,8 @@ async def _run_domain(
     status_file = _status_file(session_dir)
     response_path = session_dir / "response.md"
     response_path.unlink(missing_ok=True)
+    _, specialist_tools, specialist_mcp_servers = _specialist_prompt(plan.specialist, plan.prompt)
+    write_opencode_config(session_dir, tool_names=specialist_tools, mcp_servers=specialist_mcp_servers)
     agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
     await send_status(StatusType.SUBAGENT_SPAWNING, "Domain Agent Started", f"{plan.specialist} / {plan.selected_model}")
     result = await run_opencode(
@@ -538,6 +555,7 @@ async def _run_technical(
     review_path = session_dir / "review.md"
     response_path.unlink(missing_ok=True)
     review_path.unlink(missing_ok=True)
+    write_opencode_config(session_dir, tool_names=[], mcp_servers=[])
     technical_prompt = f"""Use the current directory as the session workspace.
 
 Read `history.md` for conversation context. It is incremental and edit-aware.
@@ -639,14 +657,18 @@ async def run_if_flow(
         uploaded_files=uploaded_files,
         thinking_mode_requested=thinking_mode_requested,
     )
-    plan = await _run_planner(
-        session_dir,
-        messages,
-        history_events=history_events,
-        runtime_context=runtime_context,
-        uploaded_files=uploaded_files,
-        thinking_mode_requested=thinking_mode_requested,
-    )
+    try:
+        plan = await _run_planner(
+            session_dir,
+            messages,
+            history_events=history_events,
+            runtime_context=runtime_context,
+            uploaded_files=uploaded_files,
+            thinking_mode_requested=thinking_mode_requested,
+        )
+    except PlannerFailure as failure:
+        await send_status(StatusType.SUBAGENT_FAILED, "Planner Failed", failure.detail[:500])
+        return FlowResult(content=_planner_failure_response(failure))
     if plan.thinking_mode and not thinking_mode_requested:
         runtime_context = build_runtime_context(
             messages=messages,

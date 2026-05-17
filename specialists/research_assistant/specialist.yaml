@@ -4,7 +4,8 @@ tools:
   - read_file
   - write_file
   - supplement_search
-mcp_servers: []
+mcp_servers:
+  - supplement_research
 directive_types:
   - core
   - writing

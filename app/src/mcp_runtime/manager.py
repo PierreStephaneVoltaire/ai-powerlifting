@@ -188,6 +188,14 @@ class MCPToolManager:
             if tool_name in wanted
         ]
 
+    def categories_for_names(self, names: list[str] | set[str]) -> dict[str, str]:
+        wanted = set(names)
+        return {
+            tool_name: category
+            for tool_name, (category, _) in sorted(self._tool_index.items())
+            if tool_name in wanted and category != "__builtin__"
+        }
+
     def all_openai_tools(self) -> list[dict[str, Any]]:
         return [
             _tool_to_openai_schema(schema)

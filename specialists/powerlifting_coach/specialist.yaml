@@ -1,7 +1,7 @@
 description: >
-  Use powerlifting_coach for any training-related read-only query or coaching
-  advice. This is the read-only counterpart to health_write — use this specialist
-  for fetching and analyzing program state, not for mutations.
+  Use powerlifting_coach for training-related queries, coaching advice, and
+  health program actions. This specialist may read and write the health program
+  through the scoped health MCP tools.
 
   Capabilities: retrieve the current training program, sessions (single or date
   range), program metadata, training phases, current maxes, operator preferences,
@@ -17,13 +17,14 @@ description: >
   review, full-block program evaluation, and any "should I..." or "what's my..."
   training question.
 
-  Do NOT use for program mutations — hand off to health_write when a write is
-  needed (logging a session, updating body weight, recording RPE, changing attempt
-  targets, updating supplements, etc.).
+  It may mutate health data when the operator explicitly asks to log, update,
+  reschedule, create, delete, import, apply, or save training/program state.
 preset: "health"
 tools:
   - health_get_program
   - health_get_session
+  - health_update_session
+  - health_new_version
   - health_get_sessions_range
   - health_get_meta
   - health_get_phases
@@ -36,6 +37,15 @@ tools:
   - health_get_diet_notes
   - health_get_supplements
   - health_rag_search
+  - health_update_competition
+  - health_update_diet_note
+  - health_update_supplements
+  - health_create_session
+  - health_delete_session
+  - health_reschedule_session
+  - health_add_exercise
+  - health_remove_exercise
+  - health_create_competition
   - get_current_date
   - kg_to_lb
   - lb_to_kg
@@ -49,11 +59,31 @@ tools:
   - program_evaluation
   - get_analysis_markdown
   - regenerate_analysis
-  # New Template Tools (Read-only for coach)
+  # Import and template tools
+  - import_parse_file
+  - import_apply
+  - import_reject
+  - import_list_pending
   - template_list
   - template_get
+  - template_apply
+  - template_apply_confirm
   - template_evaluate
-mcp_servers: []
+  - template_create_from_block
+  - template_copy
+  - template_archive
+  - template_unarchive
+  - program_archive
+  - program_unarchive
+  - glossary_add
+  - glossary_update
+  - glossary_set_e1rm
+  - glossary_estimate_e1rm
+  - glossary_estimate_fatigue
+  - supplement_search
+mcp_servers:
+  - health
+  - supplement_research
 directive_types:
   - health
   - competition

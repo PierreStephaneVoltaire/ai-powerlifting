@@ -46,6 +46,23 @@ def _tools_root() -> Path:
     return Path(os.environ.get("IF_TOOLS_ROOT") or Path(__file__).resolve().parent)
 
 
+def _category_slugs(category: str) -> list[str]:
+    slugs = TOOL_CATEGORIES.get(category)
+    if slugs:
+        return slugs
+
+    plugin_dir = _tools_root() / category
+    if (plugin_dir / "tool.py").exists():
+        return [category]
+
+    raise ValueError(f"Unknown tool category: {category}")
+
+
+def _allowed_tools() -> set[str]:
+    raw = os.environ.get("IF_MCP_ALLOWED_TOOLS", "")
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
 def _app_src() -> Path:
     root = _repo_root()
     # Repository layout
@@ -123,9 +140,8 @@ async def main(category: str) -> None:
     except ImportError as exc:
         raise RuntimeError("Python package 'mcp' is required to run IF MCP servers") from exc
 
-    slugs = TOOL_CATEGORIES.get(category)
-    if not slugs:
-        raise ValueError(f"Unknown tool category: {category}")
+    slugs = _category_slugs(category)
+    allowed = _allowed_tools()
 
     plugins = [_load_plugin(slug) for slug in slugs]
     tool_to_plugin: dict[str, Plugin] = {}
@@ -133,6 +149,8 @@ async def main(category: str) -> None:
     for plugin in plugins:
         for name, schema in plugin.schemas.items():
             normalized = _normalize_schema(schema, name)
+            if allowed and normalized["name"] not in allowed:
+                continue
             normalized_tools.append(normalized)
             tool_to_plugin[normalized["name"]] = plugin
 
@@ -167,4 +185,3 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         raise SystemExit("Usage: python tools/mcp_server.py <category>")
     asyncio.run(main(sys.argv[1]))
-

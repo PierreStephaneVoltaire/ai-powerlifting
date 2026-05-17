@@ -47,6 +47,8 @@ tools:
   - glossary_estimate_fatigue
   # Supplement research (cite evidence when logging supplement changes)
   - supplement_search
-mcp_servers: []
+mcp_servers:
+  - health
+  - supplement_research
 directive_types:
   - health
