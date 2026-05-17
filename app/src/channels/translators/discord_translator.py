@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Any, Optional
 
+from config import API_MODEL_NAME
+
 logger = logging.getLogger(__name__)
 
 
@@ -133,7 +135,7 @@ def translate_discord_batch(
     )
 
     return {
-        "model": "if-prototype",
+        "model": API_MODEL_NAME,
         "stream": True,
         "messages": api_messages,
         "platform": "discord",

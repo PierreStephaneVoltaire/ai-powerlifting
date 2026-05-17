@@ -249,13 +249,6 @@ async function findSessionItem(pk: string, programSk: string, date: string, inde
   return item
 }
 
-async function findSessionItemById(pk: string, programSk: string, sessionId: string): Promise<RawSessionItem> {
-  const items = await listSessionItems(pk, programSk)
-  const item = items.find((candidate) => candidate.id === sessionId || candidate.session_id === sessionId)
-  if (!item) throw new AppError(`Session with id ${sessionId} not found`, 404)
-  return item
-}
-
 async function nextSameDayOrdinal(pk: string, programSk: string, date: string, ignoreSk?: string): Promise<number> {
   const items = await listSessionItems(pk, programSk)
   return items.filter((item) => item.date === date && item.sk !== ignoreSk).length + 1
@@ -298,15 +291,7 @@ export async function replaceSessionAt(
   session: Session,
   phases: Phase[],
 ): Promise<Session> {
-  let existing: RawSessionItem
-  try {
-    existing = await findSessionItem(pk, programSk, date, index)
-  } catch (error) {
-    if (!(error instanceof AppError) || ![404, 409].includes(error.statusCode)) throw error
-    const sessionId = session.id || (session as any).session_id
-    if (!sessionId) throw error
-    existing = await findSessionItemById(pk, programSk, sessionId)
-  }
+  const existing = await findSessionItem(pk, programSk, date, index)
   const targetDate = session.date || date
   if (targetDate !== existing.date) {
     const conflict = (await listSessionItems(pk, programSk)).some(

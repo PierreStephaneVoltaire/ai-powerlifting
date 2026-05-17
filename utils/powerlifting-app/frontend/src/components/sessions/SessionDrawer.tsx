@@ -179,11 +179,6 @@ interface SessionDrawerProps {
   onDeleteSuccess?: () => void
 }
 
-interface SaveOptions {
-  silent?: boolean
-  closeOnSuccess?: boolean
-}
-
 function SortableExerciseItem({ 
   exercise, 
   index, 
@@ -364,6 +359,7 @@ export default function SessionDrawer({
   const [originalDate, setOriginalDate] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const [showVideoUpload, setShowVideoUpload] = useState(false)
   const [discardIntent, setDiscardIntent] = useState<'reset' | 'close' | null>(null)
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
@@ -377,13 +373,13 @@ export default function SessionDrawer({
     reps: number | null
     isBarbell: boolean
   } | null>(null)
-  const persistedDateRef = useRef('')
-  const editRevisionRef = useRef(0)
-  const pendingSaveRef = useRef<{ session: Session; revision: number } | null>(null)
-  const saveQueueRef = useRef<Promise<void> | null>(null)
+  const savedDateRef = useRef('')
+  const changeVersionRef = useRef(0)
+  const latestSaveRef = useRef<{ session: Session; version: number; notify: boolean; close: boolean } | null>(null)
+  const saveInFlightRef = useRef(false)
 
   const markChanged = () => {
-    editRevisionRef.current += 1
+    changeVersionRef.current += 1
     setHasChanges(true)
   }
 
@@ -454,14 +450,15 @@ export default function SessionDrawer({
       }))
       setLocalSession(clone)
       setOriginalDate(session.date)
-      persistedDateRef.current = session.date
-      editRevisionRef.current = 0
+      savedDateRef.current = session.date
+      changeVersionRef.current = 0
       setHasChanges(false)
+      setLastSavedAt(null)
     }
   }, [hasChanges, isSaving, session])
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const handleSaveRef = useRef<((options?: SaveOptions) => Promise<void>) | null>(null)
+  const handleSaveRef = useRef<((notify?: boolean, closeOnSuccess?: boolean) => Promise<void>) | null>(null)
 
   useEffect(() => {
     if (!hasChanges || !session || !localSession || !program) return
@@ -469,7 +466,7 @@ export default function SessionDrawer({
       clearTimeout(autoSaveTimerRef.current)
     }
     autoSaveTimerRef.current = setTimeout(() => {
-      void handleSaveRef.current?.({ silent: true })
+      void handleSaveRef.current?.(false, false)
     }, 1500)
     return () => {
       if (autoSaveTimerRef.current) {
@@ -496,58 +493,37 @@ export default function SessionDrawer({
   if (!session || !localSession || !program) return null
   const wellness = localSession.wellness
 
-  const queueSessionSave = (sessionToSave: Session, revision: number): Promise<void> => {
-    pendingSaveRef.current = { session: sessionToSave, revision }
+  const flushLatestSave = async () => {
+    if (saveInFlightRef.current) return
 
-    if (!saveQueueRef.current) {
-      saveQueueRef.current = (async () => {
-        setIsSaving(true)
-        try {
-          while (pendingSaveRef.current) {
-            const job = pendingSaveRef.current
-            pendingSaveRef.current = null
-            const lookupDate = persistedDateRef.current || originalDate || job.session.date
-            const savedSession = await saveSession(lookupDate, sessionArrayIndex, job.session)
-            persistedDateRef.current = savedSession.date
+    saveInFlightRef.current = true
+    setIsSaving(true)
+    let shouldNotify = false
+    let shouldClose = false
 
-            if (job.revision === editRevisionRef.current && !pendingSaveRef.current) {
-              setLocalSession(savedSession)
-              setOriginalDate(savedSession.date)
-              setHasChanges(false)
-            }
-          }
-        } finally {
-          setIsSaving(false)
-          saveQueueRef.current = null
-        }
-      })()
-    }
-
-    return saveQueueRef.current
-  }
-
-  const handleSave = async (options: SaveOptions = {}) => {
-    const { silent = false, closeOnSuccess = mode === 'drawer' && !silent } = options
     try {
-      const rpeError = validateRpeValues()
-      if (rpeError) {
-        pushToast({ message: rpeError, type: 'error' })
-        return
+      while (latestSaveRef.current) {
+        const job = latestSaveRef.current
+        latestSaveRef.current = null
+        shouldNotify = shouldNotify || job.notify
+        shouldClose = shouldClose || job.close
+
+        const lookupDate = savedDateRef.current || originalDate || job.session.date
+        await saveSession(lookupDate, sessionArrayIndex, job.session)
+        savedDateRef.current = job.session.date
+
+        if (job.version === changeVersionRef.current && !latestSaveRef.current) {
+          setLocalSession(job.session)
+          setOriginalDate(job.session.date)
+          setHasChanges(false)
+          setLastSavedAt(new Date())
+        }
       }
 
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current)
-        autoSaveTimerRef.current = null
-      }
-
-      const sessionToSave = finalizeSessionForSave(localSession)
-      const revision = editRevisionRef.current
-      await queueSessionSave(sessionToSave, revision)
-
-      if (!silent && revision === editRevisionRef.current) {
+      if (shouldNotify) {
         pushToast({ message: 'Session saved successfully', type: 'success' })
       }
-      if (closeOnSuccess && revision === editRevisionRef.current) {
+      if (shouldClose) {
         if (onSaveSuccess) {
           onSaveSuccess()
         } else {
@@ -557,8 +533,44 @@ export default function SessionDrawer({
     } catch (err) {
       console.error(err)
       setHasChanges(true)
+      setLastSavedAt(null)
       pushToast({
-        message: silent ? 'Auto-save failed; session has unsaved changes' : 'Failed to save session',
+        message: shouldNotify ? 'Failed to save session' : 'Auto-save failed; session has unsaved changes',
+        type: 'error',
+      })
+    } finally {
+      saveInFlightRef.current = false
+      setIsSaving(false)
+    }
+  }
+
+  const handleSave = async (notify = true, closeOnSuccess = mode === 'drawer' && notify) => {
+    const rpeError = validateRpeValues()
+    if (rpeError) {
+      pushToast({ message: rpeError, type: 'error' })
+      return
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
+
+    try {
+      const sessionToSave = finalizeSessionForSave(localSession)
+      latestSaveRef.current = {
+        session: sessionToSave,
+        version: changeVersionRef.current,
+        notify,
+        close: closeOnSuccess,
+      }
+      await flushLatestSave()
+    } catch (err) {
+      console.error(err)
+      setHasChanges(true)
+      setLastSavedAt(null)
+      pushToast({
+        message: notify ? 'Failed to save session' : 'Auto-save failed; session has unsaved changes',
         type: 'error',
       })
     }
@@ -570,7 +582,7 @@ export default function SessionDrawer({
     const clone = JSON.parse(JSON.stringify(session)) as Session
     clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
     setLocalSession(clone)
-    editRevisionRef.current = 0
+    changeVersionRef.current = 0
     setHasChanges(false)
   }
 
@@ -1019,11 +1031,16 @@ export default function SessionDrawer({
       reasoningNote,
       autoRegExerciseIndex
     ))
-    editRevisionRef.current += 1
-    const revision = editRevisionRef.current
+    changeVersionRef.current += 1
     setHasChanges(true)
     setLocalSession(nextSession)
-    await queueSessionSave(nextSession, revision)
+    latestSaveRef.current = {
+      session: nextSession,
+      version: changeVersionRef.current,
+      notify: false,
+      close: false,
+    }
+    await flushLatestSave()
     pushToast({ message: 'Auto-regulation applied', type: 'success' })
   }
 
@@ -1288,30 +1305,33 @@ export default function SessionDrawer({
             Delete
           </Button>
           <Group gap="sm" wrap="wrap">
-          <Button
-            variant="default"
-            color="gray"
-            onClick={() => setDiscardIntent('reset')}
-            disabled={!hasChanges}
-            leftSection={<RotateCcw size={16} />}
-          >
-            Discard
-          </Button>
-          <Button
-            onClick={() => void handleSave()}
-            disabled={!hasChanges || isSaving}
-            loading={isSaving}
-            leftSection={<Save size={16} />}
-          >
-            Save
-          </Button>
-          <Button
-            variant={localSession.completed ? 'filled' : 'default'}
-            onClick={toggleComplete}
-            leftSection={<Check size={16} />}
-          >
-            {localSession.completed ? 'Done' : 'Mark Done'}
-          </Button>
+            <Text size="xs" c={hasChanges ? 'yellow' : 'dimmed'} style={{ alignSelf: 'center' }}>
+              {isSaving ? 'Saving...' : hasChanges ? 'Unsaved changes' : lastSavedAt ? 'Saved' : 'No changes'}
+            </Text>
+            <Button
+              variant="default"
+              color="gray"
+              onClick={() => setDiscardIntent('reset')}
+              disabled={!hasChanges || isSaving}
+              leftSection={<RotateCcw size={16} />}
+            >
+              Discard
+            </Button>
+            <Button
+              onClick={() => void handleSave()}
+              disabled={!hasChanges || isSaving}
+              loading={isSaving}
+              leftSection={<Save size={16} />}
+            >
+              Save
+            </Button>
+            <Button
+              variant={localSession.completed ? 'filled' : 'default'}
+              onClick={toggleComplete}
+              leftSection={<Check size={16} />}
+            >
+              {localSession.completed ? 'Done' : 'Mark Done'}
+            </Button>
           </Group>
         </Stack>
       </Stack>

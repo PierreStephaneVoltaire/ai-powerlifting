@@ -29,6 +29,18 @@ python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 
 Requires `OPENROUTER_API_KEY`, `opencode` on `PATH`, and configured AWS/DynamoDB access for production storage paths. See `app/src/config.py` for full configuration.
 
+## Test Environment and Deploy Workflow
+
+- Use `if-portals-test` as the canonical private test namespace.
+- Never run portal tests against the live `operator` PK. Test data must use `test`.
+- Test API env must set `HEALTH_PROGRAM_PK=test` and `IF_USER_PK=test`.
+- Test powerlifting backend env must set `POWERLIFTING_TEST_MAPPED_PK=test`, so authenticated and unauthenticated test requests resolve to `mapped_pk=test`.
+- Test OpenRouter model envs must use `deepseek/deepseek-v4-flash`; the test planner allowlist is mounted through `MODELS_PATH` and contains only that model.
+- Use `scripts/build-test-images.sh` for ad-hoc test image deploys. It builds only `if-agent-api`, `powerlifting-app-backend`, and `powerlifting-app-frontend`, tags them as `test`, pushes to ECR, and patches only `if-portals-test`.
+- Do not use `terraform apply` for ad-hoc test deployments. For Terraform validation, run `terraform fmt`, `terraform validate`, and `terraform plan` only.
+- The test environment stays private: no Cloudflare record, no tunnel ingress rule, and no public `HTTPRoute`. Access it with `kubectl port-forward`.
+- For touched portal features, verify with `if-portals-test` pod logs plus live API calls and browser/UI checks against port-forwarded services. Unit and build checks are supporting evidence, not the main proof.
+
 ## Project Layout
 
 ```

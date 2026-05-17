@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from 'express'
 export const exportRouter = Router()
 
 const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
+const AGENT_MODEL = process.env.AGENT_MODEL || 'if-prototype'
 // Stable chat_id → predictable sandbox directory for the exported file
 const EXPORT_CHAT_ID = process.env.EXPORT_CHAT_ID || 'pl-export'
 
@@ -32,7 +33,7 @@ async function proxyExport(req: Request, res: Response, format: ExportFormat): P
         'X-Direct-Tool-Invoke': 'true',
       },
       body: JSON.stringify({
-        model: 'if-prototype',  // must match API_MODEL_NAME in config
+        model: AGENT_MODEL,
         chat_id: EXPORT_CHAT_ID,
         messages: [{ role: 'user', content: `/export_program_history ${toolArgs}` }],
       }),

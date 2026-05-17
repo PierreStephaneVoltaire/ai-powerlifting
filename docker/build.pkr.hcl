@@ -16,6 +16,11 @@ variable "image_tag" {
   default = "latest"
 }
 
+variable "tag_latest" {
+  type    = bool
+  default = true
+}
+
 source "docker" "if_agent" {
   image    = "public.ecr.aws/docker/library/python:3.12-slim"
   commit   = true
@@ -117,7 +122,7 @@ build {
   post-processors {
     post-processor "docker-tag" {
       repository = var.image_repository
-      tags       = [var.image_tag, "latest"]
+      tags       = var.tag_latest ? [var.image_tag, "latest"] : [var.image_tag]
     }
     post-processor "docker-push" {
       ecr_login    = true

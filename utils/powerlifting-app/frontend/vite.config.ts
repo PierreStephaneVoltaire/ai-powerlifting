@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const devApiProxy = process.env.VITE_DEV_API_PROXY || 'https://dev.nolift.training'
+
 export default defineConfig({
   base: '/',
   plugins: [react()],
@@ -17,7 +19,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://dev.nolift.training',
+        target: devApiProxy,
         changeOrigin: true,
       },
     },
