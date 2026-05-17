@@ -17,6 +17,8 @@ from config import (
     IF_DEFAULT_DIRECT_MODEL,
     IF_TECHNICAL_ARTIFACT_EXCLUDES,
     OPENCODE_PLANNER_MODEL,
+    PROJECT_ROOT,
+    APP_SRC,
 )
 from files import FileRef, strip_files_line
 from mcp_runtime import get_mcp_manager
@@ -44,11 +46,13 @@ class FlowResult:
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return PROJECT_ROOT
 
 
 def _main_system_prompt() -> str:
-    path = _project_root() / "app" / "main_system_prompt.txt"
+    path = PROJECT_ROOT / "main_system_prompt.txt"
+    if not path.exists():
+        path = PROJECT_ROOT / "app" / "main_system_prompt.txt"
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
     return "You are IF, a direct, pragmatic assistant."
@@ -278,8 +282,7 @@ async def _opencode_status(line: str) -> None:
 
 
 def _tool_protocol_block(tool_names: list[str]) -> str:
-    app_src = _project_root() / "app" / "src"
-    pythonpath = os.pathsep.join([str(app_src), str(_project_root())])
+    pythonpath = os.pathsep.join([str(APP_SRC), str(PROJECT_ROOT)])
     invoke = f"PYTHONPATH={pythonpath!r} {sys.executable} -m mcp_runtime.invoke_tool"
     manager = get_mcp_manager()
     schemas = manager.tools_for_names(set(tool_names) | {"get_current_date"})

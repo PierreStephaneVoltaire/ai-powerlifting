@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from config import EXTERNAL_TOOLS_FALLBACK, MCP_SERVER_CATEGORIES
+from config import EXTERNAL_TOOLS_PATH, EXTERNAL_TOOLS_FALLBACK, MCP_SERVER_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +76,10 @@ class MCPToolManager:
     def __init__(
         self,
         categories: list[str] | None = None,
-        tools_root: str | Path = EXTERNAL_TOOLS_FALLBACK,
+        tools_root: str | Path | None = None,
     ):
         self.categories = categories or list(MCP_SERVER_CATEGORIES)
-        self.tools_root = Path(tools_root)
+        self.tools_root = Path(tools_root or EXTERNAL_TOOLS_PATH or EXTERNAL_TOOLS_FALLBACK)
         self._servers: dict[str, ManagedServer] = {}
         self._tool_index: dict[str, tuple[str, dict[str, Any]]] = {}
         for name, schema in _builtin_tools().items():

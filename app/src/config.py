@@ -53,6 +53,23 @@ GOOGLE_SHEETS_CREDENTIALS = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "")
 ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "")
 
 # Paths
+def get_project_root() -> Path:
+    """Get the project root directory, handling both repo and container layouts."""
+    current = Path(__file__).resolve().parent.parent  # .../app/
+    if (current.parent / "tools").exists():
+        return current.parent  # Repository root
+    return current  # Container root (/app/)
+
+PROJECT_ROOT = get_project_root()
+
+def get_app_src(root: Path) -> Path:
+    """Get the app source directory, handling both repo and container layouts."""
+    if (root / "app" / "src").exists():
+        return root / "app" / "src"
+    return root / "src"
+
+APP_SRC = get_app_src(PROJECT_ROOT)
+
 SANDBOX_PATH = os.getenv("SANDBOX_PATH", "./sandbox")
 MEMORY_DB_PATH = os.getenv("MEMORY_DB_PATH", "./data/memory_db")
 PERSISTENCE_DIR = os.getenv("PERSISTENCE_DIR", "./data/conversations")
@@ -277,7 +294,7 @@ ORCHESTRATOR_ANALYSIS_MAX_TURNS = int(os.getenv("ORCHESTRATOR_ANALYSIS_MAX_TURNS
 EXTERNAL_TOOLS_PATH = os.getenv("EXTERNAL_TOOLS_PATH", "")
 EXTERNAL_TOOLS_FALLBACK = os.getenv(
     "EXTERNAL_TOOLS_FALLBACK",
-    str(Path(__file__).parent.parent.parent / "tools")  # project_root/tools/
+    str(PROJECT_ROOT / "tools")  # project_root/tools/
 )
 
 # =============================================================================
@@ -286,7 +303,7 @@ EXTERNAL_TOOLS_FALLBACK = os.getenv(
 
 SPECIALISTS_PATH = os.getenv(
     "SPECIALISTS_PATH",
-    str(Path(__file__).parent.parent.parent / "specialists")  # project_root/specialists/
+    str(PROJECT_ROOT / "specialists")  # project_root/specialists/
 )
 
 # =============================================================================
@@ -295,7 +312,7 @@ SPECIALISTS_PATH = os.getenv(
 
 SKILLS_PATH = os.getenv(
     "SKILLS_PATH",
-    str(Path(__file__).parent.parent.parent / "skills")  # project_root/skills/
+    str(PROJECT_ROOT / "skills")  # project_root/skills/
 )
 
 # =============================================================================
@@ -359,12 +376,12 @@ IF_MODELS_TABLE_NAME = os.getenv("IF_MODELS_TABLE_NAME", "if-models")
 
 MODELS_PATH = os.getenv(
     "MODELS_PATH",
-    str(Path(__file__).parent.parent.parent / "models")
+    str(PROJECT_ROOT / "models")
 )
 
 SCRIPTS_PATH = os.getenv(
     "SCRIPTS_PATH",
-    str(Path(__file__).parent.parent.parent / "scripts")
+    str(PROJECT_ROOT / "scripts")
 )
 
 # Model for AI-powered health analytics (correlation analysis, program evaluation)

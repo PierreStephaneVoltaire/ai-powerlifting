@@ -10,7 +10,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 SPECIALISTS_DIR = ROOT / "specialists"
 OUTPUT_DIR = ROOT / ".opencode" / "agent"
+
+# Handle both repo root and container /app root
 PERSONALITY_PATH = ROOT / "app" / "main_system_prompt.txt"
+if not PERSONALITY_PATH.exists():
+    PERSONALITY_PATH = ROOT / "main_system_prompt.txt"
 
 
 def _load_yaml(path: Path) -> dict:

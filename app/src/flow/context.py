@@ -15,13 +15,15 @@ from config import (
     IF_DIARY_SIGNALS_TABLE_NAME,
     IF_HEALTH_TABLE_NAME,
     SKILLS_PATH,
+    PROJECT_ROOT,
+    APP_SRC,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return PROJECT_ROOT
 
 
 def _text_from_content(content: Any) -> str:
@@ -44,8 +46,7 @@ def _latest_user_text(messages: list[dict[str, Any]]) -> str:
 
 
 def _runtime_tool_command() -> str:
-    app_src = _project_root() / "app" / "src"
-    pythonpath = os.pathsep.join([str(app_src), str(_project_root())])
+    pythonpath = os.pathsep.join([str(APP_SRC), str(PROJECT_ROOT)])
     return f"PYTHONPATH={pythonpath!r} {sys.executable} -m flow.runtime_tool"
 
 

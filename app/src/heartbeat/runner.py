@@ -36,12 +36,14 @@ def load_base_system_prompt() -> str:
     Returns:
         Content of main_system_prompt.txt
     """
-    from pathlib import Path
-    prompt_path = Path(__file__).parent.parent.parent / "main_system_prompt.txt"
+    from config import PROJECT_ROOT
+    path = PROJECT_ROOT / "main_system_prompt.txt"
+    if not path.exists():
+        path = PROJECT_ROOT / "app" / "main_system_prompt.txt"
     try:
-        return prompt_path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except Exception as e:
-        logger.warning(f"Failed to load base system prompt: {e}")
+        logger.warning(f"Failed to load base system prompt from {path}: {e}")
         return ""
 
 

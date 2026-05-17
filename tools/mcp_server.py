@@ -47,7 +47,14 @@ def _tools_root() -> Path:
 
 
 def _app_src() -> Path:
-    return _repo_root() / "app" / "src"
+    root = _repo_root()
+    # Repository layout
+    if (root / "app" / "src").exists():
+        return root / "app" / "src"
+    # Container layout
+    if (root / "src").exists():
+        return root / "src"
+    return root / "app" / "src"
 
 
 def _schema_from_tool_meta(path: Path) -> dict[str, dict[str, Any]]:
