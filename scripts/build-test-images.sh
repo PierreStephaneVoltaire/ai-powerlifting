@@ -82,42 +82,60 @@ aws ecr get-login-password --region "$AWS_REGION" \
 
 cd "$ROOT_DIR/docker"
 
-packer init build.pkr.hcl
-packer build \
-  -var "image_repository=${API_REPO}" \
-  -var "image_tag=${IMAGE_TAG}" \
-  -var "tag_latest=false" \
-  build.pkr.hcl
+if should_build api; then
+  packer init build.pkr.hcl
+  packer build \
+    -var "image_repository=${API_REPO}" \
+    -var "image_tag=${IMAGE_TAG}" \
+    -var "tag_latest=false" \
+    build.pkr.hcl
+else
+  echo "Skipping API image build"
+fi
 
-packer init portals-backend.pkr.hcl
-packer build \
-  -var "image_repository=${BACKEND_REPO}" \
-  -var "image_tag=${IMAGE_TAG}" \
-  -var "tag_latest=false" \
-  -var "portal_name=powerlifting-app" \
-  -var "portal_port=3005" \
-  portals-backend.pkr.hcl
+if should_build backend; then
+  packer init portals-backend.pkr.hcl
+  packer build \
+    -var "image_repository=${BACKEND_REPO}" \
+    -var "image_tag=${IMAGE_TAG}" \
+    -var "tag_latest=false" \
+    -var "portal_name=powerlifting-app" \
+    -var "portal_port=3005" \
+    portals-backend.pkr.hcl
+else
+  echo "Skipping backend image build"
+fi
 
-packer init portals-frontend.pkr.hcl
-packer build \
-  -var "image_repository=${FRONTEND_REPO}" \
-  -var "image_tag=${IMAGE_TAG}" \
-  -var "tag_latest=false" \
-  -var "portal_name=powerlifting-app" \
-  -var "api_url=${FRONTEND_API_URL}" \
-  portals-frontend.pkr.hcl
+if should_build frontend; then
+  packer init portals-frontend.pkr.hcl
+  packer build \
+    -var "image_repository=${FRONTEND_REPO}" \
+    -var "image_tag=${IMAGE_TAG}" \
+    -var "tag_latest=false" \
+    -var "portal_name=powerlifting-app" \
+    -var "api_url=${FRONTEND_API_URL}" \
+    portals-frontend.pkr.hcl
+else
+  echo "Skipping frontend image build"
+fi
 
-kubectl -n "$NAMESPACE" set image deployment/if-agent-api "api=${API_IMAGE}"
-kubectl -n "$NAMESPACE" set image deployment/powerlifting-app-backend "backend=${BACKEND_IMAGE}"
-kubectl -n "$NAMESPACE" set image deployment/powerlifting-app-frontend "frontend=${FRONTEND_IMAGE}"
+if should_build api; then
+  kubectl -n "$NAMESPACE" set image deployment/if-agent-api "api=${API_IMAGE}"
+  kubectl -n "$NAMESPACE" rollout restart deployment/if-agent-api
+  kubectl -n "$NAMESPACE" rollout status deployment/if-agent-api --timeout=300s
+fi
 
-kubectl -n "$NAMESPACE" rollout restart deployment/if-agent-api
-kubectl -n "$NAMESPACE" rollout restart deployment/powerlifting-app-backend
-kubectl -n "$NAMESPACE" rollout restart deployment/powerlifting-app-frontend
+if should_build backend; then
+  kubectl -n "$NAMESPACE" set image deployment/powerlifting-app-backend "backend=${BACKEND_IMAGE}"
+  kubectl -n "$NAMESPACE" rollout restart deployment/powerlifting-app-backend
+  kubectl -n "$NAMESPACE" rollout status deployment/powerlifting-app-backend --timeout=300s
+fi
 
-kubectl -n "$NAMESPACE" rollout status deployment/if-agent-api --timeout=300s
-kubectl -n "$NAMESPACE" rollout status deployment/powerlifting-app-backend --timeout=300s
-kubectl -n "$NAMESPACE" rollout status deployment/powerlifting-app-frontend --timeout=300s
+if should_build frontend; then
+  kubectl -n "$NAMESPACE" set image deployment/powerlifting-app-frontend "frontend=${FRONTEND_IMAGE}"
+  kubectl -n "$NAMESPACE" rollout restart deployment/powerlifting-app-frontend
+  kubectl -n "$NAMESPACE" rollout status deployment/powerlifting-app-frontend --timeout=300s
+fi
 
 print_status
 
