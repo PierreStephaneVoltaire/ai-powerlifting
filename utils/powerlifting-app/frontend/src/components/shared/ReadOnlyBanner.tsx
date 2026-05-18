@@ -1,4 +1,4 @@
-import { Alert, Button, Group } from '@mantine/core'
+import { Alert, Button, Group, Text } from '@mantine/core'
 import { useAuth } from '@/auth/AuthProvider'
 import { LogIn, Eye } from 'lucide-react'
 
@@ -19,16 +19,19 @@ export default function ReadOnlyBanner() {
         },
       }}
     >
-      <Group justify="space-between" wrap="nowrap" align="center">
-        <span>You&#39;re viewing in read-only mode. Sign in to edit your data.</span>
+      <Group justify="space-between" gap="xs" wrap="wrap" align="center">
+        <Text size="sm" fw={500} style={{ flex: '1 1 8rem', minWidth: 0 }}>
+          Read-only mode.
+        </Text>
         <Button
           size="compact-sm"
           variant="light"
           color="yellow"
           leftSection={<LogIn size={14} />}
           onClick={signIn}
+          style={{ flexShrink: 0 }}
         >
-          Sign In
+          Sign in
         </Button>
       </Group>
     </Alert>
