@@ -31,7 +31,7 @@ def render_agent(slug: str, config: dict) -> str:
     lines = [
         "---",
         f"description: {description[:500]!r}",
-        "mode: subagent",
+        "mode: primary",
         "permission:",
         "  read: allow",
         "  edit: allow",

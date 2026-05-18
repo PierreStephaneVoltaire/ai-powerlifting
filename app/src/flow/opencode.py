@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from config import OPENCODE_BIN, OPENCODE_TIMEOUT_SECONDS
+from config import OPENCODE_BIN, OPENCODE_TIMEOUT_SECONDS, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,33 @@ def resolve_opencode_bin() -> str:
     return "opencode"
 
 
+def _opencode_model_id(model: str) -> str:
+    cleaned = model.strip()
+    if cleaned.count("/") == 1:
+        return f"openrouter/{cleaned}"
+    return cleaned
+
+
+def _prepare_opencode_project(session_dir: Path) -> None:
+    source = PROJECT_ROOT / ".opencode" / "agent"
+    if not source.exists():
+        return
+
+    target_parent = session_dir / ".opencode"
+    target_parent.mkdir(parents=True, exist_ok=True)
+    target = target_parent / "agent"
+    if target.is_symlink() and not target.exists():
+        target.unlink()
+    if target.exists():
+        if target.is_dir() and not target.is_symlink():
+            shutil.copytree(source, target, dirs_exist_ok=True)
+        return
+    try:
+        target.symlink_to(source, target_is_directory=True)
+    except OSError:
+        shutil.copytree(source, target, dirs_exist_ok=True)
+
+
 async def run_opencode(
     *,
     agent: str,
@@ -47,6 +74,7 @@ async def run_opencode(
     files: list[Path] | None = None,
 ) -> OpencodeResult:
     session_dir.mkdir(parents=True, exist_ok=True)
+    _prepare_opencode_project(session_dir)
     state_dir = session_dir / ".if"
     state_dir.mkdir(parents=True, exist_ok=True)
     session_marker = state_dir / f"opencode-{agent}.session"
@@ -58,7 +86,7 @@ async def run_opencode(
             "--agent",
             agent,
             "--model",
-            model,
+            _opencode_model_id(model),
             "--dangerously-skip-permissions",
             "--dir",
             str(session_dir),
