@@ -256,8 +256,26 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
         </Stack>
       </Modal>
 
-      <Stack gap="xs">
-        {Array.from(sessionsByWeek.entries()).map(([week, sessions]) => {
+      {sessionsByWeek.size === 0 ? (
+        <Paper withBorder p="xl" data-testid="session-list-empty">
+          <Stack align="center" gap="xs">
+            <Title order={3}>No sessions yet</Title>
+            <Text c="dimmed" ta="center">
+              Add a session to start planning and logging training.
+            </Text>
+            <Button
+              leftSection={<Plus size={16} />}
+              onClick={() => setShowAddModal(true)}
+              disabled={readOnly}
+              data-testid="session-list-empty-add-session"
+            >
+              Add Session
+            </Button>
+          </Stack>
+        </Paper>
+      ) : (
+        <Stack gap="xs">
+          {Array.from(sessionsByWeek.entries()).map(([week, sessions]) => {
           const firstSession = sessions[0]
           const phase = firstSession?.phase
           const isExpanded = expandedWeeks.has(week)
@@ -407,8 +425,9 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
               )}
             </Paper>
           )
-        })}
-      </Stack>
+          })}
+        </Stack>
+      )}
     </Stack>
   )
 }

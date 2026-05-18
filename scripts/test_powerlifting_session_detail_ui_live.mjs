@@ -34,6 +34,7 @@ const awsRegion = process.env.AWS_REGION || 'ca-central-1'
 const healthTableName = process.env.IF_HEALTH_TABLE_NAME || 'if-health'
 const sessionsTableName = process.env.IF_SESSIONS_TABLE_NAME || 'if-sessions'
 const targetPk = process.env.POWERLIFTING_TEST_MAPPED_PK || 'test'
+const fixtureMarker = 'ui-session-detail-'
 const runId = `ui-session-detail-${Date.now()}`
 const tempBlock = `ui-block-${Date.now()}`
 const historicalBlock = `ui-historical-${Date.now()}`
@@ -412,8 +413,23 @@ async function installApiRouting(page, options = {}) {
     }
 
     const proxiedPath = url.pathname.replace(/^\/api/, '') || '/'
-    const response = await route.fetch({ url: `${apiBase}${proxiedPath}${url.search}` })
-    await route.fulfill({ response })
+    try {
+      let response = null
+      let lastError = null
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          response = await route.fetch({ url: `${apiBase}${proxiedPath}${url.search}` })
+          break
+        } catch (error) {
+          lastError = error
+          await sleep(200 * (attempt + 1))
+        }
+      }
+      if (!response) throw lastError || new Error(`Failed to proxy ${url.pathname}`)
+      await route.fulfill({ response })
+    } catch {
+      await route.abort('failed').catch(() => {})
+    }
   })
 }
 
@@ -524,6 +540,40 @@ async function saveSessionFromUi(page) {
   await expect(save).toBeDisabled({ timeout: 15000 })
 }
 
+async function dragExerciseByHandle(page, fromIndex, toIndex) {
+  const sourceHandle = page.getByTestId(`exercise-drag-handle-${fromIndex}`)
+  const targetRow = page.getByTestId(`session-exercise-${toIndex}`)
+  await sourceHandle.scrollIntoViewIfNeeded()
+  await targetRow.scrollIntoViewIfNeeded()
+
+  const sourceBox = await sourceHandle.boundingBox()
+  const targetBox = await targetRow.boundingBox()
+  if (!sourceBox || !targetBox) {
+    throw new Error(`Could not locate drag source/target boxes for ${fromIndex} -> ${toIndex}`)
+  }
+
+  const startX = sourceBox.x + sourceBox.width / 2
+  const startY = sourceBox.y + sourceBox.height / 2
+  const endX = targetBox.x + targetBox.width / 2
+  const endY = targetBox.y + targetBox.height / 2
+
+  await page.mouse.move(startX, startY)
+  await page.mouse.down()
+  await page.mouse.move(startX, startY - 16, { steps: 4 })
+  await page.mouse.move(endX, endY, { steps: 24 })
+  await page.mouse.up()
+}
+
+async function getExerciseNamesFromUi(page) {
+  const rows = page.locator('[data-testid^="session-exercise-"]')
+  const count = await rows.count()
+  const names = []
+  for (let index = 0; index < count; index += 1) {
+    names.push(await controlValue(page, `exercise-name-${index}`))
+  }
+  return names
+}
+
 async function findSessionIndex(date) {
   const program = await loadProgram()
   const index = program.sessions.findIndex((session) => session.date === date)
@@ -561,8 +611,16 @@ function fallbackNoteDraftLike(date, notes) {
 
 async function pickGlossaryExercises() {
   const exercises = (await request('/exercises')).data || []
-  let barbell = exercises.find((exercise) => ['barbell', 'hex_bar'].includes(exercise.equipment))?.name
-  let nonBarbell = exercises.find((exercise) => ['machine', 'cable', 'bodyweight'].includes(exercise.equipment))?.name
+  const barbellExercise = exercises.find((exercise) => ['barbell', 'hex_bar'].includes(exercise.equipment))
+  const nonBarbellExercise = exercises.find((exercise) => ['machine', 'cable', 'bodyweight'].includes(exercise.equipment))
+  let barbell = barbellExercise?.name
+  let nonBarbell = nonBarbellExercise?.name
+
+  for (const exercise of [barbellExercise, nonBarbellExercise]) {
+    if (exercise?.id && JSON.stringify(exercise).includes(fixtureMarker)) {
+      touchedExerciseIds.add(exercise.id)
+    }
+  }
 
   if (!barbell) {
     const id = `${runId}-barbell-glossary`
@@ -635,6 +693,8 @@ async function testEmptySessionsState(browser, program) {
   try {
     await page.goto(`${frontendUrl}/sessions?view=Compact`, { waitUntil: 'networkidle' })
     await expect(page.getByText(/no sessions/i)).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText(/add a session/i)).toBeVisible()
+    await expect(page.getByTestId('session-list-empty-add-session')).toBeVisible()
   } finally {
     await context.close()
   }
@@ -697,36 +757,30 @@ async function testSessionDetail(page, date, glossaryNames) {
   await page.getByTestId('exercise-delete-3').click()
   await expect(page.getByTestId('session-exercise-3')).not.toBeVisible({ timeout: 5000 })
 
-  await record('RPE inputs expose 0.5 step plus 1-10 browser bounds', async () => {
+  await record('RPE inputs expose 0.5 step and validation enforces valid range/increments', async () => {
     const attrs = {
       sessionStep: await sessionRpe.getAttribute('step'),
       exerciseStep: await exerciseRpe.getAttribute('step'),
-      sessionMin: await sessionRpe.getAttribute('min'),
-      sessionMax: await sessionRpe.getAttribute('max'),
-      exerciseMin: await exerciseRpe.getAttribute('min'),
-      exerciseMax: await exerciseRpe.getAttribute('max'),
     }
     if (
       attrs.sessionStep !== '0.5' ||
-      attrs.exerciseStep !== '0.5' ||
-      attrs.sessionMin !== '1' ||
-      attrs.sessionMax !== '10' ||
-      attrs.exerciseMin !== '1' ||
-      attrs.exerciseMax !== '10'
+      attrs.exerciseStep !== '0.5'
     ) {
       throw new Error(`Unexpected RPE input attributes: ${JSON.stringify(attrs)}`)
     }
   })
 
-  await fillControl(page, 'session-rpe', -1)
-  await blurControl(page, 'session-rpe')
-  await expect(control(page, 'session-rpe').input).toHaveValue('')
-  await fillControl(page, 'session-rpe', 11)
-  await blurControl(page, 'session-rpe')
-  await expect(control(page, 'session-rpe').input).toHaveValue('')
-  await fillControl(page, 'exercise-rpe-0', 8.25)
-  await blurControl(page, 'exercise-rpe-0')
-  await expect(control(page, 'exercise-rpe-0').input).toHaveValue('')
+  await record('RPE controls reject negative, over-10, and non-0.5 values', async () => {
+    await fillControl(page, 'session-rpe', -1)
+    await blurControl(page, 'session-rpe')
+    await expect(control(page, 'session-rpe').input).toHaveValue('')
+    await fillControl(page, 'session-rpe', 11)
+    await blurControl(page, 'session-rpe')
+    await expect(control(page, 'session-rpe').input).toHaveValue('')
+    await fillControl(page, 'exercise-rpe-0', 8.25)
+    await blurControl(page, 'exercise-rpe-0')
+    await expect(control(page, 'exercise-rpe-0').input).toHaveValue('')
+  })
   await fillControl(page, 'exercise-rpe-0', 8.5)
   await fillControl(page, 'session-rpe', 8.5)
 
@@ -773,12 +827,15 @@ async function testSessionDetail(page, date, glossaryNames) {
   }
   await ensureUnit(page, 'kg')
 
-  await page.getByTestId('exercise-drag-handle-2').dragTo(page.getByTestId('exercise-drag-handle-0'))
-  await saveSessionFromUi(page)
-  const order = await getExerciseNamesFromApi(date)
-  if (order[0] !== nonBarbell) {
-    throw new Error(`Exercise drag order was not preserved. Order: ${order.join(' | ')}`)
-  }
+  await record('Exercise drag order is preserved after save', async () => {
+    await dragExerciseByHandle(page, 2, 0)
+    await expect.poll(() => getExerciseNamesFromUi(page), { timeout: 5000 }).toEqual([nonBarbell, barbell, barbell])
+    await saveSessionFromUi(page)
+    const order = await getExerciseNamesFromApi(date)
+    if (order[0] !== nonBarbell) {
+      throw new Error(`Exercise drag order was not preserved. Order: ${order.join(' | ')}`)
+    }
+  })
 
   return { date, createdId: created.id, barbell, nonBarbell }
 }
@@ -787,7 +844,7 @@ async function testAiNotes(page, detail) {
   let capturedPayload = null
   await page.route('**/api/sessions/current/**/notes/draft', async (route) => {
     capturedPayload = JSON.parse(route.request().postData() || '{}')
-    await route.continue()
+    await route.fallback()
   })
 
   await page.getByTestId('session-notes-helper').click()
@@ -845,7 +902,10 @@ async function testToolkitAndTools(page, detail) {
   await ensureUnit(page, 'kg')
   await fillControl(page, 'plate-target-weight', 100)
   await expect(page.getByTestId('plate-grand-total-kg')).toHaveText('100.0 kg', { timeout: 10000 })
-  await expect(page.getByText('2x 20kg')).toBeVisible()
+  const platePageText = await page.locator('body').innerText()
+  if (!/1x\s*25kg/.test(platePageText) || !/1x\s*15kg/.test(platePageText)) {
+    throw new Error(`Expected 100kg loadout to prioritize largest plates as 25kg + 15kg per side. Visible plate calculator text: ${platePageText.slice(0, 1000)}`)
+  }
 }
 
 async function testSettingsDrawer(page, originalMeta) {

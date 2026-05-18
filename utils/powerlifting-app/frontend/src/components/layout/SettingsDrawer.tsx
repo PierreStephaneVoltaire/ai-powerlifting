@@ -21,7 +21,7 @@ import { getSettings, updateProfile, type UserSettings } from '@/api/settings'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
 import { Sun, Moon, Monitor, LogIn, LogOut } from 'lucide-react'
-import type { WeekStartDay } from '@powerlifting/types'
+import type { Sex, WeekStartDay } from '@powerlifting/types'
 
 const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: 'light', label: 'Light', icon: Sun },
@@ -51,6 +51,7 @@ export default function SettingsDrawer() {
   const [savingProfile, setSavingProfile] = useState(false)
 
   const isOpen = drawerOpen && drawerType === 'settings'
+  const effectiveSex = program?.meta?.sex ?? sex
 
   useEffect(() => {
     if (!isOpen || !user) {
@@ -76,6 +77,13 @@ export default function SettingsDrawer() {
       cancelled = true
     }
   }, [isOpen, user])
+
+  useEffect(() => {
+    const programSex = program?.meta?.sex
+    if (programSex && programSex !== sex) {
+      setSex(programSex)
+    }
+  }, [program?.meta?.sex, setSex, sex])
 
   const saveProfile = async () => {
     setSavingProfile(true)
@@ -252,11 +260,11 @@ export default function SettingsDrawer() {
             Sex (for DOTS calculation)
           </Text>
           <SegmentedControl
-            value={sex}
+            value={effectiveSex}
             onChange={(val) => {
-              const newSex = val as 'male' | 'female';
-              setSex(newSex);
-              programSetSex(newSex).catch(console.error);
+              const newSex = val as Sex
+              setSex(newSex)
+              if (program) programSetSex(newSex).catch(console.error)
             }}
             data={[
               { label: 'Male', value: 'male' },

@@ -169,6 +169,10 @@ function failedReasonLabels(reasons: FailedSetReason[]): string {
   return reasons.map((reason) => FAILED_SET_REASON_LABELS.get(reason) || reason).join(', ')
 }
 
+function exerciseDragId(exercise: Exercise, index: number): string {
+  return exercise.id || `ex-${index}`
+}
+
 interface SessionDrawerProps {
   isOpen: boolean
   onClose: () => void
@@ -214,10 +218,11 @@ function SortableExerciseItem({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging
-  } = useSortable({ id: exercise.id || `ex-${index}` })
+  } = useSortable({ id: exerciseDragId(exercise, index), disabled })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -231,7 +236,13 @@ function SortableExerciseItem({
   return (
     <Paper ref={setNodeRef} style={{ ...style, overflow: 'hidden' }} withBorder p="sm" radius="md" data-testid={`session-exercise-${index}`}>
       <Group gap="xs" mb="xs">
-        <Box {...(disabled ? {} : attributes)} {...(disabled ? {} : listeners)} style={{ cursor: disabled ? 'default' : 'grab', padding: '4px 0', opacity: 0.5 }} data-testid={`exercise-drag-handle-${index}`}>
+        <Box
+          ref={setActivatorNodeRef}
+          {...(disabled ? {} : attributes)}
+          {...(disabled ? {} : listeners)}
+          style={{ cursor: disabled ? 'default' : 'grab', padding: '4px 0', opacity: 0.5, touchAction: 'none' }}
+          data-testid={`exercise-drag-handle-${index}`}
+        >
           <GripVertical size={16} />
         </Box>
         <Autocomplete
@@ -421,8 +432,10 @@ export default function SessionDrawer({
       setLocalSession((prev) => {
         if (!prev) return prev
         const items = prev.exercises
-        const oldIndex = items.findIndex(i => i.id === active.id)
-        const newIndex = items.findIndex(i => i.id === over.id)
+        const dragIds = items.map((exercise, index) => exerciseDragId(exercise, index))
+        const oldIndex = dragIds.findIndex((id) => id === active.id)
+        const newIndex = dragIds.findIndex((id) => id === over.id)
+        if (oldIndex < 0 || newIndex < 0) return prev
         const nextExercises = arrayMove(items, oldIndex, newIndex)
         return { ...prev, exercises: nextExercises }
       })
@@ -1201,13 +1214,13 @@ export default function SessionDrawer({
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={localSession.exercises.map((ex, i) => ex.id || `ex-${i}`)}
+                items={localSession.exercises.map(exerciseDragId)}
                 strategy={verticalListSortingStrategy}
               >
                 <Stack gap="sm">
                   {localSession.exercises.map((ex, i) => (
                     <SortableExerciseItem
-                      key={ex.id || `ex-${i}`}
+                      key={exerciseDragId(ex, i)}
                       exercise={ex}
                       index={i}
                       onRemove={removeExercise}
