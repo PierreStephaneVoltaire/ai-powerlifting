@@ -34,6 +34,7 @@ const frontendUrl = (process.env.POWERLIFTING_TEST_FRONTEND_URL || `http://local
 const ignoredBrowserErrorFragments = [
   "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element.",
 ]
+const readOnlyBannerText = 'Read-only mode.'
 
 const children = []
 
@@ -194,7 +195,7 @@ async function fulfillReadOnlyAuth(route) {
     contentType: 'application/json',
     body: JSON.stringify({
       user: null,
-      mapped_pk: 'operator',
+      mapped_pk: 'test',
       readOnly: true,
     }),
   })
@@ -272,7 +273,7 @@ async function assertVisible(locator, label) {
 async function waitForReadOnlyBanner(page) {
   // Waiting for the banner guarantees readOnly=true has propagated through React state
   // before we check any individual controls on that page.
-  await expect(page.locator('text=You\'re viewing in read-only mode')).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText(readOnlyBannerText)).toBeVisible({ timeout: 10000 })
 }
 
 async function testReadOnlyMode(page) {
@@ -281,15 +282,19 @@ async function testReadOnlyMode(page) {
   // 1. Dashboard - verify ReadOnlyBanner visible
   console.log('  Testing Dashboard...')
   await page.goto(frontendUrl, { waitUntil: 'networkidle' })
-  const banner = page.locator('text=You\'re viewing in read-only mode')
+  const banner = page.getByText(readOnlyBannerText)
   await assertVisible(banner, 'ReadOnly banner')
-  const signInBtn = page.locator('button:has-text("Sign In")')
+  const signInBtn = page.getByRole('button', { name: 'Sign in' })
   await assertVisible(signInBtn, 'Sign In button in banner')
 
   // 2. Dashboard - verify edit buttons are disabled
   // Banner visible confirms readOnly=true. Also wait for the disabled Edit2 button
   // itself — it only renders once program data has loaded.
-  const editMaxesBtn = page.locator('button[disabled]:has(svg.lucide-edit-2)').first()
+  const editMaxesBtn = page
+    .locator('.mantine-Paper-root', { hasText: 'Target Maxes' })
+    .first()
+    .getByRole('button')
+    .first()
   await assertVisible(editMaxesBtn, 'Edit maxes button (disabled)')
   await assertDisabled(editMaxesBtn, 'Edit maxes button')
 
@@ -330,7 +335,7 @@ async function testReadOnlyMode(page) {
     await assertDisabled(uploadBtn, 'Upload button')
     
     // Session RPE input should be disabled
-    const rpeInput = page.locator('input[placeholder="1-10"]')
+    const rpeInput = page.getByTestId('session-rpe')
     await assertDisabled(rpeInput, 'RPE input')
   }
 
@@ -349,19 +354,17 @@ async function testReadOnlyMode(page) {
   console.log('  Testing Notes...')
   await page.goto(`${frontendUrl}/notes`, { waitUntil: 'networkidle' })
   await waitForReadOnlyBanner(page)
-  const addEntryBtn = page.getByTestId('notes-add-entry')
-  await assertDisabled(addEntryBtn, 'Notes Add Entry button')
-  const notesTextarea = page.getByTestId('program-note-text').first()
-  if (await notesTextarea.count()) {
-    await assertDisabled(notesTextarea, 'Notes textarea')
-  }
+  const newNoteText = page.getByTestId('notes-new-text')
+  await assertDisabled(newNoteText, 'Notes new entry textarea')
+  const newNoteSave = page.getByTestId('notes-new-save')
+  await assertDisabled(newNoteSave, 'Notes new entry save button')
 
   // 6. ReadOnlyBanner should be visible on all pages
   console.log('  Testing ReadOnlyBanner persistence...')
   const pagesForBanner = ['/analysis', '/maxes', '/supplements']
   for (const p of pagesForBanner) {
     await page.goto(`${frontendUrl}${p}`, { waitUntil: 'networkidle' })
-    const bannerVisible = await page.locator('text=You\'re viewing in read-only mode').isVisible().catch(() => false)
+    const bannerVisible = await page.getByText(readOnlyBannerText).isVisible().catch(() => false)
     if (!bannerVisible) {
       console.error(`  FAIL: ReadOnlyBanner not visible on ${p}`)
       failures += 1
@@ -377,14 +380,14 @@ async function testReadOnlyMode(page) {
 
   // 8. Competitions page - verify mutation buttons are disabled
   console.log('  Testing Competitions page...')
-  await page.goto(`${frontendUrl}/competitions`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/designer/competitions`, { waitUntil: 'networkidle' })
   await waitForReadOnlyBanner(page)
   const addCompBtn = page.getByRole('button', { name: 'Add Competition' })
   await assertDisabled(addCompBtn, 'Add Competition button')
 
   // 9. Goals page - verify mutation buttons are disabled
   console.log('  Testing Goals page...')
-  await page.goto(`${frontendUrl}/goals`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/designer/goals`, { waitUntil: 'networkidle' })
   await waitForReadOnlyBanner(page)
   const addGoalBtn = page.getByRole('button', { name: 'Add Goal' })
   await assertDisabled(addGoalBtn, 'Add Goal button')
@@ -398,7 +401,7 @@ async function testReadOnlyMode(page) {
 
   // 11. Glossary page - verify mutation buttons are disabled
   console.log('  Testing Glossary page...')
-  await page.goto(`${frontendUrl}/glossary`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/designer/glossary`, { waitUntil: 'networkidle' })
   await waitForReadOnlyBanner(page)
   const addExerciseBtn = page.getByRole('button', { name: 'Add Exercise' })
   await assertDisabled(addExerciseBtn, 'Glossary Add Exercise button')
@@ -407,7 +410,7 @@ async function testReadOnlyMode(page) {
 
   // 12. Federations page - verify mutation buttons are disabled
   console.log('  Testing Federations page...')
-  await page.goto(`${frontendUrl}/federations`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/designer/federations`, { waitUntil: 'networkidle' })
   await waitForReadOnlyBanner(page)
   const addFedBtn = page.getByRole('button', { name: 'Add Federation' })
   await assertDisabled(addFedBtn, 'Add Federation button')
@@ -423,7 +426,7 @@ async function testReadOnlyMode(page) {
 
   // 14. Lift Profile page - verify Save Profile is disabled
   console.log('  Testing Lift Profile page...')
-  await page.goto(`${frontendUrl}/lift-profile/squat`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/lift-profiles/squat`, { waitUntil: 'networkidle' })
   await waitForReadOnlyBanner(page)
   const saveProfileBtn = page.getByRole('button', { name: 'Save Profile' })
   await assertDisabled(saveProfileBtn, 'Save Profile button')
@@ -455,7 +458,7 @@ async function testAuthenticatedMode(page) {
   // 1. Dashboard - ReadOnlyBanner should NOT be visible
   console.log('  Testing Dashboard (authenticated)...')
   await page.goto(frontendUrl, { waitUntil: 'networkidle' })
-  const banner = page.locator('text=You\'re viewing in read-only mode')
+  const banner = page.getByText(readOnlyBannerText)
   try {
     await expect(banner).not.toBeVisible({ timeout: 5000 })
   } catch {
@@ -495,14 +498,14 @@ async function testAuthenticatedMode(page) {
 
   // 4. Competitions page - verify Add Competition is enabled
   console.log('  Testing Competitions page (authenticated)...')
-  await page.goto(`${frontendUrl}/competitions`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/designer/competitions`, { waitUntil: 'networkidle' })
   await sleep(1500)
   const addCompBtnAuth = page.getByRole('button', { name: 'Add Competition' })
   await assertEnabled(addCompBtnAuth, 'Add Competition button (authenticated)')
 
   // 5. Goals page - verify Add Goal is enabled
   console.log('  Testing Goals page (authenticated)...')
-  await page.goto(`${frontendUrl}/goals`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/designer/goals`, { waitUntil: 'networkidle' })
   await sleep(1500)
   const addGoalBtnAuth = page.getByRole('button', { name: 'Add Goal' })
   await assertEnabled(addGoalBtnAuth, 'Add Goal button (authenticated)')

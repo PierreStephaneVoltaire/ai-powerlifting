@@ -307,12 +307,12 @@ async function main() {
   const beforeFingerprint = await currentBlockFingerprint()
   const seededNotes = [
     {
-      date: isoDaysAgo(1),
+      date: isoDaysAgo(2),
       notes: `${runId} older context: low back fatigue was elevated.`,
       updated_at: new Date().toISOString(),
     },
     {
-      date: isoDaysAgo(0),
+      date: isoDaysAgo(1),
       notes: `${runId} newer context: fatigue resolved and normal pulling resumed.`,
       updated_at: new Date().toISOString(),
     },
@@ -356,17 +356,18 @@ async function main() {
     await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible({ timeout: 15000 })
     await expect(page.getByTestId('program-note-card')).toHaveCount(2)
 
-    const noteTextareas = page.getByTestId('program-note-text')
-    await expect(noteTextareas.nth(0)).toHaveValue(seededNotes[1].notes)
-    await expect(noteTextareas.nth(1)).toHaveValue(seededNotes[0].notes)
+    await expect(page.getByTestId('program-note-card').nth(0)).toContainText(seededNotes[1].notes)
+    await expect(page.getByTestId('program-note-card').nth(1)).toContainText(seededNotes[0].notes)
 
     const editedLatest = `${seededNotes[1].notes}\n${runId} browser edit persisted.`
-    await noteTextareas.nth(0).fill(editedLatest)
-    await expect(page.getByTestId('notes-save')).toBeEnabled()
+    await page.getByTestId('program-note-card').nth(0).click()
+    await expect(page.getByTestId('program-note-text')).toHaveValue(seededNotes[1].notes)
+    await page.getByTestId('program-note-text').fill(editedLatest)
+    await expect(page.getByTestId('program-note-edit-save')).toBeEnabled()
     const editRequest = page.waitForRequest((req) => req.method() === 'PUT' && req.url().includes('/api/block-notes/current'))
-    await page.getByTestId('notes-save').click()
+    await page.getByTestId('program-note-edit-save').click()
     await editRequest
-    await expect(page.getByTestId('notes-save')).toHaveCount(0, { timeout: 10000 })
+    await expect(page.getByTestId('program-note-edit-save')).toHaveCount(0, { timeout: 10000 })
 
     const editedNotes = [
       seededNotes[0],
@@ -380,17 +381,15 @@ async function main() {
 
     await page.reload({ waitUntil: 'networkidle' })
     await expect(page.getByTestId('program-note-card')).toHaveCount(2)
-    await expect(page.getByTestId('program-note-text').nth(0)).toHaveValue(editedLatest)
+    await expect(page.getByTestId('program-note-card').nth(0)).toContainText(editedLatest)
 
-    await page.getByTestId('notes-add-entry').click()
-    await expect(page.getByTestId('program-note-card')).toHaveCount(3)
     const newNoteText = `${runId} additional dated note created from deployed UI.`
-    await page.getByTestId('program-note-text').nth(2).fill(newNoteText)
-    await expect(page.getByTestId('notes-save')).toBeEnabled()
+    await page.getByTestId('notes-new-text').fill(newNoteText)
+    await expect(page.getByTestId('notes-new-save')).toBeEnabled()
     const addRequest = page.waitForRequest((req) => req.method() === 'PUT' && req.url().includes('/api/block-notes/current'))
-    await page.getByTestId('notes-save').click()
+    await page.getByTestId('notes-new-save').click()
     await addRequest
-    await expect(page.getByTestId('notes-save')).toHaveCount(0, { timeout: 10000 })
+    await expect(page.getByTestId('notes-new-text')).toHaveValue('', { timeout: 10000 })
 
     const apiNotes = await getBlockNotes()
     if (apiNotes.length !== 3 || !apiNotes.some((note) => note.notes === newNoteText)) {
@@ -399,7 +398,7 @@ async function main() {
 
     await page.reload({ waitUntil: 'networkidle' })
     await expect(page.getByTestId('program-note-card')).toHaveCount(3)
-    await expect(page.getByTestId('program-note-text').nth(2)).toHaveValue(newNoteText)
+    await expect(page.getByTestId('program-note-card').nth(0)).toContainText(newNoteText)
 
     if (browserErrors.length || requestFailures.length || badResponses.length) {
       throw new Error([
