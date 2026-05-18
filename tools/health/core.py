@@ -2420,7 +2420,11 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
     window_start = week_start.isoformat()
-    cache_sk = f"program_eval#{window_start}"
+    import hashlib
+    notes_fingerprint = hashlib.sha1(
+        json.dumps(program.get("meta", {}).get("block_notes", []), sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:12]
+    cache_sk = f"program_eval#{window_start}#{notes_fingerprint}"
 
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(IF_HEALTH_TABLE_NAME)

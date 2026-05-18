@@ -345,14 +345,16 @@ async function testReadOnlyMode(page) {
   const copyNextBtn = page.getByRole('button', { name: 'Copy Next' })
   await assertDisabled(copyNextBtn, 'Copy Next button')
 
-  // 5. Notes page - verify save and textarea are disabled
+  // 5. Notes page - verify add/edit controls are disabled
   console.log('  Testing Notes...')
   await page.goto(`${frontendUrl}/notes`, { waitUntil: 'networkidle' })
   await waitForReadOnlyBanner(page)
-  const notesSaveBtn = page.getByRole('button', { name: 'Save' })
-  await assertDisabled(notesSaveBtn, 'Notes Save button')
-  const notesTextarea = page.locator('textarea[placeholder="Enter block notes, changes, observations..."]')
-  await assertDisabled(notesTextarea, 'Notes textarea')
+  const addEntryBtn = page.getByTestId('notes-add-entry')
+  await assertDisabled(addEntryBtn, 'Notes Add Entry button')
+  const notesTextarea = page.getByTestId('program-note-text').first()
+  if (await notesTextarea.count()) {
+    await assertDisabled(notesTextarea, 'Notes textarea')
+  }
 
   // 6. ReadOnlyBanner should be visible on all pages
   console.log('  Testing ReadOnlyBanner persistence...')

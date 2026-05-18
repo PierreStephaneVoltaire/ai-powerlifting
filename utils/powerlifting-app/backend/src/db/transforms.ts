@@ -51,6 +51,9 @@ function resolvePhase(weekNum: number, block: string, phases: Phase[]): Phase {
  */
 export function transformProgram(item: Record<string, unknown>): Program {
   const program = item as unknown as Program
+  const legacyBlockNotes = Array.isArray((item as { block_notes?: unknown }).block_notes)
+    ? (item as { block_notes: Program['meta']['block_notes'] }).block_notes
+    : []
 
   // Ensure sessions and phases arrays exist
   if (!program.sessions) {
@@ -73,6 +76,9 @@ export function transformProgram(item: Record<string, unknown>): Program {
   }
   if (!program.supplement_phases) {
     program.supplement_phases = []
+  }
+  if (!Array.isArray(program.meta.block_notes) || (program.meta.block_notes.length === 0 && legacyBlockNotes.length > 0)) {
+    program.meta.block_notes = legacyBlockNotes
   }
 
   // Derive week_number and resolve phase for each session within its block

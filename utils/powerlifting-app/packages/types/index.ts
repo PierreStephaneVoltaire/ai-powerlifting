@@ -78,9 +78,10 @@ export interface ChangeLogEntry {
 }
 
 export interface BlockNote {
-  block: string
+  date: string
   notes: string
   updated_at: string
+  block?: string
 }
 
 export interface LastComp {

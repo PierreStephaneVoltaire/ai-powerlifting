@@ -22,7 +22,8 @@ export async function getBlockNotes(pk: string, version: string): Promise<BlockN
   const getCommand = new GetCommand({
     TableName: TABLE,
     Key: { pk, sk },
-    ProjectionExpression: 'block_notes',
+    ProjectionExpression: '#meta.block_notes, block_notes',
+    ExpressionAttributeNames: { '#meta': 'meta' },
   })
 
   const result = await docClient.send(getCommand)
@@ -31,7 +32,12 @@ export async function getBlockNotes(pk: string, version: string): Promise<BlockN
     throw new AppError(`Program version ${version} not found`, 404)
   }
 
-  return (result.Item.block_notes ?? []) as BlockNote[]
+  const metaNotes = (result.Item.meta as { block_notes?: unknown } | undefined)?.block_notes
+  const legacyNotes = result.Item.block_notes
+  if (Array.isArray(metaNotes) && (metaNotes.length > 0 || !Array.isArray(legacyNotes))) {
+    return metaNotes as BlockNote[]
+  }
+  return (legacyNotes ?? []) as BlockNote[]
 }
 
 export async function updateBlockNotes(
@@ -44,7 +50,7 @@ export async function updateBlockNotes(
   const updateCommand = new UpdateCommand({
     TableName: TABLE,
     Key: { pk, sk },
-    UpdateExpression: 'SET block_notes = :notes, #meta.updated_at = :now',
+    UpdateExpression: 'SET #meta.block_notes = :notes, #meta.updated_at = :now REMOVE block_notes',
     ExpressionAttributeNames: { '#meta': 'meta' },
     ExpressionAttributeValues: {
       ':notes': blockNotes,
