@@ -7,6 +7,7 @@ ECR_REPOSITORY_PREFIX="${ECR_REPOSITORY_PREFIX:-if}"
 NAMESPACE="${NAMESPACE:-if-portals-test}"
 IMAGE_TAG="${IMAGE_TAG:-test}"
 FRONTEND_API_URL="${TEST_FRONTEND_API_URL:-/api}"
+TEST_MODEL_ID="${TEST_MODEL_ID:-deepseek/deepseek-v4-flash}"
 
 # Allow building only specific images
 # Usage: --only frontend  or  --only api,backend,frontend
@@ -51,6 +52,28 @@ print_status() {
   done
 }
 
+refresh_test_model_config() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  printf "%s\n" "$TEST_MODEL_ID" > "$tmpdir/model_ids.txt"
+  cat > "$tmpdir/model_selection_rules.md" <<EOF
+# Test Model Selection Rules
+
+This private test namespace intentionally exposes only cheap test models.
+
+- The planner must choose \`${TEST_MODEL_ID}\` for every route in \`${NAMESPACE}\`.
+- Do not choose production-quality, expensive, online, or provider-specific fallback models in this namespace.
+- If a prompt asks for powerlifting, technical, or research work, still use \`${TEST_MODEL_ID}\` because \`model_ids.txt\` is the hard allowlist for tests.
+EOF
+
+  kubectl -n "$NAMESPACE" create configmap if-agent-api-model-allowlist \
+    --from-file="$tmpdir/model_ids.txt" \
+    --from-file="$tmpdir/model_selection_rules.md" \
+    --dry-run=client -o yaml \
+    | kubectl apply -f -
+  rm -rf "$tmpdir"
+}
+
 trap 'code=$?; echo "Test image deploy failed with exit code $code" >&2; print_status; exit "$code"' ERR
 
 require_cmd aws
@@ -74,6 +97,7 @@ echo "  API:      ${API_IMAGE}"
 echo "  Backend:  ${BACKEND_IMAGE}"
 echo "  Frontend: ${FRONTEND_IMAGE}"
 echo "  Frontend API URL: ${FRONTEND_API_URL}"
+echo "  Test model: ${TEST_MODEL_ID}"
 
 aws ecr-public get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin public.ecr.aws
@@ -120,6 +144,7 @@ else
 fi
 
 if should_build api; then
+  refresh_test_model_config
   kubectl -n "$NAMESPACE" set image deployment/if-agent-api "api=${API_IMAGE}"
   kubectl -n "$NAMESPACE" rollout restart deployment/if-agent-api
   kubectl -n "$NAMESPACE" rollout status deployment/if-agent-api --timeout=300s

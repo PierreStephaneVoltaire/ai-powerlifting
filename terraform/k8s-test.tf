@@ -229,7 +229,16 @@ resource "kubernetes_config_map" "if_agent_api_test_model_allowlist" {
   }
 
   data = {
-    "model_ids.txt" = "${local.if_test_model_id}\n"
+    "model_ids.txt"            = "${local.if_test_model_id}\n"
+    "model_selection_rules.md" = <<-EOT
+      # Test Model Selection Rules
+
+      This private test namespace intentionally exposes only cheap test models.
+
+      - The planner must choose `${local.if_test_model_id}` for every route in `if-portals-test`.
+      - Do not choose production-quality, expensive, online, or provider-specific fallback models in this namespace.
+      - If a prompt asks for powerlifting, technical, or research work, still use `${local.if_test_model_id}` because `model_ids.txt` is the hard allowlist for tests.
+    EOT
   }
 }
 

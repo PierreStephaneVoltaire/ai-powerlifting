@@ -25,7 +25,7 @@ from mcp_runtime import get_mcp_manager
 
 from .direct_llm import call_openrouter_chat
 from .history import write_history
-from .model_catalog import format_model_catalog, load_model_ids
+from .model_catalog import format_model_catalog, load_model_ids, load_model_selection_rules
 from .opencode import run_opencode
 from .opencode_config import write_opencode_config
 from .plan import IFPlan, PlanParseError, fallback_plan, parse_plan_file
@@ -158,6 +158,7 @@ def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str],
 def _planner_prompt(
     history_path: Path,
     model_ids: list[str],
+    model_selection_rules: str,
     specialist_catalog: str,
     runtime_context: str,
     *,
@@ -200,6 +201,17 @@ Specialists:
 Eligible models:
 {format_model_catalog(model_ids)}
 
+Model selection policy from `models/model_selection_rules.md`:
+{model_selection_rules or "No model selection rules file was found. Use the eligible model list and the request complexity to choose the smallest model that can answer well."}
+
+Model selection requirements:
+- `selected_model` must be exactly one ID from the eligible model list.
+- Treat `model_ids.txt` as the hard allowlist and the model selection policy as preference guidance.
+- If a policy rule references a model that is not in the eligible list, ignore that model and choose the closest eligible fit.
+- Consider interaction type, specialist, task risk, current conversation flow, attached files, runtime context, and `history.md` size.
+- Prefer cheaper models for small, simple, low-risk tasks. Prefer quality for powerlifting, technical, architectural, security, debugging, and multi-step tool work.
+- Do not default to the cheapest or most expensive model. Move up when the task becomes harder, failures repeat, history grows, or long-context capacity matters; move down only when the latest turn is clearly simple and low-risk.
+
 Classification guide:
 - social: ordinary conversation, emotional support, general answer, no domain tools.
 - domain: needs a domain specialist or IF MCP tools, especially health, finance, diary, proposals, temporal, supplement research.
@@ -224,6 +236,7 @@ async def _run_planner(
     thinking_mode_requested: bool = False,
 ) -> IFPlan:
     model_ids = load_model_ids()
+    model_selection_rules = load_model_selection_rules()
     known_specialists, catalog = _specialist_catalog()
     history_path = write_history(session_dir, messages, history_events=history_events)
     plan_path = session_dir / "plan.md"
@@ -232,12 +245,13 @@ async def _run_planner(
 
     try:
         result = await run_opencode(
-            agent="plan",
+            agent="planner",
             model=OPENCODE_PLANNER_MODEL,
             session_dir=session_dir,
             prompt=_planner_prompt(
                 history_path,
                 model_ids,
+                model_selection_rules,
                 catalog,
                 runtime_context,
                 thinking_mode_requested=thinking_mode_requested,
@@ -247,6 +261,9 @@ async def _run_planner(
         if result.returncode != 0:
             raise RuntimeError(result.stderr or result.stdout)
         if not plan_path.exists():
+            output = (result.stderr or result.stdout).strip()
+            if output:
+                logger.warning("opencode planner returned without plan.md; output: %s", output[:2000])
             raise FileNotFoundError("opencode planner did not write plan.md")
         return parse_plan_file(plan_path, model_ids, known_specialists)
     except (Exception, PlanParseError) as exc:
@@ -593,7 +610,7 @@ If the build must be retried, write `RETRY` on line 1 and then explain the requi
 Otherwise write `OK` on line 1 and a concise review summary after it.
 """
     review = await run_opencode(
-        agent="plan",
+        agent="planner",
         model=OPENCODE_PLANNER_MODEL,
         session_dir=session_dir,
         prompt=review_prompt,
