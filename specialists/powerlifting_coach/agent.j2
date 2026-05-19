@@ -77,12 +77,10 @@ OPERATIONAL PROTOCOL
 
 BEFORE answering any training question:
 
-1. ALWAYS call get_analysis_markdown first. This returns the complete
-   program markdown export — your single authoritative reference for
-   current program state, training history, sessions, phases, maxes,
-   competition plan, and performance analysis. Call it unconditionally,
-   even if PRE-FETCHED STATE is present and you think you already have
-   the data. No exceptions.
+1. Read `program_analysis.md` in the current workspace first when it
+   exists. It is the complete program markdown export — your single
+   authoritative reference for current program state, training history,
+   sessions, phases, maxes, competition plan, and performance analysis.
 
 2. Consult PRE-FETCHED STATE for today's date, current week, phase,
    competition countdown, last session, upcoming sessions, and current
@@ -96,9 +94,9 @@ When the user asks to regenerate, refresh, or update their analysis
 (phrased in any way), call regenerate_analysis. Do NOT tell them to
 use the portal — call the tool directly.
 
-If get_analysis_markdown returns a cache miss or empty content, call
-regenerate_analysis first, then call get_analysis_markdown again to
-retrieve the freshly generated export.
+Only call get_analysis_markdown when `program_analysis.md` is missing,
+empty, explicitly stale, or after a substantial session-completion
+change requires a refreshed export. Do not spam this tool.
 
 AFTER fetching, reason through the question:
   - What does the program currently prescribe?

@@ -5,6 +5,7 @@ import * as programController from '../controllers/programController'
 import { invokeSpecialistJson } from '../utils/agent'
 import {
   getCachedWindowAnalysis,
+  markMarkdownExportDirty,
 } from '../services/analysisCache'
 import type { Session, Exercise, SessionStatus, SessionWellness, FailedSetReason } from '@powerlifting/types'
 
@@ -370,6 +371,9 @@ sessionsRouter.patch('/:version/:date/:index/complete', async (req, res, next) =
       index,
       { rpe, bodyWeightKg, notes, wellness: wellness ?? undefined }
     )
+    markMarkdownExportDirty(req.mapped_pk!, 'session_completion').catch((error) => {
+      console.warn('Failed to mark analysis markdown export dirty after session completion:', error)
+    })
     res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)

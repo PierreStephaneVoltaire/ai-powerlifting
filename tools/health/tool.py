@@ -2650,9 +2650,16 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             "description": (
                 "Return the cached markdown export of the full training program (current block). "
                 "This is the primary reference document for coaching decisions. "
-                "ALWAYS call this before answering any training question."
+                "Use the cache unless it is stale, dirty, or refresh is true."
             ),
-            "parameters": {"type": "object", "properties": {}, "required": []},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "refresh": {"type": "boolean", "description": "Force regeneration before returning markdown", "default": False},
+                    "max_age_hours": {"type": "integer", "description": "Maximum cache age before regeneration", "default": 72},
+                },
+                "required": [],
+            },
         },
         "health_get_program": {
             "name": "health_get_program",
@@ -4216,6 +4223,11 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
                 "payload": json.dumps({"markdown": markdown}),
             }
             table.put_item(Item=_floats_to_decimals(md_item))
+            try:
+                from cache_invalidation import clear_markdown_export_dirty
+                clear_markdown_export_dirty(pk, ANALYSIS_CACHE_TABLE_NAME, AWS_REGION)
+            except Exception:
+                pass
     except Exception as exc:
         errors.append(f"markdown_export: {exc}")
 
@@ -4232,11 +4244,11 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a freshly generated markdown export for the current block, utilizing cached analysis where available."""
+    """Return cached markdown export, regenerating only when stale or dirty."""
     import json
     import time as _time
     import boto3
-    from datetime import datetime
+    from datetime import datetime, timezone
     from core import _get_store, _floats_to_decimals
     from export import build_program_markdown
     import tempfile
@@ -4247,11 +4259,62 @@ def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     store = _get_store()
     pk = store.pk
     cache_pk = f"analysis#{pk}"
+    max_age_hours = int(args.get("max_age_hours") or 72)
+    force_refresh = bool(args.get("refresh") or args.get("force_refresh"))
 
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
 
-    # Generate fresh markdown (utilizing cached analysis components for speed)
+    def _parse_generated_at(value: str | None):
+        if not value:
+            return None
+        try:
+            normalized = value.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except Exception:
+            return None
+
+    try:
+        from analysis_cache import AnalysisCacheStore
+
+        cache_store = AnalysisCacheStore(
+            table_name=ANALYSIS_CACHE_TABLE_NAME,
+            pk=pk,
+            region=AWS_REGION,
+        )
+        cached = cache_store.get_markdown_cache("current")
+        dirty = cache_store.get_markdown_dirty("current")
+        generated_at_dt = _parse_generated_at(cached.get("generated_at") if cached else None)
+        fresh_enough = (
+            generated_at_dt is not None
+            and (datetime.now(timezone.utc) - generated_at_dt).total_seconds() <= max_age_hours * 3600
+        )
+        if cached and fresh_enough and not dirty and not force_refresh:
+            return {
+                "markdown": cached["markdown"],
+                "generated_at": cached.get("generated_at", ""),
+                "cached": True,
+                "dirty": False,
+            }
+
+        regen = _run_async(_do_regenerate_analysis({"pk": pk}))
+        refreshed = cache_store.get_markdown_cache("current")
+        if refreshed and refreshed.get("markdown"):
+            cache_store.clear_markdown_dirty("current")
+            return {
+                "markdown": refreshed["markdown"],
+                "generated_at": refreshed.get("generated_at", regen.get("generated_at", "")),
+                "cached": False,
+                "dirty": False,
+                "regenerated": True,
+            }
+    except Exception as exc:
+        logging.getLogger(__name__).warning("get_analysis_markdown cache path failed: %s", exc)
+
+    # Fallback: generate fresh markdown in-process if the cache path failed.
     store.invalidate_cache()
     program = _run_async(store.get_program())
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]

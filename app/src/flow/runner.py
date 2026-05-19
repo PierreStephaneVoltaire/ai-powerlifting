@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 import shutil
@@ -340,7 +341,55 @@ def _tool_protocol_block(tool_names: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _domain_prompt(plan: IFPlan, runtime_context: str) -> str:
+def _extract_json_object(text: str) -> dict[str, Any]:
+    try:
+        value = json.loads(text)
+        return value if isinstance(value, dict) else {}
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", text)
+        if not match:
+            return {}
+        try:
+            value = json.loads(match.group(0))
+            return value if isinstance(value, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+
+async def _prepare_powerlifting_workspace(session_dir: Path) -> str:
+    """Materialize the cached program analysis markdown for coach runs."""
+    target = session_dir / "program_analysis.md"
+    try:
+        manager = get_mcp_manager()
+        if not manager.has_tool("get_analysis_markdown"):
+            await manager.start("health")
+        raw = await manager.call_tool(
+            "get_analysis_markdown",
+            {"max_age_hours": 72},
+        )
+        data = _extract_json_object(raw)
+        markdown = str(data.get("markdown") or "").strip()
+        if not markdown:
+            return ""
+        target.write_text(markdown, encoding="utf-8")
+        generated_at = str(data.get("generated_at") or "")
+        cached = bool(data.get("cached"))
+        return (
+            "Powerlifting workspace context:\n"
+            f"- `program_analysis.md` has been materialized for this run.\n"
+            f"- generated_at: {generated_at or 'unknown'}\n"
+            f"- cache_used: {cached}"
+        )
+    except Exception as exc:
+        logger.warning("Powerlifting markdown workspace preparation failed: %s", exc)
+        return (
+            "Powerlifting workspace context:\n"
+            "- `program_analysis.md` could not be prepared before this run. "
+            "Call `get_analysis_markdown` only if needed for the answer."
+        )
+
+
+def _domain_prompt(plan: IFPlan, runtime_context: str, workspace_context: str = "") -> str:
     specialist_block, specialist_tools, _ = _specialist_prompt(plan.specialist, plan.prompt)
     return "\n\n".join(
         part
@@ -355,6 +404,7 @@ def _domain_prompt(plan: IFPlan, runtime_context: str) -> str:
             _directive_block(["core"]),
             f"Specialist directives for `{plan.specialist}`:",
             specialist_block,
+            workspace_context,
             "Runtime compatibility, Discord contract, memory/media rules, and thinking skills:",
             runtime_context,
             _tool_protocol_block(specialist_tools),
@@ -466,12 +516,15 @@ async def _run_domain(
     _, specialist_tools, specialist_mcp_servers = _specialist_prompt(plan.specialist, plan.prompt)
     write_opencode_config(session_dir, tool_names=specialist_tools, mcp_servers=specialist_mcp_servers)
     agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
+    workspace_context = ""
+    if plan.specialist == "powerlifting_coach":
+        workspace_context = await _prepare_powerlifting_workspace(session_dir)
     await send_status(StatusType.SUBAGENT_SPAWNING, "Domain Agent Started", f"{plan.specialist} / {plan.selected_model}")
     result = await run_opencode(
         agent=agent,
         model=plan.selected_model,
         session_dir=session_dir,
-        prompt=_domain_prompt(plan, runtime_context),
+        prompt=_domain_prompt(plan, runtime_context, workspace_context),
         continue_session=True,
         status_file=status_file,
         status_callback=_opencode_status,

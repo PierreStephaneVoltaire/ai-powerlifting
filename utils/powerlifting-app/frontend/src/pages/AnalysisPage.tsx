@@ -5,7 +5,14 @@ import {
   Scale, Moon, Beef, Ruler, Utensils, Info, RefreshCw,
 } from 'lucide-react'
 import {
-  fetchWeeklyAnalysisBundle, regenerateAnalysis, type AnalysisWindowKey, type WeeklyAnalysisBundle,
+  fetchAnalysisManifest,
+  fetchAnalysisSection,
+  invalidateAnalysisSections,
+  queueAnalysisSections,
+  type AnalysisSectionKey,
+  type AnalysisWindow,
+  type AnalysisWindowKey,
+  type WeeklyAnalysis,
 } from '@/api/analytics'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
@@ -291,6 +298,52 @@ function analysisKeyForMode(mode: WeeksMode): AnalysisWindowKey {
   return `previous_${mode}` as AnalysisWindowKey
 }
 
+const DETERMINISTIC_ANALYSIS_SECTIONS: AnalysisSectionKey[] = [
+  'overview',
+  'fatigue_readiness',
+  'peaking',
+  'workload',
+  'alerts',
+]
+
+function emptyWeeklyAnalysis(window: AnalysisWindow): WeeklyAnalysis {
+  return {
+    week: window.currentWeek,
+    selected_week_start: window.weekStart,
+    selected_week_end: window.weekEnd,
+    selected_week_count: window.weeks,
+    window_start: window.start,
+    window_end: window.end,
+    selected_session_context: [],
+    block: 'current',
+    lifts: {},
+    fatigue_index: null,
+    fatigue_components: null,
+    compliance: null,
+    current_maxes: null,
+    estimated_dots: null,
+    estimated_dots_reason: null,
+    projections: [],
+    projection_reason: null,
+    flags: [],
+    sessions_analyzed: 0,
+    exercise_stats: {},
+    alerts: [],
+  }
+}
+
+function mergeWeeklySections(
+  window: AnalysisWindow,
+  payloads: Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>,
+): WeeklyAnalysis | null {
+  const hasPayload = DETERMINISTIC_ANALYSIS_SECTIONS.some((section) => Boolean(payloads[section]))
+  if (!hasPayload) return null
+  return Object.assign(
+    emptyWeeklyAnalysis(window),
+    ...DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => payloads[section] ?? {}),
+  )
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function AnalysisPage() {
@@ -302,7 +355,12 @@ export default function AnalysisPage() {
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
   const viewMode = parseAnalysisViewMode(searchParams.get('view'))
   const activeSection = parseAnalysisSection(searchParams)
-  const [analysisBundle, setAnalysisBundle] = useState<WeeklyAnalysisBundle | null>(null)
+  const analysisKey = analysisKeyForMode(weeksMode)
+  const [analysisWindows, setAnalysisWindows] = useState<Record<AnalysisWindowKey, AnalysisWindow> | null>(null)
+  const [sectionPayloads, setSectionPayloads] = useState<Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>>({})
+  const [sectionStatuses, setSectionStatuses] = useState<Partial<Record<AnalysisSectionKey, string>>>({})
+  const [latestGeneratedAt, setLatestGeneratedAt] = useState<string | null>(null)
+  const [analysisRefreshNonce, setAnalysisRefreshNonce] = useState(0)
   const [loading, setLoading] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -333,14 +391,31 @@ export default function AnalysisPage() {
   }
 
   const analysisWindow = useMemo(
-    () => analysisBundle?.windows[analysisKeyForMode(weeksMode)]
-      ?? getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start, currentWeekStartDay, asOfDate),
-    [analysisBundle?.windows, asOfDate, currentWeekStartDay, program?.meta?.program_start, program?.sessions, weeksMode],
+    () => {
+      const cached = analysisWindows?.[analysisKey]
+      if (cached) return cached
+      const fallback = getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start, currentWeekStartDay, asOfDate)
+      return {
+        key: analysisKey,
+        label: analysisKey === 'current' ? 'Current Week' : analysisKey === 'block' ? 'Full Block' : `Previous ${weeksMode} Week${weeksMode === 1 ? '' : 's'}`,
+        ...fallback,
+      }
+    },
+    [analysisKey, analysisWindows, asOfDate, currentWeekStartDay, program?.meta?.program_start, program?.sessions, weeksMode],
   )
-  const analysisKey = analysisKeyForMode(weeksMode)
-  const data = analysisBundle?.results[analysisKey] ?? null
+  const data = useMemo(
+    () => mergeWeeklySections(analysisWindow, sectionPayloads),
+    [analysisWindow, sectionPayloads],
+  )
 
   const effectiveWeeks = analysisWindow.weeks
+  const pendingSectionCount = useMemo(
+    () => DETERMINISTIC_ANALYSIS_SECTIONS.filter((section) => {
+      const status = sectionStatuses[section]
+      return status === 'pending' || status === 'running' || status === 'missing'
+    }).length,
+    [sectionStatuses],
+  )
 
   const competitions = useMemo(() => {
     return (program?.competitions || []).sort((a, b) => a.date.localeCompare(b.date))
@@ -366,16 +441,78 @@ export default function AnalysisPage() {
     : []
 
   useEffect(() => {
+    let cancelled = false
+    let pollTimer: number | undefined
+
+    async function pollSections() {
+      const statuses = await Promise.all(
+        DETERMINISTIC_ANALYSIS_SECTIONS.map((section) =>
+          fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section),
+        ),
+      )
+      if (cancelled) return
+
+      setSectionStatuses(Object.fromEntries(statuses.map((status) => [status.sectionKey, status.status])))
+      setSectionPayloads((current) => {
+        const next = { ...current }
+        for (const status of statuses) {
+          if (status.status === 'complete' && status.payload) {
+            next[status.sectionKey] = status.payload
+          }
+        }
+        return next
+      })
+      const generated = statuses
+        .map((status) => status.generatedAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .slice(-1)[0]
+      if (generated) setLatestGeneratedAt(generated)
+
+      const terminal = statuses.every((status) => status.status === 'complete' || status.status === 'error')
+      const hasAnyPayload = statuses.some((status) => status.status === 'complete' && status.payload)
+      setLoading(!terminal && !hasAnyPayload)
+      if (!terminal) {
+        pollTimer = window.setTimeout(() => {
+          pollSections().catch((e) => {
+            if (!cancelled) setError(e.message)
+          })
+        }, 2000)
+      }
+    }
+
     setLoading(true)
     setError(null)
-    fetchWeeklyAnalysisBundle(asOfDate)
-      .then(setAnalysisBundle)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-    // Only re-fetch on mount or when asOfDate changes.
-    // Analysis is NO LONGER auto-invalidated on program mutations.
-    // Use the "Regenerate Analysis" button to force a fresh generation.
-  }, [asOfDate])
+    setLatestGeneratedAt(null)
+    setSectionPayloads({})
+    setSectionStatuses({})
+
+    fetchAnalysisManifest(asOfDate, analysisKey)
+      .then((manifest) => {
+        if (cancelled) return
+        setAnalysisWindows(manifest.windows)
+        setSectionStatuses(Object.fromEntries(
+          DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => [section, manifest.sections[section]?.status ?? 'missing']),
+        ))
+        return queueAnalysisSections({
+          asOfDate,
+          windowKey: analysisKey,
+          sections: DETERMINISTIC_ANALYSIS_SECTIONS,
+        })
+      })
+      .then(() => pollSections())
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message)
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer)
+    }
+  }, [analysisKey, analysisRefreshNonce, asOfDate])
 
   useEffect(() => {
     fetchWeightLog(version).then(setWeightLog).catch(console.error)
@@ -386,9 +523,14 @@ export default function AnalysisPage() {
     setRegenerating(true)
     setError(null)
     try {
-      await regenerateAnalysis([analysisKey])
-      const bundle = await fetchWeeklyAnalysisBundle(asOfDate, true)
-      setAnalysisBundle(bundle)
+      setSectionPayloads({})
+      setSectionStatuses({})
+      await invalidateAnalysisSections({
+        asOfDate,
+        windowKey: analysisKey,
+        sections: DETERMINISTIC_ANALYSIS_SECTIONS,
+      })
+      setAnalysisRefreshNonce((value) => value + 1)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -786,15 +928,20 @@ export default function AnalysisPage() {
           >
             Regenerate Weekly Analysis
           </Button>
-          {analysisBundle?.generatedAt && !regenerating && (
+          {latestGeneratedAt && !regenerating && (
             <Badge color="gray" variant="light" size="sm">
-              Generated {new Date(analysisBundle.generatedAt).toLocaleDateString()}
+              Generated {new Date(latestGeneratedAt).toLocaleDateString()}
+            </Badge>
+          )}
+          {pendingSectionCount > 0 && (
+            <Badge color="blue" variant="light" size="sm">
+              {pendingSectionCount} updating
             </Badge>
           )}
         </Group>
       </Group>
 
-      {loading && <Center mih="20vh"><Loader /></Center>}
+      {loading && !data && <Center mih="20vh"><Loader /></Center>}
 
       {error && (
         <Paper withBorder p="md" style={{ borderColor: 'var(--mantine-color-red-4)' }}>
@@ -802,7 +949,7 @@ export default function AnalysisPage() {
         </Paper>
       )}
 
-      {data && !loading && (
+      {data && (
         <>
           <AlertsStrip alerts={data.alerts || []} />
 

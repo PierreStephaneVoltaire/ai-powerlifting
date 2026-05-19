@@ -324,6 +324,15 @@ export type AnalysisWindowKey =
   | 'previous_8'
   | 'block'
 
+export type AnalysisSectionKey =
+  | 'overview'
+  | 'fatigue_readiness'
+  | 'peaking'
+  | 'workload'
+  | 'alerts'
+  | 'ai_correlation'
+  | 'program_evaluation'
+
 export interface AnalysisWindow {
   key: AnalysisWindowKey
   label: string
@@ -342,6 +351,28 @@ export interface WeeklyAnalysisBundle {
   cached: boolean
   windows: Record<AnalysisWindowKey, AnalysisWindow>
   results: Record<AnalysisWindowKey, WeeklyAnalysis>
+}
+
+export interface AnalysisSectionStatus<T = Partial<WeeklyAnalysis> | CorrelationReport | ProgramEvaluationReport> {
+  sectionKey: AnalysisSectionKey
+  status: 'missing' | 'pending' | 'running' | 'complete' | 'error'
+  generatedAt?: string
+  updatedAt?: string
+  error?: string
+  sourceFingerprint?: string
+  cached: boolean
+  payload?: T
+  asOfDate?: string
+  windowKey?: AnalysisWindowKey
+}
+
+export interface AnalysisManifest {
+  schemaVersion: number
+  asOfDate: string
+  windowKey: AnalysisWindowKey
+  windows: Record<AnalysisWindowKey, AnalysisWindow>
+  sourceFingerprint: string
+  sections: Record<AnalysisSectionKey, Omit<AnalysisSectionStatus, 'payload'>>
 }
 
 export interface DataQualityFlag {
@@ -838,6 +869,61 @@ export async function fetchWeeklyAnalysisBundle(asOfDate?: string, refresh = fal
   if (refresh) params.set('refresh', 'true')
   const qs = params.toString()
   const res = await api.get(`/analytics/analysis/weekly-bundle${qs ? `?${qs}` : ''}`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function fetchAnalysisManifest(
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+): Promise<AnalysisManifest> {
+  const params = new URLSearchParams({ asOfDate, window: windowKey })
+  const res = await api.get(`/analytics/analysis/manifest?${params.toString()}`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function queueAnalysisSections(options: {
+  asOfDate: string
+  windowKey: AnalysisWindowKey
+  sections: AnalysisSectionKey[]
+  force?: boolean
+}): Promise<{ accepted: boolean; queued: AnalysisSectionKey[]; sourceFingerprint: string }> {
+  const res = await api.post('/analytics/analysis/sections/queue', {
+    asOfDate: options.asOfDate,
+    window: options.windowKey,
+    sections: options.sections,
+    force: options.force === true,
+  })
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function fetchAnalysisSection<T = Partial<WeeklyAnalysis>>(
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+): Promise<AnalysisSectionStatus<T>> {
+  const params = new URLSearchParams({ asOfDate, window: windowKey })
+  const res = await api.get(`/analytics/analysis/sections/${sectionKey}?${params.toString()}`)
+  const body = res.data
+  if (body.error) throw new Error(body.error)
+  return body.data
+}
+
+export async function invalidateAnalysisSections(options: {
+  asOfDate: string
+  windowKey: AnalysisWindowKey
+  sections: AnalysisSectionKey[]
+}): Promise<{ accepted: boolean; queued: AnalysisSectionKey[]; sourceFingerprint: string }> {
+  const res = await api.post('/analytics/analysis/sections/invalidate', {
+    asOfDate: options.asOfDate,
+    window: options.windowKey,
+    sections: options.sections,
+  })
   const body = res.data
   if (body.error) throw new Error(body.error)
   return body.data

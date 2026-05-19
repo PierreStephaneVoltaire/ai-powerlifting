@@ -1169,6 +1169,17 @@ async def health_update_session(date_str: str, patch: dict) -> dict:
 
     store = _get_store()
     updated_program = await store.update_session(date_str, patch)
+    if patch.get("completed") is True:
+        try:
+            from cache_invalidation import mark_markdown_export_dirty
+            mark_markdown_export_dirty(
+                store.pk,
+                getattr(store, "_table_name", None),
+                getattr(store, "_region", None),
+                reason="session_completion",
+            )
+        except Exception as exc:
+            logger.warning("[HealthTools] Markdown export dirty marker failed: %s", exc)
 
     # Find and return the updated session
     sessions = updated_program.get("sessions", [])

@@ -262,6 +262,31 @@ class AnalysisCacheStore:
             logger.error("[AnalysisCacheStore] get_markdown_cache failed: %s", exc)
             return None
 
+    def get_markdown_dirty(self, block_key: str = "current") -> Optional[dict]:
+        """Read the dirty marker for a markdown export, if present."""
+        try:
+            item = self.table.get_item(
+                Key={"pk": self._pk, "sk": f"markdown_export_dirty#{block_key}"}
+            ).get("Item")
+            if not item:
+                return None
+            return {
+                "dirty_at": item.get("dirty_at") or item.get("updated_at", ""),
+                "reason": item.get("reason", ""),
+            }
+        except Exception as exc:
+            logger.error("[AnalysisCacheStore] get_markdown_dirty failed: %s", exc)
+            return None
+
+    def clear_markdown_dirty(self, block_key: str = "current") -> None:
+        """Remove the dirty marker after a fresh markdown export is written."""
+        try:
+            self.table.delete_item(
+                Key={"pk": self._pk, "sk": f"markdown_export_dirty#{block_key}"}
+            )
+        except Exception as exc:
+            logger.error("[AnalysisCacheStore] clear_markdown_dirty failed: %s", exc)
+
     def put_markdown_cache(
         self,
         markdown: str,
