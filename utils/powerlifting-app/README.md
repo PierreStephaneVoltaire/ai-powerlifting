@@ -11,12 +11,17 @@ If you want the current truth, treat these files as the real sources of truth:
 - `frontend/src/pages/AnalysisPage.tsx`
 - `frontend/src/components/analysis/WeeklyData.tsx`
 - `frontend/src/components/analysis/AiAnalysis.tsx`
+- `frontend/src/components/layout/SettingsDrawer.tsx`
 - `frontend/src/constants/formulaDescriptions.ts`
 - `frontend/src/App.tsx`
 - `backend/src/routes/analytics.ts`
+- `backend/src/routes/setup.ts`
+- `backend/src/routes/settings.ts`
+- `backend/src/routes/profiles.ts`
 - `backend/src/services/blockAnalytics.ts`
 - `backend/src/services/blockAnalysisExport.ts`
 - `backend/src/services/analysisCache.ts`
+- `backend/src/services/userSettings.ts`
 - `tools/health/analytics.py`
 - `tools/health/*_ai.py`
 - `packages/types/index.ts`
@@ -34,7 +39,8 @@ The powerlifting app is a single-athlete training portal that combines:
   spreadsheet import
 - DynamoDB-backed storage for the full training record
 - separate DynamoDB table (`if-powerlifting-analysis-cache`) for pre-computed
-  analytics windows and AI report caches
+  analytics windows, section jobs/payloads, markdown exports, and block caches;
+  current ROI/program-evaluation AI reports are still cached in `if-health`
 - current-program exports plus cache-only past-block analysis exports
 - optional S3-backed video attachments
 - Discord OAuth authentication with generic user mappings in `if-user`
@@ -58,10 +64,64 @@ React page
 
 For the Analysis page specifically there are four separate computation paths:
 
-1. Backend deterministic analysis via `weekly_analysis` (6 windows pre-computed by `weekly-bundle`)
+1. Backend deterministic weekly sections via `analysis_section`, queued and
+   cached per section/window by `analysisCache.ts`
 2. Frontend-local derivations from program data, glossary data, and weight log
-3. Separate AI reports for correlation analysis and full-block program evaluation
-4. Block/lifetime analytics via `blockAnalytics.ts` service — powers the Blocks and Compare tabs
+3. Separate cache-only-by-default AI report reads for correlation analysis and
+   full-block program evaluation, with explicit refresh buttons to generate
+   new AI output
+4. Block/lifetime analytics via `blockAnalytics.ts` service — powers the Past
+   Blocks and Lifetime Compare tabs
+
+## Running And Verifying
+
+Workspace scripts from `utils/powerlifting-app/package.json`:
+
+- `npm run dev:backend`
+  Starts the Express API through `tsx watch src/server.ts`.
+- `npm run dev:frontend`
+  Starts Vite. The dev server listens on port 5173 and proxies `/api` to
+  `VITE_DEV_API_PROXY`, defaulting to `https://dev.nolift.training`.
+- `npm run build`
+  Runs workspace builds for `packages/types`, `backend`, and `frontend`.
+- `npm run typecheck`
+  Runs TypeScript typechecks for all workspaces.
+- `npm run test:live:session-save`, `npm run test:live:session-save:api`,
+  `npm run test:live:session-save:ui`, `npm run test:live:session-detail`, and
+  `npm run test:live:notes`
+  Run live regression tests against the private test deployment and restore
+  touched records afterward.
+
+Important backend environment variables:
+
+- `AWS_REGION`, default `ca-central-1`
+- `DYNAMO_TABLE` / `DYNAMODB_TABLE`, default `if-health`
+- `IF_HEALTH_TABLE_NAME`, used by health tools and live tests, usually
+  `if-health`
+- `IF_SESSIONS_TABLE_NAME`, default `if-sessions`
+- `IF_USER_TABLE`, default `if-user`
+- `ANALYSIS_CACHE_TABLE_NAME`, default `if-powerlifting-analysis-cache`
+- `IF_API_URL`, default Kubernetes service URL for the IF agent API
+- `AGENT_MODEL`, default `if-prototype`
+- `VIDEOS_BUCKET`, default `powerlifting-session-videos`
+- `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI`
+- `JWT_SECRET`, `COOKIE_DOMAIN`, `COOKIE_SECURE`
+- `FRONTEND_URL`, default `http://localhost:5173`
+- `POWERLIFTING_TEST_MAPPED_PK`, used by the test backend to force `mapped_pk`
+  to `test`
+
+Important frontend environment variables:
+
+- `VITE_API_BASE_URL`
+  Axios base URL. Defaults to `/api` when unset.
+- `VITE_DEV_API_PROXY`
+  Vite development proxy target for `/api`. Defaults to
+  `https://dev.nolift.training`.
+
+Portal verification policy from the root agent instructions still applies:
+local Vite is useful for quick harness debugging, but portal acceptance evidence
+comes from `if-portals-test` pod services, port-forwarded frontend/backend,
+test data copied to `pk=test`, live API/browser checks, and pod logs.
 
 ## Storage And Data Model
 
@@ -74,7 +134,8 @@ feeds `pk` is named `mapped_pk`.
 Identity/profile mapping lives in the generic DynamoDB table `if-user`
 (`IF_USER_TABLE`). That table is not powerlifting-specific. Its hash key is
 `pk`. Each record also stores `username`, optional `mapped_pk`, Discord identity
-fields, profile visibility, and display metadata.
+fields, profile visibility, display metadata, bio, and the public training
+summary flag.
 
 Important training records:
 
@@ -137,10 +198,12 @@ Storage conventions:
 - Per-block start maxes (manually pinned, for block-relative analytics):
   `block_start_maxes[blockKey].squat_kg`, `.bench_kg`, `.deadlift_kg`, `.total_kg`, `.source`, `.updated_at`
 - Program history/context:
-  `training_notes[]`, `change_log[]`, `last_comp`
+  `training_notes[]`, `change_log[]`, `block_notes[]`, `last_comp`
 - Template lineage:
   `template_lineage.applied_template_sk`, `applied_at`, `week_start_day`,
   `start_date`
+- DOTS/IPF GL sex:
+  `sex`
 
 Important nuance:
 
@@ -150,9 +213,16 @@ Important nuance:
   back to Monday; do not infer Saturday from the block name. To set the current
   block explicitly in DynamoDB, run
   `npm run set:week-start --workspace=backend -- Saturday`.
-- The typed schema does not currently declare `meta.sex`.
-- Backend projection and backend `estimated_dots` still look for `meta.sex`.
-- Frontend DOTS and IPF GL calculations instead use `settingsStore.sex`.
+- The typed schema declares `meta.sex?: Sex`. The Settings drawer writes sex
+  through `programStore.setSex()`, which persists `meta.sex` through
+  `PUT /api/programs/:version/meta`, and mirrors the persisted value back into
+  `settingsStore.sex`.
+- Backend `estimated_dots` uses `meta.current_body_weight_kg` first, then
+  legacy `meta.bodyweight_kg` / `meta.body_weight_kg`, and requires
+  `meta.sex` or `program.settings.sex`.
+- Frontend local DOTS/IPF GL trend cards use `settingsStore.sex`, which should
+  normally be synchronized from `Program.meta.sex` after the current program
+  loads.
 
 ### Phases
 
@@ -395,10 +465,13 @@ Per lift (`squat`, `bench`, `deadlift`) it stores:
 - `sticking_points`
 - `primary_muscle`
 - `volume_tolerance`
+- `e1rm_multiplier`
 - `stimulus_coefficient`
 - `stimulus_coefficient_reasoning`
 - `stimulus_coefficient_confidence`
 - `stimulus_coefficient_updated_at`
+- `inol_low_threshold`
+- `inol_high_threshold`
 
 These profiles are used in two different ways:
 
@@ -419,6 +492,21 @@ Additional tracked records:
 
 The Analysis page bodyweight trend uses `weight_log`. It does not derive
 bodyweight trends only from `program.meta.current_body_weight_kg`.
+
+### Program notes
+
+`BlockNote` captures dated program context:
+
+- `date`
+- `notes`
+- `updated_at`
+- optional legacy `block`
+
+The `/notes` page stores these in `Program.meta.block_notes[]` through
+`GET/PUT /api/block-notes/:version`. It normalizes legacy block-scoped notes
+into dated entries, deduplicates by date, and sorts newest first. These notes
+feed exports and AI context as athlete-authored training context; they are not
+session notes and they are not meal-by-meal diet notes.
 
 ### Glossary
 
@@ -476,7 +564,14 @@ Some values are not stored inside `Program` but still change outputs:
 - `settingsStore.barWeightKg`
   Plate calculator and related tools
 - `settingsStore.sex`
-  Frontend DOTS and IPF GL calculations
+  Frontend DOTS and IPF GL calculations; synchronized from `program.meta.sex`
+  after load and persisted back to `Program.meta.sex` when changed in Settings
+- `settingsStore.theme`
+  `light`, `dark`, or `system`
+- `settingsStore.defaultSessionsView`
+  Initial Sessions page view: `Month`, `Agenda`, or `Compact`
+- `settingsStore.plateInventoryKg` / `settingsStore.plateInventoryLb`
+  Plate calculator inventory, persisted in local browser storage
 - OpenPowerlifting dataset
   Used only on the Rankings page
 
@@ -502,24 +597,89 @@ Blocks, Compare) toggled via `?type=` URL param.
 
 ### Weekly tab data sources
 
-1. `GET /api/analytics/analysis/weekly-bundle?asOfDate=YYYY-MM-DD`
+1. `GET /api/analytics/analysis/manifest?asOfDate=YYYY-MM-DD&window=...`
    - backend service: `analysisCache.ts`
-   - computes all 6 window analyses in one request; returns from cache if fresh
+   - returns `schemaVersion: 6`, selected `windowKey`, all window metadata, a
+     `sourceFingerprint`, and per-section status without section payloads
+   - default window normalization is `previous_4`
+2. `POST /api/analytics/analysis/sections/queue`
+   - queues missing section jobs for the selected `asOfDate` + `windowKey`
+   - skips complete matching-fingerprint sections unless `force: true`
+   - stores job state as `analysis_job#v1#<asOfDate>#<window>#<section>`
+   - the route starts an in-process background worker that computes sections
+     serially
+3. `GET /api/analytics/analysis/sections/:sectionKey`
+   - polled by `AnalysisPage.tsx` every 2 seconds until deterministic sections
+     are complete or errored
+   - returns `missing`, `pending`, `running`, `complete`, or `error`
+   - complete responses include the cached section payload
+4. `POST /api/analytics/analysis/sections/invalidate`
+   - deletes selected section payloads and job records, requeues them, and
+     starts the worker
+   - this is what the `Regenerate Weekly Analysis` button uses for the current
+     selected window
+5. `fetchWeightLog(version)`
+   - used for the bodyweight trend and as fallback bodyweight for local DOTS/IPF GL
+6. `fetchGlossary()`
+   - used for muscle-group aggregation and per-lift accessory/category grouping
+
+Current weekly deterministic section keys:
+
+- `overview`
+  Window metadata, selected session context, compliance, current maxes, DOTS,
+  projections, projection calibration, attempt selection, session count, and
+  deload info
+- `fatigue_readiness`
+  Fatigue index/components, fatigue dimensions, INOL, ACWR, relative intensity,
+  volume landmarks, and readiness score
+- `peaking`
+  Banister CTL/ATL/TSB, monotony/strain, strength-fatigue decoupling, taper
+  quality, specificity ratio, target competition, and peaking timeline
+- `workload`
+  Per-lift progression and exercise stats
+- `alerts`
+  Alert objects and raw flags
+
+The older full-window bundle endpoint still exists:
+
+- `GET /api/analytics/analysis/weekly-bundle?asOfDate=YYYY-MM-DD`
+  - returns the legacy six-window `WeeklyAnalysisBundle`
+  - cache keys are `weekly_analysis#current`, `weekly_analysis#previous_1`,
+    `weekly_analysis#previous_2`, `weekly_analysis#previous_4`,
+    `weekly_analysis#previous_8`, and `weekly_analysis#block`
    - window keys: `current`, `previous_1`, `previous_2`, `previous_4`,
      `previous_8`, `block`
-   - backend tool for each window: `weekly_analysis`
+  - backend regeneration now builds each full window from deterministic
+    `analysis_section` results rather than the old monolithic `weekly_analysis`
+    path
    - cache table: `if-powerlifting-analysis-cache` (DynamoDB), TTL 7 days
-   - `POST /api/analytics/analysis/regenerate` force-regenerates all 6 windows
-     plus AI correlation reports and the markdown export
-2. `fetchWeightLog(version)`
-   - used for the bodyweight trend and as fallback bodyweight for local DOTS/IPF GL
-3. `fetchGlossary()`
-   - used for muscle-group aggregation and per-lift accessory/category grouping
+  - it is kept for compatibility and export/cache tooling; the current Weekly
+    tab reads sections instead
 
 AI cards are loaded separately by `AiAnalysis.tsx`:
 
-- `GET /api/analytics/correlation?weeks=...&block=current`
-- `GET /api/analytics/program-evaluation?refresh=...`
+- `GET /api/analytics/correlation?weeks=...&block=current&cacheOnly=true`
+  on automatic load; the Generate/Refresh button uses `refresh=true` and
+  `cacheOnly=false`
+- `GET /api/analytics/program-evaluation?refresh=...&cacheOnly=true`
+  on automatic full-block load; the Generate/Refresh button uses
+  `refresh=true` and `cacheOnly=false`
+
+Regeneration behavior:
+
+- Weekly page `Regenerate Weekly Analysis`
+  Invalidates and queues the deterministic sections for the currently selected
+  window only.
+- `POST /api/analytics/analysis/regenerate`
+  API-level section regeneration. It normalizes the requested window, invalidates
+  selected sections for that window, queues them, and returns `202 Accepted`.
+- `GET /api/analytics/analysis/weekly-bundle?refresh=true`
+  Regenerates all 6 deterministic window caches and the markdown export through
+  the backend route, then returns a fresh bundle.
+- Health tool `regenerate_analysis`
+  Also regenerates the 6 deterministic current-block window caches and markdown
+  export, but intentionally does not regenerate AI correlation reports, AI
+  program evaluation, past-block caches, or lifetime compare AI.
 
 Windowing behavior:
 
@@ -533,7 +693,8 @@ Important distinction:
 - backend analysis uses deterministic health-tool math
 - several cards on the page are frontend-derived and can disagree with backend
   values
-- AI sections are cached separately and regenerated on demand
+- AI cards are cached separately and only generate new AI output when explicitly
+  refreshed
 
 ### Blocks tab
 
@@ -928,11 +1089,12 @@ Subsections:
 
 - Exercise ROI Correlation
   - requires at least 4 weeks selected
-  - cached unless regenerated
+  - automatic load is cache-only; Generate/Refresh creates new AI output
 - Program Evaluation
   - only shown in Full Block mode
   - frontend gate is at least 4 completed sessions
   - backend gate is stricter: at least 4 completed weeks
+  - automatic load is cache-only; Generate/Refresh creates new AI output
 
 ### 20. Formula Accordion And Flags
 
@@ -1496,11 +1658,13 @@ GL = result * 100 / (A - B * exp(-C * bw))
 
 Important implementation nuance:
 
-- backend `weekly_analysis.estimated_dots` looks for `meta.bodyweight_kg` and
-  `meta.sex`
-- frontend local trend cards use `settingsStore.sex` and weight log / session BW
-- this is one reason backend `estimated_dots` can be null while local trend DOTS
-  still renders
+- backend `weekly_analysis.estimated_dots` uses `meta.current_body_weight_kg`
+  first, then legacy `meta.bodyweight_kg` / `meta.body_weight_kg`
+- backend DOTS requires `meta.sex` or `program.settings.sex`; if no sex or
+  usable bodyweight exists, `estimated_dots_reason` is `Missing sex or bodyweight`
+- frontend local trend cards use `settingsStore.sex` and weight log / session BW;
+  the Settings drawer synchronizes `settingsStore.sex` from `program.meta.sex`
+  after program load
 
 ### Meet projection
 
@@ -1873,7 +2037,11 @@ Cache behavior:
 
 - cached by Monday-aligned window key:
   `corr_report#{window_start}_{weeks}w`
-- `Regenerate` bypasses cache
+- automatic card load uses `cacheOnly=true` and returns a cache-miss payload
+  instead of generating
+- Generate/Refresh uses `refresh=true` and `cacheOnly=false`
+- generated reports receive a 7-day TTL and are not invalidated by session
+  changes
 - exported XLSX uses the cached report if one exists
 
 Minimum data:
@@ -2155,9 +2323,14 @@ Output (all required unless noted):
 
 Cache behavior:
 
-- cached on a weekly cadence under `program_eval#{window_start}`
-- `Regenerate` bypasses cache
-- cache invalidated if `program_updated_at` or `federation_library_updated_at` change
+- cached on a weekly cadence under
+  `program_eval#{window_start}#{block_notes_fingerprint}`
+- automatic card load uses `cacheOnly=true` and returns a cache-miss payload
+  instead of generating
+- Generate/Refresh uses `refresh=true` and `cacheOnly=false`
+- generated reports receive a 7-day TTL
+- cache is intentionally not invalidated by session changes; block-note changes
+  alter the cache key through the notes fingerprint
 
 Minimum data:
 
@@ -2263,12 +2436,14 @@ Full route list from `frontend/src/App.tsx`:
 | `/list/:date/:index?`          | `SessionDetailPage`   | Legacy alias                                    |
 | `/list`                        | `ListPage`            | Redirect → `/sessions?view=Compact`             |
 | `/analysis`                    | `AnalysisPage`        | Full analytics hub (Weekly/Blocks/Compare tabs) |
+| `/rankings`                    | `RankingsPage`        | OpenPowerlifting rankings lookup                |
+| `/notes`                       | `NotesPage`           | Dated program notes                             |
 | `/maxes`                       | `MaxesPage`           | Max history viewer                              |
 | `/supplements`                 | `SupplementsPage`     | Supplement phase CRUD                           |
 | `/biometrics`                  | `BiometricsPage`      | Diet and biometrics notes                       |
 | `/diet`                        | `BiometricsPage`      | Alias                                           |
 | `/videos`                      | `VideosPage`          | Video library                                   |
-| `/rankings`                    | `RankingsPage`        | OpenPowerlifting rankings lookup                |
+| `/profiles`                    | `ProfilesPage`        | Public profile search                           |
 | `/tools`                       | `ToolsPage`           | Tool hub                                        |
 | `/tools/plate`                 | `PlateCalculator`     |                                                 |
 | `/tools/dots`                  | `DotsCalculator`      |                                                 |
@@ -2276,7 +2451,6 @@ Full route list from `frontend/src/App.tsx`:
 | `/tools/percent`               | `PercentTable`        |                                                 |
 | `/tools/converter`             | `UnitConverter`       |                                                 |
 | `/tools/attempts`              | `AttemptSelector`     |                                                 |
-| `/about`                       | `AboutPage`           | Formula documentation                           |
 | `/designer`                    | `DesignerLanding`     | Designer hub                                    |
 | `/designer/phases`             | `DesignerPhases`      | Phase CRUD per block                            |
 | `/designer/sessions`           | `DesignerPage`        | Session designer with drag-and-drop             |
@@ -2287,8 +2461,12 @@ Full route list from `frontend/src/App.tsx`:
 | `/designer/import`             | `ImportWizardPage`    | Spreadsheet import wizard                       |
 | `/designer/templates`          | `TemplateLibraryPage` | Template library                                |
 | `/designer/templates/new`      | `TemplateCreatePage`  |                                                 |
+| `/designer/templates/import`   | `TemplateImportPage`  | Template import job flow                        |
+| `/designer/template`           | `TemplateDetailPage`  | Legacy/current template detail route            |
+| `/designer/template/edit`      | `TemplateEditPage`    | Legacy/current template edit route              |
 | `/designer/templates/:sk/edit` | `TemplateEditPage`    |                                                 |
 | `/designer/templates/:sk`      | `TemplateDetailPage`  |                                                 |
+| `/about`                       | `AboutPage`           | Formula documentation                           |
 
 Unreachable pages (no registered route): `TimelinePage.tsx`, `DietNotesPage.tsx`.
 
@@ -2308,6 +2486,51 @@ middleware resolves `req.mapped_pk` before protected app routes run:
 The user mapping record stores `pk`, `username`, optional `mapped_pk`,
 `discord_id`, `discord_username`, `avatar_url`, nickname, profile visibility,
 display name, bio, and public training-summary preference.
+
+Settings/Profile routes:
+
+- `GET /api/settings`
+  Returns the authenticated user's full `if-user` settings record.
+- `PUT /api/settings/nickname`
+  Updates nickname. It must match `[a-z0-9_-]{2,32}`.
+- `PUT /api/settings/profile`
+  Updates `profile_visibility`, `display_name`, `bio`, and
+  `public_training_summary_enabled`.
+- `GET /api/profiles/search?q=...`
+  Scans `if-user`, returns public profiles plus the viewer's own profile, and
+  limits results to 50.
+- `GET /api/profiles/:nickname`
+  Returns a public profile or the viewer's own private profile.
+
+The Settings drawer also controls theme, default session view, sex for scoring,
+training week start, and bar weight. Sex and week-start changes are persisted
+to the current program meta when a program is loaded; theme/default view/bar
+weight remain local browser settings.
+
+### Setup onboarding
+
+If `GET /api/programs/current` returns 404 for the current mapped partition,
+`programStore.needsSetup` becomes true and Dashboard/Sessions render
+`SetupOnboarding`.
+
+Setup routes:
+
+- `GET /api/setup/status`
+  Calls `health_setup_status` and returns `mapped_pk`, `authenticated`,
+  `readOnly`, `hasCurrentProgram`, and `needsSetup`.
+- `POST /api/setup/initialize`
+  Requires a signed-in writable user and calls `health_setup_initialize`.
+
+Setup modes:
+
+- `blank`
+  Create an empty current block.
+- `manual_sessions`
+  Create a starting block and navigate to the session designer.
+- `template`
+  Apply a selected template. If required maxes are missing, the tool can return
+  `gate_blocked` with `missingMaxes`; the frontend asks for those estimated
+  maxes and retries with `maxes`.
 
 ### Dashboard
 
@@ -2332,6 +2555,14 @@ Primary session management interface. Three view modes:
 - `Compact`: table view
 
 Navigates to `/session/:date/:index` on click.
+
+### NotesPage (`/notes`)
+
+Dated program-note editor. It reads and writes `Program.meta.block_notes[]`
+through `blockNotesController`, keeps one note per date, preserves legacy
+`block` notes by folding the block name into the note text when no explicit
+date exists, and sorts newest first. Notes are meant for training context,
+exports, and analysis, not for session-specific logging.
 
 ### CompetitionsPage
 
@@ -2399,8 +2630,12 @@ These pages manage:
 
 - blank template creation
 - block-to-template conversion
+- template copy
 - template archive/unarchive
+- template publish/unpublish
+- template import jobs
 - application to a program
+- application confirmation when required maxes must be backfilled
 - AI evaluation
 
 ### Tools page
@@ -2420,6 +2655,14 @@ The Rankings page is separate from the core training analytics. It compares user
 totals and DOTS to the OpenPowerlifting dataset with filterable federation,
 country, region, equipment, sex, age class, year, and event type.
 
+### Profiles page
+
+Searches public lifter profiles from `if-user`. Private profiles are hidden
+unless the viewer owns the profile. Results show avatar, display name, nickname,
+bio, and whether the user has enabled a public training summary. The page is a
+profile-directory surface only; it does not currently render another athlete's
+full training data.
+
 ### AboutPage (`/about`)
 
 Informational page documenting all formula descriptions from `formulaDescriptions.ts`,
@@ -2428,32 +2671,53 @@ PRs should update prose.
 
 ### Videos
 
-Videos are stored and displayed, but no computer-vision analysis is currently
-performed.
+Videos are S3-backed session attachments. They are stored on `Session.videos[]`
+and surfaced both inside the session editor and on `/videos`.
+
+Video routes:
+
+- `GET /api/videos?version=current&exercise=...&sort=newest|oldest`
+  Lists videos across sessions, with exercise metadata and optional exercise
+  filtering.
+- `POST /api/videos/:version/:sessionDate`
+  Uploads a video file to S3 and patches the matching session.
+- `DELETE /api/videos/:version/:sessionDate/:videoId`
+  Removes session metadata and deletes the S3 object plus thumbnail when present.
+- `PATCH /api/videos/:version/:sessionDate/:videoId/thumbnail`
+  Lambda-facing thumbnail update route.
+- `GET /api/videos/media/{*path}`
+  Proxies S3 media with HTTP Range support so browser seeking works.
+
+Upload constraints:
+
+- accepted MIME types: `video/mp4`, `video/quicktime`, `video/webm`,
+  `video/x-msvideo`
+- frontend file picker advertises MP4, MOV, and WebM
+- backend upload limit is 500MB
+- S3 key shape is `videos/<sessionDate>/<videoId>.<extension>`
+- thumbnails start as `pending` and later become `ready` or `failed`
+
+No computer-vision analysis is currently performed.
 
 ## Current Rough Edges And Read The Code Notes
 
 These are the places where the UI, backend, or data model still have deliberate
 or temporary mismatches:
 
-1. Backend `weekly_analysis.estimated_dots` still depends on
-   `meta.bodyweight_kg` and `meta.sex`, not `meta.current_body_weight_kg`, while
-   frontend trend cards use `settingsStore.sex` and local weight-log / session
-   bodyweight sources. That is why backend DOTS can be null while the local
-   trend DOTS still renders.
-2. The top max card is not the same thing as backend `current_maxes`. It prefers
+1. The top max card is not the same thing as backend `current_maxes`. It prefers
    local RPE-table/conservative-percent trend maxima when those exist, then
    falls back to backend current maxes.
-3. `attempt_selection` is computed but not rendered on the Analysis page.
-4. Program-evaluation gating differs between frontend and backend.
-5. Template evaluation still passes mocked, minimal athlete context.
-6. The glossary fatigue-estimation path is rougher than the auto-add path.
-7. `TimelinePage.tsx` exists in `frontend/src/pages/` but has no registered
+2. `attempt_selection` is computed but not rendered on the Analysis page.
+3. Program-evaluation gating differs between frontend and backend.
+4. Template evaluation still passes mocked, minimal athlete context.
+5. The glossary fatigue-estimation path is rougher than the auto-add path.
+6. `TimelinePage.tsx` exists in `frontend/src/pages/` but has no registered
    route in `App.tsx` — it is unreachable via navigation.
-8. `DietNotesPage.tsx` exists but is also unrouted — `/diet` and `/biometrics`
+7. `DietNotesPage.tsx` exists but is also unrouted — `/diet` and `/biometrics`
    both point to `BiometricsPage` instead.
-9. The media proxy route was previously registered as `/media/:path*`, which is
-   invalid in Express 5 / path-to-regexp v8. Fixed to `/media/{*path}`.
+8. `fetchWeeklyAnalysis()` and `fetchWeeklyAnalysisBundle()` still exist in
+   `frontend/src/api/analytics.ts`, but the current Weekly tab uses the
+   manifest/queue/poll section endpoints.
 
 Consistency rule:
 
@@ -2464,7 +2728,7 @@ Consistency rule:
 
 | Service               | File                                          | Purpose                                                                                     |
 | --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Analysis cache        | `backend/src/services/analysisCache.ts`       | DynamoDB cache for 6 window analyses + markdown export. Sharding for large payloads.        |
+| Analysis cache        | `backend/src/services/analysisCache.ts`       | DynamoDB cache for legacy 6-window bundles, section payloads/jobs, markdown exports. Shards large payloads. |
 | Block analytics       | `backend/src/services/blockAnalytics.ts`      | Cross-block index, per-block bundles, correlation, program-eval, AI lifetime compare        |
 | Block analysis export | `backend/src/services/blockAnalysisExport.ts` | XLSX/Markdown rendering for cached past-block analysis bundles; does not load full sessions |
 | Session store         | `backend/src/services/sessionStore.ts`        | Separate DynamoDB session storage (sessions are NOT embedded in program document)           |
@@ -2480,7 +2744,7 @@ controller must still merge or pass sessions explicitly.
 
 | Router            | Key endpoints                                                                                                                                                                                                                                        |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `analytics.ts`    | 23 endpoints: weekly-bundle, weekly, current markdown, blocks/_ including cache-only past-block export, block-comparison, correlation, program-evaluation, fatigue-profile, muscle-groups, glossary text generation, lift-profile/_, e1rm-multiplier |
+| `analytics.ts`    | 27 endpoints: analysis manifest, section queue/read/invalidate, weekly-bundle, weekly, current markdown, blocks/_ including cache-only past-block export, block-comparison, correlation, program-evaluation, fatigue-profile, muscle-groups, glossary text generation, lift-profile/_, e1rm-multiplier |
 | `sessions.ts`     | 12 endpoints: CRUD + reschedule + status + complete + AI notes/autoregulation + exercise CRUD                                                                                                                                                        |
 | `programs.ts`     | 11 endpoints: CRUD + fork + phases + lift-profiles + designer                                                                                                                                                                                        |
 | `auth.ts`         | 4 endpoints: Discord OAuth login/callback/me/logout                                                                                                                                                                                                  |
@@ -2488,7 +2752,9 @@ controller must still merge or pass sessions explicitly.
 | `competitions.ts` | 4 endpoints: CRUD + migrate + complete (triggers projection snapshot)                                                                                                                                                                                |
 | `goals.ts`        | 2 endpoints: get/put                                                                                                                                                                                                                                 |
 | `federations.ts`  | 2 endpoints: get/put                                                                                                                                                                                                                                 |
-| `template.ts`     | 10+ endpoints: list/get/create/update/apply/confirm/evaluate/convert/copy/archive                                                                                                                                                                    |
+| `setup.ts`        | 2 endpoints: status/initialize                                                                                                                                                                                                                       |
+| `profiles.ts`     | 2 endpoints: search/get by nickname                                                                                                                                                                                                                  |
+| `template.ts`     | 15 endpoints: list/get/create/update/import/import-status/apply/confirm/evaluate/convert/copy/archive/unarchive/publish/unpublish                                                                                                                   |
 | `import.ts`       | 5 endpoints: upload/pending/get/apply/reject                                                                                                                                                                                                         |
 | `export.ts`       | 2 endpoints: current-program xlsx/markdown                                                                                                                                                                                                           |
 | `videos.ts`       | 5 endpoints: list/upload/delete/thumbnail/media-proxy                                                                                                                                                                                                |
@@ -2496,8 +2762,9 @@ controller must still merge or pass sessions explicitly.
 | `weight.ts`       | 3 endpoints: get/post/delete                                                                                                                                                                                                                         |
 | `supplements.ts`  | 2 endpoints: get/put                                                                                                                                                                                                                                 |
 | `dietNotes.ts`    | 2 endpoints: get/put                                                                                                                                                                                                                                 |
+| `blockNotes.ts`   | 2 endpoints: get/put dated program notes                                                                                                                                                                                                              |
 | `stats.ts`        | 2 endpoints: categories/analyze (proxy to OpenPowerlifting)                                                                                                                                                                                          |
-| `settings.ts`     | 2 endpoints: get/nickname                                                                                                                                                                                                                            |
+| `settings.ts`     | 3 endpoints: get/nickname/profile                                                                                                                                                                                                                    |
 
 ## Bottom Line
 
@@ -2506,7 +2773,9 @@ The powerlifting app is not just a logbook. It is a layered system:
 - raw training data and meet data in DynamoDB (program document)
 - user identity/profile mappings in `if-user`, keyed by `pk`
 - sessions in a separate DynamoDB table (not embedded in program)
-- pre-computed analytics cached in `if-powerlifting-analysis-cache`
+- pre-computed window, section, job, block, and markdown analytics cached in
+  `if-powerlifting-analysis-cache`, with current ROI/program-evaluation AI
+  reports cached in `if-health`
 - glossary metadata for anatomy and fatigue semantics
 - deterministic analysis in `tools/health/analytics.py` (85+ tools)
 - narrow AI interpretation layers in `tools/health/*_ai.py`
