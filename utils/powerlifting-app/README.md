@@ -640,6 +640,11 @@ Current weekly deterministic section keys:
 - `alerts`
   Alert objects and raw flags
 
+The section API also recognizes `ai_correlation` and `program_evaluation` as
+AI section keys. The current Weekly tab queues only the five deterministic
+sections above; visible AI cards still use the separate correlation and
+program-evaluation routes described below.
+
 The older full-window bundle endpoint still exists:
 
 - `GET /api/analytics/analysis/weekly-bundle?asOfDate=YYYY-MM-DD`
@@ -647,12 +652,12 @@ The older full-window bundle endpoint still exists:
   - cache keys are `weekly_analysis#current`, `weekly_analysis#previous_1`,
     `weekly_analysis#previous_2`, `weekly_analysis#previous_4`,
     `weekly_analysis#previous_8`, and `weekly_analysis#block`
-   - window keys: `current`, `previous_1`, `previous_2`, `previous_4`,
-     `previous_8`, `block`
+  - window keys: `current`, `previous_1`, `previous_2`, `previous_4`,
+    `previous_8`, `block`
   - backend regeneration now builds each full window from deterministic
     `analysis_section` results rather than the old monolithic `weekly_analysis`
     path
-   - cache table: `if-powerlifting-analysis-cache` (DynamoDB), TTL 7 days
+  - cache table: `if-powerlifting-analysis-cache` (DynamoDB), TTL 7 days
   - it is kept for compatibility and export/cache tooling; the current Weekly
     tab reads sections instead
 
