@@ -30,6 +30,7 @@ def _if_mcp_server(category: str, allowed_tools: list[str]) -> dict[str, Any]:
         "environment": {
             "IF_TOOLS_ROOT": str(tools_root),
             "IF_MCP_ALLOWED_TOOLS": ",".join(sorted(set(allowed_tools))),
+            "IF_DISABLE_POWERLIFTING_DATASET_SYNC": "1",
             "PYTHONPATH": _pythonpath(),
         },
         "enabled": True,

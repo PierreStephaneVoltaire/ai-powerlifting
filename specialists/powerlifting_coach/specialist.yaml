@@ -54,6 +54,7 @@ tools:
   - calculate_attempts
   - days_until
   - weekly_analysis
+  - analysis_section
   - correlation_analysis
   - fatigue_profile_estimate
   - program_evaluation
@@ -73,6 +74,11 @@ tools:
   - template_copy
   - template_archive
   - template_unarchive
+  - template_publish
+  - template_unpublish
+  - template_create_blank
+  - template_create_from_payload
+  - template_update
   - program_archive
   - program_unarchive
   - glossary_add

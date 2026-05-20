@@ -26,6 +26,7 @@ import TemplateLibraryPage from '@/pages/TemplateLibraryPage'
 import TemplateDetailPage from '@/pages/TemplateDetailPage'
 import TemplateCreatePage from '@/pages/TemplateCreatePage'
 import TemplateEditPage from '@/pages/TemplateEditPage'
+import TemplateImportPage from '@/pages/TemplateImportPage'
 import RankingsPage from '@/pages/RankingsPage'
 import NotesPage from '@/pages/NotesPage'
 import ProfilesPage from '@/pages/ProfilesPage'
@@ -97,6 +98,7 @@ function AppContent() {
         <Route path="/designer/import" element={<ImportWizardPage />} />
         <Route path="/designer/templates" element={<TemplateLibraryPage />} />
         <Route path="/designer/templates/new" element={<TemplateCreatePage />} />
+        <Route path="/designer/templates/import" element={<TemplateImportPage />} />
         <Route path="/designer/template" element={<TemplateDetailPage />} />
         <Route path="/designer/template/edit" element={<TemplateEditPage />} />
         <Route path="/designer/templates/:sk/edit" element={<TemplateEditPage />} />

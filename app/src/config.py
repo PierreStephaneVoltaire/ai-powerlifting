@@ -326,6 +326,10 @@ SKILLS_PATH = os.getenv(
 # Note: IF_HEALTH_TABLE_NAME is defined at line 8 in .env.example
 IF_HEALTH_TABLE_NAME = os.getenv("IF_HEALTH_TABLE_NAME", "if-health")
 
+# DynamoDB table name for global reusable training templates
+IF_TEMPLATES_TABLE_NAME = os.getenv("IF_TEMPLATES_TABLE_NAME", "if-health-templates")
+IF_TEMPLATES_LIBRARY_PK = os.getenv("IF_TEMPLATES_LIBRARY_PK", "template_library")
+
 # DynamoDB table name for copied session records
 IF_SESSIONS_TABLE_NAME = os.getenv("IF_SESSIONS_TABLE_NAME", "if-sessions")
 

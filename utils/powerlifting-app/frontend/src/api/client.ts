@@ -29,6 +29,7 @@ import type {
   AiTemplateEvaluation,
   Template,
   TemplateListEntry,
+  TemplateImportJob,
   ConflictResolution,
   PostMeetReport,
   WeekStartDay,
@@ -808,6 +809,28 @@ export async function createBlankTemplate(body: {
 
 export async function updateTemplate(sk: string, template: Template): Promise<void> {
   await api.put(templatePath(sk), template)
+}
+
+export async function publishTemplate(sk: string): Promise<void> {
+  await api.post(templatePath(sk, '/publish'))
+}
+
+export async function unpublishTemplate(sk: string): Promise<void> {
+  await api.post(templatePath(sk, '/unpublish'))
+}
+
+export async function uploadTemplateImport(file: File): Promise<{ job_id: string; status: TemplateImportJob['status'] }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await api.post('/templates/imports', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return res.data
+}
+
+export async function fetchTemplateImport(jobId: string): Promise<TemplateImportJob> {
+  const res = await api.get(`/templates/imports/${encodeURIComponent(jobId)}`)
+  return res.data
 }
 
 // ─── Archive & e1RM ─────────────────────────────────────────────────────────

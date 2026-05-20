@@ -53,8 +53,8 @@ def _get_template_store():
         import os
         from template_store import TemplateStore
         _template_store = TemplateStore(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+            table_name=os.environ.get("IF_TEMPLATES_TABLE_NAME", "if-health-templates"),
+            pk=os.environ.get("IF_TEMPLATES_LIBRARY_PK", "template_library"),
             region=os.environ.get("AWS_REGION", "ca-central-1"),
         )
     return _template_store
@@ -356,28 +356,9 @@ def _positive_maxes(maxes: dict | None) -> dict[str, float]:
 
 
 def _setup_template(sk: str) -> dict | None:
-    from template_store import TemplateStore
-
     active_pk = _get_store().pk
-    table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
-    region = os.environ.get("AWS_REGION", "ca-central-1")
-    template_store = TemplateStore(
-        table_name=table_name,
-        pk=active_pk,
-        region=region,
-    )
-    template = template_store.get_template_sync(sk)
-    if template:
-        return template
-
-    if active_pk != "operator":
-        operator_templates = TemplateStore(
-            table_name=table_name,
-            pk="operator",
-            region=region,
-        )
-        return operator_templates.get_template_sync(sk)
-    return None
+    template_store = _get_template_store()
+    return template_store.get_template_sync(sk, actor_pk=active_pk)
 
 
 def _setup_missing_maxes(template: dict, maxes: dict[str, float]) -> list[str]:
@@ -2592,7 +2573,9 @@ async def import_apply(
     import_id: str, 
     merge_strategy: str = "append", 
     conflict_resolutions: list[dict] | None = None,
-    start_date: str | None = None
+    start_date: str | None = None,
+    actor_pk: str | None = None,
+    author: str | None = None,
 ) -> dict:
     """Apply a staged import to the program or template library."""
     import_store = _get_import_store()
@@ -2634,7 +2617,13 @@ async def import_apply(
                 "resolution_status": "resolved"
             }
         }
-        sk = await template_store.put_template(template)
+        resolved_actor = _template_actor(actor_pk)
+        sk = await template_store.put_template(
+            _prepare_template_payload(template),
+            actor_pk=resolved_actor,
+            author=_template_author(author, resolved_actor),
+            published=False,
+        )
         await import_store.mark_applied(import_id, datetime.now(timezone.utc).isoformat())
         return {"status": "applied", "target_sk": sk}
     else:
@@ -2716,13 +2705,130 @@ async def import_get_pending(import_id: str) -> dict:
         raise ValueError(f"Import not found: {import_id}")
     return pending
 
-async def template_list(include_archived: bool = False) -> list[dict]:
-    template_store = _get_template_store()
-    return await template_store.list_templates(include_archived)
+def _template_actor(actor_pk: str | None = None) -> str:
+    return str(actor_pk or _get_store().pk)
 
-async def template_get(sk: str) -> dict:
+
+def _template_author(author: str | None, actor_pk: str | None) -> str:
+    return str(author or actor_pk or _template_actor(actor_pk))
+
+
+def _template_days_per_week(sessions: list[dict]) -> int:
+    by_week: dict[int, set[str]] = {}
+    for session in sessions:
+        try:
+            week_number = int(session.get("week_number") or 1)
+        except (TypeError, ValueError):
+            week_number = 1
+        raw_day = session.get("day_index") or session.get("day_of_week") or session.get("label") or "1"
+        by_week.setdefault(week_number, set()).add(str(raw_day))
+    return max((len(days) for days in by_week.values()), default=0)
+
+
+def _template_normalize_day(session: dict) -> None:
+    weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day = session.get("day_of_week")
+    day_index = session.get("day_index")
+    if isinstance(day, str) and day in weekdays:
+        session["day_index"] = weekdays.index(day) + 1
+        return
+    try:
+        idx = int(day_index)
+    except (TypeError, ValueError):
+        idx = 1
+    idx = max(1, min(7, idx))
+    session["day_index"] = idx
+    session["day_of_week"] = weekdays[idx - 1]
+
+
+def _prepare_template_payload(template: dict) -> dict:
+    prepared = copy.deepcopy(template)
+    meta = prepared.setdefault("meta", {})
+    sessions = prepared.setdefault("sessions", [])
+    phases = prepared.setdefault("phases", [])
+    if not isinstance(sessions, list):
+        prepared["sessions"] = sessions = []
+    if not isinstance(phases, list):
+        prepared["phases"] = []
+
+    resolved: set[str] = set()
+    unresolved: set[str] = set()
+    required_maxes: set[str] = set()
+    max_week = 0
+
+    for session in sessions:
+        if not isinstance(session, dict):
+            continue
+        session.setdefault("id", str(uuid.uuid4()))
+        try:
+            week_number = int(session.get("week_number") or 1)
+        except (TypeError, ValueError):
+            week_number = 1
+        week_number = max(1, week_number)
+        session["week_number"] = week_number
+        max_week = max(max_week, week_number)
+        _template_normalize_day(session)
+        session.setdefault("label", f"W{week_number}D{session.get('day_index', 1)}")
+
+        exercises = session.get("exercises")
+        if not isinstance(exercises, list):
+            session["exercises"] = exercises = []
+        for exercise in exercises:
+            if not isinstance(exercise, dict):
+                continue
+            exercise.setdefault("notes", "")
+            exercise.setdefault("sets", None)
+            exercise.setdefault("reps", None)
+            load_type = str(exercise.get("load_type") or "unresolvable").lower()
+            if load_type not in {"rpe", "percentage", "absolute", "unresolvable"}:
+                load_type = "unresolvable"
+            exercise["load_type"] = load_type
+            if load_type == "percentage":
+                try:
+                    load_value = float(exercise.get("load_value"))
+                    if load_value > 1:
+                        load_value = load_value / 100.0
+                    exercise["load_value"] = load_value
+                except (TypeError, ValueError):
+                    exercise["load_value"] = None
+                    exercise["load_type"] = "unresolvable"
+            gid = exercise.get("glossary_id")
+            if gid:
+                gid = str(gid)
+                exercise["glossary_id"] = gid
+                resolved.add(gid)
+                if exercise["load_type"] in {"percentage", "rpe"}:
+                    required_maxes.add(gid)
+            else:
+                name = str(exercise.get("name") or "").strip()
+                if name:
+                    unresolved.add(name)
+
+    if not max_week:
+        max_week = max([int(s.get("week_number") or 1) for s in sessions if isinstance(s, dict)] or [0])
+
+    meta.setdefault("name", "Imported Template")
+    meta.setdefault("description", "")
+    meta.setdefault("estimated_weeks", max_week)
+    meta.setdefault("days_per_week", _template_days_per_week(sessions))
+    meta.setdefault("archived", False)
+    prepared["required_maxes"] = sorted(required_maxes)
+    prepared["glossary_resolution"] = {
+        "resolved": sorted(resolved),
+        "unresolved": sorted(unresolved),
+        "auto_added": [],
+        "resolution_status": "partial" if resolved and unresolved else ("unresolved" if unresolved else "resolved"),
+    }
+    return prepared
+
+
+async def template_list(include_archived: bool = False, actor_pk: str | None = None) -> list[dict]:
     template_store = _get_template_store()
-    tpl = await template_store.get_template(sk)
+    return await template_store.list_templates(include_archived, actor_pk=actor_pk)
+
+async def template_get(sk: str, actor_pk: str | None = None) -> dict:
+    template_store = _get_template_store()
+    tpl = await template_store.get_template(sk, actor_pk=actor_pk)
     if not tpl:
         raise ValueError(f"Template not found: {sk}")
     return tpl
@@ -2732,13 +2838,16 @@ async def template_apply(
     target: str = "new_block", 
     start_date: str | None = None, 
     week_start_day: str | None = None,
+    actor_pk: str | None = None,
 ) -> dict:
     """Run max resolution gate and return missing or preview."""
     from template_apply import check_max_resolution_gate, concretize
     from training_weeks import normalize_week_start_day
     
     template_store = _get_template_store()
-    template = await template_store.get_template(sk)
+    template = await template_store.get_template(sk, actor_pk=actor_pk)
+    if not template:
+        raise ValueError(f"Template not found: {sk}")
     
     store = _get_store()
     program = await store.get_program()
@@ -2781,6 +2890,7 @@ async def template_apply_confirm(
     start_date: str | None = None,
     week_start_day: str | None = None,
     target: str = "new_block",
+    actor_pk: str | None = None,
 ) -> dict:
     """Concretize and write new program version."""
     from template_apply import concretize
@@ -2788,7 +2898,9 @@ async def template_apply_confirm(
     from datetime import date
     
     template_store = _get_template_store()
-    template = await template_store.get_template(sk)
+    template = await template_store.get_template(sk, actor_pk=actor_pk)
+    if not template:
+        raise ValueError(f"Template not found: {sk}")
     
     store = _get_store()
     program = await store.get_program()
@@ -2831,11 +2943,13 @@ async def template_apply_confirm(
         "program_sk": new_program.get("sk") or new_program["meta"]["version_label"],
     }
 
-async def template_evaluate(sk: str) -> dict:
+async def template_evaluate(sk: str, actor_pk: str | None = None) -> dict:
     from template_evaluate_ai import generate_template_evaluate_report
     
     template_store = _get_template_store()
-    template = await template_store.get_template(sk)
+    template = await template_store.get_template(sk, actor_pk=actor_pk)
+    if not template:
+        raise ValueError(f"Template not found: {sk}")
     
     # Get athlete context
     store = _get_store()
@@ -2855,7 +2969,12 @@ async def template_evaluate(sk: str) -> dict:
     # For now, just return it
     return report
 
-async def template_create_from_block(name: str, program_sk: str | None = None) -> dict:
+async def template_create_from_block(
+    name: str,
+    program_sk: str | None = None,
+    actor_pk: str | None = None,
+    author: str | None = None,
+) -> dict:
     from template_convert import convert_block_to_template
     
     store = _get_store()
@@ -2872,15 +2991,34 @@ async def template_create_from_block(name: str, program_sk: str | None = None) -
     template["meta"]["name"] = name
     
     template_store = _get_template_store()
-    sk = await template_store.put_template(template)
+    resolved_actor = _template_actor(actor_pk)
+    sk = await template_store.put_template(
+        _prepare_template_payload(template),
+        actor_pk=resolved_actor,
+        author=_template_author(author, resolved_actor),
+        published=False,
+    )
     return {"status": "created", "sk": sk}
 
-async def template_copy(sk: str, new_name: str) -> dict:
+async def template_copy(sk: str, new_name: str, actor_pk: str | None = None, author: str | None = None) -> dict:
     template_store = _get_template_store()
-    new_sk = await template_store.copy_template(sk, new_name)
+    resolved_actor = _template_actor(actor_pk)
+    new_sk = await template_store.copy_template(
+        sk,
+        new_name,
+        actor_pk=resolved_actor,
+        author=_template_author(author, resolved_actor),
+    )
     return {"status": "copied", "new_sk": new_sk}
 
-async def template_create_blank(name: str, description: str, estimated_weeks: int, days_per_week: int) -> dict:
+async def template_create_blank(
+    name: str,
+    description: str,
+    estimated_weeks: int,
+    days_per_week: int,
+    actor_pk: str | None = None,
+    author: str | None = None,
+) -> dict:
     template = {
         "meta": {
             "name": name,
@@ -2900,50 +3038,62 @@ async def template_create_blank(name: str, description: str, estimated_weeks: in
         "required_maxes": [],
     }
     template_store = _get_template_store()
-    sk = await template_store.put_template(template)
+    resolved_actor = _template_actor(actor_pk)
+    sk = await template_store.put_template(
+        _prepare_template_payload(template),
+        actor_pk=resolved_actor,
+        author=_template_author(author, resolved_actor),
+        published=False,
+    )
     return {"status": "created", "sk": sk}
 
-async def template_update(sk: str, template: dict) -> dict:
-    template = copy.deepcopy(template)
-    sessions = template.get("sessions", [])
-    resolved = set()
-    unresolved = set()
-    for session in sessions:
-        for exercise in session.get("exercises", []):
-            gid = exercise.get("glossary_id")
-            if gid:
-                resolved.add(gid)
-            else:
-                name = exercise.get("name", "")
-                if name:
-                    unresolved.add(name)
-
-    if unresolved:
-        resolution_status = "partial" if resolved else "unresolved"
-    else:
-        resolution_status = "resolved"
-
-    template["glossary_resolution"] = {
-        "resolved": sorted(resolved),
-        "unresolved": sorted(unresolved),
-        "auto_added": [],
-        "resolution_status": resolution_status,
-    }
-    template["required_maxes"] = sorted(resolved)
-
+async def template_create_from_payload(
+    template: dict,
+    actor_pk: str | None = None,
+    author: str | None = None,
+    published: bool = False,
+    import_job_id: str | None = None,
+) -> dict:
+    resolved_actor = _template_actor(actor_pk)
+    prepared = _prepare_template_payload(template)
     template_store = _get_template_store()
-    await template_store.update_template(sk, template)
+    sk = await template_store.put_template(
+        prepared,
+        actor_pk=resolved_actor,
+        author=_template_author(author, resolved_actor),
+        published=published,
+        import_job_id=import_job_id,
+    )
+    return {"status": "created", "sk": sk}
+
+
+async def template_update(sk: str, template: dict, actor_pk: str | None = None) -> dict:
+    prepared = _prepare_template_payload(template)
+    template_store = _get_template_store()
+    await template_store.update_template(sk, prepared, actor_pk=_template_actor(actor_pk))
     return {"status": "updated", "sk": sk}
 
-async def template_archive(sk: str) -> dict:
+async def template_archive(sk: str, actor_pk: str | None = None) -> dict:
     template_store = _get_template_store()
-    await template_store.archive_template(sk)
+    await template_store.archive_template(sk, actor_pk=_template_actor(actor_pk))
     return {"status": "archived", "sk": sk}
 
-async def template_unarchive(sk: str) -> dict:
+async def template_unarchive(sk: str, actor_pk: str | None = None) -> dict:
     template_store = _get_template_store()
-    await template_store.unarchive_template(sk)
+    await template_store.unarchive_template(sk, actor_pk=_template_actor(actor_pk))
     return {"status": "unarchived", "sk": sk}
+
+
+async def template_publish(sk: str, actor_pk: str | None = None) -> dict:
+    template_store = _get_template_store()
+    await template_store.set_published(sk, True, actor_pk=_template_actor(actor_pk))
+    return {"status": "published", "sk": sk}
+
+
+async def template_unpublish(sk: str, actor_pk: str | None = None) -> dict:
+    template_store = _get_template_store()
+    await template_store.set_published(sk, False, actor_pk=_template_actor(actor_pk))
+    return {"status": "unpublished", "sk": sk}
 
 async def program_archive(sk: str) -> dict:
     store = _get_store()

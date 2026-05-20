@@ -13,7 +13,7 @@ import { templateDetailRoute } from '../utils/templateRoutes'
 import { useAuth } from '@/auth/AuthProvider'
 
 export default function TemplateEditPage() {
-  const { readOnly } = useAuth()
+  const { readOnly, mapped_pk } = useAuth()
   const { sk } = useParams<{ sk: string }>()
   const [searchParams] = useSearchParams()
   const resolvedSk = sk ?? searchParams.get('sk') ?? undefined
@@ -35,7 +35,7 @@ export default function TemplateEditPage() {
   }, [resolvedSk])
 
   async function handleSave() {
-    if (readOnly || !resolvedSk || !template) return
+    if (readOnly || !resolvedSk || !template || template.meta.author_pk !== mapped_pk) return
     if (!template.meta.name.trim()) {
       setError('Template name is required')
       return
@@ -80,7 +80,7 @@ export default function TemplateEditPage() {
             leftSection={<Save size={16} />}
             onClick={handleSave}
             loading={saving}
-            disabled={saving || !template || readOnly}
+            disabled={saving || !template || readOnly || template.meta.author_pk !== mapped_pk}
           >
             Save
           </Button>
@@ -100,7 +100,7 @@ export default function TemplateEditPage() {
             <TemplateMetaEditor
               meta={template.meta}
               onChange={(meta) => setTemplate(t => t ? { ...t, meta } : t)}
-              disabled={readOnly}
+              disabled={readOnly || template.meta.author_pk !== mapped_pk}
             />
           </Stack>
 
@@ -111,7 +111,7 @@ export default function TemplateEditPage() {
             <TemplatePhasesEditor
               phases={template.phases}
               onChange={(phases) => setTemplate(t => t ? { ...t, phases } : t)}
-              disabled={readOnly}
+              disabled={readOnly || template.meta.author_pk !== mapped_pk}
             />
           </Stack>
 
@@ -122,7 +122,7 @@ export default function TemplateEditPage() {
             <TemplateSessionsEditor
               sessions={template.sessions}
               onChange={(sessions) => setTemplate(t => t ? { ...t, sessions } : t)}
-              disabled={readOnly}
+              disabled={readOnly || template.meta.author_pk !== mapped_pk}
             />
           </Stack>
         </Stack>

@@ -56,6 +56,18 @@ def _get_e1rm(gid: str, current_maxes: dict[str, float], glossary_map: dict[str,
         return ex["e1rm_estimate"].get("value_kg")
     return None
 
+def rpe_to_percent(reps: int | float | None, rpe: int | float | None) -> float | None:
+    """Estimate %1RM from reps and RPE using a simple Epley-style rule."""
+    try:
+        reps_value = float(reps)
+        rpe_value = float(rpe)
+    except (TypeError, ValueError):
+        return None
+    if reps_value <= 0 or rpe_value <= 0:
+        return None
+    effective_reps = reps_value + max(0.0, 10.0 - rpe_value)
+    return 1.0 / (1.0 + effective_reps / 30.0)
+
 def concretize(
     template: dict[str, Any],
     current_maxes: dict[str, float],
@@ -110,7 +122,13 @@ def concretize(
             elif load_type == "absolute":
                 kg = load_value
             elif load_type == "rpe":
-                kg = None # resolved at runtime
+                e1rm = _get_e1rm(gid, current_maxes, glossary_map)
+                pct = rpe_to_percent(tpl_ex.get("reps"), rpe_target)
+                if e1rm and pct:
+                    kg = round_to_2_5(e1rm * pct)
+                    load_source = "rpe_estimate"
+                else:
+                    load_source = "unresolvable"
                 
             exercises.append({
                 "name": tpl_ex["name"],

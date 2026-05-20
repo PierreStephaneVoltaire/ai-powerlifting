@@ -53,6 +53,8 @@ resource "kubernetes_config_map" "if_agent_api_config" {
   data = {
     IF_CORE_TABLE_NAME          = var.dynamodb_core_table
     IF_HEALTH_TABLE_NAME        = var.dynamodb_health_table
+    IF_TEMPLATES_TABLE_NAME     = var.dynamodb_templates_table
+    IF_TEMPLATES_LIBRARY_PK     = "template_library"
     IF_SESSIONS_TABLE_NAME      = var.dynamodb_sessions_table
     ANALYSIS_CACHE_TABLE_NAME   = var.dynamodb_analysis_cache_table
     IF_FINANCE_TABLE_NAME       = var.dynamodb_finance_table

@@ -6,7 +6,7 @@ AWS_REGION="${AWS_REGION:-ca-central-1}"
 ECR_REPOSITORY_PREFIX="${ECR_REPOSITORY_PREFIX:-if}"
 NAMESPACE="${NAMESPACE:-if-portals-test}"
 IMAGE_TAG="${IMAGE_TAG:-test}"
-FRONTEND_API_URL="${TEST_FRONTEND_API_URL:-/api}"
+FRONTEND_API_URL="${TEST_FRONTEND_API_URL:-http://localhost:3005/api}"
 TEST_MODEL_ID="${TEST_MODEL_ID:-deepseek/deepseek-v4-flash}"
 
 # Allow building only specific images

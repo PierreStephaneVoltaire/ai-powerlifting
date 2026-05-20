@@ -508,6 +508,7 @@ async def _run_domain(
     runtime_context: str,
     uploaded_files: list[dict[str, Any]] | None = None,
     handoff_depth: int = 0,
+    opencode_timeout: int | None = None,
 ) -> tuple[str, list[FileRef]]:
     before = _snapshot_files(session_dir)
     status_file = _status_file(session_dir)
@@ -529,6 +530,7 @@ async def _run_domain(
         status_file=status_file,
         status_callback=_opencode_status,
         files=uploaded_file_paths(uploaded_files),
+        timeout=opencode_timeout,
     )
     if result.returncode != 0:
         await send_status(StatusType.SUBAGENT_FAILED, "Domain Agent Failed", result.stderr[:500])
@@ -790,6 +792,7 @@ async def run_specialist_flow(
     context_id: str = "",
     cache_key: str = "",
     selected_model: str | None = None,
+    opencode_timeout: int | None = None,
 ) -> tuple[str, list[FileRef]]:
     del http_client  # specialist slash commands now run through opencode
     write_history(session_dir, [{"role": "user", "content": task, "source": "direct_specialist"}])
@@ -808,7 +811,7 @@ async def run_specialist_flow(
         interaction_type="domain",
         reason=f"Direct specialist command: {specialist_slug}",
     )
-    return await _run_domain(plan, session_dir, runtime_context)
+    return await _run_domain(plan, session_dir, runtime_context, opencode_timeout=opencode_timeout)
 
 
 def materialize_file_ref(ref: FileRef, cache_key: str) -> dict[str, Any] | None:

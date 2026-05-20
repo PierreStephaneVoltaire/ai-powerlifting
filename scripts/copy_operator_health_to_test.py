@@ -5,6 +5,7 @@ This is meant for the private test environment. It copies:
   - if-health: pk=operator, sk=program#current pointer
   - if-health: the current program item pointed to by that pointer
   - if-sessions: all standalone session items for that program version
+  - if-health-templates: pk=template_library global templates to pk=test
 
 Every copied item is tagged with test_seed_marker so cleanup can remove the
 seeded test data without guessing at keys.
@@ -37,6 +38,7 @@ from botocore.exceptions import ClientError
 POINTER_SK = "program#current"
 PROGRAM_SK_PREFIX = "program#v"
 SESSION_SK_PREFIX = "session#"
+TEMPLATE_SK_PREFIX = "template#"
 DEFAULT_BLOCK = "current"
 SEED_MARKER = "operator-health-current-to-test"
 
@@ -306,6 +308,14 @@ def copy_session_item(item: dict[str, Any], source_pk: str, target_pk: str, copi
     return copied
 
 
+def copy_template_item(item: dict[str, Any], source_pk: str, target_pk: str, copied_at: str) -> dict[str, Any]:
+    copied = copy.deepcopy(item)
+    source_sk = str(copied.get("sk") or "")
+    copied["pk"] = target_pk
+    copied.update(seed_tags(source_pk, target_pk, copied_at, source_sk))
+    return copied
+
+
 def existing_keys(table: Any, items: list[dict[str, Any]]) -> list[tuple[str, str]]:
     conflicts: list[tuple[str, str]] = []
     for item in items:
@@ -353,10 +363,19 @@ def collect_cleanup_items(health_table: Any, sessions_table: Any, source_pk: str
     return health_items, session_items
 
 
+def collect_template_cleanup_items(template_table: Any, source_pk: str, target_pk: str) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in query_by_prefix(template_table, target_pk, TEMPLATE_SK_PREFIX)
+        if is_seeded(item, source_pk, target_pk)
+    ]
+
+
 def copy_current(args: argparse.Namespace) -> int:
     dynamodb = boto3.resource("dynamodb", region_name=args.region)
     health_table = dynamodb.Table(args.health_table)
     sessions_table = dynamodb.Table(args.sessions_table)
+    template_table = dynamodb.Table(args.templates_table)
     copied_at = datetime.now(timezone.utc).isoformat()
 
     pointer, program = resolve_current_program(health_table, args.source_pk)
@@ -397,12 +416,23 @@ def copy_current(args: argparse.Namespace) -> int:
     target_program = copy_program_item(program, args.source_pk, args.target_pk, copied_at)
     target_pointer = copy_pointer_item(pointer, args.source_pk, args.target_pk, copied_at)
     health_items = [target_program, target_pointer]
+    target_templates: list[dict[str, Any]] = []
+    existing_target_templates: list[dict[str, Any]] = []
+    if not args.skip_templates:
+        source_templates = query_by_prefix(template_table, args.source_template_library_pk, TEMPLATE_SK_PREFIX)
+        target_templates = [
+            copy_template_item(item, args.source_template_library_pk, args.target_template_library_pk, copied_at)
+            for item in source_templates
+        ]
+        existing_target_templates = query_by_prefix(template_table, args.target_template_library_pk, TEMPLATE_SK_PREFIX)
 
     existing_target_sessions = list_session_items(sessions_table, args.target_pk, program_sk)
     if not args.replace:
         conflicts = existing_keys(health_table, health_items)
         if existing_target_sessions:
             conflicts.extend((str(item["pk"]), str(item["sk"])) for item in existing_target_sessions[:10])
+        if existing_target_templates:
+            conflicts.extend((str(item["pk"]), str(item["sk"])) for item in existing_target_templates[:10])
         if conflicts:
             print("Refusing to copy because target items already exist. Re-run with --replace to overwrite pk=test.")
             for pk, sk in conflicts[:25]:
@@ -414,12 +444,17 @@ def copy_current(args: argparse.Namespace) -> int:
     print("[operator-health-copy] Copy current operator program to test")
     print(f"  Health table:       {args.health_table}")
     print(f"  Sessions table:     {args.sessions_table}")
+    print(f"  Templates table:    {args.templates_table}")
     print(f"  Region:             {args.region}")
     print(f"  Source PK:          {args.source_pk}")
     print(f"  Target PK:          {args.target_pk}")
+    print(f"  Source templates PK:{args.source_template_library_pk}")
+    print(f"  Target templates PK:{args.target_template_library_pk}")
     print(f"  Program SK:         {program_sk}")
     print(f"  Source sessions:    {len(target_sessions)} ({session_source})")
+    print(f"  Source templates:   {len(target_templates)}")
     print(f"  Existing target sessions for program: {len(existing_target_sessions)}")
+    print(f"  Existing target templates: {len(existing_target_templates)}")
     print(f"  Replace:            {args.replace}")
     print(f"  Dry run:            {args.dry_run}")
 
@@ -438,14 +473,19 @@ def copy_current(args: argparse.Namespace) -> int:
     if args.replace and existing_target_sessions:
         deleted = delete_items(sessions_table, existing_target_sessions, dry_run=False)
         print(f"Deleted existing target sessions for {program_sk}: {deleted}")
+    if args.replace and existing_target_templates:
+        deleted = delete_items(template_table, existing_target_templates, dry_run=False)
+        print(f"Deleted existing target templates: {deleted}")
 
     put_items(health_table, [target_program])
     put_items(sessions_table, target_sessions)
+    put_items(template_table, target_templates)
     put_items(health_table, [target_pointer])
 
     print("Copy complete.")
     print(f"  Wrote health items:   {len(health_items)}")
     print(f"  Wrote session items:  {len(target_sessions)}")
+    print(f"  Wrote template items: {len(target_templates)}")
     print("Cleanup command:")
     print("  python scripts/copy_operator_health_to_test.py --cleanup")
     return 0
@@ -455,21 +495,31 @@ def cleanup(args: argparse.Namespace) -> int:
     dynamodb = boto3.resource("dynamodb", region_name=args.region)
     health_table = dynamodb.Table(args.health_table)
     sessions_table = dynamodb.Table(args.sessions_table)
+    template_table = dynamodb.Table(args.templates_table)
     health_items, session_items = collect_cleanup_items(
         health_table,
         sessions_table,
         args.source_pk,
         args.target_pk,
     )
+    template_items = [] if args.skip_templates else collect_template_cleanup_items(
+        template_table,
+        args.source_template_library_pk,
+        args.target_template_library_pk,
+    )
 
     print("[operator-health-copy] Cleanup seeded test data")
     print(f"  Health table:    {args.health_table}")
     print(f"  Sessions table:  {args.sessions_table}")
+    print(f"  Templates table: {args.templates_table}")
     print(f"  Source PK:       {args.source_pk}")
     print(f"  Target PK:       {args.target_pk}")
+    print(f"  Source templates PK: {args.source_template_library_pk}")
+    print(f"  Target templates PK: {args.target_template_library_pk}")
     print(f"  Dry run:         {args.dry_run}")
     print(f"  Health items:    {len(health_items)}")
     print(f"  Session items:   {len(session_items)}")
+    print(f"  Template items:  {len(template_items)}")
 
     if health_items:
         print("  Health item SKs:")
@@ -479,9 +529,14 @@ def cleanup(args: argparse.Namespace) -> int:
         print("  Sample session SKs:")
         for item in sort_session_items(session_items)[: args.sample_keys]:
             print(f"    {item['sk']}")
+    if template_items:
+        print("  Template item SKs:")
+        for item in sorted(template_items, key=lambda row: str(row.get("sk") or ""))[: args.sample_keys]:
+            print(f"    {item['sk']}")
 
     deleted_sessions = delete_items(sessions_table, session_items, args.dry_run)
     deleted_health = delete_items(health_table, health_items, args.dry_run)
+    deleted_templates = delete_items(template_table, template_items, args.dry_run)
 
     if args.dry_run:
         print("Dry run only; no DynamoDB deletes performed.")
@@ -489,6 +544,7 @@ def cleanup(args: argparse.Namespace) -> int:
         print("Cleanup complete.")
     print(f"  {'Would delete' if args.dry_run else 'Deleted'} session items: {deleted_sessions}")
     print(f"  {'Would delete' if args.dry_run else 'Deleted'} health items:  {deleted_health}")
+    print(f"  {'Would delete' if args.dry_run else 'Deleted'} template items:{deleted_templates}")
     return 0
 
 
@@ -498,9 +554,13 @@ def main() -> int:
     )
     parser.add_argument("--health-table", default=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"))
     parser.add_argument("--sessions-table", default=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"))
+    parser.add_argument("--templates-table", default=os.environ.get("IF_TEMPLATES_TABLE_NAME", "if-health-templates"))
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "ca-central-1"))
     parser.add_argument("--source-pk", default=os.environ.get("HEALTH_PROGRAM_PK", "operator"))
     parser.add_argument("--target-pk", default=os.environ.get("POWERLIFTING_TEST_MAPPED_PK", "test"))
+    parser.add_argument("--source-template-library-pk", default=os.environ.get("IF_TEMPLATES_LIBRARY_PK", "template_library"))
+    parser.add_argument("--target-template-library-pk", default=os.environ.get("IF_TEMPLATES_TEST_LIBRARY_PK", "test"))
+    parser.add_argument("--skip-templates", action="store_true", help="Do not copy global template-library data")
     parser.add_argument("--replace", action="store_true", help="Overwrite the target current program and sessions")
     parser.add_argument("--cleanup", action="store_true", help="Delete items previously copied by this script")
     parser.add_argument("--dry-run", action="store_true", help="Show what would happen without writing or deleting")

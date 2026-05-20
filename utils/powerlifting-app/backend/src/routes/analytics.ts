@@ -24,7 +24,6 @@ import {
   normalizeAnalysisWindowKey,
   putCachedAnalysisSection,
   queueAnalysisSectionJobs,
-  splitWeeklyAnalysisSections,
   type AnalysisWindowKey,
   type AnalysisSectionKey,
 } from '../services/analysisCache'
@@ -135,27 +134,27 @@ async function queueMissingSections(
   return missing
 }
 
-async function computeDeterministicSections(
+async function computeDeterministicSection(
   context: AnalysisContext,
-  sectionKeys: AnalysisSectionKey[],
+  sectionKey: AnalysisSectionKey,
 ): Promise<void> {
-  const claimed: AnalysisSectionKey[] = []
-  for (const sectionKey of sectionKeys.filter((key) => DETERMINISTIC_SECTION_SET.has(key))) {
-    const didClaim = await claimAnalysisSectionJob(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-    )
-    if (didClaim) claimed.push(sectionKey)
-  }
-  if (!claimed.length) return
+  if (!DETERMINISTIC_SECTION_SET.has(sectionKey)) return
+  const didClaim = await claimAnalysisSectionJob(
+    context.pk,
+    context.asOfDate,
+    context.windowKey,
+    sectionKey,
+    context.sourceFingerprint,
+  )
+  if (!didClaim) return
 
   try {
-    await snapshotCompetitionProjection(context.pk, context.asOfDate)
+    if (sectionKey === 'overview' || sectionKey === 'alerts') {
+      await snapshotCompetitionProjection(context.pk, context.asOfDate)
+    }
     const window = context.windows[context.windowKey]
-    const weekly = await invokeToolDirect('weekly_analysis', {
+    const payload = await invokeToolDirect('analysis_section', {
+      section: sectionKey,
       weeks: window.weeks,
       block: 'current',
       window_start: window.start,
@@ -168,36 +167,31 @@ async function computeDeterministicSections(
       sessions: context.program.sessions ?? [],
       pk: context.pk,
     }) as Record<string, unknown>
-    const sections = splitWeeklyAnalysisSections(weekly)
-    await Promise.all(claimed.map(async (sectionKey) => {
-      await putCachedAnalysisSection(
-        context.pk,
-        context.asOfDate,
-        context.windowKey,
-        sectionKey,
-        context.sourceFingerprint,
-        sections[sectionKey],
-      )
-      await completeAnalysisSectionJob(
-        context.pk,
-        context.asOfDate,
-        context.windowKey,
-        sectionKey,
-        context.sourceFingerprint,
-      )
-    }))
+    await putCachedAnalysisSection(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+      payload,
+    )
+    await completeAnalysisSectionJob(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await Promise.all(claimed.map((sectionKey) =>
-      failAnalysisSectionJob(
-        context.pk,
-        context.asOfDate,
-        context.windowKey,
-        sectionKey,
-        context.sourceFingerprint,
-        message,
-      ).catch((err) => logger.warn({ err, sectionKey }, 'Failed to mark analysis section job failed')),
-    ))
+    await failAnalysisSectionJob(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+      message,
+    ).catch((err) => logger.warn({ err, sectionKey }, 'Failed to mark analysis section job failed'))
   }
 }
 
@@ -282,7 +276,9 @@ async function runQueuedAnalysisSections(
   context: AnalysisContext,
   sectionKeys: AnalysisSectionKey[],
 ): Promise<void> {
-  await computeDeterministicSections(context, sectionKeys)
+  for (const sectionKey of sectionKeys.filter((key) => DETERMINISTIC_SECTION_SET.has(key))) {
+    await computeDeterministicSection(context, sectionKey)
+  }
   for (const sectionKey of sectionKeys.filter((key) => AI_SECTION_KEYS.includes(key))) {
     await computeAiSection(context, sectionKey)
   }
@@ -307,20 +303,26 @@ async function runTargetedRegeneration(
   const results = {} as Record<AnalysisWindowKey, unknown>
   for (const key of keys) {
     const window = windows[key]
-    logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window')
-    results[key] = await invokeToolDirect('weekly_analysis', {
-      weeks: window.weeks,
-      block: 'current',
-      window_start: window.start,
-      window_end: window.end,
-      ref_date: asOfDate,
-      week_start: window.weekStart,
-      week_end: window.weekEnd,
-      refresh_program: false,
-      program,
-      sessions,
-      pk,
-    })
+    logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window from sections')
+    const merged: Record<string, unknown> = {}
+    for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
+      const sectionPayload = await invokeToolDirect('analysis_section', {
+        section: sectionKey,
+        weeks: window.weeks,
+        block: 'current',
+        window_start: window.start,
+        window_end: window.end,
+        ref_date: asOfDate,
+        week_start: window.weekStart,
+        week_end: window.weekEnd,
+        refresh_program: false,
+        program,
+        sessions,
+        pk,
+      }) as Record<string, unknown>
+      Object.assign(merged, sectionPayload)
+    }
+    results[key] = merged
   }
 
   await putAllCachedWindowAnalyses(pk, results)
@@ -595,19 +597,24 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const projectionDate = isIsoDate(refDate) ? refDate : todayIso()
     await snapshotCompetitionProjection(req.mapped_pk!, projectionDate)
     const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
-    const data = await invokeToolDirect('weekly_analysis', {
-      weeks,
-      block,
-      window_start: windowStart,
-      window_end: windowEnd,
-      ref_date: refDate,
-      week_start: weekStart,
-      week_end: weekEnd,
-      refresh_program: false,
-      program,
-      sessions: program.sessions ?? [],
-      pk: req.mapped_pk,
-    })
+    const data: Record<string, unknown> = {}
+    for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
+      const sectionPayload = await invokeToolDirect('analysis_section', {
+        section: sectionKey,
+        weeks,
+        block,
+        window_start: windowStart,
+        window_end: windowEnd,
+        ref_date: refDate,
+        week_start: weekStart,
+        week_end: weekEnd,
+        refresh_program: false,
+        program,
+        sessions: program.sessions ?? [],
+        pk: req.mapped_pk,
+      }) as Record<string, unknown>
+      Object.assign(data, sectionPayload)
+    }
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })

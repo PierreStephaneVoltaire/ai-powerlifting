@@ -34,6 +34,9 @@ def _sync_powerlifting_datasets():
     import threading
     from pathlib import Path
 
+    if os.getenv("IF_DISABLE_POWERLIFTING_DATASET_SYNC") == "1" or os.getenv("IF_MCP_ALLOWED_TOOLS"):
+        return
+
     def _sync_worker():
         try:
             import boto3
@@ -1621,7 +1624,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
     """
     import logging
 
-    from analytics import weekly_analysis
     from config import IF_HEALTH_TABLE_NAME
     from core import _get_store
     from prompt_context import summarize_lift_profiles
@@ -1707,8 +1709,19 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
         effective_weeks = 4
 
     try:
-        bundle["weekly"] = weekly_analysis(
-            program, sessions, weeks=effective_weeks, block="current", glossary=glossary,
+        from datetime import datetime
+        current_sessions = [s for s in sessions if (s.get("block") or "current") == "current"]
+        current_week = max(
+            (int(s.get("week_number", 0)) for s in current_sessions if s.get("week_number")),
+            default=effective_weeks,
+        )
+        bundle["weekly"] = _build_sectioned_week_analysis(
+            program,
+            current_sessions,
+            glossary,
+            week_start=max(1, current_week - effective_weeks + 1),
+            week_end=current_week,
+            ref_date=datetime.utcnow().date().isoformat(),
         )
     except Exception as e:
         logger.warning("export: weekly_analysis failed: %s", e)
@@ -2024,7 +2037,6 @@ class WeeklyAnalysisObservation(Observation):
 class WeeklyAnalysisExecutor(ToolExecutor[WeeklyAnalysisAction, WeeklyAnalysisObservation]):
     def __call__(self, action: WeeklyAnalysisAction, conversation=None) -> WeeklyAnalysisObservation:
         from core import _get_store
-        from analytics import weekly_analysis
         from config import IF_HEALTH_TABLE_NAME
 
         store = _get_store()
@@ -2038,17 +2050,17 @@ class WeeklyAnalysisExecutor(ToolExecutor[WeeklyAnalysisAction, WeeklyAnalysisOb
             program = _run_async(store.get_program())
             sessions = program.get("sessions", [])
         glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME)
-        result = weekly_analysis(
+        result = _build_sectioned_analysis(
             program,
             sessions,
+            glossary,
+            weeks=action.weeks,
+            block=action.block,
             window_start=action.window_start,
             window_end=action.window_end,
             ref_date=action.ref_date,
             week_start=action.week_start,
             week_end=action.week_end,
-            weeks=action.weeks,
-            block=action.block,
-            glossary=glossary,
         )
         return WeeklyAnalysisObservation.from_text(_format_result(result))
 
@@ -3164,6 +3176,34 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "required": [],
             },
         },
+        "analysis_section": {
+            "name": "analysis_section",
+            "description": (
+                "Compute one weekly analysis section only. Use this for asynchronous section caches; "
+                "it does not build the full weekly analysis report."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "section": {
+                        "type": "string",
+                        "enum": ["overview", "fatigue_readiness", "peaking", "workload", "alerts"],
+                        "description": "The individual analysis section to compute",
+                    },
+                    "weeks": {"type": "integer", "description": "Number of weeks to analyze", "default": 1},
+                    "block": {"type": "string", "description": "Program block filter", "default": "current"},
+                    "week_start": {"type": "integer", "description": "Inclusive training week number to start analysis"},
+                    "week_end": {"type": "integer", "description": "Inclusive training week number to end analysis"},
+                    "window_start": {"type": "string", "description": "Optional date window start (YYYY-MM-DD) for time-series context"},
+                    "window_end": {"type": "string", "description": "Optional date window end (YYYY-MM-DD) for time-series context"},
+                    "ref_date": {"type": "string", "description": "Optional reference date (YYYY-MM-DD)"},
+                    "refresh_program": {"type": "boolean", "description": "Invalidate the program cache before analysis", "default": True},
+                    "program": {"type": "object", "description": "Optional program snapshot supplied by the caller"},
+                    "sessions": {"type": "array", "description": "Optional session snapshot supplied by the caller", "items": {"type": "object"}},
+                },
+                "required": ["section"],
+            },
+        },
         "health_invalidate_program_cache": {
             "name": "health_invalidate_program_cache",
             "description": "Clear the in-memory cached training program so the next read loads from DynamoDB.",
@@ -3482,7 +3522,8 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "include_archived": {"type": "boolean", "default": False}
+                    "include_archived": {"type": "boolean", "default": False},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition for draft visibility"}
                 },
                 "required": [],
             },
@@ -3493,7 +3534,8 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "sk": {"type": "string"}
+                    "sk": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition for draft visibility"}
                 },
                 "required": ["sk"],
             },
@@ -3507,7 +3549,8 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                     "sk": {"type": "string"},
                     "target": {"type": "string", "default": "new_block"},
                     "start_date": {"type": "string"},
-                    "week_start_day": {"type": "string", "default": "Monday"}
+                    "week_start_day": {"type": "string", "default": "Monday"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition for draft visibility"}
                 },
                 "required": ["sk"],
             },
@@ -3522,7 +3565,8 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                     "backfilled_maxes": {"type": "object"},
                     "start_date": {"type": "string"},
                     "week_start_day": {"type": "string"},
-                    "target": {"type": "string", "description": "Apply strategy", "default": "new_block"}
+                    "target": {"type": "string", "description": "Apply strategy", "default": "new_block"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition for draft visibility"}
                 },
                 "required": ["sk"],
             },
@@ -3533,7 +3577,8 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "sk": {"type": "string"}
+                    "sk": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition for draft visibility"}
                 },
                 "required": ["sk"],
             },
@@ -3545,7 +3590,9 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "program_sk": {"type": "string"}
+                    "program_sk": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"},
+                    "author": {"type": "string", "description": "Display author"}
                 },
                 "required": ["name"],
             },
@@ -3557,7 +3604,9 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "sk": {"type": "string"},
-                    "new_name": {"type": "string"}
+                    "new_name": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"},
+                    "author": {"type": "string", "description": "Display author"}
                 },
                 "required": ["sk", "new_name"],
             },
@@ -3568,7 +3617,8 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "sk": {"type": "string"}
+                    "sk": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"}
                 },
                 "required": ["sk"],
             },
@@ -3579,7 +3629,32 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "sk": {"type": "string"}
+                    "sk": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"}
+                },
+                "required": ["sk"],
+            },
+        },
+        "template_publish": {
+            "name": "template_publish",
+            "description": "Publish an authored draft template so everyone can see and apply it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sk": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"}
+                },
+                "required": ["sk"],
+            },
+        },
+        "template_unpublish": {
+            "name": "template_unpublish",
+            "description": "Unpublish an authored template so only its author can see it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sk": {"type": "string"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"}
                 },
                 "required": ["sk"],
             },
@@ -3594,8 +3669,25 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                     "description": {"type": "string", "default": ""},
                     "estimated_weeks": {"type": "integer", "default": 4},
                     "days_per_week": {"type": "integer", "default": 3},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"},
+                    "author": {"type": "string", "description": "Display author"},
                 },
                 "required": ["name"],
+            },
+        },
+        "template_create_from_payload": {
+            "name": "template_create_from_payload",
+            "description": "Create a complete reusable training template atomically from a structured payload.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "template": {"type": "object"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"},
+                    "author": {"type": "string", "description": "Display author"},
+                    "published": {"type": "boolean", "default": False},
+                    "import_job_id": {"type": "string"}
+                },
+                "required": ["template"],
             },
         },
         "template_update": {
@@ -3606,6 +3698,7 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "properties": {
                     "sk": {"type": "string"},
                     "template": {"type": "object"},
+                    "actor_pk": {"type": "string", "description": "Signed-in user/template author partition"},
                 },
                 "required": ["sk", "template"],
             },
@@ -3820,16 +3913,38 @@ def _do_calculate_dots(args):
 
 
 def _do_weekly_analysis(args):
-    from analytics import weekly_analysis
     from config import IF_HEALTH_TABLE_NAME
     program, sessions, program_start = _get_analysis_program_and_sessions(
         args,
         refresh_program=args.get("refresh_program", True),
     )
     glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME)
-    return weekly_analysis(
+    return _build_sectioned_analysis(
         program,
         sessions,
+        glossary,
+        weeks=args.get("weeks", 1),
+        block=args.get("block", "current"),
+        window_start=args.get("window_start"),
+        window_end=args.get("window_end"),
+        ref_date=args.get("ref_date"),
+        week_start=args.get("week_start"),
+        week_end=args.get("week_end"),
+    )
+
+
+def _do_analysis_section(args):
+    from analytics import weekly_analysis_section
+    from config import IF_HEALTH_TABLE_NAME
+    program, sessions, program_start = _get_analysis_program_and_sessions(
+        args,
+        refresh_program=args.get("refresh_program", True),
+    )
+    glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME)
+    return weekly_analysis_section(
+        program,
+        sessions,
+        section=args["section"],
         window_start=args.get("window_start"),
         window_end=args.get("window_end"),
         ref_date=args.get("ref_date"),
@@ -4123,6 +4238,63 @@ def _do_export_program_markdown(args: Dict[str, Any]) -> str:
     return {"markdown": markdown, "length": len(markdown)}
 
 
+_DETERMINISTIC_ANALYSIS_SECTIONS = ["overview", "fatigue_readiness", "peaking", "workload", "alerts"]
+
+
+def _build_sectioned_week_analysis(
+    program: dict,
+    sessions: list[dict],
+    glossary: list[dict] | None,
+    *,
+    week_start: int,
+    week_end: int,
+    ref_date: str,
+) -> dict:
+    return _build_sectioned_analysis(
+        program,
+        sessions,
+        glossary,
+        weeks=max(1, week_end - week_start + 1),
+        block="current",
+        week_start=week_start,
+        week_end=week_end,
+        ref_date=ref_date,
+    )
+
+
+def _build_sectioned_analysis(
+    program: dict,
+    sessions: list[dict],
+    glossary: list[dict] | None,
+    *,
+    weeks: int = 1,
+    block: str = "current",
+    window_start: str | None = None,
+    window_end: str | None = None,
+    ref_date: str | None = None,
+    week_start: int | None = None,
+    week_end: int | None = None,
+) -> dict:
+    from analytics import weekly_analysis_section
+
+    result: dict[str, Any] = {}
+    for section in _DETERMINISTIC_ANALYSIS_SECTIONS:
+        result.update(weekly_analysis_section(
+            program=program,
+            sessions=sessions,
+            section=section,
+            weeks=weeks,
+            block=block,
+            window_start=window_start,
+            window_end=window_end,
+            week_start=week_start,
+            week_end=week_end,
+            ref_date=ref_date,
+            glossary=glossary,
+        ))
+    return result
+
+
 async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     """Regenerate deterministic current-block analysis caches and markdown export.
 
@@ -4137,7 +4309,6 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     import boto3
     from datetime import datetime
     from core import _get_store, _floats_to_decimals
-    from analytics import weekly_analysis
     from export import build_program_markdown
 
     from config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
@@ -4181,15 +4352,13 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
 
     for window_key, week_start, week_end in window_specs:
         try:
-            result = weekly_analysis(
-                program=program,
-                sessions=sessions,
-                weeks=max(1, week_end - week_start + 1),
-                block="current",
+            result = _build_sectioned_week_analysis(
+                program,
+                sessions,
+                glossary,
                 week_start=week_start,
                 week_end=week_end,
                 ref_date=today_iso,
-                glossary=glossary,
             )
             if window_key == "block":
                 block_analysis_result = result
@@ -4211,7 +4380,12 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         out_path = os.path.join(tempfile.gettempdir(), "program_history_regen.md")
         scoped_program = _scope_program_to_current_block(program)
-        build_program_markdown(scoped_program, out_path, analysis=block_analysis_result)
+        analysis_bundle = {
+            "weekly": block_analysis_result or {},
+            "pk": pk,
+            "sex": str((program.get("meta") or {}).get("sex") or "male").lower(),
+        }
+        build_program_markdown(scoped_program, out_path, analysis=analysis_bundle, export_context=analysis_bundle)
         with open(out_path, "r", encoding="utf-8") as f:
             markdown = f.read()
         if markdown:
@@ -4237,7 +4411,7 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
         "windows_regenerated": 6,
         "errors": errors,
         "message": (
-            f"Regenerated 6 deterministic analysis windows and markdown export. AI reports were not regenerated."
+            f"Regenerated 6 deterministic analysis windows from individual section calculations and markdown export. AI reports were not regenerated."
             + (f" {len(errors)} non-fatal errors: {'; '.join(errors)}" if errors else "")
         ),
     }
@@ -4318,10 +4492,28 @@ def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     store.invalidate_cache()
     program = _run_async(store.get_program())
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
-    analysis = _build_analysis_bundle(program, sessions)
+    today_iso = datetime.utcnow().date().isoformat()
+    current_week = max(
+        (int(s.get("week_number", 0)) for s in sessions if s.get("week_number")),
+        default=1,
+    )
+    glossary = _run_async(_get_glossary_store().get_glossary()) if hasattr(_get_glossary_store(), "get_glossary") else []
+    analysis = _build_sectioned_week_analysis(
+        program,
+        sessions,
+        glossary,
+        week_start=1,
+        week_end=current_week,
+        ref_date=today_iso,
+    )
     scoped_program = _scope_program_to_current_block(program)
     out_path = os.path.join(tempfile.gettempdir(), "program_history_live.md")
-    build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
+    analysis_bundle = {
+        "weekly": analysis,
+        "pk": pk,
+        "sex": str((program.get("meta") or {}).get("sex") or "male").lower(),
+    }
+    build_program_markdown(scoped_program, out_path, analysis=analysis_bundle, export_context=analysis_bundle)
     with open(out_path, "r", encoding="utf-8") as f:
         markdown = f.read()
 
@@ -4403,7 +4595,10 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         template_archive,
         template_unarchive,
         template_create_blank,
+        template_create_from_payload,
         template_update,
+        template_publish,
+        template_unpublish,
         program_archive,
         program_unarchive,
         glossary_add,
@@ -4476,6 +4671,7 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "estimate_1rm": lambda: _do_estimate_1rm(args),
         "calculate_dots": lambda: _do_calculate_dots(args),
         "weekly_analysis": lambda: _do_weekly_analysis(args),
+        "analysis_section": lambda: _do_analysis_section(args),
         "correlation_analysis": lambda: _do_correlation_analysis(args),
         "block_correlation_analysis": lambda: _do_block_correlation_analysis(args),
         "fatigue_profile_estimate": lambda: _do_fatigue_profile_estimate(args),
@@ -4488,21 +4684,24 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "block_program_evaluation": lambda: _do_block_program_evaluation(args),
         "multi_block_comparison_analysis": lambda: _do_multi_block_comparison_analysis(args),
         "import_parse_file": lambda: import_parse_file(args["base64_content"], args["filename"]),
-        "import_apply": lambda: import_apply(args["import_id"], args.get("merge_strategy", "append"), args.get("conflict_resolutions"), args.get("start_date")),
+        "import_apply": lambda: import_apply(args["import_id"], args.get("merge_strategy", "append"), args.get("conflict_resolutions"), args.get("start_date"), args.get("actor_pk") or args.get("pk"), args.get("author")),
         "import_reject": lambda: import_reject(args["import_id"], args.get("reason")),
         "import_list_pending": lambda: import_list_pending(args.get("import_type")),
         "import_get_pending": lambda: import_get_pending(args["import_id"]),
-        "template_list": lambda: template_list(args.get("include_archived", False)),
-        "template_get": lambda: template_get(args["sk"]),
-        "template_apply": lambda: template_apply(args["sk"], args.get("target", "new_block"), args.get("start_date"), args.get("week_start_day")),
-        "template_apply_confirm": lambda: template_apply_confirm(args["sk"], args.get("backfilled_maxes"), args.get("start_date"), args.get("week_start_day"), args.get("target", "new_block")),
-        "template_evaluate": lambda: template_evaluate(args["sk"]),
-        "template_create_from_block": lambda: template_create_from_block(args["name"], args.get("program_sk")),
-        "template_copy": lambda: template_copy(args["sk"], args["new_name"]),
-        "template_archive": lambda: template_archive(args["sk"]),
-        "template_unarchive": lambda: template_unarchive(args["sk"]),
-        "template_create_blank": lambda: template_create_blank(args["name"], args.get("description", ""), args.get("estimated_weeks", 4), args.get("days_per_week", 3)),
-        "template_update": lambda: template_update(args["sk"], args["template"]),
+        "template_list": lambda: template_list(args.get("include_archived", False), args.get("actor_pk") or args.get("pk")),
+        "template_get": lambda: template_get(args["sk"], args.get("actor_pk") or args.get("pk")),
+        "template_apply": lambda: template_apply(args["sk"], args.get("target", "new_block"), args.get("start_date"), args.get("week_start_day"), args.get("actor_pk") or args.get("pk")),
+        "template_apply_confirm": lambda: template_apply_confirm(args["sk"], args.get("backfilled_maxes"), args.get("start_date"), args.get("week_start_day"), args.get("target", "new_block"), args.get("actor_pk") or args.get("pk")),
+        "template_evaluate": lambda: template_evaluate(args["sk"], args.get("actor_pk") or args.get("pk")),
+        "template_create_from_block": lambda: template_create_from_block(args["name"], args.get("program_sk"), args.get("actor_pk") or args.get("pk"), args.get("author")),
+        "template_copy": lambda: template_copy(args["sk"], args["new_name"], args.get("actor_pk") or args.get("pk"), args.get("author")),
+        "template_archive": lambda: template_archive(args["sk"], args.get("actor_pk") or args.get("pk")),
+        "template_unarchive": lambda: template_unarchive(args["sk"], args.get("actor_pk") or args.get("pk")),
+        "template_publish": lambda: template_publish(args["sk"], args.get("actor_pk") or args.get("pk")),
+        "template_unpublish": lambda: template_unpublish(args["sk"], args.get("actor_pk") or args.get("pk")),
+        "template_create_blank": lambda: template_create_blank(args["name"], args.get("description", ""), args.get("estimated_weeks", 4), args.get("days_per_week", 3), args.get("actor_pk") or args.get("pk"), args.get("author")),
+        "template_create_from_payload": lambda: template_create_from_payload(args["template"], args.get("actor_pk") or args.get("pk"), args.get("author"), args.get("published", False), args.get("import_job_id")),
+        "template_update": lambda: template_update(args["sk"], args["template"], args.get("actor_pk") or args.get("pk")),
         "program_archive": lambda: program_archive(args["sk"]),
         "program_unarchive": lambda: program_unarchive(args["sk"]),
         "glossary_add": lambda: glossary_add(args["exercise"]),
@@ -4520,13 +4719,14 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
     if not handler:
         return f"Unknown health tool: {name}"
 
-    # If pk is supplied (e.g. from portal auth), override the store singletons
-    # so the operation targets the correct user's data partition.
+    # If pk is supplied (e.g. from portal auth), override user-scoped health
+    # stores. Templates are globally partitioned; pk is passed to template tools
+    # above as actor identity instead of rewriting the template library PK.
     override_pk = args.get("pk")
     saved_pk = None
     if override_pk:
-        from core import _get_store, _get_template_store, _get_import_store, _get_glossary_store, _get_federation_store
-        for getter in (_get_store, _get_template_store, _get_import_store, _get_glossary_store, _get_federation_store):
+        from core import _get_store, _get_import_store, _get_glossary_store, _get_federation_store
+        for getter in (_get_store, _get_import_store, _get_glossary_store, _get_federation_store):
             try:
                 s = getter()
                 if saved_pk is None:
@@ -4542,7 +4742,7 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
     finally:
         # Restore original pk to avoid leaking across calls
         if saved_pk is not None:
-            for getter in (_get_store, _get_template_store, _get_import_store, _get_glossary_store, _get_federation_store):
+            for getter in (_get_store, _get_import_store, _get_glossary_store, _get_federation_store):
                 try:
                     getter().pk = saved_pk
                 except Exception:
