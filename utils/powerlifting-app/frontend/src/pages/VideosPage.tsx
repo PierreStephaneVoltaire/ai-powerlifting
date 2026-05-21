@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Film, Calendar } from 'lucide-react'
-import { Select, SimpleGrid, Loader, Paper, Stack, Text, Group, Button, Center, Box } from '@mantine/core'
+import { Link } from 'react-router-dom'
+import { Calendar, Film } from 'lucide-react'
+import { Select, Loader, Paper, Stack, Text, Group, Button, Center, Box } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import * as api from '@/api/client'
 import VideoCard from '@/components/videos/VideoCard'
@@ -34,82 +35,75 @@ export default function VideosPage() {
   }, [loadVideos])
 
   return (
-    <Stack gap="md" maw={672} mx="auto" p="md">
-      {/* Header */}
-      <Group gap="xs">
-        <Film size={20} />
-        <Text size="xl" fw={700}>Videos</Text>
-        {videos.length > 0 && (
-          <Text size="sm" c="dimmed">({videos.length})</Text>
+    <Stack gap="md">
+      <div className="if-page-header">
+        <Stack gap={2}>
+          <Group gap="xs">
+            <Film size={22} />
+            <Text component="h1" className="if-page-title">Videos</Text>
+            {videos.length > 0 && (
+              <Text size="sm" c="var(--text-secondary)">({videos.length})</Text>
+            )}
+          </Group>
+          <Text className="if-page-subtitle">Review lift videos uploaded from sessions.</Text>
+        </Stack>
+        {exercises.length > 0 && (
+          <Group gap="xs" className="if-toolbar">
+            <Select
+              value={exerciseFilter}
+              onChange={setExerciseFilter}
+              data={[
+                { value: '', label: 'All exercises' },
+                ...exercises.map((name) => ({ value: name, label: name })),
+              ]}
+              clearable={false}
+              w={220}
+              size="sm"
+            />
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
+              title={sortOrder === 'newest' ? 'Show oldest first' : 'Show newest first'}
+            >
+              {sortOrder === 'newest' ? 'Newest' : 'Oldest'}
+            </Button>
+          </Group>
         )}
-      </Group>
+      </div>
 
-      {/* Filters */}
-      {exercises.length > 0 && (
-        <Group gap="xs">
-          <Select
-            value={exerciseFilter}
-            onChange={setExerciseFilter}
-            data={[
-              { value: '', label: 'All exercises' },
-              ...exercises.map((name) => ({ value: name, label: name })),
-            ]}
-            clearable={false}
-            w={200}
-          />
-          <Button
-            variant="default"
-            size="xs"
-            onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
-            title={sortOrder === 'newest' ? 'Show oldest first' : 'Show newest first'}
-          >
-            {sortOrder === 'newest' ? 'Newest' : 'Oldest'}
-          </Button>
-        </Group>
-      )}
-
-      {/* Loading */}
       {isLoading && (
         <Center py={80}>
           <Loader size="sm" />
         </Center>
       )}
 
-      {/* Empty State */}
       {!isLoading && videos.length === 0 && (
         <Center py={80}>
-          <Stack align="center" gap="xs">
-            <Film size={48} />
-            <Text fw={500} c="dimmed">No videos uploaded yet</Text>
-            <Box
-              component="a"
-              href="/sessions"
-              style={{ textDecoration: 'none' }}
-            >
-              <Group gap={4}>
-                <Calendar size={14} />
-                <Text size="sm" c="blue">Go to Sessions</Text>
-              </Group>
-            </Box>
-          </Stack>
+          <Paper withBorder p="xl" radius="md" className="if-card">
+            <Stack align="center" gap="xs">
+              <Film size={42} color="var(--text-muted)" />
+              <Text fw={500} c="var(--text-secondary)">No videos uploaded yet</Text>
+              <Button component={Link} to="/sessions" variant="light" leftSection={<Calendar size={14} />}>
+                Go to Sessions
+              </Button>
+            </Stack>
+          </Paper>
         </Center>
       )}
 
-      {/* Feed */}
       {!isLoading && videos.length > 0 && (
-        <Stack gap="sm">
+        <Box className="if-video-grid">
           {videos.map((item) => (
-            <Paper key={item.video.video_id} withBorder>
-              <VideoCard
-                item={item}
-                onClick={() => setSelectedItem(item)}
-              />
-            </Paper>
+            <VideoCard
+              key={item.video.video_id}
+              item={item}
+              onClick={() => setSelectedItem(item)}
+            />
           ))}
-        </Stack>
+        </Box>
       )}
 
-      {/* Player Modal */}
       <VideoPlayerModal
         item={selectedItem}
         onClose={() => setSelectedItem(null)}

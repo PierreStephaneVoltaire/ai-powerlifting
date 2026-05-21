@@ -571,18 +571,18 @@ export default function GlossaryPage() {
 
   return (
     <Stack gap={24}>
-      <Group justify="space-between">
+      <div className="if-page-header">
         <Stack gap={0}>
           <Group gap="xs">
             <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
               Designer
             </Text>
             <Text c="dimmed">/</Text>
-            <Text fz="h1" fw={700}>Glossary</Text>
+            <Text component="h1" className="if-page-title">Glossary</Text>
           </Group>
-          <Text c="dimmed" size="sm" mt={4}>Browse and manage exercise definitions</Text>
+          <Text className="if-page-subtitle" mt={4}>Browse and manage exercise definitions.</Text>
         </Stack>
-        <Group>
+        <Group className="if-toolbar">
           <Button
             variant="light"
             color="blue"
@@ -629,39 +629,42 @@ export default function GlossaryPage() {
             Add Exercise
           </Button>
         </Group>
-      </Group>
+      </div>
 
       {/* Search and Filters */}
-      <Group align="flex-end">
-        <TextInput
-          leftSection={<Search size={16} />}
-          placeholder="Search exercises..."
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.currentTarget.value)}
-          style={{ flex: 1 }}
-        />
-        <SegmentedControl
-          size="sm"
-          value={hasE1rmFilter}
-          onChange={(v) => setHasE1rmFilter(v as 'all' | 'with' | 'without')}
-          data={[
-            { label: 'All e1RM', value: 'all' },
-            { label: 'With e1RM', value: 'with' },
-            { label: 'Missing e1RM', value: 'without' },
-          ]}
-        />
-        <Button
-          variant={showArchived ? 'filled' : 'light'}
-          color="gray"
-          size="sm"
-          onClick={() => setShowArchived(!showArchived)}
-        >
-          {showArchived ? 'Hide Archived' : 'Show Archived'}
-        </Button>
-      </Group>
+      <Paper withBorder p="md" radius="md" className="if-card">
+        <Group align="flex-end">
+          <TextInput
+            leftSection={<Search size={16} />}
+            placeholder="Search exercises..."
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.currentTarget.value)}
+            style={{ flex: 1, minWidth: 220 }}
+          />
+          <SegmentedControl
+            size="sm"
+            value={hasE1rmFilter}
+            onChange={(v) => setHasE1rmFilter(v as 'all' | 'with' | 'without')}
+            data={[
+              { label: 'All e1RM', value: 'all' },
+              { label: 'With e1RM', value: 'with' },
+              { label: 'Missing e1RM', value: 'without' },
+            ]}
+            className="if-segmented"
+          />
+          <Button
+            variant={showArchived ? 'filled' : 'light'}
+            color="gray"
+            size="sm"
+            onClick={() => setShowArchived(!showArchived)}
+          >
+            {showArchived ? 'Hide Archived' : 'Show Archived'}
+          </Button>
+        </Group>
+      </Paper>
 
       {bulkProgress && (
-        <Paper withBorder p="sm">
+        <Paper withBorder p="sm" className="if-card">
           <Stack gap={6}>
             <Group justify="space-between" gap="sm">
               <Text size="sm" fw={500}>{bulkProgress.label}</Text>
@@ -716,7 +719,7 @@ export default function GlossaryPage() {
           </div>
 
           {/* Fatigue Profile Sliders */}
-          <Paper withBorder p="md" radius="md" bg="var(--mantine-color-gray-light)">
+          <Paper withBorder p="md" radius="md" className="if-card">
             <Group justify="space-between" mb="sm">
               <Group gap="xs">
                 <Text size="sm" fw={600}>Fatigue Profile</Text>
@@ -773,7 +776,7 @@ export default function GlossaryPage() {
             </Stack>
             
             {fatigueSource === 'ai_estimated' && fatigueReasoning && (
-              <Box mt="sm" p="xs" style={{ background: 'var(--mantine-color-body)', borderRadius: 4, border: '1px solid var(--mantine-color-gray-2)' }}>
+              <Box mt="sm" p="xs" style={{ background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
                 <Text size="xs" fw={500} mb={2} c="dimmed">AI Reasoning:</Text>
                 <Text size="xs" fs="italic" style={{ maxHeight: 100, overflowY: 'auto' }}>
                   {fatigueReasoning}
@@ -783,7 +786,7 @@ export default function GlossaryPage() {
           </Paper>
 
           {/* e1RM Estimate Section */}
-          <Paper withBorder p="md" radius="md" bg="var(--mantine-color-green-light)">
+          <Paper withBorder p="md" radius="md" className="if-card">
             <Group justify="space-between" mb="sm">
               <Group gap="xs">
                 <Text size="sm" fw={600}>e1RM Estimate</Text>
@@ -876,7 +879,7 @@ export default function GlossaryPage() {
                   {isEstimatingMuscles ? 'Estimating...' : 'AI Estimate'}
                 </Button>
               </Group>
-              <Paper withBorder p="xs" h={180} style={{ overflowY: 'auto' }}>
+              <Paper withBorder p="xs" h={180} className="if-card" style={{ overflowY: 'auto' }}>
                 <Group gap={4}>
                   {Object.entries(MUSCLE_LABELS).map(([value, label]) => (
                     <Button
@@ -895,7 +898,7 @@ export default function GlossaryPage() {
             </Stack>
             <Stack gap={4}>
               <Text size="sm" fw={500}>Secondary Muscles</Text>
-              <Paper withBorder p="xs" h={180} style={{ overflowY: 'auto' }}>
+              <Paper withBorder p="xs" h={180} className="if-card" style={{ overflowY: 'auto' }}>
                 <Group gap={4}>
                   {Object.entries(MUSCLE_LABELS).map(([value, label]) => (
                     <Button
@@ -916,7 +919,7 @@ export default function GlossaryPage() {
 
           <Stack gap={4}>
             <Text size="sm" fw={500}>Tertiary Muscles</Text>
-            <Paper withBorder p="xs" h={140} style={{ overflowY: 'auto' }}>
+            <Paper withBorder p="xs" h={140} className="if-card" style={{ overflowY: 'auto' }}>
               <Group gap={4}>
                 {Object.entries(MUSCLE_LABELS).map(([value, label]) => (
                   <Button
@@ -940,7 +943,7 @@ export default function GlossaryPage() {
             tertiary={formData.tertiary_muscles ?? []}
           />
 
-          <Paper withBorder p="md">
+          <Paper withBorder p="md" className="if-card">
             <Stack gap="md">
               <Group justify="space-between" align="center">
                 <Text size="sm" fw={600}>AI Generate</Text>

@@ -1,28 +1,59 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Alert,
   Avatar,
-  Badge,
+  Box,
   Button,
   Group,
+  Loader,
   Paper,
   SegmentedControl,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
   Textarea,
   TextInput,
-  Title,
 } from '@mantine/core'
-import { AlertCircle, LogIn, Save, User } from 'lucide-react'
+import { AlertCircle, Calendar, Film, LogIn, Save, Upload, User } from 'lucide-react'
 import { getSettings, updateNickname, updateProfile, type UserSettings } from '@/api/settings'
+import * as api from '@/api/client'
 import { useAuth } from '@/auth/AuthProvider'
+import { useProgramStore } from '@/store/programStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
+import { calculateDotsFromLifts } from '@/utils/dots'
+import { toDisplayUnit } from '@/utils/units'
+import VideoCard from '@/components/videos/VideoCard'
+import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
+import type { VideoLibraryItem } from '@powerlifting/types'
 
 type ProfileVisibility = UserSettings['profile_visibility']
+type LiftFilter = 'all' | 'squat' | 'bench' | 'deadlift'
+
+const LIFT_FILTERS: Array<{ value: LiftFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'squat', label: 'Squat' },
+  { value: 'bench', label: 'Bench' },
+  { value: 'deadlift', label: 'Deadlift' },
+]
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'U'
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
+}
+
+function liftMatches(item: VideoLibraryItem, filter: LiftFilter): boolean {
+  if (filter === 'all') return true
+  return (item.video.exercise_name || '').toLowerCase().includes(filter)
+}
 
 export default function ProfilePage() {
   const { user, loading: authLoading, readOnly, signIn } = useAuth()
+  const { program, version } = useProgramStore()
+  const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [loading, setLoading] = useState(false)
@@ -33,6 +64,10 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [publicSummary, setPublicSummary] = useState(false)
+  const [videos, setVideos] = useState<VideoLibraryItem[]>([])
+  const [videosLoading, setVideosLoading] = useState(false)
+  const [videoFilter, setVideoFilter] = useState<LiftFilter>('all')
+  const [selectedVideo, setSelectedVideo] = useState<VideoLibraryItem | null>(null)
 
   useEffect(() => {
     if (authLoading || !user) return
@@ -61,6 +96,58 @@ export default function ProfilePage() {
       cancelled = true
     }
   }, [authLoading, user])
+
+  const loadVideos = async () => {
+    setVideosLoading(true)
+    try {
+      const result = await api.getVideos(version)
+      setVideos(result.videos)
+    } catch {
+      pushToast({ message: 'Video library failed to load', type: 'error' })
+    } finally {
+      setVideosLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!user) return
+    loadVideos()
+    // Reload when the active program version changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, version])
+
+  const profileMetrics = useMemo(() => {
+    const meta = program?.meta
+    const current = program?.current_maxes
+    const squat = current?.squat ?? meta?.manual_maxes?.squat ?? meta?.target_squat_kg ?? 0
+    const bench = current?.bench ?? meta?.manual_maxes?.bench ?? meta?.target_bench_kg ?? 0
+    const deadlift = current?.deadlift ?? meta?.manual_maxes?.deadlift ?? meta?.target_dl_kg ?? 0
+    const total = squat + bench + deadlift
+    const bodyweight = meta?.current_body_weight_kg ?? meta?.last_comp?.body_weight_kg ?? 0
+    const dots = meta?.sex && total > 0 && bodyweight > 0
+      ? calculateDotsFromLifts(squat, bench, deadlift, bodyweight, meta.sex).dots
+      : null
+
+    const weightValue = (kg: number) => {
+      if (kg <= 0) return '--'
+      const display = toDisplayUnit(kg, unit)
+      return Number.isInteger(display) ? String(display) : display.toFixed(1)
+    }
+
+    return [
+      { label: 'Squat', value: weightValue(squat), sub: unit },
+      { label: 'Bench', value: weightValue(bench), sub: unit },
+      { label: 'Deadlift', value: weightValue(deadlift), sub: unit },
+      { label: 'Total', value: weightValue(total), sub: unit },
+      { label: 'DOTS', value: dots !== null ? dots.toFixed(1) : '--', sub: 'pts' },
+      { label: 'Class', value: meta?.weight_class_kg ? String(meta.weight_class_kg) : '--', sub: 'kg' },
+    ]
+  }, [program, unit])
+
+  const filteredVideos = useMemo(
+    () => videos.filter((item) => liftMatches(item, videoFilter)),
+    [videoFilter, videos],
+  )
 
   async function saveProfile() {
     if (!settings || saving) return
@@ -104,9 +191,9 @@ export default function ProfilePage() {
       <Stack gap="lg" data-testid="profile-page">
         <Group gap="xs">
           <User size={24} />
-          <Title order={2}>Profile</Title>
+          <Text component="h1" className="if-page-title">Profile</Text>
         </Group>
-        <Paper withBorder p="lg" radius="md">
+        <Paper withBorder p="lg" radius="md" className="if-card">
           <Stack gap="md">
             <Text c="dimmed">Sign in to manage your profile.</Text>
             <Button leftSection={<LogIn size={16} />} onClick={signIn} w="fit-content">
@@ -118,23 +205,15 @@ export default function ProfilePage() {
     )
   }
 
+  const resolvedName = displayName || settings?.display_name || user.username
+
   return (
-    <Stack gap="lg" data-testid="profile-page">
-      <Group justify="space-between" align="flex-start">
-        <Group gap="sm">
-          <Avatar src={settings?.avatar_url ?? user.avatar} alt={settings?.display_name ?? user.username} radius="xl">
-            {(settings?.display_name ?? user.username)[0]?.toUpperCase()}
-          </Avatar>
-          <Stack gap={2}>
-            <Group gap="xs">
-              <Title order={2}>Profile</Title>
-              {settings && <Badge variant="light">{settings.profile_visibility}</Badge>}
-            </Group>
-            <Text size="sm" c="dimmed">
-              {settings?.discord_username ?? user.username}
-            </Text>
-          </Stack>
-        </Group>
+    <Stack gap="md" data-testid="profile-page">
+      <div className="if-page-header">
+        <Stack gap={2}>
+          <Text component="h1" className="if-page-title">Profile</Text>
+          <Text className="if-page-subtitle">Public identity, training summary, and lift video gallery.</Text>
+        </Stack>
         <Button
           leftSection={<Save size={16} />}
           onClick={saveProfile}
@@ -144,7 +223,7 @@ export default function ProfilePage() {
         >
           Save Profile
         </Button>
-      </Group>
+      </div>
 
       {error && (
         <Alert color="red" title="Profile unavailable" icon={<AlertCircle size={16} />}>
@@ -152,35 +231,79 @@ export default function ProfilePage() {
         </Alert>
       )}
 
-      <Paper withBorder p="lg" radius="md" pos="relative">
+      <Paper withBorder p="lg" radius="md" className="if-card">
         <Stack gap="md">
-          <TextInput
-            label="Nickname"
-            description="Lowercase letters, numbers, hyphens, and underscores."
-            value={nickname}
-            onChange={(event) => setNickname(event.currentTarget.value)}
-            disabled={readOnly || loading || !settings}
-            maxLength={32}
-            data-testid="profile-nickname"
-          />
-          <SegmentedControl
-            value={profileVisibility}
-            onChange={(value) => setProfileVisibility(value as ProfileVisibility)}
-            data={[
-              { label: 'Private', value: 'private' },
-              { label: 'Public', value: 'public' },
-            ]}
-            className="if-segmented"
-            disabled={readOnly || loading || !settings}
-          />
-          <TextInput
-            label="Display name"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.currentTarget.value)}
-            disabled={readOnly || loading || !settings}
-            maxLength={80}
-            data-testid="profile-display-name"
-          />
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <Group gap="md" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
+              <Avatar src={settings?.avatar_url ?? user.avatar} alt={resolvedName} radius="xl" size={60}>
+                {initials(resolvedName)}
+              </Avatar>
+              <Stack gap={8} style={{ minWidth: 0 }}>
+                <Group gap="xs" wrap="wrap">
+                  <Text fw={600} size="lg" c="var(--text-primary)" truncate>
+                    {resolvedName}
+                  </Text>
+                  <Text size="sm" c="var(--text-secondary)">
+                    @{nickname || settings?.nickname}
+                  </Text>
+                  <span className="if-pill if-pill-success">Discord connected</span>
+                  <span className={`if-pill ${profileVisibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
+                    {profileVisibility}
+                  </span>
+                </Group>
+                <Text size="sm" c="var(--text-secondary)">
+                  {program?.meta.federation || 'Federation unset'} - {program?.meta.weight_class_kg || '--'} kg
+                  {program?.meta.practicing_for ? ` - ${program.meta.practicing_for}` : ''}
+                </Text>
+              </Stack>
+            </Group>
+          </Group>
+
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+            <TextInput
+              label="Nickname"
+              description="Lowercase letters, numbers, hyphens, and underscores."
+              value={nickname}
+              onChange={(event) => setNickname(event.currentTarget.value)}
+              disabled={readOnly || loading || !settings}
+              maxLength={32}
+              data-testid="profile-nickname"
+            />
+            <TextInput
+              label="Display name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.currentTarget.value)}
+              disabled={readOnly || loading || !settings}
+              maxLength={80}
+              data-testid="profile-display-name"
+            />
+          </SimpleGrid>
+
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+            <Box>
+              <Text size="sm" fw={500} mb={6}>Visibility</Text>
+              <SegmentedControl
+                value={profileVisibility}
+                onChange={(value) => setProfileVisibility(value as ProfileVisibility)}
+                data={[
+                  { label: 'Private', value: 'private' },
+                  { label: 'Public', value: 'public' },
+                ]}
+                className="if-segmented"
+                disabled={readOnly || loading || !settings}
+                fullWidth
+              />
+            </Box>
+            <Switch
+              label="Public training summary"
+              description="Allow your summary metrics to appear when public profile APIs support it."
+              checked={publicSummary}
+              onChange={(event) => setPublicSummary(event.currentTarget.checked)}
+              disabled={readOnly || loading || !settings || profileVisibility !== 'public'}
+              mt={{ base: 0, md: 28 }}
+            />
+          </SimpleGrid>
+
           <Textarea
             label="Bio"
             value={bio}
@@ -190,14 +313,86 @@ export default function ProfilePage() {
             minRows={3}
             data-testid="profile-bio"
           />
-          <Switch
-            label="Show training summary when public"
-            checked={publicSummary}
-            onChange={(event) => setPublicSummary(event.currentTarget.checked)}
-            disabled={readOnly || loading || !settings || profileVisibility !== 'public'}
-          />
         </Stack>
       </Paper>
+
+      {publicSummary && (
+        <SimpleGrid cols={{ base: 2, xs: 3, md: 6 }} spacing="xs">
+          {profileMetrics.map((metric) => (
+            <Paper key={metric.label} className="if-metric-card" p="sm" ta="center">
+              <Text className="if-metric-label">{metric.label}</Text>
+              <Text className="if-metric-value">{metric.value}</Text>
+              <Text size="xs" c="var(--text-secondary)">{metric.sub}</Text>
+            </Paper>
+          ))}
+        </SimpleGrid>
+      )}
+
+      <Paper withBorder p="lg" radius="md" className="if-card">
+        <Stack gap="md">
+          <div className="if-panel-header">
+            <Group gap="xs">
+              <Film size={18} />
+              <Text fw={600} c="var(--text-primary)">Lift videos</Text>
+              <Text size="sm" c="var(--text-secondary)">
+                {videos.length} video{videos.length === 1 ? '' : 's'}
+              </Text>
+            </Group>
+            <Group gap="xs" wrap="wrap">
+              <div className="if-tab-group">
+                {LIFT_FILTERS.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    className="if-tab-button"
+                    data-active={videoFilter === filter.value}
+                    onClick={() => setVideoFilter(filter.value)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+              <Button
+                component={Link}
+                to="/sessions"
+                size="xs"
+                variant="default"
+                leftSection={<Upload size={14} />}
+              >
+                Upload
+              </Button>
+            </Group>
+          </div>
+
+          {videosLoading ? (
+            <Group justify="center" py="xl">
+              <Loader size="sm" />
+            </Group>
+          ) : filteredVideos.length > 0 ? (
+            <div className="if-video-grid">
+              {filteredVideos.map((item) => (
+                <VideoCard key={item.video.video_id} item={item} onClick={() => setSelectedVideo(item)} />
+              ))}
+            </div>
+          ) : (
+            <Paper className="if-metric-card" p="lg">
+              <Stack align="center" gap="xs">
+                <Calendar size={28} color="var(--text-muted)" />
+                <Text size="sm" c="var(--text-secondary)" ta="center">
+                  No lift videos match this filter. Upload videos from a session.
+                </Text>
+              </Stack>
+            </Paper>
+          )}
+        </Stack>
+      </Paper>
+
+      <VideoPlayerModal
+        item={selectedVideo}
+        onClose={() => setSelectedVideo(null)}
+        onDeleted={loadVideos}
+        readOnly={readOnly}
+      />
     </Stack>
   )
 }

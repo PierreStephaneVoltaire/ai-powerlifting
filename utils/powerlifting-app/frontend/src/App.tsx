@@ -28,7 +28,7 @@ import TemplateEditPage from '@/pages/TemplateEditPage'
 import TemplateImportPage from '@/pages/TemplateImportPage'
 import RankingsPage from '@/pages/RankingsPage'
 import NotesPage from '@/pages/NotesPage'
-import ProfilesPage from '@/pages/ProfilesPage'
+import ProfilesPage, { PublicProfilePage } from '@/pages/ProfilesPage'
 import ProfilePage from '@/pages/ProfilePage'
 import LogPage from '@/pages/LogPage'
 import LoginPage from '@/pages/LoginPage'
@@ -98,6 +98,7 @@ function AppContent() {
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profiles" element={<ProfilesPage />} />
+        <Route path="/profiles/:nickname" element={<PublicProfilePage />} />
         <Route path="/designer/import" element={<ImportWizardPage />} />
         <Route path="/designer/templates" element={<TemplateLibraryPage />} />
         <Route path="/designer/templates/new" element={<TemplateCreatePage />} />

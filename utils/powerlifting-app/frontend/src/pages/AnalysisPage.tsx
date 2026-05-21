@@ -927,24 +927,35 @@ export default function AnalysisPage() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" wrap="wrap">
-        <Title order={2}>Analysis</Title>
-        <SegmentedControl
-          value={activeSection}
-          onChange={(value) => updateAnalysisParams({ type: value as AnalysisSection })}
-          data={[
+      <div className="if-page-header">
+        <Stack gap={2}>
+          <Text component="h1" className="if-page-title">Analysis</Text>
+          <Text className="if-page-subtitle">Weekly readiness, block progress, maxes, and historical comparisons.</Text>
+        </Stack>
+        <div className="if-tab-group">
+          {[
             { value: 'weekly', label: 'Weekly' },
             { value: 'blocks', label: 'Past Blocks' },
             { value: 'compare', label: 'Lifetime Compare' },
             { value: 'maxes', label: 'Maxes' },
-          ]}
-        />
-      </Group>
+          ].map((section) => (
+            <button
+              key={section.value}
+              type="button"
+              className="if-tab-button"
+              data-active={activeSection === section.value}
+              onClick={() => updateAnalysisParams({ type: section.value as AnalysisSection })}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {activeSection === 'weekly' && (
         <>
       <Group justify="space-between" wrap="wrap">
-        <Title order={2}>Weekly Analysis</Title>
+        <Text component="h2" className="if-card-title">Weekly Analysis</Text>
         <Group gap="sm" wrap="wrap">
           <Select
             size="sm"
@@ -1029,7 +1040,7 @@ export default function AnalysisPage() {
 
           {/* Top summary cards */}
           <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <Dumbbell size={18} />
                 <Text fw={500}>Estimated 1 Rep Maxes</Text>
@@ -1087,7 +1098,7 @@ export default function AnalysisPage() {
               )}
             </Paper>
 
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <CheckCircle size={18} />
                 <Text fw={500}>Compliance</Text>
@@ -1119,7 +1130,7 @@ export default function AnalysisPage() {
               ) : <Text fz="sm" c="dimmed">No compliance data</Text>}
             </Paper>
 
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <Activity size={18} />
                 <Text fw={500}>Current Fatigue State</Text>
@@ -1169,7 +1180,7 @@ export default function AnalysisPage() {
               </Stack>
             </Paper>
 
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs" justify="space-between" align="flex-start">
                 <Group gap="xs">
                   <Activity size={18} />

@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import {
   SimpleGrid,
-  Card,
   ActionIcon,
-  LoadingOverlay,
   Center,
   Text,
   Modal,
@@ -53,22 +51,16 @@ export default function VideoGrid({ session }: VideoGridProps) {
     <>
       <SimpleGrid cols={{ base: 2, md: 3, lg: 4 }} spacing="sm">
         {videos.map((video) => (
-          <Card
+          <Box
             key={video.video_id}
-            withBorder
-            shadow="sm"
-            padding={0}
-            style={{ overflow: 'hidden' }}
+            className="if-video-tile"
           >
-            {/* Thumbnail / Play Button */}
             <Box
               component="button"
+              className="if-video-thumb"
               onClick={() => setPlayingVideo(video)}
               style={{
-                position: 'relative',
                 width: '100%',
-                aspectRatio: '16 / 9',
-                background: 'var(--mantine-color-gray-1)',
                 border: 'none',
                 cursor: 'pointer',
                 padding: 0,
@@ -95,29 +87,22 @@ export default function VideoGrid({ session }: VideoGridProps) {
                 />
               ) : (
                 <Center pos="absolute" inset={0}>
-                  <Film size={24} color="var(--mantine-color-gray-6)" />
+                  <Film size={24} color="var(--text-muted)" />
                 </Center>
               )}
 
-              {/* Play Overlay */}
-              <Center
-                pos="absolute"
-                inset={0}
-                bg="rgba(0, 0, 0, 0.3)"
-                style={{ pointerEvents: 'none' }}
-              >
-                <Play size={32} color="white" />
-              </Center>
+              <span className="if-video-play">
+                <Play size={18} fill="currentColor" />
+              </span>
             </Box>
 
-            {/* Info */}
             <Box p={8}>
-              <Text size="sm" fw={500} truncate>
+              <Text size="sm" fw={600} c="var(--text-primary)" truncate>
                 {video.exercise_name || 'Video'}
               </Text>
               <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 {video.set_number && (
-                  <Text size="xs" c="dimmed">
+                  <Text size="xs" c="var(--text-secondary)">
                     Set {video.set_number}
                   </Text>
                 )}
@@ -136,7 +121,7 @@ export default function VideoGrid({ session }: VideoGridProps) {
                 </ActionIcon>
               </Box>
             </Box>
-          </Card>
+          </Box>
         ))}
       </SimpleGrid>
 

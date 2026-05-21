@@ -9,8 +9,8 @@ import { phaseColor } from '@/utils/phases'
 import { normalizeExerciseName } from '@/utils/volume'
 import { Check, Dumbbell, Plus } from 'lucide-react'
 import {
-  Paper, Title, Text, Group, Stack, Button, ActionIcon,
-  Select, Modal, Loader, Center, Box,
+  Paper, Text, Group, Stack, Button, ActionIcon,
+  Modal, Loader, Center, Box,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { Session } from '@powerlifting/types'
@@ -31,7 +31,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [newDate, setNewDate] = useState<string>('')
@@ -47,15 +47,6 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
 
   const requestedBlock = searchParams.get('block') || 'current'
   const block = availableBlocks.includes(requestedBlock) ? requestedBlock : 'current'
-
-  const updateBlockParam = (nextBlock: string) => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      next.set('view', 'Compact')
-      nextBlock === 'current' ? next.delete('block') : next.set('block', nextBlock)
-      return next
-    })
-  }
 
   const blockSessions = useMemo(() => {
     if (!program) return []
@@ -169,22 +160,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
           marginBottom: 0,
         }}
       >
-        <Group justify="space-between" wrap="nowrap">
-          <Title order={2} className="if-section-title">Sessions by Week</Title>
+        <Group justify="flex-end" wrap="nowrap">
           <Group gap="xs" wrap="nowrap">
-            {availableBlocks.length > 1 && (
-              <Select
-                value={block}
-                onChange={(v) => updateBlockParam(v || 'current')}
-                data={availableBlocks.map((b) => ({
-                  value: b,
-                  label: b === 'current' ? 'Current Block' : b,
-                }))}
-                size="sm"
-                style={{ width: 160 }}
-                data-testid="session-block-select"
-              />
-            )}
             <Button
               size="sm"
               leftSection={<Plus size={16} />}
@@ -260,7 +237,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
       {sessionsByWeek.size === 0 ? (
         <Paper withBorder p="xl" data-testid="session-list-empty">
           <Stack align="center" gap="xs">
-            <Title order={3}>No sessions yet</Title>
+            <Text fw={600} size="lg">No sessions yet</Text>
             <Text c="dimmed" ta="center">
               Add a session to start planning and logging training.
             </Text>

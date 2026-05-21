@@ -941,6 +941,13 @@ export default function SessionDrawer({
     return <Circle size={size} />
   }
 
+  const statusDotClass = (status: SetStatus) => {
+    if (status === 'completed') return 'if-set-dot if-set-dot-completed'
+    if (status === 'failed') return 'if-set-dot if-set-dot-failed'
+    if (status === 'skipped') return 'if-set-dot if-set-dot-skipped'
+    return 'if-set-dot'
+  }
+
   const renderSetStatusControls = (exercise: Exercise, exerciseIndex: number, size: 'xs' | 'sm' = 'xs') => {
     const statuses = normalizeSetStatuses(exercise, localSession.completed)
     const failedReasons = normalizeFailedSetReasons(exercise, statuses)
@@ -956,18 +963,14 @@ export default function SessionDrawer({
               <Menu.Target>
                 <Tooltip label={tooltip}>
                   <ActionIcon
-                    size={44}
+                    size={32}
                     radius="xl"
-                    variant={status === 'pending' ? 'outline' : 'filled'}
-                    color={SET_STATUS_META[status].color}
+                    variant="transparent"
+                    className={statusDotClass(status)}
                     disabled={readOnly}
-                    style={{
-                      borderColor: status === 'pending' ? 'var(--border-default)' : undefined,
-                      color: status === 'pending' ? 'var(--text-muted)' : undefined,
-                    }}
                     data-testid={`set-status-${exerciseIndex}-${setIndex}`}
                   >
-                    {statusIcon(status, size === 'xs' ? 20 : 22)}
+                    {statusIcon(status, size === 'xs' ? 15 : 17)}
                   </ActionIcon>
                 </Tooltip>
               </Menu.Target>

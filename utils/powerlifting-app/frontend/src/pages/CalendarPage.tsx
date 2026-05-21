@@ -84,6 +84,14 @@ export default function CalendarPage() {
     })
   }
 
+  const updateViewParam = (nextView: ViewType) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      nextView === defaultSessionsView ? next.delete('view') : next.set('view', nextView)
+      return next
+    })
+  }
+
   useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 400)
@@ -295,22 +303,40 @@ export default function CalendarPage() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" wrap="nowrap">
-        <Text className="if-section-title" fz={24}>Sessions</Text>
-        {view !== 'Compact' && availableBlocks.length > 1 && (
-          <Select
-            value={block}
-            onChange={(v) => updateBlockParam(v || 'current')}
-            data={availableBlocks.map((b) => ({
-              value: b,
-              label: b === 'current' ? 'Current Block' : b,
-            }))}
-            size="sm"
-            style={{ width: 160 }}
-            data-testid="session-block-select"
-          />
-        )}
-      </Group>
+      <div className="if-page-header">
+        <Stack gap={2}>
+          <Text component="h1" className="if-page-title">Sessions</Text>
+          <Text className="if-page-subtitle">Agenda, compact, and month views for the active training block.</Text>
+        </Stack>
+        <Group gap="xs" className="if-toolbar">
+          <div className="if-tab-group">
+            {(['Agenda', 'Compact', 'Month'] as ViewType[]).map((nextView) => (
+              <button
+                key={nextView}
+                type="button"
+                className="if-tab-button"
+                data-active={view === nextView}
+                onClick={() => updateViewParam(nextView)}
+              >
+                {nextView}
+              </button>
+            ))}
+          </div>
+          {availableBlocks.length > 1 && (
+            <Select
+              value={block}
+              onChange={(v) => updateBlockParam(v || 'current')}
+              data={availableBlocks.map((b) => ({
+                value: b,
+                label: b === 'current' ? 'Current Block' : b,
+              }))}
+              size="sm"
+              style={{ width: 160 }}
+              data-testid="session-block-select"
+            />
+          )}
+        </Group>
+      </div>
 
       {view === 'Compact' ? (
         <SessionsCompactView backTo={sessionsBackTo} readOnly={readOnly} />
