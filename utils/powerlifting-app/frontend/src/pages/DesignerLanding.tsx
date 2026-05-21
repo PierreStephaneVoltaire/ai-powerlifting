@@ -48,7 +48,7 @@ export default function DesignerLanding() {
               <div>
                 <Group gap="sm" mb="sm">
                   <BookOpen size={24} />
-                  <Text size="lg" fw={600}>Plan Templates</Text>
+                  <Text size="lg" fw={600}>Templates</Text>
                 </Group>
                 <Text size="sm" c="dimmed">
                   Manage reusable training templates. Create, apply, or evaluate program structures.

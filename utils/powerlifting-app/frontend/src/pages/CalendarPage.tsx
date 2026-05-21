@@ -28,6 +28,7 @@ import MuscleVolumeChart from '@/components/charts/MuscleVolumeChart'
 import { SessionsCompactView } from '@/components/sessions/SessionsCompactView'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
 import { useAuth } from '@/auth/AuthProvider'
+import Num from '@/components/shared/Num'
 
 type ViewType = 'Month' | 'Agenda' | 'Compact'
 const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
@@ -233,25 +234,33 @@ export default function CalendarPage() {
         key={`${session.date}-${session.id ?? session.week_number}`}
         ref={session === closestAgendaSession ? agendaTargetRef : undefined}
         onClick={() => openSession(session)}
+        style={{ width: '100%' }}
       >
         <Paper
           withBorder
-          p={compact ? 'xs' : 'sm'}
+          p={0}
+          className="if-session-row"
           style={{
-            borderLeft: `4px solid ${color}`,
+            borderLeft: `3px solid ${color}`,
             opacity: session.completed ? 1 : 0.8,
           }}
         >
-          <Group justify="space-between" wrap="nowrap" align="flex-start">
+          <Group justify="space-between" wrap="nowrap" align="flex-start" p={compact ? 12 : 16}>
             <Group gap="xs" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: 1 }}>
-              <Text size="sm" fw={500} style={{ minWidth: compact ? 56 : 64 }}>
+              <Num size="sm" style={{ minWidth: compact ? 56 : 80 }}>
                 {format(parseLocalDate(session.date), compact ? 'MMM d' : 'EEE, MMM d')}
-              </Text>
-              <Badge size="xs" variant="filled" color={color}>
+              </Num>
+              <Badge
+                size="xs"
+                variant="filled"
+                h={20}
+                radius={4}
+                style={{ background: color, color: 'white', flexShrink: 0 }}
+              >
                 {session.phase?.name || 'Unknown'}
               </Badge>
               {!compact && (
-                <Text size="sm" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
+                <Text size="sm" c="var(--text-secondary)" lineClamp={1} style={{ minWidth: 0 }}>
                   {previewNames}
                 </Text>
               )}
@@ -259,12 +268,12 @@ export default function CalendarPage() {
 
             <Group gap="sm" wrap="nowrap" align="center">
               <Stack gap={0} align="flex-end">
-                <Text size="sm">
+                <Text size="sm" c="var(--text-primary)">
                   {uniqueExerciseCount} exercise{uniqueExerciseCount !== 1 ? 's' : ''}
                 </Text>
-                <Text size="xs" c="dimmed">
+                <Num size="xs" c="var(--text-secondary)">
                   {session.session_rpe !== null ? `RPE ${session.session_rpe}` : 'RPE --'}
-                </Text>
+                </Num>
               </Stack>
               {session.completed && (
                 <ThemeIcon size="sm" variant="subtle" color="green" radius="xl">
@@ -275,7 +284,7 @@ export default function CalendarPage() {
           </Group>
 
           {compact && (
-            <Text size="xs" c="dimmed" mt={6} lineClamp={1}>
+            <Text size="xs" c="var(--text-secondary)" px={12} pb={12} lineClamp={1}>
               {previewNames}
             </Text>
           )}
@@ -287,7 +296,7 @@ export default function CalendarPage() {
   return (
     <Stack gap="md">
       <Group justify="space-between" wrap="nowrap">
-        <Text size="xl" fw={700}>Sessions</Text>
+        <Text className="if-section-title" fz={24}>Sessions</Text>
         {view !== 'Compact' && availableBlocks.length > 1 && (
           <Select
             value={block}
@@ -306,7 +315,7 @@ export default function CalendarPage() {
       {view === 'Compact' ? (
         <SessionsCompactView backTo={sessionsBackTo} readOnly={readOnly} />
       ) : (
-        <Paper withBorder p={{ base: 'xs', sm: 'md' }}>
+        <Paper p={{ base: 0, sm: 0 }} style={{ background: 'transparent', border: 'none' }}>
           {view === 'Month' ? (
             <Center>
               <Calendar
@@ -321,7 +330,7 @@ export default function CalendarPage() {
             <Stack gap="md">
               {weeklyGroups.map(({ weekStart, weekLabel, sessions }) => (
                 <Stack key={weekStart} gap={4}>
-                  <Text size="sm" fw={600} c="dimmed">
+                  <Text className="if-week-header">
                     Week of {weekLabel}
                   </Text>
                   {sessions.map((session) => renderSessionRow(session))}

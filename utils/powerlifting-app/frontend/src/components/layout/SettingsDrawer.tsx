@@ -20,14 +20,22 @@ import { useAuth } from '@/auth/AuthProvider'
 import { getSettings, updateProfile, type UserSettings } from '@/api/settings'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
-import { Sun, Moon, Monitor, LogIn, LogOut } from 'lucide-react'
+import { LogIn, LogOut } from 'lucide-react'
 import type { Sex, WeekStartDay } from '@powerlifting/types'
 
-const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
+const themeOptions: { value: Theme; label: string }[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
 ]
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text className="if-card-title" mb="xs">
+      {children}
+    </Text>
+  )
+}
 
 export default function SettingsDrawer() {
   const { drawerOpen, drawerType, closeDrawer, pushToast } = useUiStore()
@@ -115,13 +123,21 @@ export default function SettingsDrawer() {
       position="right"
       size="sm"
       shadow="md"
+      styles={{
+        content: {
+          background: 'var(--bg-surface)',
+          color: 'var(--text-primary)',
+        },
+        header: {
+          background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border-subtle)',
+        },
+      }}
     >
-      <Stack gap="lg">
+      <Stack gap="xl">
         {/* Authentication */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Account
-          </Text>
+          <SectionLabel>Account</SectionLabel>
           {loading ? (
             <Text size="xs" c="dimmed">Loading account...</Text>
           ) : user ? (
@@ -153,7 +169,7 @@ export default function SettingsDrawer() {
               {accountSettings && (
                 <Stack gap="xs" mt="xs">
                   <Divider />
-                  <Text size="sm" fw={500}>Public Profile</Text>
+                  <SectionLabel>Public Profile</SectionLabel>
                   <SegmentedControl
                     value={profileVisibility}
                     onChange={(value) => setProfileVisibility(value as 'private' | 'public')}
@@ -162,6 +178,7 @@ export default function SettingsDrawer() {
                       { label: 'Public', value: 'public' },
                     ]}
                     fullWidth
+                    className="if-segmented"
                     disabled={readOnly}
                   />
                   <TextInput
@@ -211,37 +228,22 @@ export default function SettingsDrawer() {
           )}
         </div>
 
-        <Divider />
-
         {/* Theme */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Appearance
-          </Text>
-          <Group gap="xs">
-            {themeOptions.map((option) => {
-              const Icon = option.icon
-              const active = theme === option.value
-              return (
-                <Button
-                  key={option.value}
-                  variant={active ? 'filled' : 'outline'}
-                  size="sm"
-                  onClick={() => setTheme(option.value)}
-                  leftSection={<Icon size={16} />}
-                >
-                  {option.label}
-                </Button>
-              )
-            })}
-          </Group>
+          <SectionLabel>Appearance</SectionLabel>
+          <SegmentedControl
+            value={theme}
+            onChange={(value) => setTheme(value as Theme)}
+            data={themeOptions}
+            fullWidth
+            className="if-segmented"
+          />
         </div>
 
         {/* Sessions View */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Default Sessions View
-          </Text>
+          <SectionLabel>Preferences</SectionLabel>
+          <Text size="sm" fw={500} mb="xs">Default Sessions View</Text>
           <Select
             value={defaultSessionsView}
             onChange={(val) => val && setDefaultSessionsView(val as 'Month' | 'Agenda' | 'Compact')}
@@ -256,9 +258,7 @@ export default function SettingsDrawer() {
 
         {/* Sex for DOTS calculation */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Sex (for DOTS calculation)
-          </Text>
+          <Text size="sm" fw={500} mb="xs">Sex (for DOTS calculation)</Text>
           <SegmentedControl
             value={effectiveSex}
             onChange={(val) => {
@@ -271,6 +271,7 @@ export default function SettingsDrawer() {
               { label: 'Female', value: 'female' },
             ]}
             fullWidth
+            className="if-segmented"
             disabled={readOnly}
             data-testid="settings-sex"
           />

@@ -42,7 +42,7 @@ export default function AppShell({ children }: AppShellProps) {
     <MantineAppShell
       header={{ height: 60 }}
       navbar={{
-        width: 256,
+        width: 200,
         breakpoint: 'md',
         collapsed: { mobile: true },
       }}
@@ -54,10 +54,17 @@ export default function AppShell({ children }: AppShellProps) {
       style={{ 
         minHeight: 'var(--app-viewport-height, 100dvh)',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        background: 'var(--bg-base)',
+        color: 'var(--text-primary)',
       }}
     >
-      <MantineAppShell.Header>
+      <MantineAppShell.Header
+        style={{
+          background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border-subtle)',
+        }}
+      >
         <TopBar />
       </MantineAppShell.Header>
 
@@ -65,6 +72,8 @@ export default function AppShell({ children }: AppShellProps) {
         style={{
           height: 'calc(var(--app-viewport-height, 100dvh) - 60px)',
           maxHeight: 'calc(var(--app-viewport-height, 100dvh) - 60px)',
+          background: 'var(--bg-surface)',
+          borderRight: '1px solid var(--border-subtle)',
         }}
       >
         <Sidebar />
@@ -91,7 +100,8 @@ export default function AppShell({ children }: AppShellProps) {
           right: 0, 
           height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          backgroundColor: 'var(--mantine-color-body)',
+          backgroundColor: 'var(--bg-surface)',
+          borderTop: '1px solid var(--border-subtle)',
           zIndex: 100
         }}
       >

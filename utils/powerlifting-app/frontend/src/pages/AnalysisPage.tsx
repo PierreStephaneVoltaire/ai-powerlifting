@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Activity, Download, AlertTriangle, CheckCircle, TrendingUp, Dumbbell, Trophy,
   Scale, Moon, Beef, Ruler, Utensils, Info, RefreshCw,
@@ -30,20 +30,22 @@ import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tool
 import {
   Stack, Group, Paper, SimpleGrid, Text, Title, Badge, Table,
   Button, Center, Select, Progress, Accordion, SegmentedControl, Box, Loader, Tooltip,
+  Card, UnstyledButton,
 } from '@mantine/core'
 import { AiAnalysis } from '@/components/analysis/AiAnalysis'
 import { AlertsStrip } from '@/components/analysis/AlertsStrip'
 import { LifetimeComparePanel, PastBlocksPanel } from '@/components/analysis/BlockAnalytics'
 import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
+import MaxesPage from '@/pages/MaxesPage'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type WeeksMode = number | 'current' | 'block'
-type AnalysisSection = 'weekly' | 'blocks' | 'compare'
+type AnalysisSection = 'weekly' | 'blocks' | 'compare' | 'maxes'
 type AnalysisViewMode = 'raw' | 'graph'
 
-const ANALYSIS_SECTIONS: AnalysisSection[] = ['weekly', 'blocks', 'compare']
+const ANALYSIS_SECTIONS: AnalysisSection[] = ['weekly', 'blocks', 'compare', 'maxes']
 const ANALYSIS_VIEW_MODES: AnalysisViewMode[] = ['raw', 'graph']
 const WEEK_MODE_NUMBERS = new Set(['1', '2', '4', '8'])
 
@@ -249,6 +251,62 @@ const ACWR_ZONE_META: Record<string, { color: string; label: string }> = {
   unknown: { color: 'gray', label: 'Unknown' },
 }
 
+const ANALYSIS_HUB_ITEMS = [
+  {
+    to: '/analysis?type=weekly',
+    icon: Activity,
+    title: 'Weekly',
+    desc: 'Current-week and recent-window training analysis.',
+  },
+  {
+    to: '/analysis?type=blocks',
+    icon: Dumbbell,
+    title: 'Past Blocks',
+    desc: 'Block-level history, summaries, and cached exports.',
+  },
+  {
+    to: '/analysis?type=compare',
+    icon: Trophy,
+    title: 'Lifetime Compare',
+    desc: 'Compare blocks and long-term training outcomes.',
+  },
+  {
+    to: '/analysis?type=maxes',
+    icon: TrendingUp,
+    title: 'Maxes',
+    desc: 'All-time maxes and big 3 strength distribution.',
+  },
+]
+
+function AnalysisHub() {
+  return (
+    <Stack gap="md" data-testid="analysis-hub">
+      <Title order={2}>Analysis</Title>
+
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+        {ANALYSIS_HUB_ITEMS.map((item) => (
+          <UnstyledButton key={item.to} component={Link} to={item.to} data-testid={`analysis-link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+            <Card withBorder shadow="sm" padding="lg">
+              <Stack justify="space-between" h="100%">
+                <div>
+                  <Group gap="sm" mb="sm">
+                    <item.icon size={24} />
+                    <Text size="lg" fw={600}>{item.title}</Text>
+                  </Group>
+                  <Text size="sm" c="dimmed">
+                    {item.desc}
+                  </Text>
+                </div>
+                <Text size="xs" c="blue" mt="md">Open {item.title.toLowerCase()} -&gt;</Text>
+              </Stack>
+            </Card>
+          </UnstyledButton>
+        ))}
+      </SimpleGrid>
+    </Stack>
+  )
+}
+
 function getInolThresholds(lift: string, thresholds?: Record<string, { low: number; high: number }>) {
   return thresholds?.[lift] ?? DEFAULT_INOL_THRESHOLDS[lift] ?? { low: 2.0, high: 4.0 }
 }
@@ -355,6 +413,11 @@ export default function AnalysisPage() {
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
   const viewMode = parseAnalysisViewMode(searchParams.get('view'))
   const activeSection = parseAnalysisSection(searchParams)
+  const hasAnalysisSelection =
+    searchParams.has('type') ||
+    searchParams.has('section') ||
+    searchParams.has('weeks') ||
+    searchParams.has('view')
   const analysisKey = analysisKeyForMode(weeksMode)
   const [analysisWindows, setAnalysisWindows] = useState<Record<AnalysisWindowKey, AnalysisWindow> | null>(null)
   const [sectionPayloads, setSectionPayloads] = useState<Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>>({})
@@ -375,7 +438,7 @@ export default function AnalysisPage() {
 
       if (updates.type !== undefined) {
         next.delete('section')
-        updates.type === 'weekly' ? next.delete('type') : next.set('type', updates.type)
+        next.set('type', updates.type)
       }
 
       if (updates.weeks !== undefined) {
@@ -441,6 +504,11 @@ export default function AnalysisPage() {
     : []
 
   useEffect(() => {
+    if (!hasAnalysisSelection || activeSection !== 'weekly') {
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     let pollTimer: number | undefined
 
@@ -512,12 +580,13 @@ export default function AnalysisPage() {
       cancelled = true
       if (pollTimer !== undefined) window.clearTimeout(pollTimer)
     }
-  }, [analysisKey, analysisRefreshNonce, asOfDate])
+  }, [activeSection, analysisKey, analysisRefreshNonce, asOfDate, hasAnalysisSelection])
 
   useEffect(() => {
+    if (!hasAnalysisSelection || activeSection !== 'weekly') return
     fetchWeightLog(version).then(setWeightLog).catch(console.error)
     fetchGlossary().then(setGlossary).catch(console.error)
-  }, [version])
+  }, [activeSection, hasAnalysisSelection, version])
 
   const handleRegenerateAnalysis = async () => {
     setRegenerating(true)
@@ -852,6 +921,10 @@ export default function AnalysisPage() {
     return { avg, delta, weekly: weeks }
   }, [nutritionTrend])
 
+  if (!hasAnalysisSelection) {
+    return <AnalysisHub />
+  }
+
   return (
     <Stack gap="lg">
       <Group justify="space-between" wrap="wrap">
@@ -863,6 +936,7 @@ export default function AnalysisPage() {
             { value: 'weekly', label: 'Weekly' },
             { value: 'blocks', label: 'Past Blocks' },
             { value: 'compare', label: 'Lifetime Compare' },
+            { value: 'maxes', label: 'Maxes' },
           ]}
         />
       </Group>
@@ -2109,6 +2183,7 @@ export default function AnalysisPage() {
 
       {activeSection === 'blocks' && <PastBlocksPanel unit={unit} readOnly={readOnly} />}
       {activeSection === 'compare' && <LifetimeComparePanel unit={unit} readOnly={readOnly} />}
+      {activeSection === 'maxes' && <MaxesPage />}
     </Stack>
   )
 }

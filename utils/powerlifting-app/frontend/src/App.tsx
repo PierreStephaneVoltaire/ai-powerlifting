@@ -18,7 +18,6 @@ import BiometricsPage from '@/pages/BiometricsPage'
 import CompetitionsPage from '@/pages/CompetitionsPage'
 import GoalsPage from '@/pages/GoalsPage'
 import FederationsPage from '@/pages/FederationsPage'
-import MaxesPage from '@/pages/MaxesPage'
 import VideosPage from '@/pages/VideosPage'
 import AboutPage from '@/pages/AboutPage'
 import ImportWizardPage from '@/pages/ImportWizardPage'
@@ -30,6 +29,8 @@ import TemplateImportPage from '@/pages/TemplateImportPage'
 import RankingsPage from '@/pages/RankingsPage'
 import NotesPage from '@/pages/NotesPage'
 import ProfilesPage from '@/pages/ProfilesPage'
+import ProfilePage from '@/pages/ProfilePage'
+import LogPage from '@/pages/LogPage'
 import LoginPage from '@/pages/LoginPage'
 import AuthCallbackPage from '@/pages/AuthCallbackPage'
 import LiftProfilePage from '@/pages/LiftProfilePage'
@@ -79,13 +80,14 @@ function AppContent() {
         <Route path="/list/:date/:index?" element={<SessionDetailPage />} />
         <Route path="/analysis" element={<AnalysisPage />} />
         <Route path="/rankings" element={<RankingsPage />} />
+        <Route path="/log" element={<LogPage />} />
         <Route path="/notes" element={<NotesPage />} />
         <Route path="/supplements" element={<SupplementsPage />} />
         <Route path="/biometrics" element={<BiometricsPage />} />
         <Route path="/diet" element={<BiometricsPage />} />
         <Route path="/designer/competitions" element={<CompetitionsPage />} />
         <Route path="/designer/glossary" element={<GlossaryPage />} />
-        <Route path="/maxes" element={<MaxesPage />} />
+        <Route path="/maxes" element={<Navigate to="/analysis?type=maxes" replace />} />
         <Route path="/tools" element={<ToolsPage />} />
         <Route path="/tools/plate" element={<PlateCalculator />} />
         <Route path="/tools/dots" element={<DotsCalculator />} />
@@ -94,6 +96,7 @@ function AppContent() {
         <Route path="/tools/converter" element={<UnitConverter />} />
         <Route path="/tools/attempts" element={<AttemptSelector />} />
         <Route path="/videos" element={<VideosPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profiles" element={<ProfilesPage />} />
         <Route path="/designer/import" element={<ImportWizardPage />} />
         <Route path="/designer/templates" element={<TemplateLibraryPage />} />

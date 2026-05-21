@@ -10,6 +10,7 @@ import { daysUntil } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
+import Num from '@/components/shared/Num'
 import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse } from 'lucide-react'
 import {
   Stack,
@@ -69,6 +70,12 @@ const LIFT_LABELS: Record<LiftProfile['lift'], string> = {
   squat: 'Squat',
   bench: 'Bench',
   deadlift: 'Deadlift',
+}
+
+const LIFT_COLORS: Record<LiftProfile['lift'], string> = {
+  squat: 'var(--lift-squat)',
+  bench: 'var(--lift-bench)',
+  deadlift: 'var(--lift-deadlift)',
 }
 
 const LIFT_STYLE_PLACEHOLDERS: Record<LiftProfile['lift'], string> = {
@@ -176,12 +183,11 @@ function buildWellnessTrend(sessions: Session[]): {
   }
 }
 
-function fatigueBadgeColor(score: number | null): string {
-  if (score === null) return 'gray'
-  if (score >= 0.65) return 'red'
-  if (score >= 0.45) return 'orange'
-  if (score >= 0.25) return 'yellow'
-  return 'green'
+function fatigueColor(score: number | null): string {
+  if (score === null) return 'var(--text-muted)'
+  if (score > 0.65) return 'var(--fatigue-high)'
+  if (score >= 0.4) return 'var(--fatigue-mid)'
+  return 'var(--fatigue-low)'
 }
 
 function fatigueLabel(score: number | null): string {
@@ -541,7 +547,7 @@ export default function Dashboard() {
   return (
     <Stack gap={24}>
       <Group justify="space-between">
-        <Text fz="h1" fw={700}>Dashboard</Text>
+        <Text className="if-section-title" fz={26}>Dashboard</Text>
         <Group gap="sm" wrap="wrap">
           <Button
             component="a"
@@ -566,13 +572,13 @@ export default function Dashboard() {
       </Group>
 
       {/* Stats Grid */}
-      <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="md">
+      <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="md">
         {/* Upcoming Competitions */}
         {upcomingComps.length > 0 && (
-          <Paper withBorder p="md">
+          <Paper withBorder p={20} className="if-card">
             <Group gap="xs" mb="sm">
               <Trophy size={20} />
-              <Text fw={500}>Upcoming Competitions</Text>
+              <Text className="if-card-title">Upcoming Competitions</Text>
             </Group>
             <Stack gap="xs">
               {upcomingComps.map((comp) => (
@@ -580,14 +586,17 @@ export default function Dashboard() {
                   <Group gap="xs" style={{ minWidth: 0 }}>
                     <Badge
                       variant="light"
-                      color={comp.status === 'confirmed' ? 'green' : 'yellow'}
+                      color={comp.status === 'confirmed' ? 'green' : 'gray'}
                       size="sm"
+                      h={20}
+                      radius={4}
+                      tt="uppercase"
                     >
                       {comp.status}
                     </Badge>
                     <Text size="sm" truncate>{comp.name}</Text>
                   </Group>
-                  <Text size="sm" fw={500} ml="xs">{daysUntil(comp.date)}d</Text>
+                  <Num size="sm" fw={500} ml="xs" style={{ textAlign: 'right' }}>{daysUntil(comp.date)}d</Num>
                 </Group>
               ))}
             </Stack>
@@ -595,11 +604,11 @@ export default function Dashboard() {
         )}
 
         {/* Target Maxes */}
-        <Paper withBorder p="md">
+        <Paper withBorder p={20} className="if-card">
           <Group justify="space-between" mb="sm">
             <Group gap="xs">
               <Target size={20} />
-              <Text fw={500}>Target Maxes</Text>
+              <Text className="if-card-title">Target Maxes</Text>
             </Group>
             {editingMaxes ? (
               <Group gap={4}>
@@ -627,17 +636,17 @@ export default function Dashboard() {
               ))}
               <Group justify="space-between" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt={4} mt={4}>
                 <Text size="sm" fw={500}>Total</Text>
-                <Text size="sm" fw={700}>{displayWeight(localMaxes.squat + localMaxes.bench + localMaxes.deadlift, unit)}</Text>
+                <Num size="sm" fw={700}>{displayWeight(localMaxes.squat + localMaxes.bench + localMaxes.deadlift, unit)}</Num>
               </Group>
             </Stack>
           ) : (
             <Stack gap={4}>
-              <Group justify="space-between"><Text size="sm">Squat</Text><Text size="sm" fw={500}>{displayWeight(meta.target_squat_kg, unit)}</Text></Group>
-              <Group justify="space-between"><Text size="sm">Bench</Text><Text size="sm" fw={500}>{displayWeight(meta.target_bench_kg, unit)}</Text></Group>
-              <Group justify="space-between"><Text size="sm">Deadlift</Text><Text size="sm" fw={500}>{displayWeight(meta.target_dl_kg, unit)}</Text></Group>
+              <Group justify="space-between"><Text size="sm">Squat</Text><Num size="sm" fw={500}>{displayWeight(meta.target_squat_kg, unit)}</Num></Group>
+              <Group justify="space-between"><Text size="sm">Bench</Text><Num size="sm" fw={500}>{displayWeight(meta.target_bench_kg, unit)}</Num></Group>
+              <Group justify="space-between"><Text size="sm">Deadlift</Text><Num size="sm" fw={500}>{displayWeight(meta.target_dl_kg, unit)}</Num></Group>
               <Group justify="space-between" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt={4} mt={4}>
                 <Text size="sm" fw={500}>Total</Text>
-                <Text size="sm" fw={700}>{displayWeight(meta.target_total_kg, unit)}</Text>
+                <Num size="sm" fw={700}>{displayWeight(meta.target_total_kg, unit)}</Num>
               </Group>
             </Stack>
           )}
@@ -645,27 +654,32 @@ export default function Dashboard() {
 
         {/* Actual Maxes */}
         {(actualMaxes.squat > 0 || actualMaxes.bench > 0 || actualMaxes.deadlift > 0) && (
-          <Paper withBorder p="md">
+          <Paper withBorder p={20} className="if-card">
             <Group gap="xs" mb="sm">
               <TrendingUp size={20} />
-              <Text fw={500}>Actual Maxes</Text>
+              <Text className="if-card-title">Actual Maxes</Text>
             </Group>
             <Stack gap="xs">
               {[
-                { label: 'Squat', actual: actualMaxes.squat, target: meta.target_squat_kg },
-                { label: 'Bench', actual: actualMaxes.bench, target: meta.target_bench_kg },
-                { label: 'Deadlift', actual: actualMaxes.deadlift, target: meta.target_dl_kg },
-              ].map(({ label, actual, target }) =>
+                { lift: 'squat' as const, label: 'Squat', actual: actualMaxes.squat, target: meta.target_squat_kg },
+                { lift: 'bench' as const, label: 'Bench', actual: actualMaxes.bench, target: meta.target_bench_kg },
+                { lift: 'deadlift' as const, label: 'Deadlift', actual: actualMaxes.deadlift, target: meta.target_dl_kg },
+              ].map(({ lift, label, actual, target }) =>
                 actual > 0 ? (
                   <Box key={label}>
                     <Group justify="space-between" mb={2}>
-                      <Text size="sm">{label}: {displayWeight(actual, unit)}</Text>
-                      <Text size="sm" c="dimmed">Target: {displayWeight(target, unit)}</Text>
+                      <Text size="sm" c="var(--text-secondary)">{label}: <Num span size="sm">{displayWeight(actual, unit)}</Num></Text>
+                      <Group gap={8}>
+                        <Text size="sm" c="dimmed">Target: <Num span size="sm">{displayWeight(target, unit)}</Num></Text>
+                        <Num size="xs" c="var(--text-secondary)">
+                          {target > 0 ? `${Math.min(100, (actual / target) * 100).toFixed(0)}%` : '0%'}
+                        </Num>
+                      </Group>
                     </Group>
                     <Progress
                       value={target > 0 ? Math.min(100, (actual / target) * 100) : 0}
-                      color={actual >= target ? 'green' : 'blue'}
-                      size="sm"
+                      color={LIFT_COLORS[lift]}
+                      size={8}
                     />
                   </Box>
                 ) : null
@@ -673,7 +687,7 @@ export default function Dashboard() {
               {(actualMaxes.squat > 0 || actualMaxes.bench > 0 || actualMaxes.deadlift > 0) && (
                 <Group justify="space-between" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt={4} mt={4}>
                   <Text size="sm" fw={500}>Total</Text>
-                  <Text size="sm" fw={700}>{displayWeight(actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift, unit)}</Text>
+                  <Num size="sm" fw={700}>{displayWeight(actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift, unit)}</Num>
                 </Group>
               )}
             </Stack>
@@ -681,11 +695,11 @@ export default function Dashboard() {
         )}
 
         {/* Body Weight */}
-        <Paper withBorder p="md">
+        <Paper withBorder p={20} className="if-card">
           <Group justify="space-between" mb="sm">
             <Group gap="xs">
               <Scale size={20} />
-              <Text fw={500}>Body Weight</Text>
+              <Text className="if-card-title">Body Weight</Text>
             </Group>
             {editingWeight ? (
               <Group gap={4}>
@@ -708,7 +722,7 @@ export default function Dashboard() {
               <Text size="sm" c="dimmed">{unit}</Text>
             </Group>
           ) : (
-            <Text fz="h1" fw={700}>{displayWeight(latestWeightKg, unit)}</Text>
+            <Num fz={44} lh={1.05} c="var(--text-primary)">{displayWeight(latestWeightKg, unit)}</Num>
           )}
           <Text size="sm" c="dimmed">Target: {meta.weight_class_kg} kg class</Text>
           <Progress
@@ -718,16 +732,16 @@ export default function Dashboard() {
           />
         </Paper>
 
-        <Paper withBorder p="md">
+        <Paper withBorder p={20} className="if-card">
           <Group justify="space-between" mb="sm" align="flex-start">
             <Group gap="xs">
               <HeartPulse size={20} />
-              <Text fw={500}>Subjective Wellness</Text>
+              <Text className="if-card-title">Subjective Wellness</Text>
             </Group>
             {wellnessTrend.overallAverage !== null && (
-              <Text size="xs" c="dimmed">
+              <Num size="xs" c="dimmed">
                 {wellnessTrend.overallAverage.toFixed(1)} / 5 avg
-              </Text>
+              </Num>
             )}
           </Group>
           {wellnessTrend.overallAverage !== null ? (
@@ -740,7 +754,7 @@ export default function Dashboard() {
                     <Stack key={bucket.label} gap={4}>
                       <Text size="xs" c="dimmed">{bucket.label}</Text>
                       <Progress value={average !== null ? (average / 5) * 100 : 0} color={color} size="sm" />
-                      <Text size="xs" fw={500}>{average !== null ? average.toFixed(1) : '—'}</Text>
+                      <Num size="xs" fw={500}>{average !== null ? average.toFixed(1) : '—'}</Num>
                     </Stack>
                   )
                 })}
@@ -754,7 +768,7 @@ export default function Dashboard() {
                     <Stack key={key} gap={4}>
                       <Text size="xs" c="dimmed">{label} avg</Text>
                       <Progress value={average !== null ? (average / 5) * 100 : 0} color={color} size="sm" />
-                      <Text size="xs" fw={500}>{average !== null ? average.toFixed(1) : '—'}</Text>
+                      <Num size="xs" fw={500}>{average !== null ? average.toFixed(1) : '—'}</Num>
                     </Stack>
                   )
                 })}
@@ -766,11 +780,11 @@ export default function Dashboard() {
         </Paper>
 
         {/* Anthropometrics */}
-        <Paper withBorder p="md">
+        <Paper withBorder p={20} className="if-card">
           <Group justify="space-between" mb="sm">
             <Group gap="xs">
               <Ruler size={20} />
-              <Text fw={500}>Anthropometrics</Text>
+              <Text className="if-card-title">Anthropometrics</Text>
             </Group>
             {editingMeasurements ? (
               <Group gap={4}>
@@ -824,26 +838,26 @@ export default function Dashboard() {
             <Stack gap={4}>
               <Group justify="space-between">
                 <Text size="sm">Height</Text>
-                <Text size="sm" fw={500}>{meta.height_cm ? `${meta.height_cm} cm` : 'Not set'}</Text>
+                <Num size="sm" fw={500}>{meta.height_cm ? `${meta.height_cm} cm` : 'Not set'}</Num>
               </Group>
               <Group justify="space-between">
                 <Text size="sm">Arm Wingspan</Text>
-                <Text size="sm" fw={500}>{meta.arm_wingspan_cm ? `${meta.arm_wingspan_cm} cm` : 'Not set'}</Text>
+                <Num size="sm" fw={500}>{meta.arm_wingspan_cm ? `${meta.arm_wingspan_cm} cm` : 'Not set'}</Num>
               </Group>
               <Group justify="space-between">
                 <Text size="sm">Leg Length</Text>
-                <Text size="sm" fw={500}>{meta.leg_length_cm ? `${meta.leg_length_cm} cm` : 'Not set'}</Text>
+                <Num size="sm" fw={500}>{meta.leg_length_cm ? `${meta.leg_length_cm} cm` : 'Not set'}</Num>
               </Group>
             </Stack>
           )}
         </Paper>
 
         {/* Current Fatigue State */}
-        <Paper withBorder p="md">
+        <Paper withBorder p={20} className="if-card">
             <Group justify="space-between" mb="sm" align="flex-start">
               <Group gap="xs">
                 <HeartPulse size={20} />
-                <Text fw={500}>Current Fatigue State</Text>
+                <Text className="if-card-title">Current Fatigue State</Text>
               </Group>
             </Group>
             {currentBlockLoading ? (
@@ -855,9 +869,9 @@ export default function Dashboard() {
               <Stack gap="xs">
                 <Group justify="space-between" align="flex-end">
                   <Stack gap={0}>
-                    <Text fz="h1" fw={700} c={fatigueBadgeColor(currentBlockFatigue)}>
+                    <Num fz={44} lh={1.05} style={{ color: fatigueColor(currentBlockFatigue) }}>
                       {currentBlockFatigue !== null ? `${(currentBlockFatigue * 100).toFixed(0)}%` : 'N/A'}
-                    </Text>
+                    </Num>
                     <Text size="sm" c="dimmed">{fatigueLabel(currentBlockFatigue)} current state</Text>
                   </Stack>
                   <Text size="xs" c="dimmed" ta="right">
@@ -866,17 +880,17 @@ export default function Dashboard() {
                 </Group>
                 <Group gap={6} wrap="wrap">
                   {typeof currentBlockWeekly.fatigue_components?.window_mean_fi === 'number' && (
-                    <Badge variant="light" color="blue">
+                    <Badge variant="light" color="blue" h={20} radius={4}>
                       Mean {(currentBlockWeekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%
                     </Badge>
                   )}
                   {typeof currentBlockWeekly.fatigue_components?.window_peak_fi === 'number' && (
-                    <Badge variant="light" color="orange">
+                    <Badge variant="light" color="orange" h={20} radius={4}>
                       Peak {(currentBlockWeekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%
                     </Badge>
                   )}
                   {currentBlockWeekly.fatigue_components?.fatigue_context_confidence && (
-                    <Badge variant="light" color="gray">
+                    <Badge variant="light" color="gray" h={20} radius={4}>
                       {currentBlockWeekly.fatigue_components.fatigue_context_confidence} confidence
                     </Badge>
                   )}
@@ -897,11 +911,11 @@ export default function Dashboard() {
           </Paper>
 
         {/* Per-Lift Breakdown */}
-        <Paper withBorder p="md" style={{ minWidth: 0 }}>
+        <Paper withBorder p={20} className="if-card" style={{ minWidth: 0 }}>
             <Group justify="space-between" mb="sm" align="flex-start">
               <Group gap="xs">
                 <Activity size={20} />
-                <Text fw={500}>Per-Lift Breakdown</Text>
+                <Text className="if-card-title">Per-Lift Breakdown</Text>
               </Group>
             </Group>
             {currentBlockLoading ? (
@@ -923,9 +937,9 @@ export default function Dashboard() {
                     {liftBreakdownRows.map((row) => (
                       <Table.Tr key={row.lift}>
                         <Table.Td fw={500}>{LIFT_LABELS[row.lift]}</Table.Td>
-                        <Table.Td>{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</Table.Td>
+                        <Table.Td><Num size="sm">{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</Num></Table.Td>
                         <Table.Td>
-                          {typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}
+                          <Num size="sm">{typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}</Num>
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -940,11 +954,11 @@ export default function Dashboard() {
           </Paper>
 
         {/* Program Phases */}
-        <Paper withBorder p="md">
+        <Paper withBorder p={20} className="if-card">
           <Group justify="space-between" mb="sm">
             <Group gap="xs">
               <TrendingUp size={20} />
-              <Text fw={500}>Program Phases</Text>
+              <Text className="if-card-title">Program Phases</Text>
             </Group>
             {editingPhases ? (
               <Group gap={4}>
@@ -1005,11 +1019,11 @@ export default function Dashboard() {
       </SimpleGrid>
 
       {/* Lift Profiles Section */}
-      <Paper withBorder p="md">
+      <Paper withBorder p={20} className="if-card">
         <Group justify="space-between" mb="md">
           <Group gap="xs">
             <Dumbbell size={20} />
-            <Text fw={500}>Lift Style Profiles</Text>
+            <Text className="if-card-title">Lift Style Profiles</Text>
           </Group>
           <Group gap={4}>
             {LIFT_ORDER.map((lift) => (

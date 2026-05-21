@@ -34,6 +34,7 @@ import SessionNotesHelperModal from './SessionNotesHelperModal'
 import AutoRegulationModal from './AutoRegulationModal'
 import { normalizeExerciseName } from '@/utils/volume'
 import { useAuth } from '@/auth/AuthProvider'
+import Num from '@/components/shared/Num'
 
 const WELLNESS_FIELDS: Array<{
   key: keyof Omit<SessionWellness, 'recorded_at'>
@@ -234,13 +235,14 @@ function SortableExerciseItem({
   const setStatuses = normalizeSetStatuses(exercise)
 
   return (
-    <Paper ref={setNodeRef} style={{ ...style, overflow: 'hidden' }} withBorder p="sm" radius="md" data-testid={`session-exercise-${index}`}>
-      <Group gap="xs" mb="xs">
+    <Paper ref={setNodeRef} style={style} withBorder p={0} radius={10} className="if-exercise-card" data-testid={`session-exercise-${index}`}>
+      <Group gap="xs" className="if-exercise-header">
         <Box
           ref={setActivatorNodeRef}
           {...(disabled ? {} : attributes)}
           {...(disabled ? {} : listeners)}
-          style={{ cursor: disabled ? 'default' : 'grab', padding: '4px 0', opacity: 0.5, touchAction: 'none' }}
+          className="if-exercise-drag"
+          style={{ cursor: disabled ? 'default' : 'grab', touchAction: 'none' }}
           data-testid={`exercise-drag-handle-${index}`}
         >
           <GripVertical size={16} />
@@ -252,6 +254,15 @@ function SortableExerciseItem({
           placeholder="Exercise name"
           size="sm"
           style={{ flex: 1 }}
+          styles={{
+            input: {
+              background: 'transparent',
+              borderColor: 'transparent',
+              color: 'var(--text-primary)',
+              fontSize: 15,
+              fontWeight: 500,
+            },
+          }}
           disabled={disabled}
           data-testid={`exercise-name-${index}`}
         />
@@ -272,39 +283,42 @@ function SortableExerciseItem({
         </Group>
       </Group>
 
-      <Box>
+      <Box p={16}>
         <Group justify="space-between" align="flex-start" gap={4} mb="xs" wrap="nowrap">
           <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
             <Box>
-              <Text size="xs" c="dimmed">Sets</Text>
+              <Text className="if-small-label">Sets</Text>
               <TextInput
                 type="number"
                 value={exercise.sets || ''}
                 onChange={(e) => onUpdateSets(index, Number(e.currentTarget.value) || 0)}
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
                 data-testid={`exercise-sets-${index}`}
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">Reps</Text>
+              <Text className="if-small-label">Reps</Text>
               <TextInput
                 type="number"
                 value={exercise.reps || ''}
                 onChange={(e) => onUpdate(index, 'reps', Number(e.currentTarget.value) || 0)}
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
                 data-testid={`exercise-reps-${index}`}
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">{unit}</Text>
+              <Text className="if-small-label">{unit}</Text>
               <TextInput
                 type="number"
                 value={exercise.kg !== null && exercise.kg !== undefined ? toDisplayUnit(exercise.kg, unit as 'kg' | 'lb') : ''}
                 onChange={(e) => onUpdate(index, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
                 size="sm"
                 step={0.5}
+                classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
                 data-testid={`exercise-weight-${index}`}
                 rightSection={setStatuses.includes('failed') ? (
@@ -315,7 +329,7 @@ function SortableExerciseItem({
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">RPE</Text>
+              <Text className="if-small-label">RPE</Text>
               <TextInput
                 type="number"
                 inputMode="decimal"
@@ -333,6 +347,7 @@ function SortableExerciseItem({
                 }}
                 placeholder="1-10"
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
                 data-testid={`exercise-rpe-${index}`}
               />
@@ -341,7 +356,7 @@ function SortableExerciseItem({
         </Group>
         
         <Box mt="xs">
-          <Text size="xs" c="dimmed">Notes</Text>
+          <Text className="if-small-label">Notes</Text>
           <Textarea
             value={exercise.notes || ''}
             onChange={(e) => onUpdate(index, 'notes', e.currentTarget.value)}
@@ -350,7 +365,7 @@ function SortableExerciseItem({
             autosize
             minRows={1}
             maxRows={4}
-            variant="filled"
+            className="if-exercise-notes"
             disabled={disabled}
             data-testid={`exercise-notes-${index}`}
           />
@@ -359,7 +374,7 @@ function SortableExerciseItem({
         {setStatuses.length > 0 && (
           <Box mt={6}>
             <Group gap={4} align="center" wrap="nowrap">
-              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
+              <Text className="if-small-label" style={{ flexShrink: 0 }}>Sets</Text>
               <Box style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                 {renderSetStatusControls(exercise, index)}
               </Box>
@@ -941,13 +956,18 @@ export default function SessionDrawer({
               <Menu.Target>
                 <Tooltip label={tooltip}>
                   <ActionIcon
-                    size={size}
-                    variant={status === 'pending' ? 'default' : 'light'}
+                    size={44}
+                    radius="xl"
+                    variant={status === 'pending' ? 'outline' : 'filled'}
                     color={SET_STATUS_META[status].color}
                     disabled={readOnly}
+                    style={{
+                      borderColor: status === 'pending' ? 'var(--border-default)' : undefined,
+                      color: status === 'pending' ? 'var(--text-muted)' : undefined,
+                    }}
                     data-testid={`set-status-${exerciseIndex}-${setIndex}`}
                   >
-                    {statusIcon(status, size === 'xs' ? 12 : 14)}
+                    {statusIcon(status, size === 'xs' ? 20 : 22)}
                   </ActionIcon>
                 </Tooltip>
               </Menu.Target>
@@ -1086,11 +1106,23 @@ export default function SessionDrawer({
   }
 
   const editorContent = (
-      <Stack
-        gap="lg"
-        pb={mode === 'page' ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : undefined}
-        style={{ maxWidth: '100vw', overflowX: 'hidden' }}
-        data-testid="session-detail"
+    <Stack
+      gap="lg"
+      pb={mode === 'page' ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : undefined}
+      style={{ maxWidth: '100vw', overflowX: 'hidden' }}
+      data-testid="session-detail"
+    >
+      <Box
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          minHeight: 48,
+          background: 'color-mix(in srgb, var(--bg-surface) 92%, transparent)',
+          backdropFilter: 'blur(10px)',
+          borderBottom: '1px solid var(--border-subtle)',
+          padding: '8px 0',
+        }}
       >
         <Group justify="space-between" wrap="wrap" align="flex-start">
           <Group gap="sm" align="flex-start" wrap="nowrap">
@@ -1115,22 +1147,23 @@ export default function SessionDrawer({
                   data-testid="session-date"
                 />
               </Group>
-              <Text size="sm" c="dimmed" mt={4}>
+              <Num size="sm" c="dimmed" mt={4}>
                 {localSession.day}
                 {localSession.phase?.name ? ` • ${localSession.phase.name}` : ''}
-              </Text>
+              </Num>
             </Box>
           </Group>
           <ActionIcon variant="subtle" onClick={handleCloseWithCheck} size="lg" title={mode === 'page' ? 'Back' : 'Close'}>
             {mode === 'page' ? <ArrowLeft size={20} /> : <X size={20} />}
           </ActionIcon>
         </Group>
+      </Box>
 
-        <Paper withBorder p="md" radius="md">
+      <Paper withBorder p={20} radius={10} className="if-card">
           <Group justify="space-between" align="center" mb="sm">
             <Group gap="xs">
               <HeartPulse size={16} />
-              <Text size="sm" fw={600}>Subjective Wellness</Text>
+              <Text className="if-card-title">Subjective Wellness</Text>
             </Group>
             <SegmentedControl
               size="xs"
@@ -1179,9 +1212,9 @@ export default function SessionDrawer({
           )}
         </Paper>
 
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p={20} radius={10} className="if-card">
           <Group justify="space-between" align="center" mb="md">
-            <Text size="sm" fw={600}>Workout</Text>
+            <Text className="if-card-title">Workout</Text>
             <Button
               variant="dashed"
               onClick={addExercise}
@@ -1196,7 +1229,7 @@ export default function SessionDrawer({
           <Stack gap="sm">
           {/* Planned exercises reference */}
           {(localSession.planned_exercises?.length ?? 0) > 0 && (
-            <Paper bg="var(--mantine-color-default)" p="xs" radius="md">
+            <Paper bg="var(--bg-elevated)" p="xs" radius="md" style={{ border: '1px solid var(--border-subtle)' }}>
               <Text size="xs" c="dimmed" fw={500} mb={4}>Planned</Text>
               <Group gap="md" wrap="wrap">
                 {localSession.planned_exercises!.map((pe, i) => (
@@ -1273,10 +1306,10 @@ export default function SessionDrawer({
           </Stack>
         </Paper>
 
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p={20} radius={10} className="if-card">
           <Stack gap="sm">
             <Group justify="space-between">
-              <Text size="sm" fw={600}>Session Summary</Text>
+              <Text className="if-card-title">Session Summary</Text>
               <Button
                 size="xs"
                 variant="light"
@@ -1290,7 +1323,7 @@ export default function SessionDrawer({
             </Group>
           <SimpleGrid cols={2} spacing="sm">
             <Box>
-              <Text size="xs" c="dimmed">Session RPE</Text>
+              <Text className="if-small-label">Session RPE</Text>
               <TextInput
                 type="number"
                 value={localSession.session_rpe || ''}
@@ -1306,13 +1339,14 @@ export default function SessionDrawer({
                 }}
                 placeholder="1-10"
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
                 step={0.5}
                 disabled={readOnly}
                 data-testid="session-rpe"
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">Body Weight ({unit})</Text>
+              <Text className="if-small-label">Body Weight ({unit})</Text>
               <TextInput
                 type="number"
                 value={
@@ -1323,6 +1357,7 @@ export default function SessionDrawer({
                 onChange={(e) => updateBodyWeight(e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
                 placeholder={unit}
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
                 step={0.1}
                 disabled={readOnly}
                 data-testid="session-body-weight"
@@ -1331,7 +1366,7 @@ export default function SessionDrawer({
           </SimpleGrid>
 
           <Box>
-            <Text size="xs" c="dimmed">Session Notes</Text>
+            <Text className="if-small-label">Session Notes</Text>
             <Textarea
               value={localSession.session_notes || ''}
               onChange={(e) => updateNotes(e.currentTarget.value)}
@@ -1340,6 +1375,7 @@ export default function SessionDrawer({
               minRows={1}
               maxRows={mode === 'page' ? 4 : 6}
               size="sm"
+              className="if-exercise-notes"
               disabled={readOnly}
               data-testid="session-notes"
             />
@@ -1365,7 +1401,7 @@ export default function SessionDrawer({
           >
             Delete
           </Button>
-          <Group gap="sm" wrap="wrap">
+          <Group gap="sm" wrap="wrap" className="if-session-action-bar">
             <Text size="xs" c={hasChanges ? 'yellow' : 'dimmed'} style={{ alignSelf: 'center' }}>
               {isSaving ? 'Saving...' : hasChanges ? 'Unsaved changes' : lastSavedAt ? 'Saved' : 'No changes'}
             </Text>

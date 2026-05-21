@@ -14,6 +14,7 @@ import {
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { Session } from '@powerlifting/types'
+import Num from '@/components/shared/Num'
 
 function countUniqueExerciseNames(session: Session): number {
   const entries = session.exercises.length > 0 ? session.exercises : session.planned_exercises ?? []
@@ -162,14 +163,14 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
           position: 'sticky',
           top: 0,
           zIndex: 10,
-          background: 'var(--mantine-color-body)',
-          borderBottom: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--bg-base)',
+          borderBottom: '1px solid var(--border-subtle)',
           paddingBottom: 8,
           marginBottom: 0,
         }}
       >
         <Group justify="space-between" wrap="nowrap">
-          <Title order={2}>Sessions by Week</Title>
+          <Title order={2} className="if-section-title">Sessions by Week</Title>
           <Group gap="xs" wrap="nowrap">
             {availableBlocks.length > 1 && (
               <Select
@@ -283,7 +284,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
           const phaseColorValue = phase ? phaseColor(phase, program.phases) : undefined
 
           return (
-            <Paper key={week} withBorder data-testid={`session-week-${week}`}>
+            <Paper key={week} withBorder className="if-card" data-testid={`session-week-${week}`}>
               <Box
                 component="button"
                 onClick={() => toggleWeek(week)}
@@ -322,20 +323,20 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
                   />
                 )}
 
-                <Text fw={500}>Week {week}</Text>
-                <Text size="sm" c="dimmed">
+                <Num fw={500}>Week {week}</Num>
+                <Text size="sm" c="var(--text-secondary)">
                   {phase?.name}
                 </Text>
 
                 <Box style={{ marginLeft: 'auto' }}>
-                  <Text size="sm" c="dimmed">
+                  <Num size="sm" c="var(--text-secondary)">
                     {completedCount}/{sessions.length} completed
-                  </Text>
+                  </Num>
                 </Box>
               </Box>
 
               {isExpanded && (
-                <Box style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+                <Box style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   {sessions.map((session) => {
                     const previewExercises = session.exercises.length > 0 ? session.exercises : session.planned_exercises || []
                     const isPlanned = session.exercises.length === 0 && (session.planned_exercises?.length ?? 0) > 0
@@ -356,11 +357,13 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
                           alignItems: 'center',
                           gap: 12,
                           padding: 12,
-                          background: 'none',
+                          background: 'transparent',
                           border: 'none',
-                          borderBottom: '1px solid var(--mantine-color-default-border)',
+                          borderBottom: '1px solid var(--border-subtle)',
+                          borderLeft: `3px solid ${phaseColorValue || 'var(--text-muted)'}`,
                           cursor: 'pointer',
                           textAlign: 'left',
+                          minHeight: 52,
                         }}
                       >
                         <Box
@@ -371,7 +374,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            backgroundColor: 'var(--mantine-color-default)',
+                            backgroundColor: 'var(--bg-elevated)',
                             flexShrink: 0,
                           }}
                         >
@@ -383,14 +386,14 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
                         </Box>
 
                         <Box style={{ flex: 1 }}>
-                          <Text fw={500}>{session.day}</Text>
-                          <Text size="sm" c="dimmed">
+                          <Text fw={500} c="var(--text-primary)">{session.day}</Text>
+                          <Num size="sm" c="var(--text-secondary)">
                             {formatDateShort(session.date)}
-                          </Text>
+                          </Num>
                         </Box>
 
                         <Box style={{ flex: 1, textAlign: 'right' }}>
-                          <Text size="sm">
+                          <Text size="sm" c="var(--text-primary)">
                             {session.exercises.length > 0
                               ? `${uniqueExerciseCount} exercise${uniqueExerciseCount !== 1 ? 's' : ''}`
                               : isPlanned
@@ -398,9 +401,9 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
                                 : 'No exercises'}
                           </Text>
                           {session.session_rpe !== null && (
-                            <Text size="xs" c="dimmed">
+                            <Num size="xs" c="var(--text-secondary)">
                               RPE {session.session_rpe}
-                            </Text>
+                            </Num>
                           )}
                         </Box>
 
