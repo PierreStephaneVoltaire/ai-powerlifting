@@ -3,6 +3,21 @@ import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
 import type { MaxEntry, MaxHistoryStore } from '@powerlifting/types'
 
+async function resolveVersionSk(pk: string, version: string): Promise<string> {
+  if (version !== 'current') return `program#${version}`
+
+  const pointerCommand = new GetCommand({
+    TableName: TABLE,
+    Key: {
+      pk,
+      sk: 'program#current',
+    },
+  })
+
+  const pointerResult = await docClient.send(pointerCommand)
+  return (pointerResult.Item as any)?.ref_sk || 'program#v001'
+}
+
 /**
  * Get max history for a program version
  */
@@ -56,11 +71,12 @@ export async function updateTargetMaxes(
   version: string,
   maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number }
 ): Promise<void> {
+  const sk = await resolveVersionSk(pk, version)
   const command = new UpdateCommand({
     TableName: TABLE,
     Key: {
       pk,
-      sk: `program#${version}`,
+      sk,
     },
     UpdateExpression: `SET
       #meta.target_squat_kg = :squat,
@@ -92,11 +108,12 @@ export async function getTargetMaxes(pk: string, version: string): Promise<{
   deadlift_kg: number
   total_kg: number
 }> {
+  const sk = await resolveVersionSk(pk, version)
   const command = new GetCommand({
     TableName: TABLE,
     Key: {
       pk,
-      sk: `program#${version}`,
+      sk,
     },
     ProjectionExpression: '#meta.target_squat_kg, #meta.target_bench_kg, #meta.target_dl_kg, #meta.target_total_kg',
     ExpressionAttributeNames: {

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Live browser regression test for powerlifting navigation.
+ * Live browser regression test for dashboard edit controls.
  *
- * Defaults to the private if-portals-test pod services. It verifies the
- * parent-level desktop nav, mobile bottom nav, and hub-card links against the
- * deployed frontend/backend services. Local Vite is available only by explicit
- * opt-in with POWERLIFTING_TEST_USE_LOCAL_FRONTEND=1.
+ * Defaults to the private if-portals-test pod services and writes only to
+ * mapped_pk=test. It exercises the first-screen dashboard numeric inputs that
+ * are easy to break with controlled input parsing: target maxes, body weight,
+ * and anthropometrics. Touched meta is restored before exit.
  */
 
 import { spawn } from 'node:child_process'
@@ -125,7 +125,7 @@ async function ensureDeployedFrontendPortForward() {
     await sleep(250)
   }
 
-  throw new Error(`Timed out waiting for deployed frontend port-forward: ${frontendUrl}`)
+  throw new Error(`Timed out waiting for frontend port-forward: ${frontendUrl}`)
 }
 
 async function ensureLocalFrontendServer() {
@@ -183,11 +183,15 @@ async function request(pathname, init = {}) {
   return body
 }
 
+async function loadProgram() {
+  return (await request('/programs/current')).data
+}
+
 async function fulfillAuth(route) {
   await route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({
-      user: { discord_id: 'test', username: 'test', avatar: null },
+      user: { discord_id: 'dashboard-test', username: 'dashboard-test', avatar: null },
       mapped_pk: 'test',
       readOnly: false,
     }),
@@ -199,13 +203,13 @@ async function fulfillSettings(route) {
     contentType: 'application/json',
     body: JSON.stringify({
       data: {
-        discord_id: 'test',
-        discord_username: 'test',
+        discord_id: 'dashboard-test',
+        discord_username: 'dashboard-test',
         avatar_url: null,
-        nickname: 'test',
+        nickname: 'dashboard-test',
         profile_visibility: 'public',
-        display_name: 'Powerlifting Test',
-        bio: 'Seeded profile settings for navigation tests.',
+        display_name: 'Dashboard Test',
+        bio: 'Seeded profile settings for dashboard tests.',
         public_training_summary_enabled: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -216,8 +220,9 @@ async function fulfillSettings(route) {
 
 async function installApiRouting(page) {
   await page.route('**/api/**', async (route) => {
-    const req = route.request()
-    const url = new URL(req.url())
+    const request = route.request()
+    const url = new URL(request.url())
+
     if (url.pathname === '/api/auth/me') {
       await fulfillAuth(route)
       return
@@ -242,91 +247,130 @@ async function installApiRouting(page) {
   })
 }
 
-async function expectCardLinks(page, labels) {
-  for (const label of labels) {
-    await expect(page.getByText(label, { exact: true })).toBeVisible({ timeout: 15000 })
+function control(page, testId) {
+  return page.locator([
+    `[data-testid="${testId}"] input`,
+    `input[data-testid="${testId}"]`,
+    `[data-testid="${testId}"]`,
+  ].join(', ')).first()
+}
+
+async function ensureUnit(page, expectedUnit) {
+  const toggle = page.getByTestId('unit-toggle')
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const text = (await toggle.textContent())?.trim().toLowerCase()
+    if (text === expectedUnit) return
+    await toggle.click()
+    await sleep(200)
+  }
+  const text = (await toggle.textContent())?.trim().toLowerCase()
+  if (text !== expectedUnit) throw new Error(`Expected unit ${expectedUnit}, got ${text}`)
+}
+
+async function expectDashboardStillMounted(page, browserErrors) {
+  await expect(page.getByTestId('dashboard-page')).toBeVisible({ timeout: 10000 })
+  await expect(page.getByTestId('dashboard-page').getByText('Target Maxes', { exact: true })).toBeVisible()
+  if (browserErrors.length > 0) {
+    throw new Error(`Browser errors while editing dashboard:\n${browserErrors.join('\n')}`)
   }
 }
 
-async function verifyDesktop(page) {
-  await page.setViewportSize({ width: 1365, height: 900 })
-  await page.goto(frontendUrl, { waitUntil: 'networkidle' })
-
-  const desktopLabels = ['Dashboard', 'Sessions', 'Designer', 'Analysis', 'Log', 'Tools', 'Profile', 'About']
-  for (const label of desktopLabels) {
-    await expect(page.getByTestId(`desktop-nav-${label.toLowerCase()}`)).toBeVisible()
-  }
-  await expect(page.getByTestId('desktop-nav-dashboard')).toHaveText(/Dashboard/)
-  await expect(page.locator('nav').getByText('Charts', { exact: true })).toHaveCount(0)
-
-  await page.getByTestId('desktop-nav-designer').click()
-  await expect(page).toHaveURL(/\/designer$/)
-  await expectCardLinks(page, ['Phase Design', 'Session Design', 'Templates', 'Import', 'Glossary', 'Competitions', 'Goals', 'Federations'])
-  await page.goto(`${frontendUrl}/designer/glossary`, { waitUntil: 'networkidle' })
-  await expect(page.getByRole('heading', { name: 'Glossary' })).toBeVisible({ timeout: 15000 })
-  await expect(page.getByPlaceholder('Search exercises...')).toBeVisible()
-
-  await page.getByTestId('desktop-nav-analysis').click()
-  await expect(page).toHaveURL(/\/analysis$/)
-  await expect(page.getByRole('heading', { name: 'Weekly Analysis' })).toBeVisible({ timeout: 15000 })
-  await expect(page.getByTestId('analysis-hub')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Weekly', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Past Blocks', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Lifetime Compare', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Maxes', exact: true })).toBeVisible()
-  await page.goto(`${frontendUrl}/analysis?type=maxes`, { waitUntil: 'networkidle' })
-  await expect(page.getByRole('heading', { name: 'Maxes' })).toBeVisible({ timeout: 15000 })
-
-  await page.getByTestId('desktop-nav-log').click()
-  await expect(page).toHaveURL(/\/log$/)
-  await expect(page.getByTestId('log-page')).toBeVisible()
-  await expectCardLinks(page, ['Notes', 'Supplements', 'Biometrics'])
-  await page.getByTestId('log-link-notes').click()
-  await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible({ timeout: 15000 })
-
-  await page.getByTestId('desktop-nav-tools').click()
-  await expect(page).toHaveURL(/\/tools$/)
-  await expectCardLinks(page, ['Plate Calc', 'DOTS', 'Weight Tracker', '% of Max', 'Unit Converter', 'Attempt Selector', 'Rankings'])
-
-  await page.getByTestId('desktop-nav-profile').click()
-  await expect(page).toHaveURL(/\/profile$/)
-  await expect(page.getByTestId('profile-page')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
-
-  await page.getByTestId('desktop-nav-about').click()
-  await expect(page).toHaveURL(/\/about$/)
-  await expect(page.getByRole('heading', { name: 'About the Peaking Portal' })).toBeVisible()
+function finiteOrZero(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-async function verifyMobile(page) {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto(frontendUrl, { waitUntil: 'networkidle' })
+async function restoreDashboardMeta(meta) {
+  await request('/maxes/current', {
+    method: 'PUT',
+    body: JSON.stringify({
+      squat_kg: finiteOrZero(meta.target_squat_kg),
+      bench_kg: finiteOrZero(meta.target_bench_kg),
+      deadlift_kg: finiteOrZero(meta.target_dl_kg),
+    }),
+  })
+  await request('/programs/current/body-weight', {
+    method: 'PUT',
+    body: JSON.stringify({ weightKg: finiteOrZero(meta.current_body_weight_kg) }),
+  })
+  for (const field of ['height_cm', 'arm_wingspan_cm', 'leg_length_cm']) {
+    await request('/programs/current/meta', {
+      method: 'PUT',
+      body: JSON.stringify({
+        field,
+        value: Object.prototype.hasOwnProperty.call(meta, field) ? meta[field] ?? null : null,
+      }),
+    })
+  }
+}
 
-  const footer = page.locator('footer')
-  await expect(footer.getByTestId('mobile-nav-dashboard')).toBeVisible()
-  await expect(footer.getByTestId('mobile-nav-sessions')).toBeVisible()
-  await expect(footer.getByTestId('mobile-nav-analysis')).toBeVisible()
-  await expect(footer.getByTestId('mobile-nav-log')).toBeVisible()
-  await expect(footer.getByTestId('mobile-nav-more')).toBeVisible()
-  await expect(footer.getByText('Designer', { exact: true })).toHaveCount(0)
-  await expect(footer.getByText('Tools', { exact: true })).toHaveCount(0)
+async function editTargetMaxes(page, browserErrors) {
+  await page.getByTestId('dashboard-edit-target-maxes').click()
+  await expect(control(page, 'dashboard-target-squat')).toBeVisible()
 
-  await footer.getByTestId('mobile-nav-analysis').click()
-  await expect(page).toHaveURL(/\/analysis$/)
-  await expect(page.getByRole('heading', { name: 'Weekly Analysis' })).toBeVisible({ timeout: 15000 })
-  await expect(page.getByTestId('analysis-hub')).toHaveCount(0)
+  await control(page, 'dashboard-target-squat').fill('')
+  await expectDashboardStillMounted(page, browserErrors)
+  await page.getByTestId('dashboard-save-target-maxes').click()
+  await expect(page.getByText('Enter valid target maxes before saving')).toBeVisible({ timeout: 5000 })
+  await expectDashboardStillMounted(page, browserErrors)
 
-  await footer.getByTestId('mobile-nav-log').click()
-  await expect(page).toHaveURL(/\/log$/)
-  await expect(page.getByTestId('log-page')).toBeVisible()
+  await control(page, 'dashboard-target-squat').fill('201.5')
+  await control(page, 'dashboard-target-bench').fill('122.5')
+  await control(page, 'dashboard-target-deadlift').fill('230')
+  await Promise.all([
+    page.waitForResponse((response) => (
+      response.request().method() === 'PUT' &&
+      response.url().includes('/api/maxes/current')
+    ), { timeout: 20000 }),
+    page.getByTestId('dashboard-save-target-maxes').click(),
+  ])
+  await expectDashboardStillMounted(page, browserErrors)
+  await expect.poll(async () => (await loadProgram()).meta.target_squat_kg, { timeout: 15000 }).toBe(201.5)
+  await expect.poll(async () => (await loadProgram()).meta.target_bench_kg, { timeout: 15000 }).toBe(122.5)
+  await expect.poll(async () => (await loadProgram()).meta.target_dl_kg, { timeout: 15000 }).toBe(230)
+}
 
-  await footer.getByTestId('mobile-nav-more').click()
-  await expect(page.getByRole('menuitem', { name: 'Designer' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: 'Tools' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: 'About' })).toBeVisible()
-  await page.getByRole('menuitem', { name: 'Tools' }).click()
-  await expect(page).toHaveURL(/\/tools$/)
+async function editBodyWeight(page, browserErrors) {
+  await page.getByTestId('dashboard-edit-body-weight').click()
+  await expect(control(page, 'dashboard-body-weight')).toBeVisible()
+
+  await control(page, 'dashboard-body-weight').fill('')
+  await expectDashboardStillMounted(page, browserErrors)
+  await page.getByTestId('dashboard-save-body-weight').click()
+  await expect(page.getByText('Enter a valid body weight before saving')).toBeVisible({ timeout: 5000 })
+  await expectDashboardStillMounted(page, browserErrors)
+
+  await control(page, 'dashboard-body-weight').fill('93.4')
+  await Promise.all([
+    page.waitForResponse((response) => (
+      response.request().method() === 'PUT' &&
+      response.url().includes('/api/programs/current/body-weight')
+    ), { timeout: 20000 }),
+    page.getByTestId('dashboard-save-body-weight').click(),
+  ])
+  await expectDashboardStillMounted(page, browserErrors)
+  await expect.poll(async () => (await loadProgram()).meta.current_body_weight_kg, { timeout: 15000 }).toBe(93.4)
+}
+
+async function editMeasurements(page, browserErrors) {
+  await page.getByTestId('dashboard-edit-measurements').click()
+  await expect(control(page, 'dashboard-height')).toBeVisible()
+
+  await control(page, 'dashboard-height').fill('')
+  await control(page, 'dashboard-wingspan').fill('181.5')
+  await control(page, 'dashboard-leg-length').fill('95')
+  await expectDashboardStillMounted(page, browserErrors)
+
+  await Promise.all([
+    page.waitForResponse((response) => (
+      response.request().method() === 'PUT' &&
+      response.url().includes('/api/programs/current/meta')
+    ), { timeout: 20000 }),
+    page.getByTestId('dashboard-save-measurements').click(),
+  ])
+  await expectDashboardStillMounted(page, browserErrors)
+  await expect.poll(async () => (await loadProgram()).meta.height_cm ?? null, { timeout: 15000 }).toBe(null)
+  await expect.poll(async () => (await loadProgram()).meta.arm_wingspan_cm, { timeout: 15000 }).toBe(181.5)
+  await expect.poll(async () => (await loadProgram()).meta.leg_length_cm, { timeout: 15000 }).toBe(95)
 }
 
 async function main() {
@@ -338,8 +382,11 @@ async function main() {
     throw new Error(`Test backend is not mapped to writable pk=test: ${JSON.stringify(status)}`)
   }
 
+  const originalProgram = await loadProgram()
+  const originalMeta = JSON.parse(JSON.stringify(originalProgram.meta))
+
   const browser = await chromium.launch({ headless: true })
-  const context = await browser.newContext()
+  const context = await browser.newContext({ viewport: { width: 1365, height: 900 } })
   const page = await context.newPage()
   const browserErrors = []
   const requestFailures = []
@@ -366,33 +413,41 @@ async function main() {
 
   try {
     await installApiRouting(page)
-    await verifyDesktop(page)
-    await verifyMobile(page)
+    await page.goto(frontendUrl, { waitUntil: 'networkidle' })
+    await ensureUnit(page, 'kg')
+    await expectDashboardStillMounted(page, browserErrors)
 
-    if (browserErrors.length || requestFailures.length || badResponses.length) {
+    await editTargetMaxes(page, browserErrors)
+    await editBodyWeight(page, browserErrors)
+    await editMeasurements(page, browserErrors)
+
+    if (requestFailures.length || badResponses.length) {
       throw new Error([
-        browserErrors.length ? `Browser errors:\n${browserErrors.join('\n')}` : '',
         requestFailures.length ? `Request failures:\n${requestFailures.join('\n')}` : '',
         badResponses.length ? `Bad responses:\n${badResponses.join('\n')}` : '',
       ].filter(Boolean).join('\n\n'))
     }
-
-    console.log('[navigation-ui-live] PASS')
-    console.log(`  Mode:     ${useDeployedFrontend ? 'deployed frontend service' : 'local Vite frontend'}`)
-    console.log(`  Frontend: ${frontendUrl}`)
-    console.log(`  API base: ${apiBase}`)
-    console.log('  Checked:  desktop parent nav; Designer/Log/Tools/Profile hubs; Glossary page; Analysis direct weekly tabs and Maxes tab; mobile Dashboard/Sessions/Analysis/Log/More bottom nav')
   } finally {
+    await context.close()
     await browser.close()
+    await restoreDashboardMeta(originalMeta).catch((error) => {
+      console.error(`Cleanup failed for dashboard meta: ${error instanceof Error ? error.message : String(error)}`)
+    })
     stopChildren()
   }
+
+  console.log('[dashboard-ui-live] PASS')
+  console.log(`  Mode:     ${useDeployedFrontend ? 'deployed frontend service' : 'local Vite frontend'}`)
+  console.log(`  Frontend: ${frontendUrl}`)
+  console.log(`  API base: ${apiBase}`)
+  console.log('  Checked:  dashboard target max, body weight, and anthropometric inputs handle empty/intermediate edits without crashing; saves persist and cleanup restores test meta')
 }
 
 main().then(() => {
   process.exit(0)
 }).catch((error) => {
   stopChildren()
-  console.error('[navigation-ui-live] FAIL')
+  console.error('[dashboard-ui-live] FAIL')
   console.error(error)
   process.exit(1)
 })

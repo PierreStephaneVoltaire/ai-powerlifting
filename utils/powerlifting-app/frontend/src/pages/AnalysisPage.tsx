@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   Activity, Download, AlertTriangle, CheckCircle, TrendingUp, Dumbbell, Trophy,
   Scale, Moon, Beef, Ruler, Utensils, Info, RefreshCw,
@@ -28,9 +28,8 @@ import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
 import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session, WeekStartDay } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
 import {
-  Stack, Group, Paper, SimpleGrid, Text, Title, Badge, Table,
+  Stack, Group, Paper, SimpleGrid, Text, Badge, Table,
   Button, Center, Select, Progress, Accordion, SegmentedControl, Box, Loader, Tooltip,
-  Card, UnstyledButton,
 } from '@mantine/core'
 import { AiAnalysis } from '@/components/analysis/AiAnalysis'
 import { AlertsStrip } from '@/components/analysis/AlertsStrip'
@@ -251,62 +250,6 @@ const ACWR_ZONE_META: Record<string, { color: string; label: string }> = {
   unknown: { color: 'gray', label: 'Unknown' },
 }
 
-const ANALYSIS_HUB_ITEMS = [
-  {
-    to: '/analysis?type=weekly',
-    icon: Activity,
-    title: 'Weekly',
-    desc: 'Current-week and recent-window training analysis.',
-  },
-  {
-    to: '/analysis?type=blocks',
-    icon: Dumbbell,
-    title: 'Past Blocks',
-    desc: 'Block-level history, summaries, and cached exports.',
-  },
-  {
-    to: '/analysis?type=compare',
-    icon: Trophy,
-    title: 'Lifetime Compare',
-    desc: 'Compare blocks and long-term training outcomes.',
-  },
-  {
-    to: '/analysis?type=maxes',
-    icon: TrendingUp,
-    title: 'Maxes',
-    desc: 'All-time maxes and big 3 strength distribution.',
-  },
-]
-
-function AnalysisHub() {
-  return (
-    <Stack gap="md" data-testid="analysis-hub">
-      <Title order={2}>Analysis</Title>
-
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-        {ANALYSIS_HUB_ITEMS.map((item) => (
-          <UnstyledButton key={item.to} component={Link} to={item.to} data-testid={`analysis-link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-            <Card withBorder shadow="sm" padding="lg">
-              <Stack justify="space-between" h="100%">
-                <div>
-                  <Group gap="sm" mb="sm">
-                    <item.icon size={24} />
-                    <Text size="lg" fw={600}>{item.title}</Text>
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {item.desc}
-                  </Text>
-                </div>
-                <Text size="xs" c="blue" mt="md">Open {item.title.toLowerCase()} -&gt;</Text>
-              </Stack>
-            </Card>
-          </UnstyledButton>
-        ))}
-      </SimpleGrid>
-    </Stack>
-  )
-}
-
 function getInolThresholds(lift: string, thresholds?: Record<string, { low: number; high: number }>) {
   return thresholds?.[lift] ?? DEFAULT_INOL_THRESHOLDS[lift] ?? { low: 2.0, high: 4.0 }
 }
@@ -413,11 +356,6 @@ export default function AnalysisPage() {
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
   const viewMode = parseAnalysisViewMode(searchParams.get('view'))
   const activeSection = parseAnalysisSection(searchParams)
-  const hasAnalysisSelection =
-    searchParams.has('type') ||
-    searchParams.has('section') ||
-    searchParams.has('weeks') ||
-    searchParams.has('view')
   const analysisKey = analysisKeyForMode(weeksMode)
   const [analysisWindows, setAnalysisWindows] = useState<Record<AnalysisWindowKey, AnalysisWindow> | null>(null)
   const [sectionPayloads, setSectionPayloads] = useState<Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>>({})
@@ -504,7 +442,7 @@ export default function AnalysisPage() {
     : []
 
   useEffect(() => {
-    if (!hasAnalysisSelection || activeSection !== 'weekly') {
+    if (activeSection !== 'weekly') {
       setLoading(false)
       return
     }
@@ -580,13 +518,13 @@ export default function AnalysisPage() {
       cancelled = true
       if (pollTimer !== undefined) window.clearTimeout(pollTimer)
     }
-  }, [activeSection, analysisKey, analysisRefreshNonce, asOfDate, hasAnalysisSelection])
+  }, [activeSection, analysisKey, analysisRefreshNonce, asOfDate])
 
   useEffect(() => {
-    if (!hasAnalysisSelection || activeSection !== 'weekly') return
+    if (activeSection !== 'weekly') return
     fetchWeightLog(version).then(setWeightLog).catch(console.error)
     fetchGlossary().then(setGlossary).catch(console.error)
-  }, [activeSection, hasAnalysisSelection, version])
+  }, [activeSection, version])
 
   const handleRegenerateAnalysis = async () => {
     setRegenerating(true)
@@ -921,10 +859,6 @@ export default function AnalysisPage() {
     return { avg, delta, weekly: weeks }
   }, [nutritionTrend])
 
-  if (!hasAnalysisSelection) {
-    return <AnalysisHub />
-  }
-
   return (
     <Stack gap="lg">
       <div className="if-page-header">
@@ -1029,7 +963,7 @@ export default function AnalysisPage() {
       {loading && !data && <Center mih="20vh"><Loader /></Center>}
 
       {error && (
-        <Paper withBorder p="md" style={{ borderColor: 'var(--mantine-color-red-4)' }}>
+        <Paper withBorder p="md" className="if-card" style={{ borderColor: 'var(--status-danger-border)' }}>
           <Text c="red">{error}</Text>
         </Paper>
       )}
@@ -1225,7 +1159,7 @@ export default function AnalysisPage() {
           {/* Peaking Layer */}
           {(data.banister || data.decoupling || taperQuality) && (
             <Stack gap="md">
-              <Paper withBorder p="md">
+              <Paper withBorder p="md" className="if-card">
                 <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                   <Group gap="xs">
                     <TrendingUp size={18} />
@@ -1325,7 +1259,7 @@ export default function AnalysisPage() {
             )}
 
               <SimpleGrid cols={{ base: 1, lg: taperQuality ? 2 : 1 }} spacing="md">
-                <Paper withBorder p="md">
+                <Paper withBorder p="md" className="if-card">
                   <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                     <Group gap="xs">
                       <Dumbbell size={18} />
@@ -1404,7 +1338,7 @@ export default function AnalysisPage() {
                 </Paper>
 
                 {taperQuality && (
-                  <Paper withBorder p="md">
+                  <Paper withBorder p="md" className="if-card">
                     <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                       <Group gap="xs">
                         <Trophy size={18} />
@@ -1448,7 +1382,7 @@ export default function AnalysisPage() {
 
           {/* INOL */}
           {data.inol && data.inol.avg_inol && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Text fw={500}>Stimulus-Adjusted INOL (Window Average)</Text>
                 <Tooltip label="INOL means intensity-number-of-lifts. Here it is adjusted by your lift-profile stimulus coefficient to reflect how hard the same workload is for you." withArrow multiline w={320}>
@@ -1501,7 +1435,7 @@ export default function AnalysisPage() {
           )}
 
           {volumeLandmarkEntries.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                 <Group gap="xs">
                   <Dumbbell size={18} />
@@ -1547,7 +1481,7 @@ export default function AnalysisPage() {
 
           {/* ACWR */}
           {data.acwr && !('status' in data.acwr) && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group justify="space-between" mb="sm">
                 <Group gap="xs">
                   <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
@@ -1581,7 +1515,7 @@ export default function AnalysisPage() {
             </Paper>
           )}
           {data.acwr && 'status' in data.acwr && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
                 <Tooltip label="EWMA ACWR means exponentially weighted moving average acute:chronic workload ratio. It compares short-term load to longer-term load while weighting recent work more heavily." withArrow multiline w={340}>
@@ -1594,7 +1528,7 @@ export default function AnalysisPage() {
 
           {/* RI Distribution */}
           {data.ri_distribution && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Text fw={500} mb="sm">Relative Intensity Distribution</Text>
               <SimpleGrid cols={3} mb="md">
                 {(['heavy', 'moderate', 'light'] as const).map(bucket => {
@@ -1631,7 +1565,7 @@ export default function AnalysisPage() {
 
           {/* Specificity Ratio */}
           {data.specificity_ratio && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group justify="space-between" align="flex-start" mb="sm">
                 <Group gap="xs">
                   <Text fw={500}>Specificity Ratio</Text>
@@ -1698,7 +1632,7 @@ export default function AnalysisPage() {
 
           {/* Fatigue Dimensions */}
           {data.fatigue_dimensions && Object.keys(data.fatigue_dimensions.weekly).length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Text fw={500} mb="sm">Fatigue Dimensions (Weekly)</Text>
               <Box visibleFrom="sm" style={{ overflowX: 'auto' }}>
                 <Table fz="sm">
@@ -1764,7 +1698,7 @@ export default function AnalysisPage() {
               </Group>
               <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
                 {data.projections.filter(p => p && typeof p === 'object').map((proj, i) => (
-                  <Paper key={i} withBorder p="md">
+                  <Paper key={i} withBorder p="md" className="if-card">
                     <Group gap="xs" mb="xs">
                       <TrendingUp size={18} />
                       <Text fw={500}>{proj.comp_name || 'Projected Total'}</Text>
@@ -1780,7 +1714,7 @@ export default function AnalysisPage() {
               </SimpleGrid>
             </Stack>
           ) : (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <TrendingUp size={18} />
                 <Text fw={500}>Projected Total</Text>
@@ -1791,7 +1725,7 @@ export default function AnalysisPage() {
 
           {/* DOTS & e1RM Trend */}
           {dotsTrend && dotsTrend.rows.length >= 2 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <TrendingUp size={18} />
                 <Text fw={500}>e1RM Progression &amp; DOTS Trend</Text>
@@ -1851,7 +1785,7 @@ export default function AnalysisPage() {
 
           {/* Body Weight Trend */}
           {weightTrend && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Scale size={18} />
                 <Text fw={500}>Body Weight Trend</Text>
@@ -1875,7 +1809,7 @@ export default function AnalysisPage() {
 
           {/* Sleep Trend */}
           {sleepTrend && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Moon size={18} />
                 <Text fw={500}>Sleep Trend</Text>
@@ -1906,7 +1840,7 @@ export default function AnalysisPage() {
 
           {/* Nutrition Trend */}
           {nutritionTrend && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Utensils size={18} />
                 <Text fw={500}>Nutrition Trend</Text>
@@ -1984,7 +1918,7 @@ export default function AnalysisPage() {
 
           {/* Athlete Measurements */}
           {(program?.meta?.height_cm || program?.meta?.arm_wingspan_cm || program?.meta?.leg_length_cm) && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Ruler size={18} />
                 <Text fw={500}>Athlete Measurements</Text>
@@ -2014,7 +1948,7 @@ export default function AnalysisPage() {
           )}
 
           {program?.lift_profiles && program.lift_profiles.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Dumbbell size={18} />
                 <Text fw={500}>Lift Style Profiles</Text>
@@ -2059,7 +1993,7 @@ export default function AnalysisPage() {
 
           {/* Competitions */}
           {competitions.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Trophy size={18} />
                 <Text fw={500}>Competitions</Text>
@@ -2162,7 +2096,7 @@ export default function AnalysisPage() {
 
           {/* Flags */}
           {data.flags.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <AlertTriangle size={18} color="var(--mantine-color-yellow-5)" />
                 <Text fw={500}>Flags</Text>

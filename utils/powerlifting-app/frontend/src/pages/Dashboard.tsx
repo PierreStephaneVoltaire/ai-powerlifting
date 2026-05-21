@@ -36,6 +36,9 @@ import { useAuth } from '@/auth/AuthProvider'
 import type { Exercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
+type BigThreeLift = typeof LIFT_ORDER[number]
+type MaxDrafts = Record<BigThreeLift, string>
+
 const PROFILE_ESTIMATE_READY_SCORE = 55
 const LIFT_ALIASES: Record<LiftProfile['lift'], string[]> = {
   squat: ['squat'],
@@ -204,6 +207,33 @@ function formatSignedKg(deltaKg: number | null | undefined, unit: 'kg' | 'lb'): 
   return `${deltaKg >= 0 ? '+' : '-'}${value}`
 }
 
+function numberDraft(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : ''
+}
+
+function displayWeightDraft(kg: number | null | undefined, unit: 'kg' | 'lb'): string {
+  return typeof kg === 'number' && Number.isFinite(kg) ? String(toDisplayUnit(kg, unit)) : ''
+}
+
+function parseRequiredNonNegativeDraft(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+function parseOptionalNonNegativeDraft(value: string): number | null | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+function parseDisplayWeightDraft(value: string, unit: 'kg' | 'lb'): number | null {
+  const parsed = parseRequiredNonNegativeDraft(value)
+  return parsed === null ? null : fromDisplayUnit(parsed, unit)
+}
+
 function findLiftAnalysis(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift']) {
   if (!weekly) return undefined
   const exact = weekly.lifts?.[lift]
@@ -224,15 +254,15 @@ export default function Dashboard() {
   const [editingWeight, setEditingWeight] = useState(false)
   const [editingPhases, setEditingPhases] = useState(false)
   const [editingLiftProfiles, setEditingLiftProfiles] = useState(false)
-  const [localMaxes, setLocalMaxes] = useState({ squat: 0, bench: 0, deadlift: 0 })
-  const [localWeight, setLocalWeight] = useState(0)
+  const [localMaxes, setLocalMaxes] = useState<MaxDrafts>({ squat: '', bench: '', deadlift: '' })
+  const [localWeight, setLocalWeight] = useState('')
   const [localPhases, setLocalPhases] = useState<Phase[]>([])
   const [localLiftProfiles, setLocalLiftProfiles] = useState<LiftProfile[]>([])
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
   const [editingMeasurements, setEditingMeasurements] = useState(false)
-  const [localHeight, setLocalHeight] = useState<number | ''>('')
-  const [localWingspan, setLocalWingspan] = useState<number | ''>('')
-  const [localLegLength, setLocalLegLength] = useState<number | ''>('')
+  const [localHeight, setLocalHeight] = useState('')
+  const [localWingspan, setLocalWingspan] = useState('')
+  const [localLegLength, setLocalLegLength] = useState('')
   const [profileGuideOpen, setProfileGuideOpen] = useState(false)
   const [profileGuideDraft, setProfileGuideDraft] = useState<LiftProfile | null>(null)
   const [profileGuideReview, setProfileGuideReview] = useState<LiftProfileReview | null>(null)
@@ -337,13 +367,25 @@ export default function Dashboard() {
   const wellnessTrend = buildWellnessTrend(sessions)
 
   const startEditingMaxes = () => {
-    setLocalMaxes({ squat: meta.target_squat_kg, bench: meta.target_bench_kg, deadlift: meta.target_dl_kg })
+    setLocalMaxes({
+      squat: displayWeightDraft(meta.target_squat_kg, unit),
+      bench: displayWeightDraft(meta.target_bench_kg, unit),
+      deadlift: displayWeightDraft(meta.target_dl_kg, unit),
+    })
     setEditingMaxes(true)
   }
 
   const saveMaxes = async () => {
+    const squat = parseDisplayWeightDraft(localMaxes.squat, unit)
+    const bench = parseDisplayWeightDraft(localMaxes.bench, unit)
+    const deadlift = parseDisplayWeightDraft(localMaxes.deadlift, unit)
+    if (squat === null || bench === null || deadlift === null) {
+      pushToast({ message: 'Enter valid target maxes before saving', type: 'error' })
+      return
+    }
+
     try {
-      await updateMaxes({ squat_kg: localMaxes.squat, bench_kg: localMaxes.bench, deadlift_kg: localMaxes.deadlift })
+      await updateMaxes({ squat_kg: squat, bench_kg: bench, deadlift_kg: deadlift })
       pushToast({ message: 'Target maxes updated', type: 'success' })
       setEditingMaxes(false)
     } catch (err) {
@@ -352,13 +394,19 @@ export default function Dashboard() {
   }
 
   const startEditingWeight = () => {
-    setLocalWeight(latestWeightKg)
+    setLocalWeight(displayWeightDraft(latestWeightKg, unit))
     setEditingWeight(true)
   }
 
   const saveWeight = async () => {
+    const weightKg = parseDisplayWeightDraft(localWeight, unit)
+    if (weightKg === null) {
+      pushToast({ message: 'Enter a valid body weight before saving', type: 'error' })
+      return
+    }
+
     try {
-      await updateBodyWeight(localWeight)
+      await updateBodyWeight(weightKg)
       pushToast({ message: 'Body weight updated', type: 'success' })
       setEditingWeight(false)
     } catch (err) {
@@ -367,18 +415,26 @@ export default function Dashboard() {
   }
 
   const startEditingMeasurements = () => {
-    setLocalHeight(meta.height_cm ?? '')
-    setLocalWingspan(meta.arm_wingspan_cm ?? '')
-    setLocalLegLength(meta.leg_length_cm ?? '')
+    setLocalHeight(numberDraft(meta.height_cm))
+    setLocalWingspan(numberDraft(meta.arm_wingspan_cm))
+    setLocalLegLength(numberDraft(meta.leg_length_cm))
     setEditingMeasurements(true)
   }
 
   const saveMeasurements = async () => {
+    const height = parseOptionalNonNegativeDraft(localHeight)
+    const wingspan = parseOptionalNonNegativeDraft(localWingspan)
+    const legLength = parseOptionalNonNegativeDraft(localLegLength)
+    if (height === undefined || wingspan === undefined || legLength === undefined) {
+      pushToast({ message: 'Enter valid measurements before saving', type: 'error' })
+      return
+    }
+
     try {
       await Promise.all([
-        updateMetaField(version, 'height_cm', localHeight === '' ? null : localHeight),
-        updateMetaField(version, 'arm_wingspan_cm', localWingspan === '' ? null : localWingspan),
-        updateMetaField(version, 'leg_length_cm', localLegLength === '' ? null : localLegLength),
+        updateMetaField(version, 'height_cm', height),
+        updateMetaField(version, 'arm_wingspan_cm', wingspan),
+        updateMetaField(version, 'leg_length_cm', legLength),
       ])
       await useProgramStore.getState().loadProgram(version)
       pushToast({ message: 'Measurements updated', type: 'success' })
@@ -534,6 +590,13 @@ export default function Dashboard() {
   const profileGuideCanEstimate = profileGuideScore >= PROFILE_ESTIMATE_READY_SCORE
   const currentBlockWeekly = currentBlockBundle?.weekly ?? null
   const currentBlockFatigue = currentBlockWeekly?.fatigue_index ?? null
+  const localMaxesKg = LIFT_ORDER.reduce((acc, lift) => {
+    acc[lift] = parseDisplayWeightDraft(localMaxes[lift], unit)
+    return acc
+  }, {} as Record<BigThreeLift, number | null>)
+  const localMaxTotalKg = LIFT_ORDER.every((lift) => localMaxesKg[lift] !== null)
+    ? LIFT_ORDER.reduce((sum, lift) => sum + (localMaxesKg[lift] ?? 0), 0)
+    : null
   const liftBreakdownRows = LIFT_ORDER.map((lift) => {
     const liftAnalysis = findLiftAnalysis(currentBlockWeekly, lift)
     const endStrength = currentBlockBundle?.historical.endStrength[lift] ?? currentBlockWeekly?.current_maxes?.[lift] ?? null
@@ -545,7 +608,7 @@ export default function Dashboard() {
   })
 
   return (
-    <Stack gap={24}>
+    <Stack gap={24} data-testid="dashboard-page">
       <Group justify="space-between">
         <Text className="if-section-title" fz={26}>Dashboard</Text>
         <Group gap="sm" wrap="wrap">
@@ -612,11 +675,11 @@ export default function Dashboard() {
             </Group>
             {editingMaxes ? (
               <Group gap={4}>
-                <ActionIcon variant="subtle" color="blue" onClick={saveMaxes}><Save size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" onClick={() => setEditingMaxes(false)}><X size={16} /></ActionIcon>
+                <ActionIcon variant="subtle" color="blue" onClick={saveMaxes} aria-label="Save target maxes" data-testid="dashboard-save-target-maxes"><Save size={16} /></ActionIcon>
+                <ActionIcon variant="subtle" onClick={() => setEditingMaxes(false)} aria-label="Cancel target maxes edit" data-testid="dashboard-cancel-target-maxes"><X size={16} /></ActionIcon>
               </Group>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingMaxes} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
+              <ActionIcon variant="subtle" onClick={startEditingMaxes} disabled={readOnly} aria-label="Edit target maxes" data-testid="dashboard-edit-target-maxes"><Edit2 size={16} /></ActionIcon>
             )}
           </Group>
           {editingMaxes ? (
@@ -626,9 +689,12 @@ export default function Dashboard() {
                   <Text size="sm" w={64} tt="capitalize">{lift}</Text>
                   <TextInput
                     type="number"
+                    inputMode="decimal"
                     style={{ flex: 1 }}
-                    value={toDisplayUnit(localMaxes[lift], unit)}
-                    onChange={(e) => setLocalMaxes(prev => ({ ...prev, [lift]: fromDisplayUnit(Number(e.currentTarget.value) || 0, unit) }))}
+                    value={localMaxes[lift]}
+                    onChange={(e) => setLocalMaxes(prev => ({ ...prev, [lift]: e.currentTarget.value }))}
+                    aria-label={`${lift} target max`}
+                    data-testid={`dashboard-target-${lift}`}
                     size="sm"
                   />
                   <Text size="xs" c="dimmed">{unit}</Text>
@@ -636,7 +702,7 @@ export default function Dashboard() {
               ))}
               <Group justify="space-between" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt={4} mt={4}>
                 <Text size="sm" fw={500}>Total</Text>
-                <Num size="sm" fw={700}>{displayWeight(localMaxes.squat + localMaxes.bench + localMaxes.deadlift, unit)}</Num>
+                <Num size="sm" fw={700}>{localMaxTotalKg === null ? '--' : displayWeight(localMaxTotalKg, unit)}</Num>
               </Group>
             </Stack>
           ) : (
@@ -703,20 +769,23 @@ export default function Dashboard() {
             </Group>
             {editingWeight ? (
               <Group gap={4}>
-                <ActionIcon variant="subtle" color="blue" onClick={saveWeight}><Save size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" onClick={() => setEditingWeight(false)}><X size={16} /></ActionIcon>
+                <ActionIcon variant="subtle" color="blue" onClick={saveWeight} aria-label="Save body weight" data-testid="dashboard-save-body-weight"><Save size={16} /></ActionIcon>
+                <ActionIcon variant="subtle" onClick={() => setEditingWeight(false)} aria-label="Cancel body weight edit" data-testid="dashboard-cancel-body-weight"><X size={16} /></ActionIcon>
               </Group>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingWeight} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
+              <ActionIcon variant="subtle" onClick={startEditingWeight} disabled={readOnly} aria-label="Edit body weight" data-testid="dashboard-edit-body-weight"><Edit2 size={16} /></ActionIcon>
             )}
           </Group>
           {editingWeight ? (
             <Group gap="xs">
               <TextInput
                 type="number"
+                inputMode="decimal"
                 style={{ flex: 1 }}
-                value={toDisplayUnit(localWeight, unit)}
-                onChange={(e) => setLocalWeight(fromDisplayUnit(Number(e.currentTarget.value) || 0, unit))}
+                value={localWeight}
+                onChange={(e) => setLocalWeight(e.currentTarget.value)}
+                aria-label="Body weight"
+                data-testid="dashboard-body-weight"
                 size="lg"
               />
               <Text size="sm" c="dimmed">{unit}</Text>
@@ -788,11 +857,11 @@ export default function Dashboard() {
             </Group>
             {editingMeasurements ? (
               <Group gap={4}>
-                <ActionIcon variant="subtle" color="blue" onClick={saveMeasurements}><Save size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" onClick={() => setEditingMeasurements(false)}><X size={16} /></ActionIcon>
+                <ActionIcon variant="subtle" color="blue" onClick={saveMeasurements} aria-label="Save measurements" data-testid="dashboard-save-measurements"><Save size={16} /></ActionIcon>
+                <ActionIcon variant="subtle" onClick={() => setEditingMeasurements(false)} aria-label="Cancel measurements edit" data-testid="dashboard-cancel-measurements"><X size={16} /></ActionIcon>
               </Group>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingMeasurements} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
+              <ActionIcon variant="subtle" onClick={startEditingMeasurements} disabled={readOnly} aria-label="Edit measurements" data-testid="dashboard-edit-measurements"><Edit2 size={16} /></ActionIcon>
             )}
           </Group>
           {editingMeasurements ? (
@@ -801,10 +870,13 @@ export default function Dashboard() {
                 <Text size="sm" w={96}>Height</Text>
                 <TextInput
                   type="number"
+                  inputMode="decimal"
                   style={{ flex: 1 }}
                   value={localHeight}
-                  onChange={(e) => setLocalHeight(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
+                  onChange={(e) => setLocalHeight(e.currentTarget.value)}
                   placeholder="--"
+                  aria-label="Height"
+                  data-testid="dashboard-height"
                   size="sm"
                 />
                 <Text size="xs" c="dimmed">cm</Text>
@@ -813,10 +885,13 @@ export default function Dashboard() {
                 <Text size="sm" w={96}>Arm Wingspan</Text>
                 <TextInput
                   type="number"
+                  inputMode="decimal"
                   style={{ flex: 1 }}
                   value={localWingspan}
-                  onChange={(e) => setLocalWingspan(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
+                  onChange={(e) => setLocalWingspan(e.currentTarget.value)}
                   placeholder="--"
+                  aria-label="Arm wingspan"
+                  data-testid="dashboard-wingspan"
                   size="sm"
                 />
                 <Text size="xs" c="dimmed">cm</Text>
@@ -825,10 +900,13 @@ export default function Dashboard() {
                 <Text size="sm" w={96}>Leg Length</Text>
                 <TextInput
                   type="number"
+                  inputMode="decimal"
                   style={{ flex: 1 }}
                   value={localLegLength}
-                  onChange={(e) => setLocalLegLength(e.currentTarget.value ? Number(e.currentTarget.value) : '')}
+                  onChange={(e) => setLocalLegLength(e.currentTarget.value)}
                   placeholder="--"
+                  aria-label="Leg length"
+                  data-testid="dashboard-leg-length"
                   size="sm"
                 />
                 <Text size="xs" c="dimmed">cm</Text>

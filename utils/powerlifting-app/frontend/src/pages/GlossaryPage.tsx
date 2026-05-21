@@ -1029,6 +1029,7 @@ export default function GlossaryPage() {
             <Accordion
               variant="contained"
               chevronPosition="right"
+              className="if-glossary-list"
             >
               {categoryExercises.map((exercise) => (
                 <Accordion.Item key={exercise.id} value={exercise.id}>

@@ -387,6 +387,26 @@ async function fulfillAuth(route) {
   })
 }
 
+async function fulfillSettings(route) {
+  await route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      data: {
+        discord_id: 'test-session-detail',
+        discord_username: 'test-session-detail',
+        avatar_url: null,
+        nickname: 'test-session-detail',
+        profile_visibility: 'public',
+        display_name: 'Session Detail Test',
+        bio: 'Seeded profile settings for session detail tests.',
+        public_training_summary_enabled: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    }),
+  })
+}
+
 async function installApiRouting(page, options = {}) {
   const { programOverride = null } = options
 
@@ -396,6 +416,10 @@ async function installApiRouting(page, options = {}) {
 
     if (url.pathname === '/api/auth/me') {
       await fulfillAuth(route)
+      return
+    }
+    if (url.pathname === '/api/settings') {
+      await fulfillSettings(route)
       return
     }
 
@@ -840,6 +864,71 @@ async function testSessionDetail(page, date, glossaryNames) {
   return { date, createdId: created.id, barbell, nonBarbell }
 }
 
+async function assertLocatorCenterIsHittable(locator, label) {
+  const hitState = await locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+    const target = document.elementFromPoint(centerX, centerY)
+    return {
+      hit: target === element || element.contains(target),
+      rect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      },
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
+      targetText: target?.textContent?.trim().slice(0, 80) || '',
+      targetTag: target?.tagName || '',
+    }
+  })
+
+  if (
+    !hitState.hit ||
+    hitState.rect.top < 0 ||
+    hitState.rect.bottom > hitState.viewport.height ||
+    hitState.rect.left < 0 ||
+    hitState.rect.right > hitState.viewport.width
+  ) {
+    throw new Error(`${label} is not reachable in the mobile viewport: ${JSON.stringify(hitState)}`)
+  }
+}
+
+async function testMobileSessionCompleteAction(browser, date) {
+  await deleteSessionIfExists(date)
+  const created = await createSession(makeSession(date))
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+  })
+  const page = await context.newPage()
+  await installApiRouting(page)
+
+  try {
+    await openSession(page, date)
+    const completeButton = page.getByTestId('session-toggle-complete')
+    await expect(completeButton).toBeVisible({ timeout: 15000 })
+    await assertLocatorCenterIsHittable(completeButton, 'Mobile Mark Done button')
+    await completeButton.click()
+    await expect(completeButton).toHaveText(/Done/, { timeout: 5000 })
+    await saveSessionFromUi(page)
+
+    const saved = (await loadProgram()).sessions.find((session) => session.date === date)
+    if (!saved?.completed) {
+      throw new Error(`Mobile Mark Done did not persist completed=true for ${date}`)
+    }
+    await waitForDynamoSession(date, created.id, (item) => item.completed === true || item.status === 'completed', 'Mobile complete save')
+  } finally {
+    await context.close()
+  }
+}
+
 async function testAiNotes(page, detail) {
   let capturedPayload = null
   await page.route('**/api/sessions/current/**/notes/draft', async (route) => {
@@ -968,6 +1057,7 @@ async function main() {
     detail: isoDateFromSeed(2),
     blockCurrent: isoDateFromSeed(3),
     blockOther: isoDateFromSeed(4),
+    mobileComplete: isoDateFromSeed(5),
   }
   Object.values(dates).forEach((date) => touchedDates.add(date))
 
@@ -1012,6 +1102,7 @@ async function main() {
     await record('Session detail supports exercise CRUD, notes, set editing, statuses, unit edits, save, reload, DynamoDB, and ordering', async () => {
       detail = await testSessionDetail(page, dates.detail, glossaryNames)
     })
+    await record('Mobile session detail keeps Mark Done visible, tappable, and persisted', () => testMobileSessionCompleteAction(browser, dates.mobileComplete))
     if (detail) {
       await record('AI notes helper sends full session context and returns a model draft', () => testAiNotes(page, detail))
       await record('Session toolkit and plate calculator use correct bar and plate math', () => testToolkitAndTools(page, detail))
@@ -1064,7 +1155,7 @@ async function main() {
   console.log(`  Frontend: ${frontendUrl}`)
   console.log(`  API base: ${apiBase}`)
   console.log(`  DynamoDB: ${sessionsTableName} pk=${targetPk}`)
-  console.log('  Checked:  session add/delete; empty state; block switching; detail editing; RPE bounds; exercise deletion/duplicates/order; set statuses/failure reasons; kg/lb persistence; AI notes context; toolkit/plate math; settings sex/week-start metadata')
+  console.log('  Checked:  session add/delete; empty state; block switching; detail editing; mobile Mark Done visibility/persistence; RPE bounds; exercise deletion/duplicates/order; set statuses/failure reasons; kg/lb persistence; AI notes context; toolkit/plate math; settings sex/week-start metadata')
 }
 
 main().then(() => {
