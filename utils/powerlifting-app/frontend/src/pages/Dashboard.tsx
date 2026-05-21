@@ -692,7 +692,10 @@ export default function Dashboard() {
                     inputMode="decimal"
                     style={{ flex: 1 }}
                     value={localMaxes[lift]}
-                    onChange={(e) => setLocalMaxes(prev => ({ ...prev, [lift]: e.currentTarget.value }))}
+                    onChange={(e) => {
+                      const value = e.currentTarget.value
+                      setLocalMaxes(prev => ({ ...prev, [lift]: value }))
+                    }}
                     aria-label={`${lift} target max`}
                     data-testid={`dashboard-target-${lift}`}
                     size="sm"

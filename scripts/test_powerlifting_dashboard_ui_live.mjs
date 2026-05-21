@@ -255,6 +255,10 @@ function control(page, testId) {
   ].join(', ')).first()
 }
 
+function targetMaxControl(page, lift) {
+  return page.getByLabel(`${lift} target max`)
+}
+
 async function ensureUnit(page, expectedUnit) {
   const toggle = page.getByTestId('unit-toggle')
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -268,7 +272,17 @@ async function ensureUnit(page, expectedUnit) {
 }
 
 async function expectDashboardStillMounted(page, browserErrors) {
-  await expect(page.getByTestId('dashboard-page')).toBeVisible({ timeout: 10000 })
+  try {
+    await expect(page.getByTestId('dashboard-page')).toBeVisible({ timeout: 10000 })
+  } catch (error) {
+    const bodyText = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '')
+    throw new Error([
+      'Dashboard unmounted while editing numeric inputs.',
+      browserErrors.length ? `Browser errors:\n${browserErrors.join('\n')}` : 'Browser errors: none captured',
+      bodyText ? `Visible page text:\n${bodyText.slice(0, 2000)}` : 'Visible page text: unavailable',
+      `Original assertion: ${error instanceof Error ? error.message : String(error)}`,
+    ].join('\n\n'))
+  }
   await expect(page.getByTestId('dashboard-page').getByText('Target Maxes', { exact: true })).toBeVisible()
   if (browserErrors.length > 0) {
     throw new Error(`Browser errors while editing dashboard:\n${browserErrors.join('\n')}`)
@@ -305,17 +319,20 @@ async function restoreDashboardMeta(meta) {
 
 async function editTargetMaxes(page, browserErrors) {
   await page.getByTestId('dashboard-edit-target-maxes').click()
-  await expect(control(page, 'dashboard-target-squat')).toBeVisible()
+  await expect(targetMaxControl(page, 'squat')).toBeVisible()
 
-  await control(page, 'dashboard-target-squat').fill('')
+  await targetMaxControl(page, 'squat').fill('')
   await expectDashboardStillMounted(page, browserErrors)
   await page.getByTestId('dashboard-save-target-maxes').click()
   await expect(page.getByText('Enter valid target maxes before saving')).toBeVisible({ timeout: 5000 })
   await expectDashboardStillMounted(page, browserErrors)
 
-  await control(page, 'dashboard-target-squat').fill('201.5')
-  await control(page, 'dashboard-target-bench').fill('122.5')
-  await control(page, 'dashboard-target-deadlift').fill('230')
+  await expect(targetMaxControl(page, 'bench')).toBeVisible({ timeout: 5000 })
+  await targetMaxControl(page, 'squat').fill('201.5')
+  await expectDashboardStillMounted(page, browserErrors)
+  await expect(targetMaxControl(page, 'bench')).toBeVisible({ timeout: 5000 })
+  await targetMaxControl(page, 'bench').fill('122.5')
+  await targetMaxControl(page, 'deadlift').fill('230')
   await Promise.all([
     page.waitForResponse((response) => (
       response.request().method() === 'PUT' &&
