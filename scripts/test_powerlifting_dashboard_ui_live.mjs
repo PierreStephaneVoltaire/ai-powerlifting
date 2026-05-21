@@ -283,7 +283,7 @@ async function expectDashboardStillMounted(page, browserErrors) {
       `Original assertion: ${error instanceof Error ? error.message : String(error)}`,
     ].join('\n\n'))
   }
-  await expect(page.getByTestId('dashboard-page').getByText('Target Maxes', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('dashboard-page').getByText('Actual vs target maxes', { exact: true })).toBeVisible()
   if (browserErrors.length > 0) {
     throw new Error(`Browser errors while editing dashboard:\n${browserErrors.join('\n')}`)
   }

@@ -153,13 +153,11 @@ export default function SupplementsPage() {
   const sortedFilteredPhases = [...filteredPhases].sort((a, b) => a.phase - b.phase)
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
+    <Stack gap="md" className="if-mock-page">
+      <Group justify="space-between" className="if-mock-header">
         <Stack gap={0}>
-          <Text fw={700} size="xl">Supplements</Text>
-          <Text c="dimmed" size="sm">
-            Manage supplement phases and peak week protocols
-          </Text>
+          <h1 className="if-mock-title">Supplements</h1>
+          <div className="if-mock-subtitle">Manage supplement phases and peak week protocols.</div>
         </Stack>
         <Group gap="sm">
           <Select
@@ -194,7 +192,7 @@ export default function SupplementsPage() {
 
       {/* Phase Cards */}
       {sortedFilteredPhases.length > 0 ? (
-        <Accordion variant="separated">
+        <Accordion variant="separated" className="if-mock-accordion">
           {sortedFilteredPhases.map((phase) => {
             const originalIndex = phases.findIndex((p) => p.phase === phase.phase)
 

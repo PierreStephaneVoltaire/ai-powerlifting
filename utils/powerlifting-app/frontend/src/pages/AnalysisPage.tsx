@@ -860,11 +860,11 @@ export default function AnalysisPage() {
   }, [nutritionTrend])
 
   return (
-    <Stack gap="lg">
-      <div className="if-page-header">
+    <Stack gap="md" className="if-mock-page">
+      <div className="if-mock-header">
         <Stack gap={2}>
-          <Text component="h1" className="if-page-title">Analysis</Text>
-          <Text className="if-page-subtitle">Weekly readiness, block progress, maxes, and historical comparisons.</Text>
+          <h1 className="if-mock-title">Analysis</h1>
+          <div className="if-mock-subtitle">Weekly readiness, block progress, maxes, and historical comparisons.</div>
         </Stack>
         <div className="if-tab-group">
           {[
@@ -888,7 +888,7 @@ export default function AnalysisPage() {
 
       {activeSection === 'weekly' && (
         <>
-      <Group justify="space-between" wrap="wrap">
+      <Group justify="space-between" wrap="wrap" className="if-mock-card">
         <Text component="h2" className="if-card-title">Weekly Analysis</Text>
         <Group gap="sm" wrap="wrap">
           <Select

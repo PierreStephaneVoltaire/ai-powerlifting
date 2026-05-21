@@ -290,11 +290,7 @@ async function testReadOnlyMode(page) {
   // 2. Dashboard - verify edit buttons are disabled
   // Banner visible confirms readOnly=true. Also wait for the disabled Edit2 button
   // itself — it only renders once program data has loaded.
-  const editMaxesBtn = page
-    .locator('.mantine-Paper-root', { hasText: 'Target Maxes' })
-    .first()
-    .getByRole('button')
-    .first()
+  const editMaxesBtn = page.getByTestId('dashboard-edit-target-maxes')
   await assertVisible(editMaxesBtn, 'Edit maxes button (disabled)')
   await assertDisabled(editMaxesBtn, 'Edit maxes button')
 

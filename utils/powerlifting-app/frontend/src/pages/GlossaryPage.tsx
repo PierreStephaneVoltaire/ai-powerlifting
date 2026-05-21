@@ -570,19 +570,19 @@ export default function GlossaryPage() {
   }
 
   return (
-    <Stack gap={24}>
-      <div className="if-page-header">
+    <Stack gap={16} className="if-mock-page">
+      <div className="if-mock-header">
         <Stack gap={0}>
           <Group gap="xs">
             <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
               Designer
             </Text>
             <Text c="dimmed">/</Text>
-            <Text component="h1" className="if-page-title">Glossary</Text>
+            <h1 className="if-mock-title">Glossary</h1>
           </Group>
-          <Text className="if-page-subtitle" mt={4}>Browse and manage exercise definitions.</Text>
+          <div className="if-mock-subtitle">Browse and manage exercise definitions.</div>
         </Stack>
-        <Group className="if-toolbar">
+        <Group className="if-mock-toolbar">
           <Button
             variant="light"
             color="blue"
@@ -1029,7 +1029,7 @@ export default function GlossaryPage() {
             <Accordion
               variant="contained"
               chevronPosition="right"
-              className="if-glossary-list"
+              className="if-glossary-list if-mock-accordion"
             >
               {categoryExercises.map((exercise) => (
                 <Accordion.Item key={exercise.id} value={exercise.id}>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Card, Group, SimpleGrid, Stack, Text, Title, UnstyledButton } from '@mantine/core'
+import { SimpleGrid, Stack, Text, UnstyledButton } from '@mantine/core'
 import { BookOpen, Pill, Utensils } from 'lucide-react'
 
 const LOG_ITEMS = [
@@ -25,26 +25,23 @@ const LOG_ITEMS = [
 
 export default function LogPage() {
   return (
-    <Stack gap="md" data-testid="log-page">
-      <Title order={2}>Log</Title>
+    <Stack gap="md" className="if-mock-page" data-testid="log-page">
+      <div className="if-mock-header" style={{ alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="if-mock-title">Log</h1>
+          <div className="if-mock-subtitle">Quick entry points for notes, supplements, and biometrics.</div>
+        </div>
+      </div>
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
         {LOG_ITEMS.map((item) => (
           <UnstyledButton key={item.to} component={Link} to={item.to} data-testid={`log-link-${item.title.toLowerCase()}`}>
-            <Card withBorder shadow="sm" padding="lg">
-              <Stack justify="space-between" h="100%">
-                <div>
-                  <Group gap="sm" mb="sm">
-                    <item.icon size={24} />
-                    <Text size="lg" fw={600}>{item.title}</Text>
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {item.desc}
-                  </Text>
-                </div>
-                <Text size="xs" c="blue" mt="md">Open {item.title.toLowerCase()} -&gt;</Text>
-              </Stack>
-            </Card>
+            <div className="if-mock-card" style={{ minHeight: 132 }}>
+              <item.icon size={18} style={{ color: 'var(--color-text-secondary)', marginBottom: 16 }} />
+              <div style={{ color: 'var(--color-text-primary)', fontSize: 15, fontWeight: 500, marginBottom: 4 }}>{item.title}</div>
+              <Text size="sm" c="dimmed" lh={1.45}>{item.desc}</Text>
+              <div style={{ color: 'var(--color-text-info)', fontSize: 11, marginTop: 16 }}>Open {item.title.toLowerCase()} -&gt;</div>
+            </div>
           </UnstyledButton>
         ))}
       </SimpleGrid>

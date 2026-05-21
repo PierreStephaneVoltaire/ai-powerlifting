@@ -606,91 +606,80 @@ export default function Dashboard() {
       progressionRate: liftAnalysis?.progression_rate_kg_per_week ?? null,
     }
   })
+  const maxRows = [
+    { lift: 'squat' as const, label: 'Squat', actual: actualMaxes.squat, target: meta.target_squat_kg, color: LIFT_COLORS.squat },
+    { lift: 'bench' as const, label: 'Bench', actual: actualMaxes.bench, target: meta.target_bench_kg, color: LIFT_COLORS.bench },
+    { lift: 'deadlift' as const, label: 'Deadlift', actual: actualMaxes.deadlift, target: meta.target_dl_kg, color: LIFT_COLORS.deadlift },
+  ]
+  const actualTotalKg = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
+  const targetTotalKg = meta.target_total_kg || meta.target_squat_kg + meta.target_bench_kg + meta.target_dl_kg
+  const measurementRows = [
+    { label: 'Height', value: meta.height_cm ? `${meta.height_cm}` : '--', unit: 'cm' },
+    { label: 'Arm wingspan', value: meta.arm_wingspan_cm ? `${meta.arm_wingspan_cm}` : '--', unit: 'cm' },
+    { label: 'Leg length', value: meta.leg_length_cm ? `${meta.leg_length_cm}` : '--', unit: 'cm' },
+  ]
 
   return (
-    <Stack gap={24} data-testid="dashboard-page">
-      <Group justify="space-between">
-        <Text className="if-section-title" fz={26}>Dashboard</Text>
-        <Group gap="sm" wrap="wrap">
-          <Button
-            component="a"
-            href="/api/export/xlsx"
-            download="program_history.xlsx"
-            leftSection={<Download size={16} />}
-            size="sm"
-          >
-            Export Excel
-          </Button>
-          <Button
-            component="a"
-            href="/api/export/markdown"
-            download="program_history.md"
-            leftSection={<Download size={16} />}
-            size="sm"
-            variant="light"
-          >
-            Export Markdown
-          </Button>
-        </Group>
-      </Group>
+    <Stack gap={0} className="if-mock-page" data-testid="dashboard-page">
+      <div className="if-mock-header">
+        <h1 className="if-mock-title">Dashboard</h1>
+        <div className="if-mock-toolbar">
+          <a className="if-mock-button" href="/api/export/xlsx" download="program_history.xlsx">
+            <Download size={12} /> Excel
+          </a>
+          <a className="if-mock-button" href="/api/export/markdown" download="program_history.md">
+            <Download size={12} /> Markdown
+          </a>
+        </div>
+      </div>
 
-      {/* Stats Grid */}
-      <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="md">
-        {/* Upcoming Competitions */}
-        {upcomingComps.length > 0 && (
-          <Paper withBorder p={20} className="if-card">
-            <Group gap="xs" mb="sm">
-              <Trophy size={20} />
-              <Text className="if-card-title">Upcoming Competitions</Text>
-            </Group>
-            <Stack gap="xs">
-              {upcomingComps.map((comp) => (
-                <Group key={comp.date} justify="space-between">
-                  <Group gap="xs" style={{ minWidth: 0 }}>
-                    <Badge
-                      variant="light"
-                      color={comp.status === 'confirmed' ? 'green' : 'gray'}
-                      size="sm"
-                      h={20}
-                      radius={4}
-                      tt="uppercase"
-                    >
-                      {comp.status}
-                    </Badge>
-                    <Text size="sm" truncate>{comp.name}</Text>
-                  </Group>
-                  <Num size="sm" fw={500} ml="xs" style={{ textAlign: 'right' }}>{daysUntil(comp.date)}d</Num>
-                </Group>
-              ))}
-            </Stack>
-          </Paper>
-        )}
+      <div className="if-dashboard-row if-dashboard-row-top">
+        <section className="if-mock-card">
+          <div className="if-mock-card-label"><Trophy size={12} /> Upcoming competitions</div>
+          {upcomingComps.length > 0 ? upcomingComps.map((comp) => (
+            <div className="if-compact-row" key={comp.date}>
+              <span
+                className="if-mock-badge"
+                style={{
+                  background: comp.status === 'confirmed' ? 'var(--color-background-success)' : 'var(--color-background-secondary)',
+                  color: comp.status === 'confirmed' ? 'var(--color-text-success)' : 'var(--color-text-secondary)',
+                }}
+              >
+                {comp.status}
+              </span>
+              <span style={{ color: 'var(--color-text-primary)', flex: 1, fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {comp.name}
+              </span>
+              <span className="if-mock-num if-mock-muted" style={{ fontSize: 12 }}>{daysUntil(comp.date)}d</span>
+            </div>
+          )) : (
+            <Text size="sm" c="dimmed">No upcoming competitions.</Text>
+          )}
+        </section>
 
-        {/* Target Maxes */}
-        <Paper withBorder p={20} className="if-card">
-          <Group justify="space-between" mb="sm">
-            <Group gap="xs">
-              <Target size={20} />
-              <Text className="if-card-title">Target Maxes</Text>
-            </Group>
+        <section className="if-mock-card">
+          <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}><TrendingUp size={12} /> Actual vs target maxes</div>
             {editingMaxes ? (
-              <Group gap={4}>
-                <ActionIcon variant="subtle" color="blue" onClick={saveMaxes} aria-label="Save target maxes" data-testid="dashboard-save-target-maxes"><Save size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" onClick={() => setEditingMaxes(false)} aria-label="Cancel target maxes edit" data-testid="dashboard-cancel-target-maxes"><X size={16} /></ActionIcon>
-              </Group>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button className="if-mock-icon-button" onClick={saveMaxes} aria-label="Save target maxes" data-testid="dashboard-save-target-maxes"><Save size={15} /></button>
+                <button className="if-mock-icon-button" onClick={() => setEditingMaxes(false)} aria-label="Cancel target maxes edit" data-testid="dashboard-cancel-target-maxes"><X size={15} /></button>
+              </div>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingMaxes} disabled={readOnly} aria-label="Edit target maxes" data-testid="dashboard-edit-target-maxes"><Edit2 size={16} /></ActionIcon>
+              <button className="if-mock-icon-button" onClick={startEditingMaxes} disabled={readOnly} aria-label="Edit target maxes" data-testid="dashboard-edit-target-maxes"><Edit2 size={15} /></button>
             )}
-          </Group>
-          {editingMaxes ? (
-            <Stack gap="xs">
-              {(['squat', 'bench', 'deadlift'] as const).map((lift) => (
-                <Group key={lift} gap="xs">
-                  <Text size="sm" w={64} tt="capitalize">{lift}</Text>
+          </div>
+          {maxRows.map(({ lift, label, actual, target, color }) => {
+            const pct = target > 0 ? Math.min(100, (actual / target) * 100) : 0
+            return (
+              <div className="if-progress-row" key={lift}>
+                <span className="if-progress-label">{label}</span>
+                <div className="if-progress-track"><div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} /></div>
+                <span className="if-progress-value">{actual > 0 ? displayWeight(actual, unit) : '--'}</span>
+                {editingMaxes ? (
                   <TextInput
                     type="number"
                     inputMode="decimal"
-                    style={{ flex: 1 }}
                     value={localMaxes[lift]}
                     onChange={(e) => {
                       const value = e.currentTarget.value
@@ -698,565 +687,249 @@ export default function Dashboard() {
                     }}
                     aria-label={`${lift} target max`}
                     data-testid={`dashboard-target-${lift}`}
-                    size="sm"
+                    size="xs"
+                    styles={{ input: { fontFamily: 'var(--font-mono)', fontSize: 11, minHeight: 24, padding: '2px 4px', width: 64 } }}
                   />
-                  <Text size="xs" c="dimmed">{unit}</Text>
+                ) : (
+                  <span className="if-progress-target">↑ {target > 0 ? displayWeight(target, unit) : '--'}</span>
+                )}
+              </div>
+            )
+          })}
+          <div className="if-divider-top" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>Total</span>
+            <span className="if-mock-num" style={{ fontSize: 13, fontWeight: 500 }}>
+              {actualTotalKg > 0 ? displayWeight(actualTotalKg, unit) : '--'}
+              <span className="if-mock-muted" style={{ fontSize: 11 }}> / {targetTotalKg > 0 ? displayWeight(targetTotalKg, unit) : '--'} target</span>
+            </span>
+          </div>
+        </section>
+
+        <section className="if-mock-card">
+          <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}><Ruler size={12} /> Anthropometrics</div>
+            {editingMeasurements ? (
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button className="if-mock-icon-button" onClick={saveMeasurements} aria-label="Save measurements" data-testid="dashboard-save-measurements"><Save size={15} /></button>
+                <button className="if-mock-icon-button" onClick={() => setEditingMeasurements(false)} aria-label="Cancel measurements edit" data-testid="dashboard-cancel-measurements"><X size={15} /></button>
+              </div>
+            ) : (
+              <button className="if-mock-icon-button" onClick={startEditingMeasurements} disabled={readOnly} aria-label="Edit measurements" data-testid="dashboard-edit-measurements"><Edit2 size={15} /></button>
+            )}
+          </div>
+          {editingMeasurements ? (
+            <Stack gap={8}>
+              {[
+                { label: 'Height', value: localHeight, set: setLocalHeight, test: 'dashboard-height' },
+                { label: 'Arm wingspan', value: localWingspan, set: setLocalWingspan, test: 'dashboard-wingspan' },
+                { label: 'Leg length', value: localLegLength, set: setLocalLegLength, test: 'dashboard-leg-length' },
+              ].map((row) => (
+                <Group key={row.label} gap="xs" wrap="nowrap">
+                  <Text size="xs" c="dimmed" w={86}>{row.label}</Text>
+                  <TextInput type="number" value={row.value} onChange={(e) => row.set(e.currentTarget.value)} size="xs" style={{ flex: 1 }} data-testid={row.test} />
+                  <Text size="xs" c="dimmed">cm</Text>
                 </Group>
               ))}
-              <Group justify="space-between" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt={4} mt={4}>
-                <Text size="sm" fw={500}>Total</Text>
-                <Num size="sm" fw={700}>{localMaxTotalKg === null ? '--' : displayWeight(localMaxTotalKg, unit)}</Num>
-              </Group>
             </Stack>
           ) : (
-            <Stack gap={4}>
-              <Group justify="space-between"><Text size="sm">Squat</Text><Num size="sm" fw={500}>{displayWeight(meta.target_squat_kg, unit)}</Num></Group>
-              <Group justify="space-between"><Text size="sm">Bench</Text><Num size="sm" fw={500}>{displayWeight(meta.target_bench_kg, unit)}</Num></Group>
-              <Group justify="space-between"><Text size="sm">Deadlift</Text><Num size="sm" fw={500}>{displayWeight(meta.target_dl_kg, unit)}</Num></Group>
-              <Group justify="space-between" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt={4} mt={4}>
-                <Text size="sm" fw={500}>Total</Text>
-                <Num size="sm" fw={700}>{displayWeight(meta.target_total_kg, unit)}</Num>
-              </Group>
-            </Stack>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {measurementRows.map((row) => (
+                <div key={row.label}>
+                  <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginBottom: 2 }}>{row.label}</div>
+                  <div className="if-mock-num" style={{ fontSize: 22, fontWeight: 500 }}>
+                    {row.value} <span className="if-mock-muted" style={{ fontSize: 13 }}>{row.unit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-        </Paper>
+        </section>
+      </div>
 
-        {/* Actual Maxes */}
-        {(actualMaxes.squat > 0 || actualMaxes.bench > 0 || actualMaxes.deadlift > 0) && (
-          <Paper withBorder p={20} className="if-card">
-            <Group gap="xs" mb="sm">
-              <TrendingUp size={20} />
-              <Text className="if-card-title">Actual Maxes</Text>
-            </Group>
-            <Stack gap="xs">
-              {[
-                { lift: 'squat' as const, label: 'Squat', actual: actualMaxes.squat, target: meta.target_squat_kg },
-                { lift: 'bench' as const, label: 'Bench', actual: actualMaxes.bench, target: meta.target_bench_kg },
-                { lift: 'deadlift' as const, label: 'Deadlift', actual: actualMaxes.deadlift, target: meta.target_dl_kg },
-              ].map(({ lift, label, actual, target }) =>
-                actual > 0 ? (
-                  <Box key={label}>
-                    <Group justify="space-between" mb={2}>
-                      <Text size="sm" c="var(--text-secondary)">{label}: <Num span size="sm">{displayWeight(actual, unit)}</Num></Text>
-                      <Group gap={8}>
-                        <Text size="sm" c="dimmed">Target: <Num span size="sm">{displayWeight(target, unit)}</Num></Text>
-                        <Num size="xs" c="var(--text-secondary)">
-                          {target > 0 ? `${Math.min(100, (actual / target) * 100).toFixed(0)}%` : '0%'}
-                        </Num>
-                      </Group>
-                    </Group>
-                    <Progress
-                      value={target > 0 ? Math.min(100, (actual / target) * 100) : 0}
-                      color={LIFT_COLORS[lift]}
-                      size={8}
-                    />
-                  </Box>
-                ) : null
-              )}
-              {(actualMaxes.squat > 0 || actualMaxes.bench > 0 || actualMaxes.deadlift > 0) && (
-                <Group justify="space-between" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt={4} mt={4}>
-                  <Text size="sm" fw={500}>Total</Text>
-                  <Num size="sm" fw={700}>{displayWeight(actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift, unit)}</Num>
-                </Group>
-              )}
-            </Stack>
-          </Paper>
-        )}
-
-        {/* Body Weight */}
-        <Paper withBorder p={20} className="if-card">
-          <Group justify="space-between" mb="sm">
-            <Group gap="xs">
-              <Scale size={20} />
-              <Text className="if-card-title">Body Weight</Text>
-            </Group>
+      <div className="if-dashboard-row if-dashboard-row-mid">
+        <section className="if-mock-card">
+          <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}><Scale size={12} /> Body weight</div>
             {editingWeight ? (
-              <Group gap={4}>
-                <ActionIcon variant="subtle" color="blue" onClick={saveWeight} aria-label="Save body weight" data-testid="dashboard-save-body-weight"><Save size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" onClick={() => setEditingWeight(false)} aria-label="Cancel body weight edit" data-testid="dashboard-cancel-body-weight"><X size={16} /></ActionIcon>
-              </Group>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button className="if-mock-icon-button" onClick={saveWeight} aria-label="Save body weight" data-testid="dashboard-save-body-weight"><Save size={15} /></button>
+                <button className="if-mock-icon-button" onClick={() => setEditingWeight(false)} aria-label="Cancel body weight edit" data-testid="dashboard-cancel-body-weight"><X size={15} /></button>
+              </div>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingWeight} disabled={readOnly} aria-label="Edit body weight" data-testid="dashboard-edit-body-weight"><Edit2 size={16} /></ActionIcon>
+              <button className="if-mock-icon-button" onClick={startEditingWeight} disabled={readOnly} aria-label="Edit body weight" data-testid="dashboard-edit-body-weight"><Edit2 size={15} /></button>
             )}
-          </Group>
+          </div>
           {editingWeight ? (
-            <Group gap="xs">
-              <TextInput
-                type="number"
-                inputMode="decimal"
-                style={{ flex: 1 }}
-                value={localWeight}
-                onChange={(e) => setLocalWeight(e.currentTarget.value)}
-                aria-label="Body weight"
-                data-testid="dashboard-body-weight"
-                size="lg"
-              />
-              <Text size="sm" c="dimmed">{unit}</Text>
-            </Group>
+            <TextInput type="number" inputMode="decimal" value={localWeight} onChange={(e) => setLocalWeight(e.currentTarget.value)} data-testid="dashboard-body-weight" />
           ) : (
-            <Num fz={44} lh={1.05} c="var(--text-primary)">{displayWeight(latestWeightKg, unit)}</Num>
+            <div className="if-mock-num" style={{ fontSize: 'clamp(28px, 2.4vw, 36px)', fontWeight: 500, lineHeight: 1.1, whiteSpace: 'nowrap' }}>{displayWeight(latestWeightKg, unit)}</div>
           )}
-          <Text size="sm" c="dimmed">Target: {meta.weight_class_kg} kg class</Text>
-          <Progress
-            value={weightClassProgress}
-            mt="sm"
-            size="md"
-          />
-        </Paper>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginTop: 3 }}>Target: {meta.weight_class_kg} kg class</div>
+          <div className="if-progress-track" style={{ marginTop: 10, width: '100%' }}><div className="if-progress-fill" style={{ width: `${weightClassProgress}%`, background: 'var(--accent-blue)' }} /></div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginTop: 4 }}>{weightClassProgress.toFixed(0)}% to class limit</div>
+        </section>
 
-        <Paper withBorder p={20} className="if-card">
-          <Group justify="space-between" mb="sm" align="flex-start">
-            <Group gap="xs">
-              <HeartPulse size={20} />
-              <Text className="if-card-title">Subjective Wellness</Text>
-            </Group>
-            {wellnessTrend.overallAverage !== null && (
-              <Num size="xs" c="dimmed">
-                {wellnessTrend.overallAverage.toFixed(1)} / 5 avg
-              </Num>
-            )}
-          </Group>
+        <section className="if-mock-card">
+          <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}><HeartPulse size={12} /> Subjective wellness</div>
+            {wellnessTrend.overallAverage !== null && <span className="if-mock-muted" style={{ fontSize: 11 }}>{wellnessTrend.overallAverage.toFixed(1)} / 5 avg</span>}
+          </div>
           {wellnessTrend.overallAverage !== null ? (
-            <Stack gap="xs">
-              <SimpleGrid cols={4} spacing="xs">
-                {wellnessTrend.buckets.map((bucket) => {
-                  const average = bucket.average
-                  const color = average === null ? 'gray' : average >= 4 ? 'green' : average >= 3 ? 'yellow' : 'red'
-                  return (
-                    <Stack key={bucket.label} gap={4}>
-                      <Text size="xs" c="dimmed">{bucket.label}</Text>
-                      <Progress value={average !== null ? (average / 5) * 100 : 0} color={color} size="sm" />
-                      <Num size="xs" fw={500}>{average !== null ? average.toFixed(1) : '—'}</Num>
-                    </Stack>
-                  )
-                })}
-              </SimpleGrid>
-              <Text size="xs" c="dimmed">Higher is better. Soreness is reversed in readiness math.</Text>
-              <SimpleGrid cols={{ base: 2, sm: 5 }} spacing="xs" mt="xs">
+            <>
+              <div style={{ display: 'grid', gap: 4, gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 10, textAlign: 'center' }}>
+                {wellnessTrend.buckets.map((bucket) => (
+                  <div key={bucket.label}>
+                    <div style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>{bucket.label}</div>
+                    <div className="if-mock-num" style={{ color: bucket.average !== null && bucket.average < 3 ? 'hsl(25,80%,60%)' : 'var(--color-text-primary)', fontSize: 15, fontWeight: 500 }}>{bucket.average !== null ? bucket.average.toFixed(1) : '--'}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="if-divider-top" style={{ display: 'grid', gap: 4, gridTemplateColumns: 'repeat(5, 1fr)', textAlign: 'center' }}>
                 {WELLNESS_METRICS.map(({ key, label }) => {
                   const average = wellnessTrend.metricAverages[key]
-                  const color = average === null ? 'gray' : average >= 4 ? 'green' : average >= 3 ? 'yellow' : 'red'
                   return (
-                    <Stack key={key} gap={4}>
-                      <Text size="xs" c="dimmed">{label} avg</Text>
-                      <Progress value={average !== null ? (average / 5) * 100 : 0} color={color} size="sm" />
-                      <Num size="xs" fw={500}>{average !== null ? average.toFixed(1) : '—'}</Num>
-                    </Stack>
+                    <div key={key}>
+                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>{label}</div>
+                      <div className="if-mock-num" style={{ color: average !== null && average < 3 ? 'hsl(25,80%,60%)' : 'var(--color-text-primary)', fontSize: 13 }}>{average !== null ? average.toFixed(1) : '--'}</div>
+                    </div>
                   )
                 })}
-              </SimpleGrid>
-            </Stack>
+              </div>
+            </>
           ) : (
             <Text size="sm" c="dimmed">No wellness entries yet.</Text>
           )}
-        </Paper>
+        </section>
 
-        {/* Anthropometrics */}
-        <Paper withBorder p={20} className="if-card">
-          <Group justify="space-between" mb="sm">
-            <Group gap="xs">
-              <Ruler size={20} />
-              <Text className="if-card-title">Anthropometrics</Text>
-            </Group>
-            {editingMeasurements ? (
-              <Group gap={4}>
-                <ActionIcon variant="subtle" color="blue" onClick={saveMeasurements} aria-label="Save measurements" data-testid="dashboard-save-measurements"><Save size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" onClick={() => setEditingMeasurements(false)} aria-label="Cancel measurements edit" data-testid="dashboard-cancel-measurements"><X size={16} /></ActionIcon>
-              </Group>
-            ) : (
-              <ActionIcon variant="subtle" onClick={startEditingMeasurements} disabled={readOnly} aria-label="Edit measurements" data-testid="dashboard-edit-measurements"><Edit2 size={16} /></ActionIcon>
-            )}
-          </Group>
-          {editingMeasurements ? (
-            <Stack gap="xs">
-              <Group gap="xs">
-                <Text size="sm" w={96}>Height</Text>
-                <TextInput
-                  type="number"
-                  inputMode="decimal"
-                  style={{ flex: 1 }}
-                  value={localHeight}
-                  onChange={(e) => setLocalHeight(e.currentTarget.value)}
-                  placeholder="--"
-                  aria-label="Height"
-                  data-testid="dashboard-height"
-                  size="sm"
-                />
-                <Text size="xs" c="dimmed">cm</Text>
-              </Group>
-              <Group gap="xs">
-                <Text size="sm" w={96}>Arm Wingspan</Text>
-                <TextInput
-                  type="number"
-                  inputMode="decimal"
-                  style={{ flex: 1 }}
-                  value={localWingspan}
-                  onChange={(e) => setLocalWingspan(e.currentTarget.value)}
-                  placeholder="--"
-                  aria-label="Arm wingspan"
-                  data-testid="dashboard-wingspan"
-                  size="sm"
-                />
-                <Text size="xs" c="dimmed">cm</Text>
-              </Group>
-              <Group gap="xs">
-                <Text size="sm" w={96}>Leg Length</Text>
-                <TextInput
-                  type="number"
-                  inputMode="decimal"
-                  style={{ flex: 1 }}
-                  value={localLegLength}
-                  onChange={(e) => setLocalLegLength(e.currentTarget.value)}
-                  placeholder="--"
-                  aria-label="Leg length"
-                  data-testid="dashboard-leg-length"
-                  size="sm"
-                />
-                <Text size="xs" c="dimmed">cm</Text>
-              </Group>
-            </Stack>
+        <section className="if-mock-card">
+          <div className="if-mock-card-label"><Activity size={12} /> Fatigue state</div>
+          {currentBlockLoading ? (
+            <Group gap="xs"><Loader size="sm" /><Text size="sm" c="dimmed">Loading...</Text></Group>
+          ) : currentBlockWeekly ? (
+            <>
+              <div className="if-mock-num" style={{ color: fatigueColor(currentBlockFatigue), fontSize: 42, fontWeight: 500, lineHeight: 1, marginBottom: 4 }}>
+                {currentBlockFatigue !== null ? `${(currentBlockFatigue * 100).toFixed(0)}%` : 'N/A'}
+              </div>
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: 12, marginBottom: 8 }}>{fatigueLabel(currentBlockFatigue)} current state</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                {typeof currentBlockWeekly.fatigue_components?.window_mean_fi === 'number' && <span className="if-mock-pill">Mean {(currentBlockWeekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%</span>}
+                {typeof currentBlockWeekly.fatigue_components?.window_peak_fi === 'number' && <span className="if-mock-pill" style={{ background: 'var(--color-background-warning)', borderColor: 'var(--color-border-warning)', color: 'var(--color-text-warning)' }}>Peak {(currentBlockWeekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%</span>}
+                {currentBlockWeekly.fatigue_components?.fatigue_context_confidence && <span className="if-mock-pill" style={{ background: 'var(--color-background-success)', borderColor: 'var(--color-border-success)', color: 'var(--color-text-success)' }}>{currentBlockWeekly.fatigue_components.fatigue_context_confidence} confidence</span>}
+              </div>
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, lineHeight: 1.6 }}>
+                Failures {((currentBlockWeekly.fatigue_components?.failure_stress ?? 0) * 100).toFixed(0)}% · Spike {((currentBlockWeekly.fatigue_components?.acute_spike_stress ?? 0) * 100).toFixed(0)}% · RPE {((currentBlockWeekly.fatigue_components?.rpe_stress ?? 0) * 100).toFixed(0)}% · Reservoir {((currentBlockWeekly.fatigue_components?.chronic_load_stress ?? 0) * 100).toFixed(0)}% · Strain {((currentBlockWeekly.fatigue_components?.monotony_stress ?? 0) * 100).toFixed(0)}%
+              </div>
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginTop: 4 }}>{currentBlockBundle?.block.startDate} → {currentBlockBundle?.block.endDate}</div>
+            </>
           ) : (
-            <Stack gap={4}>
-              <Group justify="space-between">
-                <Text size="sm">Height</Text>
-                <Num size="sm" fw={500}>{meta.height_cm ? `${meta.height_cm} cm` : 'Not set'}</Num>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm">Arm Wingspan</Text>
-                <Num size="sm" fw={500}>{meta.arm_wingspan_cm ? `${meta.arm_wingspan_cm} cm` : 'Not set'}</Num>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm">Leg Length</Text>
-                <Num size="sm" fw={500}>{meta.leg_length_cm ? `${meta.leg_length_cm} cm` : 'Not set'}</Num>
-              </Group>
-            </Stack>
+            <Text size="sm" c="dimmed">Block analysis unavailable.</Text>
           )}
-        </Paper>
+        </section>
 
-        {/* Current Fatigue State */}
-        <Paper withBorder p={20} className="if-card">
-            <Group justify="space-between" mb="sm" align="flex-start">
-              <Group gap="xs">
-                <HeartPulse size={20} />
-                <Text className="if-card-title">Current Fatigue State</Text>
-              </Group>
-            </Group>
-            {currentBlockLoading ? (
-              <Group gap="xs">
-                <Loader size="sm" />
-                <Text size="sm" c="dimmed">Loading block analysis...</Text>
-              </Group>
-            ) : currentBlockWeekly ? (
-              <Stack gap="xs">
-                <Group justify="space-between" align="flex-end">
-                  <Stack gap={0}>
-                    <Num fz={44} lh={1.05} style={{ color: fatigueColor(currentBlockFatigue) }}>
-                      {currentBlockFatigue !== null ? `${(currentBlockFatigue * 100).toFixed(0)}%` : 'N/A'}
-                    </Num>
-                    <Text size="sm" c="dimmed">{fatigueLabel(currentBlockFatigue)} current state</Text>
-                  </Stack>
-                  <Text size="xs" c="dimmed" ta="right">
-                    {currentBlockBundle?.block.startDate} to {currentBlockBundle?.block.endDate}
-                  </Text>
-                </Group>
-                <Group gap={6} wrap="wrap">
-                  {typeof currentBlockWeekly.fatigue_components?.window_mean_fi === 'number' && (
-                    <Badge variant="light" color="blue" h={20} radius={4}>
-                      Mean {(currentBlockWeekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%
-                    </Badge>
-                  )}
-                  {typeof currentBlockWeekly.fatigue_components?.window_peak_fi === 'number' && (
-                    <Badge variant="light" color="orange" h={20} radius={4}>
-                      Peak {(currentBlockWeekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%
-                    </Badge>
-                  )}
-                  {currentBlockWeekly.fatigue_components?.fatigue_context_confidence && (
-                    <Badge variant="light" color="gray" h={20} radius={4}>
-                      {currentBlockWeekly.fatigue_components.fatigue_context_confidence} confidence
-                    </Badge>
-                  )}
-                </Group>
-                <Text fz="xs" c="dimmed" lh="lg">
-                  Failures {((currentBlockWeekly.fatigue_components?.failure_stress ?? 0) * 100).toFixed(0)}%
-                  {' '}· Spike {((currentBlockWeekly.fatigue_components?.acute_spike_stress ?? 0) * 100).toFixed(0)}%
-                  {' '}· RPE {((currentBlockWeekly.fatigue_components?.rpe_stress ?? 0) * 100).toFixed(0)}%
-                  {' '}· Reservoir {((currentBlockWeekly.fatigue_components?.chronic_load_stress ?? 0) * 100).toFixed(0)}%
-                  {' '}· Strain {((currentBlockWeekly.fatigue_components?.monotony_stress ?? 0) * 100).toFixed(0)}%
-                </Text>
-              </Stack>
-            ) : (
-              <Text size="sm" c="dimmed">
-                Block analysis unavailable.
-              </Text>
-            )}
-          </Paper>
+        <section className="if-mock-card" style={{ minWidth: 0 }}>
+          <div className="if-mock-card-label"><TrendingUp size={12} /> Per-lift breakdown</div>
+          <div style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)', display: 'grid', fontSize: 10, gap: 4, gridTemplateColumns: '1fr 80px 60px', letterSpacing: '0.07em', marginBottom: 4, paddingBottom: 5, textTransform: 'uppercase' }}>
+            <span>Lift</span><span style={{ textAlign: 'right' }}>Current</span><span style={{ textAlign: 'right' }}>Trend</span>
+          </div>
+          {currentBlockLoading ? (
+            <Text size="sm" c="dimmed">Loading lift data...</Text>
+          ) : currentBlockWeekly ? liftBreakdownRows.map((row) => (
+            <div className="if-lift-row" key={row.lift}>
+              <span style={{ color: 'var(--color-text-primary)', fontSize: 13 }}>{LIFT_LABELS[row.lift]}</span>
+              <span className="if-mock-num" style={{ fontSize: 13, textAlign: 'right' }}>{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</span>
+              <span className="if-mock-num" style={{ color: typeof row.progressionRate === 'number' && row.progressionRate > 0 ? 'var(--color-text-success)' : 'var(--color-text-secondary)', fontSize: 11, textAlign: 'right' }}>{typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}</span>
+            </div>
+          )) : (
+            <Text size="sm" c="dimmed">Lift breakdown unavailable.</Text>
+          )}
+        </section>
+      </div>
 
-        {/* Per-Lift Breakdown */}
-        <Paper withBorder p={20} className="if-card" style={{ minWidth: 0 }}>
-            <Group justify="space-between" mb="sm" align="flex-start">
-              <Group gap="xs">
-                <Activity size={20} />
-                <Text className="if-card-title">Per-Lift Breakdown</Text>
-              </Group>
-            </Group>
-            {currentBlockLoading ? (
-              <Group gap="xs">
-                <Loader size="sm" />
-                <Text size="sm" c="dimmed">Loading lift data...</Text>
-              </Group>
-            ) : currentBlockWeekly ? (
-              <Box style={{ overflowX: 'auto' }}>
-                <Table striped highlightOnHover withTableBorder={false} withColumnBorders={false} miw={360}>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Lift</Table.Th>
-                      <Table.Th>Current</Table.Th>
-                      <Table.Th>Trend</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {liftBreakdownRows.map((row) => (
-                      <Table.Tr key={row.lift}>
-                        <Table.Td fw={500}>{LIFT_LABELS[row.lift]}</Table.Td>
-                        <Table.Td><Num size="sm">{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</Num></Table.Td>
-                        <Table.Td>
-                          <Num size="sm">{typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}</Num>
-                        </Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Box>
-            ) : (
-              <Text size="sm" c="dimmed">
-                Lift breakdown unavailable.
-              </Text>
-            )}
-          </Paper>
-
-        {/* Program Phases */}
-        <Paper withBorder p={20} className="if-card">
-          <Group justify="space-between" mb="sm">
-            <Group gap="xs">
-              <TrendingUp size={20} />
-              <Text className="if-card-title">Program Phases</Text>
-            </Group>
+      <div className="if-dashboard-row if-dashboard-row-bottom">
+        <section className="if-mock-card">
+          <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}><TrendingUp size={12} /> Program phases</div>
             {editingPhases ? (
-              <Group gap={4}>
-                <ActionIcon variant="subtle" color="blue" onClick={addPhase}><Plus size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" color="blue" onClick={savePhases}><Save size={16} /></ActionIcon>
-                <ActionIcon variant="subtle" onClick={() => setEditingPhases(false)}><X size={16} /></ActionIcon>
-              </Group>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button className="if-mock-icon-button" onClick={addPhase} aria-label="Add phase"><Plus size={15} /></button>
+                <button className="if-mock-icon-button" onClick={savePhases} aria-label="Save phases"><Save size={15} /></button>
+                <button className="if-mock-icon-button" onClick={() => setEditingPhases(false)} aria-label="Cancel phase edit"><X size={15} /></button>
+              </div>
             ) : (
-              <ActionIcon variant="subtle" onClick={startEditingPhases} disabled={readOnly}><Edit2 size={16} /></ActionIcon>
+              <button className="if-mock-icon-button" onClick={startEditingPhases} disabled={readOnly} aria-label="Edit phases"><Edit2 size={15} /></button>
             )}
-          </Group>
+          </div>
           {editingPhases ? (
-            <Stack gap="xs">
+            <Stack gap={6}>
               {localPhases.map((phase, idx) => (
-                <Group key={idx} gap="xs" p="xs" style={{ backgroundColor: 'var(--mantine-color-default)', borderRadius: 'var(--mantine-radius-sm)' }}>
-                  <Box w={12} h={12} style={{ borderRadius: '50%', backgroundColor: phaseColor({ ...phase, block: 'current' }, localPhases) }} />
-                  <TextInput
-                    style={{ flex: 1 }}
-                    value={phase.name}
-                    onChange={(e) => updatePhase(idx, 'name', e.currentTarget.value)}
-                    placeholder="Phase name"
-                    size="xs"
-                  />
-                  <TextInput
-                    type="number"
-                    style={{ width: 48 }}
-                    value={phase.start_week}
-                    onChange={(e) => updatePhase(idx, 'start_week', Number(e.currentTarget.value) || 0)}
-                    size="xs"
-                  />
-                  <Text size="xs">-</Text>
-                  <TextInput
-                    type="number"
-                    style={{ width: 48 }}
-                    value={phase.end_week}
-                    onChange={(e) => updatePhase(idx, 'end_week', Number(e.currentTarget.value) || 0)}
-                    size="xs"
-                  />
-                  <ActionIcon variant="subtle" color="red" onClick={() => removePhase(idx)}><Trash2 size={12} /></ActionIcon>
+                <Group key={`${phase.name}-${idx}`} gap="xs" wrap="nowrap">
+                  <Box w={9} h={9} style={{ borderRadius: '50%', backgroundColor: phaseColor({ ...phase, block: 'current' }, localPhases), flexShrink: 0 }} />
+                  <TextInput value={phase.name} onChange={(e) => updatePhase(idx, 'name', e.currentTarget.value)} size="xs" style={{ flex: 1 }} />
+                  <TextInput type="number" value={phase.start_week} onChange={(e) => updatePhase(idx, 'start_week', Number(e.currentTarget.value) || 0)} size="xs" style={{ width: 48 }} />
+                  <Text size="xs" c="dimmed">-</Text>
+                  <TextInput type="number" value={phase.end_week} onChange={(e) => updatePhase(idx, 'end_week', Number(e.currentTarget.value) || 0)} size="xs" style={{ width: 48 }} />
+                  <button className="if-mock-icon-button" onClick={() => removePhase(idx)} aria-label="Remove phase"><Trash2 size={13} /></button>
                 </Group>
               ))}
             </Stack>
+          ) : currentBlockPhases.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {currentBlockPhases.map((phase) => {
+                const color = phaseColor(phase, currentBlockPhases)
+                return (
+                  <div key={`${phase.name}-${phase.start_week}`} style={{ alignItems: 'center', display: 'flex', gap: 8 }}>
+                    <span style={{ background: color, borderRadius: '50%', flexShrink: 0, height: 9, width: 9 }} />
+                    <span style={{ color: 'var(--color-text-secondary)', fontSize: 11, width: 44 }}>W{phase.start_week}-{phase.end_week}</span>
+                    <span style={{ color: 'var(--color-text-primary)', fontSize: 12 }}>{phase.name}</span>
+                  </div>
+                )
+              })}
+            </div>
           ) : (
-            <Stack gap={4}>
-              {currentBlockPhases.length === 0 ? (
-                <Text size="sm" c="dimmed">No phases defined for the current block.</Text>
-              ) : (
-                currentBlockPhases.map((phase, idx) => (
-                  <Group key={idx} gap="xs">
-                    <Box w={12} h={12} style={{ borderRadius: '50%', backgroundColor: phaseColor(phase, currentBlockPhases) }} />
-                    <Text size="sm">W{phase.start_week}-W{phase.end_week}: {phase.name}</Text>
-                  </Group>
-                ))
-              )}
-            </Stack>
+            <Text size="sm" c="dimmed">No phases defined for the current block.</Text>
           )}
-        </Paper>
-      </SimpleGrid>
+        </section>
 
-      {/* Lift Profiles Section */}
-      <Paper withBorder p={20} className="if-card">
-        <Group justify="space-between" mb="md">
-          <Group gap="xs">
-            <Dumbbell size={20} />
-            <Text className="if-card-title">Lift Style Profiles</Text>
-          </Group>
-          <Group gap={4}>
-            {LIFT_ORDER.map((lift) => (
-              <Button
-                key={lift}
-                component={Link}
-                to={`/lift-profiles/${lift}`}
-                disabled={readOnly}
-                variant="subtle"
-                size="compact-sm"
-                leftSection={<Edit2 size={14} />}
-              >
-                {LIFT_LABELS[lift]}
-              </Button>
-            ))}
-          </Group>
-        </Group>
-
-        {editingLiftProfiles ? (
-          <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="lg">
-            {localLiftProfiles.map((profile) => (
-              <Stack key={profile.lift} gap="sm" style={{ minWidth: 0 }}>
-                <Group justify="space-between" align="center" style={{ borderBottom: '1px solid var(--mantine-color-default-border)', paddingBottom: 4 }}>
-                  <Text size="sm" fw={500} tt="capitalize">{LIFT_LABELS[profile.lift]}</Text>
-                  <Button
-                    component={Link}
-                    to={`/lift-profiles/${profile.lift}`}
-                    variant="subtle"
-                    size="compact-xs"
-                    leftSection={<Sparkles size={12} />}
-                  >
-                    Open Profile
-                  </Button>
-                </Group>
-
-                {/* Style Notes */}
-                <Stack gap={4}>
-                  <Text size="xs" c="dimmed">Style & Setup</Text>
-                  <Textarea
-                    rows={2}
-                    value={profile.style_notes}
-                    onChange={(e) => updateLocalProfile(profile.lift, { style_notes: e.currentTarget.value })}
-                    placeholder={LIFT_STYLE_PLACEHOLDERS[profile.lift]}
-                    size="xs"
-                    styles={{ input: { maxWidth: '100%', minWidth: 0, width: '100%', overflowY: 'auto', resize: 'vertical' } }}
-                  />
-                </Stack>
-
-                {/* Sticking Points */}
-                <Stack gap={4}>
-                  <Text size="xs" c="dimmed">Sticking Points</Text>
-                  <Textarea
-                    rows={2}
-                    value={profile.sticking_points}
-                    onChange={(e) => updateLocalProfile(profile.lift, { sticking_points: e.currentTarget.value })}
-                    placeholder={STICKING_PLACEHOLDERS[profile.lift]}
-                    size="xs"
-                    styles={{ input: { maxWidth: '100%', minWidth: 0, width: '100%', overflowY: 'auto', resize: 'vertical' } }}
-                  />
-                </Stack>
-
-                {/* Primary Muscle */}
-                <Stack gap={4}>
-                  <Text size="xs" c="dimmed">Primary Muscle Driving the Lift</Text>
-                  <TextInput
-                    value={profile.primary_muscle}
-                    onChange={(e) => updateLocalProfile(profile.lift, { primary_muscle: e.currentTarget.value })}
-                    placeholder={profile.lift === 'squat' ? 'e.g. Quad dominant' : profile.lift === 'bench' ? 'e.g. Tricep dominant' : 'e.g. Glute dominant'}
-                    size="xs"
-                  />
-                </Stack>
-
-                {/* Volume Tolerance */}
-                <Stack gap={4}>
-                  <Text size="xs" c="dimmed">Volume Recovery Tolerance</Text>
-                  <SegmentedControl
-                    fullWidth
-                    size="xs"
-                    data={[
-                      { label: 'Low', value: 'low' },
-                      { label: 'Moderate', value: 'moderate' },
-                      { label: 'High', value: 'high' },
-                    ]}
-                    value={profile.volume_tolerance}
-                    onChange={(v) => updateLocalProfile(profile.lift, { volume_tolerance: v as 'low' | 'moderate' | 'high' })}
-                  />
-                </Stack>
-
-                <Stack gap={4}>
-                  <Text size="xs" c="dimmed">Stimulus Coefficient</Text>
-                  <TextInput
-                    type="number"
-                    step={0.05}
-                    value={profile.stimulus_coefficient ?? 1}
-                    onChange={(e) => updateLocalProfile(profile.lift, { stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) })}
-                    size="xs"
-                  />
-                  {profile.stimulus_coefficient_reasoning && (
-                    <Text size="xs" c="dimmed" lineClamp={3}>{profile.stimulus_coefficient_reasoning}</Text>
-                  )}
-                </Stack>
-              </Stack>
-            ))}
-          </SimpleGrid>
-        ) : (
-          <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md">
+        <section className="if-mock-card">
+          <div style={{ alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}><Dumbbell size={12} /> Lift style profiles</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {LIFT_ORDER.map((lift) => (
+                <Link key={lift} className="if-mock-button" to={`/lift-profiles/${lift}`} aria-disabled={readOnly} style={{ fontSize: 11, minHeight: 24, padding: '3px 9px' }}>
+                  <Edit2 size={11} /> {LIFT_LABELS[lift]}
+                </Link>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
             {displayProfiles.map((profile) => {
+              const color = LIFT_COLORS[profile.lift]
               const hasData = profile.style_notes || profile.sticking_points || profile.primary_muscle
               return (
-                <Stack key={profile.lift} gap="xs" style={{ minWidth: 0 }}>
-                  <Text size="sm" fw={500} tt="capitalize" style={{ borderBottom: '1px solid var(--mantine-color-default-border)', paddingBottom: 4 }}>{LIFT_LABELS[profile.lift]}</Text>
+                <div key={profile.lift} style={{ minWidth: 0 }}>
+                  <div style={{ color, fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>{LIFT_LABELS[profile.lift]}</div>
                   {hasData ? (
                     <>
-                      {profile.style_notes && (
-                        <div>
-                          <Text size="xs" c="dimmed" mb={2}>Style</Text>
-                          <Text size="xs" style={{ lineHeight: 1.6 }}>{profile.style_notes}</Text>
-                        </div>
-                      )}
-                      {profile.sticking_points && (
-                        <div>
-                          <Text size="xs" c="dimmed" mb={2}>Sticking Points</Text>
-                          <Text size="xs" c="orange" style={{ lineHeight: 1.6 }}>{profile.sticking_points}</Text>
-                        </div>
-                      )}
-                      {profile.primary_muscle && (
-                        <div>
-                          <Text size="xs" c="dimmed" mb={2}>Primary Driver</Text>
-                          <Text size="xs" fw={500}>{profile.primary_muscle}</Text>
-                        </div>
-                      )}
-                      <Badge
-                        variant="light"
-                        color={profile.volume_tolerance === 'low' ? 'red' : profile.volume_tolerance === 'moderate' ? 'yellow' : 'green'}
-                        size="sm"
-                        tt="capitalize"
-                      >
-                        {profile.volume_tolerance} volume tolerance
-                      </Badge>
-                      <Badge variant="light" color="blue" size="sm">
-                        Stimulus x{(profile.stimulus_coefficient ?? 1).toFixed(2)}
-                      </Badge>
+                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, lineHeight: 1.6, marginBottom: 6 }}>{profile.style_notes || 'No style notes yet.'}</div>
+                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, letterSpacing: '0.07em', marginBottom: 4, textTransform: 'uppercase' }}>Sticking point</div>
+                      <div style={{ color: 'var(--color-text-warning)', fontSize: 11, lineHeight: 1.5, marginBottom: 6 }}>{profile.sticking_points || '--'}</div>
+                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, letterSpacing: '0.07em', marginBottom: 4, textTransform: 'uppercase' }}>Primary driver</div>
+                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 11 }}>{profile.primary_muscle || '--'}</div>
+                      <div style={{ marginTop: 8 }}>
+                        <span className="if-mock-pill" style={{ background: 'var(--color-background-warning)', borderColor: 'var(--color-border-warning)', color: 'var(--color-text-warning)' }}>
+                          {profile.volume_tolerance} volume tolerance
+                        </span>
+                      </div>
                     </>
                   ) : (
-                    <Text size="xs" c="dimmed" fs="italic">No profile yet - click edit to add</Text>
+                    <Text size="xs" c="dimmed">No profile yet.</Text>
                   )}
-                </Stack>
+                </div>
               )
             })}
-          </SimpleGrid>
-        )}
-      </Paper>
+          </div>
+        </section>
+      </div>
 
       <Modal
         opened={profileGuideOpen}

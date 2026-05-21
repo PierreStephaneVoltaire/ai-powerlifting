@@ -4,8 +4,9 @@ import { Plus, Edit2, Trash2, X, Save, ExternalLink } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { useUiStore } from '@/store/uiStore'
+import { phaseColor } from '@/utils/phases'
 import {
-  Paper, Title, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
+  Paper, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
   TextInput, Textarea, Modal, Box, Select,
 } from '@mantine/core'
 import type { Phase } from '@powerlifting/types'
@@ -123,14 +124,14 @@ export default function DesignerPhases() {
   }
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
+    <Stack gap="md" className="if-mock-page">
+      <Group justify="space-between" className="if-mock-header">
         <Group gap="xs">
           <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
             Designer
           </Text>
           <Text c="dimmed">/</Text>
-          <Title order={2}>Phase Design</Title>
+          <h1 className="if-mock-title">Phase Design</h1>
         </Group>
         <Group gap="xs">
           <Select
@@ -156,8 +157,10 @@ export default function DesignerPhases() {
       {phases.length > 0 ? (
         <Stack gap="sm">
           {phases.map((phase, i) => (
-            <Paper key={phase.name} withBorder p="md">
+            <Paper key={phase.name} withBorder p={0} className="if-card">
+              <Box p="14px 16px">
               <Group justify="space-between" wrap="nowrap">
+                <Box style={{ background: phaseColor(phase, phases), borderRadius: '50%', flexShrink: 0, height: 10, marginTop: 6, width: 10 }} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text fw={500}>{phase.name}</Text>
                   <Text size="sm" c="dimmed">
@@ -197,7 +200,8 @@ export default function DesignerPhases() {
                     <Trash2 size={16} />
                   </ActionIcon>
                 </Group>
-              </Group>
+                </Group>
+              </Box>
             </Paper>
           ))}
         </Stack>

@@ -250,7 +250,7 @@ async function expectCardLinks(page, labels) {
 
 async function verifyDesktop(page) {
   await page.setViewportSize({ width: 1365, height: 900 })
-  await page.goto(frontendUrl, { waitUntil: 'networkidle' })
+  await page.goto(frontendUrl, { waitUntil: 'domcontentloaded' })
 
   const desktopLabels = ['Dashboard', 'Sessions', 'Designer', 'Analysis', 'Log', 'Tools', 'Profile', 'About']
   for (const label of desktopLabels) {
@@ -262,7 +262,7 @@ async function verifyDesktop(page) {
   await page.getByTestId('desktop-nav-designer').click()
   await expect(page).toHaveURL(/\/designer$/)
   await expectCardLinks(page, ['Phase Design', 'Session Design', 'Templates', 'Import', 'Glossary', 'Competitions', 'Goals', 'Federations'])
-  await page.goto(`${frontendUrl}/designer/glossary`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/designer/glossary`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'Glossary' })).toBeVisible({ timeout: 15000 })
   await expect(page.getByPlaceholder('Search exercises...')).toBeVisible()
 
@@ -274,7 +274,7 @@ async function verifyDesktop(page) {
   await expect(page.getByRole('button', { name: 'Past Blocks', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Lifetime Compare', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Maxes', exact: true })).toBeVisible()
-  await page.goto(`${frontendUrl}/analysis?type=maxes`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/analysis?type=maxes`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'Maxes' })).toBeVisible({ timeout: 15000 })
 
   await page.getByTestId('desktop-nav-log').click()
@@ -300,7 +300,7 @@ async function verifyDesktop(page) {
 
 async function verifyMobile(page) {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto(frontendUrl, { waitUntil: 'networkidle' })
+  await page.goto(frontendUrl, { waitUntil: 'domcontentloaded' })
 
   const footer = page.locator('footer')
   await expect(footer.getByTestId('mobile-nav-dashboard')).toBeVisible()

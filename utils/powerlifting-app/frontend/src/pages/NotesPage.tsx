@@ -4,7 +4,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
 import {
-  Paper, Title, Text, Group, Stack, Button, Textarea, Box, ActionIcon,
+  Paper, Text, Group, Stack, Button, Textarea, Box, ActionIcon,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { BlockNote } from '@powerlifting/types'
@@ -157,17 +157,16 @@ export default function NotesPage() {
   const canAdd = Boolean(newDate && newText.trim()) && !readOnly && !saving
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between" align="flex-start">
+    <Stack gap="md" className="if-mock-page">
+      <Group justify="space-between" align="flex-start" className="if-mock-header">
         <Box>
-          <Title order={2}>Notes</Title>
-          <Text size="sm" c="dimmed">
-            Dated training context for exports and analysis
-          </Text>
+          <h1 className="if-mock-title">Notes</h1>
+          <div className="if-mock-subtitle">Dated training context for exports and analysis.</div>
         </Box>
       </Group>
 
-      <Paper withBorder p="md" radius="md">
+      <Paper withBorder p={0} radius="md" className="if-card">
+        <Box p="14px 16px">
         <Stack gap="sm">
           <Group gap="xs">
             <Calendar size={16} style={{ opacity: 0.6 }} />
@@ -202,6 +201,7 @@ export default function NotesPage() {
             </Button>
           </Group>
         </Stack>
+        </Box>
       </Paper>
 
       <Stack gap="md">
@@ -210,7 +210,8 @@ export default function NotesPage() {
 
           if (isEditing) {
             return (
-              <Paper key={note.date} withBorder p="md" radius="md" data-testid="program-note-card">
+              <Paper key={note.date} withBorder p={0} radius="md" className="if-card" data-testid="program-note-card">
+                <Box p="14px 16px">
                 <Stack gap="sm">
                   <Group justify="space-between" align="center">
                     <Group gap="xs">
@@ -285,6 +286,7 @@ export default function NotesPage() {
                     </Button>
                   </Group>
                 </Stack>
+                </Box>
               </Paper>
             )
           }
@@ -293,8 +295,9 @@ export default function NotesPage() {
             <Paper
               key={note.date}
               withBorder
-              p="md"
+              p={0}
               radius="md"
+              className="if-card"
               onClick={() => startEdit(note)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
@@ -307,6 +310,7 @@ export default function NotesPage() {
               style={{ cursor: readOnly ? 'default' : 'pointer' }}
               data-testid="program-note-card"
             >
+              <Box p="14px 16px">
               <Group justify="space-between" align="flex-start" gap="md">
                 <Box style={{ flex: 1 }}>
                   <Group gap="xs" mb={6}>
@@ -334,6 +338,7 @@ export default function NotesPage() {
                   </ActionIcon>
                 )}
               </Group>
+              </Box>
             </Paper>
           )
         })}

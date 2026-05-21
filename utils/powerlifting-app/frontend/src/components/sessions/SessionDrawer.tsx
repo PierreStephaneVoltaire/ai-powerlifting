@@ -1110,63 +1110,71 @@ export default function SessionDrawer({
 
   const editorContent = (
     <Stack
-      gap="lg"
+      gap={10}
       pb={mode === 'page' ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : undefined}
-      style={{ maxWidth: '100vw', overflowX: 'hidden' }}
+      className="if-mock-page"
+      style={{ maxWidth: mode === 'page' ? 680 : '100vw', margin: mode === 'page' ? '0 auto' : undefined, overflowX: 'hidden' }}
       data-testid="session-detail"
     >
       <Box
+        className="if-mock-card if-mock-card-compact"
         style={{
-          position: 'sticky',
-          top: 0,
+          alignItems: 'center',
+          display: 'flex',
+          gap: 12,
           zIndex: 20,
           minHeight: 48,
-          background: 'color-mix(in srgb, var(--bg-surface) 92%, transparent)',
-          backdropFilter: 'blur(10px)',
-          borderBottom: '1px solid var(--border-subtle)',
-          padding: '8px 0',
+          position: mode === 'page' ? 'sticky' : 'static',
+          top: 0,
         }}
       >
-        <Group justify="space-between" wrap="wrap" align="flex-start">
-          <Group gap="sm" align="flex-start" wrap="nowrap">
-            <Box
-              w={12}
-              h={12}
-              mt={6}
-              style={{ borderRadius: '50%', backgroundColor: phaseColorValue }}
+        <button className="if-mock-button" onClick={handleCloseWithCheck} title={mode === 'page' ? 'Back' : 'Close'} style={{ minWidth: 34, padding: '4px 8px' }}>
+          {mode === 'page' ? <ArrowLeft size={13} /> : <X size={13} />}
+        </button>
+        <span style={{ background: hasChanges ? 'var(--accent-blue)' : phaseColorValue, borderRadius: '50%', flexShrink: 0, height: 8, width: 8 }} title={hasChanges ? 'Unsaved changes' : localSession.phase?.name || 'Phase'} />
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" align="center" wrap="wrap">
+            <DatePickerInput
+              value={localSession.date}
+              valueFormat="YYYY-MM-DD"
+              onChange={(d) => {
+                if (d) updateDate(d as string)
+              }}
+              size="xs"
+              disabled={readOnly}
+              data-testid="session-date"
+              styles={{
+                input: {
+                  background: 'transparent',
+                  border: '0',
+                  color: 'var(--color-text-primary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  minHeight: 24,
+                  padding: 0,
+                  width: 104,
+                },
+              }}
             />
-            <Box>
-              <Group gap="xs" align="center">
-                <Calendar size={16} style={{ opacity: 0.6 }} />
-                <DatePickerInput
-                  value={localSession.date}
-                  valueFormat="YYYY-MM-DD"
-                  onChange={(d) => {
-                    if (d) updateDate(d as string)
-                  }}
-                  size="sm"
-                  style={{ width: 'auto' }}
-                  disabled={readOnly}
-                  data-testid="session-date"
-                />
-              </Group>
-              <Num size="sm" c="dimmed" mt={4}>
-                {localSession.day}
-                {localSession.phase?.name ? ` • ${localSession.phase.name}` : ''}
-              </Num>
-            </Box>
+            <span className="if-mock-pill" style={{ background: 'var(--color-background-secondary)', borderColor: 'transparent', color: 'var(--color-text-secondary)', fontSize: 11 }}>
+              {localSession.day}
+            </span>
+            {localSession.phase?.name && (
+              <span className="if-mock-pill" style={{ background: `color-mix(in srgb, ${phaseColorValue} 22%, transparent)`, borderColor: 'transparent', color: phaseColorValue, fontSize: 11 }}>
+                {localSession.phase.name}
+              </span>
+            )}
           </Group>
-          <ActionIcon variant="subtle" onClick={handleCloseWithCheck} size="lg" title={mode === 'page' ? 'Back' : 'Close'}>
-            {mode === 'page' ? <ArrowLeft size={20} /> : <X size={20} />}
-          </ActionIcon>
-        </Group>
+        </Box>
       </Box>
 
-      <Paper withBorder p={20} radius={10} className="if-card">
+      <Paper withBorder p={0} radius={10} className="if-card">
+        <Box p="12px 16px">
           <Group justify="space-between" align="center" mb="sm">
             <Group gap="xs">
               <HeartPulse size={16} />
-              <Text className="if-card-title">Subjective Wellness</Text>
+              <Text size="sm" fw={500}>Subjective wellness</Text>
             </Group>
             <SegmentedControl
               size="xs"
@@ -1213,13 +1221,15 @@ export default function SessionDrawer({
           ) : (
             <Text size="xs" c="dimmed">No wellness captured for this session.</Text>
           )}
+        </Box>
         </Paper>
 
-        <Paper withBorder p={20} radius={10} className="if-card">
+        <Paper withBorder p={0} radius={10} className="if-card">
+          <Box p="12px 16px">
           <Group justify="space-between" align="center" mb="md">
-            <Text className="if-card-title">Workout</Text>
+            <Text size="sm" fw={500}>Workout</Text>
             <Button
-              variant="dashed"
+              variant="light"
               onClick={addExercise}
               leftSection={<Plus size={16} />}
               disabled={readOnly}
@@ -1302,17 +1312,19 @@ export default function SessionDrawer({
           {session.videos && session.videos.length > 0 ? (
             <VideoGrid session={session} />
           ) : (
-            <Text size="xs" c="dimmed" ta="center" py="md">
+            <Text size="xs" c="dimmed" py="md">
               No videos uploaded for this session
             </Text>
           )}
           </Stack>
+          </Box>
         </Paper>
 
-        <Paper withBorder p={20} radius={10} className="if-card">
+        <Paper withBorder p={0} radius={10} className="if-card">
+          <Box p="12px 16px">
           <Stack gap="sm">
             <Group justify="space-between">
-              <Text className="if-card-title">Session Summary</Text>
+              <Text size="sm" fw={500}>Session summary</Text>
               <Button
                 size="xs"
                 variant="light"
@@ -1384,6 +1396,7 @@ export default function SessionDrawer({
             />
           </Box>
           </Stack>
+          </Box>
         </Paper>
 
         <Stack gap="sm">
@@ -1401,8 +1414,17 @@ export default function SessionDrawer({
             leftSection={<Trash2 size={16} />}
             disabled={readOnly}
             data-testid="session-delete"
+            fullWidth
+            h={40}
+            style={{
+              background: 'var(--color-background-primary)',
+              border: '0.5px solid var(--color-border-danger)',
+              borderRadius: 'var(--border-radius-lg)',
+              color: 'var(--color-text-danger)',
+              fontWeight: 500,
+            }}
           >
-            Delete
+            Delete session
           </Button>
           <Group gap="sm" wrap="wrap" className="if-session-action-bar">
             <Text size="xs" c={hasChanges ? 'yellow' : 'dimmed'} style={{ alignSelf: 'center' }}>

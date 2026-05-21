@@ -4,7 +4,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
 import {
-  Paper, Title, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
+  Paper, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
   TextInput, Textarea, Select, SegmentedControl, Box,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
@@ -75,13 +75,11 @@ export default function BiometricsPage() {
   }
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
+    <Stack gap="md" className="if-mock-page">
+      <Group justify="space-between" className="if-mock-header">
         <Box>
-          <Title order={2}>Biometrics</Title>
-          <Text size="sm" c="dimmed">
-            Track daily nutrition, sleep, and recovery metrics
-          </Text>
+          <h1 className="if-mock-title">Biometrics</h1>
+          <div className="if-mock-subtitle">Track daily nutrition, sleep, and recovery metrics.</div>
         </Box>
         <Group gap="xs">
           {hasChanges && (
@@ -98,7 +96,8 @@ export default function BiometricsPage() {
 
       <Stack gap="md">
         {notes.map((note) => (
-          <Paper key={note.date} withBorder p="md">
+          <Paper key={note.date} withBorder p={0} className="if-card">
+            <Box p="14px 16px">
             <Stack gap="sm">
               {/* Date Header */}
               <Group justify="space-between">
@@ -307,6 +306,7 @@ export default function BiometricsPage() {
                 disabled={readOnly}
               />
             </Stack>
+            </Box>
           </Paper>
         ))}
       </Stack>
