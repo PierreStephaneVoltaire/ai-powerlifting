@@ -112,6 +112,15 @@ export function requireWriteAuth(req: Request, _res: Response, next: NextFunctio
     return next()
   }
 
+  const readOnlySafePost = req.method === 'POST' && [
+    '/api/analytics/analysis/sections/queue',
+    '/api/analytics/block-comparison/ai',
+  ].includes(req.path)
+
+  if (readOnlySafePost) {
+    return next()
+  }
+
   if (testMappedPkOverride()) {
     return next()
   }

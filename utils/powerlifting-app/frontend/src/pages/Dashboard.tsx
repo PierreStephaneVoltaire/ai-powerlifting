@@ -6,12 +6,13 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, type LiftProfileReview } from '@/api/client'
 import { fetchBlockAnalysis, fetchProgramBlocks, type BlockAnalysisBundle, type WeeklyAnalysis } from '@/api/analytics'
+import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
 import { daysUntil } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
 import Num from '@/components/shared/Num'
-import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse } from 'lucide-react'
+import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse, User } from 'lucide-react'
 import {
   Stack,
   Group,
@@ -271,6 +272,7 @@ export default function Dashboard() {
   const [profileGuideEstimating, setProfileGuideEstimating] = useState(false)
   const [currentBlockBundle, setCurrentBlockBundle] = useState<BlockAnalysisBundle | null>(null)
   const [currentBlockLoading, setCurrentBlockLoading] = useState(false)
+  const [profileSnippet, setProfileSnippet] = useState<PublicProfile | null>(null)
 
   useEffect(() => {
     if (version && program && !needsSetup) {
@@ -325,6 +327,27 @@ export default function Dashboard() {
     }
   }, [version, program, needsSetup])
 
+  useEffect(() => {
+    let cancelled = false
+
+    if (!program || needsSetup) {
+      setProfileSnippet(null)
+      return
+    }
+
+    fetchCurrentProfile()
+      .then((profile) => {
+        if (!cancelled) setProfileSnippet(profile)
+      })
+      .catch(() => {
+        if (!cancelled) setProfileSnippet(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [program, needsSetup])
+
   if (needsSetup) {
     return <SetupOnboarding />
   }
@@ -339,6 +362,9 @@ export default function Dashboard() {
 
   const { meta, sessions, phases, competitions } = program
   const currentBlockPhases = phasesForBlock(phases)
+  const profileFederation = profileSnippet?.federation || meta.federation || 'Federation unset'
+  const profileWeightClass = profileSnippet?.weight_class_kg ?? meta.weight_class_kg
+  const profileBio = profileSnippet?.bio?.trim()
 
   const upcomingComps = competitions
     .filter((c) => c.status !== 'skipped' && new Date(c.date) >= new Date())
@@ -632,6 +658,40 @@ export default function Dashboard() {
           </a>
         </div>
       </div>
+
+      {profileSnippet && (
+        <Link
+          to="/profile"
+          className="if-mock-card"
+          data-testid="dashboard-profile-link"
+          style={{
+            alignItems: 'center',
+            color: 'inherit',
+            display: 'flex',
+            gap: 16,
+            justifyContent: 'space-between',
+            marginBottom: 12,
+            textDecoration: 'none',
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div className="if-mock-card-label"><User size={12} /> Profile</div>
+            <Text fw={600} c="var(--color-text-primary)" truncate>
+              {profileSnippet.display_name}
+            </Text>
+            <Text size="xs" c="var(--color-text-secondary)" mt={2}>
+              {profileFederation} - {profileWeightClass || '--'} kg
+              {profileSnippet.practicing_for ? ` - ${profileSnippet.practicing_for}` : ''}
+            </Text>
+            {profileBio && (
+              <Text size="sm" c="var(--color-text-secondary)" mt={6} lineClamp={2}>
+                {profileBio}
+              </Text>
+            )}
+          </div>
+          <span className="if-mock-badge">View</span>
+        </Link>
+      )}
 
       <div className="if-dashboard-row if-dashboard-row-top">
         <section className="if-mock-card">

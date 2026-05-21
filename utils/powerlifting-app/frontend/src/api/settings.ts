@@ -33,7 +33,7 @@ export async function updateProfile(input: {
   profile_visibility: 'private' | 'public'
   display_name: string
   bio: string
-  public_training_summary_enabled: boolean
+  public_training_summary_enabled?: boolean
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/profile', input)
   return res.data.data

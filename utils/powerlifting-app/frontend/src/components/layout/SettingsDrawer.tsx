@@ -1,23 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import {
   Avatar,
   Button,
-  Divider,
   Drawer,
   Group,
   SegmentedControl,
   Select,
   Stack,
-  Switch,
   Text,
-  Textarea,
   TextInput,
 } from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
 import { defaultBarWeightKgForUnit, useSettingsStore, type Theme } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
-import { getSettings, updateProfile, type UserSettings } from '@/api/settings'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
 import { LogIn, LogOut } from 'lucide-react'
@@ -38,7 +34,7 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 export default function SettingsDrawer() {
-  const { drawerOpen, drawerType, closeDrawer, pushToast } = useUiStore()
+  const { drawerOpen, drawerType, closeDrawer } = useUiStore()
   const {
     unit,
     theme,
@@ -51,40 +47,9 @@ export default function SettingsDrawer() {
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
   const { user, loading, readOnly, signIn, signOut } = useAuth()
-  const [accountSettings, setAccountSettings] = useState<UserSettings | null>(null)
-  const [profileVisibility, setProfileVisibility] = useState<'private' | 'public'>('private')
-  const [displayName, setDisplayName] = useState('')
-  const [bio, setBio] = useState('')
-  const [publicSummary, setPublicSummary] = useState(false)
-  const [savingProfile, setSavingProfile] = useState(false)
 
   const isOpen = drawerOpen && drawerType === 'settings'
   const effectiveSex = program?.meta?.sex ?? sex
-
-  useEffect(() => {
-    if (!isOpen || !user) {
-      setAccountSettings(null)
-      return
-    }
-
-    let cancelled = false
-    getSettings()
-      .then((settings) => {
-        if (cancelled) return
-        setAccountSettings(settings)
-        setProfileVisibility(settings.profile_visibility)
-        setDisplayName(settings.display_name)
-        setBio(settings.bio)
-        setPublicSummary(settings.public_training_summary_enabled)
-      })
-      .catch(() => {
-        if (!cancelled) setAccountSettings(null)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [isOpen, user])
 
   useEffect(() => {
     const programSex = program?.meta?.sex
@@ -92,28 +57,6 @@ export default function SettingsDrawer() {
       setSex(programSex)
     }
   }, [program?.meta?.sex, setSex, sex])
-
-  const saveProfile = async () => {
-    setSavingProfile(true)
-    try {
-      const settings = await updateProfile({
-        profile_visibility: profileVisibility,
-        display_name: displayName,
-        bio,
-        public_training_summary_enabled: publicSummary,
-      })
-      setAccountSettings(settings)
-      setProfileVisibility(settings.profile_visibility)
-      setDisplayName(settings.display_name)
-      setBio(settings.bio)
-      setPublicSummary(settings.public_training_summary_enabled)
-      pushToast({ message: 'Profile updated', type: 'success' })
-    } catch {
-      pushToast({ message: 'Failed to update profile', type: 'error' })
-    } finally {
-      setSavingProfile(false)
-    }
-  }
 
   return (
     <Drawer
@@ -166,54 +109,6 @@ export default function SettingsDrawer() {
               >
                 Sign out
               </Button>
-              {accountSettings && (
-                <Stack gap="xs" mt="xs">
-                  <Divider />
-                  <SectionLabel>Public Profile</SectionLabel>
-                  <SegmentedControl
-                    value={profileVisibility}
-                    onChange={(value) => setProfileVisibility(value as 'private' | 'public')}
-                    data={[
-                      { label: 'Private', value: 'private' },
-                      { label: 'Public', value: 'public' },
-                    ]}
-                    fullWidth
-                    className="if-segmented"
-                    disabled={readOnly}
-                  />
-                  <TextInput
-                    label="Display name"
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.currentTarget.value)}
-                    maxLength={80}
-                    disabled={readOnly}
-                  />
-                  <Textarea
-                    label="Bio"
-                    value={bio}
-                    onChange={(event) => setBio(event.currentTarget.value)}
-                    maxLength={280}
-                    minRows={2}
-                    disabled={readOnly}
-                  />
-                  <Switch
-                    label="Show training summary when public"
-                    checked={publicSummary}
-                    onChange={(event) => setPublicSummary(event.currentTarget.checked)}
-                    disabled={profileVisibility !== 'public' || readOnly}
-                  />
-                  <Button
-                    variant="light"
-                    size="sm"
-                    onClick={saveProfile}
-                    loading={savingProfile}
-                    fullWidth
-                    disabled={readOnly}
-                  >
-                    Save profile
-                  </Button>
-                </Stack>
-              )}
             </Stack>
           ) : (
             <Button

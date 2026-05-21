@@ -415,7 +415,16 @@ analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
     const asOfDate = isIsoDate(req.body?.asOfDate) ? req.body.asOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.body?.window)
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
-    const force = req.body?.force === true
+    const unsafeReadOnlySections = req.readOnly
+      ? sectionKeys.filter((sectionKey) => !DETERMINISTIC_SECTION_SET.has(sectionKey))
+      : []
+    if (unsafeReadOnlySections.length) {
+      return res.status(403).json({
+        data: null,
+        error: 'Read-only users can only queue deterministic analysis sections.',
+      })
+    }
+    const force = req.readOnly ? false : req.body?.force === true
     const context = await buildAnalysisContext(pk, asOfDate, windowKey)
     if (force) {
       await invalidateAnalysisSections(pk, asOfDate, windowKey, sectionKeys)
@@ -921,11 +930,12 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     if (current) selected.add(current.blockKey)
 
     const selectedBlocks = blocks.filter((block) => selected.has(block.blockKey))
-    const cacheOnly = req.body?.cacheOnly === true
     const bundles = []
     const correlationReports = new Map<string, Record<string, unknown> | null>()
     const programEvaluationReports = new Map<string, Record<string, unknown> | null>()
     const contexts = new Map()
+    const cacheOnly = req.readOnly ? true : req.body?.cacheOnly === true
+    const refresh = req.readOnly ? false : req.body?.refresh === true
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
@@ -955,7 +965,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
       req.mapped_pk!,
       bundles,
       invokeToolDirect,
-      req.body?.refresh === true,
+      refresh,
       cacheOnly,
       correlationReports,
       programEvaluationReports,

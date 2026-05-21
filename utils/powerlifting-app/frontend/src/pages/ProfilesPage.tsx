@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Avatar, Badge, Button, Group, Loader, Paper, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
-import { ArrowLeft, Search, User, Users } from 'lucide-react'
+import { ArrowLeft, Calendar, Film, Search, User, Users } from 'lucide-react'
 import { fetchProfile, searchProfiles, type PublicProfile } from '@/api/profiles'
 import { useUiStore } from '@/store/uiStore'
+import { useSettingsStore } from '@/store/settingsStore'
+import { toDisplayUnit } from '@/utils/units'
+import VideoCard from '@/components/videos/VideoCard'
+import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
+import type { VideoLibraryItem } from '@powerlifting/types'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -27,16 +32,20 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
             <Text size="xs" c="var(--text-secondary)">@{profile.nickname}</Text>
           </Stack>
         </Group>
-        <Text size="sm" c={profile.bio ? 'var(--text-secondary)' : 'var(--text-muted)'} lineClamp={3}>
-          {profile.bio || 'No bio yet.'}
-        </Text>
+        {profile.bio && (
+          <Text size="sm" c="var(--text-secondary)" lineClamp={3}>
+            {profile.bio}
+          </Text>
+        )}
+        {(profile.federation || profile.weight_class_kg) && (
+          <Text size="xs" c="var(--text-secondary)">
+            {profile.federation || 'Federation unset'} - {profile.weight_class_kg || '--'} kg
+          </Text>
+        )}
         <Group gap="xs">
           <span className={`if-pill ${profile.profile_visibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
             {profile.profile_visibility}
           </span>
-          {profile.public_training_summary_enabled && (
-            <span className="if-pill if-pill-success">Training summary public</span>
-          )}
         </Group>
       </Stack>
     </Paper>
@@ -118,9 +127,11 @@ export default function ProfilesPage() {
 
 export function PublicProfilePage() {
   const { nickname = '' } = useParams<{ nickname: string }>()
+  const { unit } = useSettingsStore()
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedVideo, setSelectedVideo] = useState<VideoLibraryItem | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -141,6 +152,32 @@ export function PublicProfilePage() {
       cancelled = true
     }
   }, [nickname])
+
+  const profileMetrics = useMemo(() => {
+    const summary = profile?.summary
+    const weightValue = (kg: number | null | undefined) => {
+      if (!kg || kg <= 0) return '--'
+      const display = toDisplayUnit(kg, unit)
+      return Number.isInteger(display) ? String(display) : display.toFixed(1)
+    }
+
+    return [
+      { label: 'Squat', value: weightValue(summary?.squat_kg), sub: unit },
+      { label: 'Bench', value: weightValue(summary?.bench_kg), sub: unit },
+      { label: 'Deadlift', value: weightValue(summary?.deadlift_kg), sub: unit },
+      { label: 'Total', value: weightValue(summary?.total_kg), sub: unit },
+      { label: 'DOTS', value: summary?.dots !== null && summary?.dots !== undefined ? summary.dots.toFixed(1) : '--', sub: 'pts' },
+      { label: 'Class', value: profile?.weight_class_kg ? String(profile.weight_class_kg) : '--', sub: 'kg' },
+    ]
+  }, [profile, unit])
+
+  const sortedVideos = useMemo(
+    () => (profile?.lift_videos ?? []).slice().sort((a, b) => (
+      b.session_date.localeCompare(a.session_date)
+      || b.video.uploaded_at.localeCompare(a.video.uploaded_at)
+    )),
+    [profile?.lift_videos],
+  )
 
   if (loading) {
     return (
@@ -184,10 +221,11 @@ export function PublicProfilePage() {
                 </Group>
                 <Group gap="xs">
                   <span className="if-pill if-pill-info">Public profile</span>
-                  {profile.public_training_summary_enabled && (
-                    <span className="if-pill if-pill-success">Training summary public</span>
-                  )}
                 </Group>
+                <Text size="sm" c="var(--text-secondary)">
+                  {profile.federation || 'Federation unset'} - {profile.weight_class_kg || '--'} kg
+                  {profile.practicing_for ? ` - ${profile.practicing_for}` : ''}
+                </Text>
               </Stack>
             </Group>
             {profile.is_self && (
@@ -196,32 +234,60 @@ export function PublicProfilePage() {
               </Button>
             )}
           </Group>
-          <Text size="sm" c={profile.bio ? 'var(--text-primary)' : 'var(--text-muted)'} lh={1.6}>
-            {profile.bio || 'No bio yet.'}
-          </Text>
+          {profile.bio && (
+            <Text size="sm" c="var(--text-primary)" lh={1.6}>
+              {profile.bio}
+            </Text>
+          )}
         </Stack>
       </Paper>
 
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        <Paper withBorder p="lg" radius="md" className="if-card">
-          <Stack gap="xs">
-            <Text className="if-card-title">Training Summary</Text>
-            <Text size="sm" c="var(--text-secondary)">
-              {profile.public_training_summary_enabled
-                ? 'This profile has opted into public training metadata, but public training summary fields are not exposed by the current API.'
-                : 'This athlete has not enabled a public training summary.'}
-            </Text>
-          </Stack>
-        </Paper>
-        <Paper withBorder p="lg" radius="md" className="if-card">
-          <Stack gap="xs">
-            <Text className="if-card-title">Lift Videos</Text>
-            <Text size="sm" c="var(--text-secondary)">
-              Public lift videos are not exposed by the current API.
-            </Text>
-          </Stack>
-        </Paper>
+      <SimpleGrid cols={{ base: 2, xs: 3, md: 6 }} spacing="xs">
+        {profileMetrics.map((metric) => (
+          <Paper key={metric.label} className="if-metric-card" p="sm" ta="center">
+            <Text className="if-metric-label">{metric.label}</Text>
+            <Text className="if-metric-value">{metric.value}</Text>
+            <Text size="xs" c="var(--text-secondary)">{metric.sub}</Text>
+          </Paper>
+        ))}
       </SimpleGrid>
+
+      <Paper withBorder p="lg" radius="md" className="if-card">
+        <Stack gap="md">
+          <div className="if-panel-header">
+            <Group gap="xs">
+              <Film size={18} />
+              <Text fw={600} c="var(--text-primary)">Lift videos</Text>
+              <Text size="sm" c="var(--text-secondary)">
+                {sortedVideos.length} video{sortedVideos.length === 1 ? '' : 's'}
+              </Text>
+            </Group>
+          </div>
+          {sortedVideos.length > 0 ? (
+            <div className="if-video-grid">
+              {sortedVideos.map((item) => (
+                <VideoCard key={item.video.video_id} item={item} onClick={() => setSelectedVideo(item)} />
+              ))}
+            </div>
+          ) : (
+            <Paper className="if-metric-card" p="lg">
+              <Stack align="center" gap="xs">
+                <Calendar size={28} color="var(--text-muted)" />
+                <Text size="sm" c="var(--text-secondary)" ta="center">
+                  No public lift videos yet.
+                </Text>
+              </Stack>
+            </Paper>
+          )}
+        </Stack>
+      </Paper>
+
+      <VideoPlayerModal
+        item={selectedVideo}
+        onClose={() => setSelectedVideo(null)}
+        onDeleted={() => undefined}
+        readOnly
+      />
     </Stack>
   )
 }

@@ -178,6 +178,23 @@ async function request(pathname, init = {}) {
   return body
 }
 
+async function fetchRouteWithRetry(route, url) {
+  let lastError
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await route.fetch({ url })
+    } catch (error) {
+      lastError = error
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes('socket hang up') && !message.includes('ECONNRESET')) {
+        throw error
+      }
+      await sleep(250 * (attempt + 1))
+    }
+  }
+  throw lastError
+}
+
 function stopChildren() {
   for (const child of children.reverse()) {
     if (child.exitCode === null && child.signalCode === null) {
@@ -236,7 +253,7 @@ async function installApiRouting(page, authMode) {
     }
 
     const proxiedPath = url.pathname.replace(/^\/api/, '') || '/'
-    const response = await route.fetch({ url: `${apiBase}${proxiedPath}${url.search}` })
+    const response = await fetchRouteWithRetry(route, `${apiBase}${proxiedPath}${url.search}`)
     await route.fulfill({ response })
   })
 }
