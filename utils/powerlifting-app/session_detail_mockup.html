@@ -1,0 +1,156 @@
+
+<h2 class="sr-only">Session detail page mockup showing workout logging with exercise cards, set completion tracking with four states, sticky header and bottom action bar.</h2>
+<style>
+.inp-label{font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px}
+.set-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:0.5px solid var(--color-border-secondary);display:flex;align-items:center;justify-content:center;transition:background 100ms,border 100ms;flex-shrink:0}
+.ex-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:10px;overflow:hidden}
+.ex-header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.ex-inputs{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;padding:12px 14px}
+.ex-notes{margin:0 14px 10px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:6px 10px;font-size:12px;font-family:var(--font-sans);background:transparent;color:var(--color-text-secondary);width:100%;box-sizing:border-box;resize:none}
+.ex-footer{padding:6px 14px 10px;display:flex;align-items:center;gap:6px}
+.drag-handle{color:var(--color-text-secondary);cursor:grab;font-size:16px}
+.bottom-bar{background:var(--color-background-primary);border-top:0.5px solid var(--color-border-tertiary);padding:10px 16px;display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:16px}
+.status-legend{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 14px}
+.status-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--color-text-secondary)}
+</style>
+
+<div style="max-width:680px;">
+
+<div style="background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-tertiary);padding:10px 16px;display:flex;align-items:center;gap:12px;margin-bottom:14px;border-radius:var(--border-radius-lg);">
+  <button style="background:transparent;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:4px 8px;cursor:pointer;font-size:13px;font-family:var(--font-sans);color:var(--color-text-secondary);display:flex;align-items:center;gap:4px;"><i class="ti ti-arrow-left" style="font-size:13px" aria-hidden="true"></i></button>
+  <div style="width:8px;height:8px;border-radius:50%;background:#3b82f6;flex-shrink:0;" title="Unsaved changes"></div>
+  <div style="flex:1;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:14px;font-weight:500;color:var(--color-text-primary);font-family:var(--font-mono);">2026-02-27</span>
+      <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary);">Friday</span>
+      <span id="phase-tag" style="font-size:11px;padding:2px 8px;border-radius:20px;background:hsl(214,55%,22%);color:hsl(214,65%,72%);">Base Build</span>
+    </div>
+  </div>
+</div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <div>
+    <div style="font-size:12px;font-weight:500;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;"><i class="ti ti-heart-rate-monitor" style="font-size:14px" aria-hidden="true"></i> Subjective wellness</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px;">No wellness captured for this session.</div>
+  </div>
+  <div style="display:flex;gap:6px;">
+    <button style="padding:4px 10px;font-size:12px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);background:transparent;border:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary);">Skip</button>
+    <button style="padding:4px 10px;font-size:12px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);">Record</button>
+  </div>
+</div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 16px;margin-bottom:10px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+    <span style="font-size:14px;font-weight:500;color:var(--color-text-primary);">Workout</span>
+    <button style="display:flex;align-items:center;gap:5px;padding:5px 12px;font-size:12px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);background:var(--color-background-info);color:var(--color-text-info);border:0.5px solid var(--color-border-info);"><i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i> Add exercise</button>
+  </div>
+  <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:12px;line-height:1.6;">
+    Planned: <span style="font-family:var(--font-mono);">Squat 2×6 @284.4lb · Squat 1×4 @315.3lb · Squat 1×6 @209lb · Bench Press 1×4 @216.1lb · Bench Press 3×6 @183lb · Shrugs 2×6 @185lb</span>
+  </div>
+
+  <div class="status-legend">
+    <div class="status-item"><div class="set-dot" style="border:0.5px solid var(--color-border-secondary);"></div> Pending</div>
+    <div class="status-item"><div class="set-dot" style="background:var(--color-background-success);border-color:var(--color-border-success);"><i class="ti ti-check" style="font-size:11px;color:var(--color-text-success)" aria-hidden="true"></i></div> Done</div>
+    <div class="status-item"><div class="set-dot" style="background:var(--color-background-danger);border-color:var(--color-border-danger);"><i class="ti ti-x" style="font-size:11px;color:var(--color-text-danger)" aria-hidden="true"></i></div> Failed</div>
+    <div class="status-item"><div class="set-dot" style="background:var(--color-background-secondary);border:0.5px dashed var(--color-border-secondary);"><i class="ti ti-minus" style="font-size:11px;color:var(--color-text-secondary)" aria-hidden="true"></i></div> Skipped</div>
+  </div>
+
+  <div id="exercises"></div>
+</div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 16px;margin-bottom:10px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+    <span style="font-size:13px;font-weight:500;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;"><i class="ti ti-video" style="font-size:14px" aria-hidden="true"></i> Videos</span>
+    <button style="display:flex;align-items:center;gap:5px;padding:4px 10px;font-size:12px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);"><i class="ti ti-upload" style="font-size:13px" aria-hidden="true"></i> Upload</button>
+  </div>
+  <div style="font-size:12px;color:var(--color-text-secondary);">No videos uploaded for this session.</div>
+</div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 16px;margin-bottom:10px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:6px;">
+    <span style="font-size:13px;font-weight:500;color:var(--color-text-primary);">Session summary</span>
+    <button style="display:flex;align-items:center;gap:5px;padding:4px 10px;font-size:12px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);"><i class="ti ti-sparkles" style="font-size:13px" aria-hidden="true"></i> Help write notes</button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+    <div><div class="inp-label">Session RPE</div><input type="text" value="7" style="width:100%;box-sizing:border-box;font-family:var(--font-mono);font-size:14px;text-align:center;"></div>
+    <div><div class="inp-label">Body weight (lb)</div><input type="text" placeholder="lb" style="width:100%;box-sizing:border-box;font-family:var(--font-mono);font-size:14px;text-align:center;"></div>
+  </div>
+  <div class="inp-label">Session notes</div>
+  <textarea class="ex-notes" style="margin:0;width:100%;min-height:64px;" placeholder="How did the session feel?"></textarea>
+</div>
+
+<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-danger);border-radius:var(--border-radius-lg);padding:10px 16px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+  <span style="font-size:13px;color:var(--color-text-danger);display:flex;align-items:center;gap:6px;"><i class="ti ti-trash" style="font-size:14px" aria-hidden="true"></i> Delete session</span>
+</div>
+
+<div class="bottom-bar" style="border-radius:var(--border-radius-lg);margin-top:6px;">
+  <span style="font-size:12px;color:var(--color-text-secondary);flex:1;">2 unsaved changes</span>
+  <button style="padding:5px 12px;font-size:13px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);background:transparent;border:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary);">Discard</button>
+  <button style="padding:5px 12px;font-size:13px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);">Save</button>
+  <button style="padding:5px 14px;font-size:13px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);background:var(--color-background-info);color:var(--color-text-info);border:0.5px solid var(--color-border-info);"><i class="ti ti-check" style="font-size:13px" aria-hidden="true"></i> Done</button>
+</div>
+</div>
+
+<script>
+const EXES = [
+  {name:'Squat',sets:[{s:'done'},{s:'done'}],reps:'6',lb:'284.4',rpe:'7',note:''},
+  {name:'Squat',sets:[{s:'done'}],reps:'4',lb:'315.3',rpe:'8',note:'heavy top set'},
+  {name:'Squat',sets:[{s:'failed'}],reps:'6',lb:'269',rpe:'',note:''},
+  {name:'Bench Press',sets:[{s:'done'}],reps:'4',lb:'216.1',rpe:'8',note:'heavy top set'},
+  {name:'Bench Press',sets:[{s:'done'},{s:'done'},{s:'skipped'}],reps:'6',lb:'183',rpe:'7',note:''},
+  {name:'Shrugs',sets:[{s:'pending'},{s:'pending'}],reps:'6',lb:'185',rpe:'',note:''},
+];
+const STATES = ['pending','done','failed','skipped'];
+function dotStyle(s){
+  if(s==='done') return `background:var(--color-background-success);border-color:var(--color-border-success)`;
+  if(s==='failed') return `background:var(--color-background-danger);border-color:var(--color-border-danger)`;
+  if(s==='skipped') return `background:var(--color-background-secondary);border-style:dashed`;
+  return '';
+}
+function dotIcon(s){
+  if(s==='done') return `<i class="ti ti-check" style="font-size:11px;color:var(--color-text-success)" aria-hidden="true"></i>`;
+  if(s==='failed') return `<i class="ti ti-x" style="font-size:11px;color:var(--color-text-danger)" aria-hidden="true"></i>`;
+  if(s==='skipped') return `<i class="ti ti-minus" style="font-size:11px;color:var(--color-text-secondary)" aria-hidden="true"></i>`;
+  return '';
+}
+function countLabel(sets){
+  const done=sets.filter(s=>s.s==='done').length;
+  const failed=sets.filter(s=>s.s==='failed').length;
+  const skipped=sets.filter(s=>s.s==='skipped').length;
+  const parts=[];
+  if(done) parts.push(`<span style="color:var(--color-text-success)">${done} done</span>`);
+  if(failed) parts.push(`<span style="color:var(--color-text-danger)">${failed} failed</span>`);
+  if(skipped) parts.push(`<span style="color:var(--color-text-secondary)">${skipped} skipped</span>`);
+  return parts.join(' · ');
+}
+function cycleDot(ei,si){
+  const cur=EXES[ei].sets[si].s;
+  EXES[ei].sets[si].s=STATES[(STATES.indexOf(cur)+1)%STATES.length];
+  render();
+}
+function render(){
+  document.getElementById('exercises').innerHTML=EXES.map((ex,ei)=>`
+    <div class="ex-card">
+      <div class="ex-header">
+        <i class="ti ti-grip-vertical drag-handle" aria-hidden="true"></i>
+        <span style="flex:1;font-size:14px;font-weight:500;color:var(--color-text-primary);">${ex.name}</span>
+        <button style="background:transparent;border:none;cursor:pointer;padding:2px;color:var(--color-text-secondary);font-size:14px;" aria-label="Copy exercise"><i class="ti ti-copy" aria-hidden="true"></i></button>
+        <button style="background:transparent;border:none;cursor:pointer;padding:2px;color:var(--color-text-secondary);font-size:14px;" aria-label="Delete exercise"><i class="ti ti-trash" aria-hidden="true"></i></button>
+      </div>
+      <div class="ex-inputs">
+        <div><div class="inp-label">Sets</div><input type="text" value="${ex.sets.length}" style="width:100%;box-sizing:border-box;font-family:var(--font-mono);font-size:14px;text-align:center;"></div>
+        <div><div class="inp-label">Reps</div><input type="text" value="${ex.reps}" style="width:100%;box-sizing:border-box;font-family:var(--font-mono);font-size:14px;text-align:center;"></div>
+        <div><div class="inp-label">lb</div><input type="text" value="${ex.lb}" style="width:100%;box-sizing:border-box;font-family:var(--font-mono);font-size:14px;text-align:center;"></div>
+        <div><div class="inp-label">RPE</div><input type="text" value="${ex.rpe}" placeholder="1–10" style="width:100%;box-sizing:border-box;font-family:var(--font-mono);font-size:14px;text-align:center;"></div>
+      </div>
+      ${ex.note?`<textarea class="ex-notes">${ex.note}</textarea>`:''}
+      <div class="ex-footer">
+        <span style="font-size:11px;color:var(--color-text-secondary);">Sets:</span>
+        ${ex.sets.map((set,si)=>`<div class="set-dot" style="${dotStyle(set.s)}" onclick="cycleDot(${ei},${si})" title="Click to cycle state" role="button" aria-label="Set ${si+1}: ${set.s}">${dotIcon(set.s)}</div>`).join('')}
+        <span style="font-size:11px;margin-left:4px;">${countLabel(ex.sets)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+render();
+</script>

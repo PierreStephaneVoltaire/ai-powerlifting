@@ -1,0 +1,196 @@
+
+<h2 class="sr-only">Sessions page mockup with three view modes: Agenda, Compact, and Month. Includes dynamic phase color system and mobile-friendly session rows.</h2>
+<div style="font-family:var(--font-sans);">
+
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+  <div style="display:flex; align-items:center; gap:6px;">
+    <span style="font-size:18px; font-weight:500; color:var(--color-text-primary);">Sessions</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+    <div style="display:flex; border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); overflow:hidden;">
+      <button id="v-agenda" onclick="setView('agenda')" style="padding:5px 12px; font-size:12px; font-family:var(--font-sans); cursor:pointer; border:none; border-right:0.5px solid var(--color-border-tertiary); background:var(--color-background-info); color:var(--color-text-info);">Agenda</button>
+      <button id="v-compact" onclick="setView('compact')" style="padding:5px 12px; font-size:12px; font-family:var(--font-sans); cursor:pointer; border:none; border-right:0.5px solid var(--color-border-tertiary); background:transparent; color:var(--color-text-secondary);">Compact</button>
+      <button id="v-month" onclick="setView('month')" style="padding:5px 12px; font-size:12px; font-family:var(--font-sans); cursor:pointer; border:none; background:transparent; color:var(--color-text-secondary);">Month</button>
+    </div>
+    <button style="padding:5px 10px; font-size:12px; font-family:var(--font-sans); cursor:pointer; border-radius:var(--border-radius-md); display:flex; align-items:center; gap:5px; border:0.5px solid var(--color-border-tertiary); background:transparent; color:var(--color-text-secondary);">
+      <i class="ti ti-filter" style="font-size:13px;" aria-hidden="true"></i> Current Block
+    </button>
+  </div>
+</div>
+
+<div id="view-agenda"></div>
+<div id="view-compact" style="display:none;"></div>
+<div id="view-month" style="display:none;"></div>
+
+</div>
+
+<style>
+.sess-row { transition: background 120ms ease; cursor:pointer; }
+.sess-row:hover { background: var(--color-background-secondary) !important; }
+.phase-pill { display:inline-block; font-size:10px; font-weight:500; padding:2px 7px; border-radius:20px; letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
+.week-label { font-size:11px; text-transform:uppercase; letter-spacing:0.09em; color:var(--color-text-secondary); padding:10px 0 6px; border-bottom:0.5px solid var(--color-border-tertiary); margin-bottom:4px; }
+.done-check { width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.cal-day { min-height:70px; border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); padding:6px; cursor:pointer; transition:background 120ms; }
+.cal-day:hover { background:var(--color-background-secondary); }
+</style>
+
+<script>
+function hashPhaseColor(name) {
+  let h = 0;
+  for(let i=0;i<name.length;i++) h = (h*31 + name.charCodeAt(i)) & 0xffffffff;
+  const hue = Math.abs(h) % 360;
+  return { hue, bg:`hsl(${hue},55%,22%)`, text:`hsl(${hue},65%,72%)`, border:`hsl(${hue},50%,35%)`, dot:`hsl(${hue},60%,55%)` };
+}
+
+const PHASES = {
+  'Warmup':       hashPhaseColor('Warmup'),
+  'Base Build':   hashPhaseColor('Base Build'),
+  'Intensification': hashPhaseColor('Intensification'),
+  'Deload':       hashPhaseColor('Deload'),
+  'Taper (HS)':   hashPhaseColor('Taper (HS)'),
+};
+
+const SESSIONS = [
+  {id:1, date:'Fri, Feb 13', week:'Week of Feb 9',  phase:'Warmup',          exs:['Squat','Bench Press','Shrugs'],              sets:3, rpe:7,  done:true},
+  {id:2, date:'Sun, Feb 15', week:'Week of Feb 9',  phase:'Warmup',          exs:['Deadlift','Spoto Press','Weighted Pull-ups'], sets:3, rpe:7,  done:true},
+  {id:3, date:'Mon, Feb 16', week:'Week of Feb 9',  phase:'Base Build',      exs:['Pause Bench Press'],                         sets:1, rpe:7,  done:true},
+  {id:4, date:'Wed, Feb 18', week:'Week of Feb 9',  phase:'Base Build',      exs:['Hex Bar RDL','Single-Leg Leg Press','Pullover','Belt Squat'], sets:4, rpe:7, done:true},
+  {id:5, date:'Fri, Feb 20', week:'Week of Feb 9',  phase:'Base Build',      exs:['Squat','Bench Press','Shrugs'],              sets:3, rpe:7,  done:true},
+  {id:6, date:'Sun, Feb 22', week:'Week of Feb 21', phase:'Base Build',      exs:['Deadlift','Spoto Press','Weighted Pull-ups'], sets:3, rpe:7, done:true},
+  {id:7, date:'Mon, Feb 23', week:'Week of Feb 21', phase:'Base Build',      exs:['Pause Bench Press','Leg Press','Pendlay Row'], sets:3, rpe:7, done:true},
+  {id:8, date:'Wed, Feb 25', week:'Week of Feb 21', phase:'Intensification', exs:['Hex Bar RDL','Single-Leg Leg Press','Pullover'], sets:4, rpe:8, done:false},
+  {id:9, date:'Fri, Feb 27', week:'Week of Feb 21', phase:'Intensification', exs:['Squat','Bench Press','Shrugs'],              sets:3, rpe:8,  done:false},
+  {id:10,date:'Sun, Mar 1',  week:'Week of Feb 28', phase:'Intensification', exs:['Deadlift','Spoto Press','Weighted Pull-ups'], sets:3, rpe:8, done:false},
+  {id:11,date:'Mon, Mar 2',  week:'Week of Feb 28', phase:'Intensification', exs:['Pause Bench Press','Leg Press','Pendlay Row'], sets:3, rpe:8, done:false},
+  {id:12,date:'Wed, Mar 4',  week:'Week of Feb 28', phase:'Deload',          exs:['Hex Bar RDL','Single-Leg Leg Press','Pullover'], sets:4, rpe:6, done:false},
+  {id:13,date:'Fri, Mar 6',  week:'Week of Feb 28', phase:'Deload',          exs:['Squat','Bench Press','Shrugs'],              sets:3, rpe:6,  done:false},
+  {id:14,date:'Wed, Mar 11', week:'Week of Mar 7',  phase:'Taper (HS)',      exs:['Squat','Bench Press'],                       sets:2, rpe:9,  done:false},
+];
+
+function sessionRow(s, mode) {
+  const c = PHASES[s.phase] || hashPhaseColor(s.phase);
+  const exTrunc = s.exs.length > 3 ? s.exs.slice(0,3).join(', ') + ` +${s.exs.length-3}` : s.exs.join(', ');
+  const checkEl = s.done
+    ? `<div class="done-check" style="background:var(--color-background-success);"><i class="ti ti-check" style="font-size:12px; color:var(--color-text-success);" aria-hidden="true"></i></div>`
+    : `<div class="done-check" style="border:0.5px solid var(--color-border-tertiary);"></div>`;
+
+  if(mode==='compact') {
+    return `<div class="sess-row" style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:var(--border-radius-md); background:var(--color-background-primary); border-left:3px solid ${c.dot}; border-top:0.5px solid var(--color-border-tertiary); border-right:0.5px solid var(--color-border-tertiary); border-bottom:0.5px solid var(--color-border-tertiary); margin-bottom:3px;">
+      <div style="width:72px; font-size:12px; color:var(--color-text-secondary); font-family:var(--font-mono); flex-shrink:0;">${s.date.replace(/,.*$/,'').trim()}<br><span style="font-size:10px;">${s.date.split(', ')[1]||''}</span></div>
+      <span class="phase-pill" style="background:${c.bg}; color:${c.text}; flex-shrink:0;">${s.phase}</span>
+      <div style="font-size:12px; color:var(--color-text-secondary); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${exTrunc}</div>
+      <div style="font-size:11px; color:var(--color-text-secondary); flex-shrink:0; text-align:right;">RPE ${s.rpe}</div>
+      ${checkEl}
+    </div>`;
+  }
+
+  return `<div class="sess-row" style="display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:var(--border-radius-md); background:var(--color-background-primary); border-left:3px solid ${c.dot}; border-top:0.5px solid var(--color-border-tertiary); border-right:0.5px solid var(--color-border-tertiary); border-bottom:0.5px solid var(--color-border-tertiary); margin-bottom:4px;">
+    <div style="width:88px; flex-shrink:0;">
+      <div style="font-size:13px; font-weight:500; color:var(--color-text-primary); font-family:var(--font-mono);">${s.date.split(', ')[0]}</div>
+      <div style="font-size:11px; color:var(--color-text-secondary);">${s.date.split(', ')[1]||''}</div>
+    </div>
+    <span class="phase-pill" style="background:${c.bg}; color:${c.text}; flex-shrink:0;">${s.phase}</span>
+    <div style="flex:1; min-width:0;">
+      <div style="font-size:13px; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${exTrunc}</div>
+    </div>
+    <div style="font-size:12px; color:var(--color-text-secondary); flex-shrink:0; text-align:right; min-width:80px;">${s.sets} exercise${s.sets!==1?'s':''}<br><span style="font-size:11px;">RPE ${s.rpe}</span></div>
+    ${checkEl}
+  </div>`;
+}
+
+function buildAgenda() {
+  let html = '';
+  let lastWeek = '';
+  for(const s of SESSIONS) {
+    if(s.week !== lastWeek) {
+      html += `<div class="week-label">${s.week}</div>`;
+      lastWeek = s.week;
+    }
+    html += sessionRow(s, 'agenda');
+  }
+  document.getElementById('view-agenda').innerHTML = html;
+}
+
+function buildCompact() {
+  let html = '';
+  let lastWeek = '';
+  for(const s of SESSIONS) {
+    if(s.week !== lastWeek) {
+      html += `<div class="week-label">${s.week}</div>`;
+      lastWeek = s.week;
+    }
+    html += sessionRow(s, 'compact');
+  }
+  document.getElementById('view-compact').innerHTML = html;
+}
+
+function buildMonth() {
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const sessionMap = {};
+  const dateMap = {
+    'Feb 13':5,'Feb 15':0,'Feb 16':1,'Feb 18':3,'Feb 20':5,
+    'Feb 22':0,'Feb 23':1,'Feb 25':3,'Feb 27':5,
+    'Mar 1':0,'Mar 2':1,'Mar 4':3,'Mar 6':5,'Mar 11':3
+  };
+  SESSIONS.forEach(s => {
+    const d = s.date.split(', ')[1];
+    sessionMap[d] = s;
+  });
+
+  let html = `<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:8px;">`;
+  days.forEach(d => html += `<div style="text-align:center; font-size:11px; color:var(--color-text-secondary); padding:4px 0; text-transform:uppercase; letter-spacing:0.07em;">${d}</div>`);
+  html += '</div>';
+
+  const weeks = [
+    ['','','','Feb 18','','Feb 20',''],
+    ['Feb 22','Feb 23','','Feb 25','','Feb 27',''],
+    ['Mar 1','Mar 2','','Mar 4','','Mar 6',''],
+    ['','','','Mar 11','','',''],
+  ];
+
+  const startLabel = ['Week of Feb 9','Week of Feb 21','Week of Feb 28','Week of Mar 7'];
+
+  weeks.forEach((week, wi) => {
+    html += `<div style="font-size:10px; color:var(--color-text-secondary); margin:8px 0 4px; letter-spacing:0.07em; text-transform:uppercase;">${startLabel[wi]}</div>`;
+    html += `<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px;">`;
+    week.forEach(day => {
+      const s = sessionMap[day];
+      if(s) {
+        const c = PHASES[s.phase] || hashPhaseColor(s.phase);
+        const short = day.replace(/[A-Za-z]+ /,'');
+        html += `<div class="cal-day" style="border-left:3px solid ${c.dot};">
+          <div style="font-size:11px; font-weight:500; color:var(--color-text-primary); font-family:var(--font-mono); margin-bottom:4px;">${short}</div>
+          <span class="phase-pill" style="background:${c.bg}; color:${c.text}; font-size:9px;">${s.phase}</span>
+          <div style="font-size:10px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${s.exs[0]}${s.exs.length>1?` +${s.exs.length-1}`:''}</div>
+          ${s.done ? `<i class="ti ti-check" style="font-size:11px; color:var(--color-text-success); margin-top:4px; display:block;" aria-hidden="true"></i>` : ''}
+        </div>`;
+      } else {
+        html += `<div class="cal-day" style="opacity:0.35; cursor:default;">
+          ${day ? `<div style="font-size:11px; color:var(--color-text-secondary); font-family:var(--font-mono);">${day.replace(/[A-Za-z]+ /,'')}</div>` : ''}
+        </div>`;
+      }
+    });
+    html += '</div>';
+  });
+
+  document.getElementById('view-month').innerHTML = html;
+}
+
+function setView(v) {
+  ['agenda','compact','month'].forEach(id => {
+    document.getElementById('view-'+id).style.display = id===v ? 'block' : 'none';
+    const btn = document.getElementById('v-'+id);
+    if(id===v) {
+      btn.style.background = 'var(--color-background-info)';
+      btn.style.color = 'var(--color-text-info)';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--color-text-secondary)';
+    }
+  });
+}
+
+buildAgenda();
+buildCompact();
+buildMonth();
+</script>
