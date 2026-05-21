@@ -1,0 +1,100 @@
+
+<style>
+.note-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px;margin-bottom:8px}
+.scope-pill{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;cursor:pointer;border:0.5px solid}
+</style>
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+  <div>
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px;">Log / Notes</div>
+    <div style="font-size:20px;font-weight:500;color:var(--color-text-primary);">Notes</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);">Dated training context for block exports and AI analysis</div>
+  </div>
+</div>
+
+<div class="note-card" style="margin-bottom:12px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+    <i class="ti ti-calendar" style="font-size:14px;color:var(--color-text-secondary)" aria-hidden="true"></i>
+    <input type="date" value="2026-05-21" id="new-date" style="font-size:13px;font-family:var(--font-mono);padding:4px 8px;border-radius:var(--border-radius-md);">
+    <div style="display:flex;gap:5px;margin-left:auto;" id="scope-btns">
+      <button onclick="setScope('block',this)" class="scope-pill" style="background:var(--color-background-info);color:var(--color-text-info);border-color:var(--color-border-info);">Current block</button>
+      <button onclick="setScope('general',this)" class="scope-pill" style="background:transparent;color:var(--color-text-secondary);border-color:var(--color-border-tertiary);">General</button>
+      <button onclick="setScope('coach',this)" class="scope-pill" style="background:transparent;color:var(--color-text-secondary);border-color:var(--color-border-tertiary);">Coach</button>
+    </div>
+  </div>
+  <textarea id="new-note" placeholder="Write a dated program note — context, observations, things to flag for AI analysis..." style="width:100%;box-sizing:border-box;font-size:13px;font-family:var(--font-sans);min-height:88px;resize:vertical;background:transparent;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 12px;color:var(--color-text-primary);"></textarea>
+  <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+    <button onclick="saveNote()" style="display:flex;align-items:center;gap:5px;padding:6px 14px;font-size:13px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);background:var(--color-background-info);color:var(--color-text-info);border:0.5px solid var(--color-border-info);">
+      <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i> Save entry
+    </button>
+  </div>
+</div>
+
+<div id="notes-list"></div>
+
+<script>
+let activeScope = 'block';
+const SCOPES = {
+  block: {label:'Current block', bg:'var(--color-background-info)', text:'var(--color-text-info)', border:'var(--color-border-info)'},
+  general: {label:'General', bg:'var(--color-background-secondary)', text:'var(--color-text-secondary)', border:'var(--color-border-secondary)'},
+  coach: {label:'Coach', bg:'var(--color-background-warning)', text:'var(--color-text-warning)', border:'var(--color-border-warning)'},
+};
+
+const NOTES = [
+  {id:1, date:'May 18, 2026', isoDate:'2026-05-18', scope:'block', text:'Sleep and calories aren\'t really factors I can control because of work so no point in suggesting changes there.'},
+  {id:2, date:'May 3, 2026', isoDate:'2026-05-03', scope:'general', text:'Back felt a bit tight after Wednesday session, probably from the belt position being slightly off. Nothing serious. Hip flexors also sore — probably the single-leg work catching up.'},
+  {id:3, date:'Apr 20, 2026', isoDate:'2026-04-20', scope:'coach', text:'Considering swapping the Mon session to Tue — work schedule is making the turnaround between Sun and Mon brutal. Would shift recovery by a day.'},
+];
+let nextId = 4;
+
+function setScope(s, btn) {
+  activeScope = s;
+  document.querySelectorAll('#scope-btns .scope-pill').forEach(b => {
+    b.style.background = 'transparent';
+    b.style.color = 'var(--color-text-secondary)';
+    b.style.borderColor = 'var(--color-border-tertiary)';
+  });
+  const sc = SCOPES[s];
+  btn.style.background = sc.bg;
+  btn.style.color = sc.text;
+  btn.style.borderColor = sc.border;
+}
+
+function deleteNote(id) {
+  const idx = NOTES.findIndex(n=>n.id===id);
+  if(idx>-1) NOTES.splice(idx,1);
+  render();
+}
+
+function saveNote() {
+  const text = document.getElementById('new-note').value.trim();
+  const date = document.getElementById('new-date').value;
+  if(!text) return;
+  const d = new Date(date);
+  const label = d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  NOTES.unshift({id:nextId++, date:label, isoDate:date, scope:activeScope, text});
+  document.getElementById('new-note').value = '';
+  render();
+}
+
+function render() {
+  document.getElementById('notes-list').innerHTML = NOTES.map(n => {
+    const sc = SCOPES[n.scope] || SCOPES.general;
+    return `
+    <div class="note-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <i class="ti ti-calendar" style="font-size:13px;color:var(--color-text-secondary)" aria-hidden="true"></i>
+        <span style="font-size:14px;font-weight:500;color:var(--color-text-primary);">${n.date}</span>
+        <span style="font-size:12px;color:var(--color-text-secondary);font-family:var(--font-mono);">${n.isoDate}</span>
+        <span class="scope-pill" style="background:${sc.bg};color:${sc.text};border-color:${sc.border};">${sc.label}</span>
+        <button onclick="deleteNote(${n.id})" style="margin-left:auto;background:transparent;border:none;cursor:pointer;color:var(--color-text-secondary);font-size:14px;display:flex;align-items:center;" aria-label="Delete note">
+          <i class="ti ti-trash" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.7;">${n.text}</div>
+    </div>`;
+  }).join('');
+}
+
+render();
+</script>

@@ -1,0 +1,164 @@
+
+<style>
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.phase-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:10px;overflow:hidden}
+.phase-header{padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background 100ms;user-select:none}
+.phase-header:hover{background:var(--color-background-secondary)}
+.week-pill{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--color-background-info);color:var(--color-text-info);border:0.5px solid var(--color-border-info);white-space:nowrap}
+.count-pill{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--color-background-secondary);color:var(--color-text-secondary)}
+.tbl-header{display:grid;grid-template-columns:1fr 150px 1fr 32px;gap:8px;padding:7px 16px;background:var(--color-background-secondary);border-top:0.5px solid var(--color-border-tertiary);border-bottom:0.5px solid var(--color-border-tertiary)}
+.tbl-row{display:grid;grid-template-columns:1fr 150px 1fr 32px;gap:8px;padding:8px 16px;border-bottom:0.5px solid var(--color-border-tertiary);align-items:center}
+.tbl-row:last-child{border-bottom:none}
+.inp-label{font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px}
+.phase-inner{border-top:0.5px solid var(--color-border-tertiary)}
+.section-pad{padding:12px 16px}
+.del-btn{background:transparent;border:none;cursor:pointer;color:var(--color-text-secondary);font-size:14px;padding:2px;display:flex;align-items:center;justify-content:center}
+.del-btn:hover{color:var(--color-text-danger)}
+</style>
+
+<div class="page-header">
+  <div>
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px;">Log / Supplements</div>
+    <div style="font-size:20px;font-weight:500;color:var(--color-text-primary);">Supplements</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);">Manage supplement phases and peak week protocols</div>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+    <select style="font-size:12px;padding:5px 8px;border-radius:var(--border-radius-md);">
+      <option>Current block</option><option>All blocks</option>
+    </select>
+    <button onclick="addPhase()" style="display:flex;align-items:center;gap:5px;padding:6px 12px;font-size:12px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);background:var(--color-background-info);color:var(--color-text-info);border:0.5px solid var(--color-border-info);">
+      <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i> Add phase
+    </button>
+  </div>
+</div>
+
+<div id="phases-container"></div>
+
+<script>
+const PHASES = [
+  {
+    id:1, name:'Left overs from last comp', weeks:'W1–W8', items:5,
+    notes:'Full general wellness + performance + hormonal stack.\nMostly using leftovers',
+    supps:[
+      {name:'Creatine', dose:'10g/day', note:'Strong evidence for strength gains in squat, bench, leg press.'},
+      {name:'Vitamin D3+K2', dose:'25mcg/120mcg/day', note:"idk don't feel any different"},
+      {name:'Boron', dose:'9mg/day', note:'no real difference'},
+      {name:'Tongkat Ali', dose:'900mg/day', note:'no real difference'},
+      {name:'Ashwagandha', dose:'2500mg/day', note:'overdoing it. will reduce to 650mg/day'},
+      {name:'Zinc', dose:'200mg/day', note:'should probably keep for phase 2'},
+      {name:'Vitamin B Complex', dose:'2 softgels/day', note:'should probably keep for phase 2'},
+      {name:'Magnesium', dose:'600mg/day', note:'should probably keep for phase 2'},
+    ],
+    peakWeek: null,
+    open: true,
+  },
+  {
+    id:2, name:'Water Retention + Performance Stack', weeks:'W8–W23', items:11,
+    notes:'', supps:[], peakWeek:null, open:false,
+  },
+  {
+    id:3, name:'Desaturation', weeks:'W24–W25', items:11,
+    notes:'', supps:[], peakWeek:null, open:false,
+  },
+];
+
+function togglePhase(id) {
+  const p = PHASES.find(p=>p.id===id);
+  p.open = !p.open;
+  render();
+}
+
+function deleteSupp(phaseId, idx) {
+  const p = PHASES.find(p=>p.id===phaseId);
+  p.supps.splice(idx,1);
+  p.items = p.supps.length;
+  render();
+}
+
+function addSupp(phaseId) {
+  const p = PHASES.find(p=>p.id===phaseId);
+  p.supps.push({name:'', dose:'', note:''});
+  p.items = p.supps.length;
+  render();
+}
+
+function addPhase() {
+  const id = PHASES.length + 1;
+  PHASES.push({id, name:`Phase ${id}`, weeks:'W?–W?', items:0, notes:'', supps:[], peakWeek:null, open:true});
+  render();
+}
+
+function render() {
+  const container = document.getElementById('phases-container');
+  container.innerHTML = PHASES.map(p => {
+    const chevron = p.open ? 'ti-chevron-up' : 'ti-chevron-down';
+    const suppRows = p.supps.map((s,i) => `
+      <div class="tbl-row">
+        <input type="text" value="${s.name}" placeholder="Supplement name" style="width:100%;box-sizing:border-box;font-size:13px;">
+        <input type="text" value="${s.dose}" placeholder="e.g. 5g/day" style="width:100%;box-sizing:border-box;font-size:12px;font-family:var(--font-mono);">
+        <input type="text" value="${s.note}" placeholder="Notes or observations..." style="width:100%;box-sizing:border-box;font-size:12px;background:transparent;border:none;outline:none;color:var(--color-text-secondary);font-family:var(--font-sans);" readonly onfocus="this.readOnly=false">
+        <button class="del-btn" onclick="deleteSupp(${p.id},${i})" aria-label="Remove supplement"><i class="ti ti-trash" aria-hidden="true"></i></button>
+      </div>`).join('');
+
+    const body = p.open ? `
+      <div class="phase-inner">
+        <div class="section-pad" style="border-bottom:0.5px solid var(--color-border-tertiary);">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:12px;color:var(--color-text-secondary);">Start</span>
+              <input type="text" value="${p.weeks.split('–')[0]}" style="width:48px;font-size:12px;font-family:var(--font-mono);text-align:center;">
+              <span style="color:var(--color-text-secondary);">→</span>
+              <span style="font-size:12px;color:var(--color-text-secondary);">End</span>
+              <input type="text" value="${p.weeks.split('–')[1]||''}" style="width:48px;font-size:12px;font-family:var(--font-mono);text-align:center;">
+            </div>
+          </div>
+        </div>
+
+        <div class="section-pad" style="border-bottom:0.5px solid var(--color-border-tertiary);">
+          <div class="inp-label">Phase notes</div>
+          <textarea style="width:100%;box-sizing:border-box;font-size:12px;font-family:var(--font-sans);min-height:48px;resize:none;background:transparent;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:7px 10px;color:var(--color-text-secondary);" placeholder="Protocol intent, notes for AI context...">${p.notes}</textarea>
+        </div>
+
+        <div class="tbl-header">
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--color-text-secondary);">Name</span>
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--color-text-secondary);">Dose</span>
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--color-text-secondary);">Notes</span>
+          <button onclick="addSupp(${p.id})" style="font-size:11px;padding:2px 8px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);display:flex;align-items:center;gap:3px;justify-self:end;">
+            <i class="ti ti-plus" style="font-size:11px" aria-hidden="true"></i> Add
+          </button>
+        </div>
+        ${suppRows || '<div style="padding:14px 16px;font-size:12px;color:var(--color-text-secondary);">No supplements added yet.</div>'}
+
+        <div class="section-pad" style="border-top:0.5px solid var(--color-border-tertiary);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div class="inp-label" style="margin-bottom:0;">Peak week protocol</div>
+            <button style="font-size:11px;padding:3px 9px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);display:flex;align-items:center;gap:3px;">
+              <i class="ti ti-plus" style="font-size:11px" aria-hidden="true"></i> Add field
+            </button>
+          </div>
+          ${p.peakWeek ? '<div>fields here</div>' : '<div style="font-size:12px;color:var(--color-text-secondary);">No peak week protocol defined.</div>'}
+        </div>
+
+        <div style="padding:10px 16px;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);display:flex;justify-content:flex-end;">
+          <button style="font-size:12px;padding:5px 12px;font-family:var(--font-sans);cursor:pointer;border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-danger);border:0.5px solid var(--color-border-danger);display:flex;align-items:center;gap:5px;">
+            <i class="ti ti-trash" style="font-size:12px" aria-hidden="true"></i> Delete phase
+          </button>
+        </div>
+      </div>` : '';
+
+    return `
+      <div class="phase-card">
+        <div class="phase-header" onclick="togglePhase(${p.id})">
+          <span style="font-size:11px;color:var(--color-text-secondary);flex-shrink:0;">Phase ${p.id}</span>
+          <span style="font-size:15px;font-weight:500;color:var(--color-text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name}</span>
+          <span class="count-pill">${p.items} items</span>
+          <span class="week-pill">${p.weeks}</span>
+          <i class="ti ${chevron}" style="font-size:14px;color:var(--color-text-secondary);flex-shrink:0;" aria-hidden="true"></i>
+        </div>
+        ${body}
+      </div>`;
+  }).join('');
+}
+
+render();
+</script>
