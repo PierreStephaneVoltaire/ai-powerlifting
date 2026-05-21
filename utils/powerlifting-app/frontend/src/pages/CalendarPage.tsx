@@ -2,18 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Group,
-  Badge,
-  Paper,
   Stack,
   Text,
   Box,
-  ThemeIcon,
   UnstyledButton,
-  Center,
   Select,
   ActionIcon,
 } from '@mantine/core'
-import { Calendar } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { phaseColor } from '@/utils/phases'
@@ -24,11 +19,9 @@ import { normalizeExerciseName } from '@/utils/volume'
 import { Check, ArrowUp } from 'lucide-react'
 import dayjs from 'dayjs'
 import type { Session } from '@powerlifting/types'
-import MuscleVolumeChart from '@/components/charts/MuscleVolumeChart'
 import { SessionsCompactView } from '@/components/sessions/SessionsCompactView'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
 import { useAuth } from '@/auth/AuthProvider'
-import Num from '@/components/shared/Num'
 
 type ViewType = 'Month' | 'Agenda' | 'Compact'
 const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
@@ -254,8 +247,8 @@ export default function CalendarPage() {
             padding: compact ? '7px 10px' : '10px 14px',
           }}
         >
-          <div style={{ alignItems: 'center', display: 'flex', gap: compact ? 8 : 12, minWidth: 0 }}>
-            <div style={{ flexShrink: 0, width: compact ? 72 : 88 }}>
+          <div className="if-session-row-main" style={{ gap: compact ? 8 : 12 }}>
+            <div className="if-session-date" style={{ width: compact ? 72 : 88 }}>
               <div className="if-mock-num" style={{ color: compact ? 'var(--color-text-secondary)' : 'var(--color-text-primary)', fontSize: compact ? 12 : 13, fontWeight: compact ? 400 : 500 }}>
                 {dateLabel}
               </div>
@@ -271,10 +264,10 @@ export default function CalendarPage() {
             >
               {session.phase?.name || 'Unknown'}
             </span>
-            <div style={{ color: 'var(--color-text-secondary)', flex: 1, fontSize: compact ? 12 : 13, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className="if-session-preview" style={{ fontSize: compact ? 12 : 13 }}>
               {previewNames}
             </div>
-            <div style={{ color: 'var(--color-text-secondary)', flexShrink: 0, fontSize: compact ? 11 : 12, minWidth: compact ? 48 : 80, textAlign: 'right' }}>
+            <div className="if-session-meta" style={{ fontSize: compact ? 11 : 12, minWidth: compact ? 48 : 80 }}>
               {compact ? null : <>{uniqueExerciseCount} exercise{uniqueExerciseCount !== 1 ? 's' : ''}<br /></>}
               <span style={{ fontSize: 11 }}>{session.session_rpe !== null ? `RPE ${session.session_rpe}` : 'RPE --'}</span>
             </div>
@@ -391,8 +384,6 @@ export default function CalendarPage() {
           ))}
         </Stack>
       )}
-
-      <MuscleVolumeChart />
 
       {showScrollTop && (
         <ActionIcon

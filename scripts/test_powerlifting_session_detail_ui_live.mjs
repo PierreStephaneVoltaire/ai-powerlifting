@@ -217,13 +217,24 @@ async function ensureFrontendServer() {
 }
 
 async function request(pathname, init = {}) {
-  const response = await fetch(`${apiBase}${pathname}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers || {}),
-    },
-  })
+  let response = null
+  let lastError = null
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      response = await fetch(`${apiBase}${pathname}`, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(init.headers || {}),
+        },
+      })
+      break
+    } catch (error) {
+      lastError = error
+      await sleep(250 * (attempt + 1))
+    }
+  }
+  if (!response) throw lastError || new Error(`Request failed: ${pathname}`)
   const text = await response.text()
   const body = text ? JSON.parse(text) : null
   if (!response.ok) {
@@ -607,7 +618,7 @@ async function findSessionIndex(date) {
 
 async function openSession(page, date) {
   const index = await findSessionIndex(date)
-  await page.goto(`${frontendUrl}/session/${date}/${index}`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/session/${date}/${index}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('session-detail')).toBeVisible({ timeout: 15000 })
   return index
 }
@@ -693,7 +704,7 @@ async function pickGlossaryExercises() {
 
 async function testAddAndDeleteSession(page, date) {
   await deleteSessionIfExists(date)
-  await page.goto(`${frontendUrl}/sessions?view=Compact`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/sessions?view=Compact`, { waitUntil: 'domcontentloaded' })
   await page.getByTestId('session-list-add-session').click()
   await pickVisibleCalendarDate(page, 'session-create-date', date)
   await Promise.all([
@@ -715,7 +726,7 @@ async function testEmptySessionsState(browser, program) {
   const page = await context.newPage()
   await installApiRouting(page, { programOverride: { ...clone(program), sessions: [] } })
   try {
-    await page.goto(`${frontendUrl}/sessions?view=Compact`, { waitUntil: 'networkidle' })
+    await page.goto(`${frontendUrl}/sessions?view=Compact`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText(/no sessions/i)).toBeVisible({ timeout: 5000 })
     await expect(page.getByText(/add a session/i)).toBeVisible()
     await expect(page.getByTestId('session-list-empty-add-session')).toBeVisible()
@@ -730,15 +741,15 @@ async function testBlockSwitching(page, currentDate, otherDate) {
   await createSession(makeSession(currentDate, 'current', [{ name: `${runId} Current Block Lift`, sets: 1, reps: 1, kg: 60, notes: '' }]))
   await createSession(makeSession(otherDate, tempBlock, [{ name: `${runId} Other Block Lift`, sets: 1, reps: 1, kg: 70, notes: '' }]))
 
-  await page.goto(`${frontendUrl}/sessions?view=Compact`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/sessions?view=Compact`, { waitUntil: 'domcontentloaded' })
   await expandWeek(page, 1)
   await expect(page.getByTestId(`session-list-row-${currentDate}`)).toBeVisible({ timeout: 15000 })
-  await page.goto(`${frontendUrl}/sessions?view=Compact&block=${encodeURIComponent(tempBlock)}`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/sessions?view=Compact&block=${encodeURIComponent(tempBlock)}`, { waitUntil: 'domcontentloaded' })
   await expandWeek(page, 1)
   await expect(page.getByTestId(`session-list-row-${otherDate}`)).toBeVisible({ timeout: 15000 })
   await expect(page.getByTestId(`session-list-row-${currentDate}`)).not.toBeVisible({ timeout: 5000 })
 
-  await page.goto(`${frontendUrl}/sessions?view=Agenda&block=${encodeURIComponent(tempBlock)}`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/sessions?view=Agenda&block=${encodeURIComponent(tempBlock)}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByText(`${runId} Other Block Lift`)).toBeVisible({ timeout: 15000 })
   await expect(page.getByText(`${runId} Current Block Lift`)).not.toBeVisible({ timeout: 5000 })
 }
@@ -838,7 +849,7 @@ async function testSessionDetail(page, date, glossaryNames) {
   }
 
   await waitForDynamoSession(date, created.id, (item) => item.session_notes === saved.session_notes, 'Session detail save')
-  await page.reload({ waitUntil: 'networkidle' })
+  await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(control(page, 'session-notes').input).toHaveValue(saved.session_notes, { timeout: 15000 })
 
   await ensureUnit(page, 'lb')
@@ -987,7 +998,7 @@ async function testToolkitAndTools(page, detail) {
   await expect(page.getByText('Non-barbell exercise defaulted to 0.')).toBeVisible()
   await page.keyboard.press('Escape')
 
-  await page.goto(`${frontendUrl}/tools/plate`, { waitUntil: 'networkidle' })
+  await page.goto(`${frontendUrl}/tools/plate`, { waitUntil: 'domcontentloaded' })
   await ensureUnit(page, 'kg')
   await fillControl(page, 'plate-target-weight', 100)
   await expect(page.getByTestId('plate-grand-total-kg')).toHaveText('100.0 kg', { timeout: 10000 })
@@ -1011,7 +1022,7 @@ async function testSettingsDrawer(page, originalMeta) {
   await updateMeta('program_week_start_day', 'Tuesday')
   await updateMeta('block_week_start_days', stagedStarts)
 
-  await page.goto(frontendUrl, { waitUntil: 'networkidle' })
+  await page.goto(frontendUrl, { waitUntil: 'domcontentloaded' })
   await page.getByTestId('settings-button').click()
   await expect(page.getByText('Sex (for DOTS calculation)')).toBeVisible({ timeout: 15000 })
 
