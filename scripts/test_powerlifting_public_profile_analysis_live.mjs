@@ -26,6 +26,15 @@ const ignoredBrowserErrorFragments = [
   "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element.",
 ]
 const children = []
+const weekDayIndex = {
+  Monday: 0,
+  Tuesday: 1,
+  Wednesday: 2,
+  Thursday: 3,
+  Friday: 4,
+  Saturday: 5,
+  Sunday: 6,
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -114,9 +123,14 @@ async function fetchRouteWithRetry(route, url) {
     } catch (error) {
       lastError = error
       const message = error instanceof Error ? error.message : String(error)
-      if (!message.includes('socket hang up') && !message.includes('ECONNRESET')) {
+      if (
+        !message.includes('socket hang up') &&
+        !message.includes('ECONNRESET') &&
+        !message.includes('ECONNREFUSED')
+      ) {
         throw error
       }
+      await ensurePortForwards()
       await sleep(250 * (attempt + 1))
     }
   }
@@ -125,6 +139,76 @@ async function fetchRouteWithRetry(route, url) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
+}
+
+function todayYmd() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function parseYmd(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+function formatYmd(date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function addDays(dateStr, days) {
+  const date = parseYmd(dateStr)
+  date.setUTCDate(date.getUTCDate() + days)
+  return formatYmd(date)
+}
+
+function diffDays(later, earlier) {
+  return Math.floor((parseYmd(later).getTime() - parseYmd(earlier).getTime()) / 86400000)
+}
+
+function programWeekAnchorDate(programStart, weekStartDay) {
+  const parsed = parseYmd(programStart)
+  const currentIndex = (parsed.getUTCDay() + 6) % 7
+  const targetIndex = weekDayIndex[weekStartDay] ?? weekDayIndex.Monday
+  const offset = (currentIndex - targetIndex + 7) % 7
+  return addDays(programStart, -offset)
+}
+
+function programWeekStartDate(programStart, week, weekStartDay) {
+  return addDays(programWeekAnchorDate(programStart, weekStartDay), (Math.max(1, week) - 1) * 7)
+}
+
+function trainingWeekForDate(dateStr, programStart, weekStartDay) {
+  const anchor = programWeekAnchorDate(programStart, weekStartDay)
+  return Math.max(1, Math.floor(diffDays(dateStr, anchor) / 7) + 1)
+}
+
+function resolveCurrentProgramWeek(program, asOfDate = todayYmd()) {
+  const weekStartDay = program.meta?.block_week_start_days?.current ?? 'Monday'
+  const programStart = program.meta?.program_start ?? program.sessions?.[0]?.date ?? asOfDate
+  const calculatedWeek = trainingWeekForDate(asOfDate, programStart, weekStartDay)
+  const calculatedStart = programWeekStartDate(programStart, calculatedWeek, weekStartDay)
+  const calculatedEnd = addDays(calculatedStart, 6)
+  const dueWeekNumbers = (program.sessions ?? [])
+    .filter((session) => (session.block ?? 'current') === 'current')
+    .filter((session) => session.date >= calculatedStart && session.date <= calculatedEnd && session.date <= asOfDate)
+    .map((session) => Number(session.week_number))
+    .filter((week) => Number.isFinite(week))
+
+  return dueWeekNumbers.length ? Math.max(...dueWeekNumbers) : calculatedWeek
+}
+
+function expectedPhaseStates(program, currentWeek) {
+  return (program.phases ?? [])
+    .filter((phase) => (phase.block ?? 'current') === 'current')
+    .map((phase) => ({
+      name: phase.name,
+      startWeek: phase.start_week,
+      endWeek: phase.end_week,
+      state: phase.end_week < currentWeek
+        ? 'completed'
+        : phase.start_week <= currentWeek && phase.end_week >= currentWeek
+          ? 'current'
+          : 'upcoming',
+    }))
 }
 
 function assertVideosSorted(videos) {
@@ -178,6 +262,9 @@ async function main() {
   assert(profile.summary?.total_kg > 0, 'current profile total is not populated')
   assert(profile.summary?.dots > 0, 'current profile DOTS is not populated')
   assertVideosSorted(profile.lift_videos ?? [])
+  const program = (await request('/programs/current')).data
+  const currentWeek = resolveCurrentProgramWeek(program)
+  const phaseStates = expectedPhaseStates(program, currentWeek)
 
   const queued = await request('/analytics/analysis/sections/queue', {
     method: 'POST',
@@ -192,6 +279,13 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({ viewport: { width: 1365, height: 900 } })
+  await context.addInitScript(() => {
+    window.localStorage.setItem('pl-settings', JSON.stringify({
+      state: { theme: 'dark' },
+      version: 2,
+    }))
+    window.localStorage.setItem('mantine-color-scheme-value', 'dark')
+  })
   const page = await context.newPage()
   const browserErrors = []
   const badResponses = []
@@ -222,14 +316,56 @@ async function main() {
   await installReadOnlyRouting(page)
 
   await page.goto(frontendUrl, { waitUntil: 'networkidle' })
+  await expect(page.locator('html')).toHaveAttribute('data-mantine-color-scheme', 'dark')
   const profileLink = page.getByTestId('dashboard-profile-link')
   await expect(profileLink).toBeVisible({ timeout: 15000 })
   await expect(profileLink).toHaveAttribute('href', '/profile')
+  await expect(page.getByTestId('topbar')).not.toContainText('Fork this version')
+  await expect(page.getByText(/^Version /)).toHaveCount(0)
   await expect(page.getByText('No bio yet.')).toHaveCount(0)
+  const dashboardCardBackground = await page.locator('.if-mock-card').first().evaluate((node) => getComputedStyle(node).backgroundColor)
   const topRowChildren = await page.locator('.if-dashboard-row-top > *').count()
   assert(topRowChildren === 3, `dashboard top row should have 3 cards, found ${topRowChildren}`)
+  const phaseCardBox = await page.locator('.if-dashboard-phases-card').boundingBox()
+  const liftStyleBox = await page.locator('.if-dashboard-row-bottom > :nth-child(2)').boundingBox()
+  assert(phaseCardBox && liftStyleBox, 'dashboard phase and lift profile cards must be visible')
+  assert(
+    phaseCardBox.width < liftStyleBox.width,
+    `phase card should be thinner than lift style card, got ${phaseCardBox.width}px vs ${liftStyleBox.width}px`,
+  )
+  const renderedPhaseRows = await page.locator('.if-dashboard-phase-row').evaluateAll((rows) => rows.map((row) => ({
+    status: row.getAttribute('data-status'),
+    text: row.textContent ?? '',
+    background: getComputedStyle(row).backgroundColor,
+    nameDecoration: getComputedStyle(row.querySelector('.if-dashboard-phase-name')).textDecorationLine,
+    rangeDecoration: getComputedStyle(row.querySelector('.if-dashboard-phase-range')).textDecorationLine,
+  })))
+  assert(renderedPhaseRows.length === phaseStates.length, `expected ${phaseStates.length} phase rows, found ${renderedPhaseRows.length}`)
+  for (let index = 0; index < phaseStates.length; index += 1) {
+    const phase = phaseStates[index]
+    const row = renderedPhaseRows[index]
+    assert(row, `missing rendered phase row for ${phase.name}`)
+    assert(row.text.includes(`W${phase.startWeek}-${phase.endWeek}`), `phase ${phase.name} rendered with wrong week range`)
+    assert(row.text.includes(phase.name), `phase row ${index + 1} expected ${phase.name}, got ${row.text}`)
+    assert(row.status === phase.state, `phase ${phase.name} expected ${phase.state}, got ${row.status}`)
+    if (phase.state === 'completed') {
+      assert(row.nameDecoration.includes('line-through'), `completed phase ${phase.name} name is not crossed out`)
+      assert(row.rangeDecoration.includes('line-through'), `completed phase ${phase.name} week range is not crossed out`)
+    }
+    if (phase.state === 'current') {
+      assert(row.background !== dashboardCardBackground, `current phase ${phase.name} is not highlighted`)
+    }
+  }
 
-  await profileLink.click()
+  await page.goto(`${frontendUrl}/designer`, { waitUntil: 'networkidle' })
+  const mantineCardBackground = await page.locator('.mantine-Card-root').first().evaluate((node) => getComputedStyle(node).backgroundColor)
+  assert(
+    mantineCardBackground === dashboardCardBackground,
+    `Mantine card background ${mantineCardBackground} does not match dashboard card background ${dashboardCardBackground}`,
+  )
+
+  await page.goto(frontendUrl, { waitUntil: 'networkidle' })
+  await page.getByTestId('dashboard-profile-link').click()
   await expect(page).toHaveURL(/\/profile$/)
   await expect(page.getByText('Read only')).toBeVisible({ timeout: 15000 })
   await expect(page.getByTestId('profile-save')).toHaveCount(0)
@@ -253,7 +389,7 @@ async function main() {
   console.log('[public-profile-analysis-live] PASS')
   console.log(`  Frontend: ${frontendUrl}`)
   console.log(`  API base: ${apiBase}`)
-  console.log('  Checked: public current profile API, DOTS, video ordering, read-only dashboard profile link/layout, signed-out profile read-only view, analysis page access')
+  console.log('  Checked: public current profile API, DOTS, video ordering, dark Mantine card backgrounds, no version/fork UI, dashboard phase layout/state by week number, read-only dashboard profile link/layout, signed-out profile read-only view, analysis page access')
 }
 
 main().then(() => {

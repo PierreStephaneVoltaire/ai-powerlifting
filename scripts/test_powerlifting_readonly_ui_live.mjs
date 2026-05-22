@@ -186,9 +186,14 @@ async function fetchRouteWithRetry(route, url) {
     } catch (error) {
       lastError = error
       const message = error instanceof Error ? error.message : String(error)
-      if (!message.includes('socket hang up') && !message.includes('ECONNRESET')) {
+      if (
+        !message.includes('socket hang up') &&
+        !message.includes('ECONNRESET') &&
+        !message.includes('ECONNREFUSED')
+      ) {
         throw error
       }
+      await ensureBackendPortForward()
       await sleep(250 * (attempt + 1))
     }
   }

@@ -5,9 +5,11 @@ import {
   Avatar,
   Box,
   Button,
+  FileButton,
   Group,
   Loader,
   Paper,
+  Progress,
   SegmentedControl,
   SimpleGrid,
   Stack,
@@ -16,7 +18,15 @@ import {
   TextInput,
 } from '@mantine/core'
 import { AlertCircle, Calendar, Film, LogIn, Save, Upload, User } from 'lucide-react'
-import { getSettings, updateNickname, updateProfile, type UserSettings } from '@/api/settings'
+import {
+  getSettings,
+  isValidProfileAvatarType,
+  MAX_PROFILE_AVATAR_SIZE,
+  updateNickname,
+  updateProfile,
+  uploadProfileAvatar,
+  type UserSettings,
+} from '@/api/settings'
 import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
 import * as api from '@/api/client'
 import { useAuth } from '@/auth/AuthProvider'
@@ -121,6 +131,8 @@ export default function ProfilePage() {
   const [videosLoading, setVideosLoading] = useState(false)
   const [videoFilter, setVideoFilter] = useState<LiftFilter>('all')
   const [selectedVideo, setSelectedVideo] = useState<VideoLibraryItem | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarProgress, setAvatarProgress] = useState(0)
 
   useEffect(() => {
     if (authLoading || !user) return
@@ -258,6 +270,33 @@ export default function ProfilePage() {
       )),
     [publicProfile?.lift_videos, videoFilter],
   )
+
+  async function handleAvatarUpload(file: File | null) {
+    if (!file || avatarUploading) return
+    if (!isValidProfileAvatarType(file)) {
+      pushToast({ message: 'Profile picture must be JPG, PNG, WebP, or GIF', type: 'error' })
+      return
+    }
+    if (file.size > MAX_PROFILE_AVATAR_SIZE) {
+      pushToast({ message: 'Profile picture must be 8 MB or smaller', type: 'error' })
+      return
+    }
+
+    setAvatarUploading(true)
+    setAvatarProgress(0)
+    setError(null)
+    try {
+      const nextSettings = await uploadProfileAvatar(file, setAvatarProgress)
+      setSettings(nextSettings)
+      pushToast({ message: 'Profile picture updated', type: 'success' })
+    } catch {
+      setError('Profile picture upload failed.')
+      pushToast({ message: 'Profile picture upload failed', type: 'error' })
+    } finally {
+      setAvatarUploading(false)
+      setAvatarProgress(0)
+    }
+  }
 
   async function saveProfile() {
     if (!settings || saving) return
@@ -459,9 +498,31 @@ export default function ProfilePage() {
         <Stack gap="md">
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <Group gap="md" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
-              <Avatar src={settings?.avatar_url ?? user.avatar} alt={resolvedName} radius="xl" size={60}>
-                {initials(resolvedName)}
-              </Avatar>
+              <Stack gap={6} align="center" style={{ flexShrink: 0 }}>
+                <Avatar src={settings?.avatar_url ?? user.avatar} alt={resolvedName} radius="xl" size={60}>
+                  {initials(resolvedName)}
+                </Avatar>
+                <FileButton
+                  onChange={handleAvatarUpload}
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  disabled={readOnly || loading || !settings || avatarUploading}
+                >
+                  {(props) => (
+                    <Button
+                      {...props}
+                      size="xs"
+                      variant="light"
+                      leftSection={<Upload size={14} />}
+                      loading={avatarUploading}
+                      disabled={readOnly || loading || !settings}
+                      data-testid="profile-avatar-upload"
+                    >
+                      Photo
+                    </Button>
+                  )}
+                </FileButton>
+                {avatarUploading && <Progress value={avatarProgress} size="xs" w={72} />}
+              </Stack>
               <Stack gap={8} style={{ minWidth: 0 }}>
                 <Group gap="xs" wrap="wrap">
                   <Text fw={600} size="lg" c="var(--text-primary)" truncate>

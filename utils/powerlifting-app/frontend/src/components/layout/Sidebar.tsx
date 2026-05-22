@@ -5,12 +5,10 @@ import {
   Stack,
   Group,
   ScrollArea,
-  Badge,
   Box,
   Text,
   UnstyledButton,
 } from '@mantine/core'
-import { useProgramStore } from '@/store/programStore'
 import {
   LayoutDashboard,
   Calendar,
@@ -71,8 +69,6 @@ function isActiveItem(item: NavItem, pathname: string): boolean {
 
 function DesktopSidebar() {
   const location = useLocation()
-  const { version, program } = useProgramStore()
-  const versionLabel = program?.meta?.version_label || version || 'current'
 
   return (
     <Box
@@ -108,21 +104,6 @@ function DesktopSidebar() {
           })}
         </Stack>
       </ScrollArea>
-      <Box p={12} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-        <Badge
-          variant="outline"
-          size="xs"
-          color="gray"
-          style={{
-            borderColor: 'var(--border-default)',
-            color: 'var(--text-muted)',
-            fontSize: 10,
-            letterSpacing: '0.08em',
-          }}
-        >
-          Version {versionLabel}
-        </Badge>
-      </Box>
     </Box>
   )
 }

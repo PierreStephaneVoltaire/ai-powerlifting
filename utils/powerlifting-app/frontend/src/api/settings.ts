@@ -5,6 +5,7 @@ const api = axios.create({
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 })
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 export interface UserSettings {
   discord_id: string
@@ -37,4 +38,55 @@ export async function updateProfile(input: {
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/profile', input)
   return res.data.data
+}
+
+export function isValidProfileAvatarType(file: File): boolean {
+  return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
+}
+
+export const MAX_PROFILE_AVATAR_SIZE = 8 * 1024 * 1024
+
+export async function uploadProfileAvatar(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<UserSettings> {
+  const formData = new FormData()
+  formData.append('avatar', file)
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.withCredentials = true
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100))
+      }
+    })
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText)
+          resolve(response.data)
+        } catch {
+          reject(new Error('Invalid response from server'))
+        }
+        return
+      }
+
+      try {
+        const response = JSON.parse(xhr.responseText)
+        reject(new Error(response.error || 'Profile picture upload failed'))
+      } catch {
+        reject(new Error('Profile picture upload failed'))
+      }
+    })
+
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error during profile picture upload'))
+    })
+
+    xhr.open('POST', `${API_BASE}/settings/avatar`)
+    xhr.send(formData)
+  })
 }

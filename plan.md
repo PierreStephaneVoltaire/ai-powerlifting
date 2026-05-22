@@ -1,0 +1,4 @@
+in the ranking page we read an excel or 2 to rank the user. what i want to do is generate another data set in the bucket if it doesn't exist that data set will only have the 3 weight class closes the the users. now using that sheet we will
+generate new cards for the dashbard page the first one will calculate the percental of all 3 lifts + total of the user in the national scenme so like the actual vs target card it'll show top x percent in canada per lift and for total so 4 lines
+the data set should only count the last 3 years (inclusive) and drop duplicate lifters (keep the highest total). do the same for regional ones and global ones (so you need to filter by the user sex, country , region age class and year) , i
+don't think we keep track of country and region so let the user set them in the profile. options should only be from the list in the sheet. i think we already have the region/country relatyionship logic in the ranking page

@@ -1,15 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { differenceInCalendarDays, parse } from 'date-fns'
+import { differenceInCalendarDays, format, parse } from 'date-fns'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, type LiftProfileReview } from '@/api/client'
-import { fetchBlockAnalysis, fetchProgramBlocks, type BlockAnalysisBundle, type WeeklyAnalysis } from '@/api/analytics'
+import {
+  fetchAnalysisManifest,
+  fetchAnalysisSection,
+  queueAnalysisSections,
+  type AnalysisSectionKey,
+  type AnalysisWindow,
+  type WeeklyAnalysis,
+} from '@/api/analytics'
 import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
 import { daysUntil } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
+import { resolveTrainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
 import Num from '@/components/shared/Num'
 import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse, User } from 'lucide-react'
@@ -40,6 +48,8 @@ const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 type BigThreeLift = typeof LIFT_ORDER[number]
 type MaxDrafts = Record<BigThreeLift, string>
 
+const DASHBOARD_ANALYSIS_WINDOW = 'block'
+const DASHBOARD_ANALYSIS_SECTIONS: AnalysisSectionKey[] = ['overview', 'fatigue_readiness', 'workload']
 const PROFILE_ESTIMATE_READY_SCORE = 55
 const LIFT_ALIASES: Record<LiftProfile['lift'], string[]> = {
   squat: ['squat'],
@@ -235,7 +245,7 @@ function parseDisplayWeightDraft(value: string, unit: 'kg' | 'lb'): number | nul
   return parsed === null ? null : fromDisplayUnit(parsed, unit)
 }
 
-function findLiftAnalysis(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift']) {
+function findLiftAnalysis(weekly: Partial<WeeklyAnalysis> | null, lift: LiftProfile['lift']) {
   if (!weekly) return undefined
   const exact = weekly.lifts?.[lift]
   if (exact) return exact
@@ -243,6 +253,33 @@ function findLiftAnalysis(weekly: WeeklyAnalysis | null, lift: LiftProfile['lift
     const lowerName = name.toLowerCase()
     return LIFT_ALIASES[lift].some((alias) => lowerName.includes(alias))
   })?.[1]
+}
+
+function mergeDashboardAnalysisSections(
+  payloads: Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>,
+): Partial<WeeklyAnalysis> | null {
+  const hasPayload = DASHBOARD_ANALYSIS_SECTIONS.some((section) => Boolean(payloads[section]))
+  if (!hasPayload) return null
+  return Object.assign(
+    {},
+    ...DASHBOARD_ANALYSIS_SECTIONS.map((section) => payloads[section] ?? {}),
+  )
+}
+
+function sectionPending(
+  statuses: Partial<Record<AnalysisSectionKey, string>>,
+  payloads: Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>,
+  section: AnalysisSectionKey,
+): boolean {
+  if (payloads[section]) return false
+  const status = statuses[section]
+  return status === undefined || status === 'missing' || status === 'pending' || status === 'running'
+}
+
+function phaseState(phase: Phase, currentWeek: number): 'completed' | 'current' | 'upcoming' {
+  if (phase.end_week < currentWeek) return 'completed'
+  if (phase.start_week <= currentWeek && phase.end_week >= currentWeek) return 'current'
+  return 'upcoming'
 }
 
 export default function Dashboard() {
@@ -270,9 +307,12 @@ export default function Dashboard() {
   const [profileGuideLoading, setProfileGuideLoading] = useState(false)
   const [profileGuideRewriting, setProfileGuideRewriting] = useState(false)
   const [profileGuideEstimating, setProfileGuideEstimating] = useState(false)
-  const [currentBlockBundle, setCurrentBlockBundle] = useState<BlockAnalysisBundle | null>(null)
-  const [currentBlockLoading, setCurrentBlockLoading] = useState(false)
+  const [dashboardAnalysisWindow, setDashboardAnalysisWindow] = useState<AnalysisWindow | null>(null)
+  const [dashboardSectionPayloads, setDashboardSectionPayloads] = useState<Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>>({})
+  const [dashboardSectionStatuses, setDashboardSectionStatuses] = useState<Partial<Record<AnalysisSectionKey, string>>>({})
+  const [dashboardAnalysisError, setDashboardAnalysisError] = useState<string | null>(null)
   const [profileSnippet, setProfileSnippet] = useState<PublicProfile | null>(null)
+  const dashboardAsOfDate = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
 
   useEffect(() => {
     if (version && program && !needsSetup) {
@@ -294,38 +334,75 @@ export default function Dashboard() {
     let cancelled = false
 
     if (!version || !program || needsSetup) {
-      setCurrentBlockBundle(null)
-      setCurrentBlockLoading(false)
+      setDashboardAnalysisWindow(null)
+      setDashboardSectionPayloads({})
+      setDashboardSectionStatuses({})
+      setDashboardAnalysisError(null)
       return
     }
 
-    setCurrentBlockLoading(true)
+    let pollTimer: number | undefined
 
-    fetchProgramBlocks()
-      .then((blocks) => {
-        const currentBlock = blocks.find((block) => block.isCurrent)
-        if (!currentBlock) return null
-        return fetchBlockAnalysis(currentBlock.blockKey, false)
-      })
-      .then((bundle) => {
-        if (!cancelled && bundle) {
-          setCurrentBlockBundle(bundle)
+    async function pollDashboardSections() {
+      const statuses = await Promise.all(
+        DASHBOARD_ANALYSIS_SECTIONS.map((section) =>
+          fetchAnalysisSection<Partial<WeeklyAnalysis>>(dashboardAsOfDate, DASHBOARD_ANALYSIS_WINDOW, section),
+        ),
+      )
+      if (cancelled) return
+
+      setDashboardSectionStatuses(Object.fromEntries(statuses.map((status) => [status.sectionKey, status.status])))
+      setDashboardSectionPayloads((current) => {
+        const next = { ...current }
+        for (const status of statuses) {
+          if (status.status === 'complete' && status.payload) {
+            next[status.sectionKey] = status.payload
+          }
         }
+        return next
       })
+
+      const terminal = statuses.every((status) => status.status === 'complete' || status.status === 'error')
+      if (!terminal) {
+        pollTimer = window.setTimeout(() => {
+          pollDashboardSections().catch((error) => {
+            if (!cancelled) setDashboardAnalysisError(error instanceof Error ? error.message : String(error))
+          })
+        }, 2000)
+      }
+    }
+
+    setDashboardAnalysisWindow(null)
+    setDashboardSectionPayloads({})
+    setDashboardSectionStatuses({})
+    setDashboardAnalysisError(null)
+
+    fetchAnalysisManifest(dashboardAsOfDate, DASHBOARD_ANALYSIS_WINDOW)
+      .then((manifest) => {
+        if (cancelled) return
+        setDashboardAnalysisWindow(manifest.windows[DASHBOARD_ANALYSIS_WINDOW])
+        setDashboardSectionStatuses(Object.fromEntries(
+          DASHBOARD_ANALYSIS_SECTIONS.map((section) => [section, manifest.sections[section]?.status ?? 'missing']),
+        ))
+        return queueAnalysisSections({
+          asOfDate: dashboardAsOfDate,
+          windowKey: DASHBOARD_ANALYSIS_WINDOW,
+          sections: DASHBOARD_ANALYSIS_SECTIONS,
+        })
+      })
+      .then(() => pollDashboardSections())
       .catch((error) => {
-        console.warn('Failed to load current block analysis:', error)
+        console.warn('Failed to load dashboard analysis sections:', error)
         if (!cancelled) {
-          setCurrentBlockBundle(null)
+          setDashboardAnalysisError(error instanceof Error ? error.message : String(error))
         }
-      })
-      .finally(() => {
-        if (!cancelled) setCurrentBlockLoading(false)
       })
 
     return () => {
       cancelled = true
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer)
     }
-  }, [version, program, needsSetup])
+  }, [version, program, needsSetup, dashboardAsOfDate])
 
   useEffect(() => {
     let cancelled = false
@@ -362,6 +439,15 @@ export default function Dashboard() {
 
   const { meta, sessions, phases, competitions } = program
   const currentBlockPhases = phasesForBlock(phases)
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const currentBlockWeekStartDay = weekStartForBlock(program, 'current')
+  const currentWeekNumber = resolveTrainingWeekForDate(
+    todayStr,
+    meta.program_start ?? sessions[0]?.date ?? todayStr,
+    currentBlockWeekStartDay,
+    sessions,
+    'current',
+  )
   const profileFederation = profileSnippet?.federation || meta.federation || 'Federation unset'
   const profileWeightClass = profileSnippet?.weight_class_kg ?? meta.weight_class_kg
   const profileBio = profileSnippet?.bio?.trim()
@@ -614,8 +700,11 @@ export default function Dashboard() {
   )
   const profileGuideScore = profileGuideReview?.completeness_score ?? 0
   const profileGuideCanEstimate = profileGuideScore >= PROFILE_ESTIMATE_READY_SCORE
-  const currentBlockWeekly = currentBlockBundle?.weekly ?? null
+  const currentBlockWeekly = mergeDashboardAnalysisSections(dashboardSectionPayloads)
   const currentBlockFatigue = currentBlockWeekly?.fatigue_index ?? null
+  const currentBlockFatigueComponents = currentBlockWeekly?.fatigue_components ?? null
+  const fatigueSectionLoading = sectionPending(dashboardSectionStatuses, dashboardSectionPayloads, 'fatigue_readiness')
+  const workloadSectionLoading = sectionPending(dashboardSectionStatuses, dashboardSectionPayloads, 'workload')
   const localMaxesKg = LIFT_ORDER.reduce((acc, lift) => {
     acc[lift] = parseDisplayWeightDraft(localMaxes[lift], unit)
     return acc
@@ -625,7 +714,8 @@ export default function Dashboard() {
     : null
   const liftBreakdownRows = LIFT_ORDER.map((lift) => {
     const liftAnalysis = findLiftAnalysis(currentBlockWeekly, lift)
-    const endStrength = currentBlockBundle?.historical.endStrength[lift] ?? currentBlockWeekly?.current_maxes?.[lift] ?? null
+    const actualMax = actualMaxes[lift] > 0 ? actualMaxes[lift] : null
+    const endStrength = currentBlockWeekly?.current_maxes?.[lift] ?? actualMax
     return {
       lift,
       endStrength,
@@ -863,26 +953,30 @@ export default function Dashboard() {
 
         <section className="if-mock-card">
           <div className="if-mock-card-label"><Activity size={12} /> Fatigue state</div>
-          {currentBlockLoading ? (
+          {fatigueSectionLoading ? (
             <Group gap="xs"><Loader size="sm" /><Text size="sm" c="dimmed">Loading...</Text></Group>
-          ) : currentBlockWeekly ? (
+          ) : currentBlockFatigueComponents || currentBlockFatigue !== null ? (
             <>
               <div className="if-mock-num" style={{ color: fatigueColor(currentBlockFatigue), fontSize: 42, fontWeight: 500, lineHeight: 1, marginBottom: 4 }}>
                 {currentBlockFatigue !== null ? `${(currentBlockFatigue * 100).toFixed(0)}%` : 'N/A'}
               </div>
               <div style={{ color: 'var(--color-text-secondary)', fontSize: 12, marginBottom: 8 }}>{fatigueLabel(currentBlockFatigue)} current state</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                {typeof currentBlockWeekly.fatigue_components?.window_mean_fi === 'number' && <span className="if-mock-pill">Mean {(currentBlockWeekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%</span>}
-                {typeof currentBlockWeekly.fatigue_components?.window_peak_fi === 'number' && <span className="if-mock-pill" style={{ background: 'var(--color-background-warning)', borderColor: 'var(--color-border-warning)', color: 'var(--color-text-warning)' }}>Peak {(currentBlockWeekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%</span>}
-                {currentBlockWeekly.fatigue_components?.fatigue_context_confidence && <span className="if-mock-pill" style={{ background: 'var(--color-background-success)', borderColor: 'var(--color-border-success)', color: 'var(--color-text-success)' }}>{currentBlockWeekly.fatigue_components.fatigue_context_confidence} confidence</span>}
+                {typeof currentBlockFatigueComponents?.window_mean_fi === 'number' && <span className="if-mock-pill">Mean {(currentBlockFatigueComponents.window_mean_fi * 100).toFixed(0)}%</span>}
+                {typeof currentBlockFatigueComponents?.window_peak_fi === 'number' && <span className="if-mock-pill" style={{ background: 'var(--color-background-warning)', borderColor: 'var(--color-border-warning)', color: 'var(--color-text-warning)' }}>Peak {(currentBlockFatigueComponents.window_peak_fi * 100).toFixed(0)}%</span>}
+                {currentBlockFatigueComponents?.fatigue_context_confidence && <span className="if-mock-pill" style={{ background: 'var(--color-background-success)', borderColor: 'var(--color-border-success)', color: 'var(--color-text-success)' }}>{currentBlockFatigueComponents.fatigue_context_confidence} confidence</span>}
               </div>
               <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, lineHeight: 1.6 }}>
-                Failures {((currentBlockWeekly.fatigue_components?.failure_stress ?? 0) * 100).toFixed(0)}% · Spike {((currentBlockWeekly.fatigue_components?.acute_spike_stress ?? 0) * 100).toFixed(0)}% · RPE {((currentBlockWeekly.fatigue_components?.rpe_stress ?? 0) * 100).toFixed(0)}% · Reservoir {((currentBlockWeekly.fatigue_components?.chronic_load_stress ?? 0) * 100).toFixed(0)}% · Strain {((currentBlockWeekly.fatigue_components?.monotony_stress ?? 0) * 100).toFixed(0)}%
+                Failures {((currentBlockFatigueComponents?.failure_stress ?? 0) * 100).toFixed(0)}% · Spike {((currentBlockFatigueComponents?.acute_spike_stress ?? 0) * 100).toFixed(0)}% · RPE {((currentBlockFatigueComponents?.rpe_stress ?? 0) * 100).toFixed(0)}% · Reservoir {((currentBlockFatigueComponents?.chronic_load_stress ?? 0) * 100).toFixed(0)}% · Strain {((currentBlockFatigueComponents?.monotony_stress ?? 0) * 100).toFixed(0)}%
               </div>
-              <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginTop: 4 }}>{currentBlockBundle?.block.startDate} → {currentBlockBundle?.block.endDate}</div>
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginTop: 4 }}>
+                {dashboardAnalysisWindow ? `${dashboardAnalysisWindow.start} -> ${dashboardAnalysisWindow.end}` : 'Current block'}
+              </div>
             </>
+          ) : dashboardAnalysisError ? (
+            <Text size="sm" c="red">Analysis unavailable.</Text>
           ) : (
-            <Text size="sm" c="dimmed">Block analysis unavailable.</Text>
+            <Text size="sm" c="dimmed">Fatigue analysis unavailable.</Text>
           )}
         </section>
 
@@ -891,24 +985,29 @@ export default function Dashboard() {
           <div style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)', display: 'grid', fontSize: 10, gap: 4, gridTemplateColumns: '1fr 80px 60px', letterSpacing: '0.07em', marginBottom: 4, paddingBottom: 5, textTransform: 'uppercase' }}>
             <span>Lift</span><span style={{ textAlign: 'right' }}>Current</span><span style={{ textAlign: 'right' }}>Trend</span>
           </div>
-          {currentBlockLoading ? (
+          {workloadSectionLoading ? (
             <Text size="sm" c="dimmed">Loading lift data...</Text>
-          ) : currentBlockWeekly ? liftBreakdownRows.map((row) => (
+          ) : currentBlockWeekly?.lifts ? liftBreakdownRows.map((row) => (
             <div className="if-lift-row" key={row.lift}>
               <span style={{ color: 'var(--color-text-primary)', fontSize: 13 }}>{LIFT_LABELS[row.lift]}</span>
               <span className="if-mock-num" style={{ fontSize: 13, textAlign: 'right' }}>{row.endStrength !== null ? displayWeight(row.endStrength, unit) : '--'}</span>
               <span className="if-mock-num" style={{ color: typeof row.progressionRate === 'number' && row.progressionRate > 0 ? 'var(--color-text-success)' : 'var(--color-text-secondary)', fontSize: 11, textAlign: 'right' }}>{typeof row.progressionRate === 'number' ? `${formatSignedKg(row.progressionRate, unit)}/wk` : '--'}</span>
             </div>
-          )) : (
+          )) : dashboardAnalysisError ? (
+            <Text size="sm" c="red">Lift analysis unavailable.</Text>
+          ) : (
             <Text size="sm" c="dimmed">Lift breakdown unavailable.</Text>
           )}
         </section>
       </div>
 
       <div className="if-dashboard-row if-dashboard-row-bottom">
-        <section className="if-mock-card">
+        <section className="if-mock-card if-dashboard-phases-card">
           <div style={{ alignItems: 'center', display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="if-mock-card-label" style={{ marginBottom: 0 }}><TrendingUp size={12} /> Program phases</div>
+            <div>
+              <div className="if-mock-card-label" style={{ marginBottom: 0 }}><TrendingUp size={12} /> Program phases</div>
+              <div className="if-dashboard-phase-week">Week {currentWeekNumber}</div>
+            </div>
             {editingPhases ? (
               <div style={{ display: 'flex', gap: 4 }}>
                 <button className="if-mock-icon-button" onClick={addPhase} aria-label="Add phase"><Plus size={15} /></button>
@@ -933,14 +1032,20 @@ export default function Dashboard() {
               ))}
             </Stack>
           ) : currentBlockPhases.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <div className="if-dashboard-phase-list">
               {currentBlockPhases.map((phase) => {
                 const color = phaseColor(phase, currentBlockPhases)
+                const state = phaseState(phase, currentWeekNumber)
                 return (
-                  <div key={`${phase.name}-${phase.start_week}`} style={{ alignItems: 'center', display: 'flex', gap: 8 }}>
-                    <span style={{ background: color, borderRadius: '50%', flexShrink: 0, height: 9, width: 9 }} />
-                    <span style={{ color: 'var(--color-text-secondary)', fontSize: 11, width: 44 }}>W{phase.start_week}-{phase.end_week}</span>
-                    <span style={{ color: 'var(--color-text-primary)', fontSize: 12 }}>{phase.name}</span>
+                  <div
+                    key={`${phase.name}-${phase.start_week}`}
+                    className="if-dashboard-phase-row"
+                    data-status={state}
+                    data-testid={`dashboard-phase-${state}`}
+                  >
+                    <span className="if-dashboard-phase-dot" style={{ background: color }} />
+                    <span className="if-dashboard-phase-range">W{phase.start_week}-{phase.end_week}</span>
+                    <span className="if-dashboard-phase-name">{phase.name}</span>
                   </div>
                 )
               })}

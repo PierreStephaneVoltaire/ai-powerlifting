@@ -264,6 +264,28 @@ export async function updateProfile(
   return getSettings(discordUsername) as Promise<UserSettings>
 }
 
+export async function updateAvatarUrl(discordUsername: string, avatarUrl: string | null): Promise<UserSettings> {
+  const existing = await getSettings(discordUsername)
+  if (!existing) {
+    throw new Error('Settings not found')
+  }
+
+  const now = new Date().toISOString()
+  await docClient.send(new UpdateCommand({
+    TableName: USER_TABLE,
+    Key: { pk: existing.pk },
+    UpdateExpression: 'SET avatar_url = :avatar, updated_at = :now',
+    ConditionExpression: 'attribute_exists(pk)',
+    ExpressionAttributeValues: {
+      ':avatar': avatarUrl,
+      ':now': now,
+    },
+  }))
+
+  cache.delete(usernameKey(discordUsername))
+  return getSettings(discordUsername) as Promise<UserSettings>
+}
+
 async function scanSettings(): Promise<UserSettings[]> {
   const settings: UserSettings[] = []
   let ExclusiveStartKey: Record<string, unknown> | undefined
