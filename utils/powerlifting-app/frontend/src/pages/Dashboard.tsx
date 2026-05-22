@@ -4,7 +4,7 @@ import { differenceInCalendarDays, format, parse } from 'date-fns'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
-import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, type LiftProfileReview } from '@/api/client'
+import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, fetchRankingPercentile, type LiftProfileReview, type RankingPercentileResult } from '@/api/client'
 import {
   fetchAnalysisManifest,
   fetchAnalysisSection,
@@ -14,6 +14,7 @@ import {
   type WeeklyAnalysis,
 } from '@/api/analytics'
 import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
+import { getSettings } from '@/api/settings'
 import { daysUntil } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
@@ -312,6 +313,10 @@ export default function Dashboard() {
   const [dashboardSectionStatuses, setDashboardSectionStatuses] = useState<Partial<Record<AnalysisSectionKey, string>>>({})
   const [dashboardAnalysisError, setDashboardAnalysisError] = useState<string | null>(null)
   const [profileSnippet, setProfileSnippet] = useState<PublicProfile | null>(null)
+  const [rankingPercentile, setRankingPercentile] = useState<RankingPercentileResult | null>(null)
+  const [rankingPercentileLoading, setRankingPercentileLoading] = useState(false)
+  const [rankingCountry, setRankingCountry] = useState<string | null>(null)
+  const [rankingRegion, setRankingRegion] = useState<string | null>(null)
   const dashboardAsOfDate = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
 
   useEffect(() => {
@@ -424,6 +429,61 @@ export default function Dashboard() {
       cancelled = true
     }
   }, [program, needsSetup])
+
+  // Load user's saved ranking location settings once
+  useEffect(() => {
+    let cancelled = false
+    if (needsSetup) return
+    getSettings().then((s) => {
+      if (!cancelled) {
+        setRankingCountry(s.ranking_country)
+        setRankingRegion(s.ranking_region)
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [needsSetup])
+
+  // Load ranking percentile once we have actual maxes + bodyweight + settings
+  // Uses actualMaxes (computed after program loads below) — but since this effect
+  // depends on program we re-derive them inline here to avoid ordering issues.
+  useEffect(() => {
+    let cancelled = false
+    if (needsSetup || !program) return
+
+    const sexCode = (program.meta?.sex === 'female' ? 'F' : 'M')
+    const bw = program.meta?.current_body_weight_kg
+    if (!bw || bw <= 0) return
+
+    // Derive actual block maxes inline (mirrors the computation below)
+    const inline: Record<string, number> = { squat: 0, bench: 0, deadlift: 0 }
+    for (const session of program.sessions ?? []) {
+      if (!session.completed || session.status === 'skipped') continue
+      if ((session.block || 'current') !== 'current') continue
+      for (const exercise of session.exercises ?? []) {
+        if (exercise.kg == null) continue
+        const name = exercise.name.toLowerCase()
+        if (name.includes('squat')     && exercise.kg > inline.squat)    inline.squat    = exercise.kg
+        if (name.includes('bench')     && exercise.kg > inline.bench)    inline.bench    = exercise.kg
+        if (name.includes('deadlift')  && exercise.kg > inline.deadlift) inline.deadlift = exercise.kg
+      }
+    }
+
+    setRankingPercentileLoading(true)
+    fetchRankingPercentile({
+      squat_kg:    inline.squat    > 0 ? inline.squat    : undefined,
+      bench_kg:    inline.bench    > 0 ? inline.bench    : undefined,
+      deadlift_kg: inline.deadlift > 0 ? inline.deadlift : undefined,
+      bodyweight_kg: bw,
+      sex_code: sexCode,
+      country: rankingCountry ?? undefined,
+      region:  rankingRegion  ?? undefined,
+    })
+      .then((data) => { if (!cancelled) setRankingPercentile(data) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setRankingPercentileLoading(false) })
+
+    return () => { cancelled = true }
+  }, [program, needsSetup, rankingCountry, rankingRegion])
 
   if (needsSetup) {
     return <SetupOnboarding />
@@ -893,6 +953,103 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+        </section>
+      </div>
+
+      {/* Percentile ranking row — full width, one card */}
+      <div className="if-dashboard-row" style={{ gridTemplateColumns: '1fr' }} data-testid="dashboard-ranking-percentile-row">
+        <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
+          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
+              <Trophy size={12} /> Percentile rankings
+            </div>
+            {rankingPercentile?.weight_class_label && (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
+                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
+              </span>
+            )}
+          </div>
+          {rankingPercentileLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Loader size="xs" />
+              <Text size="xs" c="dimmed">Loading rankings...</Text>
+            </div>
+          ) : !rankingPercentile ? (
+            <Text size="xs" c="dimmed">
+              {meta.current_body_weight_kg > 0
+                ? 'Rankings unavailable — dataset may still be loading.'
+                : 'Set your body weight to see percentile rankings.'}
+            </Text>
+          ) : (() => {
+            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
+            const fmtTop = (beaten: number | null | undefined): string | null => {
+              if (typeof beaten !== 'number') return null
+              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
+            }
+            const barPct = (userKg: number, mean: number | null | undefined) =>
+              mean && mean > 0 ? Math.min(100, (userKg / mean) * 100) : 0
+
+            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
+            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
+              { key: 'squat',    label: 'Squat',    userKg: actualMaxes.squat,    color: LIFT_COLORS.squat },
+              { key: 'bench',    label: 'Bench',    userKg: actualMaxes.bench,    color: LIFT_COLORS.bench },
+              { key: 'deadlift', label: 'Deadlift', userKg: actualMaxes.deadlift, color: LIFT_COLORS.deadlift },
+              { key: 'total',    label: 'Total',    userKg: actualTotal,          color: 'var(--accent-blue)' },
+            ]
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
+                  if (userKg <= 0) return null
+                  const g  = rankingPercentile.global?.[key] as number | null
+                  const n  = rankingPercentile.national?.[key] as number | null
+                  const r  = rankingPercentile.regional?.[key] as number | null
+                  type CardKey = keyof typeof rankingPercentile.global
+                  const top10k = `top10_mean_${key}` as CardKey
+                  const gMean = rankingPercentile.global?.[top10k] as number | null
+                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
+                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
+                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
+
+                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
+                    { beaten: g, mean: gMean, label: 'worldwide' },
+                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
+                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
+                  ]
+
+                  return (
+                    <div key={key}>
+                      {/* Lift name + current value */}
+                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
+                        {label} — {displayWeight(userKg, unit)}
+                      </div>
+                      {/* One text + bar block per scope */}
+                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
+                        const top = fmtTop(beaten)
+                        if (!top) return null
+                        const pct = barPct(userKg, mean)
+                        return (
+                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
+                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
+                              {top} {scopeLabel}
+                            </div>
+                            <div className="if-progress-track">
+                              <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+                {!rankingCountry && (
+                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
+                )}
+                {rankingCountry && !rankingRegion && (
+                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
+                )}
+              </div>
+            )
+          })()}
         </section>
       </div>
 

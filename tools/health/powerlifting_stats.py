@@ -4,15 +4,21 @@ Powerlifting Stats Tool
 A tool for the main agent (health tool) to pull the OpenPowerlifting
 dataset from S3, extract filter categories for the UI, and compute
 rankings for a user's SBD numbers, Total, and Dots.
+
+Also provides compute_ranking_percentiles() which generates a
+national/regional/global percentile card for the dashboard, using a
+deduplicated (best-total-per-lifter), last-3-years slice narrowed to
+the 3 weight classes closest to the user's bodyweight.
 """
 
 import os
 import glob
 import logging
 import threading
+from datetime import date
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 # Import configuration from the main app
 try:
@@ -47,11 +53,12 @@ def _parse_csvs() -> pd.DataFrame:
     logger.info(f"[Powerlifting] Found {len(csv_files)} dataset(s): {csv_files}")
 
     usecols = [
-        "Federation", "MeetCountry", "State", "Equipment", "Sex", "AgeClass", "Event",
+        "Name", "Federation", "MeetCountry", "State", "Equipment", "Sex", "AgeClass", "Event",
         "Best3SquatKg", "Best3BenchKg", "Best3DeadliftKg", "TotalKg",
         "Dots", "Age", "BodyweightKg", "Date"
     ]
     dtypes = {
+        "Name": "str",
         "Federation": "category",
         "MeetCountry": "category",
         "State": "category",
@@ -307,6 +314,207 @@ def analyze_stats(
             results["analysis"][label] = rank_value(user_val, filtered_df[col])
 
     return results
+
+
+
+# =============================================================================
+# IPF weight classes — used to determine nearest 3 classes for percentile card
+# =============================================================================
+
+_IPF_CLASSES: Dict[str, list] = {
+    "M": [59.0, 66.0, 74.0, 83.0, 93.0, 105.0, 120.0, float("inf")],
+    "F": [47.0, 52.0, 57.0, 63.0, 69.0, 76.0, 84.0, float("inf")],
+}
+
+# Cache: (sex_code, lower_bound) → sliced DataFrame
+_wc_slice_cache: Dict[str, pd.DataFrame] = {}
+_wc_slice_lock = threading.Lock()
+
+
+def _user_class_bounds(bodyweight_kg: float, sex_code: str) -> tuple:
+    """Return (lower_exclusive_kg, upper_inclusive_kg) for the user's IPF weight
+    class, plus ±1 adjacent class to capture WRPF/USAPL/etc. variants that sit
+    fractionally below the IPF limit (e.g. 82.5 for the 83kg slot).
+
+    We include the class below and above so a 78kg lifter in the 83kg class
+    is compared against the 74kg AND 83kg AND 93kg pools — i.e. anyone whose
+    bodyweight is >66kg and <=93kg.  That gives 3 neighbouring classes, which
+    is what the plan requested.
+    """
+    classes = _IPF_CLASSES.get(sex_code)
+    if not classes or bodyweight_kg <= 0:
+        return (0.0, float("inf"))
+
+    # Find the user's own class index (first class ceiling >= bodyweight)
+    idx = next((i for i, c in enumerate(classes) if bodyweight_kg <= c), len(classes) - 1)
+
+    # Span ±1 class around the user's class, clamped to valid range
+    start = max(0, idx - 1)
+    end   = min(len(classes) - 1, idx + 1)
+
+    lower = classes[start - 1] if start > 0 else 0.0
+    upper = classes[end]  # inf for the open/super class
+    return (lower, upper)
+
+
+def _get_or_build_wc_slice(df: pd.DataFrame, bodyweight_kg: float, sex_code: str) -> pd.DataFrame:
+    """Lazily build and cache the ±1-class-neighbourhood slice.
+
+    Uses BodyweightKg directly — federation-agnostic.  A WRPF 82.5kg lifter
+    fits inside the 83kg band (>74 and <=83) just as an IPF 83kg lifter does.
+    """
+    lower, upper = _user_class_bounds(bodyweight_kg, sex_code)
+    cache_key = f"{sex_code}_{lower}_{upper}"
+    with _wc_slice_lock:
+        if cache_key not in _wc_slice_cache:
+            mask = (df["BodyweightKg"] > lower) & (df["BodyweightKg"] <= upper)
+            _wc_slice_cache[cache_key] = df[mask].copy()
+        return _wc_slice_cache[cache_key]
+
+
+def _three_year_deduplicated(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep last 3 calendar years; deduplicate by Name keeping best TotalKg."""
+    current_year = date.today().year
+    min_year = current_year - 2
+    if "Year" not in df.columns:
+        return df
+    recent = df[(df["Year"] >= min_year) & (df["Year"] <= current_year)].copy()
+    if "Name" not in recent.columns or recent.empty:
+        return recent
+    recent = recent.sort_values("TotalKg", ascending=False, na_position="last")
+    return recent.drop_duplicates(subset=["Name"], keep="first")
+
+
+def _percentile_for(value: Optional[float], series: "pd.Series") -> Optional[int]:
+    """Top-X percentile (0-100) of value within series; None if <10 entries."""
+    if value is None or value <= 0:
+        return None
+    arr = series.dropna().values
+    if len(arr) < 10:
+        return None
+    return int(round(float(np.sum(arr < value) / len(arr) * 100)))
+
+
+def _top10_mean_for(series: "pd.Series") -> Optional[float]:
+    """Mean of the top 10% of values in series; None if <10 entries."""
+    arr = series.dropna().values
+    if len(arr) < 10:
+        return None
+    threshold = np.percentile(arr, 90)
+    top10 = arr[arr >= threshold]
+    if len(top10) == 0:
+        return None
+    return round(float(top10.mean()), 1)
+
+
+def compute_ranking_percentiles(
+    df: pd.DataFrame,
+    squat_kg: Optional[float] = None,
+    bench_kg: Optional[float] = None,
+    deadlift_kg: Optional[float] = None,
+    bodyweight_kg: Optional[float] = None,
+    sex_code: Optional[str] = None,
+    country: Optional[str] = None,
+    region: Optional[str] = None,
+    age_class: Optional[str] = None,
+    equipment: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Compute national/regional/global percentile cards for the dashboard.
+
+    Pipeline:
+    1. Narrow df to 3 nearest IPF weight classes (by bodyweight_kg + sex_code)
+    2. Apply sex / age_class / equipment filters
+    3. Last 3 calendar years, deduplicate by Name (keep best TotalKg)
+    4. Compute percentiles for Squat/Bench/Deadlift/Total across 3 geo scopes
+
+    Returns::
+
+        {
+            "global":   {"squat": 72, "bench": 65, "deadlift": 80, "total": 74},
+            "national": {"squat": 68, ...},   # None when country not given
+            "regional": {"squat": 55, ...},   # None when region not given
+            "meta":     {"global_n": 3200, "national_n": 410, "regional_n": 80},
+        }
+
+    Any lift value is None when <10 comparison lifters or lift not provided.
+    """
+    total_kg: Optional[float] = None
+    if squat_kg and bench_kg and deadlift_kg:
+        total_kg = squat_kg + bench_kg + deadlift_kg
+
+    # 1. Weight-class slice
+    base_df = df
+    if bodyweight_kg and bodyweight_kg > 0 and sex_code in ("M", "F"):
+        base_df = _get_or_build_wc_slice(df, bodyweight_kg, sex_code)
+
+    # 2. Common attribute filters — always enforce SBD (full-power) event
+    mask = pd.Series(True, index=base_df.index)
+    if "Event" in base_df.columns:
+        mask &= base_df["Event"].astype(str).str.strip() == "SBD"
+    if sex_code and "Sex" in base_df.columns:
+        mask &= base_df["Sex"].astype(str).str.strip() == sex_code
+    if age_class and "AgeClass" in base_df.columns:
+        mask &= base_df["AgeClass"].astype(str).str.strip() == age_class
+    if equipment and "Equipment" in base_df.columns:
+        mask &= base_df["Equipment"].astype(str).str.strip() == equipment
+    filtered_base = base_df[mask].copy()
+
+    # 3. Recency + deduplication (shared for all geo scopes)
+    global_df = _three_year_deduplicated(filtered_base)
+
+    # 4. Geo sub-frames
+    national_df: Optional[pd.DataFrame] = None
+    regional_df: Optional[pd.DataFrame] = None
+    if country and "MeetCountry" in global_df.columns:
+        nat_mask = global_df["MeetCountry"].astype(str).str.strip() == country
+        national_df = global_df[nat_mask].copy()
+        if region and "State" in national_df.columns:
+            reg_mask = national_df["State"].astype(str).str.strip() == region
+            regional_df = national_df[reg_mask].copy()
+
+    def _card(scope_df: Optional[pd.DataFrame]) -> Dict[str, Any]:
+        if scope_df is None or scope_df.empty:
+            return {
+                "squat": None, "bench": None, "deadlift": None, "total": None,
+                "top10_mean_squat": None, "top10_mean_bench": None,
+                "top10_mean_deadlift": None, "top10_mean_total": None,
+            }
+        empty = pd.Series(dtype="float32")
+        s_ser  = scope_df["Best3SquatKg"]    if "Best3SquatKg"    in scope_df.columns else empty
+        b_ser  = scope_df["Best3BenchKg"]    if "Best3BenchKg"    in scope_df.columns else empty
+        dl_ser = scope_df["Best3DeadliftKg"] if "Best3DeadliftKg" in scope_df.columns else empty
+        t_ser  = scope_df["TotalKg"]         if "TotalKg"         in scope_df.columns else empty
+        return {
+            "squat":    _percentile_for(squat_kg,    s_ser),
+            "bench":    _percentile_for(bench_kg,    b_ser),
+            "deadlift": _percentile_for(deadlift_kg, dl_ser),
+            "total":    _percentile_for(total_kg,    t_ser),
+            "top10_mean_squat":    _top10_mean_for(s_ser),
+            "top10_mean_bench":    _top10_mean_for(b_ser),
+            "top10_mean_deadlift": _top10_mean_for(dl_ser),
+            "top10_mean_total":    _top10_mean_for(t_ser),
+        }
+
+    # Resolve human-readable weight class label for the pool
+    weight_class_label: Optional[str] = None
+    if bodyweight_kg and bodyweight_kg > 0 and sex_code in ("M", "F"):
+        classes = _IPF_CLASSES[sex_code]
+        for cls in classes:
+            if bodyweight_kg <= cls:
+                weight_class_label = f"{int(cls)}kg" if cls != float("inf") else f"{int(classes[-2])}kg+"
+                break
+
+    return {
+        "global":   _card(global_df),
+        "national": _card(national_df),
+        "regional": _card(regional_df),
+        "weight_class_label": weight_class_label,
+        "meta": {
+            "global_n":   len(global_df),
+            "national_n": len(national_df) if national_df is not None else None,
+            "regional_n": len(regional_df) if regional_df is not None else None,
+        },
+    }
 
 
 if __name__ == "__main__":

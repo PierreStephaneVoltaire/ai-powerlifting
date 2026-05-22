@@ -882,4 +882,50 @@ export async function analyzeStats(payload: any): Promise<any> {
   return res.data
 }
 
+export interface RankingPercentileCard {
+  squat: number | null
+  bench: number | null
+  deadlift: number | null
+  total: number | null
+  top10_mean_squat: number | null
+  top10_mean_bench: number | null
+  top10_mean_deadlift: number | null
+  top10_mean_total: number | null
+}
+
+export interface RankingPercentileResult {
+  global: RankingPercentileCard
+  national: RankingPercentileCard | null
+  regional: RankingPercentileCard | null
+  weight_class_label: string | null
+  meta: {
+    global_n: number
+    national_n: number | null
+    regional_n: number | null
+  }
+}
+
+export interface RankingPercentileParams {
+  squat_kg?: number
+  bench_kg?: number
+  deadlift_kg?: number
+  bodyweight_kg?: number
+  sex_code?: string
+  country?: string
+  region?: string
+  age_class?: string
+  equipment?: string
+}
+
+export async function fetchRankingPercentile(params: RankingPercentileParams): Promise<RankingPercentileResult> {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value))
+    }
+  }
+  const res = await api.get<RankingPercentileResult>(`/stats/ranking_percentile?${query.toString()}`)
+  return res.data
+}
+
 export default api

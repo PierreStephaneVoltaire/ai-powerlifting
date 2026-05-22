@@ -3827,6 +3827,32 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
                 "required": [],
             },
         },
+        "powerlifting_ranking_percentile": {
+            "name": "powerlifting_ranking_percentile",
+            "description": (
+                "Returns national/regional/global top-percentile cards for the dashboard. "
+                "Filters the OpenPowerlifting dataset to the 3 nearest IPF weight classes, "
+                "last 3 calendar years, deduplicated by lifter (best total per name). "
+                "Returns percentile (0-100) for Squat/Bench/Deadlift/Total across global, "
+                "national (country), and regional (country+region) scopes. "
+                "A value is null when <10 comparison lifters or the lift was not provided."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "squat_kg": {"type": "number", "description": "User's best squat in kg"},
+                    "bench_kg": {"type": "number", "description": "User's best bench in kg"},
+                    "deadlift_kg": {"type": "number", "description": "User's best deadlift in kg"},
+                    "bodyweight_kg": {"type": "number", "description": "User's bodyweight in kg"},
+                    "sex_code": {"type": "string", "description": "'M' or 'F'"},
+                    "country": {"type": "string", "description": "Filter national scope (MeetCountry value from dataset)"},
+                    "region": {"type": "string", "description": "Filter regional scope (State value from dataset)"},
+                    "age_class": {"type": "string", "description": "Filter by age class"},
+                    "equipment": {"type": "string", "description": "Filter by equipment (e.g. Raw)"},
+                },
+                "required": [],
+            },
+        },
     }
 
 
@@ -4218,6 +4244,28 @@ def _do_analyze_powerlifting_stats(args):
          bodyweight_kg=args.get("bodyweight_kg"),
          sex_code=args.get("sex_code"),
      )
+
+
+def _do_powerlifting_ranking_percentile(args):
+    from powerlifting_stats import load_data, compute_ranking_percentiles, DatasetNotReadyError
+    try:
+        df = load_data()
+    except DatasetNotReadyError as e:
+        return f"ERROR: Dataset not ready. {str(e)}"
+    except FileNotFoundError as e:
+        return f"ERROR: Dataset missing. {str(e)}"
+    return compute_ranking_percentiles(
+        df,
+        squat_kg=args.get("squat_kg"),
+        bench_kg=args.get("bench_kg"),
+        deadlift_kg=args.get("deadlift_kg"),
+        bodyweight_kg=args.get("bodyweight_kg"),
+        sex_code=args.get("sex_code"),
+        country=args.get("country"),
+        region=args.get("region"),
+        age_class=args.get("age_class"),
+        equipment=args.get("equipment"),
+    )
 
 
 def _do_export_program_markdown(args: Dict[str, Any]) -> str:
@@ -4713,6 +4761,7 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         "glossary_estimate_muscles": lambda: glossary_estimate_muscles(args["id"]),
         "powerlifting_filter_categories": lambda: asyncio.to_thread(_do_powerlifting_filter_categories, args),
         "analyze_powerlifting_stats": lambda: asyncio.to_thread(_do_analyze_powerlifting_stats, args),
+        "powerlifting_ranking_percentile": lambda: asyncio.to_thread(_do_powerlifting_ranking_percentile, args),
     }
 
     handler = ROUTES.get(name)

@@ -7,6 +7,7 @@ import {
   updateNickname,
   updateAvatarUrl,
   updateProfile,
+  updateRankingLocation,
   validateNickname,
   invalidateCache,
   type ProfileVisibility,
@@ -160,3 +161,24 @@ export async function updateAvatarHandler(req: Request, res: Response): Promise<
 
   res.json({ data: settings })
 }
+
+export async function updateRankingLocationHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user) {
+    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
+  }
+
+  const { ranking_country, ranking_region } = req.body
+  if (ranking_country !== undefined && ranking_country !== null && typeof ranking_country !== 'string') {
+    throw new AppError('ranking_country must be a string or null', 400)
+  }
+  if (ranking_region !== undefined && ranking_region !== null && typeof ranking_region !== 'string') {
+    throw new AppError('ranking_region must be a string or null', 400)
+  }
+
+  const settings = await updateRankingLocation(req.user.username, {
+    ranking_country: ranking_country ?? null,
+    ranking_region: ranking_region ?? null,
+  })
+  res.json({ data: settings })
+}
+

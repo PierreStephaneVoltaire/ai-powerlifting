@@ -16,6 +16,8 @@ export interface UserSettings {
   display_name: string
   bio: string
   public_training_summary_enabled: boolean
+  ranking_country: string | null
+  ranking_region: string | null
   created_at: string
   updated_at: string
 }
@@ -89,4 +91,13 @@ export async function uploadProfileAvatar(
     xhr.open('POST', `${API_BASE}/settings/avatar`)
     xhr.send(formData)
   })
+}
+
+
+export async function updateRankingLocation(input: {
+  ranking_country: string | null
+  ranking_region: string | null
+}): Promise<UserSettings> {
+  const res = await api.put<{ data: UserSettings }>('/settings/ranking-location', input)
+  return res.data.data
 }

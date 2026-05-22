@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import multer from 'multer'
-import { getSettingsHandler, updateAvatarHandler, updateNicknameHandler, updateProfileHandler } from '../controllers/settingsController'
+import { getSettingsHandler, updateAvatarHandler, updateNicknameHandler, updateProfileHandler, updateRankingLocationHandler } from '../controllers/settingsController'
 
 export const settingsRouter = Router()
 
@@ -22,4 +22,5 @@ const avatarUpload = multer({
 settingsRouter.get('/', getSettingsHandler)
 settingsRouter.put('/nickname', updateNicknameHandler)
 settingsRouter.put('/profile', updateProfileHandler)
+settingsRouter.put('/ranking-location', updateRankingLocationHandler)
 settingsRouter.post('/avatar', avatarUpload.single('avatar'), updateAvatarHandler)
