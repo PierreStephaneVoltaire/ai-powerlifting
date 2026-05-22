@@ -954,10 +954,7 @@ export default function Dashboard() {
             </div>
           )}
         </section>
-      </div>
 
-      {/* Percentile ranking row — full width, one card */}
-      <div className="if-dashboard-row" style={{ gridTemplateColumns: '1fr' }} data-testid="dashboard-ranking-percentile-row">
         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
           <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
             <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
@@ -986,8 +983,11 @@ export default function Dashboard() {
               if (typeof beaten !== 'number') return null
               return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
             }
-            const barPct = (userKg: number, mean: number | null | undefined) =>
-              mean && mean > 0 ? Math.min(100, (userKg / mean) * 100) : 0
+            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
+              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
+              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
+              return 0;
+            }
 
             const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
             const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
@@ -1026,14 +1026,19 @@ export default function Dashboard() {
                       {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
                         const top = fmtTop(beaten)
                         if (!top) return null
-                        const pct = barPct(userKg, mean)
+                        const pct = barPct(userKg, mean, beaten)
                         return (
                           <div key={scopeLabel} style={{ marginBottom: 8 }}>
                             <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
                               {top} {scopeLabel}
                             </div>
-                            <div className="if-progress-track">
-                              <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
+                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
+                              <div className="if-progress-track" style={{ flex: 1 }}>
+                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
+                              </div>
+                              {mean && mean > 0 && (
+                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
+                              )}
                             </div>
                           </div>
                         )
@@ -1051,6 +1056,7 @@ export default function Dashboard() {
             )
           })()}
         </section>
+        
       </div>
 
       <div className="if-dashboard-row if-dashboard-row-mid">

@@ -455,7 +455,7 @@
 }
 
 .if-dashboard-row-top {
-  grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.6fr) minmax(180px, 1fr);
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.4fr) minmax(160px, 0.9fr) minmax(220px, 1.2fr);
 }
 
 .if-dashboard-row-mid {
