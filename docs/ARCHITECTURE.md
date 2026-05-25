@@ -26,7 +26,7 @@ Client
     -> chunked delivery
 ```
 
-The normal request path is `api/completions.py -> flow.runner.run_if_flow`. Older OpenHands SDK modules still exist in the repo, but they are not the primary chat execution path.
+The normal request path is `api/completions.py -> flow.runner.run_if_flow`.
 
 ---
 

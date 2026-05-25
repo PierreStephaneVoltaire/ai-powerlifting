@@ -12,8 +12,6 @@ It is deployed on a personal Kubernetes (k3s) cluster and used personally, which
 
 **Current:** OpenRouter (LLM provider), OpenCode (planner and execution runtime), Discord + OpenWebUI + OpenAI-compatible HTTP (interaction layers), DynamoDB + LanceDB + SQLite (state), Prometheus + Loki + Grafana (observability), Rancher (cluster management).
 
-Older OpenHands SDK modules still exist in the repository, but the primary request path is now the OpenCode planner/runtime flow.
-
 ---
 
 ## How It Works
@@ -125,7 +123,7 @@ High-frequency capability gaps are useful signals for where new tools, specialis
 Domain experts are discovered from `specialists/*/specialist.yaml`. Each is a YAML config plus a Jinja2 prompt template, so adding a specialist is primarily configuration and prompt work rather than routing code.
 
 <details>
-<summary><strong>Code & Infrastructure (17 specialists)</strong></summary>
+<summary><strong>Code &amp; Infrastructure (17 specialists)</strong></summary>
 
 | Specialist | Purpose | Key Tools |
 | --- | --- | --- |
@@ -150,7 +148,7 @@ Domain experts are discovered from `specialists/*/specialist.yaml`. Each is a YA
 </details>
 
 <details>
-<summary><strong>Reasoning, Planning & Communication (15 specialists)</strong></summary>
+<summary><strong>Reasoning, Planning &amp; Communication (15 specialists)</strong></summary>
 
 | Specialist | Purpose |
 | --- | --- |
@@ -173,7 +171,7 @@ Domain experts are discovered from `specialists/*/specialist.yaml`. Each is a YA
 </details>
 
 <details>
-<summary><strong>Documents, Analysis & Learning (12 specialists)</strong></summary>
+<summary><strong>Documents, Analysis &amp; Learning (12 specialists)</strong></summary>
 
 | Specialist | Purpose |
 | --- | --- |
@@ -193,7 +191,7 @@ Domain experts are discovered from `specialists/*/specialist.yaml`. Each is a YA
 </details>
 
 <details>
-<summary><strong>Domain-Specific & Meta (9 specialists)</strong></summary>
+<summary><strong>Domain-Specific &amp; Meta (9 specialists)</strong></summary>
 
 | Specialist | Purpose | Key Integration |
 | --- | --- | --- |
@@ -281,7 +279,7 @@ Human collaboration layer — TypeScript/Node.js apps that provide visual interf
 | **Finance Portal** | 3002 | Net worth, investments, accounts, goals, and cashflow |
 | **Diary Portal** | 3003 | Journal entries and life-load signals injected into runtime context |
 | **Proposals Portal** | 3004 | Kanban board for reviewing agent-proposed directives before they take effect |
-| **Powerlifting App** | 3005 | Training sessions, program state, analytics, imports, and templates |
+| **Powerlifting App** | 3005 | Training sessions, program state, analytics, imports, and templates
 
 ---
 

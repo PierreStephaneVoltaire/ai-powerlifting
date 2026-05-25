@@ -45,7 +45,7 @@ The powerlifting app is a single-athlete training portal that combines:
 - optional S3-backed video attachments
 - Discord OAuth authentication with generic user mappings in `if-user`
 
-The frontend is React 19 + Vite + TypeScript + Mantine. The backend is
+The frontend is React 19 + Vite + TypeScript + Mantine 9. The backend is
 Express/TypeScript. Most serious analytics and AI work does not happen inside
 the Node backend itself. The backend is primarily a thin transport layer that
 calls IF health tools through the IF agent API.
@@ -592,8 +592,8 @@ prompts, but the deterministic fatigue math does not directly adjust for them.
 
 ## Analysis Page: Data Sources And Render Path
 
-`frontend/src/pages/AnalysisPage.tsx` has three top-level section tabs (Weekly,
-Blocks, Compare) toggled via `?type=` URL param.
+`frontend/src/pages/AnalysisPage.tsx` has four top-level section tabs (Weekly,
+Blocks, Compare, Maxes) toggled via `?type=` URL param.
 
 ### Weekly tab data sources
 
@@ -2440,15 +2440,18 @@ Full route list from `frontend/src/App.tsx`:
 | `/session/:date/:index?`       | `SessionDetailPage`   | Full-page session editor                        |
 | `/list/:date/:index?`          | `SessionDetailPage`   | Legacy alias                                    |
 | `/list`                        | `ListPage`            | Redirect → `/sessions?view=Compact`             |
-| `/analysis`                    | `AnalysisPage`        | Full analytics hub (Weekly/Blocks/Compare tabs) |
+| `/analysis`                    | `AnalysisPage`        | Full analytics hub (Weekly/Blocks/Compare/Maxes tabs) |
 | `/rankings`                    | `RankingsPage`        | OpenPowerlifting rankings lookup                |
 | `/notes`                       | `NotesPage`           | Dated program notes                             |
-| `/maxes`                       | `MaxesPage`           | Max history viewer                              |
+| `/log`                         | `LogPage`             | Log hub — links to Notes, Supplements, and Biometrics |
+| `/maxes`                       | redirect              | → `/analysis?type=maxes` (no separate page)       |
 | `/supplements`                 | `SupplementsPage`     | Supplement phase CRUD                           |
 | `/biometrics`                  | `BiometricsPage`      | Diet and biometrics notes                       |
 | `/diet`                        | `BiometricsPage`      | Alias                                           |
 | `/videos`                      | `VideosPage`          | Video library                                   |
 | `/profiles`                    | `ProfilesPage`        | Public profile search                           |
+| `/profiles/:nickname`          | `ProfileDetailPage`   | Public lifter profile view                      |
+| `/profile`                     | `ProfilePage`         | Authenticated user's own account and profile management |
 | `/tools`                       | `ToolsPage`           | Tool hub                                        |
 | `/tools/plate`                 | `PlateCalculator`     |                                                 |
 | `/tools/dots`                  | `DotsCalculator`      |                                                 |
@@ -2501,6 +2504,9 @@ Settings/Profile routes:
 - `PUT /api/settings/profile`
   Updates `profile_visibility`, `display_name`, `bio`, and
   `public_training_summary_enabled`.
+- `POST /api/settings/avatar`
+  Uploads a profile avatar image. Accepts image files up to the configured size
+  limit. Stores in S3 and updates the user's `avatar_url` in `if-user`.
 - `GET /api/profiles/search?q=...`
   Scans `if-user`, returns public profiles plus the viewer's own profile, and
   limits results to 50.
@@ -2597,11 +2603,12 @@ Dedicated per-lift profile editor (squat/bench/deadlift). Includes:
 - INOL low/high threshold overrides
 - e1RM multiplier with AI suggestions from `fetchE1rmMultiplierSuggestions()`
 
-### MaxesPage (`/maxes`)
+### MaxesPage
 
 All-time and windowed max history. Windows: 1 week / 1 month / 3 months / 6 months /
 1 year / all time. Includes a Big 3 pie chart (squat/bench/deadlift proportions).
-All data is derived locally from program store sessions.
+All data is derived locally from program store sessions. Rendered as the `maxes` tab
+inside `AnalysisPage` (`/analysis?type=maxes`). The `/maxes` route redirects there.
 
 ### SupplementsPage (`/supplements`)
 
@@ -2769,7 +2776,7 @@ controller must still merge or pass sessions explicitly.
 | `dietNotes.ts`    | 2 endpoints: get/put                                                                                                                                                                                                                                 |
 | `blockNotes.ts`   | 2 endpoints: get/put dated program notes                                                                                                                                                                                                              |
 | `stats.ts`        | 2 endpoints: categories/analyze (proxy to OpenPowerlifting)                                                                                                                                                                                          |
-| `settings.ts`     | 3 endpoints: get/nickname/profile                                                                                                                                                                                                                    |
+| `settings.ts`     | 4 endpoints: get/nickname/profile/avatar                                                                                                                                                                                                             |
 
 ## Bottom Line
 
@@ -2784,7 +2791,7 @@ The powerlifting app is not just a logbook. It is a layered system:
 - glossary metadata for anatomy and fatigue semantics
 - deterministic analysis in `tools/health/analytics.py` (85+ tools)
 - narrow AI interpretation layers in `tools/health/*_ai.py`
-- a React Analysis page with Weekly, Blocks, and Compare tabs
+- a React Analysis page with Weekly, Blocks, Compare, and Maxes tabs
 
 The most important customizations are the ones that make the portal athlete-
 specific instead of textbook-generic:

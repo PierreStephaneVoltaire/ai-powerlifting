@@ -2,8 +2,6 @@
 
 A personal FastAPI agent service with planner-based routing, specialist execution, scoped MCP tools, and durable operator memory. Routes through OpenRouter and OpenCode, persists knowledge in LanceDB, stores directives and domain state in DynamoDB, and delivers through Discord, OpenWebUI, and an OpenAI-compatible HTTP API.
 
-Older OpenHands SDK modules still exist in the tree, but the primary request path is now `api/completions.py -> flow.runner.run_if_flow()` using an OpenCode planner and OpenCode domain/technical runs. Treat SDK-era paths as legacy/support unless code inspection proves they are active.
-
 ## Tech Stack
 
 - Python 3.12, FastAPI, OpenCode subprocess runtime
@@ -122,7 +120,7 @@ app/
 │   │   ├── interceptor.py   # Bypass routing
 │   │   ├── cache.py         # Conversation cache
 │   │   └── commands.py      # Command parsing (/reset, /pondering, /reflect, etc.)
-│   ├── app_sandbox/         # Legacy LocalWorkspace manager retained for support paths
+│   ├── app_sandbox/         # Legacy LocalWorkspace manager
 │   │   ├── __init__.py      # init_local_sandbox, exported entry point
 │   │   └── local.py         # LocalSandboxManager, get_local_sandbox
 │   ├── files/               # FILES: metadata parsing (strip from agent output)
@@ -320,7 +318,7 @@ Domain experts selected by the OpenCode planner. Each has its own `specialist.ya
 
 **Current thinking skills**: `deep_think`, `sequential_plan`, and `parallel_analysis` are prompt packages loaded when requested.
 
-`agentic: true` remains in some YAML files as legacy metadata. In the current OpenCode path, specialist execution is controlled by `flow/runner.py` and scoped MCP configuration, not by SDK-era subagent code.
+`agentic: true` may appear in some YAML files as legacy metadata. In the current OpenCode path, specialist execution is controlled by `flow/runner.py` and scoped MCP configuration.
 
 **Model routing for specialists**: The current planner chooses the concrete `selected_model` for the run. The specialist `preset` field remains useful metadata and may still be used by legacy/support code, but it is not the current primary execution selector.
 
@@ -452,7 +450,6 @@ The app-side MCP manager (`mcp_runtime/manager.py`) starts configured categories
 
 Reuse helpers such as `health.program_store.ProgramStore._floats_to_decimals`, `tools/health/core.py::_floats_to_decimals`, or equivalent store-level helpers.
 
-Older OpenHands SDK tool classes and `register_tool()` patterns may still appear in git history or stale support modules. Do not introduce new code in that style unless you have verified the path still executes.
 
 ## Channels
 
@@ -613,7 +610,7 @@ TypeScript/Node.js apps in `utils/`:
 | Finance | 3002 | Net worth, investments, cashflow | `if-finance` |
 | Diary | 3003 | Mental health journaling and signals | `if-diary-entries`, `if-diary-signals` |
 | Proposals | 3004 | Kanban for agent-proposed directives | `if-proposals` |
-| Powerlifting | 3005 | Training tracking, analytics, block comparison, rankings | `if-health` |
+| Powerlifting | 3005 | Training tracking, analytics, block comparison, rankings, maxes history | `if-health` |
 
 ## Commands
 
