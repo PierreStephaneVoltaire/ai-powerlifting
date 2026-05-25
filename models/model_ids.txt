@@ -31,7 +31,7 @@ google/gemma-4-31b-it
 deepseek/deepseek-r1-0528
 deepseek/deepseek-v3.2
 deepseek/deepseek-v3.2-speciale
-
+deepseek/deepseek-v4-flash
 # === Qwen ===
 qwen/qwen3-max-thinking
 qwen/qwen3-coder-next

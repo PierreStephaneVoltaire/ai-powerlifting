@@ -15,7 +15,7 @@ import {
 } from '@/api/analytics'
 import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
 import { getSettings } from '@/api/settings'
-import { daysUntil } from '@/utils/dates'
+import { daysUntil, formatDateShort } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
 import { resolveTrainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
@@ -43,7 +43,7 @@ import {
   Table,
 } from '@mantine/core'
 import { useAuth } from '@/auth/AuthProvider'
-import type { Exercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
+import type { Exercise, PlannedExercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 type BigThreeLift = typeof LIFT_ORDER[number]
@@ -538,6 +538,16 @@ export default function Dashboard() {
 
   const wellnessTrend = buildWellnessTrend(sessions)
 
+  const nextWorkout = sessions
+    .map((session, index) => ({ session, index }))
+    .filter(({ session }) => (session.block ?? 'current') === 'current')
+    .filter(({ session }) => session.status !== 'skipped')
+    .filter(({ session }) => session.date >= todayStr)
+    .filter(({ session }) => (session.planned_exercises?.length ?? 0) > 0 || (session.exercises?.length ?? 0) > 0)
+    .sort((a, b) => a.session.date.localeCompare(b.session.date) || a.index - b.index)[0]?.session ?? null
+
+  const MAX_VISIBLE_EXERCISES = 3
+
   const startEditingMaxes = () => {
     setLocalMaxes({
       squat: displayWeightDraft(meta.target_squat_kg, unit),
@@ -844,6 +854,44 @@ export default function Dashboard() {
       )}
 
       <div className="if-dashboard-row if-dashboard-row-top">
+        <section className="if-mock-card" data-testid="dashboard-next-workout">
+          <div className="if-mock-card-label"><Dumbbell size={12} /> Next workout</div>
+          {nextWorkout ? (() => {
+            const planned = nextWorkout.planned_exercises?.length ? nextWorkout.planned_exercises : nextWorkout.exercises
+            const visible = planned.slice(0, MAX_VISIBLE_EXERCISES)
+            const remaining = planned.length - visible.length
+            return (
+              <>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+                  <span style={{ color: 'var(--color-text-primary)', fontSize: 13, fontWeight: 500 }}>{nextWorkout.day} · {formatDateShort(nextWorkout.date)}</span>
+                  {daysUntil(nextWorkout.date) <= 0 ? (
+                    <span className="if-mock-pill" style={{ background: 'var(--color-background-success)', borderColor: 'var(--color-border-success)', color: 'var(--color-text-success)' }}>Today</span>
+                  ) : daysUntil(nextWorkout.date) === 1 ? (
+                    <span className="if-mock-pill" style={{ background: 'var(--color-background-info)', borderColor: 'var(--color-border-info)', color: 'var(--color-text-info)' }}>Tomorrow</span>
+                  ) : (
+                    <span className="if-mock-num if-mock-muted" style={{ fontSize: 11 }}>{daysUntil(nextWorkout.date)}d</span>
+                  )}
+                </div>
+                <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 8 }}>{nextWorkout.week}{nextWorkout.phase?.name ? ` · ${nextWorkout.phase.name}` : ''}</div>
+                {visible.map((exercise, i) => (
+                  <div key={i} className="if-compact-row">
+                    <span style={{ color: 'var(--color-text-primary)', flex: 1, fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exercise.name}</span>
+                    <span className="if-mock-num" style={{ fontSize: 11, flexShrink: 0 }}>{exercise.sets}×{exercise.reps}</span>
+                    {exercise.kg != null && exercise.kg > 0 && (
+                      <span className="if-mock-num if-mock-muted" style={{ fontSize: 11, flexShrink: 0, width: 'auto' }}>{displayWeight(exercise.kg, unit)}</span>
+                    )}
+                  </div>
+                ))}
+                {remaining > 0 && (
+                  <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, paddingTop: 4 }}>+{remaining} more</div>
+                )}
+              </>
+            )
+          })() : (
+            <Text size="sm" c="dimmed">No planned workouts.</Text>
+          )}
+        </section>
+
         <section className="if-mock-card">
           <div className="if-mock-card-label"><Trophy size={12} /> Upcoming competitions</div>
           {upcomingComps.length > 0 ? upcomingComps.map((comp) => (
@@ -955,7 +1003,8 @@ export default function Dashboard() {
           )}
         </section>
 
-        <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
+  
+         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
           <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
             <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
               <Trophy size={12} /> Percentile rankings
@@ -992,8 +1041,304 @@ export default function Dashboard() {
             const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
             const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
               { key: 'squat',    label: 'Squat',    userKg: actualMaxes.squat,    color: LIFT_COLORS.squat },
+    
+            ]
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
+                  if (userKg <= 0) return null
+                  const g  = rankingPercentile.global?.[key] as number | null
+                  const n  = rankingPercentile.national?.[key] as number | null
+                  const r  = rankingPercentile.regional?.[key] as number | null
+                  type CardKey = keyof typeof rankingPercentile.global
+                  const top10k = `top10_mean_${key}` as CardKey
+                  const gMean = rankingPercentile.global?.[top10k] as number | null
+                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
+                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
+                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
+
+                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
+                    { beaten: g, mean: gMean, label: 'worldwide' },
+                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
+                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
+                  ]
+
+                  return (
+                    <div key={key}>
+                      {/* Lift name + current value */}
+                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
+                        {label} — {displayWeight(userKg, unit)}
+                      </div>
+                      {/* One text + bar block per scope */}
+                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
+                        const top = fmtTop(beaten)
+                        if (!top) return null
+                        const pct = barPct(userKg, mean, beaten)
+                        return (
+                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
+                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
+                              {top} {scopeLabel}
+                            </div>
+                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
+                              <div className="if-progress-track" style={{ flex: 1 }}>
+                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
+                              </div>
+                              {mean && mean > 0 && (
+                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+                {!rankingCountry && (
+                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
+                )}
+                {rankingCountry && !rankingRegion && (
+                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
+                )}
+              </div>
+            )
+          })()}
+        </section>
+         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
+          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
+              <Trophy size={12} /> Percentile rankings
+            </div>
+            {rankingPercentile?.weight_class_label && (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
+                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
+              </span>
+            )}
+          </div>
+          {rankingPercentileLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Loader size="xs" />
+              <Text size="xs" c="dimmed">Loading rankings...</Text>
+            </div>
+          ) : !rankingPercentile ? (
+            <Text size="xs" c="dimmed">
+              {meta.current_body_weight_kg > 0
+                ? 'Rankings unavailable — dataset may still be loading.'
+                : 'Set your body weight to see percentile rankings.'}
+            </Text>
+          ) : (() => {
+            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
+            const fmtTop = (beaten: number | null | undefined): string | null => {
+              if (typeof beaten !== 'number') return null
+              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
+            }
+            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
+              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
+              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
+              return 0;
+            }
+
+            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
+            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
               { key: 'bench',    label: 'Bench',    userKg: actualMaxes.bench,    color: LIFT_COLORS.bench },
+   
+            ]
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
+                  if (userKg <= 0) return null
+                  const g  = rankingPercentile.global?.[key] as number | null
+                  const n  = rankingPercentile.national?.[key] as number | null
+                  const r  = rankingPercentile.regional?.[key] as number | null
+                  type CardKey = keyof typeof rankingPercentile.global
+                  const top10k = `top10_mean_${key}` as CardKey
+                  const gMean = rankingPercentile.global?.[top10k] as number | null
+                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
+                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
+                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
+
+                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
+                    { beaten: g, mean: gMean, label: 'worldwide' },
+                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
+                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
+                  ]
+
+                  return (
+                    <div key={key}>
+                      {/* Lift name + current value */}
+                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
+                        {label} — {displayWeight(userKg, unit)}
+                      </div>
+                      {/* One text + bar block per scope */}
+                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
+                        const top = fmtTop(beaten)
+                        if (!top) return null
+                        const pct = barPct(userKg, mean, beaten)
+                        return (
+                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
+                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
+                              {top} {scopeLabel}
+                            </div>
+                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
+                              <div className="if-progress-track" style={{ flex: 1 }}>
+                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
+                              </div>
+                              {mean && mean > 0 && (
+                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+                {!rankingCountry && (
+                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
+                )}
+                {rankingCountry && !rankingRegion && (
+                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
+                )}
+              </div>
+            )
+          })()}
+        </section>
+         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
+          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
+              <Trophy size={12} /> Percentile rankings
+            </div>
+            {rankingPercentile?.weight_class_label && (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
+                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
+              </span>
+            )}
+          </div>
+          {rankingPercentileLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Loader size="xs" />
+              <Text size="xs" c="dimmed">Loading rankings...</Text>
+            </div>
+          ) : !rankingPercentile ? (
+            <Text size="xs" c="dimmed">
+              {meta.current_body_weight_kg > 0
+                ? 'Rankings unavailable — dataset may still be loading.'
+                : 'Set your body weight to see percentile rankings.'}
+            </Text>
+          ) : (() => {
+            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
+            const fmtTop = (beaten: number | null | undefined): string | null => {
+              if (typeof beaten !== 'number') return null
+              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
+            }
+            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
+              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
+              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
+              return 0;
+            }
+
+            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
+            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
+   
               { key: 'deadlift', label: 'Deadlift', userKg: actualMaxes.deadlift, color: LIFT_COLORS.deadlift },
+             
+            ]
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
+                  if (userKg <= 0) return null
+                  const g  = rankingPercentile.global?.[key] as number | null
+                  const n  = rankingPercentile.national?.[key] as number | null
+                  const r  = rankingPercentile.regional?.[key] as number | null
+                  type CardKey = keyof typeof rankingPercentile.global
+                  const top10k = `top10_mean_${key}` as CardKey
+                  const gMean = rankingPercentile.global?.[top10k] as number | null
+                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
+                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
+                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
+
+                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
+                    { beaten: g, mean: gMean, label: 'worldwide' },
+                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
+                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
+                  ]
+
+                  return (
+                    <div key={key}>
+                      {/* Lift name + current value */}
+                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
+                        {label} — {displayWeight(userKg, unit)}
+                      </div>
+                      {/* One text + bar block per scope */}
+                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
+                        const top = fmtTop(beaten)
+                        if (!top) return null
+                        const pct = barPct(userKg, mean, beaten)
+                        return (
+                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
+                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
+                              {top} {scopeLabel}
+                            </div>
+                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
+                              <div className="if-progress-track" style={{ flex: 1 }}>
+                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
+                              </div>
+                              {mean && mean > 0 && (
+                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+                {!rankingCountry && (
+                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
+                )}
+                {rankingCountry && !rankingRegion && (
+                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
+                )}
+              </div>
+            )
+          })()}
+        </section>
+         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
+          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
+            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
+              <Trophy size={12} /> Percentile rankings
+            </div>
+            {rankingPercentile?.weight_class_label && (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
+                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
+              </span>
+            )}
+          </div>
+          {rankingPercentileLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Loader size="xs" />
+              <Text size="xs" c="dimmed">Loading rankings...</Text>
+            </div>
+          ) : !rankingPercentile ? (
+            <Text size="xs" c="dimmed">
+              {meta.current_body_weight_kg > 0
+                ? 'Rankings unavailable — dataset may still be loading.'
+                : 'Set your body weight to see percentile rankings.'}
+            </Text>
+          ) : (() => {
+            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
+            const fmtTop = (beaten: number | null | undefined): string | null => {
+              if (typeof beaten !== 'number') return null
+              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
+            }
+            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
+              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
+              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
+              return 0;
+            }
+
+            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
+            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
+            
               { key: 'total',    label: 'Total',    userKg: actualTotal,          color: 'var(--accent-blue)' },
             ]
             return (
@@ -1056,7 +1401,6 @@ export default function Dashboard() {
             )
           })()}
         </section>
-        
       </div>
 
       <div className="if-dashboard-row if-dashboard-row-mid">
