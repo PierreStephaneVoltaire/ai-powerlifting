@@ -20,6 +20,10 @@ class DiscordConfig(BaseModel):
 
     bot_token: str = Field(..., description="Discord bot token")
     channel_id: str = Field(..., description="Discord channel ID to listen to")
+    pinned_specialist: Optional[str] = Field(
+        None,
+        description="Specialist slug to lock this channel to. Leave blank for normal planner-based routing.",
+    )
 
 
 class OpenWebUIConfig(BaseModel):
@@ -53,6 +57,7 @@ class WebhookResponse(BaseModel):
     platform: str
     label: str
     status: str
+    pinned_specialist: str = ""
 
 
 class WebhookListResponse(BaseModel):
@@ -76,33 +81,53 @@ async def register_webhook(req: RegisterWebhookRequest):
             detail="openwebui config required when platform is 'openwebui'"
         )
     
-    config = (req.discord or req.openwebui).model_dump()
-    
+    platform_config = (req.discord or req.openwebui)
+    config = platform_config.model_dump()
+    pinned_specialist = ""
+    if req.platform == "discord" and req.discord and req.discord.pinned_specialist:
+        pinned_specialist = req.discord.pinned_specialist.strip()
+    if pinned_specialist:
+        try:
+            from agent.specialists import get_specialist
+            if get_specialist(pinned_specialist) is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown specialist slug: '{pinned_specialist}'. "
+                           "Check /v1/chat/completions specialist catalog.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass 
+
     record = WebhookRecord(
         platform=req.platform,
         label=req.label,
+        pinned_specialist=pinned_specialist,
     )
     record.set_config(config)
-    
+
     store = get_webhook_store()
     record = store.create(record)
-    
+
     logger.info(
         f"Registered webhook {record.webhook_id} "
         f"({req.platform}, {req.label})"
+        + (f" locked to specialist={pinned_specialist}" if pinned_specialist else "")
     )
-    
+
     try:
         start_listener(record)
     except Exception as e:
         logger.error(f"Failed to start listener for {record.webhook_id}: {e}")
-    
+
     return WebhookResponse(
         webhook_id=record.webhook_id,
         conversation_id=record.conversation_id,
         platform=record.platform,
         label=record.label,
         status="listening" if record.status == "active" else record.status,
+        pinned_specialist=record.pinned_specialist,
     )
 
 
@@ -119,10 +144,11 @@ async def list_all_webhooks():
             platform=r.platform,
             label=r.label,
             status=r.status,
+            pinned_specialist=r.pinned_specialist or "",
         )
         for r in records
     ]
-    
+
     return WebhookListResponse(
         webhooks=webhooks,
         total=len(webhooks),
@@ -134,7 +160,7 @@ async def list_active_webhooks():
 
     store = get_webhook_store()
     records = store.list_active()
-    
+
     webhooks = [
         WebhookResponse(
             webhook_id=r.webhook_id,
@@ -142,10 +168,11 @@ async def list_active_webhooks():
             platform=r.platform,
             label=r.label,
             status=r.status,
+            pinned_specialist=r.pinned_specialist or "",
         )
         for r in records
     ]
-    
+
     return WebhookListResponse(
         webhooks=webhooks,
         total=len(webhooks),
@@ -157,19 +184,20 @@ async def get_webhook(webhook_id: str):
 
     store = get_webhook_store()
     record = store.get(webhook_id)
-    
+
     if record is None:
         raise HTTPException(
             status_code=404,
             detail=f"Webhook not found: {webhook_id}"
         )
-    
+
     return WebhookResponse(
         webhook_id=record.webhook_id,
         conversation_id=record.conversation_id,
         platform=record.platform,
         label=record.label,
         status=record.status,
+        pinned_specialist=record.pinned_specialist or "",
     )
 
 

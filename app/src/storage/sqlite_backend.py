@@ -60,6 +60,22 @@ def init_sqlite() -> None:
 
         conn.commit()
 
+
+    with _engine.connect() as conn:
+        result = conn.execute(text("PRAGMA table_info(webhooks)"))
+        existing_cols = {row[1] for row in result.fetchall()}
+
+        webhook_migrations = [
+            ("pinned_specialist", "TEXT NOT NULL DEFAULT ''"),
+        ]
+
+        for col_name, col_def in webhook_migrations:
+            if col_name not in existing_cols:
+                conn.execute(text(f"ALTER TABLE webhooks ADD COLUMN {col_name} {col_def}"))
+                logger.info(f"[Migration] Added column {col_name} to webhooks")
+
+        conn.commit()
+
     logger.info(f"SQLite store initialized at {STORAGE_DB_PATH} (WAL mode)")
 
 

@@ -473,7 +473,12 @@ async def process_chat_completion_internal(
                 return "Error executing command: missing specialist target.", []
             task = cmd.command_args.strip()
             if not task:
-                return f"Command /{cmd.target} requires a task description.", []
+                task = last_user_message.strip()
+                slash_prefix = f"/{cmd.target}"
+                if task.lower().startswith(slash_prefix.lower()):
+                    task = task[len(slash_prefix):].strip()
+            if not task:
+                return f"/{cmd.target} requires a task or message body after the command.", []
 
             try:
                 result = await run_specialist_flow(
@@ -517,12 +522,39 @@ async def process_chat_completion_internal(
                 logger.error(f"[Command] Error handling {cmd.action.value}: {e}")
                 return f"Error executing command: {e}", []
     
+    if webhook and getattr(webhook, "pinned_specialist", ""):
+        locked_specialist = webhook.pinned_specialist.strip()
+        if locked_specialist:
+            task = last_user_message or "No message provided."
+            logger.info(f"[PinnedSpecialist] channel locked to {locked_specialist!r}, bypassing planner")
+            try:
+                result = await run_specialist_flow(
+                    specialist_slug=locked_specialist,
+                    task=task,
+                    http_client=http_client,
+                    session_dir=resolve_session_dir(request_data, webhook, cache_key),
+                    context_id=context_id,
+                    cache_key=cache_key,
+                    selected_model=_specialist_model_override(request_data),
+                )
+                content, refs = result
+                if refs:
+                    log_file_refs(cache_key, refs)
+                attachments = [att for ref in refs if (att := materialize_file_ref(ref, cache_key))]
+                return content, attachments
+            except Exception as e:
+                logger.error(f"[PinnedSpecialist] {locked_specialist} failed: {e}")
+                return (
+                    f"The channel is locked to the **{locked_specialist}** specialist "
+                    f"but that run failed: `{type(e).__name__}: {e}`"
+                ), []
+
     interceptor_result = await intercept_request(
         messages=messages,
         http_client=http_client,
         stream=stream
     )
-    
+
     if interceptor_result.should_bypass_routing():
         if interceptor_result.error:
             raise Exception(f"Interceptor error: {interceptor_result.error}")
