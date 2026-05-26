@@ -1,28 +1,32 @@
 import React, { useState } from 'react'
 import { Stack, Group, Title, Button, Text, Badge, Divider, LoadingOverlay, Grid } from '@mantine/core'
-import { Edit2 } from 'lucide-react'
+import { Edit2, Eye, EyeOff } from 'lucide-react'
 import { Template } from '@powerlifting/types'
 import { SessionGrid } from './SessionGrid'
 import { EvaluationPanel } from './EvaluationPanel'
 import { ApplyModal } from './ApplyModal'
 import { MaxResolutionGate } from './MaxResolutionGate'
-import { confirmApplyTemplate } from '../../api/client'
+import { confirmApplyTemplate, publishTemplate, unpublishTemplate } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
 import { templateEditRoute } from '../../utils/templateRoutes'
+import { useAuth } from '@/auth/AuthProvider'
 
 interface Props {
   template: Template
   templateSk?: string
   onRefresh: () => void
+  readOnly?: boolean
 }
 
-export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefresh }) => {
+export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefresh, readOnly }) => {
   const [applyModalOpened, setApplyModalOpened] = useState(false)
   const [missingMaxes, setMissingMaxes] = useState<string[] | null>(null)
   const [applyData, setApplyData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const { mapped_pk } = useAuth()
   const resolvedTemplateSk = template.sk || templateSk
+  const canEdit = !readOnly && Boolean(resolvedTemplateSk) && template.meta.author_pk === mapped_pk
 
   const handleApply = async (res: any) => {
     if (res.missing_maxes && res.missing_maxes.length > 0) {
@@ -42,6 +46,21 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
       } finally {
         setLoading(false)
       }
+    }
+  }
+
+  const handlePublishToggle = async () => {
+    if (!resolvedTemplateSk || !canEdit) return
+    setLoading(true)
+    try {
+      if (template.meta.published === false) {
+        await publishTemplate(resolvedTemplateSk)
+      } else {
+        await unpublishTemplate(resolvedTemplateSk)
+      }
+      onRefresh()
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -70,6 +89,7 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         <Stack gap={4}>
           <Group gap="sm">
             <Title order={2}>{template.meta.name}</Title>
+            {template.meta.published === false && <Badge color="yellow">Draft</Badge>}
             {template.meta.archived && <Badge color="gray">Archived</Badge>}
           </Group>
           <Text size="sm" c="dimmed">
@@ -80,16 +100,24 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         <Group>
           <Button
             variant="default"
+            leftSection={template.meta.published === false ? <Eye size={16} /> : <EyeOff size={16} />}
+            onClick={handlePublishToggle}
+            disabled={!canEdit}
+          >
+            {template.meta.published === false ? 'Publish' : 'Unpublish'}
+          </Button>
+          <Button
+            variant="default"
             leftSection={<Edit2 size={16} />}
             onClick={() => resolvedTemplateSk && navigate(templateEditRoute(resolvedTemplateSk))}
-            disabled={!resolvedTemplateSk}
+            disabled={!canEdit}
           >
             Edit
           </Button>
           <Button
             size="lg"
             onClick={() => setApplyModalOpened(true)}
-            disabled={!resolvedTemplateSk}
+            disabled={!resolvedTemplateSk || readOnly}
           >
             Apply Template
           </Button>
@@ -109,12 +137,12 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         <Grid.Col span={{ base: 12, md: 4 }}>
           <Stack gap="lg">
           <Title order={3}>AI Analysis</Title>
-          <EvaluationPanel 
-            sk={resolvedTemplateSk ?? ''} 
+          <EvaluationPanel
+            sk={resolvedTemplateSk ?? ''}
             evaluation={template.meta.ai_evaluation ?? null}
             onRefresh={onRefresh}
-          />
-          </Stack>
+            readOnly={readOnly}
+          />          </Stack>
         </Grid.Col>
       </Grid>
 

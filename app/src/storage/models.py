@@ -36,6 +36,7 @@ class WebhookRecord(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     config_json: str = ""  # JSON-serialized platform config
+    pinned_specialist: str = "" 
 
     # --- Convenience methods for config serialization ---
 

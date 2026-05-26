@@ -16,6 +16,16 @@ variable "image_tag" {
   default = "latest"
 }
 
+variable "tag_latest" {
+  type    = bool
+  default = true
+}
+
+variable "opencode_version" {
+  type    = string
+  default = "1.14.48"
+}
+
 source "docker" "if_agent" {
   image    = "public.ecr.aws/docker/library/python:3.12-slim"
   commit   = true
@@ -34,9 +44,17 @@ build {
   # Install system dependencies
   provisioner "shell" {
     inline = [
-      "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y curl unzip ca-certificates git vim iputils-ping dnsutils netcat-openbsd iproute2 procps default-jre-headless",
+      "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y curl unzip ca-certificates git vim iputils-ping dnsutils netcat-openbsd iproute2 procps default-jre-headless nodejs npm",
       "rm -rf /var/lib/apt/lists/*",
       "mkdir -p /app/src"
+    ]
+  }
+
+  # Install OpenCode runtime used by planner/domain/technical subprocess runs.
+  provisioner "shell" {
+    inline = [
+      "npm install -g opencode-ai@${var.opencode_version}",
+      "opencode --version"
     ]
   }
 
@@ -117,7 +135,7 @@ build {
   post-processors {
     post-processor "docker-tag" {
       repository = var.image_repository
-      tags       = [var.image_tag, "latest"]
+      tags       = var.tag_latest ? [var.image_tag, "latest"] : [var.image_tag]
     }
     post-processor "docker-push" {
       ecr_login    = true

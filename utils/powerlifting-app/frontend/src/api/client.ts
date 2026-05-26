@@ -29,6 +29,7 @@ import type {
   AiTemplateEvaluation,
   Template,
   TemplateListEntry,
+  TemplateImportJob,
   ConflictResolution,
   PostMeetReport,
   WeekStartDay,
@@ -810,6 +811,28 @@ export async function updateTemplate(sk: string, template: Template): Promise<vo
   await api.put(templatePath(sk), template)
 }
 
+export async function publishTemplate(sk: string): Promise<void> {
+  await api.post(templatePath(sk, '/publish'))
+}
+
+export async function unpublishTemplate(sk: string): Promise<void> {
+  await api.post(templatePath(sk, '/unpublish'))
+}
+
+export async function uploadTemplateImport(file: File): Promise<{ job_id: string; status: TemplateImportJob['status'] }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await api.post('/templates/imports', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return res.data
+}
+
+export async function fetchTemplateImport(jobId: string): Promise<TemplateImportJob> {
+  const res = await api.get(`/templates/imports/${encodeURIComponent(jobId)}`)
+  return res.data
+}
+
 // ─── Archive & e1RM ─────────────────────────────────────────────────────────
 
 export async function archiveProgram(version: string): Promise<void> {
@@ -856,6 +879,52 @@ export async function fetchStatCategories(): Promise<any> {
 
 export async function analyzeStats(payload: any): Promise<any> {
   const res = await api.post('/stats/analyze', payload)
+  return res.data
+}
+
+export interface RankingPercentileCard {
+  squat: number | null
+  bench: number | null
+  deadlift: number | null
+  total: number | null
+  top10_mean_squat: number | null
+  top10_mean_bench: number | null
+  top10_mean_deadlift: number | null
+  top10_mean_total: number | null
+}
+
+export interface RankingPercentileResult {
+  global: RankingPercentileCard
+  national: RankingPercentileCard | null
+  regional: RankingPercentileCard | null
+  weight_class_label: string | null
+  meta: {
+    global_n: number
+    national_n: number | null
+    regional_n: number | null
+  }
+}
+
+export interface RankingPercentileParams {
+  squat_kg?: number
+  bench_kg?: number
+  deadlift_kg?: number
+  bodyweight_kg?: number
+  sex_code?: string
+  country?: string
+  region?: string
+  age_class?: string
+  equipment?: string
+}
+
+export async function fetchRankingPercentile(params: RankingPercentileParams): Promise<RankingPercentileResult> {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value))
+    }
+  }
+  const res = await api.get<RankingPercentileResult>(`/stats/ranking_percentile?${query.toString()}`)
   return res.data
 }
 

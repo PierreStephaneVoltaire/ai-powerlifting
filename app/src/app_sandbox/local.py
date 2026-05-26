@@ -1,16 +1,10 @@
-"""LocalSandbox — wraps OpenHands SDK LocalWorkspace for per-conversation shell access.
-
-Replaces StaticTerminalManager (HTTP-based OpenTerminal pod).
-Commands run as subprocesses of the FastAPI process against the mounted conversations PVC.
-"""
+"""LocalSandbox directory manager for per-conversation file access."""
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional
-
-from openhands.sdk import LocalWorkspace
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,27 +14,24 @@ WORKSPACE_BASE = os.getenv("WORKSPACE_BASE", "/app/src/data/conversations")
 
 
 class LocalSandboxManager:
-    """Manages per-conversation LocalWorkspace instances."""
+    """Manages per-conversation local directories."""
 
     def __init__(self, workspace_base: str = WORKSPACE_BASE):
         self.workspace_base = Path(workspace_base)
-        self._workspaces: Dict[str, LocalWorkspace] = {}
 
-    def get_workspace(self, chat_id: str) -> LocalWorkspace:
-        """Return (creating if needed) the LocalWorkspace for this conversation."""
-        if chat_id not in self._workspaces:
-            workdir = self.workspace_base / chat_id
-            workdir.mkdir(parents=True, exist_ok=True)
-            self._workspaces[chat_id] = LocalWorkspace(working_dir=str(workdir))
-        return self._workspaces[chat_id]
+    def get_workspace(self, chat_id: str) -> Path:
+        """Return (creating if needed) the local directory for this conversation."""
+        workdir = self.workspace_base / chat_id
+        workdir.mkdir(parents=True, exist_ok=True)
+        return workdir
 
     def get_working_dir(self, chat_id: str) -> str:
         """Return the working directory path for a conversation."""
-        return str(self.workspace_base / chat_id)
+        return str(self.get_workspace(chat_id))
 
     def close(self) -> None:
-        """Clears in-memory workspace cache; subprocesses are auto-cleaned by OS on app exit."""
-        self._workspaces.clear()
+        """Directory manager has no persistent process resources."""
+        return None
 
 
 def init_local_sandbox(workspace_base: str = WORKSPACE_BASE) -> LocalSandboxManager:

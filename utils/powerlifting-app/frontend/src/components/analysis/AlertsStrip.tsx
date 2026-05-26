@@ -41,16 +41,13 @@ export function AlertsStrip({ alerts }: AlertsStripProps) {
     <Paper
       withBorder
       p="md"
-      style={{
-        background: 'linear-gradient(180deg, var(--mantine-color-body) 0%, var(--mantine-color-gray-0) 100%)',
-      }}
+      className="if-card"
+      style={{ borderColor: 'var(--status-info-border)' }}
     >
       <Group gap="xs" mb="sm">
         <AlertTriangle size={18} />
-        <Text fw={600}>Coaching Alerts</Text>
-        <Badge variant="light" color="blue" size="sm">
-          {alerts.length}
-        </Badge>
+        <Text fw={600} c="var(--text-primary)">Coaching Alerts</Text>
+        <span className="if-pill if-pill-info">{alerts.length}</span>
       </Group>
       <Text fz="sm" c="dimmed" mb="md">
         Deterministic coaching-language summaries derived from the analysis response.
@@ -66,12 +63,8 @@ export function AlertsStrip({ alerts }: AlertsStripProps) {
                 <Group justify="space-between" wrap="nowrap" align="flex-start">
                   <Stack gap={4} style={{ flex: 1 }}>
                     <Group gap="xs" wrap="wrap">
-                      <Badge variant="light" color={severity.color} size="sm">
-                        {severity.label}
-                      </Badge>
-                      <Badge variant="light" color="gray" size="sm">
-                        {SOURCE_LABELS[alert.source]}
-                      </Badge>
+                      <Badge variant="light" color={severity.color} size="sm">{severity.label}</Badge>
+                      <span className="if-pill if-pill-neutral">{SOURCE_LABELS[alert.source]}</span>
                     </Group>
                     <Text fw={600} fz="sm">
                       {alert.message}

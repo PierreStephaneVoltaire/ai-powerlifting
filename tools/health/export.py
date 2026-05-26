@@ -1451,6 +1451,10 @@ def _md_notes(
         if note:
             all_notes.append(("Program", meta.get("updated_at", ""), str(note)))
 
+    for note in _safe_list(meta.get("block_notes")):
+        if isinstance(note, dict) and note.get("notes"):
+            all_notes.append(("Program", note.get("date") or note.get("updated_at", ""), str(note["notes"])))
+
     for phase in phases:
         if phase.get("notes"):
             all_notes.append(("Phase", f"W{phase.get('start_week', '')}\u2013W{phase.get('end_week', '')}", phase["notes"]))
@@ -2699,6 +2703,10 @@ def _write_notes_sheet(
 
     for note in _safe_list(meta.get("training_notes")):
         rows.append(["Meta", meta.get("updated_at", ""), "Training Note", note])
+
+    for note in _safe_list(meta.get("block_notes")):
+        if isinstance(note, dict) and note.get("notes"):
+            rows.append(["Program", note.get("date") or note.get("updated_at", ""), "Dated Program Note", note.get("notes", "")])
 
     for phase in phases:
         if phase.get("notes"):

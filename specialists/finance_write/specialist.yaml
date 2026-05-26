@@ -20,6 +20,7 @@ tools:
   - finance_update_cashflow
   - finance_update_tax
   - finance_update_insurance
-mcp_servers: []
+mcp_servers:
+  - finance
 directive_types:
   - finance

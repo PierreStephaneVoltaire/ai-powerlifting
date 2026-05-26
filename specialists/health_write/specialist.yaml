@@ -37,6 +37,11 @@ tools:
   - template_copy
   - template_archive
   - template_unarchive
+  - template_publish
+  - template_unpublish
+  - template_create_blank
+  - template_create_from_payload
+  - template_update
   - program_archive
   - program_unarchive
   # New Glossary Tools
@@ -47,6 +52,8 @@ tools:
   - glossary_estimate_fatigue
   # Supplement research (cite evidence when logging supplement changes)
   - supplement_search
-mcp_servers: []
+mcp_servers:
+  - health
+  - supplement_research
 directive_types:
   - health

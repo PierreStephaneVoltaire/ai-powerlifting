@@ -1,9 +1,12 @@
 import { logger } from '../utils/logger'
+import crypto from 'crypto'
 import {
   BatchWriteCommand,
+  DeleteCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { docClient } from '../db/dynamo'
 import type { Program, Session, WeightEntry } from '@powerlifting/types'
@@ -15,6 +18,17 @@ export type AnalysisWindowKey =
   | 'previous_4'
   | 'previous_8'
   | 'block'
+
+export type AnalysisSectionKey =
+  | 'overview'
+  | 'fatigue_readiness'
+  | 'peaking'
+  | 'workload'
+  | 'alerts'
+  | 'ai_correlation'
+  | 'program_evaluation'
+
+export type AnalysisJobStatus = 'pending' | 'running' | 'complete' | 'error'
 
 export interface AnalysisWindow {
   key: AnalysisWindowKey
@@ -36,7 +50,45 @@ export interface WeeklyAnalysisBundle<T = unknown> {
   results: Record<AnalysisWindowKey, T>
 }
 
+export interface CachedAnalysisSection<T = unknown> {
+  schemaVersion: number
+  asOfDate: string
+  windowKey: AnalysisWindowKey
+  sectionKey: AnalysisSectionKey
+  sourceFingerprint: string
+  generatedAt: string
+  payload: T
+  cached: boolean
+}
+
+export interface AnalysisSectionStatus<T = unknown> {
+  sectionKey: AnalysisSectionKey
+  status: AnalysisJobStatus | 'missing'
+  generatedAt?: string
+  updatedAt?: string
+  error?: string
+  sourceFingerprint?: string
+  cached: boolean
+  payload?: T
+}
+
+export interface AnalysisSectionJob {
+  sectionKey: AnalysisSectionKey
+  status: AnalysisJobStatus
+  asOfDate: string
+  windowKey: AnalysisWindowKey
+  sourceFingerprint: string
+  queuedAt: string
+  updatedAt: string
+  startedAt?: string
+  completedAt?: string
+  error?: string
+  attempts?: number
+}
+
 const CACHE_SCHEMA_VERSION = 5
+const SECTION_CACHE_SCHEMA_VERSION = 6
+const SECTION_CACHE_VERSION = 'v1'
 const ANALYSIS_CACHE_TABLE = process.env.ANALYSIS_CACHE_TABLE_NAME || 'if-powerlifting-analysis-cache'
 // Current-block window caches expire after 7 days. Past-block caches have no TTL.
 const CACHE_TTL_DAYS = 7
@@ -57,6 +109,15 @@ export const ALL_WINDOW_KEYS: AnalysisWindowKey[] = WINDOW_SPECS.map((spec) => s
 
 // Windows that receive correlation AI analysis (4+ weeks needed)
 export const CORRELATION_WINDOW_KEYS: AnalysisWindowKey[] = ['previous_4', 'previous_8', 'block']
+export const DETERMINISTIC_SECTION_KEYS: AnalysisSectionKey[] = [
+  'overview',
+  'fatigue_readiness',
+  'peaking',
+  'workload',
+  'alerts',
+]
+export const AI_SECTION_KEYS: AnalysisSectionKey[] = ['ai_correlation', 'program_evaluation']
+export const ALL_SECTION_KEYS: AnalysisSectionKey[] = [...DETERMINISTIC_SECTION_KEYS, ...AI_SECTION_KEYS]
 
 type WeekStartDay =
   | 'Monday'
@@ -240,6 +301,14 @@ function windowSk(windowKey: AnalysisWindowKey): string {
   return `weekly_analysis#${windowKey}`
 }
 
+function analysisSectionSk(asOfDate: string, windowKey: AnalysisWindowKey, sectionKey: AnalysisSectionKey): string {
+  return `analysis_section#${SECTION_CACHE_VERSION}#${asOfDate}#${windowKey}#${sectionKey}`
+}
+
+function analysisJobSk(asOfDate: string, windowKey: AnalysisWindowKey, sectionKey: AnalysisSectionKey): string {
+  return `analysis_job#${SECTION_CACHE_VERSION}#${asOfDate}#${windowKey}#${sectionKey}`
+}
+
 /** SK for a cached markdown export. blockKey defaults to 'current'. */
 function markdownSk(blockKey = 'current'): string {
   return `markdown_export#${blockKey}`
@@ -252,6 +321,48 @@ function shardSk(baseSk: string, index: number): string {
 
 function currentBlockExpiresAt(): number {
   return Math.floor(Date.now() / 1000) + CACHE_TTL_DAYS * 24 * 60 * 60
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  const obj = value as Record<string, unknown>
+  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableJson(obj[key])}`).join(',')}}`
+}
+
+function hashValue(value: unknown): string {
+  return crypto.createHash('sha256').update(stableJson(value)).digest('hex')
+}
+
+export function buildAnalysisSourceFingerprint(
+  program: Program,
+  window: AnalysisWindow,
+): string {
+  const currentSessions = (program.sessions ?? [])
+    .filter((session) => (session.block ?? 'current') === 'current')
+    .filter((session) => session.date <= window.end)
+  const scopedWeightLog = ((program as Program & { weight_log?: WeightEntry[] }).weight_log ?? [])
+    .filter((entry) => entry.date <= window.end)
+  const currentPhases = (program.phases ?? [])
+    .filter((phase) => (phase.block ?? 'current') === 'current')
+  return hashValue({
+    schema: SECTION_CACHE_SCHEMA_VERSION,
+    asOfWindow: {
+      key: window.key,
+      start: window.start,
+      end: window.end,
+      weekStart: window.weekStart,
+      weekEnd: window.weekEnd,
+    },
+    meta: program.meta ?? {},
+    phases: currentPhases,
+    sessions: currentSessions,
+    competitions: program.competitions ?? [],
+    goals: (program as Program & { goals?: unknown[] }).goals ?? [],
+    lift_profiles: program.lift_profiles ?? [],
+    diet_notes: (program as Program & { diet_notes?: unknown[] }).diet_notes ?? [],
+    weight_log: scopedWeightLog,
+  })
 }
 
 async function batchDeleteByPrefix(pk: string, prefix: string): Promise<void> {
@@ -350,7 +461,10 @@ async function putJsonItem(
 }
 
 /** Read a JSON item that may be sharded. Returns null on miss or parse error. */
-async function getJsonItem<T>(pk: string, sk: string): Promise<{ data: T; generatedAt: string } | null> {
+async function getJsonItemWithMetadata<T>(
+  pk: string,
+  sk: string,
+): Promise<{ data: T; generatedAt: string; item: Record<string, unknown> } | null> {
   try {
     const response = await docClient.send(new GetCommand({
       TableName: ANALYSIS_CACHE_TABLE,
@@ -375,16 +489,21 @@ async function getJsonItem<T>(pk: string, sk: string): Promise<{ data: T; genera
       )
       const joined = parts.join('')
       if (!joined) return null
-      return { data: JSON.parse(joined) as T, generatedAt }
+      return { data: JSON.parse(joined) as T, generatedAt, item }
     }
 
     // Inline item
     const payload = item.payload
     if (typeof payload !== 'string' || !payload) return null
-    return { data: JSON.parse(payload) as T, generatedAt }
+    return { data: JSON.parse(payload) as T, generatedAt, item }
   } catch {
     return null
   }
+}
+
+async function getJsonItem<T>(pk: string, sk: string): Promise<{ data: T; generatedAt: string } | null> {
+  const result = await getJsonItemWithMetadata<T>(pk, sk)
+  return result ? { data: result.data, generatedAt: result.generatedAt } : null
 }
 
 // ─── Window analysis cache (current block only) ───────────────────────────────
@@ -436,6 +555,367 @@ export async function putAllCachedWindowAnalyses(
       putJsonItem(cachePk(userPk), windowSk(key), results[key], expiry),
     ),
   )
+}
+
+// ─── Section analysis cache + background job state ────────────────────────────
+
+function isConditionalFailure(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && String((error as { name?: unknown }).name) === 'ConditionalCheckFailedException'
+}
+
+function validWindowKey(value: unknown): value is AnalysisWindowKey {
+  return ALL_WINDOW_KEYS.includes(value as AnalysisWindowKey)
+}
+
+function validSectionKey(value: unknown): value is AnalysisSectionKey {
+  return ALL_SECTION_KEYS.includes(value as AnalysisSectionKey)
+}
+
+export function normalizeAnalysisWindowKey(value: unknown): AnalysisWindowKey {
+  return validWindowKey(value) ? value : 'previous_4'
+}
+
+export function normalizeAnalysisSectionKeys(value: unknown, fallback: AnalysisSectionKey[] = DETERMINISTIC_SECTION_KEYS): AnalysisSectionKey[] {
+  const raw = Array.isArray(value) ? value : fallback
+  const keys = raw.filter(validSectionKey)
+  return keys.length ? Array.from(new Set(keys)) : fallback
+}
+
+export function splitWeeklyAnalysisSections(weekly: Record<string, unknown>): Record<AnalysisSectionKey, Record<string, unknown>> {
+  return {
+    overview: {
+      week: weekly.week,
+      selected_week_start: weekly.selected_week_start,
+      selected_week_end: weekly.selected_week_end,
+      selected_week_count: weekly.selected_week_count,
+      window_start: weekly.window_start,
+      window_end: weekly.window_end,
+      selected_session_context: weekly.selected_session_context,
+      block: weekly.block,
+      compliance: weekly.compliance,
+      current_maxes: weekly.current_maxes,
+      estimated_dots: weekly.estimated_dots,
+      estimated_dots_reason: weekly.estimated_dots_reason,
+      projections: weekly.projections,
+      projection_reason: weekly.projection_reason,
+      projection_calibration: weekly.projection_calibration,
+      attempt_selection: weekly.attempt_selection,
+      sessions_analyzed: weekly.sessions_analyzed,
+      deload_info: weekly.deload_info,
+    },
+    fatigue_readiness: {
+      fatigue_index: weekly.fatigue_index,
+      fatigue_components: weekly.fatigue_components,
+      fatigue_dimensions: weekly.fatigue_dimensions,
+      inol: weekly.inol,
+      acwr: weekly.acwr,
+      ri_distribution: weekly.ri_distribution,
+      volume_landmarks: weekly.volume_landmarks,
+      readiness_score: weekly.readiness_score,
+    },
+    peaking: {
+      banister: weekly.banister,
+      monotony_strain: weekly.monotony_strain,
+      decoupling: weekly.decoupling,
+      taper_quality: weekly.taper_quality,
+      specificity_ratio: weekly.specificity_ratio,
+      specificity_target_competition: weekly.specificity_target_competition,
+      peaking_timeline: weekly.peaking_timeline,
+    },
+    workload: {
+      lifts: weekly.lifts,
+      exercise_stats: weekly.exercise_stats,
+    },
+    alerts: {
+      alerts: weekly.alerts ?? [],
+      flags: weekly.flags ?? [],
+    },
+    ai_correlation: {},
+    program_evaluation: {},
+  }
+}
+
+export async function getCachedAnalysisSection<T = unknown>(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+  expectedSourceFingerprint?: string,
+): Promise<CachedAnalysisSection<T> | null> {
+  const result = await getJsonItemWithMetadata<T>(cachePk(userPk), analysisSectionSk(asOfDate, windowKey, sectionKey))
+  if (!result) return null
+  const sourceFingerprint = typeof result.item.source_fingerprint === 'string' ? result.item.source_fingerprint : ''
+  if (expectedSourceFingerprint && sourceFingerprint !== expectedSourceFingerprint) return null
+  return {
+    schemaVersion: SECTION_CACHE_SCHEMA_VERSION,
+    asOfDate,
+    windowKey,
+    sectionKey,
+    sourceFingerprint,
+    generatedAt: result.generatedAt,
+    payload: result.data,
+    cached: true,
+  }
+}
+
+export async function putCachedAnalysisSection(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+  sourceFingerprint: string,
+  payload: unknown,
+): Promise<void> {
+  await putJsonItem(
+    cachePk(userPk),
+    analysisSectionSk(asOfDate, windowKey, sectionKey),
+    payload,
+    currentBlockExpiresAt(),
+    {
+      schema_version: SECTION_CACHE_SCHEMA_VERSION,
+      cache_version: SECTION_CACHE_VERSION,
+      as_of_date: asOfDate,
+      window_key: windowKey,
+      section_key: sectionKey,
+      source_fingerprint: sourceFingerprint,
+    },
+  )
+}
+
+export async function invalidateAnalysisSections(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKeys: AnalysisSectionKey[] = ALL_SECTION_KEYS,
+): Promise<void> {
+  const pk = cachePk(userPk)
+  for (const sectionKey of sectionKeys) {
+    await batchDeleteByPrefix(pk, analysisSectionSk(asOfDate, windowKey, sectionKey))
+    await batchDeleteByPrefix(pk, analysisJobSk(asOfDate, windowKey, sectionKey))
+  }
+}
+
+export async function getAnalysisSectionJob(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+): Promise<AnalysisSectionJob | null> {
+  const response = await docClient.send(new GetCommand({
+    TableName: ANALYSIS_CACHE_TABLE,
+    Key: { pk: cachePk(userPk), sk: analysisJobSk(asOfDate, windowKey, sectionKey) },
+  }))
+  const item = response.Item
+  if (!item) return null
+  const status = item.status
+  if (!['pending', 'running', 'complete', 'error'].includes(String(status))) return null
+  return {
+    sectionKey,
+    status: status as AnalysisJobStatus,
+    asOfDate,
+    windowKey,
+    sourceFingerprint: String(item.source_fingerprint ?? ''),
+    queuedAt: String(item.queued_at ?? ''),
+    updatedAt: String(item.updated_at ?? ''),
+    startedAt: typeof item.started_at === 'string' ? item.started_at : undefined,
+    completedAt: typeof item.completed_at === 'string' ? item.completed_at : undefined,
+    error: typeof item.error === 'string' ? item.error : undefined,
+    attempts: typeof item.attempts === 'number' ? item.attempts : undefined,
+  }
+}
+
+export async function queueAnalysisSectionJobs(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKeys: AnalysisSectionKey[],
+  sourceFingerprint: string,
+): Promise<void> {
+  const now = new Date().toISOString()
+  for (const sectionKey of sectionKeys) {
+    try {
+      await docClient.send(new PutCommand({
+        TableName: ANALYSIS_CACHE_TABLE,
+        Item: {
+          pk: cachePk(userPk),
+          sk: analysisJobSk(asOfDate, windowKey, sectionKey),
+          schema_version: SECTION_CACHE_SCHEMA_VERSION,
+          cache_version: SECTION_CACHE_VERSION,
+          as_of_date: asOfDate,
+          window_key: windowKey,
+          section_key: sectionKey,
+          source_fingerprint: sourceFingerprint,
+          status: 'pending',
+          queued_at: now,
+          updated_at: now,
+          attempts: 0,
+          expires_at: currentBlockExpiresAt(),
+        },
+        ConditionExpression: [
+          'attribute_not_exists(pk)',
+          'source_fingerprint <> :fp',
+          'attribute_not_exists(source_fingerprint)',
+          '#status IN (:complete, :errorStatus)',
+        ].join(' OR '),
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':fp': sourceFingerprint,
+          ':complete': 'complete',
+          ':errorStatus': 'error',
+        },
+      }))
+    } catch (error) {
+      if (!isConditionalFailure(error)) throw error
+    }
+  }
+}
+
+export async function claimAnalysisSectionJob(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+  sourceFingerprint: string,
+): Promise<boolean> {
+  const now = new Date().toISOString()
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  try {
+    await docClient.send(new UpdateCommand({
+      TableName: ANALYSIS_CACHE_TABLE,
+      Key: { pk: cachePk(userPk), sk: analysisJobSk(asOfDate, windowKey, sectionKey) },
+      UpdateExpression: 'SET #status = :running, started_at = :now, updated_at = :now ADD attempts :one',
+      ConditionExpression: 'source_fingerprint = :fp AND (#status = :pending OR (#status = :running AND updated_at < :stale))',
+      ExpressionAttributeNames: { '#status': 'status' },
+      ExpressionAttributeValues: {
+        ':running': 'running',
+        ':pending': 'pending',
+        ':fp': sourceFingerprint,
+        ':now': now,
+        ':stale': staleBefore,
+        ':one': 1,
+      },
+    }))
+    return true
+  } catch (error) {
+    if (isConditionalFailure(error)) return false
+    throw error
+  }
+}
+
+export async function completeAnalysisSectionJob(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+  sourceFingerprint: string,
+): Promise<void> {
+  const now = new Date().toISOString()
+  await docClient.send(new UpdateCommand({
+    TableName: ANALYSIS_CACHE_TABLE,
+    Key: { pk: cachePk(userPk), sk: analysisJobSk(asOfDate, windowKey, sectionKey) },
+    UpdateExpression: 'SET #status = :complete, completed_at = :now, updated_at = :now REMOVE #error',
+    ConditionExpression: 'source_fingerprint = :fp',
+    ExpressionAttributeNames: { '#status': 'status', '#error': 'error' },
+    ExpressionAttributeValues: {
+      ':complete': 'complete',
+      ':fp': sourceFingerprint,
+      ':now': now,
+    },
+  }))
+}
+
+export async function failAnalysisSectionJob(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+  sourceFingerprint: string,
+  message: string,
+): Promise<void> {
+  const now = new Date().toISOString()
+  await docClient.send(new UpdateCommand({
+    TableName: ANALYSIS_CACHE_TABLE,
+    Key: { pk: cachePk(userPk), sk: analysisJobSk(asOfDate, windowKey, sectionKey) },
+    UpdateExpression: 'SET #status = :errorStatus, #error = :error, updated_at = :now',
+    ConditionExpression: 'source_fingerprint = :fp',
+    ExpressionAttributeNames: { '#status': 'status', '#error': 'error' },
+    ExpressionAttributeValues: {
+      ':errorStatus': 'error',
+      ':error': message.slice(0, 1000),
+      ':fp': sourceFingerprint,
+      ':now': now,
+    },
+  }))
+}
+
+export async function analysisSectionStatus<T = unknown>(
+  userPk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+  sectionKey: AnalysisSectionKey,
+  expectedSourceFingerprint?: string,
+): Promise<AnalysisSectionStatus<T>> {
+  const cached = await getCachedAnalysisSection<T>(userPk, asOfDate, windowKey, sectionKey, expectedSourceFingerprint)
+  if (cached) {
+    return {
+      sectionKey,
+      status: 'complete',
+      generatedAt: cached.generatedAt,
+      sourceFingerprint: cached.sourceFingerprint,
+      cached: true,
+      payload: cached.payload,
+    }
+  }
+  const job = await getAnalysisSectionJob(userPk, asOfDate, windowKey, sectionKey)
+  if (job && (!expectedSourceFingerprint || job.sourceFingerprint === expectedSourceFingerprint)) {
+    return {
+      sectionKey,
+      status: job.status,
+      updatedAt: job.updatedAt,
+      error: job.error,
+      sourceFingerprint: job.sourceFingerprint,
+      cached: false,
+    }
+  }
+  return { sectionKey, status: 'missing', cached: false }
+}
+
+export async function markMarkdownExportDirty(userPk: string, reason = 'session_completion'): Promise<void> {
+  const now = new Date().toISOString()
+  await docClient.send(new PutCommand({
+    TableName: ANALYSIS_CACHE_TABLE,
+    Item: {
+      pk: cachePk(userPk),
+      sk: 'markdown_export_dirty#current',
+      reason,
+      dirty_at: now,
+      updated_at: now,
+      expires_at: currentBlockExpiresAt(),
+    },
+  }))
+}
+
+export async function clearMarkdownExportDirty(userPk: string): Promise<void> {
+  await docClient.send(new DeleteCommand({
+    TableName: ANALYSIS_CACHE_TABLE,
+    Key: { pk: cachePk(userPk), sk: 'markdown_export_dirty#current' },
+  }))
+}
+
+export async function getMarkdownExportDirty(userPk: string): Promise<{ dirtyAt: string; reason: string } | null> {
+  const response = await docClient.send(new GetCommand({
+    TableName: ANALYSIS_CACHE_TABLE,
+    Key: { pk: cachePk(userPk), sk: 'markdown_export_dirty#current' },
+  }))
+  const item = response.Item
+  if (!item) return null
+  return {
+    dirtyAt: String(item.dirty_at ?? item.updated_at ?? ''),
+    reason: String(item.reason ?? ''),
+  }
 }
 
 // ─── Markdown export cache ─────────────────────────────────────────────────────

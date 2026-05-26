@@ -78,9 +78,10 @@ export interface ChangeLogEntry {
 }
 
 export interface BlockNote {
-  block: string
+  date: string
   notes: string
   updated_at: string
+  block?: string
 }
 
 export interface LastComp {
@@ -590,6 +591,11 @@ export interface TemplateMeta {
   created_at: string
   updated_at: string
   archived: boolean
+  author?: string
+  author_pk?: string
+  published: boolean
+  published_at?: string
+  import_job_id?: string
   derived_from_template_sk?: string
   derived_from_program_sk?: string
   ai_evaluation?: AiTemplateEvaluation
@@ -658,8 +664,28 @@ export interface TemplateListEntry {
   estimated_weeks: number
   days_per_week: number
   archived: boolean
+  author?: string
+  author_pk?: string
+  published: boolean
+  published_at?: string
+  import_job_id?: string
   created_at: string
   updated_at: string
+}
+
+export type TemplateImportJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+
+export interface TemplateImportJob {
+  job_id: string
+  status: TemplateImportJobStatus
+  filename?: string
+  template_sk?: string
+  warnings?: any[]
+  error?: string
+  author?: string
+  author_pk?: string
+  created_at?: string
+  updated_at?: string
 }
 
 // ─── Imports ─────────────────────────────────────────────────────────────────

@@ -1,36 +1,42 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   Avatar,
   Button,
-  Divider,
   Drawer,
   Group,
   SegmentedControl,
   Select,
   Stack,
-  Switch,
   Text,
-  Textarea,
   TextInput,
 } from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
 import { defaultBarWeightKgForUnit, useSettingsStore, type Theme } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
-import { getSettings, updateProfile, type UserSettings } from '@/api/settings'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
-import { Sun, Moon, Monitor, LogIn, LogOut } from 'lucide-react'
-import type { WeekStartDay } from '@powerlifting/types'
+import { LogIn, LogOut } from 'lucide-react'
+import type { Sex, WeekStartDay } from '@powerlifting/types'
+import { getSettings, updateRankingLocation } from '@/api/settings'
+import { fetchStatCategories } from '@/api/client'
 
-const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
+const themeOptions: { value: Theme; label: string }[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
 ]
 
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text className="if-card-title" mb="xs">
+      {children}
+    </Text>
+  )
+}
+
 export default function SettingsDrawer() {
-  const { drawerOpen, drawerType, closeDrawer, pushToast } = useUiStore()
+  const { drawerOpen, drawerType, closeDrawer } = useUiStore()
   const {
     unit,
     theme,
@@ -42,62 +48,63 @@ export default function SettingsDrawer() {
     defaultSessionsView, setDefaultSessionsView,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
-  const { user, loading, signIn, signOut } = useAuth()
-  const [accountSettings, setAccountSettings] = useState<UserSettings | null>(null)
-  const [profileVisibility, setProfileVisibility] = useState<'private' | 'public'>('private')
-  const [displayName, setDisplayName] = useState('')
-  const [bio, setBio] = useState('')
-  const [publicSummary, setPublicSummary] = useState(false)
-  const [savingProfile, setSavingProfile] = useState(false)
+  const { user, loading, readOnly, signIn, signOut } = useAuth()
 
   const isOpen = drawerOpen && drawerType === 'settings'
+  const effectiveSex = program?.meta?.sex ?? sex
 
+  // Ranking location state
+  const [rankingCountry, setRankingCountry] = useState<string | null>(null)
+  const [rankingRegion, setRankingRegion] = useState<string | null>(null)
+  const [rankingCategories, setRankingCategories] = useState<{ countries: string[]; country_regions: Record<string, string[]> } | null>(null)
+  const [rankingSaving, setRankingSaving] = useState(false)
+
+  // Load current ranking location from settings
   useEffect(() => {
-    if (!isOpen || !user) {
-      setAccountSettings(null)
-      return
-    }
-
-    let cancelled = false
-    getSettings()
-      .then((settings) => {
-        if (cancelled) return
-        setAccountSettings(settings)
-        setProfileVisibility(settings.profile_visibility)
-        setDisplayName(settings.display_name)
-        setBio(settings.bio)
-        setPublicSummary(settings.public_training_summary_enabled)
-      })
-      .catch(() => {
-        if (!cancelled) setAccountSettings(null)
-      })
-
-    return () => {
-      cancelled = true
-    }
+    if (!isOpen || !user) return
+    getSettings().then((s) => {
+      setRankingCountry(s.ranking_country)
+      setRankingRegion(s.ranking_region)
+    }).catch(() => {})
   }, [isOpen, user])
 
-  const saveProfile = async () => {
-    setSavingProfile(true)
+  // Load categories for dropdowns (reuse existing categories endpoint)
+  useEffect(() => {
+    if (!isOpen || rankingCategories) return
+    fetchStatCategories().then((data: any) => {
+      if (data && !data.error) {
+        setRankingCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
+      }
+    }).catch(() => {})
+  }, [isOpen, rankingCategories])
+
+  const rankingRegionOptions: string[] = rankingCountry
+    ? (rankingCategories?.country_regions?.[rankingCountry] ?? [])
+    : []
+
+  const handleRankingCountryChange = useCallback((value: string | null) => {
+    setRankingCountry(value)
+    setRankingRegion(null)
+  }, [])
+
+  const saveRankingLocation = useCallback(async () => {
+    if (!user) return
+    setRankingSaving(true)
     try {
-      const settings = await updateProfile({
-        profile_visibility: profileVisibility,
-        display_name: displayName,
-        bio,
-        public_training_summary_enabled: publicSummary,
-      })
-      setAccountSettings(settings)
-      setProfileVisibility(settings.profile_visibility)
-      setDisplayName(settings.display_name)
-      setBio(settings.bio)
-      setPublicSummary(settings.public_training_summary_enabled)
-      pushToast({ message: 'Profile updated', type: 'success' })
+      await updateRankingLocation({ ranking_country: rankingCountry, ranking_region: rankingRegion })
     } catch {
-      pushToast({ message: 'Failed to update profile', type: 'error' })
+      // silently ignore
     } finally {
-      setSavingProfile(false)
+      setRankingSaving(false)
     }
-  }
+  }, [user, rankingCountry, rankingRegion])
+
+  useEffect(() => {
+    const programSex = program?.meta?.sex
+    if (programSex && programSex !== sex) {
+      setSex(programSex)
+    }
+  }, [program?.meta?.sex, setSex, sex])
 
   return (
     <Drawer
@@ -107,13 +114,21 @@ export default function SettingsDrawer() {
       position="right"
       size="sm"
       shadow="md"
+      styles={{
+        content: {
+          background: 'var(--bg-surface)',
+          color: 'var(--text-primary)',
+        },
+        header: {
+          background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border-subtle)',
+        },
+      }}
     >
-      <Stack gap="lg">
+      <Stack gap="xl">
         {/* Authentication */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Account
-          </Text>
+          <SectionLabel>Account</SectionLabel>
           {loading ? (
             <Text size="xs" c="dimmed">Loading account...</Text>
           ) : user ? (
@@ -142,49 +157,6 @@ export default function SettingsDrawer() {
               >
                 Sign out
               </Button>
-              {accountSettings && (
-                <Stack gap="xs" mt="xs">
-                  <Divider />
-                  <Text size="sm" fw={500}>Public Profile</Text>
-                  <SegmentedControl
-                    value={profileVisibility}
-                    onChange={(value) => setProfileVisibility(value as 'private' | 'public')}
-                    data={[
-                      { label: 'Private', value: 'private' },
-                      { label: 'Public', value: 'public' },
-                    ]}
-                    fullWidth
-                  />
-                  <TextInput
-                    label="Display name"
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.currentTarget.value)}
-                    maxLength={80}
-                  />
-                  <Textarea
-                    label="Bio"
-                    value={bio}
-                    onChange={(event) => setBio(event.currentTarget.value)}
-                    maxLength={280}
-                    minRows={2}
-                  />
-                  <Switch
-                    label="Show training summary when public"
-                    checked={publicSummary}
-                    onChange={(event) => setPublicSummary(event.currentTarget.checked)}
-                    disabled={profileVisibility !== 'public'}
-                  />
-                  <Button
-                    variant="light"
-                    size="sm"
-                    onClick={saveProfile}
-                    loading={savingProfile}
-                    fullWidth
-                  >
-                    Save profile
-                  </Button>
-                </Stack>
-              )}
             </Stack>
           ) : (
             <Button
@@ -199,37 +171,22 @@ export default function SettingsDrawer() {
           )}
         </div>
 
-        <Divider />
-
         {/* Theme */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Appearance
-          </Text>
-          <Group gap="xs">
-            {themeOptions.map((option) => {
-              const Icon = option.icon
-              const active = theme === option.value
-              return (
-                <Button
-                  key={option.value}
-                  variant={active ? 'filled' : 'outline'}
-                  size="sm"
-                  onClick={() => setTheme(option.value)}
-                  leftSection={<Icon size={16} />}
-                >
-                  {option.label}
-                </Button>
-              )
-            })}
-          </Group>
+          <SectionLabel>Appearance</SectionLabel>
+          <SegmentedControl
+            value={theme}
+            onChange={(value) => setTheme(value as Theme)}
+            data={themeOptions}
+            fullWidth
+            className="if-segmented"
+          />
         </div>
 
         {/* Sessions View */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Default Sessions View
-          </Text>
+          <SectionLabel>Preferences</SectionLabel>
+          <Text size="sm" fw={500} mb="xs">Default Sessions View</Text>
           <Select
             value={defaultSessionsView}
             onChange={(val) => val && setDefaultSessionsView(val as 'Month' | 'Agenda' | 'Compact')}
@@ -238,26 +195,28 @@ export default function SettingsDrawer() {
               { label: 'Month', value: 'Month' },
               { label: 'Compact', value: 'Compact' },
             ]}
+            data-testid="settings-default-sessions-view"
           />
         </div>
 
         {/* Sex for DOTS calculation */}
         <div>
-          <Text size="sm" fw={500} mb="xs">
-            Sex (for DOTS calculation)
-          </Text>
+          <Text size="sm" fw={500} mb="xs">Sex (for DOTS calculation)</Text>
           <SegmentedControl
-            value={sex}
+            value={effectiveSex}
             onChange={(val) => {
-              const newSex = val as 'male' | 'female';
-              setSex(newSex);
-              programSetSex(newSex).catch(console.error);
+              const newSex = val as Sex
+              setSex(newSex)
+              if (program) programSetSex(newSex).catch(console.error)
             }}
             data={[
               { label: 'Male', value: 'male' },
               { label: 'Female', value: 'female' },
             ]}
             fullWidth
+            className="if-segmented"
+            disabled={readOnly}
+            data-testid="settings-sex"
           />
         </div>
 
@@ -269,6 +228,8 @@ export default function SettingsDrawer() {
             value={weekStartForBlock(program, 'current')}
             onChange={(value) => value && setWeekStartDay(value as WeekStartDay).catch(console.error)}
             data={WEEK_START_DAYS.map((day) => ({ value: day, label: day }))}
+            disabled={readOnly}
+            data-testid="settings-week-start"
           />
         </div>
 
@@ -286,11 +247,56 @@ export default function SettingsDrawer() {
                 : defaultBarWeightKgForUnit(unit),
             )}
             step={unit === 'kg' ? 0.25 : 0.5}
+            disabled={readOnly}
+            data-testid="settings-bar-weight"
           />
           <Text size="xs" c="dimmed" mt={4}>
             Used for plate calculator. Default is 20kg in metric mode and 45lb in imperial mode.
           </Text>
         </div>
+
+        {/* Rankings Location */}
+        <div>
+          <SectionLabel>Rankings Location</SectionLabel>
+            <Text size="xs" c="dimmed" mb="sm">
+              Used for national and regional percentile cards on the dashboard.
+              Options come from the OpenPowerlifting dataset.
+            </Text>
+            <Stack gap="xs">
+              <Select
+                label="Country"
+                placeholder="Select country"
+                data={rankingCategories?.countries ?? []}
+                value={rankingCountry}
+                onChange={handleRankingCountryChange}
+                searchable
+                clearable
+                disabled={!rankingCategories}
+                data-testid="settings-ranking-country"
+              />
+              <Select
+                label="Region / Province / State"
+                placeholder={rankingCountry ? 'Select region' : 'Select country first'}
+                data={rankingRegionOptions}
+                value={rankingRegion}
+                onChange={setRankingRegion}
+                searchable
+                clearable
+                disabled={!rankingCountry || rankingRegionOptions.length === 0}
+                data-testid="settings-ranking-region"
+              />
+              <Button
+                size="xs"
+                variant="light"
+                loading={rankingSaving}
+                onClick={saveRankingLocation}
+                mt={4}
+                data-testid="settings-save-ranking-location"
+              >
+                Save Rankings Location
+              </Button>
+            </Stack>
+          </div>
       </Stack>
     </Drawer>
   )

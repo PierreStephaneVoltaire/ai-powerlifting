@@ -34,8 +34,8 @@ class SpecialistConfig:
         directive_types: Types of directives to inject
         preset: OpenRouter preset to use
         max_turns: Maximum turns before timeout (non-agentic path)
-        agentic: Whether to use the SDK agentic loop (Conversation.run())
-        max_iterations: Maximum iterations for the SDK agentic loop
+        agentic: Legacy metadata indicating a specialist may need iterative execution
+        max_iterations: Legacy iteration budget metadata
         skills: List of AgentSkills names this specialist uses (loaded at spawn time)
     """
     slug: str

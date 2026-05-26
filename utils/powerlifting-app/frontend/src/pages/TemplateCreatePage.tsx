@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Stack, Group, Title, Text, TextInput, Textarea, Button, Alert } from '@mantine/core'
 import { createBlankTemplate } from '../api/client'
+import { useAuth } from '@/auth/AuthProvider'
 import { templateEditRoute } from '../utils/templateRoutes'
 
 export default function TemplateCreatePage() {
+  const { readOnly } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ name: '', description: '', estimated_weeks: 4, days_per_week: 3 })
   const [nameError, setNameError] = useState(false)
@@ -63,6 +65,7 @@ export default function TemplateCreatePage() {
             setForm(f => ({ ...f, name: val }));
           }}
           error={nameError ? 'Name is required' : undefined}
+          disabled={readOnly}
         />
         <Textarea
           label="Description"
@@ -73,6 +76,7 @@ export default function TemplateCreatePage() {
           }}
           autosize
           minRows={2}
+          disabled={readOnly}
         />
         <TextInput
           type="number"
@@ -89,7 +93,7 @@ export default function TemplateCreatePage() {
       </Stack>
 
       <Group gap="xs">
-        <Button onClick={handleCreate} loading={saving} disabled={saving}>
+        <Button onClick={handleCreate} loading={saving} disabled={saving || readOnly}>
           Create Template
         </Button>
         <Button variant="default" component={Link} to="/designer/templates">

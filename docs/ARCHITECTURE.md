@@ -1,458 +1,309 @@
 # Architecture Deep Dive
 
-Technical details on how IF's internals work. For a high-level overview, see the [README](../README.md).
+Technical map of IF as it currently runs. For the human overview, read the [README](../README.md). For agent-facing implementation context, read [`.claude/CLAUDE.md`](../.claude/CLAUDE.md).
 
 ---
 
-## Project Layout
+## Runtime Shape
 
-```
-app/
-├── src/
-│   ├── main.py              # FastAPI entry point, lifespan init
-│   ├── config.py            # All env vars (module-level, os.getenv defaults)
-│   ├── logging_config.py    # Centralized logging
-│   ├── api/                 # FastAPI routers
-│   │   ├── completions.py   # POST /v1/chat/completions (OpenAI-compatible)
-│   │   ├── models.py        # GET /v1/models
-│   │   ├── files.py         # File serving from sandbox
-│   │   ├── webhooks.py      # Channel registration
-│   │   ├── directives.py    # Directive CRUD API
-│   │   └── admin.py         # POST /admin/reload-tools (hot reload)
-│   ├── agent/               # Core agent system
-│   │   ├── session.py       # AgentSession, system prompt assembly, execute_agent()
-│   │   ├── tool_registry.py # External tool plugin discovery, loading, indexing
-│   │   ├── specialists.py   # YAML-based specialist auto-discovery + rendering
-│   │   ├── tiering.py       # Context-aware model selection (air/standard/heavy)
-│   │   ├── condenser.py     # Conversation summarization
-│   │   ├── commands.py      # Slash command definitions
-│   │   ├── memory_tools.py  # ChromaDB memory search/add/remove/list
-│   │   ├── plugin_runner.py # Subprocess plugin runner helper
-│   │   ├── skills.py        # AgentSkills loader (load_skills_from_dir)
-│   │   ├── prompts/         # Jinja2 templates + specialist definitions
-│   │   │   ├── system_prompt.j2
-│   │   │   └── mcp_servers.yaml
-│   │   ├── reflection/      # Behavioral feedback loop
-│   │   │   ├── engine.py           # ReflectionEngine (periodic, post-session, on-demand)
-│   │   │   ├── pattern_detector.py # Behavioral pattern detection
-│   │   │   ├── opinion_formation.py
-│   │   │   ├── meta_analysis.py
-│   │   │   └── growth_tracker.py
-│   │   └── tools/           # OpenHands SDK tools
-│   │       ├── base.py               # TextObservation base class
-│   │       ├── capability_tracker.py # log_gap, list_gaps
-│   │       ├── context_tools.py      # get_signals, get_financial_context, get_context_snapshot, get_current_date
-│   │       ├── directive_tools.py    # add, revise, deactivate, list
-│   │       ├── discovery_tools.py    # discover_tools + use_tool
-│   │       ├── file_tools.py         # File read/write/search tools
-│   │       ├── media_tools.py        # read_media
-│   │       ├── opinion_tools.py      # log_opinion_pair, log_misconception
-│   │       ├── session_reflection.py # store_session_reflection
-│   │       ├── subagent_sdk.py       # run_subagent_sdk (agentic SDK loop)
-│   │       ├── subagents.py          # list_specialists, condense_intent, deep_think, spawn_specialist
-│   │       ├── terminal_tools.py     # terminal_execute, terminal_read_file, etc.
-│   │       ├── tool_schemas.py       # Registry-backed schema resolution
-│   │       └── user_facts.py         # search, add, update, list, remove
-│   ├── models/              # Dynamic model routing
-│   │   ├── loader.py        # ModelPresetManager + TierConfigManager
-│   │   └── router.py        # Smart model selection via fast LLM
-│   ├── channels/            # Multi-platform message handling
-│   │   ├── dispatcher.py    # translate → agent → chunk → deliver
-│   │   ├── delivery.py      # Platform-specific response delivery
-│   │   ├── chunker.py       # 1500-char chunk splitting
-│   │   ├── debounce.py      # 5-second message batching window
-│   │   ├── manager.py       # Listener lifecycle management
-│   │   ├── context.py       # Platform context var for status embed threading
-│   │   ├── status.py        # Discord status embed system
-│   │   ├── slash_commands.py
-│   │   ├── listeners/       # discord_listener.py, openwebui_listener.py
-│   │   └── translators/     # discord_translator.py, openwebui_translator.py
-│   ├── memory/              # Persistent memory
-│   │   ├── user_facts.py    # UserFact dataclass + UserFactStore (LanceDB)
-│   │   ├── lancedb_store.py # Table management, context-scoped storage
-│   │   ├── store.py         # Legacy ChromaDB MemoryStore
-│   │   ├── embeddings.py    # Sentence transformer embedding generation
-│   │   └── summarizer.py    # Fire-and-forget conversation summarization
-│   ├── storage/             # Storage abstraction
-│   │   ├── factory.py       # Backend factory
-│   │   ├── sqlite_backend.py
-│   │   ├── dynamodb_backend.py
-│   │   ├── directive_store.py   # DynamoDB directives + cache
-│   │   └── model_registry.py   # DynamoDB model metadata + cache
-│   ├── routing/             # Request routing
-│   │   ├── interceptor.py   # Bypass routing
-│   │   ├── cache.py         # Conversation cache
-│   │   └── commands.py      # Command parsing
-│   ├── app_sandbox/         # Per-conversation shell access
-│   │   ├── __init__.py      # init_local_sandbox entry point
-│   │   └── local.py         # LocalSandboxManager
-│   ├── files/               # FILES: metadata parsing
-│   │   └── __init__.py      # FileRef, FilesStripBuffer
-│   ├── orchestrator/        # Multi-step execution
-│   │   ├── executor.py      # execute_plan (sequential steps)
-│   │   ├── analyzer.py      # analyze_parallel (multiple perspectives)
-│   │   └── prompts/         # Jinja2 templates for orchestrator subagents
-│   ├── presets/             # Legacy preset definitions
-│   │   └── loader.py
-│   ├── mcp_servers/
-│   │   └── config.py
-│   ├── heartbeat/           # Proactive engagement
-│   │   ├── runner.py        # Idle detection, cooldown, quiet hours
-│   │   └── activity.py
-│   └── health/              # Fitness/training module
-│       ├── program_store.py # DynamoDB program storage
-│       ├── rag.py           # ChromaDB RAG for PDFs
-│       ├── renderer.py
-│       └── tools.py
-├── docker/                  # Packer build files
-├── terraform/               # Kubernetes + AWS infra
-└── main_system_prompt.txt   # Agent personality base prompt
-specialists/                 # One subdir per specialist (specialist.yaml + agent.j2)
-skills/                      # AgentSkills-compliant packages
-models/                      # Dynamic model routing config
-├── presets.yaml             # Subagent preset definitions
-├── tiers.yaml               # Tier config (air/standard/heavy + media)
-└── model_ids.txt            # Model IDs to track
-tools/                       # External tool plugins
-utils/                       # TypeScript/Node.js utility apps
+IF is a FastAPI service that accepts OpenAI-compatible chat requests and channel events, routes them through an OpenCode-based execution flow, and delivers text/files back to the originating platform.
+
+```text
+Client
+  Discord / OpenWebUI / HTTP
+    -> listener or /v1/chat/completions
+    -> command parsing + interceptor
+    -> run_if_flow()
+    -> session directory resolution
+    -> runtime context assembly
+    -> OpenCode planner
+    -> route:
+         social    -> direct OpenRouter chat
+         domain    -> specialist OpenCode run
+         technical -> OpenCode build run + review
+    -> optional HANDOFF_REQUIRED child runs
+    -> FILES: parsing + attachment materialization
+    -> chunked delivery
 ```
 
----
-
-## Request Processing Pipeline
-
-`completions.py → process_chat_completion_internal()`:
-
-1. Resolve `cache_key` (from webhook channel_id, chat_id, or content hash) and `context_id`
-2. Parse slash commands (`/reset`, `/pondering`, `/reflect`, `/gaps`, `/patterns`, `/opinions`, `/growth`, `/meta`, `/tools`)
-3. Run interceptor for bypass routing
-4. Track tier with context token estimation
-5. Resolve concrete model for the tier via `select_model_for_tier()` (first model in tier's sorted list)
-6. Create session with `model_override` and signals injection
-7. Execute agent via OpenHands SDK
-8. Extract file attachments from `FILES:` metadata
-9. Trigger async conversation summarization
+The normal request path is `api/completions.py -> flow.runner.run_if_flow`.
 
 ---
 
-## System Prompt Assembly
+## Session Workspace
 
-`session.py → assemble_system_prompt()` builds the complete prompt from:
+Every conversation gets a persistent local workspace under `OPENCODE_WORKSPACE_BASE`.
 
-1. **Signals** — current mental health, life load, training status (from `context_tools.py`)
-2. **Base personality** — `main_system_prompt.txt`
-3. **Operator context** — user facts from LanceDB (semantic search results relevant to conversation)
-4. **Conversation history**
-5. **Directives** — from DynamoDB DirectiveStore, priority-ordered
-6. **Memory protocol** — instructions for fact management
-7. **Media protocol** — instructions for handling attachments
-8. **Terminal environment** — workspace path, available commands
-9. **Pondering addendum** — if in reflective mode
+For Discord, the path is stable by guild/channel. For OpenWebUI and direct API calls, the path is derived from request identifiers or cache keys.
 
-For specialists, the assembly is different:
-- Specialist's own Jinja2 template instead of base personality
-- Only directives matching the specialist's `directive_types`
-- Only the specialist's declared tools and MCP servers
-- AgentSkills loaded per the specialist's `skills` config
+Important files:
+
+| File | Owner | Purpose |
+| --- | --- | --- |
+| `history.md` | runner | Incremental conversation history, edit-aware for Discord |
+| `history.json` | runner | Structured history backing file |
+| `plan.md` | planner | YAML-front-matter route/model/specialist decision |
+| `opencode.json` | runner | Per-run OpenCode MCP config |
+| `response.md` | domain/technical run | Final user-facing output |
+| `review.md` | technical reviewer | Retry signal for technical runs |
+| `.if/status.log` | OpenCode run | Progress lines forwarded to Discord status embeds |
+
+Generated deliverables stay inside the session directory. `FILES:` metadata in responses is stripped before delivery and converted into attachment records.
 
 ---
 
-## Model Router
+## Planning
 
-### Model Registry (`storage/model_registry.py`)
+The planner is an OpenCode `plan` agent run. It reads `history.md`, receives IF personality/core directives, runtime context, a specialist catalog, and eligible model IDs from `models/model_ids.txt`.
 
-DynamoDB-backed registry (`if-models` table) storing metadata for OpenRouter models.
-
-**Fields**: model_id, context_size, max_output_tokens, input/output pricing (per-provider), input/output modalities, tool_support, caching_support, zero_data_retention, throughput, latency.
-
-**Seeding**: `python scripts/seed_models.py` fetches models from OpenRouter API, filters to those in `models/model_ids.txt` with tool support, upserts to DynamoDB. Also fetches per-provider latency/throughput from `/api/v1/models/{id}/endpoints`. Runs at startup.
-
-**Periodic refresh**: Background task refreshes latency/throughput stats every 30 minutes (configurable via `MODEL_STATS_REFRESH_INTERVAL`).
-
-**Sorting strategies**: `price_asc`, `price_desc`, `latency_asc`, `context_size_desc`, `throughput_desc`.
-
-### Presets (`models/presets.yaml`)
-
-Subagent model pools. Each preset defines candidate models and a sorting strategy:
+It must write `plan.md` with this front matter:
 
 ```yaml
-presets:
-  code:
-    models: [anthropic/claude-sonnet-4, google/gemini-2.5-pro]
-    sort_by: price_asc
-    when: "Code generation, debugging, code review"
+---
+intent_summary: "short summary"
+interaction_type: "social|domain|technical"
+specialist: "powerlifting_coach"
+thinking_mode: false
+selected_model: "provider/model-id"
+---
 ```
 
-### Tiers (`models/tiers.yaml`)
+Validation happens in `flow/plan.py`. The selected model must be present in the eligible model list and the specialist must be known.
 
-Orchestrator model pools. Separate from subagent presets:
+Planner failure is fail-closed. `PlannerFailure` is caught in `run_if_flow`, a red Discord status is sent, and the user gets an explicit planner error. The runner does not fall back to a guessed social answer.
 
-```yaml
-tiers:
-  air:
-    models: [openai/gpt-5.4-nano, google/gemma-4-26b-a4b-it]
-    sort_by: throughput_desc
-    context_limit: 150000
-  standard:
-    models: [anthropic/claude-sonnet-4.6, google/gemini-3.1-pro-preview]
-    sort_by: latency_asc
-    context_limit: 200000
-  heavy:
-    models: [anthropic/claude-opus-4.6, openai/gpt-5.4]
-    sort_by: price_asc
-    context_limit: 1000000
+---
+
+## Routing
+
+### Social
+
+Social traffic is answered through a direct OpenRouter chat call. It receives:
+
+- IF personality prompt
+- Core directives
+- Runtime context
+- Planner prompt
+
+No domain MCP tools are loaded.
+
+### Domain
+
+Domain traffic runs the selected specialist through OpenCode. The runner builds a prompt with:
+
+- Current IF personality
+- Core directives
+- Specialist prompt rendered from `specialists/<slug>/agent.j2`
+- Directives filtered by the specialist's `directive_types`
+- Runtime context, memory rules, media rules, and thinking-mode skills when active
+- Tool protocol and allowed schemas
+
+Before the run starts, `write_opencode_config()` writes `opencode.json` for that workspace. It includes only the selected specialist's MCP servers and only the declared tool names for that specialist.
+
+If a domain run returns `HANDOFF_REQUIRED` blocks, the runner parses them, validates the targets, executes child domain runs in order, and then runs a synthesis pass.
+
+### Technical
+
+Technical traffic runs OpenCode `build` in the workspace. It must write `response.md`.
+
+After build, the runner asks OpenCode `plan` to review the output and write `review.md`.
+
+- `OK` on line 1 accepts the build.
+- `RETRY` on line 1 triggers one retry with review context.
+
+This path is for code, files, shell work, debugging, build/test work, and generated artifacts.
+
+---
+
+## Scoped MCP Configuration
+
+Local tools live under `tools/<plugin>/`. Each folder with a `tool.py` can be exposed as a Python MCP server through `tools/mcp_server.py`.
+
+`flow/opencode_config.py` groups allowed tool names by their backing category and writes an OpenCode config like:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "if_health": {
+      "type": "local",
+      "command": ["python", "/app/tools/mcp_server.py", "health"],
+      "environment": {
+        "IF_TOOLS_ROOT": "/app/tools",
+        "IF_MCP_ALLOWED_TOOLS": "health_get_session,health_update_session",
+        "PYTHONPATH": "/app/src:/app"
+      },
+      "enabled": true,
+      "timeout": 60000
+    }
+  }
+}
 ```
 
-Media tiers (vision-capable) are defined separately under `media_tiers`.
+The server filters `list_tools` using `IF_MCP_ALLOWED_TOOLS`, so OpenCode cannot see the rest of the plugin just because it shares a folder.
 
-### Selection Paths
+External MCP servers are defined in `specialists/mcp_servers.yaml` and included only when a specialist declares them.
 
-| Path | Target | Method |
-|------|--------|--------|
-| Main agent | `select_model_for_tier()` | Maps tier (0/1/2) → tier config → first model in sorted list. No LLM call. |
-| Specialists | `select_model_for_specialist()` | Maps `@preset/X` → YAML preset → fast LLM picks best model from candidates using task intent + metadata. |
-| Media | `get_media_tier()` | Picks vision-capable model from media tier pool. |
+Native OpenCode MCP tool names are server-prefixed, such as `if_health_health_get_session`. Prompts also expose a shell fallback:
 
-Fast router model: `anthropic/claude-haiku-4.5` (configurable). Falls back to first-sorted if router disabled or fails. If no YAML preset exists, original `@preset/X` reference passes through to OpenRouter (backward compatible).
-
----
-
-## Tool System
-
-### OpenHands SDK Pattern
-
-All tools follow `Action` (params) → `Observation` (result) → `Executor` (logic) → `ToolDefinition` (metadata), registered via `register_tool()`.
-
-**TextObservation fix**: All system tool Observations inherit from `TextObservation` (`agent/tools/base.py`) instead of raw SDK `Observation`. This fixes an SDK bug where `to_llm_content` returns empty content because custom Observations store results in named fields but don't override `to_llm_content`. `TextObservation` wires through `visualize.plain` so subclasses only need a correct `visualize` implementation.
-
-**Output limit**: `TOOL_OUTPUT_CHAR_LIMIT` is 200K chars (SDK default 50K causes silent clipping).
-
-### External Tool Plugins
-
-Self-contained packages in `tools/` with `tool.yaml` (metadata) + `tool.py` (exports `execute()`). Two execution modes:
-
-**In-process** (`mode: in_process`): `tool.py` imported directly; `execute()` called in the main process. For heavy plugins with dependencies already in the main venv.
-
-**Subprocess** (`mode: subprocess`): Each plugin ships `pyproject.toml`, `tool_meta.yaml` (static schema), and `_plugin_runner.py`. Registry creates a dedicated `uv` venv on first use and invokes the runner as a subprocess, passing `{"name": ..., "args": ...}` on stdin.
-
-### Adding a Plugin
-
-**In-process:**
-1. Create `tools/{name}/tool.yaml` — name, description, version, scope, `mode: in_process`
-2. Create `tools/{name}/tool.py` — exports `get_tools()`, `get_schemas()`, `async execute(name, args)`
-3. App picks it up on next startup, or `POST /admin/reload-tools` for hot reload
-
-**Subprocess:**
-1. Create `tools/{name}/tool.yaml` with `mode: subprocess`
-2. Create `tools/{name}/pyproject.toml` with dependencies
-3. Create `tools/{name}/tool_meta.yaml` with static schema
-4. Create `tools/{name}/tool.py` with `async execute(name, args)`
-5. Copy `tools/_plugin_runner.py` into the plugin directory
-
-### Two Agent-Facing Execution Paths
-
-- **SDK path** (agentic specialists): Tools registered via `register_tool()` at import. SDK resolves by PascalCase name.
-- **JSON schema path** (non-agentic specialists): `tool_schemas.py` delegates to registry for schema resolution and dispatch. Uses snake_case names.
-
----
-
-## Specialist System
-
-### Auto-Discovery
-
-`specialists.py` scans `SPECIALISTS_PATH` at import time. Each specialist directory contains:
-
-```
-specialists/{name}/
-├── specialist.yaml   # Config: description, tools, preset, directive_types, mcp_servers, skills, agentic flag
-└── agent.j2          # Jinja2 system prompt template
+```bash
+PYTHONPATH=<app-src:project-root> python -m mcp_runtime.invoke_tool <tool_name> '<json_args>'
 ```
 
-### Delegation Flow
+The app also starts MCP managers at startup to build a tool index, power slash commands, and serve runtime calls.
 
-1. `list_specialists` — orchestrator sees all available slugs + descriptions
-2. `condense_intent` — fast LLM rewrites user message as focused task for chosen specialist
-3. `spawn_specialist` — spawns with:
-   - System prompt from `agent.j2`
-   - Tools from `specialist.yaml` `tools` field
-   - Directives filtered by `directive_types`
-   - MCP servers from `mcp_servers` field
-   - AgentSkills from `skills` field
-   - Model selected via `select_model_for_specialist()`
+---
 
-### Agentic vs Non-Agentic
+## Specialists
 
-Specialists with `agentic: true` route to `run_subagent_sdk()` — full OpenHands SDK loop with multi-turn tool dispatch, stuck detection, and event-based iteration via `Conversation.run()`.
+Specialists are discovered from `specialists/*/specialist.yaml`.
 
-Non-agentic specialists use a raw OpenRouter call loop.
+Important fields:
 
-### Skills System
+| Field | Meaning |
+| --- | --- |
+| `description` | Planner-facing routing description |
+| `preset` | Domain/model grouping metadata |
+| `tools` | Exact local tool names allowed for this specialist |
+| `mcp_servers` | Local/external MCP categories to attach |
+| `directive_types` | Directive classes loaded into the prompt |
+| `context_builder` | Optional prefetch hook for specialist-specific context |
+| `skills` | AgentSkills packages referenced by the prompt/runtime |
 
-AgentSkills-compliant packages loaded per-specialist at spawn time (not globally — context size concern).
+Rendered specialist prompts come from `agent.specialists.render_specialist_prompt`.
 
+Current important routing rules:
+
+- `powerlifting_coach` handles training reads, coaching, analysis, and explicit health/training writes through scoped health MCP tools.
+- `finance_write` handles explicit finance snapshot mutations.
+- `financial_analyst` handles market/financial analysis with Yahoo Finance and Alpha Vantage MCPs.
+- `research_assistant` can use supplement research and research-model behavior.
+- `media_reader` handles image/file analysis when an attachment requires vision.
+
+Specialists do not call SDK delegation tools in the OpenCode path. If another specialist is needed, they write `HANDOFF_REQUIRED`.
+
+---
+
+## Runtime Context
+
+`flow/context.py` builds the compatibility block injected into planner and OpenCode prompts.
+
+It can include:
+
+- Current diary/training/finance signals
+- LanceDB operator facts relevant to the latest message
+- Upload manifests
+- Runtime compatibility notes mapping old tool names to current protocols
+- Runtime memory CLI commands
+- Media protocol text
+- Thinking-mode addenda and skills
+
+Runtime memory CLI:
+
+```bash
+python -m flow.runtime_tool user_facts_search '<json>'
+python -m flow.runtime_tool user_facts_add '<json>'
+python -m flow.runtime_tool user_facts_supersede '<json>'
+python -m flow.runtime_tool capability_gap_log '<json>'
 ```
-skills/{skill-name}/
-├── SKILL.md       # YAML frontmatter + markdown body
-├── scripts/       # Executables (run via uv/uvx/npx)
-├── references/    # On-demand reference docs
-└── assets/        # Templates/data
+
+These are intentionally narrow. They let OpenCode runs interact with durable operator memory without exposing the whole old SDK tool surface.
+
+---
+
+## Data Stores
+
+| Store | Use |
+| --- | --- |
+| LanceDB | User facts, semantic search, context-scoped memory |
+| ChromaDB | Legacy memory store and health-document RAG |
+| DynamoDB `if-core` | Directives, proposals, model registry data |
+| DynamoDB health/finance/diary tables | Domain state |
+| SQLite | Webhook/channel registration and activity |
+| Local workspace | Per-conversation history, plans, outputs, files |
+
+DynamoDB writes must convert Python floats to `Decimal(str(value))`. Reuse existing conversion helpers in health/finance/model stores rather than writing raw floats.
+
+---
+
+## Directives And Reflection
+
+Directives are versioned behavioral rules stored in DynamoDB. They are priority-tiered and filtered by `directive_types`.
+
+The reflection system can run periodically, post-session, or on demand through slash commands. It tracks:
+
+- Behavioral patterns
+- Capability gaps
+- Opinions and disagreements
+- Session reflections
+- Growth signals
+- Directive proposals
+
+Proposals are reviewed in the proposals portal before changing runtime behavior.
+
+---
+
+## Channels And Delivery
+
+| Platform | Current role |
+| --- | --- |
+| Discord | Main interactive channel, slash commands, status embeds |
+| OpenWebUI | Polling integration |
+| HTTP | OpenAI-compatible API |
+
+Dispatcher flow:
+
+```text
+listener -> debounce -> translator -> completions pipeline -> chunker -> delivery
 ```
 
-Loaded via `openhands.sdk.load_skills_from_dir`. Skill scripts run in isolated uv-managed venvs.
+Discord status embeds are emitted for model selection, domain/technical starts and completions, planner/domain failures, and tool progress lines from `.if/status.log`.
+
+Messages are chunked to 1500 characters for Discord. Attachments are materialized from generated file references.
 
 ---
 
-## Channel Internals
+## Models
 
-### Message Flow
+Model IDs live in `models/model_ids.txt`. The planner chooses the execution model from that list.
 
-```
-Platform listener → Debounce (5s batching) → Dispatcher
-  → Set platform context (contextvars.ContextVar)
-  → Translate to ChatCompletionRequest
-  → Completions pipeline
-  → Chunker (1500 char chunks)
-  → Delivery (platform-specific)
-```
+The model registry still stores OpenRouter metadata in DynamoDB: context size, max output, price, modalities, tool support, caching support, latency, and throughput.
 
-### Discord Specifics
-
-**Status embeds**: Color-coded embeds sent per event — message received (blue), model selected (green), subagent spawning (yellow), subagent completed (green), subagent/tool failed (red), tool started (purple), tool completed (green). Context propagated through `ThreadPoolExecutor` via `contextvars.copy_context()`. No-ops for non-Discord platforms.
-
-**Attachments**: Downloaded by dispatcher, uploaded to terminal filesystem, referenced via `FILES:` metadata in agent output. `FilesStripBuffer` strips these lines from user-facing responses.
-
-**History**: Dispatcher fetches up to 100 historical messages for context enrichment.
+Tier/preset managers still exist and are used by legacy paths and metadata flows, but the current request path relies on planner-selected concrete model IDs rather than the old `@preset/*` specialist router.
 
 ---
 
-## Directive System
+## Tool Plugins
 
-DynamoDB `if-core` table. Priority tiers:
+Each local plugin is a folder under `tools/` with metadata and an async `execute(name, args)` entrypoint.
 
-| Tier | Label | Purpose |
-|------|-------|---------|
-| 0 | Core Identity | Fundamental personality traits |
-| 1 | Behavioral Rules | How to respond/act |
-| 2 | Style & Tone | Voice adjustments |
-| 3 | Domain Knowledge | Topic-specific guidance |
-| 4 | Situational | Context-dependent rules |
-| 5 | Temporary | Time-limited adjustments |
+Common plugins:
 
-Content is rewritten through LLM for consistent voice. Cached in memory with periodic refresh.
+| Plugin | Purpose |
+| --- | --- |
+| `health` | Training program CRUD, sessions, competitions, imports, templates, glossary, analytics, RAG, conversions |
+| `finance` | Profile, goals, accounts, investments, cashflow, tax, insurance, net worth |
+| `diary` | Diary entries and signal computation |
+| `proposals` | Directive proposal CRUD and implementation plans |
+| `supplement_research` | Supplement corpus search |
+| `temporal_*` | Dates, durations, timezones, city time, ages, Unix timestamps |
 
-Agent tools: `directive_add`, `directive_revise`, `directive_deactivate`, `directive_list`.
-
----
-
-## Reflection Engine
-
-`agent/reflection/` — triggers post-session (>5 turns), periodically (6h), on-demand (`/reflect`), or threshold-based (uncategorized facts, gaps, opinions accumulate).
-
-**Cycle**: Pattern Detection → Opinion Formation → Capability Gap Analysis → Meta-Analysis → Growth Tracking.
-
-**Capability gap scoring**: `(frequency × 0.4) + (recency × 0.3) + (impact × 0.3)`. Gaps exceeding `CAPABILITY_GAP_PROMOTION_THRESHOLD` (default 3) are promoted to tool suggestions.
+Plugins can still expose schemas for direct app-side dispatch. The current OpenCode specialist path reaches them through scoped MCP servers or the shell bridge fallback.
 
 ---
 
-## Orchestrator
+## Deployment
 
-Multi-step execution in `orchestrator/`:
+The app is deployed to a personal k3s cluster.
 
-- **`execute_plan`**: Sequential steps with subagents. Each step sees filesystem state from previous steps.
-- **`analyze_parallel`**: Parallel analysis across perspectives (security, performance, architecture, testing, documentation). Each writes to `/home/user/workspace/findings/{perspective}.md`. Synthesizer combines into prioritized report.
+- Terraform manages Kubernetes/AWS resources.
+- Packer builds Docker images.
+- Portals run as separate frontend/backend services.
+- Prometheus, Loki, Grafana, and Discord status embeds cover observability.
 
----
+Minimum local development requirements:
 
-## Sandbox
-
-Per-conversation shell access via OpenHands SDK `LocalWorkspace`. Each conversation gets an isolated working directory at `WORKSPACE_BASE/{conversation_id}/`.
-
-`LocalSandboxManager` manages lifecycle: `init_local_sandbox(conversation_id)` creates directory + returns `LocalWorkspace`; `get_local_sandbox(conversation_id)` retrieves existing.
-
-`FILES:` lines in agent output reference sandbox files for artifact tracking. Parsed/stripped by `files/__init__.py`.
-
----
-
-## Heartbeat
-
-Proactive engagement after idle periods. Config: idle 6h, cooldown 6h, quiet hours 23:00-07:00 UTC. Uses stored user facts for opening message. Integrates with pondering mode for reflective conversations.
-
----
-
-## MCP Servers
-
-Defined in `specialists/mcp_servers.yaml`:
-
-| Server | Purpose |
-|--------|---------|
-| `time` | Current date/time |
-| `aws_docs` | AWS documentation lookup |
-| `yahoo_finance` | Stock quotes |
-| `alpha_vantage` | Financial indicators |
-
-Assignment per specialist via `specialist.yaml` `mcp_servers` field.
-
----
-
-## Storage
-
-| Store | Backend | Table | Purpose |
-|-------|---------|-------|---------|
-| User Facts | LanceDB | per-context | Operator context with semantic search |
-| Webhooks | SQLite (WAL) | — | Channel registration and activity |
-| Directives | DynamoDB | `if-core` | Behavioral rules with versioning |
-| Models | DynamoDB | `if-models` | OpenRouter model metadata |
-| Health | DynamoDB | `if-health` | Training programs |
-| Finance | DynamoDB | `if-finance` | Financial snapshots |
-| Diary | DynamoDB | `if-diary-entries`, `if-diary-signals` | Journaling + distilled signals |
-| Proposals | DynamoDB | `if-proposals` | Agent-proposed directives |
-
----
-
-## Commands
-
-| Command | Action |
-|---------|--------|
-| `/end_convo` | Clear conversation state and force reclassification |
-| `/clear [amount]` | Delete recent messages (default 100) |
-| `/pondering` | Enter reflective conversation mode (heavy tier) |
-| `/reflect` | Trigger manual reflection cycle |
-| `/gaps [min_triggers]` | List capability gaps by priority |
-| `/patterns` | Show detected behavioral patterns |
-| `/opinions` | Show opinion pairs (operator vs agent positions) |
-| `/growth [days]` | Operator growth report (default 30 days) |
-| `/meta` | Store health metrics and category suggestions |
-| `/tools` | Tool suggestions from capability gaps |
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENROUTER_API_KEY` | required | API key for model access |
-| `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | LLM endpoint |
-| `TIER_UPGRADE_THRESHOLD` | 0.65 | Context fraction before tier upgrade |
-| `TIER_AIR_LIMIT` | 100000 | Air tier token limit |
-| `TIER_STANDARD_LIMIT` | 200000 | Standard tier token limit |
-| `TIER_HEAVY_LIMIT` | 1000000 | Heavy tier token limit |
-| `HEARTBEAT_ENABLED` | true | Enable proactive engagement |
-| `HEARTBEAT_IDLE_HOURS` | 6.0 | Hours idle before heartbeat |
-| `DIRECTIVE_STORE_ENABLED` | true | Enable DynamoDB directives |
-| `REFLECTION_ENABLED` | true | Enable reflection engine |
-| `WORKSPACE_BASE` | `/app/src/data/conversations` | Per-conversation working directories |
-| `TOOL_OUTPUT_CHAR_LIMIT` | 200000 | Max tool output chars |
-| `EXTERNAL_TOOLS_PATH` | `""` | Override for external tool plugins path |
-| `EXTERNAL_TOOLS_FALLBACK` | `project_root/tools/` | Fallback path if EXTERNAL_TOOLS_PATH is empty |
-| `SPECIALISTS_PATH` | `project_root/specialists/` | Specialists directory |
-| `SKILLS_PATH` | `project_root/skills/` | AgentSkills directory |
-| `IF_MODELS_TABLE_NAME` | `if-models` | DynamoDB table for model registry |
-| `MODELS_PATH` | `project_root/models/` | Model preset YAML configs |
-| `MODEL_ROUTER_MODEL` | `anthropic/claude-haiku-4.5` | Fast model for subagent routing |
-| `MODEL_ROUTER_ENABLED` | true | Enable LLM-based model routing |
-| `MODEL_STATS_REFRESH_INTERVAL` | 1800 | Seconds between stats refreshes |
-| `MODEL_SEED_INTERVAL` | 3600 | Seconds between full model metadata re-seeds from OpenRouter |
-| `LLM_REASONING_EFFORT` | `high` | Reasoning effort for main agent (`high`/`medium`/`low`; ignored for non-supporting models) |
-| `SPECIALIST_REASONING_EFFORT` | (same as LLM_REASONING_EFFORT) | Reasoning effort for specialist subagents |
-
----
+- Python 3.12
+- `OPENROUTER_API_KEY`
+- access to configured storage backends for production-like runs
+- `opencode` on `PATH` for normal planner/domain/technical execution

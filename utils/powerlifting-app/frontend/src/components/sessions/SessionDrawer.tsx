@@ -33,6 +33,8 @@ import SessionToolkitModal from './SessionToolkitModal'
 import SessionNotesHelperModal from './SessionNotesHelperModal'
 import AutoRegulationModal from './AutoRegulationModal'
 import { normalizeExerciseName } from '@/utils/volume'
+import { useAuth } from '@/auth/AuthProvider'
+import Num from '@/components/shared/Num'
 
 const WELLNESS_FIELDS: Array<{
   key: keyof Omit<SessionWellness, 'recorded_at'>
@@ -168,6 +170,10 @@ function failedReasonLabels(reasons: FailedSetReason[]): string {
   return reasons.map((reason) => FAILED_SET_REASON_LABELS.get(reason) || reason).join(', ')
 }
 
+function exerciseDragId(exercise: Exercise, index: number): string {
+  return exercise.id || `ex-${index}`
+}
+
 interface SessionDrawerProps {
   isOpen: boolean
   onClose: () => void
@@ -175,6 +181,7 @@ interface SessionDrawerProps {
   sessionIndex: number
   sessionArrayIndex: number
   mode?: 'drawer' | 'page'
+  readOnly?: boolean
   onSaveSuccess?: () => void
   onDeleteSuccess?: () => void
 }
@@ -191,7 +198,8 @@ function SortableExerciseItem({
   renderMobileMenu,
   renderDesktopActions,
   renderSetStatusControls,
-  renderStatusBadges
+  renderStatusBadges,
+  disabled = false,
 }: { 
   exercise: Exercise;
   index: number;
@@ -205,15 +213,17 @@ function SortableExerciseItem({
   renderDesktopActions: (ex: Exercise, i: number) => React.ReactNode;
   renderSetStatusControls: (ex: Exercise, i: number) => React.ReactNode;
   renderStatusBadges: (ex: Exercise) => React.ReactNode;
+  disabled?: boolean;
 }) {
   const {
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging
-  } = useSortable({ id: exercise.id || `ex-${index}` })
+  } = useSortable({ id: exerciseDragId(exercise, index), disabled })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -225,9 +235,16 @@ function SortableExerciseItem({
   const setStatuses = normalizeSetStatuses(exercise)
 
   return (
-    <Paper ref={setNodeRef} style={{ ...style, overflow: 'hidden' }} withBorder p="sm" radius="md">
-      <Group gap="xs" mb="xs">
-        <Box {...attributes} {...listeners} style={{ cursor: 'grab', padding: '4px 0', opacity: 0.5 }}>
+    <Paper ref={setNodeRef} style={style} withBorder p={0} radius={10} className="if-exercise-card" data-testid={`session-exercise-${index}`}>
+      <Group gap="xs" className="if-exercise-header">
+        <Box
+          ref={setActivatorNodeRef}
+          {...(disabled ? {} : attributes)}
+          {...(disabled ? {} : listeners)}
+          className="if-exercise-drag"
+          style={{ cursor: disabled ? 'default' : 'grab', touchAction: 'none' }}
+          data-testid={`exercise-drag-handle-${index}`}
+        >
           <GripVertical size={16} />
         </Box>
         <Autocomplete
@@ -237,6 +254,17 @@ function SortableExerciseItem({
           placeholder="Exercise name"
           size="sm"
           style={{ flex: 1 }}
+          styles={{
+            input: {
+              background: 'transparent',
+              borderColor: 'transparent',
+              color: 'var(--text-primary)',
+              fontSize: 15,
+              fontWeight: 500,
+            },
+          }}
+          disabled={disabled}
+          data-testid={`exercise-name-${index}`}
         />
         <Group gap={4} wrap="nowrap">
           {renderMobileMenu(exercise, index)}
@@ -247,41 +275,52 @@ function SortableExerciseItem({
             color="red"
             size="sm"
             onClick={() => onRemove(index)}
+            disabled={disabled}
+            data-testid={`exercise-delete-${index}`}
           >
             <Trash2 size={16} />
           </ActionIcon>
         </Group>
       </Group>
 
-      <Box>
+      <Box p={16}>
         <Group justify="space-between" align="flex-start" gap={4} mb="xs" wrap="nowrap">
           <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
             <Box>
-              <Text size="xs" c="dimmed">Sets</Text>
+              <Text className="if-small-label">Sets</Text>
               <TextInput
                 type="number"
                 value={exercise.sets || ''}
                 onChange={(e) => onUpdateSets(index, Number(e.currentTarget.value) || 0)}
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
+                disabled={disabled}
+                data-testid={`exercise-sets-${index}`}
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">Reps</Text>
+              <Text className="if-small-label">Reps</Text>
               <TextInput
                 type="number"
                 value={exercise.reps || ''}
                 onChange={(e) => onUpdate(index, 'reps', Number(e.currentTarget.value) || 0)}
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
+                disabled={disabled}
+                data-testid={`exercise-reps-${index}`}
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">{unit}</Text>
+              <Text className="if-small-label">{unit}</Text>
               <TextInput
                 type="number"
                 value={exercise.kg !== null && exercise.kg !== undefined ? toDisplayUnit(exercise.kg, unit as 'kg' | 'lb') : ''}
                 onChange={(e) => onUpdate(index, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
                 size="sm"
                 step={0.5}
+                classNames={{ input: 'if-control-input' }}
+                disabled={disabled}
+                data-testid={`exercise-weight-${index}`}
                 rightSection={setStatuses.includes('failed') ? (
                   <Tooltip label="Contains failed sets">
                     <AlertTriangle size={14} color="var(--mantine-color-red-6)" />
@@ -290,7 +329,7 @@ function SortableExerciseItem({
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">RPE</Text>
+              <Text className="if-small-label">RPE</Text>
               <TextInput
                 type="number"
                 inputMode="decimal"
@@ -308,13 +347,16 @@ function SortableExerciseItem({
                 }}
                 placeholder="1-10"
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
+                disabled={disabled}
+                data-testid={`exercise-rpe-${index}`}
               />
             </Box>
           </SimpleGrid>
         </Group>
         
         <Box mt="xs">
-          <Text size="xs" c="dimmed">Notes</Text>
+          <Text className="if-small-label">Notes</Text>
           <Textarea
             value={exercise.notes || ''}
             onChange={(e) => onUpdate(index, 'notes', e.currentTarget.value)}
@@ -323,14 +365,16 @@ function SortableExerciseItem({
             autosize
             minRows={1}
             maxRows={4}
-            variant="filled"
+            className="if-exercise-notes"
+            disabled={disabled}
+            data-testid={`exercise-notes-${index}`}
           />
         </Box>
 
         {setStatuses.length > 0 && (
           <Box mt={6}>
             <Group gap={4} align="center" wrap="nowrap">
-              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Sets:</Text>
+              <Text className="if-small-label" style={{ flexShrink: 0 }}>Sets</Text>
               <Box style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                 {renderSetStatusControls(exercise, index)}
               </Box>
@@ -349,15 +393,20 @@ export default function SessionDrawer({
   session,
   sessionArrayIndex,
   mode = 'drawer',
+  readOnly: readOnlyProp,
   onSaveSuccess,
   onDeleteSuccess,
 }: SessionDrawerProps) {
-  const { program, version, updateSession, saveSession, rescheduleSession, deleteSession } = useProgramStore()
+  const { readOnly: authReadOnly } = useAuth()
+  const readOnly = readOnlyProp ?? authReadOnly
+  const { program, version, updateSession, saveSession, deleteSession } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const [localSession, setLocalSession] = useState<Session | null>(null)
   const [originalDate, setOriginalDate] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const [showVideoUpload, setShowVideoUpload] = useState(false)
   const [discardIntent, setDiscardIntent] = useState<'reset' | 'close' | null>(null)
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
@@ -371,6 +420,15 @@ export default function SessionDrawer({
     reps: number | null
     isBarbell: boolean
   } | null>(null)
+  const savedDateRef = useRef('')
+  const changeVersionRef = useRef(0)
+  const latestSaveRef = useRef<{ session: Session; version: number; notify: boolean; close: boolean } | null>(null)
+  const saveInFlightRef = useRef(false)
+
+  const markChanged = () => {
+    changeVersionRef.current += 1
+    setHasChanges(true)
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -389,12 +447,14 @@ export default function SessionDrawer({
       setLocalSession((prev) => {
         if (!prev) return prev
         const items = prev.exercises
-        const oldIndex = items.findIndex(i => i.id === active.id)
-        const newIndex = items.findIndex(i => i.id === over.id)
+        const dragIds = items.map((exercise, index) => exerciseDragId(exercise, index))
+        const oldIndex = dragIds.findIndex((id) => id === active.id)
+        const newIndex = dragIds.findIndex((id) => id === over.id)
+        if (oldIndex < 0 || newIndex < 0) return prev
         const nextExercises = arrayMove(items, oldIndex, newIndex)
         return { ...prev, exercises: nextExercises }
       })
-      setHasChanges(true)
+      markChanged()
     }
   }
 
@@ -413,8 +473,11 @@ export default function SessionDrawer({
     return lookup
   }, [glossary])
 
-  // Initialize local state when session changes
+  // Initialize local state when the backing session changes. While local edits
+  // are dirty or saving, keep the editor snapshot instead of replaying an older
+  // store update over it.
   useEffect(() => {
+    if (hasChanges || isSaving) return
     if (session) {
       const clone = JSON.parse(JSON.stringify(session)) as Session
       // Pre-populate exercises from planned_exercises for incomplete sessions
@@ -436,20 +499,23 @@ export default function SessionDrawer({
       }))
       setLocalSession(clone)
       setOriginalDate(session.date)
+      savedDateRef.current = session.date
+      changeVersionRef.current = 0
       setHasChanges(false)
+      setLastSavedAt(null)
     }
-  }, [session])
+  }, [hasChanges, isSaving, session])
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const handleSaveRef = useRef<(() => Promise<void>) | null>(null)
+  const handleSaveRef = useRef<((notify?: boolean, closeOnSuccess?: boolean) => Promise<void>) | null>(null)
 
   useEffect(() => {
-    if (!hasChanges || !session || !localSession || !program) return
+    if (readOnly || !hasChanges || !session || !localSession || !program) return
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
     }
     autoSaveTimerRef.current = setTimeout(() => {
-      void handleSaveRef.current?.()
+      void handleSaveRef.current?.(false, false)
     }, 1500)
     return () => {
       if (autoSaveTimerRef.current) {
@@ -459,45 +525,103 @@ export default function SessionDrawer({
     }
   }, [hasChanges, localSession, program, session])
 
+  useEffect(() => {
+    if (!hasChanges && !isSaving) return
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasChanges, isSaving])
+
   const phaseColorValue = session && program ? phaseColor(session.phase, program.phases) : 'var(--mantine-color-gray-6)'
 
   if (!session || !localSession || !program) return null
   const wellness = localSession.wellness
 
-  const handleSave = async () => {
+  const flushLatestSave = async () => {
+    if (saveInFlightRef.current) return
+
+    saveInFlightRef.current = true
+    setIsSaving(true)
+    let shouldNotify = false
+    let shouldClose = false
+
     try {
-      const rpeError = validateRpeValues()
-      if (rpeError) {
-        pushToast({ message: rpeError, type: 'error' })
-        return
+      while (latestSaveRef.current) {
+        const job = latestSaveRef.current
+        latestSaveRef.current = null
+        shouldNotify = shouldNotify || job.notify
+        shouldClose = shouldClose || job.close
+
+        const lookupDate = savedDateRef.current || originalDate || job.session.date
+        await saveSession(lookupDate, sessionArrayIndex, job.session)
+        savedDateRef.current = job.session.date
+
+        if (job.version === changeVersionRef.current && !latestSaveRef.current) {
+          setLocalSession(job.session)
+          setOriginalDate(job.session.date)
+          setHasChanges(false)
+          setLastSavedAt(new Date())
+        }
       }
 
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current)
-        autoSaveTimerRef.current = null
+      if (shouldNotify) {
+        pushToast({ message: 'Session saved successfully', type: 'success' })
       }
-
-      if (localSession.date !== originalDate) {
-        const newDay = getDayOfWeek(localSession.date)
-        await rescheduleSession(originalDate, sessionArrayIndex, localSession.date, newDay)
-      }
-
-      const sessionToSave = finalizeSessionForSave(localSession)
-      updateSession(sessionToSave.date, sessionArrayIndex, sessionToSave)
-      await saveSession(localSession.date, sessionArrayIndex)
-
-      setHasChanges(false)
-      setLocalSession(sessionToSave)
-      setOriginalDate(sessionToSave.date)
-      pushToast({ message: 'Session saved successfully', type: 'success' })
-      if (onSaveSuccess) {
-        onSaveSuccess()
-      } else if (mode === 'drawer') {
-        onClose()
+      if (shouldClose) {
+        if (onSaveSuccess) {
+          onSaveSuccess()
+        } else {
+          onClose()
+        }
       }
     } catch (err) {
       console.error(err)
-      pushToast({ message: 'Failed to save session', type: 'error' })
+      setHasChanges(true)
+      setLastSavedAt(null)
+      pushToast({
+        message: shouldNotify ? 'Failed to save session' : 'Auto-save failed; session has unsaved changes',
+        type: 'error',
+      })
+    } finally {
+      saveInFlightRef.current = false
+      setIsSaving(false)
+    }
+  }
+
+  const handleSave = async (notify = true, closeOnSuccess = mode === 'drawer' && notify) => {
+    const rpeError = validateRpeValues()
+    if (rpeError) {
+      pushToast({ message: rpeError, type: 'error' })
+      return
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
+
+    try {
+      const sessionToSave = finalizeSessionForSave(localSession)
+      latestSaveRef.current = {
+        session: sessionToSave,
+        version: changeVersionRef.current,
+        notify,
+        close: closeOnSuccess,
+      }
+      await flushLatestSave()
+    } catch (err) {
+      console.error(err)
+      setHasChanges(true)
+      setLastSavedAt(null)
+      pushToast({
+        message: notify ? 'Failed to save session' : 'Auto-save failed; session has unsaved changes',
+        type: 'error',
+      })
     }
   }
 
@@ -507,6 +631,7 @@ export default function SessionDrawer({
     const clone = JSON.parse(JSON.stringify(session)) as Session
     clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
     setLocalSession(clone)
+    changeVersionRef.current = 0
     setHasChanges(false)
   }
 
@@ -535,7 +660,7 @@ export default function SessionDrawer({
       exercises[index] = { ...exercises[index], [field]: value }
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const addExercise = () => {
@@ -559,7 +684,7 @@ export default function SessionDrawer({
         ],
       }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const removeExercise = (index: number) => {
@@ -568,7 +693,7 @@ export default function SessionDrawer({
       const exercises = prev.exercises.filter((_, i) => i !== index)
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateSetStatus = (exerciseIndex: number, setIndex: number, status: SetStatus) => {
@@ -582,7 +707,7 @@ export default function SessionDrawer({
       })
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const openFailedSetReasons = (exerciseIndex: number, setIndex: number, exerciseOverride?: Exercise) => {
@@ -618,7 +743,7 @@ export default function SessionDrawer({
       })
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const saveFailedSetReasons = () => {
@@ -637,7 +762,7 @@ export default function SessionDrawer({
       })
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateExerciseRpe = (index: number, rpe: number | null) => {
@@ -647,7 +772,7 @@ export default function SessionDrawer({
       exercises[index] = { ...exercises[index], rpe }
       return { ...prev, exercises }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const validateRpeValues = (): string | null => {
@@ -673,7 +798,7 @@ export default function SessionDrawer({
     if (newDate && newDate !== localSession.date) {
       const newDay = getDayOfWeek(newDate)
       setLocalSession((prev) => prev ? { ...prev, date: newDate, day: newDay } : prev)
-      setHasChanges(true)
+      markChanged()
     }
   }
 
@@ -683,22 +808,22 @@ export default function SessionDrawer({
       const completed = !prev.completed
       return { ...prev, completed, status: completed ? 'completed' : 'planned' }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateRpe = (rpe: number | null) => {
     setLocalSession((prev) => prev ? { ...prev, session_rpe: rpe } : prev)
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateBodyWeight = (kg: number | null) => {
     setLocalSession((prev) => prev ? { ...prev, body_weight_kg: kg } : prev)
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateNotes = (notes: string) => {
     setLocalSession((prev) => prev ? { ...prev, session_notes: notes } : prev)
-    setHasChanges(true)
+    markChanged()
   }
 
   const setWellnessMode = (enabled: boolean) => {
@@ -711,7 +836,7 @@ export default function SessionDrawer({
       }
       return { ...prev, wellness: createDefaultWellness(prev.wellness) }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const updateWellness = (field: keyof Omit<SessionWellness, 'recorded_at'>, value: number) => {
@@ -727,7 +852,7 @@ export default function SessionDrawer({
         },
       }
     })
-    setHasChanges(true)
+    markChanged()
   }
 
   const openToolkitForExercise = (exercise: Exercise) => {
@@ -750,6 +875,7 @@ export default function SessionDrawer({
           size="sm"
           title="Exercise actions"
           aria-label="Exercise actions"
+          disabled={readOnly}
         >
           <MoreHorizontal size={16} />
         </ActionIcon>
@@ -788,6 +914,8 @@ export default function SessionDrawer({
         size="sm"
         onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
         title="Auto-regulation"
+        disabled={readOnly}
+        data-testid={`exercise-autoreg-${exerciseIndex}`}
       >
         <Bot size={iconSize} />
       </ActionIcon>
@@ -798,6 +926,8 @@ export default function SessionDrawer({
         size="sm"
         onClick={() => openToolkitForExercise(exercise)}
         title="Open toolkit"
+        disabled={readOnly}
+        data-testid={`exercise-toolkit-${exerciseIndex}`}
       >
         <Calculator size={iconSize} />
       </ActionIcon>
@@ -809,6 +939,13 @@ export default function SessionDrawer({
     if (status === 'failed') return <XCircle size={size} />
     if (status === 'skipped') return <Minus size={size} />
     return <Circle size={size} />
+  }
+
+  const statusDotClass = (status: SetStatus) => {
+    if (status === 'completed') return 'if-set-dot if-set-dot-completed'
+    if (status === 'failed') return 'if-set-dot if-set-dot-failed'
+    if (status === 'skipped') return 'if-set-dot if-set-dot-skipped'
+    return 'if-set-dot'
   }
 
   const renderSetStatusControls = (exercise: Exercise, exerciseIndex: number, size: 'xs' | 'sm' = 'xs') => {
@@ -826,11 +963,14 @@ export default function SessionDrawer({
               <Menu.Target>
                 <Tooltip label={tooltip}>
                   <ActionIcon
-                    size={size}
-                    variant={status === 'pending' ? 'default' : 'light'}
-                    color={SET_STATUS_META[status].color}
+                    size={32}
+                    radius="xl"
+                    variant="transparent"
+                    className={statusDotClass(status)}
+                    disabled={readOnly}
+                    data-testid={`set-status-${exerciseIndex}-${setIndex}`}
                   >
-                    {statusIcon(status, size === 'xs' ? 12 : 14)}
+                    {statusIcon(status, size === 'xs' ? 15 : 17)}
                   </ActionIcon>
                 </Tooltip>
               </Menu.Target>
@@ -949,61 +1089,92 @@ export default function SessionDrawer({
 
   const applyAutoRegulation = async (proposedExercises: Exercise[], reasoningNote: string) => {
     if (autoRegExerciseIndex === null) return
-    const nextSession = {
-      ...buildAutoRegulatedSession(localSession, proposedExercises, reasoningNote, autoRegExerciseIndex),
-      date: originalDate,
-      day: getDayOfWeek(originalDate),
-    }
+    const nextSession = finalizeSessionForSave(buildAutoRegulatedSession(
+      localSession,
+      proposedExercises,
+      reasoningNote,
+      autoRegExerciseIndex
+    ))
+    changeVersionRef.current += 1
+    setHasChanges(true)
     setLocalSession(nextSession)
-    updateSession(originalDate, sessionArrayIndex, nextSession)
-    await saveSession(originalDate, sessionArrayIndex)
-    setHasChanges(false)
+    latestSaveRef.current = {
+      session: nextSession,
+      version: changeVersionRef.current,
+      notify: false,
+      close: false,
+    }
+    await flushLatestSave()
     pushToast({ message: 'Auto-regulation applied', type: 'success' })
   }
 
   const editorContent = (
-      <Stack
-        gap="lg"
-        pb={mode === 'page' ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : undefined}
-        style={{ maxWidth: '100vw', overflowX: 'hidden' }}
+    <Stack
+      gap={10}
+      pb={mode === 'page' ? 'calc(120px + env(safe-area-inset-bottom, 0px))' : undefined}
+      className="if-mock-page"
+      style={{ maxWidth: mode === 'page' ? 680 : '100vw', margin: mode === 'page' ? '0 auto' : undefined, overflowX: 'hidden' }}
+      data-testid="session-detail"
+    >
+      <Box
+        className="if-mock-card if-mock-card-compact"
+        style={{
+          alignItems: 'center',
+          display: 'flex',
+          gap: 12,
+          zIndex: 20,
+          minHeight: 48,
+          position: mode === 'page' ? 'sticky' : 'static',
+          top: 0,
+        }}
       >
-        <Group justify="space-between" wrap="wrap" align="flex-start">
-          <Group gap="sm" align="flex-start" wrap="nowrap">
-            <Box
-              w={12}
-              h={12}
-              mt={6}
-              style={{ borderRadius: '50%', backgroundColor: phaseColorValue }}
+        <button className="if-mock-button" onClick={handleCloseWithCheck} title={mode === 'page' ? 'Back' : 'Close'} style={{ minWidth: 34, padding: '4px 8px' }}>
+          {mode === 'page' ? <ArrowLeft size={13} /> : <X size={13} />}
+        </button>
+        <span style={{ background: hasChanges ? 'var(--accent-blue)' : phaseColorValue, borderRadius: '50%', flexShrink: 0, height: 8, width: 8 }} title={hasChanges ? 'Unsaved changes' : localSession.phase?.name || 'Phase'} />
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" align="center" wrap="wrap">
+            <DatePickerInput
+              value={localSession.date}
+              valueFormat="YYYY-MM-DD"
+              onChange={(d) => {
+                if (d) updateDate(d as string)
+              }}
+              size="xs"
+              disabled={readOnly}
+              data-testid="session-date"
+              styles={{
+                input: {
+                  background: 'transparent',
+                  border: '0',
+                  color: 'var(--color-text-primary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  minHeight: 24,
+                  padding: 0,
+                  width: 104,
+                },
+              }}
             />
-            <Box>
-              <Group gap="xs" align="center">
-                <Calendar size={16} style={{ opacity: 0.6 }} />
-                <DatePickerInput
-                  value={localSession.date}
-                  valueFormat="YYYY-MM-DD"
-                  onChange={(d) => {
-                    if (d) updateDate(d as string)
-                  }}
-                  size="sm"
-                  style={{ width: 'auto' }}
-                />
-              </Group>
-              <Text size="sm" c="dimmed" mt={4}>
-                {localSession.day}
-                {localSession.phase?.name ? ` • ${localSession.phase.name}` : ''}
-              </Text>
-            </Box>
+            <span className="if-mock-pill" style={{ background: 'var(--color-background-secondary)', borderColor: 'transparent', color: 'var(--color-text-secondary)', fontSize: 11 }}>
+              {localSession.day}
+            </span>
+            {localSession.phase?.name && (
+              <span className="if-mock-pill" style={{ background: `color-mix(in srgb, ${phaseColorValue} 22%, transparent)`, borderColor: 'transparent', color: phaseColorValue, fontSize: 11 }}>
+                {localSession.phase.name}
+              </span>
+            )}
           </Group>
-          <ActionIcon variant="subtle" onClick={handleCloseWithCheck} size="lg" title={mode === 'page' ? 'Back' : 'Close'}>
-            {mode === 'page' ? <ArrowLeft size={20} /> : <X size={20} />}
-          </ActionIcon>
-        </Group>
+        </Box>
+      </Box>
 
-        <Paper withBorder p="md" radius="md">
+      <Paper withBorder p={0} radius={10} className="if-card">
+        <Box p="12px 16px">
           <Group justify="space-between" align="center" mb="sm">
             <Group gap="xs">
               <HeartPulse size={16} />
-              <Text size="sm" fw={600}>Subjective Wellness</Text>
+              <Text size="sm" fw={500}>Subjective wellness</Text>
             </Group>
             <SegmentedControl
               size="xs"
@@ -1013,6 +1184,7 @@ export default function SessionDrawer({
                 { label: 'Skip', value: 'skip' },
                 { label: 'Record', value: 'record' },
               ]}
+              disabled={readOnly}
             />
           </Group>
 
@@ -1038,6 +1210,7 @@ export default function SessionDrawer({
                       { value: 5, label: '5' },
                     ]}
                     color={field.key === 'soreness' || field.key === 'stress' ? 'orange' : 'blue'}
+                    disabled={readOnly}
                   />
                 </Box>
               ))}
@@ -1048,15 +1221,19 @@ export default function SessionDrawer({
           ) : (
             <Text size="xs" c="dimmed">No wellness captured for this session.</Text>
           )}
+        </Box>
         </Paper>
 
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p={0} radius={10} className="if-card">
+          <Box p="12px 16px">
           <Group justify="space-between" align="center" mb="md">
-            <Text size="sm" fw={600}>Workout</Text>
+            <Text size="sm" fw={500}>Workout</Text>
             <Button
-              variant="dashed"
+              variant="light"
               onClick={addExercise}
               leftSection={<Plus size={16} />}
+              disabled={readOnly}
+              data-testid="session-add-exercise"
             >
               Add Exercise
             </Button>
@@ -1065,7 +1242,7 @@ export default function SessionDrawer({
           <Stack gap="sm">
           {/* Planned exercises reference */}
           {(localSession.planned_exercises?.length ?? 0) > 0 && (
-            <Paper bg="var(--mantine-color-default)" p="xs" radius="md">
+            <Paper bg="var(--bg-elevated)" p="xs" radius="md" style={{ border: '1px solid var(--border-subtle)' }}>
               <Text size="xs" c="dimmed" fw={500} mb={4}>Planned</Text>
               <Group gap="md" wrap="wrap">
                 {localSession.planned_exercises!.map((pe, i) => (
@@ -1083,13 +1260,13 @@ export default function SessionDrawer({
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={localSession.exercises.map((ex, i) => ex.id || `ex-${i}`)}
+                items={localSession.exercises.map(exerciseDragId)}
                 strategy={verticalListSortingStrategy}
               >
                 <Stack gap="sm">
                   {localSession.exercises.map((ex, i) => (
                     <SortableExerciseItem
-                      key={ex.id || `ex-${i}`}
+                      key={exerciseDragId(ex, i)}
                       exercise={ex}
                       index={i}
                       onRemove={removeExercise}
@@ -1102,6 +1279,7 @@ export default function SessionDrawer({
                       renderDesktopActions={renderDesktopExerciseActions}
                       renderSetStatusControls={renderSetStatusControls}
                       renderStatusBadges={renderStatusBadges}
+                      disabled={readOnly}
                     />
                   ))}
                 </Stack>
@@ -1119,12 +1297,14 @@ export default function SessionDrawer({
                 <Text size="xs" c="dimmed" span>({session.videos?.length})</Text>
               )}
             </Group>
-            <Button
-              size="xs"
-              variant="default"
-              onClick={() => setShowVideoUpload(true)}
-              leftSection={<Plus size={12} />}
-            >
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => setShowVideoUpload(true)}
+                leftSection={<Plus size={12} />}
+                disabled={readOnly}
+                data-testid="session-upload-video"
+              >
               Upload
             </Button>
           </Group>
@@ -1132,29 +1312,33 @@ export default function SessionDrawer({
           {session.videos && session.videos.length > 0 ? (
             <VideoGrid session={session} />
           ) : (
-            <Text size="xs" c="dimmed" ta="center" py="md">
+            <Text size="xs" c="dimmed" py="md">
               No videos uploaded for this session
             </Text>
           )}
           </Stack>
+          </Box>
         </Paper>
 
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p={0} radius={10} className="if-card">
+          <Box p="12px 16px">
           <Stack gap="sm">
             <Group justify="space-between">
-              <Text size="sm" fw={600}>Session Summary</Text>
+              <Text size="sm" fw={500}>Session summary</Text>
               <Button
                 size="xs"
                 variant="light"
                 leftSection={<Wand2 size={14} />}
                 onClick={() => setShowNotesHelper(true)}
+                disabled={readOnly}
+                data-testid="session-notes-helper"
               >
                 Help write notes
               </Button>
             </Group>
           <SimpleGrid cols={2} spacing="sm">
             <Box>
-              <Text size="xs" c="dimmed">Session RPE</Text>
+              <Text className="if-small-label">Session RPE</Text>
               <TextInput
                 type="number"
                 value={localSession.session_rpe || ''}
@@ -1170,11 +1354,14 @@ export default function SessionDrawer({
                 }}
                 placeholder="1-10"
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
                 step={0.5}
+                disabled={readOnly}
+                data-testid="session-rpe"
               />
             </Box>
             <Box>
-              <Text size="xs" c="dimmed">Body Weight ({unit})</Text>
+              <Text className="if-small-label">Body Weight ({unit})</Text>
               <TextInput
                 type="number"
                 value={
@@ -1185,13 +1372,16 @@ export default function SessionDrawer({
                 onChange={(e) => updateBodyWeight(e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
                 placeholder={unit}
                 size="sm"
+                classNames={{ input: 'if-control-input' }}
                 step={0.1}
+                disabled={readOnly}
+                data-testid="session-body-weight"
               />
             </Box>
           </SimpleGrid>
 
           <Box>
-            <Text size="xs" c="dimmed">Session Notes</Text>
+            <Text className="if-small-label">Session Notes</Text>
             <Textarea
               value={localSession.session_notes || ''}
               onChange={(e) => updateNotes(e.currentTarget.value)}
@@ -1200,9 +1390,13 @@ export default function SessionDrawer({
               minRows={1}
               maxRows={mode === 'page' ? 4 : 6}
               size="sm"
+              className="if-exercise-notes"
+              disabled={readOnly}
+              data-testid="session-notes"
             />
           </Box>
           </Stack>
+          </Box>
         </Paper>
 
         <Stack gap="sm">
@@ -1218,33 +1412,52 @@ export default function SessionDrawer({
               }
             }}
             leftSection={<Trash2 size={16} />}
+            disabled={readOnly}
+            data-testid="session-delete"
+            fullWidth
+            h={40}
+            style={{
+              background: 'var(--color-background-primary)',
+              border: '0.5px solid var(--color-border-danger)',
+              borderRadius: 'var(--border-radius-lg)',
+              color: 'var(--color-text-danger)',
+              fontWeight: 500,
+            }}
           >
-            Delete
+            Delete session
           </Button>
-          <Group gap="sm" wrap="wrap">
-          <Button
-            variant="default"
-            color="gray"
-            onClick={() => setDiscardIntent('reset')}
-            disabled={!hasChanges}
-            leftSection={<RotateCcw size={16} />}
-          >
-            Discard
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges}
-            leftSection={<Save size={16} />}
-          >
-            Save
-          </Button>
-          <Button
-            variant={localSession.completed ? 'filled' : 'default'}
-            onClick={toggleComplete}
-            leftSection={<Check size={16} />}
-          >
-            {localSession.completed ? 'Done' : 'Mark Done'}
-          </Button>
+          <Group gap="sm" wrap="wrap" className="if-session-action-bar">
+            <Text size="xs" c={hasChanges ? 'yellow' : 'dimmed'} style={{ alignSelf: 'center' }}>
+              {isSaving ? 'Saving...' : hasChanges ? 'Unsaved changes' : lastSavedAt ? 'Saved' : 'No changes'}
+            </Text>
+            <Button
+              variant="default"
+              color="gray"
+              onClick={() => setDiscardIntent('reset')}
+              disabled={!hasChanges || isSaving || readOnly}
+              leftSection={<RotateCcw size={16} />}
+              data-testid="session-discard"
+            >
+              Discard
+            </Button>
+            <Button
+              onClick={() => void handleSave()}
+              disabled={!hasChanges || isSaving || readOnly}
+              loading={isSaving}
+              leftSection={<Save size={16} />}
+              data-testid="session-save"
+            >
+              Save
+            </Button>
+            <Button
+              variant={localSession.completed ? 'filled' : 'default'}
+              onClick={toggleComplete}
+              leftSection={<Check size={16} />}
+              disabled={readOnly}
+              data-testid="session-toggle-complete"
+            >
+              {localSession.completed ? 'Done' : 'Mark Done'}
+            </Button>
           </Group>
         </Stack>
       </Stack>
@@ -1354,6 +1567,7 @@ export default function SessionDrawer({
           <Checkbox.Group
             value={failedReasonDraft}
             onChange={(value) => setFailedReasonDraft(value as FailedSetReason[])}
+            data-testid="failed-set-reasons"
           >
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
               {FAILED_SET_REASON_OPTIONS.map((option) => (
@@ -1375,7 +1589,7 @@ export default function SessionDrawer({
             >
               Cancel
             </Button>
-            <Button onClick={saveFailedSetReasons} disabled={failedReasonDraft.length === 0}>
+            <Button onClick={saveFailedSetReasons} disabled={failedReasonDraft.length === 0} data-testid="failed-set-reasons-save">
               Save
             </Button>
           </Group>

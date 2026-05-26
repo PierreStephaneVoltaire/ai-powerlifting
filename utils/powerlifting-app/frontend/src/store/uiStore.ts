@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { notifications } from '@mantine/notifications'
 
 type DrawerType = 'session' | 'maxManager' | 'exercise' | 'settings' | null
 
@@ -41,10 +42,14 @@ export const useUiStore = create<UiState>()((set) => ({
 
   closeDrawer: () => set({ drawerOpen: false, drawerType: null }),
 
-  pushToast: (toast) =>
+  pushToast: (toast) => {
+    const id = generateId()
+    const color = toast.type === 'success' ? 'green' : toast.type === 'warning' ? 'yellow' : 'red'
+    notifications.show({ id, message: toast.message, color })
     set((s) => ({
-      toasts: [...s.toasts, { ...toast, id: generateId() }],
-    })),
+      toasts: [...s.toasts, { ...toast, id }],
+    }))
+  },
 
   dismissToast: (id) =>
     set((s) => ({

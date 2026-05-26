@@ -53,6 +53,23 @@ GOOGLE_SHEETS_CREDENTIALS = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "")
 ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "")
 
 # Paths
+def get_project_root() -> Path:
+    """Get the project root directory, handling both repo and container layouts."""
+    current = Path(__file__).resolve().parent.parent  # .../app/
+    if (current.parent / "tools").exists():
+        return current.parent  # Repository root
+    return current  # Container root (/app/)
+
+PROJECT_ROOT = get_project_root()
+
+def get_app_src(root: Path) -> Path:
+    """Get the app source directory, handling both repo and container layouts."""
+    if (root / "app" / "src").exists():
+        return root / "app" / "src"
+    return root / "src"
+
+APP_SRC = get_app_src(PROJECT_ROOT)
+
 SANDBOX_PATH = os.getenv("SANDBOX_PATH", "./sandbox")
 MEMORY_DB_PATH = os.getenv("MEMORY_DB_PATH", "./data/memory_db")
 PERSISTENCE_DIR = os.getenv("PERSISTENCE_DIR", "./data/conversations")
@@ -74,9 +91,7 @@ TOPIC_SHIFT_MODEL = os.getenv("TOPIC_SHIFT_MODEL", "z-ai/glm-4.7-flash")
 # Context Condensation
 CONTEXT_CONDENSE_THRESHOLD = int(os.getenv("CONTEXT_CONDENSE_THRESHOLD", "250000"))
 
-# Maximum characters for tool output before OpenHands SDK truncates it.
-# Default SDK value is 50000 which silently clips large tool results
-# (e.g. health_get_program ~95K) causing hallucinations from incomplete data.
+# Maximum characters retained for tool output in direct/MCP flows.
 TOOL_OUTPUT_CHAR_LIMIT = int(os.getenv("TOOL_OUTPUT_CHAR_LIMIT", "200000"))
 
 # =============================================================================
@@ -97,6 +112,41 @@ TIER_STANDARD_PRESET = os.getenv("TIER_STANDARD_PRESET", "@preset/standard")
 TIER_HEAVY_PRESET = os.getenv("TIER_HEAVY_PRESET", "@preset/heavy")
 
 # =============================================================================
+# opencode Flow Configuration
+# =============================================================================
+
+OPENCODE_BIN = os.getenv("OPENCODE_BIN", "")
+OPENCODE_PLANNER_MODEL = os.getenv("OPENCODE_PLANNER_MODEL", "deepseek/deepseek-v4-flash")
+OPENCODE_TIMEOUT_SECONDS = int(os.getenv("OPENCODE_TIMEOUT_SECONDS", "900"))
+OPENCODE_WORKSPACE_BASE = os.getenv(
+    "OPENCODE_WORKSPACE_BASE",
+    os.getenv("WORKSPACE_BASE", "/app/src/data/conversations"),
+)
+IF_DIRECT_LLM_TOOL_ROUNDS = int(os.getenv("IF_DIRECT_LLM_TOOL_ROUNDS", "8"))
+IF_DEFAULT_DIRECT_MODEL = os.getenv("IF_DEFAULT_DIRECT_MODEL", "openai/gpt-5.4-mini")
+IF_TECHNICAL_ARTIFACT_EXCLUDES = {
+    "history.md",
+    "history.json",
+    "opencode.json",
+    "plan.md",
+    "review.md",
+    "response.md",
+    "status.log",
+}
+
+# MCP tool server categories managed by IF at startup.
+MCP_SERVER_CATEGORIES = [
+    item.strip()
+    for item in os.getenv(
+        "MCP_SERVER_CATEGORIES",
+        "health,finance,diary,proposals,supplement_research,"
+        "temporal_age,temporal_city_time,temporal_duration,temporal_from_unix,"
+        "temporal_resolve,temporal_timezone,temporal_to_unix",
+    ).split(",")
+    if item.strip()
+]
+
+# =============================================================================
 # Specialist Subagent Configuration (Phase 4)
 # =============================================================================
 
@@ -106,7 +156,7 @@ SPECIALIST_PRESET = os.getenv("SPECIALIST_PRESET", "general")
 # Maximum turns per specialist subagent
 SPECIALIST_MAX_TURNS = int(os.getenv("SPECIALIST_MAX_TURNS", "15"))
 
-# Agentic specialist configuration (SDK Conversation.run() loop)
+# Legacy agentic specialist limits retained for specialist metadata compatibility.
 AGENTIC_MAX_ITERATIONS = int(os.getenv("AGENTIC_MAX_ITERATIONS", "25"))
 
 # Deep thinker (pondering) configuration
@@ -203,7 +253,7 @@ PRESET_FALLBACK_MODEL = os.getenv("PRESET_FALLBACK_MODEL", "openrouter/@preset/g
 # Model for reflection engine and opinion formation
 REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "openrouter/@preset/general")
 
-# Reasoning effort passed to the OpenHands LLM for the main agent.
+# Reasoning effort retained for direct OpenRouter callers that support it.
 # Valid values: "high", "medium", "low" (silently ignored for models that don't support it).
 LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "high")
 
@@ -247,7 +297,7 @@ ORCHESTRATOR_ANALYSIS_MAX_TURNS = int(os.getenv("ORCHESTRATOR_ANALYSIS_MAX_TURNS
 EXTERNAL_TOOLS_PATH = os.getenv("EXTERNAL_TOOLS_PATH", "")
 EXTERNAL_TOOLS_FALLBACK = os.getenv(
     "EXTERNAL_TOOLS_FALLBACK",
-    str(Path(__file__).parent.parent.parent / "tools")  # project_root/tools/
+    str(PROJECT_ROOT / "tools")  # project_root/tools/
 )
 
 # =============================================================================
@@ -256,7 +306,7 @@ EXTERNAL_TOOLS_FALLBACK = os.getenv(
 
 SPECIALISTS_PATH = os.getenv(
     "SPECIALISTS_PATH",
-    str(Path(__file__).parent.parent.parent / "specialists")  # project_root/specialists/
+    str(PROJECT_ROOT / "specialists")  # project_root/specialists/
 )
 
 # =============================================================================
@@ -265,7 +315,7 @@ SPECIALISTS_PATH = os.getenv(
 
 SKILLS_PATH = os.getenv(
     "SKILLS_PATH",
-    str(Path(__file__).parent.parent.parent / "skills")  # project_root/skills/
+    str(PROJECT_ROOT / "skills")  # project_root/skills/
 )
 
 # =============================================================================
@@ -275,6 +325,10 @@ SKILLS_PATH = os.getenv(
 # DynamoDB table name for health program storage
 # Note: IF_HEALTH_TABLE_NAME is defined at line 8 in .env.example
 IF_HEALTH_TABLE_NAME = os.getenv("IF_HEALTH_TABLE_NAME", "if-health")
+
+# DynamoDB table name for global reusable training templates
+IF_TEMPLATES_TABLE_NAME = os.getenv("IF_TEMPLATES_TABLE_NAME", "if-health-templates")
+IF_TEMPLATES_LIBRARY_PK = os.getenv("IF_TEMPLATES_LIBRARY_PK", "template_library")
 
 # DynamoDB table name for copied session records
 IF_SESSIONS_TABLE_NAME = os.getenv("IF_SESSIONS_TABLE_NAME", "if-sessions")
@@ -329,16 +383,13 @@ IF_MODELS_TABLE_NAME = os.getenv("IF_MODELS_TABLE_NAME", "if-models")
 
 MODELS_PATH = os.getenv(
     "MODELS_PATH",
-    str(Path(__file__).parent.parent.parent / "models")
+    str(PROJECT_ROOT / "models")
 )
 
 SCRIPTS_PATH = os.getenv(
     "SCRIPTS_PATH",
-    str(Path(__file__).parent.parent.parent / "scripts")
+    str(PROJECT_ROOT / "scripts")
 )
-
-MODEL_ROUTER_MODEL = os.getenv("MODEL_ROUTER_MODEL", "anthropic/claude-haiku-4.5")
-MODEL_ROUTER_ENABLED: bool = os.getenv("MODEL_ROUTER_ENABLED", "true").lower() == "true"
 
 # Model for AI-powered health analytics (correlation analysis, program evaluation)
 # Defaults to Claude Sonnet with extended thinking enabled

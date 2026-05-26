@@ -1,8 +1,7 @@
-description: "Multi-source synthesis — spawns 2-3 specialists, collects outputs, identifies agreement/disagreement, synthesizes"
+description: "Multi-perspective synthesis — selects 2-3 specialist handoffs for one high-stakes question, then synthesizes agreement/disagreement from their returned outputs"
 preset: "general"
 tools:
-  - spawn_specialist
-  - spawn_specialists
+  - read_file
   - write_file
 mcp_servers: []
 directive_types:

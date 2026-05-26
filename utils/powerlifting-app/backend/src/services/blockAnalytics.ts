@@ -568,6 +568,19 @@ function blockDietNotes(program: Program, startDate: string, endDate: string) {
   return (program.diet_notes ?? []).filter((note) => note.date >= startDate && note.date <= endDate)
 }
 
+function blockProgramNotes(program: Program, startDate: string, endDate: string) {
+  return (program.meta?.block_notes ?? [])
+    .filter((note) => {
+      const noteDate = note.date || note.updated_at?.slice(0, 10) || ''
+      return noteDate >= startDate && noteDate <= endDate
+    })
+    .map((note) => ({
+      ...note,
+      date: note.date || note.updated_at?.slice(0, 10) || startDate,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
 function blockProjectionReferenceDate(entry: ProgramBlockIndexEntry): string {
   const competitionDate = parseDate(entry.linkedCompetition?.date ?? null)
   if (!competitionDate) return entry.endDate
@@ -732,6 +745,7 @@ function blockSourceFingerprint(
     },
     competitions,
     goals,
+    block_notes: startDate && endDate ? blockProgramNotes(program, startDate, endDate) : [],
     diet_notes: startDate && endDate ? blockDietNotes(program, startDate, endDate) : [],
     lift_profiles: program.lift_profiles ?? [],
     phases,
@@ -1129,8 +1143,8 @@ export async function putCachedBlockAnalysisBundle(userPk: string, bundle: Block
 async function getCachedJsonPayload<T>(
   userPk: string,
   sk: string,
-  _expectedSourceFingerprint?: string,
-  _options?: { allowStale?: boolean },
+  expectedSourceFingerprint?: string,
+  options?: { allowStale?: boolean },
 ): Promise<T | null> {
   try {
     const pk = cachePk(userPk)
@@ -1140,6 +1154,13 @@ async function getCachedJsonPayload<T>(
     }))
     const item = response.Item
     if (!item) return null
+    if (
+      expectedSourceFingerprint
+      && options?.allowStale !== true
+      && item.source_fingerprint !== expectedSourceFingerprint
+    ) {
+      return null
+    }
 
     // New plain JSON payload
     let payloadStr = typeof item.payload === 'string' ? item.payload : ''
@@ -1562,6 +1583,7 @@ export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntr
   const competitions = blockCompetitionWindow(program, entry.startDate, competitionContextEndDate, entry.linkedCompetition)
   const goals = blockGoalsForCompetitions(program, competitions)
   const meta = blockScopedMeta(program, entry, analysisEndDate, competitions, goals)
+  meta.block_notes = blockProgramNotes(program, entry.startDate, analysisEndDate)
   if (normalizeToCurrent) {
     const storedWeekStarts = { ...(program.meta.block_week_start_days ?? {}) }
     const entryWeekStart = storedWeekStarts[entry.block]
@@ -1678,7 +1700,7 @@ export async function getOrCreateBlockProgramEvaluation(
 
   const sk = blockProgramEvaluationSk(blockKey)
   if (!refresh) {
-    const cached = await getCachedJsonPayload<Record<string, unknown>>(userPk, sk)
+    const cached = await getCachedJsonPayload<Record<string, unknown>>(userPk, sk, entry.sourceFingerprint)
     if (cached) {
       return {
         ...cached,

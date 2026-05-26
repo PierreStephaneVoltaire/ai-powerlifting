@@ -3727,6 +3727,723 @@ def compute_readiness_score(
     }
 
 
+_WEEKLY_ANALYSIS_SECTION_KEYS = {
+    "overview",
+    "fatigue_readiness",
+    "peaking",
+    "workload",
+    "alerts",
+}
+
+
+def _weekly_analysis_window_context(
+    program: dict,
+    sessions: list[dict],
+    window_start: Optional[str] = None,
+    window_end: Optional[str] = None,
+    ref_date: Optional[str] = None,
+    week_start: Optional[int] = None,
+    week_end: Optional[int] = None,
+    weeks: int = 1,
+    block: Optional[str] = None,
+) -> dict[str, Any]:
+    meta = program.get("meta", {})
+    phases = program.get("phases", [])
+    program_start = meta.get("program_start", "")
+
+    if block:
+        sessions = [s for s in sessions if s.get("block", "current") == block]
+
+    current_week = _calculate_current_week(program_start, sessions)
+    current_phase = _find_current_phase(phases, current_week)
+    phase_name = current_phase.get("name", "Unknown") if current_phase else "Unknown"
+
+    end = _parse_date(window_end) if window_end else (_parse_date(ref_date) if ref_date else date.today())
+    ref = end
+    start = _parse_date(window_start) if window_start else None
+    use_week_window = week_start is not None or week_end is not None or start is None
+    selected_week_start: Optional[int] = None
+    selected_week_end: Optional[int] = None
+
+    all_sessions_to_ref = [
+        s for s in sessions
+        if (d := _parse_date(s.get("date", ""))) is not None
+        and d <= ref
+    ]
+    completed_history_to_ref = [
+        s for s in all_sessions_to_ref
+        if _is_completed_session(s)
+    ]
+
+    if use_week_window:
+        selected_week_start, selected_week_end = _resolve_week_window(
+            sessions,
+            current_week,
+            weeks,
+            program_start,
+            week_start=week_start,
+            week_end=week_end,
+        )
+        selected_sessions = _sessions_in_week_window(
+            sessions,
+            program_start,
+            selected_week_start,
+            selected_week_end,
+        )
+        inferred_start, _ = _session_date_bounds(selected_sessions)
+        if start is None:
+            start = inferred_start or end - timedelta(days=max(7, weeks * 7) - 1)
+            window_start = start.isoformat()
+        if not window_end:
+            window_end = end.isoformat()
+
+        recent_sessions = sorted(
+            [
+                s for s in selected_sessions
+                if (d := _parse_date(s.get("date", ""))) is None or d <= end
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+        completed_in_window = sorted(
+            [
+                s for s in recent_sessions
+                if _is_completed_session(s)
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+        selected_week_count = max(1, selected_week_end - selected_week_start + 1)
+    else:
+        cutoff = start
+        recent_sessions = sorted(
+            [
+                s
+                for s in all_sessions_to_ref
+                if (d := _parse_date(s.get("date", ""))) and d >= cutoff and d <= end
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+        completed_in_window = sorted(
+            [
+                s for s in completed_history_to_ref
+                if (d := _parse_date(s.get("date", ""))) is not None
+                and cutoff <= d <= end
+            ],
+            key=lambda s: s.get("date", ""),
+            reverse=True,
+        )
+        selected_week_nums = {
+            wk for s in completed_in_window
+            if (wk := _session_week_num(s, program_start)) is not None
+        }
+        if selected_week_nums:
+            selected_week_start = min(selected_week_nums)
+            selected_week_end = max(selected_week_nums)
+        selected_week_count = max(1, int(weeks or 1))
+
+    return {
+        "program": program,
+        "sessions": sessions,
+        "meta": meta,
+        "phases": phases,
+        "program_start": program_start,
+        "current_week": current_week,
+        "current_phase": current_phase,
+        "phase_name": phase_name,
+        "end": end,
+        "ref": ref,
+        "window_start": window_start,
+        "window_end": window_end,
+        "selected_week_start": selected_week_start,
+        "selected_week_end": selected_week_end,
+        "selected_week_count": selected_week_count,
+        "recent_sessions": recent_sessions,
+        "completed_in_window": completed_in_window,
+        "all_sessions_to_ref": all_sessions_to_ref,
+        "completed_history_to_ref": completed_history_to_ref,
+    }
+
+
+def _analysis_exercise_stats(completed_in_window: list[dict]) -> dict[str, dict[str, Any]]:
+    exercise_stats: dict[str, dict[str, Any]] = {}
+    for s in completed_in_window:
+        for ex in s.get("exercises", []):
+            name = ex.get("name", "").strip()
+            if not name:
+                continue
+            kg = _num(ex.get("kg", 0))
+            sets = _executed_sets(ex)
+            reps = _num(ex.get("reps", 0))
+            vol = sets * reps * kg
+            if sets <= 0:
+                continue
+            if name not in exercise_stats:
+                exercise_stats[name] = {"total_sets": 0, "total_volume": 0.0, "max_kg": 0.0}
+            exercise_stats[name]["total_sets"] += int(sets)
+            exercise_stats[name]["total_volume"] += vol
+            if kg > exercise_stats[name]["max_kg"]:
+                exercise_stats[name]["max_kg"] = kg
+    for v in exercise_stats.values():
+        v["total_volume"] = round(v["total_volume"], 1)
+        v["max_kg"] = round(v["max_kg"], 1)
+    return exercise_stats
+
+
+def _analysis_current_maxes(ctx: dict[str, Any]) -> tuple[dict | None, dict | None, dict | None]:
+    comp_maxes_raw = _estimate_maxes_from_comps(ctx["program"].get("competitions", []), reference_date=ctx["ref"])
+    session_maxes_raw = _estimate_maxes_from_sessions(ctx["completed_history_to_ref"], reference_date=ctx["ref"])
+    current_maxes_raw = comp_maxes_raw or session_maxes_raw
+    return current_maxes_raw, comp_maxes_raw, session_maxes_raw
+
+
+def _analysis_current_maxes_out(current_maxes_raw: dict | None, comp_maxes_raw: dict | None, session_maxes_raw: dict | None) -> dict[str, Any]:
+    maxes_method = "comp_results" if comp_maxes_raw else ("session_estimated" if session_maxes_raw else "none")
+    current_maxes_out: dict[str, Any] = {}
+    if current_maxes_raw:
+        for lk in ("squat", "bench", "deadlift"):
+            val = current_maxes_raw.get(lk)
+            if val is not None:
+                current_maxes_out[lk] = round(_num(val), 1)
+    current_maxes_out["method"] = maxes_method
+    return current_maxes_out
+
+
+def _analysis_target_rpe_midpoint(current_phase: dict | None) -> float | None:
+    if not current_phase:
+        return None
+    t_min = current_phase.get("target_rpe_min")
+    t_max = current_phase.get("target_rpe_max")
+    if t_min is not None and t_max is not None:
+        return (_num(t_min) + _num(t_max)) / 2.0
+    return None
+
+
+def _analysis_compliance_obj(ctx: dict[str, Any]) -> dict[str, Any]:
+    if ctx["selected_week_start"] is not None and ctx["selected_week_end"] is not None:
+        compliance_result = session_compliance_for_week_window(
+            ctx["sessions"],
+            ctx["phases"],
+            ctx["selected_week_start"],
+            ctx["selected_week_end"],
+            ref_date=ctx["ref"],
+        )
+    else:
+        compliance_result = session_compliance(
+            ctx["sessions"],
+            ctx["phases"],
+            ctx["program_start"],
+            weeks=ctx["selected_week_count"],
+            ref_date=ctx["ref"],
+        )
+    return {
+        "phase": compliance_result.get("phase", "Unknown"),
+        "planned": compliance_result.get("planned_sessions", 0),
+        "completed": compliance_result.get("completed_sessions", 0),
+        "missed": compliance_result.get("missed_sessions", 0),
+        "pct": compliance_result.get("compliance_pct", 0),
+        "planned_sets": compliance_result.get("planned_sets", 0),
+        "completed_sets": compliance_result.get("completed_sets", 0),
+        "set_pct": compliance_result.get("set_compliance_pct", 0),
+        "planned_reps": compliance_result.get("planned_reps", 0),
+        "completed_reps": compliance_result.get("completed_reps", 0),
+        "rep_pct": compliance_result.get("rep_compliance_pct", 0),
+        "planned_volume": compliance_result.get("planned_volume", 0),
+        "completed_volume": compliance_result.get("completed_volume", 0),
+        "vol_pct": compliance_result.get("vol_compliance_pct", 0),
+    }
+
+
+def _analysis_deload_info(ctx: dict[str, Any]) -> dict[str, Any]:
+    deload_info_raw = _detect_deloads(ctx["sessions"], ctx["program_start"])
+    return {
+        "deload_weeks": [d["week_num"] for d in deload_info_raw if d["is_deload"]],
+        "break_weeks": [d["week_num"] for d in deload_info_raw if d["is_break"]],
+        "effective_training_weeks": sum(1 for d in deload_info_raw if d["effective_index"] >= 0),
+    }
+
+
+def _analysis_projection_payload(ctx: dict[str, Any], current_maxes_out: dict[str, Any]) -> dict[str, Any]:
+    program = ctx["program"]
+    sessions = ctx["sessions"]
+    meta = ctx["meta"]
+    ref = ctx["ref"]
+    end = ctx["end"]
+
+    estimated_dots = None
+    estimated_dots_reason = None
+    bodyweight = _num(
+        meta.get(
+            "current_body_weight_kg",
+            meta.get("bodyweight_kg", meta.get("body_weight_kg", 0)),
+        )
+    )
+    sex = str(
+        meta.get("sex")
+        or program.get("settings", {}).get("sex")
+        or ""
+    ).lower()
+    if bodyweight > 0 and sex in ("male", "female") and all(current_maxes_out.get(lk, 0) for lk in ("squat", "bench", "deadlift")):
+        total_kg = sum(current_maxes_out.get(lk, 0) for lk in ("squat", "bench", "deadlift"))
+        if total_kg > 0:
+            estimated_dots = calculate_dots(total_kg, bodyweight, sex)
+    else:
+        estimated_dots_reason = "Missing sex or bodyweight"
+
+    projections: list[dict[str, Any]] = []
+    projection_reason = None
+    upcoming = [
+        c for c in sorted(program.get("competitions", []), key=lambda x: x.get("date", ""))
+        if c.get("status") in ("confirmed", "optional", "completed") and (d := _parse_date(c.get("date", ""))) and d > ref
+    ]
+    to_project = [upcoming[0], upcoming[-1]] if len(upcoming) >= 2 else upcoming[:1]
+    projection_calibration = _resolve_projection_lambda_multiplier(program, reference_date=ref)
+
+    for comp in to_project:
+        proj = meet_projection(program, sessions, comp_date=comp["date"], ref_date=end)
+        if "total" in proj:
+            projections.append({
+                "total": proj["total"],
+                "confidence": proj["confidence"],
+                "weeks_to_comp": proj.get("weeks_to_comp"),
+                "method": proj.get("method"),
+                "comp_name": comp.get("name"),
+                "lifts": proj.get("lifts", {}),
+                "projection_calibration": proj.get("projection_calibration"),
+            })
+
+    if not projections and not to_project and meta.get("comp_date"):
+        proj = meet_projection(program, sessions, comp_date=meta["comp_date"], ref_date=end)
+        if "total" in proj:
+            projections.append({"total": proj["total"], "confidence": proj["confidence"],
+                                 "weeks_to_comp": proj.get("weeks_to_comp"), "method": proj.get("method"),
+                                 "comp_name": None, "lifts": proj.get("lifts", {}),
+                                 "projection_calibration": proj.get("projection_calibration")})
+        else:
+            projection_reason = proj.get("reason", "Insufficient data for projection")
+
+    attempt_selection = None
+    if projections:
+        attempt_pct = meta.get("attempt_pct")
+        first_proj_lifts = projections[0].get("lifts", {})
+        projected_maxes = {
+            lift: data.get("projected") for lift, data in first_proj_lifts.items()
+            if isinstance(data, dict) and data.get("projected") is not None
+        }
+        if projected_maxes:
+            attempt_selection = compute_attempt_selection(projected_maxes, attempt_pct)
+
+    return {
+        "estimated_dots": estimated_dots,
+        "estimated_dots_reason": estimated_dots_reason,
+        "projections": projections,
+        "projection_reason": projection_reason,
+        "projection_calibration": projection_calibration,
+        "attempt_selection": attempt_selection,
+    }
+
+
+def _analysis_workload_payload(ctx: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    completed_in_window = ctx["completed_in_window"]
+    sessions = ctx["sessions"]
+    program_start = ctx["program_start"]
+    phases = ctx["phases"]
+    end = ctx["end"]
+    exercise_stats = _analysis_exercise_stats(completed_in_window)
+    exercise_names = {ex.get("name", "").lower().strip() for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name") and _executed_sets(ex) > 0}
+    tracked_lifts = []
+    lift_alias_map = {}
+    for canonical, output_key in [("squat", "squat"), ("bench press", "bench"), ("deadlift", "deadlift"), ("bench", "bench")]:
+        if canonical in exercise_names and output_key not in lift_alias_map:
+            lift_alias_map[output_key] = canonical
+            if output_key not in tracked_lifts:
+                tracked_lifts.append(output_key)
+
+    lifts_report = {}
+    flags: list[str] = []
+    for lift_key in tracked_lifts:
+        ex_name = lift_alias_map.get(lift_key, lift_key)
+        lift_data: dict[str, Any] = {}
+
+        prog = progression_rate(sessions, ex_name, program_start, reference_date=end)
+        if "slope_kg_per_week" in prog:
+            lift_data["progression_rate_kg_per_week"] = prog["slope_kg_per_week"]
+            lift_data["fit_quality"] = prog.get("fit_quality")
+            lift_data["kendall_tau"] = prog.get("kendall_tau")
+            lift_data["r2"] = prog.get("r2")
+            lift_data["r_squared"] = prog.get("r_squared")
+        else:
+            lift_data["progression_rate_kg_per_week"] = None
+            lift_data["fit_quality"] = None
+            lift_data["kendall_tau"] = None
+            lift_data["r2"] = None
+            lift_data["r_squared"] = None
+
+        vol_corr = volume_intensity_correlation(sessions, ex_name, program_start)
+        if "volume_series" in vol_corr and len(vol_corr["volume_series"]) >= 2:
+            vols = [v[1] for v in vol_corr["volume_series"]]
+            intens = [i[1] for i in vol_corr["intensity_series"]]
+            prev_vol = vols[-2]
+            prev_int = intens[-2]
+            lift_data["volume_change_pct"] = round(((vols[-1] - prev_vol) / prev_vol * 100) if prev_vol > 0 else 0, 1)
+            lift_data["intensity_change_pct"] = round(((intens[-1] - prev_int) / prev_int * 100) if prev_int > 0 else 0, 1)
+
+        drift = rpe_drift(sessions, ex_name, program_start, phases=phases)
+        if "drift_direction" in drift:
+            lift_data["rpe_trend"] = drift["drift_direction"]
+            if drift.get("flag"):
+                flags.append(f"{ex_name}_rpe_{drift['flag']}")
+        else:
+            lift_data["rpe_trend"] = "unknown"
+
+        lift_data["failed_sets"] = int(sum(
+            _count_failed_sets(ex)
+            for s in completed_in_window
+            for ex in s.get("exercises", [])
+            if ex.get("name", "").lower().strip() == ex_name
+        ))
+        lift_data["executed_sets"] = int(sum(
+            _executed_sets(ex)
+            for s in completed_in_window
+            for ex in s.get("exercises", [])
+            if ex.get("name", "").lower().strip() == ex_name
+        ))
+        lift_data["planned_sets"] = int(sum(
+            _num(ex.get("sets", 0))
+            for s in completed_in_window
+            for ex in s.get("exercises", [])
+            if ex.get("name", "").lower().strip() == ex_name
+        ))
+        lift_data["max_kg"] = round(float(max([_num(ex.get("kg", 0)) for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name", "").lower().strip() == ex_name and _executed_sets(ex) > 0] or [0.0])), 1)
+        lift_data["total_volume"] = round(float(sum([_executed_volume(ex) for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name", "").lower().strip() == ex_name])), 1)
+        lifts_report[ex_name] = lift_data
+
+    return {"lifts": lifts_report, "exercise_stats": exercise_stats}, flags
+
+
+def weekly_analysis_section(
+    program: dict,
+    sessions: list[dict],
+    section: str,
+    window_start: Optional[str] = None,
+    window_end: Optional[str] = None,
+    ref_date: Optional[str] = None,
+    week_start: Optional[int] = None,
+    week_end: Optional[int] = None,
+    weeks: int = 1,
+    block: Optional[str] = None,
+    glossary: list[dict] | None = None,
+) -> dict:
+    """Compute one weekly analysis section without building the full report."""
+    section = str(section or "").strip()
+    if section not in _WEEKLY_ANALYSIS_SECTION_KEYS:
+        raise ValueError(f"Unknown weekly analysis section: {section}")
+
+    ctx = _weekly_analysis_window_context(
+        program,
+        sessions,
+        window_start=window_start,
+        window_end=window_end,
+        ref_date=ref_date,
+        week_start=week_start,
+        week_end=week_end,
+        weeks=weeks,
+        block=block,
+    )
+    current_maxes_raw, comp_maxes_raw, session_maxes_raw = _analysis_current_maxes(ctx)
+    current_maxes_out = _analysis_current_maxes_out(current_maxes_raw, comp_maxes_raw, session_maxes_raw)
+
+    if section == "overview":
+        return {
+            "week": ctx["current_week"],
+            "selected_week_start": ctx["selected_week_start"],
+            "selected_week_end": ctx["selected_week_end"],
+            "selected_week_count": ctx["selected_week_count"],
+            "window_start": ctx["window_start"],
+            "window_end": ctx["window_end"],
+            "selected_session_context": ctx["recent_sessions"],
+            "block": ctx["phase_name"],
+            "compliance": _analysis_compliance_obj(ctx),
+            "current_maxes": current_maxes_out,
+            **_analysis_projection_payload(ctx, current_maxes_out),
+            "sessions_analyzed": len(ctx["completed_in_window"]),
+            "deload_info": _analysis_deload_info(ctx),
+        }
+
+    if section == "workload":
+        payload, _ = _analysis_workload_payload(ctx)
+        return payload
+
+    if section == "fatigue_readiness":
+        target_rpe_mid = _analysis_target_rpe_midpoint(ctx["current_phase"])
+        fatigue = fatigue_index(
+            ctx["completed_history_to_ref"],
+            days=ctx["selected_week_count"] * 7,
+            glossary=glossary,
+            current_maxes=current_maxes_raw,
+            program_start=ctx["program_start"],
+            ref_date=ctx["ref"],
+            window_start=ctx["window_start"],
+            window_end=ctx["window_end"],
+            weeks=ctx["selected_week_count"],
+            target_rpe_midpoint=target_rpe_mid,
+        )
+        fatigue_score = fatigue.get("score") if "score" in fatigue else None
+        fatigue_components = fatigue.get("components", {}) if "components" in fatigue else {}
+
+        fatigue_dimensions = None
+        if glossary is not None:
+            weekly_dim = _weekly_fatigue_by_dimension(ctx["completed_in_window"], glossary, ctx["program_start"], current_maxes_raw or {})
+            acwr_for_dimensions = compute_acwr(
+                ctx["completed_history_to_ref"],
+                glossary,
+                ctx["program_start"],
+                current_maxes_raw or {},
+                phases=ctx["phases"],
+                current_week=ctx["current_week"],
+                ref_date=ctx["end"],
+            )
+            spike = _compute_dimensional_spike(weekly_dim)
+            weekly_rounded = {wk: {k: round(v, 1) for k, v in dims.items()} for wk, dims in sorted(weekly_dim.items())}
+            fatigue_dimensions = {
+                "weekly": weekly_rounded,
+                "acwr": acwr_for_dimensions,
+                "spike": spike,
+                "dimension_weights": _DIMENSION_WEIGHTS,
+                "label": "selected_window_dimensions_current_state_acwr",
+            }
+
+        inol_result = compute_inol(
+            ctx["completed_in_window"],
+            ctx["program_start"],
+            current_maxes_raw,
+            ctx["program"].get("lift_profiles"),
+            phases=ctx["phases"],
+            selected_weeks=ctx["selected_week_count"],
+            all_history_sessions=ctx["completed_history_to_ref"],
+            ref_date=ctx["end"],
+        )
+        acwr_result = compute_acwr(
+            ctx["completed_history_to_ref"],
+            glossary,
+            ctx["program_start"],
+            current_maxes_raw,
+            phases=ctx["phases"],
+            current_week=ctx["current_week"],
+            ref_date=ctx["end"],
+        )
+        ri_result = compute_ri_distribution(ctx["completed_in_window"], current_maxes_raw)
+        volume_landmarks = compute_volume_landmarks(
+            ctx["completed_history_to_ref"],
+            glossary,
+            current_maxes_raw or {},
+            ctx["program_start"],
+            ref_date=ctx["end"],
+        )
+        readiness_result = compute_readiness_score(
+            ctx["all_sessions_to_ref"],
+            ctx["program"],
+            glossary,
+            ctx["program_start"],
+            reference_date=ctx["ref"],
+        )
+
+        return {
+            "fatigue_index": fatigue_score,
+            "fatigue_components": fatigue_components,
+            "fatigue_dimensions": fatigue_dimensions,
+            "inol": inol_result if "status" not in inol_result else None,
+            "acwr": acwr_result,
+            "ri_distribution": ri_result if "status" not in ri_result else None,
+            "volume_landmarks": volume_landmarks,
+            "readiness_score": readiness_result,
+        }
+
+    if section == "peaking":
+        banister = None
+        monotony_strain = None
+        decoupling = None
+        taper_quality = None
+        if glossary is not None:
+            banister = compute_banister_ffm(
+                ctx["completed_history_to_ref"],
+                glossary,
+                ctx["program_start"],
+                current_maxes_raw or {},
+                ref_date=ctx["end"],
+            )
+            monotony_strain = compute_monotony_strain(
+                ctx["completed_history_to_ref"],
+                glossary,
+                ctx["program_start"],
+                current_maxes_raw or {},
+                ref_date=ctx["end"],
+            )
+            decoupling = compute_decoupling(
+                ctx["completed_history_to_ref"],
+                glossary,
+                ctx["program_start"],
+                current_maxes_raw or {},
+                ref_date=ctx["end"],
+            )
+            taper_quality = compute_taper_quality(
+                ctx["program"],
+                ctx["completed_history_to_ref"],
+                glossary,
+                current_maxes_raw or {},
+                ctx["program_start"],
+                ref_date=ctx["end"],
+            )
+        specificity_target = _select_specificity_target_competition(ctx["program"], ctx["ref"])
+        specificity_comp_date = specificity_target.get("date") if specificity_target else None
+        specificity_weeks_to_comp = None
+        if specificity_comp_date:
+            comp_dt = _parse_date(specificity_comp_date)
+            if comp_dt is not None and comp_dt > ctx["ref"]:
+                specificity_weeks_to_comp = (comp_dt - ctx["ref"]).days / 7.0
+        specificity_result = compute_specificity_ratio(
+            ctx["completed_in_window"],
+            glossary,
+            weeks_to_comp=specificity_weeks_to_comp,
+        )
+        peaking_timeline = _build_peaking_timeline(
+            ctx["program"],
+            ctx["sessions"],
+            glossary,
+            ctx["ref"],
+            banister,
+            current_maxes_raw or {},
+        )
+        return {
+            "banister": banister,
+            "monotony_strain": monotony_strain,
+            "decoupling": decoupling,
+            "taper_quality": taper_quality,
+            "specificity_ratio": specificity_result if "status" not in specificity_result else None,
+            "specificity_target_competition": specificity_target,
+            "peaking_timeline": peaking_timeline,
+        }
+
+    _, workload_flags = _analysis_workload_payload(ctx)
+    all_flags = list(workload_flags)
+
+    target_rpe_mid = _analysis_target_rpe_midpoint(ctx["current_phase"])
+    fatigue = fatigue_index(
+        ctx["completed_history_to_ref"],
+        days=ctx["selected_week_count"] * 7,
+        glossary=glossary,
+        current_maxes=current_maxes_raw,
+        program_start=ctx["program_start"],
+        ref_date=ctx["ref"],
+        window_start=ctx["window_start"],
+        window_end=ctx["window_end"],
+        weeks=ctx["selected_week_count"],
+        target_rpe_midpoint=target_rpe_mid,
+    )
+    fatigue_score = fatigue.get("score") if "score" in fatigue else None
+    if fatigue.get("flags"):
+        all_flags.extend(fatigue["flags"])
+    projection_payload = _analysis_projection_payload(ctx, current_maxes_out)
+    acwr_result = compute_acwr(
+        ctx["completed_history_to_ref"],
+        glossary,
+        ctx["program_start"],
+        current_maxes_raw,
+        phases=ctx["phases"],
+        current_week=ctx["current_week"],
+        ref_date=ctx["end"],
+    )
+    readiness_result = compute_readiness_score(
+        ctx["all_sessions_to_ref"],
+        ctx["program"],
+        glossary,
+        ctx["program_start"],
+        reference_date=ctx["ref"],
+    )
+    banister = None
+    monotony_strain = None
+    decoupling = None
+    if glossary is not None:
+        banister = compute_banister_ffm(
+            ctx["completed_history_to_ref"],
+            glossary,
+            ctx["program_start"],
+            current_maxes_raw or {},
+            ref_date=ctx["end"],
+        )
+        monotony_strain = compute_monotony_strain(
+            ctx["completed_history_to_ref"],
+            glossary,
+            ctx["program_start"],
+            current_maxes_raw or {},
+            ref_date=ctx["end"],
+        )
+        decoupling = compute_decoupling(
+            ctx["completed_history_to_ref"],
+            glossary,
+            ctx["program_start"],
+            current_maxes_raw or {},
+            ref_date=ctx["end"],
+        )
+    inol_result = compute_inol(
+        ctx["completed_in_window"],
+        ctx["program_start"],
+        current_maxes_raw,
+        ctx["program"].get("lift_profiles"),
+        phases=ctx["phases"],
+        selected_weeks=ctx["selected_week_count"],
+        all_history_sessions=ctx["completed_history_to_ref"],
+        ref_date=ctx["end"],
+    )
+    if "flags" in inol_result and inol_result["flags"]:
+        all_flags.extend([flag for flag in inol_result["flags"] if flag not in all_flags])
+    if isinstance(monotony_strain, dict):
+        for row in monotony_strain.get("weekly", []):
+            for flag in row.get("flags", []):
+                if flag not in all_flags:
+                    all_flags.append(flag)
+    if isinstance(decoupling, dict) and "flags" in decoupling:
+        for flag in decoupling["flags"]:
+            if flag not in all_flags:
+                all_flags.append(flag)
+    specificity_target = _select_specificity_target_competition(ctx["program"], ctx["ref"])
+    specificity_comp_date = specificity_target.get("date") if specificity_target else None
+    specificity_weeks_to_comp = None
+    if specificity_comp_date:
+        comp_dt = _parse_date(specificity_comp_date)
+        if comp_dt is not None and comp_dt > ctx["ref"]:
+            specificity_weeks_to_comp = (comp_dt - ctx["ref"]).days / 7.0
+    specificity_result = compute_specificity_ratio(
+        ctx["completed_in_window"],
+        glossary,
+        weeks_to_comp=specificity_weeks_to_comp,
+    )
+    alerts = generate_alerts(
+        {
+            "week": ctx["current_week"],
+            "fatigue_index": fatigue_score,
+            "current_maxes": current_maxes_out,
+            "projections": projection_payload["projections"],
+            "banister": banister,
+            "acwr": acwr_result,
+            "decoupling": decoupling,
+            "specificity_ratio": specificity_result if "status" not in specificity_result else None,
+            "monotony_strain": monotony_strain,
+            "readiness_score": readiness_result,
+        },
+        ctx["program"],
+        ctx["completed_history_to_ref"],
+        glossary,
+        ref_date=ctx["end"],
+        window_weeks=ctx["selected_week_count"],
+    )
+    return {
+        "alerts": alerts,
+        "flags": all_flags,
+    }
+
+
 def weekly_analysis(
     program: dict,
     sessions: list[dict],

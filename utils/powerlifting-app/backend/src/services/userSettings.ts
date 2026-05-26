@@ -15,6 +15,8 @@ export interface UserSettings {
   display_name: string
   bio: string
   public_training_summary_enabled: boolean
+  ranking_country: string | null
+  ranking_region: string | null
   created_at: string
   updated_at: string
 }
@@ -93,13 +95,23 @@ function normalizeSettings(raw: Record<string, unknown>): UserSettings {
     display_name: normalizeDisplayName(raw.display_name, discordUsername || nickname),
     bio: normalizeBio(raw.bio),
     public_training_summary_enabled: raw.public_training_summary_enabled === true,
+    ranking_country: typeof raw.ranking_country === 'string' && raw.ranking_country.trim() ? raw.ranking_country.trim() : null,
+    ranking_region: typeof raw.ranking_region === 'string' && raw.ranking_region.trim() ? raw.ranking_region.trim() : null,
     created_at: String(raw.created_at || new Date().toISOString()),
     updated_at: String(raw.updated_at || new Date().toISOString()),
   }
 }
 
-function publicProfile(settings: UserSettings, viewerUsername?: string): PublicProfile {
+function isSelfProfile(settings: UserSettings, viewerUsername?: string): boolean {
   const viewerKey = viewerUsername ? usernameKey(viewerUsername) : ''
+  return Boolean(viewerKey && viewerKey === settingsUsernameKey(settings))
+}
+
+function canViewProfile(settings: UserSettings, viewerUsername?: string): boolean {
+  return settings.profile_visibility === 'public' || isSelfProfile(settings, viewerUsername)
+}
+
+export function publicProfile(settings: UserSettings, viewerUsername?: string): PublicProfile {
   return {
     nickname: settings.nickname,
     display_name: settings.display_name,
@@ -107,7 +119,7 @@ function publicProfile(settings: UserSettings, viewerUsername?: string): PublicP
     bio: settings.bio,
     profile_visibility: settings.profile_visibility,
     public_training_summary_enabled: settings.public_training_summary_enabled,
-    is_self: Boolean(viewerKey && viewerKey === settingsUsernameKey(settings)),
+    is_self: isSelfProfile(settings, viewerUsername),
   }
 }
 
@@ -149,6 +161,8 @@ export async function getOrCreateSettings(
     display_name: discordUsername,
     bio: '',
     public_training_summary_enabled: false,
+    ranking_country: null,
+    ranking_region: null,
     created_at: now,
     updated_at: now,
   }
@@ -256,6 +270,28 @@ export async function updateProfile(
   return getSettings(discordUsername) as Promise<UserSettings>
 }
 
+export async function updateAvatarUrl(discordUsername: string, avatarUrl: string | null): Promise<UserSettings> {
+  const existing = await getSettings(discordUsername)
+  if (!existing) {
+    throw new Error('Settings not found')
+  }
+
+  const now = new Date().toISOString()
+  await docClient.send(new UpdateCommand({
+    TableName: USER_TABLE,
+    Key: { pk: existing.pk },
+    UpdateExpression: 'SET avatar_url = :avatar, updated_at = :now',
+    ConditionExpression: 'attribute_exists(pk)',
+    ExpressionAttributeValues: {
+      ':avatar': avatarUrl,
+      ':now': now,
+    },
+  }))
+
+  cache.delete(usernameKey(discordUsername))
+  return getSettings(discordUsername) as Promise<UserSettings>
+}
+
 async function scanSettings(): Promise<UserSettings[]> {
   const settings: UserSettings[] = []
   let ExclusiveStartKey: Record<string, unknown> | undefined
@@ -279,12 +315,10 @@ async function scanSettings(): Promise<UserSettings[]> {
 export async function searchProfiles(query: string, viewerUsername?: string): Promise<PublicProfile[]> {
   const normalizedQuery = query.trim().toLowerCase()
   const allSettings = await scanSettings()
-  const viewerKey = viewerUsername ? usernameKey(viewerUsername) : ''
 
   return allSettings
     .filter((settings) => {
-      const isSelf = Boolean(viewerKey && viewerKey === settingsUsernameKey(settings))
-      if (settings.profile_visibility !== 'public' && !isSelf) return false
+      if (!canViewProfile(settings, viewerUsername)) return false
       if (!normalizedQuery) return true
       return [
         settings.nickname,
@@ -298,7 +332,7 @@ export async function searchProfiles(query: string, viewerUsername?: string): Pr
     .map((settings) => publicProfile(settings, viewerUsername))
 }
 
-export async function getProfileByNickname(nickname: string, viewerUsername?: string): Promise<PublicProfile | null> {
+export async function getProfileSettingsByNickname(nickname: string, viewerUsername?: string): Promise<UserSettings | null> {
   const normalizedNickname = nickname.trim().toLowerCase()
   if (!validateNickname(normalizedNickname)) return null
 
@@ -306,13 +340,61 @@ export async function getProfileByNickname(nickname: string, viewerUsername?: st
   const settings = allSettings.find((item) => item.nickname === normalizedNickname)
   if (!settings) return null
 
-  const viewerKey = viewerUsername ? usernameKey(viewerUsername) : ''
-  const isSelf = Boolean(viewerKey && viewerKey === settingsUsernameKey(settings))
-  if (settings.profile_visibility !== 'public' && !isSelf) return null
+  if (!canViewProfile(settings, viewerUsername)) return null
+  return settings
+}
 
-  return publicProfile(settings, viewerUsername)
+export async function getProfileSettingsByMappedPk(mappedPk: string, viewerUsername?: string): Promise<UserSettings | null> {
+  const target = mappedPk.trim()
+  if (!target || !validateMappedPk(target)) return null
+
+  const allSettings = await scanSettings()
+  const candidates = allSettings
+    .filter((settings) => mappedPkForSettings(settings) === target || settings.pk === target)
+    .filter((settings) => canViewProfile(settings, viewerUsername))
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+
+  return candidates.find((settings) => isSelfProfile(settings, viewerUsername)) ?? candidates[0] ?? null
+}
+
+export async function getProfileByNickname(nickname: string, viewerUsername?: string): Promise<PublicProfile | null> {
+  const settings = await getProfileSettingsByNickname(nickname, viewerUsername)
+  return settings ? publicProfile(settings, viewerUsername) : null
 }
 
 export function invalidateCache(discordUsername: string): void {
   cache.delete(usernameKey(discordUsername))
+}
+
+export async function updateRankingLocation(
+  discordUsername: string,
+  input: { ranking_country: string | null; ranking_region: string | null },
+): Promise<UserSettings> {
+  const existing = await getSettings(discordUsername)
+  if (!existing) {
+    throw new Error('Settings not found')
+  }
+
+  const rankingCountry = typeof input.ranking_country === 'string' && input.ranking_country.trim()
+    ? input.ranking_country.trim()
+    : null
+  const rankingRegion = typeof input.ranking_region === 'string' && input.ranking_region.trim()
+    ? input.ranking_region.trim()
+    : null
+  const now = new Date().toISOString()
+
+  await docClient.send(new UpdateCommand({
+    TableName: USER_TABLE,
+    Key: { pk: existing.pk },
+    UpdateExpression: 'SET ranking_country = :country, ranking_region = :region, updated_at = :now',
+    ConditionExpression: 'attribute_exists(pk)',
+    ExpressionAttributeValues: {
+      ':country': rankingCountry,
+      ':region': rankingRegion,
+      ':now': now,
+    },
+  }))
+
+  cache.delete(usernameKey(discordUsername))
+  return getSettings(discordUsername) as Promise<UserSettings>
 }

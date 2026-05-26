@@ -30,6 +30,14 @@ class ImportStore:
         self._table = None
 
     @property
+    def pk(self) -> str:
+        return self._pk
+
+    @pk.setter
+    def pk(self, value: str) -> None:
+        self._pk = value
+
+    @property
     def table(self):
         if self._table is None:
             self._table = boto3.resource(

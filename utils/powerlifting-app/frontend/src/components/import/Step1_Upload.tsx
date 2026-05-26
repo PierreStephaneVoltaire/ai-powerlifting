@@ -5,9 +5,10 @@ import { uploadImport } from '../../api/client'
 
 interface Props {
   onUpload: (importId: string) => void
+  readOnly?: boolean
 }
 
-export const Step1_Upload: React.FC<Props> = ({ onUpload }) => {
+export const Step1_Upload: React.FC<Props> = ({ onUpload, readOnly }) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,6 +30,7 @@ export const Step1_Upload: React.FC<Props> = ({ onUpload }) => {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    disabled: readOnly,
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'text/csv': ['.csv']
@@ -44,7 +46,7 @@ export const Step1_Upload: React.FC<Props> = ({ onUpload }) => {
         p="xl"
         radius="md"
         style={{
-          cursor: 'pointer',
+          cursor: readOnly ? 'not-allowed' : 'pointer',
           backgroundColor: isDragActive ? 'var(--mantine-color-blue-light)' : undefined,
           borderStyle: 'dashed',
         }}

@@ -310,6 +310,7 @@ export async function getVideoLibrary(
 
   items.sort((a, b) => {
     const cmp = a.session_date.localeCompare(b.session_date)
+      || a.video.uploaded_at.localeCompare(b.video.uploaded_at)
     return sort === 'newest' ? -cmp : cmp
   })
 

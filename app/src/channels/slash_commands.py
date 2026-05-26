@@ -54,6 +54,17 @@ def setup_command_tree(
     cache_key = str(channel_id)
     context_id = f"discord_{channel_id}"
 
+    def _clear_opencode_session(interaction: discord.Interaction) -> None:
+        from flow.session_dirs import clear_session_dir
+
+        request_data = {
+            "platform": "discord",
+            "channel_id": str(interaction.channel_id or channel_id),
+            "guild_id": str(interaction.guild_id or ""),
+            "conversation_id": str(interaction.channel_id or channel_id),
+        }
+        clear_session_dir(request_data, None, cache_key)
+
     # --- /end_convo ---
     @tree.command(
         name="end_convo",
@@ -74,6 +85,8 @@ def setup_command_tree(
                     await cache.persist_eviction(cache_key, store._backend)
             except Exception as e:
                 logger.warning(f"[SlashCmd] Failed to persist eviction: {e}")
+
+            _clear_opencode_session(interaction)
 
             await interaction.response.send_message(
                 "Acknowledged. Categorisation state cleared. "
@@ -149,6 +162,7 @@ def setup_command_tree(
 
         try:
             deleted = await interaction.channel.purge(limit=amount)
+            _clear_opencode_session(interaction)
             await interaction.followup.send(
                 f"Deleted {len(deleted)} message(s).", ephemeral=True
             )
@@ -286,17 +300,17 @@ def setup_command_tree(
         current: str,
     ) -> List[app_commands.Choice[str]]:
         try:
-            from tools.health.template_store import list_templates
-            import asyncio
-            
-            # Run in executor since it's a sync DynamoDB call
-            loop = asyncio.get_event_loop()
-            templates = await loop.run_in_executor(None, lambda: list_templates(include_archived=False))
+            from mcp_runtime import get_mcp_manager
+            import json
+
+            raw = await get_mcp_manager().call_tool("template_list", {"include_archived": False})
+            parsed = json.loads(raw)
+            templates = parsed.get("templates", parsed if isinstance(parsed, list) else [])
             
             choices = [
-                app_commands.Choice(name=t["name"], value=t["sk"])
+                app_commands.Choice(name=t["name"], value=t.get("sk", t["name"]))
                 for t in templates
-                if current.lower() in t["name"].lower()
+                if isinstance(t, dict) and "name" in t and current.lower() in t["name"].lower()
             ]
             return choices[:25]
         except Exception as e:
@@ -348,6 +362,7 @@ async def _invoke_via_agent(message_content: str, interaction: discord.Interacti
         "messages": [{"role": "user", "content": message_content}],
         "platform": "discord",
         "channel_id": str(interaction.channel_id) if interaction.channel_id else "",
+        "guild_id": str(interaction.guild_id) if interaction.guild_id else "",
         "conversation_id": str(interaction.channel_id) if interaction.channel_id else "",
         "user": str(interaction.user.id),
     }
@@ -392,41 +407,41 @@ def _register_dynamic_commands(tree, channel_id, conversation_id):
 
 
 def _register_tool_commands(tree, used_names: set[str]):
-    """Register slash commands for each tool in the tool registry."""
+    """Register slash commands for each MCP tool."""
     try:
-        from agent.tool_registry import get_tool_registry
-        registry = get_tool_registry()
+        from mcp_runtime import get_mcp_manager
+        manager = get_mcp_manager()
+        tool_names = manager.list_tool_names()
     except Exception:
-        logger.debug("[SlashCmd] Tool registry not available, skipping tool commands")
+        logger.debug("[SlashCmd] MCP tools not available, skipping tool commands")
         return
 
-    for config in registry._tools.values():
-        for tool_name, schema in config.schemas.items():
-            if len(used_names) >= MAX_DISCORD_CHAT_INPUT_COMMANDS:
-                logger.warning(
-                    "[SlashCmd] Reached Discord slash command limit while registering tools; skipping remaining tools"
-                )
-                return
+    for tool_name in tool_names:
+        if len(used_names) >= MAX_DISCORD_CHAT_INPUT_COMMANDS:
+            logger.warning(
+                "[SlashCmd] Reached Discord slash command limit while registering tools; skipping remaining tools"
+            )
+            return
 
-            discord_name = tool_name[:32]
-            if discord_name in used_names:
-                logger.warning(f"[SlashCmd] Skipping duplicate tool command: {discord_name} -> {tool_name}")
-                continue
+        discord_name = tool_name[:32]
+        if discord_name in used_names:
+            logger.warning(f"[SlashCmd] Skipping duplicate tool command: {discord_name} -> {tool_name}")
+            continue
 
-            description = (schema.get("description") or tool_name)[:100]
+        description = f"Invoke MCP tool {tool_name}"[:100]
 
-            tool_handler = _make_proxy_command_handler(tool_name, discord_name)
-            tool_handler = app_commands.describe(
-                args="Optional JSON arguments e.g. {\"weeks\": 4}"
-            )(tool_handler)
-            try:
-                tree.command(name=discord_name, description=description)(tool_handler)
-            except app_commands.errors.CommandAlreadyRegistered:
-                logger.warning(
-                    f"[SlashCmd] Tool command name collision, skipping: {discord_name} -> {tool_name}"
-                )
-                continue
-            used_names.add(discord_name)
+        tool_handler = _make_proxy_command_handler(tool_name, discord_name)
+        tool_handler = app_commands.describe(
+            args="Optional JSON arguments e.g. {\"weeks\": 4}"
+        )(tool_handler)
+        try:
+            tree.command(name=discord_name, description=description)(tool_handler)
+        except app_commands.errors.CommandAlreadyRegistered:
+            logger.warning(
+                f"[SlashCmd] Tool command name collision, skipping: {discord_name} -> {tool_name}"
+            )
+            continue
+        used_names.add(discord_name)
 
 
 def _register_specialist_commands(tree, used_names: set[str]):

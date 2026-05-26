@@ -281,7 +281,7 @@ resource "kubernetes_deployment" "portal_backends" {
   }
 
   spec {
-    replicas = 1
+    replicas = each.key == "powerlifting-app" ? 1 : 0
 
     selector {
       match_labels = {
@@ -384,7 +384,7 @@ resource "kubernetes_deployment" "portal_frontends" {
   }
 
   spec {
-    replicas = 1
+    replicas = each.key == "powerlifting-app" ? 1 : 0
 
     selector {
       match_labels = {

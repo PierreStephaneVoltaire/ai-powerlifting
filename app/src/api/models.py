@@ -4,6 +4,8 @@ GET /v1/models - Returns available models.
 """
 from fastapi import APIRouter
 
+from config import API_MODEL_NAME
+
 from .schemas import Model, ModelList
 
 router = APIRouter()
@@ -19,7 +21,7 @@ async def list_models():
     return ModelList(
         data=[
             Model(
-                id="if-prototype",
+                id=API_MODEL_NAME,
                 owned_by="if-prototype"
             )
         ]

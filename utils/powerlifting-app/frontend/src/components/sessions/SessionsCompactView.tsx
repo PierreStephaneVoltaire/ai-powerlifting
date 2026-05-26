@@ -9,11 +9,12 @@ import { phaseColor } from '@/utils/phases'
 import { normalizeExerciseName } from '@/utils/volume'
 import { Check, Dumbbell, Plus } from 'lucide-react'
 import {
-  Paper, Title, Text, Group, Stack, Button, ActionIcon,
-  Select, Modal, Loader, Center, Box,
+  Paper, Text, Group, Stack, Button, ActionIcon,
+  Modal, Loader, Center, Box,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { Session } from '@powerlifting/types'
+import Num from '@/components/shared/Num'
 
 function countUniqueExerciseNames(session: Session): number {
   const entries = session.exercises.length > 0 ? session.exercises : session.planned_exercises ?? []
@@ -22,14 +23,15 @@ function countUniqueExerciseNames(session: Session): number {
 
 interface SessionsCompactViewProps {
   backTo?: string
+  readOnly?: boolean
 }
 
-export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: SessionsCompactViewProps) {
+export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnly = false }: SessionsCompactViewProps) {
   const { program, isLoading, createSession } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [newDate, setNewDate] = useState<string>('')
@@ -45,15 +47,6 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
 
   const requestedBlock = searchParams.get('block') || 'current'
   const block = availableBlocks.includes(requestedBlock) ? requestedBlock : 'current'
-
-  const updateBlockParam = (nextBlock: string) => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      next.set('view', 'Compact')
-      nextBlock === 'current' ? next.delete('block') : next.set('block', nextBlock)
-      return next
-    })
-  }
 
   const blockSessions = useMemo(() => {
     if (!program) return []
@@ -106,8 +99,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
   }, [closestSession, closestWeek, expandedWeeks])
 
   const handleAddSession = async () => {
-    if (!newDate) {
-      pushToast({ message: 'Please select a date', type: 'error' })
+    if (!newDate || readOnly) {
+      if (!newDate) pushToast({ message: 'Please select a date', type: 'error' })
       return
     }
 
@@ -161,32 +154,21 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
           position: 'sticky',
           top: 0,
           zIndex: 10,
-          background: 'var(--mantine-color-body)',
-          borderBottom: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--bg-base)',
+          borderBottom: '1px solid var(--border-subtle)',
           paddingBottom: 8,
           marginBottom: 0,
         }}
       >
-        <Group justify="space-between" wrap="nowrap">
-          <Title order={2}>Sessions by Week</Title>
+        <Group justify="flex-end" wrap="nowrap">
           <Group gap="xs" wrap="nowrap">
-            {availableBlocks.length > 1 && (
-              <Select
-                value={block}
-                onChange={(v) => updateBlockParam(v || 'current')}
-                data={availableBlocks.map((b) => ({
-                  value: b,
-                  label: b === 'current' ? 'Current Block' : b,
-                }))}
-                size="sm"
-                style={{ width: 160 }}
-              />
-            )}
             <Button
               size="sm"
               leftSection={<Plus size={16} />}
               onClick={() => setShowAddModal(true)}
               visibleFrom="sm"
+              disabled={readOnly}
+              data-testid="session-list-add-session"
             >
               Add Session
             </Button>
@@ -201,6 +183,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
         hiddenFrom="sm"
         onClick={() => setShowAddModal(true)}
         aria-label="Add Session"
+        disabled={readOnly}
+        data-testid="session-list-add-session-mobile"
         style={{
           position: 'fixed',
           bottom: 'calc(76px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
@@ -229,6 +213,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
               value={newDate || null}
               valueFormat="YYYY-MM-DD"
               onChange={(d) => setNewDate(d || '')}
+              disabled={readOnly}
+              data-testid="session-create-date"
             />
           </Box>
           <Group justify="flex-end" gap="xs">
@@ -241,15 +227,33 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
             >
               Cancel
             </Button>
-            <Button onClick={handleAddSession}>
+            <Button onClick={handleAddSession} disabled={readOnly} data-testid="session-create-submit">
               Create Session
             </Button>
           </Group>
         </Stack>
       </Modal>
 
-      <Stack gap="xs">
-        {Array.from(sessionsByWeek.entries()).map(([week, sessions]) => {
+      {sessionsByWeek.size === 0 ? (
+        <Paper withBorder p="xl" data-testid="session-list-empty">
+          <Stack align="center" gap="xs">
+            <Text fw={600} size="lg">No sessions yet</Text>
+            <Text c="dimmed" ta="center">
+              Add a session to start planning and logging training.
+            </Text>
+            <Button
+              leftSection={<Plus size={16} />}
+              onClick={() => setShowAddModal(true)}
+              disabled={readOnly}
+              data-testid="session-list-empty-add-session"
+            >
+              Add Session
+            </Button>
+          </Stack>
+        </Paper>
+      ) : (
+        <Stack gap="xs">
+          {Array.from(sessionsByWeek.entries()).map(([week, sessions]) => {
           const firstSession = sessions[0]
           const phase = firstSession?.phase
           const isExpanded = expandedWeeks.has(week)
@@ -257,7 +261,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
           const phaseColorValue = phase ? phaseColor(phase, program.phases) : undefined
 
           return (
-            <Paper key={week} withBorder>
+            <Paper key={week} withBorder className="if-card" data-testid={`session-week-${week}`}>
               <Box
                 component="button"
                 onClick={() => toggleWeek(week)}
@@ -296,20 +300,20 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                   />
                 )}
 
-                <Text fw={500}>Week {week}</Text>
-                <Text size="sm" c="dimmed">
+                <Num fw={500}>Week {week}</Num>
+                <Text size="sm" c="var(--text-secondary)">
                   {phase?.name}
                 </Text>
 
                 <Box style={{ marginLeft: 'auto' }}>
-                  <Text size="sm" c="dimmed">
+                  <Num size="sm" c="var(--text-secondary)">
                     {completedCount}/{sessions.length} completed
-                  </Text>
+                  </Num>
                 </Box>
               </Box>
 
               {isExpanded && (
-                <Box style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+                <Box style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   {sessions.map((session) => {
                     const previewExercises = session.exercises.length > 0 ? session.exercises : session.planned_exercises || []
                     const isPlanned = session.exercises.length === 0 && (session.planned_exercises?.length ?? 0) > 0
@@ -323,17 +327,20 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                         onClick={() => navigate(program.sessions.indexOf(session) >= 0 ? `/session/${session.date}/${program.sessions.indexOf(session)}` : `/session/${session.date}`, {
                           state: { backTo },
                         })}
+                        data-testid={`session-list-row-${session.date}`}
                         style={{
                           width: '100%',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 12,
                           padding: 12,
-                          background: 'none',
+                          background: 'transparent',
                           border: 'none',
-                          borderBottom: '1px solid var(--mantine-color-default-border)',
+                          borderBottom: '1px solid var(--border-subtle)',
+                          borderLeft: `3px solid ${phaseColorValue || 'var(--text-muted)'}`,
                           cursor: 'pointer',
                           textAlign: 'left',
+                          minHeight: 52,
                         }}
                       >
                         <Box
@@ -344,7 +351,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            backgroundColor: 'var(--mantine-color-default)',
+                            backgroundColor: 'var(--bg-elevated)',
                             flexShrink: 0,
                           }}
                         >
@@ -356,14 +363,14 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                         </Box>
 
                         <Box style={{ flex: 1 }}>
-                          <Text fw={500}>{session.day}</Text>
-                          <Text size="sm" c="dimmed">
+                          <Text fw={500} c="var(--text-primary)">{session.day}</Text>
+                          <Num size="sm" c="var(--text-secondary)">
                             {formatDateShort(session.date)}
-                          </Text>
+                          </Num>
                         </Box>
 
                         <Box style={{ flex: 1, textAlign: 'right' }}>
-                          <Text size="sm">
+                          <Text size="sm" c="var(--text-primary)">
                             {session.exercises.length > 0
                               ? `${uniqueExerciseCount} exercise${uniqueExerciseCount !== 1 ? 's' : ''}`
                               : isPlanned
@@ -371,9 +378,9 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
                                 : 'No exercises'}
                           </Text>
                           {session.session_rpe !== null && (
-                            <Text size="xs" c="dimmed">
+                            <Num size="xs" c="var(--text-secondary)">
                               RPE {session.session_rpe}
-                            </Text>
+                            </Num>
                           )}
                         </Box>
 
@@ -398,8 +405,9 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact' }: Sessi
               )}
             </Paper>
           )
-        })}
-      </Stack>
+          })}
+        </Stack>
+      )}
     </Stack>
   )
 }

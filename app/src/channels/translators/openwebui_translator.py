@@ -6,6 +6,8 @@ format that can be processed by the existing agent pipeline.
 from __future__ import annotations
 from typing import Dict, List, Any
 
+from config import API_MODEL_NAME
+
 
 def translate_openwebui_batch(
     messages: List[Dict[str, Any]],
@@ -59,7 +61,7 @@ def translate_openwebui_batch(
                 })
 
     return {
-        "model": "if-prototype",
+        "model": API_MODEL_NAME,
         "stream": True,
         "messages": [{"role": "user", "content": content_parts}],
         "_conversation_id": conversation_id,

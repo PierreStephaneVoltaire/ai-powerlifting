@@ -3,20 +3,10 @@ import asyncio
 import os
 import subprocess
 import sys
-import uuid
 from typing import Optional
 from contextlib import asynccontextmanager
 from pathlib import Path
 import logging
-
-# Override OpenHands SDK tool output truncation limit.
-# Default 50K silently truncates large tool results (e.g. health_get_program
-# returns ~95K) causing the model to hallucinate from incomplete data.
-from config import TOOL_OUTPUT_CHAR_LIMIT
-import openhands.sdk.utils.truncate as _oh_truncate
-_oh_truncate.DEFAULT_TEXT_CONTENT_LIMIT = TOOL_OUTPUT_CHAR_LIMIT
-import openhands.sdk.utils as _oh_utils
-_oh_utils.DEFAULT_TEXT_CONTENT_LIMIT = TOOL_OUTPUT_CHAR_LIMIT
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -34,7 +24,7 @@ from api.files import router as files_router, get_sandbox_directory
 from api.webhooks import router as webhooks_router
 from api.directives import router as directives_router
 from api.admin import router as admin_router
-from api.health_stats import router as health_stats_router
+from api.template_imports import router as template_imports_router
 from presets.loader import get_preset_manager
 from mcp_servers.config import validate_mcp_config
 from storage.factory import init_store, close_store, get_webhook_store, init_directive_store
@@ -127,6 +117,25 @@ async def lifespan(app: FastAPI):
     except RuntimeError as e:
         logger.error(f"Failed to load presets: {e}")
         raise
+
+    try:
+        generator = Path(SCRIPTS_PATH) / "generate_opencode_agents.py"
+        if generator.exists():
+            result = subprocess.run(
+                [sys.executable, str(generator)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=os.environ.copy(),
+            )
+            if result.returncode == 0:
+                logger.info(result.stdout.strip() or "Generated opencode agent files")
+            else:
+                logger.warning("opencode agent generation failed: %s", result.stderr.strip())
+        else:
+            logger.warning("opencode agent generator not found at %s", generator)
+    except Exception as e:
+        logger.warning(f"opencode agent generation failed: {e}")
     
     sandbox_dir = get_sandbox_directory()
     logger.info(f"Sandbox directory: {sandbox_dir}")
@@ -176,13 +185,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Legacy memory store initialization failed: {e}")
 
-    # External tool plugin initialization
+    # MCP tool server initialization
     try:
-        from agent.tool_registry import init_tool_registry
-        registry = init_tool_registry()
-        logger.info(f"Tool registry: {len(registry.list_tools())} external tools loaded")
+        from mcp_runtime import init_mcp_manager
+
+        manager = init_mcp_manager()
+        await manager.start_all()
+        logger.info("MCP tools loaded: %s tools", len(manager.list_tool_names()))
     except Exception as e:
-        logger.warning(f"Tool registry initialization failed: {e}")
+        logger.warning(f"MCP tool initialization failed: {e}")
 
     try:
         import nltk
@@ -308,22 +319,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Model stats refresh init failed: {e}")
 
-    # Model preset configuration (subagent presets)
-    try:
-        from models.loader import get_model_preset_manager
-        _model_preset_mgr = get_model_preset_manager()
-        _model_preset_mgr.load()
-    except Exception as e:
-        logger.warning(f"Model preset manager initialization failed: {e}")
-
-    # Tier configuration (internal tiers)
-    try:
-        from models.loader import get_tier_config_manager
-        _tier_config_mgr = get_tier_config_manager()
-        _tier_config_mgr.load()
-    except Exception as e:
-        logger.warning(f"Tier config manager initialization failed: {e}")
-    
     try:
         init_debounce(asyncio.get_running_loop())
         logger.info("Debounce system initialized")
@@ -420,6 +415,14 @@ async def lifespan(app: FastAPI):
     if _stats_refresh_task:
         _stats_refresh_task.cancel()
         logger.info("Model stats refresh stopped")
+
+    try:
+        from mcp_runtime import shutdown_mcp_manager
+
+        await shutdown_mcp_manager()
+        logger.info("MCP tool servers stopped")
+    except Exception as e:
+        logger.warning(f"MCP shutdown failed: {e}")
     
     stop_all()
     logger.info("All channel listeners stopped")
@@ -449,7 +452,7 @@ app.include_router(files_router)
 app.include_router(webhooks_router)
 app.include_router(directives_router)
 app.include_router(admin_router)
-app.include_router(health_stats_router)
+app.include_router(template_imports_router)
 
 
 

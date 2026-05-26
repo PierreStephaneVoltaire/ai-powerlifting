@@ -256,3 +256,34 @@ resource "aws_dynamodb_table" "if_health" {
     Service = "health"
   }
 }
+
+resource "aws_dynamodb_table" "if_health_templates" {
+  name         = var.dynamodb_templates_table
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "health-templates"
+  }
+}

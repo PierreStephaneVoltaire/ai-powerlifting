@@ -15,7 +15,10 @@ export const TemplateCard: React.FC<Props> = ({ template }) => {
     <Card withBorder padding="lg" radius="md">
       <Group justify="space-between" mb="xs">
         <Text fw={500}>{template.name}</Text>
-        {template.archived && <Badge color="gray">Archived</Badge>}
+        <Group gap={6}>
+          {template.published === false && <Badge color="yellow">Draft</Badge>}
+          {template.archived && <Badge color="gray">Archived</Badge>}
+        </Group>
       </Group>
 
       <Stack gap="xs" mb="md">
@@ -25,6 +28,11 @@ export const TemplateCard: React.FC<Props> = ({ template }) => {
         <Text size="xs" c="dimmed">
           Created: {new Date(template.created_at).toLocaleDateString()}
         </Text>
+        {template.author && (
+          <Text size="xs" c="dimmed">
+            Author: {template.author}
+          </Text>
+        )}
       </Stack>
 
       <Group grow>

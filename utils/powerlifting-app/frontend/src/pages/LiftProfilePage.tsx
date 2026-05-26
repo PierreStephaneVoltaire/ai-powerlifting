@@ -32,6 +32,7 @@ import {
 } from '@/api/client'
 import type { LiftProfile } from '@powerlifting/types'
 import { toDisplayUnit } from '@/utils/units'
+import { useAuth } from '@/auth/AuthProvider'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 const PROFILE_ESTIMATE_READY_SCORE = 55
@@ -105,6 +106,7 @@ function coefficientValue(value: string | number): number {
 }
 
 export default function LiftProfilePage() {
+  const { readOnly } = useAuth()
   const { lift: liftParam } = useParams<{ lift: string }>()
   const navigate = useNavigate()
   const { program, updateLiftProfiles } = useProgramStore()
@@ -290,16 +292,16 @@ export default function LiftProfilePage() {
         <Divider />
 
         <Stack gap="xs" mt="auto">
-          <Button variant="light" leftSection={<Sparkles size={16} />} loading={reviewing} onClick={() => draft && runReview(draft)}>
+          <Button variant="light" leftSection={<Sparkles size={16} />} loading={reviewing} onClick={() => draft && runReview(draft)} disabled={readOnly}>
             Review
           </Button>
-          <Button variant="light" leftSection={<Sparkles size={16} />} loading={rewriting} onClick={runRewrite}>
+          <Button variant="light" leftSection={<Sparkles size={16} />} loading={rewriting} onClick={runRewrite} disabled={readOnly}>
             Rewrite
           </Button>
-          <Button variant="light" leftSection={<Sparkles size={16} />} loading={estimating} disabled={!canEstimate} onClick={runEstimate}>
+          <Button variant="light" leftSection={<Sparkles size={16} />} loading={estimating} disabled={!canEstimate || readOnly} onClick={runEstimate}>
             Estimate Stimulus
           </Button>
-          <Button leftSection={<Save size={16} />} loading={saving} onClick={save}>
+          <Button leftSection={<Save size={16} />} loading={saving} onClick={save} disabled={readOnly}>
             Save Profile
           </Button>
         </Stack>
@@ -357,10 +359,11 @@ export default function LiftProfilePage() {
                     </Text>
                     <Text size="xs" c="dimmed">{suggestion.basis}</Text>
                     <Group gap="xs">
-                      <Button 
-                        size="compact-xs" 
-                        variant="filled" 
+                      <Button
+                        size="compact-xs"
+                        variant="filled"
                         onClick={() => updateDraft({ e1rm_multiplier: suggestion.suggested_multiplier }, false)}
+                        disabled={readOnly}
                       >
                         Apply
                       </Button>
@@ -384,6 +387,7 @@ export default function LiftProfilePage() {
                 placeholder={LIFT_STYLE_PLACEHOLDERS[lift]}
                 autosize={false}
                 styles={{ input: { minHeight: '44vh', width: '100%', resize: 'vertical', overflowY: 'auto' } }}
+                disabled={readOnly}
               />
               <Textarea
                 label="Sticking Points"
@@ -392,12 +396,14 @@ export default function LiftProfilePage() {
                 placeholder={STICKING_PLACEHOLDERS[lift]}
                 autosize={false}
                 styles={{ input: { minHeight: '34vh', width: '100%', resize: 'vertical', overflowY: 'auto' } }}
+                disabled={readOnly}
               />
               <TextInput
                 label="Primary Muscle Driver"
                 value={draft.primary_muscle}
                 onChange={(event) => updateDraft({ primary_muscle: event.currentTarget.value })}
                 placeholder={lift === 'squat' ? 'Quad dominant' : lift === 'bench' ? 'Tricep dominant' : 'Glute dominant'}
+                disabled={readOnly}
               />
             </Stack>
           </Paper>
@@ -407,12 +413,13 @@ export default function LiftProfilePage() {
               <Stack gap="xs">
                 <Group justify="space-between">
                   <Text size="sm" fw={500}>e1RM Multiplier</Text>
-                  <ActionIcon 
-                    variant="subtle" 
-                    color="gray" 
-                    size="sm" 
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
                     onClick={() => updateDraft({ e1rm_multiplier: 1.00 }, false)}
                     title="Reset to 1.00"
+                    disabled={readOnly}
                   >
                     <RotateCcw size={14} />
                   </ActionIcon>
@@ -422,6 +429,7 @@ export default function LiftProfilePage() {
                   step={0.01}
                   value={draft.e1rm_multiplier ?? 1.00}
                   onChange={(e) => updateDraft({ e1rm_multiplier: multiplierValue(Number(e.currentTarget.value)) }, false)}
+                  disabled={readOnly}
                 />
                 <Text size="xs" c="dimmed">
                   Use this if the app consistently overestimates or underestimates your real
@@ -458,6 +466,7 @@ export default function LiftProfilePage() {
                   ]}
                   value={draft.volume_tolerance}
                   onChange={(value) => updateDraft({ volume_tolerance: value as LiftProfile['volume_tolerance'] })}
+                  disabled={readOnly}
                 />
               </Stack>
             </Paper>
@@ -472,6 +481,7 @@ export default function LiftProfilePage() {
                   step={0.05}
                   value={draft.stimulus_coefficient ?? 1}
                   onChange={(e) => updateDraft({ stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) }, false)}
+                  disabled={readOnly}
                 />
                 <Text size="xs" c="dimmed">Range is 1.00 to 2.00. Baseline competition-standard stimulus is 1.00.</Text>
               </Stack>

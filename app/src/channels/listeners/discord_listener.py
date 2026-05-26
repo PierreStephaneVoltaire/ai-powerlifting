@@ -138,6 +138,9 @@ def create_discord_listener(
                     "platform": "discord",
                     "webhook_id": webhook_id,
                     "conversation_id": conversation_id,
+                    "message_id": str(message.id),
+                    "guild_id": str(message.guild.id) if message.guild else "",
+                    "channel_id": str(message.channel.id),
                     "author": message.author.display_name,
                     "content": message.clean_content,
                     "attachments": [
@@ -154,11 +157,56 @@ def create_discord_listener(
                     "channel_ref": message.channel,
                     "discord_loop": loop,  # Pass the Discord event loop for delivery
                     "timestamp": message.created_at.isoformat(),
+                    "edited_at": message.edited_at.isoformat() if message.edited_at else "",
                 },
             )
             logger.debug(
                 f"Discord message from {message.author.display_name} "
                 f"in {webhook_id}: {message.clean_content[:50]}..."
+            )
+
+        @client.event
+        async def on_message_edit(before: discord.Message, after: discord.Message):
+            if after.author == client.user or after.author.bot:
+                return
+            if after.channel.id != channel_id:
+                return
+
+            from channels.debounce import push_message
+
+            push_message(
+                conversation_id=conversation_id,
+                message={
+                    "platform": "discord",
+                    "webhook_id": webhook_id,
+                    "conversation_id": conversation_id,
+                    "message_id": str(after.id),
+                    "guild_id": str(after.guild.id) if after.guild else "",
+                    "channel_id": str(after.channel.id),
+                    "author": after.author.display_name,
+                    "content": after.clean_content,
+                    "attachments": [
+                        {
+                            "filename": att.filename,
+                            "url": att.url,
+                            "content_type": (
+                                att.content_type
+                                or "application/octet-stream"
+                            ),
+                        }
+                        for att in after.attachments
+                    ],
+                    "channel_ref": after.channel,
+                    "discord_loop": loop,
+                    "timestamp": after.created_at.isoformat(),
+                    "edited_at": after.edited_at.isoformat() if after.edited_at else "",
+                    "is_edit": True,
+                    "previous_content": before.clean_content,
+                },
+            )
+            logger.debug(
+                f"Discord edit from {after.author.display_name} "
+                f"in {webhook_id}: {after.clean_content[:50]}..."
             )
 
         async def runner():

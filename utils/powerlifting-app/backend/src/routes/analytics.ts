@@ -6,12 +6,26 @@ import * as weightController from '../controllers/weightController'
 import type { Program, WeightEntry } from '@powerlifting/types'
 import {
   ALL_WINDOW_KEYS,
-  CORRELATION_WINDOW_KEYS,
+  ALL_SECTION_KEYS,
+  AI_SECTION_KEYS,
+  DETERMINISTIC_SECTION_KEYS,
   buildAnalysisWindows,
+  buildAnalysisSourceFingerprint,
+  analysisSectionStatus,
+  claimAnalysisSectionJob,
+  completeAnalysisSectionJob,
+  failAnalysisSectionJob,
+  getCachedAnalysisSection,
+  invalidateAnalysisSections,
   putAllCachedWindowAnalyses,
   isIsoDate,
   makeWeeklyAnalysisBundle,
+  normalizeAnalysisSectionKeys,
+  normalizeAnalysisWindowKey,
+  putCachedAnalysisSection,
+  queueAnalysisSectionJobs,
   type AnalysisWindowKey,
+  type AnalysisSectionKey,
 } from '../services/analysisCache'
 import {
   analysisScopedBlockEntry,
@@ -68,6 +82,214 @@ async function snapshotCompetitionProjection(pk: string, date: string): Promise<
   }
 }
 
+type AnalysisContext = {
+  pk: string
+  asOfDate: string
+  windowKey: AnalysisWindowKey
+  program: ProgramWithWeightLog
+  windows: ReturnType<typeof buildAnalysisWindows>
+  sourceFingerprint: string
+}
+
+const DETERMINISTIC_SECTION_SET = new Set<AnalysisSectionKey>(DETERMINISTIC_SECTION_KEYS)
+
+async function buildAnalysisContext(
+  pk: string,
+  asOfDate: string,
+  windowKey: AnalysisWindowKey,
+): Promise<AnalysisContext> {
+  const program = await getProgramWithWeightLog(pk, 'current')
+  const windows = buildAnalysisWindows(program, asOfDate)
+  const sourceFingerprint = buildAnalysisSourceFingerprint(program, windows[windowKey])
+  return { pk, asOfDate, windowKey, program, windows, sourceFingerprint }
+}
+
+async function queueMissingSections(
+  context: AnalysisContext,
+  sectionKeys: AnalysisSectionKey[],
+  force = false,
+): Promise<AnalysisSectionKey[]> {
+  const missing: AnalysisSectionKey[] = []
+  for (const sectionKey of sectionKeys) {
+    const cached = force
+      ? null
+      : await getCachedAnalysisSection(
+        context.pk,
+        context.asOfDate,
+        context.windowKey,
+        sectionKey,
+        context.sourceFingerprint,
+      )
+    if (!cached) missing.push(sectionKey)
+  }
+  if (missing.length) {
+    await queueAnalysisSectionJobs(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      missing,
+      context.sourceFingerprint,
+    )
+  }
+  return missing
+}
+
+async function computeDeterministicSection(
+  context: AnalysisContext,
+  sectionKey: AnalysisSectionKey,
+): Promise<void> {
+  if (!DETERMINISTIC_SECTION_SET.has(sectionKey)) return
+  const didClaim = await claimAnalysisSectionJob(
+    context.pk,
+    context.asOfDate,
+    context.windowKey,
+    sectionKey,
+    context.sourceFingerprint,
+  )
+  if (!didClaim) return
+
+  try {
+    if (sectionKey === 'overview' || sectionKey === 'alerts') {
+      await snapshotCompetitionProjection(context.pk, context.asOfDate)
+    }
+    const window = context.windows[context.windowKey]
+    const payload = await invokeToolDirect('analysis_section', {
+      section: sectionKey,
+      weeks: window.weeks,
+      block: 'current',
+      window_start: window.start,
+      window_end: window.end,
+      ref_date: context.asOfDate,
+      week_start: window.weekStart,
+      week_end: window.weekEnd,
+      refresh_program: false,
+      program: context.program,
+      sessions: context.program.sessions ?? [],
+      pk: context.pk,
+    }) as Record<string, unknown>
+    await putCachedAnalysisSection(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+      payload,
+    )
+    await completeAnalysisSectionJob(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await failAnalysisSectionJob(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+      message,
+    ).catch((err) => logger.warn({ err, sectionKey }, 'Failed to mark analysis section job failed'))
+  }
+}
+
+async function computeAiSection(
+  context: AnalysisContext,
+  sectionKey: AnalysisSectionKey,
+): Promise<void> {
+  const didClaim = await claimAnalysisSectionJob(
+    context.pk,
+    context.asOfDate,
+    context.windowKey,
+    sectionKey,
+    context.sourceFingerprint,
+  )
+  if (!didClaim) return
+
+  try {
+    const window = context.windows[context.windowKey]
+    let payload: unknown
+    if (sectionKey === 'ai_correlation') {
+      if (window.weeks < 4) {
+        payload = {
+          insufficient_data: true,
+          insufficient_data_reason: 'Correlation analysis requires at least 4 weeks of data.',
+          cache_miss: false,
+        }
+      } else {
+        payload = await invokeToolDirect('correlation_analysis', {
+          weeks: window.weeks,
+          block: 'current',
+          refresh: true,
+          cache_only: false,
+          pk: context.pk,
+        })
+      }
+    } else if (sectionKey === 'program_evaluation') {
+      if (context.windowKey !== 'block') {
+        payload = {
+          insufficient_data: true,
+          insufficient_data_reason: 'Program evaluation is only available for the full block.',
+          cache_miss: false,
+        }
+      } else {
+        payload = await invokeToolDirect('program_evaluation', {
+          refresh: true,
+          cache_only: false,
+          pk: context.pk,
+        })
+      }
+    } else {
+      payload = {}
+    }
+    await putCachedAnalysisSection(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+      payload,
+    )
+    await completeAnalysisSectionJob(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await failAnalysisSectionJob(
+      context.pk,
+      context.asOfDate,
+      context.windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+      message,
+    ).catch((err) => logger.warn({ err, sectionKey }, 'Failed to mark AI analysis section failed'))
+  }
+}
+
+async function runQueuedAnalysisSections(
+  context: AnalysisContext,
+  sectionKeys: AnalysisSectionKey[],
+): Promise<void> {
+  for (const sectionKey of sectionKeys.filter((key) => DETERMINISTIC_SECTION_SET.has(key))) {
+    await computeDeterministicSection(context, sectionKey)
+  }
+  for (const sectionKey of sectionKeys.filter((key) => AI_SECTION_KEYS.includes(key))) {
+    await computeAiSection(context, sectionKey)
+  }
+}
+
+function startAnalysisSectionWorker(context: AnalysisContext, sectionKeys: AnalysisSectionKey[]): void {
+  void runQueuedAnalysisSections(context, sectionKeys).catch((error) => {
+    logger.warn({ err: error, pk: context.pk, asOfDate: context.asOfDate, windowKey: context.windowKey, sectionKeys }, 'Analysis section worker failed')
+  })
+}
+
 async function runTargetedRegeneration(
   pk: string,
   asOfDate: string,
@@ -77,50 +299,33 @@ async function runTargetedRegeneration(
   const windows = buildAnalysisWindows(program, asOfDate)
   const sessions = program.sessions ?? []
   const keys = targetWindows ?? ALL_WINDOW_KEYS
-  const needCorrelation = keys.some((k) => CORRELATION_WINDOW_KEYS.includes(k))
 
   const results = {} as Record<AnalysisWindowKey, unknown>
   for (const key of keys) {
     const window = windows[key]
-    logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window')
-    results[key] = await invokeToolDirect('weekly_analysis', {
-      weeks: window.weeks,
-      block: 'current',
-      window_start: window.start,
-      window_end: window.end,
-      ref_date: asOfDate,
-      week_start: window.weekStart,
-      week_end: window.weekEnd,
-      refresh_program: false,
-      program,
-      sessions,
-      pk,
-    })
+    logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window from sections')
+    const merged: Record<string, unknown> = {}
+    for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
+      const sectionPayload = await invokeToolDirect('analysis_section', {
+        section: sectionKey,
+        weeks: window.weeks,
+        block: 'current',
+        window_start: window.start,
+        window_end: window.end,
+        ref_date: asOfDate,
+        week_start: window.weekStart,
+        week_end: window.weekEnd,
+        refresh_program: false,
+        program,
+        sessions,
+        pk,
+      }) as Record<string, unknown>
+      Object.assign(merged, sectionPayload)
+    }
+    results[key] = merged
   }
 
   await putAllCachedWindowAnalyses(pk, results)
-
-  for (const key of keys.filter((k) => CORRELATION_WINDOW_KEYS.includes(k))) {
-    try {
-      await invokeToolDirect('correlation_analysis', {
-        weeks: windows[key].weeks,
-        block: 'current',
-        refresh: true,
-        cache_only: false,
-        pk,
-      })
-    } catch (err) {
-      logger.warn({ err, pk, window: key }, 'Correlation analysis failed for window')
-    }
-  }
-
-  if (needCorrelation) {
-    try {
-      await getOrCreateBlockCorrelationReport(pk, program, 'current', invokeToolDirect, true, false)
-    } catch (err) {
-      logger.warn({ err, pk }, 'block_correlation#v1#current regeneration failed')
-    }
-  }
 
   try {
     await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false)
@@ -138,20 +343,7 @@ async function runFullCurrentBlockRegeneration(
   asOfDate: string,
 ): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows> }> {
   await snapshotCompetitionProjection(pk, asOfDate)
-  const program = await getProgramWithWeightLog(pk, 'current')
   const { generatedAt, windows } = await runTargetedRegeneration(pk, asOfDate)
-
-  try {
-    await invokeToolDirect('program_evaluation', { refresh: true, cache_only: false, pk })
-  } catch (err) {
-    logger.warn({ err, pk }, 'Program evaluation failed during regeneration')
-  }
-
-  try {
-    await getOrCreateBlockProgramEvaluation(pk, program, 'current', invokeToolDirect, true, false)
-  } catch (err) {
-    logger.warn({ err, pk }, 'block_program_eval#v1#current regeneration failed')
-  }
 
   try {
     const markdownResult = await invokeToolDirect('export_program_markdown', {
@@ -179,6 +371,139 @@ analyticsRouter.post('/e1rm-multiplier/suggestions', async (req, res) => {
     res.json({ data: result })
   } catch (error) {
     res.status(500).json({ error: String(error) })
+  }
+})
+
+analyticsRouter.get('/analysis/manifest', async (req, res) => {
+  try {
+    const pk = req.mapped_pk!
+    const requestedAsOfDate = req.query.asOfDate as string | undefined
+    const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
+    const windowKey = normalizeAnalysisWindowKey(req.query.window)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    const statuses = await Promise.all(ALL_SECTION_KEYS.map(async (sectionKey) => {
+      const status = await analysisSectionStatus(
+        pk,
+        asOfDate,
+        windowKey,
+        sectionKey,
+        context.sourceFingerprint,
+      )
+      const { payload: _payload, ...withoutPayload } = status
+      return withoutPayload
+    }))
+    res.json({
+      data: {
+        schemaVersion: 6,
+        asOfDate,
+        windowKey,
+        windows: context.windows,
+        sourceFingerprint: context.sourceFingerprint,
+        sections: Object.fromEntries(statuses.map((status) => [status.sectionKey, status])),
+      },
+      error: null,
+    })
+  } catch (err) {
+    logger.error({ err }, 'Analysis manifest failed')
+    res.status(502).json({ data: null, error: `Analysis manifest error: ${err}` })
+  }
+})
+
+analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
+  try {
+    const pk = req.mapped_pk!
+    const asOfDate = isIsoDate(req.body?.asOfDate) ? req.body.asOfDate : todayIso()
+    const windowKey = normalizeAnalysisWindowKey(req.body?.window)
+    const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
+    const unsafeReadOnlySections = req.readOnly
+      ? sectionKeys.filter((sectionKey) => !DETERMINISTIC_SECTION_SET.has(sectionKey))
+      : []
+    if (unsafeReadOnlySections.length) {
+      return res.status(403).json({
+        data: null,
+        error: 'Read-only users can only queue deterministic analysis sections.',
+      })
+    }
+    const force = req.readOnly ? false : req.body?.force === true
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    if (force) {
+      await invalidateAnalysisSections(pk, asOfDate, windowKey, sectionKeys)
+    }
+    const queued = await queueMissingSections(context, sectionKeys, force)
+    startAnalysisSectionWorker(context, queued.length ? queued : sectionKeys)
+    res.status(202).json({
+      data: {
+        accepted: true,
+        asOfDate,
+        windowKey,
+        queued,
+        sourceFingerprint: context.sourceFingerprint,
+      },
+      error: null,
+    })
+  } catch (err) {
+    logger.error({ err }, 'Analysis section queue failed')
+    res.status(502).json({ data: null, error: `Analysis queue error: ${err}` })
+  }
+})
+
+analyticsRouter.get('/analysis/sections/:sectionKey', async (req, res) => {
+  try {
+    const pk = req.mapped_pk!
+    const sectionKey = normalizeAnalysisSectionKeys([req.params.sectionKey], [])[0]
+    if (!sectionKey) {
+      return res.status(400).json({ data: null, error: `Unknown analysis section: ${req.params.sectionKey}` })
+    }
+    const requestedAsOfDate = req.query.asOfDate as string | undefined
+    const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
+    const windowKey = normalizeAnalysisWindowKey(req.query.window)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    const status = await analysisSectionStatus(
+      pk,
+      asOfDate,
+      windowKey,
+      sectionKey,
+      context.sourceFingerprint,
+    )
+    res.json({
+      data: {
+        ...status,
+        asOfDate,
+        windowKey,
+        sourceFingerprint: status.sourceFingerprint ?? context.sourceFingerprint,
+      },
+      error: null,
+    })
+  } catch (err) {
+    logger.error({ err, sectionKey: req.params.sectionKey }, 'Analysis section read failed')
+    res.status(502).json({ data: null, error: `Analysis section error: ${err}` })
+  }
+})
+
+analyticsRouter.post('/analysis/sections/invalidate', async (req, res) => {
+  try {
+    const pk = req.mapped_pk!
+    const asOfDate = isIsoDate(req.body?.asOfDate) ? req.body.asOfDate : todayIso()
+    const windowKey = normalizeAnalysisWindowKey(req.body?.window)
+    const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    await invalidateAnalysisSections(pk, asOfDate, windowKey, sectionKeys)
+    const queued = await queueMissingSections(context, sectionKeys, true)
+    startAnalysisSectionWorker(context, queued)
+    res.status(202).json({
+      data: {
+        accepted: true,
+        invalidated: sectionKeys,
+        queued,
+        asOfDate,
+        windowKey,
+        sourceFingerprint: context.sourceFingerprint,
+      },
+      error: null,
+    })
+  } catch (err) {
+    logger.error({ err }, 'Analysis section invalidation failed')
+    res.status(502).json({ data: null, error: `Analysis invalidation error: ${err}` })
   }
 })
 
@@ -216,15 +541,26 @@ analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
 analyticsRouter.post('/analysis/regenerate', async (req, res) => {
   try {
     const pk = req.mapped_pk!
-    const asOfDate = todayIso()
-    const requestedWindows = req.body?.windows
-    if (Array.isArray(requestedWindows) && requestedWindows.length > 0) {
-      const valid = requestedWindows.filter((w: string) => ALL_WINDOW_KEYS.includes(w as AnalysisWindowKey)) as AnalysisWindowKey[]
-      const { generatedAt } = await runTargetedRegeneration(pk, asOfDate, valid)
-      return res.json({ data: { success: true, generatedAt, windowsRegenerated: valid.length }, error: null })
-    }
-    const { generatedAt } = await runFullCurrentBlockRegeneration(pk, asOfDate)
-    res.json({ data: { success: true, generatedAt, windowsRegenerated: ALL_WINDOW_KEYS.length }, error: null })
+    const asOfDate = isIsoDate(req.body?.asOfDate) ? req.body.asOfDate : todayIso()
+    const requestedWindows = Array.isArray(req.body?.windows) ? req.body.windows : []
+    const windowKey = normalizeAnalysisWindowKey(req.body?.window ?? requestedWindows[0])
+    const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    await invalidateAnalysisSections(pk, asOfDate, windowKey, sectionKeys)
+    const queued = await queueMissingSections(context, sectionKeys, true)
+    startAnalysisSectionWorker(context, queued)
+    res.status(202).json({
+      data: {
+        success: true,
+        accepted: true,
+        asOfDate,
+        windowKey,
+        queued,
+        generatedAt: new Date().toISOString(),
+        windowsRegenerated: windowKey ? 1 : 0,
+      },
+      error: null,
+    })
   } catch (err) {
     res.status(502).json({ data: null, error: `Regeneration error: ${err}` })
   }
@@ -270,19 +606,24 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const projectionDate = isIsoDate(refDate) ? refDate : todayIso()
     await snapshotCompetitionProjection(req.mapped_pk!, projectionDate)
     const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
-    const data = await invokeToolDirect('weekly_analysis', {
-      weeks,
-      block,
-      window_start: windowStart,
-      window_end: windowEnd,
-      ref_date: refDate,
-      week_start: weekStart,
-      week_end: weekEnd,
-      refresh_program: false,
-      program,
-      sessions: program.sessions ?? [],
-      pk: req.mapped_pk,
-    })
+    const data: Record<string, unknown> = {}
+    for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
+      const sectionPayload = await invokeToolDirect('analysis_section', {
+        section: sectionKey,
+        weeks,
+        block,
+        window_start: windowStart,
+        window_end: windowEnd,
+        ref_date: refDate,
+        week_start: weekStart,
+        week_end: weekEnd,
+        refresh_program: false,
+        program,
+        sessions: program.sessions ?? [],
+        pk: req.mapped_pk,
+      }) as Record<string, unknown>
+      Object.assign(data, sectionPayload)
+    }
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
@@ -589,11 +930,12 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     if (current) selected.add(current.blockKey)
 
     const selectedBlocks = blocks.filter((block) => selected.has(block.blockKey))
-    const cacheOnly = req.body?.cacheOnly === true
     const bundles = []
     const correlationReports = new Map<string, Record<string, unknown> | null>()
     const programEvaluationReports = new Map<string, Record<string, unknown> | null>()
     const contexts = new Map()
+    const cacheOnly = req.readOnly ? true : req.body?.cacheOnly === true
+    const refresh = req.readOnly ? false : req.body?.refresh === true
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
@@ -623,7 +965,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
       req.mapped_pk!,
       bundles,
       invokeToolDirect,
-      req.body?.refresh === true,
+      refresh,
       cacheOnly,
       correlationReports,
       programEvaluationReports,

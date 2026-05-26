@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Modal, Group, Button, ActionIcon, Text, Box, Stack } from '@mantine/core'
-import { X, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useProgramStore } from '@/store/programStore'
 import * as api from '@/api/client'
@@ -10,9 +10,10 @@ interface VideoPlayerModalProps {
   item: VideoLibraryItem | null
   onClose: () => void
   onDeleted?: () => void
+  readOnly?: boolean
 }
 
-export default function VideoPlayerModal({ item, onClose, onDeleted }: VideoPlayerModalProps) {
+export default function VideoPlayerModal({ item, onClose, onDeleted, readOnly = false }: VideoPlayerModalProps) {
   const { pushToast } = useUiStore()
   const { version } = useProgramStore()
   const [showConfirm, setShowConfirm] = useState(false)
@@ -22,6 +23,7 @@ export default function VideoPlayerModal({ item, onClose, onDeleted }: VideoPlay
   const { video, session_date, day, week_number, phase_name } = item
 
   async function handleDelete() {
+    if (readOnly) return
     try {
       await api.removeSessionVideo(version, session_date, video.video_id)
       pushToast({ message: 'Video deleted', type: 'success' })
@@ -83,6 +85,7 @@ export default function VideoPlayerModal({ item, onClose, onDeleted }: VideoPlay
                   size="compact-sm"
                   leftSection={<Trash2 size={14} />}
                   onClick={handleDelete}
+                  disabled={readOnly}
                 >
                   Confirm Delete
                 </Button>
@@ -94,6 +97,7 @@ export default function VideoPlayerModal({ item, onClose, onDeleted }: VideoPlay
                 size="compact-sm"
                 leftSection={<Trash2 size={14} />}
                 onClick={() => setShowConfirm(true)}
+                disabled={readOnly}
               >
                 Delete Video
               </Button>

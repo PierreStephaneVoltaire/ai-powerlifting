@@ -32,6 +32,7 @@ const DEFAULT_BAR_WEIGHT_KG: Record<Unit, number> = {
   kg: 20,
   lb: lbToKg(45),
 }
+const MANTINE_COLOR_SCHEME_KEY = 'mantine-color-scheme-value'
 
 function isNear(value: number, target: number, tolerance = 0.02): boolean {
   return Math.abs(value - target) <= tolerance
@@ -53,6 +54,12 @@ function applyTheme(theme: Theme) {
   const resolved = theme === 'system'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : theme
+
+  try {
+    window.localStorage.setItem(MANTINE_COLOR_SCHEME_KEY, theme === 'system' ? 'auto' : theme)
+  } catch {
+    // Ignore storage errors; the DOM attributes still keep the current page in sync.
+  }
 
   // Toggle .dark class for Tailwind compatibility during migration
   if (resolved === 'dark') {

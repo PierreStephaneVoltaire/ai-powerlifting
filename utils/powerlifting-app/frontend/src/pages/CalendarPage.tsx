@@ -2,18 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Group,
-  Badge,
-  Paper,
   Stack,
   Text,
   Box,
-  ThemeIcon,
   UnstyledButton,
-  Center,
   Select,
   ActionIcon,
 } from '@mantine/core'
-import { Calendar } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { phaseColor } from '@/utils/phases'
@@ -24,9 +19,9 @@ import { normalizeExerciseName } from '@/utils/volume'
 import { Check, ArrowUp } from 'lucide-react'
 import dayjs from 'dayjs'
 import type { Session } from '@powerlifting/types'
-import MuscleVolumeChart from '@/components/charts/MuscleVolumeChart'
 import { SessionsCompactView } from '@/components/sessions/SessionsCompactView'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
+import { useAuth } from '@/auth/AuthProvider'
 
 type ViewType = 'Month' | 'Agenda' | 'Compact'
 const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
@@ -49,6 +44,7 @@ function sessionRoute(session: Session, index: number): string {
 }
 
 export default function CalendarPage() {
+  const { readOnly } = useAuth()
   const { program, isLoading, needsSetup } = useProgramStore()
   const { defaultSessionsView } = useSettingsStore()
   const navigate = useNavigate()
@@ -77,6 +73,14 @@ export default function CalendarPage() {
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
       nextBlock === 'current' ? next.delete('block') : next.set('block', nextBlock)
+      return next
+    })
+  }
+
+  const updateViewParam = (nextView: ViewType) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      nextView === defaultSessionsView ? next.delete('view') : next.set('view', nextView)
       return next
     })
   }
@@ -225,68 +229,135 @@ export default function CalendarPage() {
     const previewExercises = session.exercises.length > 0 ? session.exercises : session.planned_exercises ?? []
     const uniqueExerciseCount = countUniqueExerciseNames(session)
     const previewNames = Array.from(new Set(previewExercises.map((exercise) => exercise.name))).slice(0, compact ? 2 : 3).join(', ') || 'Rest Day'
+    const dateLabel = format(parseLocalDate(session.date), compact ? 'EEE' : 'EEE')
+    const dateSubLabel = format(parseLocalDate(session.date), 'MMM d')
 
     return (
       <UnstyledButton
         key={`${session.date}-${session.id ?? session.week_number}`}
         ref={session === closestAgendaSession ? agendaTargetRef : undefined}
         onClick={() => openSession(session)}
+        style={{ width: '100%' }}
       >
-        <Paper
-          withBorder
-          p={compact ? 'xs' : 'sm'}
+        <div
+          className="if-session-row"
           style={{
-            borderLeft: `4px solid ${color}`,
+            borderLeft: `3px solid ${color}`,
             opacity: session.completed ? 1 : 0.8,
+            padding: compact ? '7px 10px' : '10px 14px',
           }}
         >
-          <Group justify="space-between" wrap="nowrap" align="flex-start">
-            <Group gap="xs" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: 1 }}>
-              <Text size="sm" fw={500} style={{ minWidth: compact ? 56 : 64 }}>
-                {format(parseLocalDate(session.date), compact ? 'MMM d' : 'EEE, MMM d')}
-              </Text>
-              <Badge size="xs" variant="filled" color={color}>
-                {session.phase?.name || 'Unknown'}
-              </Badge>
-              {!compact && (
-                <Text size="sm" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
-                  {previewNames}
-                </Text>
-              )}
-            </Group>
-
-            <Group gap="sm" wrap="nowrap" align="center">
-              <Stack gap={0} align="flex-end">
-                <Text size="sm">
-                  {uniqueExerciseCount} exercise{uniqueExerciseCount !== 1 ? 's' : ''}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  {session.session_rpe !== null ? `RPE ${session.session_rpe}` : 'RPE --'}
-                </Text>
-              </Stack>
-              {session.completed && (
-                <ThemeIcon size="sm" variant="subtle" color="green" radius="xl">
-                  <Check size={14} />
-                </ThemeIcon>
-              )}
-            </Group>
-          </Group>
-
-          {compact && (
-            <Text size="xs" c="dimmed" mt={6} lineClamp={1}>
+          <div className="if-session-row-main" style={{ gap: compact ? 8 : 12 }}>
+            <div className="if-session-date" style={{ width: compact ? 72 : 88 }}>
+              <div className="if-mock-num" style={{ color: compact ? 'var(--color-text-secondary)' : 'var(--color-text-primary)', fontSize: compact ? 12 : 13, fontWeight: compact ? 400 : 500 }}>
+                {dateLabel}
+              </div>
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: compact ? 10 : 11 }}>{dateSubLabel}</div>
+            </div>
+            <span
+              className="if-phase-pill"
+              style={{
+                background: `color-mix(in srgb, ${color} 22%, transparent)`,
+                color,
+                flexShrink: 0,
+              }}
+            >
+              {session.phase?.name || 'Unknown'}
+            </span>
+            <div className="if-session-preview" style={{ fontSize: compact ? 12 : 13 }}>
               {previewNames}
-            </Text>
-          )}
-        </Paper>
+            </div>
+            <div className="if-session-meta" style={{ fontSize: compact ? 11 : 12, minWidth: compact ? 48 : 80 }}>
+              {compact ? null : <>{uniqueExerciseCount} exercise{uniqueExerciseCount !== 1 ? 's' : ''}<br /></>}
+              <span style={{ fontSize: 11 }}>{session.session_rpe !== null ? `RPE ${session.session_rpe}` : 'RPE --'}</span>
+            </div>
+            <span className="if-session-done" data-completed={session.completed ? 'true' : 'false'}>
+              {session.completed && <Check size={12} />}
+            </span>
+          </div>
+        </div>
       </UnstyledButton>
     )
   }
 
+  const renderMonthGrid = () => (
+    <Stack gap="xs">
+      <div className="if-calendar-grid" style={{ marginBottom: 8 }}>
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          <div key={day} style={{ color: 'var(--color-text-secondary)', fontSize: 11, letterSpacing: '0.07em', padding: '4px 0', textAlign: 'center', textTransform: 'uppercase' }}>
+            {day}
+          </div>
+        ))}
+      </div>
+      {weeklyGroups.map(({ weekStart, weekLabel }) => {
+        const start = dayjs(weekStart)
+        const days = Array.from({ length: 7 }, (_, index) => start.add(index, 'day').format('YYYY-MM-DD'))
+        return (
+          <div key={weekStart}>
+            <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, letterSpacing: '0.07em', margin: '8px 0 4px', textTransform: 'uppercase' }}>
+              Week of {weekLabel}
+            </div>
+            <div className="if-calendar-grid">
+              {days.map((date) => {
+                const session = sessionsByDate.get(date)
+                const phase = session ? program.phases.find((p) => p.name === session.phase?.name) : undefined
+                const color = phase ? phaseColor(phase, program.phases) : '#94a3b8'
+                const previewExercises = session ? (session.exercises.length > 0 ? session.exercises : session.planned_exercises ?? []) : []
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    className="if-calendar-day"
+                    onClick={() => session && openSession(session)}
+                    disabled={!session}
+                    style={{
+                      background: 'transparent',
+                      borderLeft: session ? `3px solid ${color}` : undefined,
+                      cursor: session ? 'pointer' : 'default',
+                      opacity: session ? 1 : 0.35,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div className="if-mock-num" style={{ fontSize: 11, fontWeight: 500, marginBottom: 4 }}>{dayjs(date).date()}</div>
+                    {session && (
+                      <>
+                        <span className="if-phase-pill" style={{ background: `color-mix(in srgb, ${color} 22%, transparent)`, color, fontSize: 9 }}>
+                          {session.phase?.name || 'Unknown'}
+                        </span>
+                        <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {previewExercises[0]?.name || 'Rest Day'}{previewExercises.length > 1 ? ` +${previewExercises.length - 1}` : ''}
+                        </div>
+                        {session.completed && <Check size={11} style={{ color: 'var(--color-text-success)', display: 'block', marginTop: 4 }} />}
+                      </>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </Stack>
+  )
+
   return (
-    <Stack gap="md">
-      <Group justify="space-between" wrap="nowrap">
-        <Text size="xl" fw={700}>Sessions</Text>
-        {view !== 'Compact' && availableBlocks.length > 1 && (
+    <Stack gap="md" className="if-mock-page">
+      <div className="if-mock-header">
+        <h1 className="if-mock-title">Sessions</h1>
+        <div className="if-mock-toolbar">
+          <div className="if-tab-group">
+            {(['Agenda', 'Compact', 'Month'] as ViewType[]).map((nextView) => (
+              <button
+                key={nextView}
+                type="button"
+                className="if-tab-button"
+                data-active={view === nextView}
+                onClick={() => updateViewParam(nextView)}
+              >
+                {nextView}
+              </button>
+            ))}
+          </div>
           <Select
             value={block}
             onChange={(v) => updateBlockParam(v || 'current')}
@@ -294,42 +365,25 @@ export default function CalendarPage() {
               value: b,
               label: b === 'current' ? 'Current Block' : b,
             }))}
-            size="sm"
+            size="xs"
             style={{ width: 160 }}
+            data-testid="session-block-select"
           />
-        )}
-      </Group>
+        </div>
+      </div>
 
       {view === 'Compact' ? (
-        <SessionsCompactView backTo={sessionsBackTo} />
-      ) : (
-        <Paper withBorder p={{ base: 'xs', sm: 'md' }}>
-          {view === 'Month' ? (
-            <Center>
-              <Calendar
-                renderDay={renderDay}
-                getDayProps={getDayProps}
-                date={calendarDate ?? undefined}
-                onDateChange={(date) => updateSessionParams({ date })}
-                size="md"
-              />
-            </Center>
-          ) : (
-            <Stack gap="md">
-              {weeklyGroups.map(({ weekStart, weekLabel, sessions }) => (
-                <Stack key={weekStart} gap={4}>
-                  <Text size="sm" fw={600} c="dimmed">
-                    Week of {weekLabel}
-                  </Text>
-                  {sessions.map((session) => renderSessionRow(session))}
-                </Stack>
-              ))}
+        <SessionsCompactView backTo={sessionsBackTo} readOnly={readOnly} />
+      ) : view === 'Month' ? renderMonthGrid() : (
+        <Stack gap="md">
+          {weeklyGroups.map(({ weekStart, weekLabel, sessions }) => (
+            <Stack key={weekStart} gap={4}>
+              <Text className="if-week-header">Week of {weekLabel}</Text>
+              {sessions.map((session) => renderSessionRow(session, false))}
             </Stack>
-          )}
-        </Paper>
+          ))}
+        </Stack>
       )}
-
-      <MuscleVolumeChart />
 
       {showScrollTop && (
         <ActionIcon

@@ -625,6 +625,81 @@ def test_weekly_analysis_training_week_window_overrides_calendar_start() -> None
     assert result["compliance"]["completed"] == 2
 
 
+def test_weekly_analysis_section_matches_full_report_sections() -> None:
+    glossary = [
+        {"name": "Squat", "fatigue_profile": {"axial": 1.0, "neural": 1.0, "peripheral": 0.6, "systemic": 0.8}},
+        {"name": "Bench Press", "fatigue_profile": {"axial": 0.2, "neural": 0.8, "peripheral": 0.8, "systemic": 0.5}},
+        {"name": "Deadlift", "fatigue_profile": {"axial": 1.0, "neural": 1.0, "peripheral": 0.8, "systemic": 0.9}},
+    ]
+    program = {
+        "meta": {"program_start": "2026-04-01", "sex": "male", "current_body_weight_kg": 82.5},
+        "phases": [{"name": "Build", "intent": "", "start_week": 1, "end_week": 8, "target_rpe_min": 7, "target_rpe_max": 9}],
+        "competitions": [{"name": "Meet", "date": "2026-06-01", "status": "confirmed"}],
+        "lift_profiles": [],
+        "sessions": [],
+    }
+    sessions = [
+        make_sbd_session(20, 150, 100, 190, session_rpe=7, week_number=1),
+        make_sbd_session(13, 155, 102.5, 195, session_rpe=8, week_number=2),
+        make_sbd_session(6, 160, 105, 200, session_rpe=8, week_number=3),
+        make_sbd_session(1, 162.5, 107.5, 205, session_rpe=8.5, week_number=4),
+    ]
+
+    full = analytics.weekly_analysis(
+        program,
+        sessions,
+        window_start="2026-04-01",
+        window_end="2026-04-24",
+        week_start=1,
+        week_end=4,
+        weeks=4,
+        block="current",
+        glossary=glossary,
+    )
+
+    section_keys = {
+        "overview": [
+            "week",
+            "selected_week_start",
+            "selected_week_end",
+            "selected_week_count",
+            "window_start",
+            "window_end",
+            "block",
+            "compliance",
+            "current_maxes",
+            "estimated_dots",
+            "estimated_dots_reason",
+            "projections",
+            "projection_reason",
+            "projection_calibration",
+            "attempt_selection",
+            "sessions_analyzed",
+            "deload_info",
+        ],
+        "workload": ["lifts", "exercise_stats"],
+        "fatigue_readiness": ["fatigue_index", "fatigue_components", "fatigue_dimensions", "inol", "acwr", "ri_distribution", "volume_landmarks", "readiness_score"],
+        "peaking": ["banister", "monotony_strain", "decoupling", "taper_quality", "specificity_ratio", "specificity_target_competition", "peaking_timeline"],
+        "alerts": ["alerts", "flags"],
+    }
+
+    for section, keys in section_keys.items():
+        payload = analytics.weekly_analysis_section(
+            program,
+            sessions,
+            section=section,
+            window_start="2026-04-01",
+            window_end="2026-04-24",
+            week_start=1,
+            week_end=4,
+            weeks=4,
+            block="current",
+            glossary=glossary,
+        )
+        for key in keys:
+            assert payload[key] == full[key]
+
+
 def test_weekly_analysis_uses_stored_saturday_week_start_for_current_block() -> None:
     program = {
         "meta": {

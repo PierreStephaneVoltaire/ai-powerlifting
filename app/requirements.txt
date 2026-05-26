@@ -4,12 +4,15 @@
 # Web Framework
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
+python-multipart>=0.0.9
 
 # HTTP Client
 httpx>=0.27.0
 
 # Data Validation
 pydantic>=2.5.0
+PyYAML>=6.0.0
+Jinja2>=3.1.0
 
 # Database ORM (SQLite + SQLModel for storage abstraction)
 sqlmodel>=0.0.22
@@ -30,8 +33,8 @@ sentence-transformers>=2.2.0
 # Token Counting for Context Condensation
 tiktoken>=0.5.0
 
-# OpenHands Agent Runtime
-openhands-sdk==1.11.4
+# MCP tool runtime
+mcp>=1.2.0,<2.0.0
 
 # Discord Integration
 discord.py>=2.3.0
@@ -49,6 +52,8 @@ tika>=2.0.0
 openpyxl>=3.1.0
 
 # Statistics for Theil-Sen regression in health analytics
+numpy>=1.24.0
+pandas>=2.0.0
 scipy>=1.11.0
 rapidfuzz>=3.6.0
 
@@ -60,7 +65,3 @@ python-dateutil>=2.8.0
 # Optional: For development and testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
-
-
-
-

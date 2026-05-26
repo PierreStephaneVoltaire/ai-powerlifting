@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { VideoLibraryItem } from '@powerlifting/types'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -14,6 +15,18 @@ export interface PublicProfile {
   profile_visibility: 'private' | 'public'
   public_training_summary_enabled: boolean
   is_self: boolean
+  federation?: string | null
+  weight_class_kg?: number | null
+  practicing_for?: string | null
+  summary?: {
+    squat_kg: number | null
+    bench_kg: number | null
+    deadlift_kg: number | null
+    total_kg: number | null
+    bodyweight_kg: number | null
+    dots: number | null
+  }
+  lift_videos?: VideoLibraryItem[]
 }
 
 export async function searchProfiles(query: string): Promise<PublicProfile[]> {
@@ -25,5 +38,10 @@ export async function searchProfiles(query: string): Promise<PublicProfile[]> {
 
 export async function fetchProfile(nickname: string): Promise<PublicProfile> {
   const res = await api.get<{ data: PublicProfile }>(`/profiles/${encodeURIComponent(nickname)}`)
+  return res.data.data
+}
+
+export async function fetchCurrentProfile(): Promise<PublicProfile> {
+  const res = await api.get<{ data: PublicProfile }>('/profiles/current')
   return res.data.data
 }

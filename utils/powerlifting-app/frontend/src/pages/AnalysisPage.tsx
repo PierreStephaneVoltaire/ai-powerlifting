@@ -5,9 +5,17 @@ import {
   Scale, Moon, Beef, Ruler, Utensils, Info, RefreshCw,
 } from 'lucide-react'
 import {
-  fetchWeeklyAnalysisBundle, regenerateAnalysis, type AnalysisWindowKey, type WeeklyAnalysisBundle,
+  fetchAnalysisManifest,
+  fetchAnalysisSection,
+  invalidateAnalysisSections,
+  queueAnalysisSections,
+  type AnalysisSectionKey,
+  type AnalysisWindow,
+  type AnalysisWindowKey,
+  type WeeklyAnalysis,
 } from '@/api/analytics'
 import { useProgramStore } from '@/store/programStore'
+import { useAuth } from '@/auth/AuthProvider'
 import { fetchWeightLog, fetchGlossary } from '@/api/client'
 import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -20,7 +28,7 @@ import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
 import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session, WeekStartDay } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
 import {
-  Stack, Group, Paper, SimpleGrid, Text, Title, Badge, Table,
+  Stack, Group, Paper, SimpleGrid, Text, Badge, Table,
   Button, Center, Select, Progress, Accordion, SegmentedControl, Box, Loader, Tooltip,
 } from '@mantine/core'
 import { AiAnalysis } from '@/components/analysis/AiAnalysis'
@@ -28,14 +36,15 @@ import { AlertsStrip } from '@/components/analysis/AlertsStrip'
 import { LifetimeComparePanel, PastBlocksPanel } from '@/components/analysis/BlockAnalytics'
 import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
+import MaxesPage from '@/pages/MaxesPage'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type WeeksMode = number | 'current' | 'block'
-type AnalysisSection = 'weekly' | 'blocks' | 'compare'
+type AnalysisSection = 'weekly' | 'blocks' | 'compare' | 'maxes'
 type AnalysisViewMode = 'raw' | 'graph'
 
-const ANALYSIS_SECTIONS: AnalysisSection[] = ['weekly', 'blocks', 'compare']
+const ANALYSIS_SECTIONS: AnalysisSection[] = ['weekly', 'blocks', 'compare', 'maxes']
 const ANALYSIS_VIEW_MODES: AnalysisViewMode[] = ['raw', 'graph']
 const WEEK_MODE_NUMBERS = new Set(['1', '2', '4', '8'])
 
@@ -290,17 +299,69 @@ function analysisKeyForMode(mode: WeeksMode): AnalysisWindowKey {
   return `previous_${mode}` as AnalysisWindowKey
 }
 
+const DETERMINISTIC_ANALYSIS_SECTIONS: AnalysisSectionKey[] = [
+  'overview',
+  'fatigue_readiness',
+  'peaking',
+  'workload',
+  'alerts',
+]
+
+function emptyWeeklyAnalysis(window: AnalysisWindow): WeeklyAnalysis {
+  return {
+    week: window.currentWeek,
+    selected_week_start: window.weekStart,
+    selected_week_end: window.weekEnd,
+    selected_week_count: window.weeks,
+    window_start: window.start,
+    window_end: window.end,
+    selected_session_context: [],
+    block: 'current',
+    lifts: {},
+    fatigue_index: null,
+    fatigue_components: null,
+    compliance: null,
+    current_maxes: null,
+    estimated_dots: null,
+    estimated_dots_reason: null,
+    projections: [],
+    projection_reason: null,
+    flags: [],
+    sessions_analyzed: 0,
+    exercise_stats: {},
+    alerts: [],
+  }
+}
+
+function mergeWeeklySections(
+  window: AnalysisWindow,
+  payloads: Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>,
+): WeeklyAnalysis | null {
+  const hasPayload = DETERMINISTIC_ANALYSIS_SECTIONS.some((section) => Boolean(payloads[section]))
+  if (!hasPayload) return null
+  return Object.assign(
+    emptyWeeklyAnalysis(window),
+    ...DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => payloads[section] ?? {}),
+  )
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function AnalysisPage() {
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
+  const { readOnly } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
   const viewMode = parseAnalysisViewMode(searchParams.get('view'))
   const activeSection = parseAnalysisSection(searchParams)
-  const [analysisBundle, setAnalysisBundle] = useState<WeeklyAnalysisBundle | null>(null)
+  const analysisKey = analysisKeyForMode(weeksMode)
+  const [analysisWindows, setAnalysisWindows] = useState<Record<AnalysisWindowKey, AnalysisWindow> | null>(null)
+  const [sectionPayloads, setSectionPayloads] = useState<Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>>({})
+  const [sectionStatuses, setSectionStatuses] = useState<Partial<Record<AnalysisSectionKey, string>>>({})
+  const [latestGeneratedAt, setLatestGeneratedAt] = useState<string | null>(null)
+  const [analysisRefreshNonce, setAnalysisRefreshNonce] = useState(0)
   const [loading, setLoading] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -315,7 +376,7 @@ export default function AnalysisPage() {
 
       if (updates.type !== undefined) {
         next.delete('section')
-        updates.type === 'weekly' ? next.delete('type') : next.set('type', updates.type)
+        next.set('type', updates.type)
       }
 
       if (updates.weeks !== undefined) {
@@ -331,14 +392,31 @@ export default function AnalysisPage() {
   }
 
   const analysisWindow = useMemo(
-    () => analysisBundle?.windows[analysisKeyForMode(weeksMode)]
-      ?? getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start, currentWeekStartDay, asOfDate),
-    [analysisBundle?.windows, asOfDate, currentWeekStartDay, program?.meta?.program_start, program?.sessions, weeksMode],
+    () => {
+      const cached = analysisWindows?.[analysisKey]
+      if (cached) return cached
+      const fallback = getAnalysisWindow(weeksMode, program?.sessions ?? [], program?.meta?.program_start, currentWeekStartDay, asOfDate)
+      return {
+        key: analysisKey,
+        label: analysisKey === 'current' ? 'Current Week' : analysisKey === 'block' ? 'Full Block' : `Previous ${weeksMode} Week${weeksMode === 1 ? '' : 's'}`,
+        ...fallback,
+      }
+    },
+    [analysisKey, analysisWindows, asOfDate, currentWeekStartDay, program?.meta?.program_start, program?.sessions, weeksMode],
   )
-  const analysisKey = analysisKeyForMode(weeksMode)
-  const data = analysisBundle?.results[analysisKey] ?? null
+  const data = useMemo(
+    () => mergeWeeklySections(analysisWindow, sectionPayloads),
+    [analysisWindow, sectionPayloads],
+  )
 
   const effectiveWeeks = analysisWindow.weeks
+  const pendingSectionCount = useMemo(
+    () => DETERMINISTIC_ANALYSIS_SECTIONS.filter((section) => {
+      const status = sectionStatuses[section]
+      return status === 'pending' || status === 'running' || status === 'missing'
+    }).length,
+    [sectionStatuses],
+  )
 
   const competitions = useMemo(() => {
     return (program?.competitions || []).sort((a, b) => a.date.localeCompare(b.date))
@@ -364,29 +442,102 @@ export default function AnalysisPage() {
     : []
 
   useEffect(() => {
+    if (activeSection !== 'weekly') {
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+    let pollTimer: number | undefined
+
+    async function pollSections() {
+      const statuses = await Promise.all(
+        DETERMINISTIC_ANALYSIS_SECTIONS.map((section) =>
+          fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section),
+        ),
+      )
+      if (cancelled) return
+
+      setSectionStatuses(Object.fromEntries(statuses.map((status) => [status.sectionKey, status.status])))
+      setSectionPayloads((current) => {
+        const next = { ...current }
+        for (const status of statuses) {
+          if (status.status === 'complete' && status.payload) {
+            next[status.sectionKey] = status.payload
+          }
+        }
+        return next
+      })
+      const generated = statuses
+        .map((status) => status.generatedAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .slice(-1)[0]
+      if (generated) setLatestGeneratedAt(generated)
+
+      const terminal = statuses.every((status) => status.status === 'complete' || status.status === 'error')
+      const hasAnyPayload = statuses.some((status) => status.status === 'complete' && status.payload)
+      setLoading(!terminal && !hasAnyPayload)
+      if (!terminal) {
+        pollTimer = window.setTimeout(() => {
+          pollSections().catch((e) => {
+            if (!cancelled) setError(e.message)
+          })
+        }, 2000)
+      }
+    }
+
     setLoading(true)
     setError(null)
-    fetchWeeklyAnalysisBundle(asOfDate)
-      .then(setAnalysisBundle)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-    // Only re-fetch on mount or when asOfDate changes.
-    // Analysis is NO LONGER auto-invalidated on program mutations.
-    // Use the "Regenerate Analysis" button to force a fresh generation.
-  }, [asOfDate])
+    setLatestGeneratedAt(null)
+    setSectionPayloads({})
+    setSectionStatuses({})
+
+    fetchAnalysisManifest(asOfDate, analysisKey)
+      .then((manifest) => {
+        if (cancelled) return
+        setAnalysisWindows(manifest.windows)
+        setSectionStatuses(Object.fromEntries(
+          DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => [section, manifest.sections[section]?.status ?? 'missing']),
+        ))
+        return queueAnalysisSections({
+          asOfDate,
+          windowKey: analysisKey,
+          sections: DETERMINISTIC_ANALYSIS_SECTIONS,
+        })
+      })
+      .then(() => pollSections())
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message)
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer)
+    }
+  }, [activeSection, analysisKey, analysisRefreshNonce, asOfDate])
 
   useEffect(() => {
+    if (activeSection !== 'weekly') return
     fetchWeightLog(version).then(setWeightLog).catch(console.error)
     fetchGlossary().then(setGlossary).catch(console.error)
-  }, [version])
+  }, [activeSection, version])
 
   const handleRegenerateAnalysis = async () => {
     setRegenerating(true)
     setError(null)
     try {
-      await regenerateAnalysis([analysisKey])
-      const bundle = await fetchWeeklyAnalysisBundle(asOfDate, true)
-      setAnalysisBundle(bundle)
+      setSectionPayloads({})
+      setSectionStatuses({})
+      await invalidateAnalysisSections({
+        asOfDate,
+        windowKey: analysisKey,
+        sections: DETERMINISTIC_ANALYSIS_SECTIONS,
+      })
+      setAnalysisRefreshNonce((value) => value + 1)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -709,24 +860,36 @@ export default function AnalysisPage() {
   }, [nutritionTrend])
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between" wrap="wrap">
-        <Title order={2}>Analysis</Title>
-        <SegmentedControl
-          value={activeSection}
-          onChange={(value) => updateAnalysisParams({ type: value as AnalysisSection })}
-          data={[
+    <Stack gap="md" className="if-mock-page">
+      <div className="if-mock-header">
+        <Stack gap={2}>
+          <h1 className="if-mock-title">Analysis</h1>
+          <div className="if-mock-subtitle">Weekly readiness, block progress, maxes, and historical comparisons.</div>
+        </Stack>
+        <div className="if-tab-group">
+          {[
             { value: 'weekly', label: 'Weekly' },
             { value: 'blocks', label: 'Past Blocks' },
             { value: 'compare', label: 'Lifetime Compare' },
-          ]}
-        />
-      </Group>
+            { value: 'maxes', label: 'Maxes' },
+          ].map((section) => (
+            <button
+              key={section.value}
+              type="button"
+              className="if-tab-button"
+              data-active={activeSection === section.value}
+              onClick={() => updateAnalysisParams({ type: section.value as AnalysisSection })}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {activeSection === 'weekly' && (
         <>
-      <Group justify="space-between" wrap="wrap">
-        <Title order={2}>Weekly Analysis</Title>
+      <Group justify="space-between" wrap="wrap" className="if-mock-card">
+        <Text component="h2" className="if-card-title">Weekly Analysis</Text>
         <Group gap="sm" wrap="wrap">
           <Select
             size="sm"
@@ -780,32 +943,38 @@ export default function AnalysisPage() {
             leftSection={<RefreshCw size={16} />}
             loading={regenerating}
             onClick={handleRegenerateAnalysis}
+            disabled={readOnly}
           >
-            Regenerate Analysis
+            Regenerate Weekly Analysis
           </Button>
-          {analysisBundle?.generatedAt && !regenerating && (
+          {latestGeneratedAt && !regenerating && (
             <Badge color="gray" variant="light" size="sm">
-              Generated {new Date(analysisBundle.generatedAt).toLocaleDateString()}
+              Generated {new Date(latestGeneratedAt).toLocaleDateString()}
+            </Badge>
+          )}
+          {pendingSectionCount > 0 && (
+            <Badge color="blue" variant="light" size="sm">
+              {pendingSectionCount} updating
             </Badge>
           )}
         </Group>
       </Group>
 
-      {loading && <Center mih="20vh"><Loader /></Center>}
+      {loading && !data && <Center mih="20vh"><Loader /></Center>}
 
       {error && (
-        <Paper withBorder p="md" style={{ borderColor: 'var(--mantine-color-red-4)' }}>
+        <Paper withBorder p="md" className="if-card" style={{ borderColor: 'var(--status-danger-border)' }}>
           <Text c="red">{error}</Text>
         </Paper>
       )}
 
-      {data && !loading && (
+      {data && (
         <>
           <AlertsStrip alerts={data.alerts || []} />
 
           {/* Top summary cards */}
           <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <Dumbbell size={18} />
                 <Text fw={500}>Estimated 1 Rep Maxes</Text>
@@ -863,7 +1032,7 @@ export default function AnalysisPage() {
               )}
             </Paper>
 
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <CheckCircle size={18} />
                 <Text fw={500}>Compliance</Text>
@@ -895,7 +1064,7 @@ export default function AnalysisPage() {
               ) : <Text fz="sm" c="dimmed">No compliance data</Text>}
             </Paper>
 
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <Activity size={18} />
                 <Text fw={500}>Current Fatigue State</Text>
@@ -945,7 +1114,7 @@ export default function AnalysisPage() {
               </Stack>
             </Paper>
 
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs" justify="space-between" align="flex-start">
                 <Group gap="xs">
                   <Activity size={18} />
@@ -990,7 +1159,7 @@ export default function AnalysisPage() {
           {/* Peaking Layer */}
           {(data.banister || data.decoupling || taperQuality) && (
             <Stack gap="md">
-              <Paper withBorder p="md">
+              <Paper withBorder p="md" className="if-card">
                 <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                   <Group gap="xs">
                     <TrendingUp size={18} />
@@ -1090,7 +1259,7 @@ export default function AnalysisPage() {
             )}
 
               <SimpleGrid cols={{ base: 1, lg: taperQuality ? 2 : 1 }} spacing="md">
-                <Paper withBorder p="md">
+                <Paper withBorder p="md" className="if-card">
                   <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                     <Group gap="xs">
                       <Dumbbell size={18} />
@@ -1169,7 +1338,7 @@ export default function AnalysisPage() {
                 </Paper>
 
                 {taperQuality && (
-                  <Paper withBorder p="md">
+                  <Paper withBorder p="md" className="if-card">
                     <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                       <Group gap="xs">
                         <Trophy size={18} />
@@ -1213,7 +1382,7 @@ export default function AnalysisPage() {
 
           {/* INOL */}
           {data.inol && data.inol.avg_inol && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Text fw={500}>Stimulus-Adjusted INOL (Window Average)</Text>
                 <Tooltip label="INOL means intensity-number-of-lifts. Here it is adjusted by your lift-profile stimulus coefficient to reflect how hard the same workload is for you." withArrow multiline w={320}>
@@ -1266,7 +1435,7 @@ export default function AnalysisPage() {
           )}
 
           {volumeLandmarkEntries.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm" justify="space-between" align="flex-start">
                 <Group gap="xs">
                   <Dumbbell size={18} />
@@ -1312,7 +1481,7 @@ export default function AnalysisPage() {
 
           {/* ACWR */}
           {data.acwr && !('status' in data.acwr) && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group justify="space-between" mb="sm">
                 <Group gap="xs">
                   <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
@@ -1346,7 +1515,7 @@ export default function AnalysisPage() {
             </Paper>
           )}
           {data.acwr && 'status' in data.acwr && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
                 <Tooltip label="EWMA ACWR means exponentially weighted moving average acute:chronic workload ratio. It compares short-term load to longer-term load while weighting recent work more heavily." withArrow multiline w={340}>
@@ -1359,7 +1528,7 @@ export default function AnalysisPage() {
 
           {/* RI Distribution */}
           {data.ri_distribution && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Text fw={500} mb="sm">Relative Intensity Distribution</Text>
               <SimpleGrid cols={3} mb="md">
                 {(['heavy', 'moderate', 'light'] as const).map(bucket => {
@@ -1396,7 +1565,7 @@ export default function AnalysisPage() {
 
           {/* Specificity Ratio */}
           {data.specificity_ratio && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group justify="space-between" align="flex-start" mb="sm">
                 <Group gap="xs">
                   <Text fw={500}>Specificity Ratio</Text>
@@ -1463,7 +1632,7 @@ export default function AnalysisPage() {
 
           {/* Fatigue Dimensions */}
           {data.fatigue_dimensions && Object.keys(data.fatigue_dimensions.weekly).length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Text fw={500} mb="sm">Fatigue Dimensions (Weekly)</Text>
               <Box visibleFrom="sm" style={{ overflowX: 'auto' }}>
                 <Table fz="sm">
@@ -1529,7 +1698,7 @@ export default function AnalysisPage() {
               </Group>
               <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
                 {data.projections.filter(p => p && typeof p === 'object').map((proj, i) => (
-                  <Paper key={i} withBorder p="md">
+                  <Paper key={i} withBorder p="md" className="if-card">
                     <Group gap="xs" mb="xs">
                       <TrendingUp size={18} />
                       <Text fw={500}>{proj.comp_name || 'Projected Total'}</Text>
@@ -1545,7 +1714,7 @@ export default function AnalysisPage() {
               </SimpleGrid>
             </Stack>
           ) : (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="xs">
                 <TrendingUp size={18} />
                 <Text fw={500}>Projected Total</Text>
@@ -1556,7 +1725,7 @@ export default function AnalysisPage() {
 
           {/* DOTS & e1RM Trend */}
           {dotsTrend && dotsTrend.rows.length >= 2 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <TrendingUp size={18} />
                 <Text fw={500}>e1RM Progression &amp; DOTS Trend</Text>
@@ -1616,7 +1785,7 @@ export default function AnalysisPage() {
 
           {/* Body Weight Trend */}
           {weightTrend && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Scale size={18} />
                 <Text fw={500}>Body Weight Trend</Text>
@@ -1640,7 +1809,7 @@ export default function AnalysisPage() {
 
           {/* Sleep Trend */}
           {sleepTrend && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Moon size={18} />
                 <Text fw={500}>Sleep Trend</Text>
@@ -1671,7 +1840,7 @@ export default function AnalysisPage() {
 
           {/* Nutrition Trend */}
           {nutritionTrend && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Utensils size={18} />
                 <Text fw={500}>Nutrition Trend</Text>
@@ -1749,7 +1918,7 @@ export default function AnalysisPage() {
 
           {/* Athlete Measurements */}
           {(program?.meta?.height_cm || program?.meta?.arm_wingspan_cm || program?.meta?.leg_length_cm) && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Ruler size={18} />
                 <Text fw={500}>Athlete Measurements</Text>
@@ -1779,7 +1948,7 @@ export default function AnalysisPage() {
           )}
 
           {program?.lift_profiles && program.lift_profiles.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Dumbbell size={18} />
                 <Text fw={500}>Lift Style Profiles</Text>
@@ -1824,7 +1993,7 @@ export default function AnalysisPage() {
 
           {/* Competitions */}
           {competitions.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <Trophy size={18} />
                 <Text fw={500}>Competitions</Text>
@@ -1879,7 +2048,7 @@ export default function AnalysisPage() {
             analysisWeeks={effectiveWeeks}
             unit={unit}
           />
-          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} isRegenerating={regenerating} />
+          <AiAnalysis effectiveWeeks={effectiveWeeks} weeksMode={weeksMode} readOnly={readOnly} />
 
           {/* Formula Reference */}
           <Accordion mt="xl" variant="separated" defaultValue="formulas-outer">
@@ -1927,7 +2096,7 @@ export default function AnalysisPage() {
 
           {/* Flags */}
           {data.flags.length > 0 && (
-            <Paper withBorder p="md">
+            <Paper withBorder p="md" className="if-card">
               <Group gap="xs" mb="sm">
                 <AlertTriangle size={18} color="var(--mantine-color-yellow-5)" />
                 <Text fw={500}>Flags</Text>
@@ -1957,8 +2126,9 @@ export default function AnalysisPage() {
         </>
       )}
 
-      {activeSection === 'blocks' && <PastBlocksPanel unit={unit} />}
-      {activeSection === 'compare' && <LifetimeComparePanel unit={unit} />}
+      {activeSection === 'blocks' && <PastBlocksPanel unit={unit} readOnly={readOnly} />}
+      {activeSection === 'compare' && <LifetimeComparePanel unit={unit} readOnly={readOnly} />}
+      {activeSection === 'maxes' && <MaxesPage />}
     </Stack>
   )
 }

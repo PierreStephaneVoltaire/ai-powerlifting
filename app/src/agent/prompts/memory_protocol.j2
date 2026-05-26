@@ -12,6 +12,11 @@ USE memory_search WHEN:
   - You need to tailor tone, depth, or framing to the operator's
     known level of understanding.
 
+WORKSPACE COMPATIBILITY:
+  In workspace runs, memory_search is not a literal tool
+  name. Use the runtime CLI command exposed in the task prompt:
+  `python -m flow.runtime_tool user_facts_search '<json_args>'`.
+
 DO NOT USE memory_search WHEN:
   - The task is purely technical with no personalization benefit
     (code generation, architecture review, shell commands).
@@ -23,6 +28,11 @@ USE memory_add WHEN:
   - The operator explicitly asks you to remember something.
   - A pattern emerges across multiple interactions that would
     benefit future sessions.
+
+WORKSPACE COMPATIBILITY:
+  In workspace runs, memory_add is not a literal tool
+  name. Use the runtime CLI command exposed in the task prompt:
+  `python -m flow.runtime_tool user_facts_add '<json_args>'`.
 
 DO NOT USE memory_add FOR:
   - Task-specific details (code snippets, debugging context).

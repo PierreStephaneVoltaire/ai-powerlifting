@@ -36,12 +36,14 @@ def load_base_system_prompt() -> str:
     Returns:
         Content of main_system_prompt.txt
     """
-    from pathlib import Path
-    prompt_path = Path(__file__).parent.parent.parent / "main_system_prompt.txt"
+    from config import PROJECT_ROOT
+    path = PROJECT_ROOT / "main_system_prompt.txt"
+    if not path.exists():
+        path = PROJECT_ROOT / "app" / "main_system_prompt.txt"
     try:
-        return prompt_path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except Exception as e:
-        logger.warning(f"Failed to load base system prompt: {e}")
+        logger.warning(f"Failed to load base system prompt from {path}: {e}")
         return ""
 
 
@@ -284,18 +286,16 @@ class HeartbeatRunner:
         )
         
         try:
-            # Get pondering preset model
-            from presets.loader import get_preset_manager
-            preset_manager = get_preset_manager()
-            pondering_preset = preset_manager.get_preset("pondering")
-            from models.router import resolve_preset_to_model
-            raw_model = pondering_preset.model if pondering_preset else HEARTBEAT_FALLBACK_MODEL
-            model = resolve_preset_to_model(raw_model)
+            from flow.model_catalog import load_model_ids
+
+            model_ids = load_model_ids()
+            model = model_ids[0] if model_ids else HEARTBEAT_FALLBACK_MODEL.replace("openrouter/", "")
             
             response = await call_llm(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 system_prompt=load_base_system_prompt(),
+                max_tokens=300,
                 http_client=self.http_client,
             )
             return response.content

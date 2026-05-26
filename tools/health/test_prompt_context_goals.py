@@ -80,6 +80,37 @@ def test_summarize_goals_resolves_linked_standard_and_competition() -> None:
     assert goal["linked_competition"]["weight_class_alignment"] == "target"
 
 
+def test_summarize_program_notes_keeps_chronological_evolving_context() -> None:
+    program = {
+        "meta": {
+            "block_notes": [
+                {
+                    "date": "2026-04-10",
+                    "notes": "Back fatigue resolved; return to normal pulling.",
+                    "updated_at": "2026-04-10T08:00:00Z",
+                },
+                {
+                    "date": "2026-04-03",
+                    "notes": "Back fatigue elevated after travel.",
+                    "updated_at": "2026-04-03T08:00:00Z",
+                },
+                {
+                    "date": "2026-03-20",
+                    "notes": "Older block context.",
+                    "updated_at": "2026-03-20T08:00:00Z",
+                },
+            ]
+        }
+    }
+
+    result = prompt_context.summarize_program_notes(program, window_start=date(2026, 4, 1))
+
+    assert result["entries"] == 2
+    assert [note["date"] for note in result["chronological_notes"]] == ["2026-04-03", "2026-04-10"]
+    assert "conflict" in result["interpretation"]
+    assert "newer dated notes" in result["interpretation"]
+
+
 def test_summarize_competitions_uses_goal_priority_and_goal_owned_standard() -> None:
     program = {
         "meta": {

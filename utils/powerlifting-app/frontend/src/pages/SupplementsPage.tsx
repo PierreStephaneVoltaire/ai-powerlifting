@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, X, Trash2, Edit2, Save } from 'lucide-react'
+import { Plus, X, Trash2, Edit2, Save, ChevronDown, ChevronUp } from 'lucide-react'
 import {
-  Stack, Group, Text, Button, Paper, Badge, SimpleGrid,
-  TextInput, Textarea, Select, ActionIcon, Accordion, Table,
+  Stack, Group, Text, Button,
+  TextInput, Textarea, Select, ActionIcon,
 } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
+import { useAuth } from '@/auth/AuthProvider'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 
 export default function SupplementsPage() {
+  const { readOnly } = useAuth()
   const { program, updateSupplementPhases } = useProgramStore()
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
@@ -41,8 +43,22 @@ export default function SupplementsPage() {
   useEffect(() => {
     if (program?.supplement_phases) {
       setPhases(program.supplement_phases)
+    } else {
+      setPhases([])
     }
   }, [program])
+
+  useEffect(() => {
+    if (filteredPhases.length === 0) {
+      setExpandedPhase(null)
+      return
+    }
+
+    setExpandedPhase((current) => {
+      if (current != null && filteredPhases.some((phase) => phase.phase === current)) return current
+      return [...filteredPhases].sort((a, b) => a.phase - b.phase)[0]?.phase ?? null
+    })
+  }, [block, filteredPhases])
 
   function updatePhase(index: number, updates: Partial<SupplementPhase>) {
     setPhases((prev) => {
@@ -86,16 +102,19 @@ export default function SupplementsPage() {
 
   function addPhase() {
     const maxPhase = phases.reduce((max, p) => Math.max(max, p.phase), 0)
+    const nextPhase = maxPhase + 1
     setPhases((prev) => [
       ...prev,
       {
-        phase: maxPhase + 1,
-        phase_name: `Phase ${maxPhase + 1}`,
+        phase: nextPhase,
+        phase_name: `Phase ${nextPhase}`,
         notes: '',
         items: [],
         block: block,
       },
     ])
+    setExpandedPhase(nextPhase)
+    setEditingPhase(nextPhase)
     setHasChanges(true)
   }
 
@@ -150,14 +169,17 @@ export default function SupplementsPage() {
 
   const sortedFilteredPhases = [...filteredPhases].sort((a, b) => a.phase - b.phase)
 
+  const phaseWeekLabel = (phase: SupplementPhase) => {
+    if (phase.start_week == null && phase.end_week == null) return 'W?'
+    return `W${phase.start_week ?? '?'}\u2013W${phase.end_week ?? '?'}`
+  }
+
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
+    <Stack gap="md" className="if-mock-page">
+      <Group justify="space-between" className="if-mock-header">
         <Stack gap={0}>
-          <Text fw={700} size="xl">Supplements</Text>
-          <Text c="dimmed" size="sm">
-            Manage supplement phases and peak week protocols
-          </Text>
+          <h1 className="if-mock-title">Supplements</h1>
+          <div className="if-mock-subtitle">Manage supplement phases and peak week protocols.</div>
         </Stack>
         <Group gap="sm">
           <Select
@@ -174,6 +196,7 @@ export default function SupplementsPage() {
             <Button
               leftSection={<Save size={16} />}
               onClick={handleSave}
+              disabled={readOnly}
             >
               Save
             </Button>
@@ -182,192 +205,182 @@ export default function SupplementsPage() {
             variant="default"
             leftSection={<Plus size={16} />}
             onClick={addPhase}
+            disabled={readOnly}
           >
             Add Phase
           </Button>
         </Group>
       </Group>
 
-      {/* Phase Cards */}
       {sortedFilteredPhases.length > 0 ? (
-        <Accordion variant="separated">
+        <div>
           {sortedFilteredPhases.map((phase) => {
-            const originalIndex = phases.findIndex((p) => p.phase === phase.phase)
+            const originalIndex = phases.indexOf(phase)
+            const isOpen = expandedPhase === phase.phase
+            const weekLabel = phaseWeekLabel(phase)
 
             return (
-              <Accordion.Item key={phase.phase} value={`phase-${phase.phase}`}>
-                <Accordion.Control>
-                  <Group gap="sm" wrap="nowrap">
-                    <Text size="sm" c="dimmed" fw={500}>
-                      Phase {phase.phase}
-                    </Text>
+              <div className="if-supp-phase-card" key={`${phase.block ?? 'current'}-${phase.phase}-${originalIndex}`}>
+                <button
+                  type="button"
+                  className="if-supp-phase-header"
+                  onClick={() => setExpandedPhase(isOpen ? null : phase.phase)}
+                >
+                  <span className="if-supp-phase-number">Phase {phase.phase}</span>
+                  <span className="if-supp-phase-title">
                     {editingPhase === phase.phase ? (
                       <TextInput
                         value={phase.phase_name}
                         onChange={(e) => updatePhase(originalIndex, { phase_name: e.currentTarget.value })}
                         onBlur={() => setEditingPhase(null)}
                         onKeyDown={(e) => e.key === 'Enter' && setEditingPhase(null)}
-                        size="sm"
-                        w={200}
+                        size="xs"
+                        style={{ width: 'min(260px, 100%)' }}
                         onClick={(e) => e.stopPropagation()}
+                        disabled={readOnly}
                       />
                     ) : (
-                      <Group
-                        gap={4}
+                      <span
                         onClick={(e) => {
                           e.stopPropagation()
+                          if (readOnly) return
                           setEditingPhase(phase.phase)
                         }}
-                        style={{ cursor: 'text' }}
+                        style={{ alignItems: 'center', cursor: readOnly ? 'default' : 'text', display: 'inline-flex', gap: 5, minWidth: 0 }}
                       >
-                        <Text fw={500}>{phase.phase_name}</Text>
-                        <Edit2 size={12} style={{ color: 'var(--mantine-color-dimmed)' }} />
-                      </Group>
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{phase.phase_name}</span>
+                        <Edit2 size={12} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
+                      </span>
                     )}
-                    <Badge variant="light" size="sm">
-                      {phase.items.length} items
-                    </Badge>
-                    {(phase.start_week != null || phase.end_week != null) && (
-                      <Badge variant="light" size="sm">
-                        {`W${phase.start_week ?? '?'}\u2013W${phase.end_week ?? '?'}`}
-                      </Badge>
-                    )}
-                  </Group>
-                </Accordion.Control>
+                  </span>
+                  <span className="if-supp-count-pill">{phase.items.length} items</span>
+                  <span className="if-supp-week-pill">{weekLabel}</span>
+                  {isOpen ? <ChevronUp size={14} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />}
+                </button>
 
-                <Accordion.Panel>
-                  <Stack gap="md">
-                    {/* Week Range */}
-                    <Group gap="md">
-                      <Group gap="sm">
-                        <Text size="sm" c="dimmed">Start Week</Text>
+                {isOpen && (
+                  <div className="if-supp-phase-inner">
+                    <div className="if-supp-section">
+                      <Group gap="md" wrap="wrap">
+                        <Group gap={6} wrap="nowrap">
+                          <Text size="sm" c="dimmed">Start</Text>
                         <Select
                           value={phase.start_week != null ? String(phase.start_week) : ''}
                           onChange={(v) => updatePhase(originalIndex, {
                             start_week: v ? Number(v) : undefined,
                           })}
                           data={weekSelectData}
-                          size="sm"
-                          w={100}
+                          size="xs"
+                          w={74}
+                          disabled={readOnly}
                         />
-                      </Group>
-                      <Text c="dimmed">{'\u2192'}</Text>
-                      <Group gap="sm">
-                        <Text size="sm" c="dimmed">End Week</Text>
+                        </Group>
+                        <Text c="dimmed">{'\u2192'}</Text>
+                        <Group gap={6} wrap="nowrap">
+                          <Text size="sm" c="dimmed">End</Text>
                         <Select
                           value={phase.end_week != null ? String(phase.end_week) : ''}
                           onChange={(v) => updatePhase(originalIndex, {
                             end_week: v ? Number(v) : undefined,
                           })}
                           data={weekSelectData}
-                          size="sm"
-                          w={100}
+                          size="xs"
+                          w={74}
+                          disabled={readOnly}
                         />
+                        </Group>
                       </Group>
-                    </Group>
+                    </div>
 
-                    {/* Phase Notes */}
-                    <Textarea
-                      label="Phase Notes"
-                      value={phase.notes}
-                      onChange={(e) => updatePhase(originalIndex, { notes: e.currentTarget.value })}
-                      minRows={2}
-                      autosize
-                      placeholder="Notes about this phase..."
-                    />
+                    <div className="if-supp-section">
+                      <div className="if-small-label">Phase notes</div>
+                      <Textarea
+                        value={phase.notes}
+                        onChange={(e) => updatePhase(originalIndex, { notes: e.currentTarget.value })}
+                        minRows={2}
+                        autosize
+                        placeholder="Protocol intent, notes for AI context..."
+                        disabled={readOnly}
+                      />
+                    </div>
 
-                    {/* Supplements Table */}
-                    <Stack gap="xs">
-                      <Group justify="space-between">
-                        <Text size="sm" c="dimmed">Supplements</Text>
-                        <Button
-                          variant="default"
+                    <div className="if-supp-table-header">
+                      <span className="if-supp-table-label">Name</span>
+                      <span className="if-supp-table-label">Dose</span>
+                      <span className="if-supp-table-label">Notes</span>
+                      <Button
+                        variant="default"
+                        size="compact-xs"
+                        leftSection={<Plus size={11} />}
+                        onClick={() => addItem(originalIndex)}
+                        disabled={readOnly}
+                        style={{ justifySelf: 'end' }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+
+                    {phase.items.length > 0 ? phase.items.map((item, itemIndex) => (
+                      <div className="if-supp-table-row" key={itemIndex}>
+                        <TextInput
+                          value={item.name}
+                          onChange={(e) =>
+                            updateItem(originalIndex, itemIndex, { name: e.currentTarget.value })
+                          }
+                          placeholder="Supplement name"
                           size="xs"
-                          leftSection={<Plus size={12} />}
-                          onClick={() => addItem(originalIndex)}
+                          disabled={readOnly}
+                        />
+                        <TextInput
+                          value={item.dose}
+                          onChange={(e) =>
+                            updateItem(originalIndex, itemIndex, { dose: e.currentTarget.value })
+                          }
+                          placeholder="e.g. 5g/day"
+                          size="xs"
+                          disabled={readOnly}
+                          styles={{ input: { fontFamily: 'var(--font-mono)' } }}
+                        />
+                        <TextInput
+                          value={item.notes || ''}
+                          onChange={(e) =>
+                            updateItem(originalIndex, itemIndex, { notes: e.currentTarget.value })
+                          }
+                          placeholder="Notes or observations..."
+                          size="xs"
+                          disabled={readOnly}
+                          classNames={{ input: 'if-supp-note-input' }}
+                        />
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          size="sm"
+                          onClick={() => removeItem(originalIndex, itemIndex)}
+                          disabled={readOnly}
+                          aria-label="Remove supplement"
                         >
-                          Add Item
-                        </Button>
-                      </Group>
+                          <Trash2 size={14} />
+                        </ActionIcon>
+                      </div>
+                    )) : (
+                      <Text size="sm" c="dimmed" py="md" px={16}>
+                        No supplements added yet.
+                      </Text>
+                    )}
 
-                      {phase.items.length > 0 ? (
-                        <Table striped highlightOnHover>
-                          <Table.Thead>
-                            <Table.Tr>
-                              <Table.Th w="40%">Name</Table.Th>
-                              <Table.Th w="20%">Dose</Table.Th>
-                              <Table.Th>Notes</Table.Th>
-                              <Table.Th w={40} />
-                            </Table.Tr>
-                          </Table.Thead>
-                          <Table.Tbody>
-                            {phase.items.map((item, itemIndex) => (
-                              <Table.Tr key={itemIndex}>
-                                <Table.Td>
-                                  <TextInput
-                                    value={item.name}
-                                    onChange={(e) =>
-                                      updateItem(originalIndex, itemIndex, { name: e.currentTarget.value })
-                                    }
-                                    size="xs"
-                                  />
-                                </Table.Td>
-                                <Table.Td>
-                                  <TextInput
-                                    value={item.dose}
-                                    onChange={(e) =>
-                                      updateItem(originalIndex, itemIndex, { dose: e.currentTarget.value })
-                                    }
-                                    size="xs"
-                                  />
-                                </Table.Td>
-                                <Table.Td>
-                                  <Textarea
-                                    value={item.notes || ''}
-                                    onChange={(e) =>
-                                      updateItem(originalIndex, itemIndex, { notes: e.currentTarget.value })
-                                    }
-                                    placeholder="Optional"
-                                    minRows={1}
-                                    autosize
-                                    size="xs"
-                                  />
-                                </Table.Td>
-                                <Table.Td>
-                                  <ActionIcon
-                                    variant="subtle"
-                                    color="red"
-                                    size="sm"
-                                    onClick={() => removeItem(originalIndex, itemIndex)}
-                                  >
-                                    <Trash2 size={14} />
-                                  </ActionIcon>
-                                </Table.Td>
-                              </Table.Tr>
-                            ))}
-                          </Table.Tbody>
-                        </Table>
-                      ) : (
-                        <Text size="sm" c="dimmed" ta="center" py="md">
-                          No supplements in this phase
-                        </Text>
-                      )}
-                    </Stack>
-
-                    {/* Peak Week Protocol */}
-                    <Stack gap="xs">
-                      <Group justify="space-between">
-                        <Text size="sm" c="dimmed">Peak Week Protocol</Text>
+                    <div className="if-supp-section" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+                      <Group justify="space-between" mb={8}>
+                        <div className="if-small-label" style={{ marginBottom: 0 }}>Peak week protocol</div>
                         <Button
                           variant="default"
-                          size="xs"
-                          leftSection={<Plus size={12} />}
+                          size="compact-xs"
+                          leftSection={<Plus size={11} />}
                           onClick={() => addProtocolKey(originalIndex)}
+                          disabled={readOnly}
                         >
-                          Add Field
+                          Add field
                         </Button>
                       </Group>
-
                       {phase.peak_week_protocol && Object.keys(phase.peak_week_protocol).length > 0 ? (
                         <Stack gap="xs">
                           {Object.entries(phase.peak_week_protocol).map(([key, value]) => (
@@ -378,12 +391,14 @@ export default function SupplementsPage() {
                                 onChange={(e) => updateProtocolKey(originalIndex, key, e.currentTarget.value)}
                                 style={{ flex: 1 }}
                                 size="sm"
+                                disabled={readOnly}
                               />
                               <ActionIcon
                                 variant="subtle"
                                 color="red"
                                 size="sm"
                                 onClick={() => removeProtocolKey(originalIndex, key)}
+                                disabled={readOnly}
                               >
                                 <X size={14} />
                               </ActionIcon>
@@ -391,30 +406,30 @@ export default function SupplementsPage() {
                           ))}
                         </Stack>
                       ) : (
-                        <Text size="sm" c="dimmed" py="xs">
+                        <Text size="sm" c="dimmed">
                           No peak week protocol defined
                         </Text>
                       )}
-                    </Stack>
+                    </div>
 
-                    {/* Delete Phase */}
-                    <Group justify="flex-end" pt="sm">
+                    <div className="if-supp-footer">
                       <Button
                         variant="light"
                         color="red"
                         size="sm"
                         leftSection={<Trash2 size={14} />}
                         onClick={() => removePhase(originalIndex)}
+                        disabled={readOnly}
                       >
                         Delete Phase
                       </Button>
-                    </Group>
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
+                    </div>
+                  </div>
+                )}
+              </div>
             )
           })}
-        </Accordion>
+        </div>
       ) : (
         <Group justify="center" py={48}>
           <Text c="dimmed">No supplement phases defined. Click "Add Phase" to get started.</Text>

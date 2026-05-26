@@ -21,14 +21,14 @@ from typing import Any, Dict, List, Literal, Optional, Sequence
 
 from pydantic import Field
 
-from openhands.sdk import (
+from tools.sdk_compat import (
     Action,
     Observation,
     Tool,
     ToolDefinition,
+    ToolExecutor,
     register_tool,
 )
-from openhands.sdk.tool import ToolExecutor
 
 
 # =============================================================================
@@ -73,6 +73,106 @@ ProposalStatus = Literal[
 ]
 
 
+def _proposal_table():
+    import boto3
+    from config import AWS_REGION, IF_PROPOSALS_TABLE_NAME
+
+    return boto3.resource("dynamodb", region_name=AWS_REGION).Table(IF_PROPOSALS_TABLE_NAME)
+
+
+async def create_proposal(
+    *,
+    type: str,
+    title: str,
+    rationale: str,
+    content: str,
+    target_id: Optional[str] = None,
+    user_pk: str = "operator",
+) -> Dict[str, Any]:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    item = {
+        "pk": user_pk,
+        "sk": f"proposal#{now}",
+        "type": type,
+        "title": title,
+        "rationale": rationale,
+        "content": content,
+        "target_id": target_id,
+        "status": "pending",
+        "author": "agent",
+        "created_at": now,
+        "updated_at": now,
+    }
+    _proposal_table().put_item(Item=item)
+    return {"proposal": item}
+
+
+async def list_proposals(
+    status: Optional[str] = None,
+    user_pk: str = "operator",
+    limit: int = 20,
+) -> Dict[str, Any]:
+    from boto3.dynamodb.conditions import Key
+
+    response = _proposal_table().query(
+        KeyConditionExpression=Key("pk").eq(user_pk) & Key("sk").begins_with("proposal#"),
+        Limit=max(1, min(int(limit), 100)),
+        ScanIndexForward=False,
+    )
+    proposals = response.get("Items", [])
+    if status:
+        proposals = [p for p in proposals if p.get("status") == status]
+    return {"proposals": proposals}
+
+
+async def resolve_proposal(
+    *,
+    sk: str,
+    decision: str,
+    reason: Optional[str] = None,
+    user_pk: str = "operator",
+) -> Dict[str, Any]:
+    from datetime import datetime, timezone
+
+    if decision not in {"approved", "rejected"}:
+        raise ValueError("decision must be approved or rejected")
+    now = datetime.now(timezone.utc).isoformat()
+    table = _proposal_table()
+    response = table.update_item(
+        Key={"pk": user_pk, "sk": sk},
+        UpdateExpression="SET #status=:status, updated_at=:updated_at, decision_reason=:reason",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={
+            ":status": decision,
+            ":updated_at": now,
+            ":reason": reason or "",
+        },
+        ReturnValues="ALL_NEW",
+    )
+    return {"proposal": response.get("Attributes", {})}
+
+
+async def generate_implementation_plan(
+    *,
+    proposal_sk: str,
+    user_pk: str = "operator",
+) -> Dict[str, Any]:
+    response = _proposal_table().get_item(Key={"pk": user_pk, "sk": proposal_sk})
+    proposal = response.get("Item")
+    if not proposal:
+        return {"error": f"Proposal not found: {proposal_sk}"}
+    plan = [
+        "Confirm the proposal is still desired and scoped.",
+        "Identify affected directives, prompts, tools, or docs.",
+        "Make the smallest coherent change.",
+        "Run focused verification.",
+        "Mark the proposal implemented when merged/deployed.",
+    ]
+    return {"proposal_sk": proposal_sk, "title": proposal.get("title"), "implementation_plan": plan}
+
+
 # =============================================================================
 # SDK Tool Classes
 # =============================================================================
@@ -94,7 +194,6 @@ class CreateProposalObservation(Observation):
 
 class CreateProposalExecutor(ToolExecutor[CreateProposalAction, CreateProposalObservation]):
     def __call__(self, action: CreateProposalAction, conversation=None) -> CreateProposalObservation:
-        from agent.tools.proposal_tools import create_proposal
         result = _run_async(create_proposal(
             type=action.type,
             title=action.title,
@@ -135,7 +234,6 @@ class ListProposalsObservation(Observation):
 
 class ListProposalsExecutor(ToolExecutor[ListProposalsAction, ListProposalsObservation]):
     def __call__(self, action: ListProposalsAction, conversation=None) -> ListProposalsObservation:
-        from agent.tools.proposal_tools import list_proposals
         result = _run_async(list_proposals(
             status=action.status,
             user_pk=action.user_pk,
@@ -173,7 +271,6 @@ class ResolveProposalObservation(Observation):
 
 class ResolveProposalExecutor(ToolExecutor[ResolveProposalAction, ResolveProposalObservation]):
     def __call__(self, action: ResolveProposalAction, conversation=None) -> ResolveProposalObservation:
-        from agent.tools.proposal_tools import resolve_proposal
         result = _run_async(resolve_proposal(
             sk=action.sk,
             decision=action.decision,
@@ -210,7 +307,6 @@ class GenerateImplementationPlanObservation(Observation):
 
 class GenerateImplementationPlanExecutor(ToolExecutor[GenerateImplementationPlanAction, GenerateImplementationPlanObservation]):
     def __call__(self, action: GenerateImplementationPlanAction, conversation=None) -> GenerateImplementationPlanObservation:
-        from agent.tools.proposal_tools import generate_implementation_plan
         result = _run_async(generate_implementation_plan(
             proposal_sk=action.proposal_sk,
             user_pk=action.user_pk,
@@ -352,13 +448,6 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     """Route proposal tool calls to the underlying proposal module functions."""
-    from agent.tools.proposal_tools import (
-        create_proposal,
-        list_proposals,
-        resolve_proposal,
-        generate_implementation_plan,
-    )
-
     ROUTES = {
         "create_proposal": lambda: create_proposal(
             type=args["type"],

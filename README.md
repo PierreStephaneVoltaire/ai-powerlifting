@@ -1,299 +1,335 @@
 # IF
 
-A single main agent with context-aware tiering and specialist subagent delegation. Built on the OpenHands SDK, routes through OpenRouter, persists knowledge in LanceDB. Behavior evolves through runtime directives stored in DynamoDB.
+A personal FastAPI agent service with planner-based routing, scoped specialist execution, durable memory, and runtime behavior directives. It receives messages from Discord, OpenWebUI, and an OpenAI-compatible HTTP API; routes through OpenRouter models and OpenCode workspaces; persists knowledge in LanceDB; and stores directives plus domain state in DynamoDB.
 
 ---
 
 ## What This Is
 
-An architectural exercise and personal learning project — not a product. The goal is to build practical knowledge of multi-agent orchestration, runtime behavior shaping, specialist delegation, and operational observability by building something that actually runs.
+An architectural exercise and personal learning project — not a product. The goal is to build practical knowledge of multi-agent orchestration, runtime behavior shaping, specialist delegation, domain tool design, and operational observability by building something that actually runs.
 
 It is deployed on a personal Kubernetes (k3s) cluster and used personally, which means real bugs surface and architectural decisions have real consequences.
 
-**Current:** OpenRouter (LLM provider), Discord + OpenWebUI (interaction layers), Prometheus + Loki + Grafana (observability) + Rancher (cluster managment).
+**Current:** OpenRouter (LLM provider), OpenCode (planner and execution runtime), Discord + OpenWebUI + OpenAI-compatible HTTP (interaction layers), DynamoDB + LanceDB + SQLite (state), Prometheus + Loki + Grafana (observability), Rancher (cluster management).
 
 ---
 
 ## How It Works
 
-```
+```text
 User message (Discord / OpenWebUI / HTTP API)
-  → Channel Listener → Debounce (5s batching) → Dispatcher
-    → Orchestrator (lightweight: sees specialist list + user intent, not full domain context)
-      → condense_intent (strips noise, rewrites as focused task)
-        → Specialist (scoped: only its tools, directives, skills, and MCP servers)
-          → Tool execution (deterministic functions — DynamoDB CRUD, date parsing, file validation)
-          → Agentic loop (multi-turn tool use with stuck detection, for complex tasks)
-      → Response → Chunker → Delivery back to platform
+  -> completions pipeline
+    -> runtime context assembly
+      -> OpenCode planner writes plan.md
+        -> route:
+             social    -> direct OpenRouter chat
+             domain    -> specialist OpenCode run with scoped MCP tools
+             technical -> OpenCode build run + review
+        -> optional HANDOFF_REQUIRED specialist runs
+      -> response.md / direct text
+    -> FILES: parsing, attachment materialization, chunked delivery
 ```
 
-The orchestrator never sees all specialist domains at once. It classifies intent, picks a specialist, condenses the context, and hands off. Each specialist receives only:
+The planner receives conversation history, core directives, runtime context, the specialist catalog, and eligible model IDs. It writes a small `plan.md` decision containing:
 
-- Its own system prompt template
-- Directives filtered to its domain (health specialist gets health directives, not finance ones)
-- Its declared tools and MCP servers
-- Any applicable AgentSkills
+- interaction type: `social`, `domain`, or `technical`
+- specialist slug
+- thinking-mode flag
+- concrete model ID from `models/model_ids.txt`
 
-This context scoping is the core architectural choice: it reduces hallucination risk from bloated prompts and keeps token costs proportional to task complexity, not system complexity.
+Planner failures are fail-closed. If the plan cannot be written or parsed, the service returns an explicit failure response rather than guessing a route.
 
-### Tiered Model Selection
+### Scoped Specialist Execution
 
-Models hallucinate more as their context window fills up. The orchestrator auto-upgrades to larger models as conversation context grows:
+Domain requests run through a selected specialist. Each specialist receives only:
 
-| Tier         | When          | Why                                                    |
-| ------------ | ------------- | ------------------------------------------------------ |
-| **Air**      | < 100K tokens | Fast, cheap — most single-turn tasks                   |
-| **Standard** | < 200K tokens | Mid-range — multi-turn conversations                   |
-| **Heavy**    | ≥ 200K tokens | Large context window — complex sessions, deep analysis |
+- its own Jinja2 prompt template
+- directives filtered to its declared domain
+- runtime context relevant to the request
+- its declared local tools and MCP servers
+- any active thinking-mode instructions
 
-Upgrade triggers at 65% capacity. The concrete model for each tier is resolved from a YAML-configured pool sorted by strategy (price, latency, throughput, context size).
+Before each domain run, the service writes a per-session `opencode.json` that exposes only the selected specialist's MCP categories and allowed tool names. This context scoping is the core architectural choice: it reduces hallucination risk from bloated prompts and keeps cost proportional to task complexity, not system size.
 
-### Smart Model Routing for Specialists
+### Technical Workspaces
 
-Each specialist has a model preset (e.g., `@preset/code`, `@preset/architecture`). At spawn time, a fast LLM selects the best concrete model from the preset's candidate pool using:
+Technical requests run in a persistent per-conversation workspace. OpenCode performs the build task, writes `response.md`, and then a review pass writes `review.md`.
 
-- The condensed task intent
-- Model metadata (latency, price, context size, throughput)
-- The preset's sorting strategy
+- `OK` on the first review line accepts the result.
+- `RETRY` on the first review line triggers one retry with review context.
 
-A proofreading task gets a cheap, fast model. A health programming task gets a model ranked highly for that domain. This happens per-request with no code changes — presets are YAML.
+Generated files stay in the session workspace and are delivered back to Discord or HTTP clients through the `FILES:` attachment pipeline.
+
+### Model Selection
+
+The current flow selects concrete model IDs at planning time. Eligible execution models are maintained in `models/model_ids.txt`, while `storage/model_registry.py` keeps OpenRouter metadata in DynamoDB:
+
+- context size
+- maximum output
+- pricing
+- modalities
+- tool support
+- caching support
+- zero-data-retention flag
+- throughput and latency
+
+Legacy tier and preset modules still exist for support paths, but the normal request flow is planner-selected model IDs plus specialist-scoped prompts.
 
 ### Runtime Directive System
 
 Behavior rules are stored in DynamoDB, not baked into code. This inverts the typical agent workflow:
 
-**Traditional:** Engineer a comprehensive system prompt upfront → deploy → discover gaps → edit code → redeploy.
+**Traditional:** Engineer a comprehensive system prompt upfront -> deploy -> discover gaps -> edit code -> redeploy.
 
-**IF:** Start with a blank slate → use the agent → reflection pipeline detects failure patterns → agent proposes directive → human reviews in proposals portal → approved directive takes effect on next request.
+**This system:** Start with a baseline -> use the agent -> reflection pipeline detects failure patterns -> agent proposes directive -> human reviews in proposals portal -> approved directive takes effect on the next request.
 
-Directives are priority-tiered (0–5) for conflict resolution. When two directives contradict, the higher-priority one wins deterministically. Specialists receive only directives matching their declared `directive_types`, so domain rules don't leak across contexts.
+Directives are priority-tiered for conflict resolution. Specialists receive only directives matching their declared `directive_types`, so domain rules do not leak across contexts.
 
-The agent can propose new directives (`directive_add`), but nothing takes effect without human approval through the proposals portal.
+The agent can propose new directives, but nothing takes effect without human approval through the proposals portal.
 
 ### Behavioral Feedback Loop
 
-After sessions (>5 turns), periodically (every 6h), or on demand (`/reflect`):
+After longer sessions, periodically, or on demand:
 
-1. **Pattern Detection** — recurring behaviors, failure modes
-2. **Capability Gap Analysis** — tracks what the agent couldn't do, scores by frequency × recency × impact
+1. **Pattern Detection** — recurring behaviors and failure modes
+2. **Capability Gap Analysis** — tracks what the agent could not do, scored by frequency, recency, and impact
 3. **Opinion Formation** — logs where operator and agent positions differ
 4. **Directive Proposals** — suggests behavioral changes for human review
-5. **Growth Tracking** — operator development over time
+5. **Growth Tracking** — follows operator development over time
 
-High-frequency capability gaps are auto-promoted to tool suggestions. Gaps that keep appearing signal where new tools or specialist improvements would have the most impact.
+High-frequency capability gaps are useful signals for where new tools, specialist changes, or prompt constraints would have the most impact.
 
 ---
 
 ## Tech Stack
 
-| Layer              | Technology                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------- |
-| Core               | Python 3.12, FastAPI, OpenHands SDK 1.11.4                                                     |
-| LLM Routing        | OpenRouter (dynamic model registry, per-provider latency/throughput tracking)                  |
-| Vector Search      | LanceDB (user facts, all-MiniLM-L6-v2 embeddings)                                              |
-| RAG                | ChromaDB (health docs — Tika PDF extraction, 500-token chunks, 50-token overlap, SHA256 dedup) |
-| Structured Storage | DynamoDB (directives, health, finance, diary, proposals, model registry)                       |
-| Relational         | SQLite with WAL (webhooks, activity)                                                           |
-| Observability      | Prometheus + Loki + Grafana                                                                    |
-| Deployment         | Kubernetes (k3s), Terraform, Docker via Packer                                                 |
-| Shell Access       | OpenHands SDK LocalWorkspace (per-conversation isolated directories)                           |
+| Layer | Technology |
+| --- | --- |
+| Core | Python 3.12, FastAPI |
+| Agent Runtime | OpenCode planner/build runs, per-conversation workspaces |
+| LLM Routing | OpenRouter, DynamoDB-backed model registry |
+| Vector Search | LanceDB user facts, all-MiniLM-L6-v2 embeddings |
+| RAG | ChromaDB health docs with PDF extraction, chunking, and deduplication |
+| Structured Storage | DynamoDB for directives, health, finance, diary, proposals, model registry |
+| Relational Storage | SQLite with WAL for webhooks and activity |
+| Tool Runtime | Python tool plugins exposed through scoped MCP servers |
+| Observability | Prometheus, Loki, Grafana, Discord status embeds |
+| Deployment | Kubernetes (k3s), Terraform, Docker images built via Packer |
 
 ---
 
 ## Specialists
 
-Domain experts spawned by the orchestrator. Each is a YAML config + Jinja2 prompt template — adding one requires no code changes.
+Domain experts are discovered from `specialists/*/specialist.yaml`. Each is a YAML config plus a Jinja2 prompt template, so adding a specialist is primarily configuration and prompt work rather than routing code.
 
 <details>
-<summary><strong>Code & Infrastructure (17 specialists)</strong></summary>
+<summary><strong>Code &amp; Infrastructure (17 specialists)</strong></summary>
 
-| Specialist            | Purpose                                                       | Key Tools                             |
-| --------------------- | ------------------------------------------------------------- | ------------------------------------- |
-| `coder`               | General software engineering                                  | terminal, read/write/search files     |
-| `scripter`            | Quick tasks (3-5 commands, max 3 turns)                       | terminal, read/write files            |
-| `debugger`            | Deep code debugging and error analysis                        | terminal, read/write/search files     |
-| `architect`           | System design and architecture patterns                       | read/write/search files, AWS docs MCP |
-| `secops`              | Security operations and vulnerability analysis                | terminal, read/search files           |
-| `devops`              | Infrastructure and deployment automation                      | terminal, read/write files            |
-| `file_generator`      | Structured file generation with syntax validation             | terminal, write/read files            |
-| `git_ops`             | Git operations — rebasing, conflicts, PR workflows            | terminal, read/write/search files     |
-| `code_reviewer`       | Structured code review                                        | terminal, read/search files           |
-| `code_explorer`       | Codebase navigation, dependency mapping                       | terminal, read/search files           |
-| `doc_generator`       | Technical documentation — READMEs, ADRs, RFCs, runbooks       | terminal, read/write/search files     |
-| `test_writer`         | Test generation (GENERATE→RUN→FIX→VERIFY loop)                | terminal, read/write/search files     |
-| `refactorer`          | Code refactoring without behavior change                      | terminal, read/write/search files     |
-| `api_designer`        | REST/GraphQL/gRPC API design, OpenAPI specs                   | read/write/search files               |
-| `migration_planner`   | Database/infra migration planning with rollback               | terminal, read/write/search files     |
-| `incident_responder`  | Production incident triage — action-first                     | terminal, read/search files           |
-| `performance_analyst` | Profiling and optimization (MEASURE→IDENTIFY→OPTIMIZE→VERIFY) | terminal, read/search files           |
+| Specialist | Purpose | Key Tools |
+| --- | --- | --- |
+| `coder` | General software engineering | terminal, read/write/search files |
+| `scripter` | Quick command-oriented tasks | terminal, read/write files |
+| `debugger` | Deep code debugging and error analysis | terminal, read/write/search files |
+| `architect` | System design and architecture patterns | read/write/search files, AWS docs MCP |
+| `secops` | Security operations and vulnerability analysis | terminal, read/search files |
+| `devops` | Infrastructure and deployment automation | terminal, read/write files |
+| `file_generator` | Structured file generation with syntax validation | terminal, write/read files |
+| `git_ops` | Git operations, rebasing, conflicts, PR workflows | terminal, read/write/search files |
+| `code_reviewer` | Structured code review | terminal, read/search files |
+| `code_explorer` | Codebase navigation and dependency mapping | terminal, read/search files |
+| `doc_generator` | READMEs, ADRs, RFCs, API docs, runbooks | terminal, read/write/search files |
+| `test_writer` | Test generation and verification | terminal, read/write/search files |
+| `refactorer` | Behavior-preserving code refactoring | terminal, read/write/search files |
+| `api_designer` | REST, GraphQL, gRPC, and OpenAPI design | read/write/search files |
+| `migration_planner` | Database and infrastructure migration planning | terminal, read/write/search files |
+| `incident_responder` | Production incident triage and mitigation | terminal, read/search files |
+| `performance_analyst` | Profiling, benchmarking, and optimization | terminal, read/search files |
 
 </details>
 
 <details>
-<summary><strong>Reasoning, Planning & Communication (13 specialists)</strong></summary>
+<summary><strong>Reasoning, Planning &amp; Communication (15 specialists)</strong></summary>
 
-| Specialist            | Purpose                                                                |
-| --------------------- | ---------------------------------------------------------------------- |
-| `planner`             | Decomposes goals into sequenced, dependency-aware plans                |
-| `dialectic`           | Structured adversarial reasoning — thesis-antithesis-synthesis         |
-| `decision_analyst`    | Multi-criteria decision analysis with weighted scoring                 |
-| `project_manager`     | Implementation verification — confirms planned work exists in codebase |
-| `todo_generator`      | Extracts actionable task lists from conversations/documents            |
-| `proofreader`         | Prose editing, grammar, clarity, tone                                  |
-| `email_writer`        | Professional email drafting                                            |
-| `jira_writer`         | Structured Jira tickets with acceptance criteria                       |
-| `constrained_writer`  | Character-limited content (tweets, Discord, SMS)                       |
-| `interviewer`         | Requirements gathering through structured questioning                  |
-| `summarizer`          | Condensing long content into structured summaries                      |
-| `meeting_prep`        | Meeting preparation — talking points, background research              |
-| `negotiation_advisor` | Negotiation strategy — BATNA analysis, concession planning             |
-
-</details>
-
-<details>
-<summary><strong>Documents, Analysis & Learning (11 specialists)</strong></summary>
-
-| Specialist         | Purpose                                                     |
-| ------------------ | ----------------------------------------------------------- |
-| `resume`           | Resume tailoring via LaTeX, JD analysis, compile to PDF     |
-| `cover_letter`     | Cover letter generation — JD-specific, one page max         |
-| `workday`          | Workday/ATS form input — copy-paste-ready blocks            |
-| `pdf_generator`    | Formatted PDF creation via WeasyPrint/Pandoc/LaTeX          |
-| `changelog_writer` | Release notes from git history                              |
-| `data_analyst`     | Data exploration, analysis, visualization                   |
-| `legal_reader`     | Contract/ToS analysis — NOT legal advice                    |
-| `prompt_engineer`  | Writing and testing prompts for LLMs                        |
-| `sql_analyst`      | Database query optimization, schema analysis                |
-| `math_tutor`       | Mathematics instruction — algebra through ML/AI math        |
-| `language_tutor`   | Language learning — Japanese, Spanish, French               |
-| `ml_tutor`         | ML/AI instruction — architectures, training, implementation |
+| Specialist | Purpose |
+| --- | --- |
+| `planner` | Decomposes goals into sequenced, dependency-aware plans |
+| `dialectic` | Structured adversarial reasoning |
+| `decision_analyst` | Multi-criteria decision analysis |
+| `project_manager` | Implementation verification against planned work |
+| `product_manager` | Product discovery, user research, and strategy |
+| `product_owner` | Requirements, acceptance criteria, and delivery definition |
+| `todo_generator` | Extracts actionable task lists from conversations or documents |
+| `proofreader` | Prose editing, grammar, clarity, and tone |
+| `email_writer` | Professional email drafting |
+| `jira_writer` | Structured Jira tickets and acceptance criteria |
+| `constrained_writer` | Character-limited writing for short-form channels |
+| `interviewer` | Requirements gathering through structured questioning |
+| `summarizer` | Condensing long content into structured summaries |
+| `meeting_prep` | Meeting preparation, talking points, and background notes |
+| `negotiation_advisor` | Negotiation strategy, BATNA analysis, and concession planning |
 
 </details>
 
 <details>
-<summary><strong>Domain-Specific & Meta (8 specialists)</strong></summary>
+<summary><strong>Documents, Analysis &amp; Learning (12 specialists)</strong></summary>
 
-| Specialist           | Purpose                                                                         | Key Integration                                           |
-| -------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `health_write`       | Training program mutations (log sessions, RPE, body weight)                     | Health DynamoDB tools (35 tools)                          |
-| `finance_write`      | Finance snapshot mutations (balances, holdings, goals)                          | Finance DynamoDB tools (21 tools)                         |
-| `financial_analyst`  | Market research and financial analysis                                          | Yahoo Finance + Alpha Vantage MCPs                        |
-| `research_assistant` | Up-to-date research via native web search + local Examine.com supplement corpus | `supplement_search`, `plan_append/read`, read/write files |
-| `media_reader`       | File and image analysis                                                         | Vision model (single turn)                                |
-| `career_advisor`     | Career strategy — trajectory, skill gaps, market positioning                    | User facts                                                |
-| `consensus_builder`  | Multi-source synthesis — spawns 2-3 specialists, collects, synthesizes          | Nested specialist spawning                                |
-| `self_improver`      | Analyzes IF's performance, proposes directive/prompt improvements               | Read/write/search files                                   |
+| Specialist | Purpose |
+| --- | --- |
+| `resume` | Resume tailoring via LaTeX, JD analysis, and PDF compilation |
+| `cover_letter` | JD-specific cover letter generation |
+| `workday` | ATS and Workday form input blocks |
+| `pdf_generator` | Formatted PDF creation |
+| `changelog_writer` | Release notes from git history |
+| `data_analyst` | Data exploration, analysis, and visualization |
+| `legal_reader` | Contract, ToS, and policy reading; not legal advice |
+| `prompt_engineer` | Prompt writing, testing, and evaluation |
+| `sql_analyst` | Query optimization and schema analysis |
+| `math_tutor` | Mathematics instruction |
+| `language_tutor` | Language learning support |
+| `ml_tutor` | Machine learning and AI instruction |
 
 </details>
 
-### Skill Modes
+<details>
+<summary><strong>Domain-Specific &amp; Meta (9 specialists)</strong></summary>
 
-Specialists can be invoked with a skill modifier that shifts their perspective. A single system prompt injection — no separate agent.
+| Specialist | Purpose | Key Integration |
+| --- | --- | --- |
+| `powerlifting_coach` | Training reads, coaching, analysis, and explicit health/training mutations | Health + supplement research MCPs |
+| `health_write` | Specialized health mutation path retained for compatibility | Health DynamoDB tools |
+| `finance_write` | Finance snapshot mutations | Finance DynamoDB tools |
+| `financial_analyst` | Market research and financial analysis | Yahoo Finance + Alpha Vantage MCPs |
+| `research_assistant` | Research-style synthesis and supplement corpus search | supplement research tools |
+| `media_reader` | File and image analysis | vision-capable model path |
+| `career_advisor` | Career strategy, skill gaps, and market positioning | user facts |
+| `consensus_builder` | Multi-source synthesis across specialist outputs | handoff/synthesis flow |
+| `self_improver` | Analyzes agent performance and proposes improvements | reflection/proposal tools |
 
-`red_team` · `blue_team` · `pro_con` · `steelman` · `devils_advocate` · `backcast` · `rubber_duck` · `eli5` · `formal` · `speed` · `teach`
+</details>
 
-Example: `spawn_specialist(specialist_type="architect", skill="red_team")` → adversarial architecture review.
+### Thinking Modes
+
+Longer reasoning modes are implemented as skill packages loaded into prompts when requested:
+
+- `deep_think`
+- `sequential_plan`
+- `parallel_analysis`
+
+They modify the reasoning protocol for a request without requiring separate specialist implementations.
 
 ---
 
 ## Tools
 
-Deterministic functions the agent calls instead of guessing. Two categories:
+Deterministic functions handle data access and domain operations so the model does not guess structured state.
 
-**System tools** (loaded in orchestrator): user fact CRUD, directive management, capability gap tracking, opinion logging, context/signal retrieval, specialist delegation (list_specialists, condense_intent, deep_think, spawn_specialist, spawn_specialists), media reading, orchestration.
+Local tool plugins live under `tools/` and expose schemas plus async executors. The app-side MCP manager indexes tools at startup, and per-run OpenCode configs expose only the tools allowed for the selected specialist.
 
-**External tool plugins** (loaded per specialist): self-contained packages in `tools/` with `tool.yaml` + `tool.py`. Auto-discovered at startup, hot-reloadable via `POST /admin/reload-tools`.
+| Plugin | Purpose |
+| --- | --- |
+| `health` | Training program CRUD, sessions, competitions, imports, templates, analytics, glossary, health RAG |
+| `finance` | Financial profile, goals, accounts, investments, cashflow, tax, insurance, net worth |
+| `diary` | Diary entries and current signal computation |
+| `proposals` | Directive proposals and implementation plans |
+| `supplement_research` | Local supplement research corpus search |
+| `temporal_*` | Date parsing, timezone conversion, duration calculation, age, city time, Unix timestamps |
 
-| Plugin                   | Tools | Purpose                                                                                  |
-| ------------------------ | ----- | ---------------------------------------------------------------------------------------- |
-| `health`                 | 35    | Training program CRUD, session logging, RAG search, unit conversions                     |
-| `finance`                | 21    | Financial profile, investments, goals, cashflow                                          |
-| `diary`                  | 2     | Write-only diary entries, signal computation                                             |
-| `proposals`              | 4     | Proposal CRUD, implementation plan generation                                            |
-| `temporal_*` (7 plugins) | 7     | Date parsing, timezone conversion, duration calculation, age, city time, Unix timestamps |
+Native OpenCode MCP tool names are server-prefixed, for example `if_health_health_get_session`. Prompts also expose a fallback shell bridge:
 
-Plugins support two execution modes:
-
-- **In-process** — imported directly (heavy plugins already in main venv)
-- **Subprocess** — isolated `uv` venv per plugin, invoked as a subprocess (clean dependency isolation)
-
-All tools follow the OpenHands SDK `Action → Observation → Executor → ToolDefinition` pattern.
+```bash
+PYTHONPATH=<app-src:project-root> python -m mcp_runtime.invoke_tool <tool_name> '<json_args>'
+```
 
 ---
 
 ## Memory
 
-| Store                      | Tech                       | Purpose                                                                                                                                                                |
-| -------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **User Facts**             | LanceDB (all-MiniLM-L6-v2) | Semantic search over 22 categories of operator context — personal, preferences, opinions, skills, health, finance, mental state, etc. Context-scoped per conversation. |
-| **Health Docs**            | ChromaDB                   | RAG over PDF documents (IPF rulebook, supplements, anti-doping). Tika extraction, 500-token chunks, 50-token overlap, SHA256 dedup for incremental indexing.           |
-| **Conversation Summaries** | Fire-and-forget            | Async summarization after conversations end.                                                                                                                           |
+| Store | Tech | Purpose |
+| --- | --- | --- |
+| **User Facts** | LanceDB | Semantic search over operator context: preferences, projects, opinions, health, finance, skills, mental state, and similar categories |
+| **Health Docs** | ChromaDB | RAG over health and powerlifting reference documents |
+| **Legacy Memory** | ChromaDB | Older memory path still present for compatibility |
+| **Conversation State** | Local workspace files | `history.md`, `history.json`, generated files, and run artifacts per conversation |
 
-User facts accumulate over time — the agent learns preferences, tracks life events, builds project context. Facts have sources (user-stated, model-observed, conversation-derived) and confidence scores.
+User facts accumulate over time. Facts carry sources, confidence, categories, and supersession metadata so old or corrected information can be handled explicitly.
 
 ---
 
 ## Channels
 
-| Platform  | Type                     | Status                                          |
-| --------- | ------------------------ | ----------------------------------------------- |
-| Discord   | Bot (discord.py)         | Active — slash commands, threads, status embeds |
-| OpenWebUI | Polling (5s)             | Active                                          |
-| HTTP API  | REST (OpenAI-compatible) | Active                                          |
+| Platform | Type | Status |
+| --- | --- | --- |
+| Discord | Bot (`discord.py`) | Active — slash commands, threads, status embeds, attachment delivery |
+| OpenWebUI | Polling / chat integration | Active |
+| HTTP API | OpenAI-compatible REST | Active |
 
-Message flow: `listener → debounce (5s) → dispatcher → translator → completions pipeline → chunker (1500 chars) → delivery`
+Message flow: `listener/API -> debounce or request handling -> completions pipeline -> OpenCode planner -> route execution -> chunker -> delivery`.
 
-Discord gets real-time status embeds (color-coded) showing: message received, model selected, subagent spawning/completed/failed, tool started/completed/failed.
+Discord gets real-time status embeds showing planner failures, route/model/tool progress, specialist runs, and delivery failures.
 
 ---
 
 ## Utility Applications
 
-Human collaboration layer — TypeScript/Node.js apps that give visual interfaces to agent-managed data.
+Human collaboration layer — TypeScript/Node.js apps that provide visual interfaces to agent-managed data.
 
-| App                  | Port | What It Does                                                                       |
-| -------------------- | ---- | ---------------------------------------------------------------------------------- |
-| **Hub**              | 3000 | Central dashboard aggregating all portals                                          |
-| **Finance Portal**   | 3002 | Net worth, investments, cashflow — data managed by `finance_write` specialist      |
-| **Diary Portal**     | 3003 | Mental health journaling and signals — distilled into context injected per request |
-| **Proposals Portal** | 3004 | Kanban board for reviewing agent-proposed directives before they take effect       |
-| **Powerlifting App** | 3005 | Training tracking and analytics — data managed by `health_write` specialist        |
+| App | Port | What It Does |
+| --- | ---: | --- |
+| **Hub** | 3000 | Central dashboard aggregating the local portals |
+| **Finance Portal** | 3002 | Net worth, investments, accounts, goals, and cashflow |
+| **Diary Portal** | 3003 | Journal entries and life-load signals injected into runtime context |
+| **Proposals Portal** | 3004 | Kanban board for reviewing agent-proposed directives before they take effect |
+| **Powerlifting App** | 3005 | Training sessions, program state, analytics, imports, and templates
 
 ---
 
 ## AI Concepts Covered
 
-This project exists to build applied knowledge. Here's what it exercises:
+This project exists to build applied knowledge. Here is what it exercises:
 
-| Concept                              | Where It Lives                                                                          |
-| ------------------------------------ | --------------------------------------------------------------------------------------- |
-| Multi-agent orchestration            | Orchestrator → specialist delegation with context scoping                               |
-| RAG (Retrieval-Augmented Generation) | ChromaDB health docs pipeline — extraction, chunking, dedup, retrieval                  |
-| Vector semantic search               | LanceDB user facts with all-MiniLM-L6-v2 embeddings                                     |
-| Embedding models                     | Sentence transformers for fact/query encoding                                           |
-| Tool use / function calling          | 70+ deterministic tools via OpenHands SDK pattern                                       |
-| Dynamic model routing                | Task-aware model selection from candidate pools using fast LLM                          |
-| Context window management            | Tiered models, conversation summarization, directive scoping per specialist             |
-| Prompt engineering                   | Jinja2 templates, directive injection, skill modifiers, system prompt assembly pipeline |
-| Agentic loops                        | Multi-turn tool execution with stuck detection for complex specialists                  |
-| Runtime behavior shaping             | DynamoDB directive system with priority-based conflict resolution                       |
-| Behavioral feedback loops            | Reflection pipeline — pattern detection, gap analysis, directive proposals              |
-| Cost optimization                    | Tier-based model selection, context condensation, per-provider price/latency tracking   |
-| Plugin architecture                  | Hot-reloadable tool plugins with auto-discovery (YAML + Python)                         |
-| AgentSkills compliance               | Skills portable across 30+ compliant agents (GitHub Copilot, Claude Code, Cursor, etc.) |
-| Multi-platform messaging             | Listener/translator/dispatcher pattern across Discord, OpenWebUI, HTTP                  |
-| Observability                        | Prometheus metrics, Loki logs, Grafana dashboards                                       |
-| Infrastructure as Code               | Terraform (K8s + AWS), Packer (Docker images), k3s deployment                           |
+| Concept | Where It Lives |
+| --- | --- |
+| Multi-agent orchestration | OpenCode planner -> scoped specialist runs -> optional handoffs |
+| RAG | Health document corpus and supplement research tooling |
+| Vector semantic search | LanceDB user facts with sentence-transformer embeddings |
+| Tool use / function calling | Local Python tool plugins exposed through scoped MCP servers |
+| Model routing | Planner-selected concrete model IDs backed by an OpenRouter model registry |
+| Context management | Per-conversation history, runtime context builders, specialist-scoped prompts |
+| Prompt engineering | Jinja2 specialist templates, directive injection, tool protocol generation |
+| Agentic execution | Domain/technical OpenCode runs with tool access and workspace artifacts |
+| Runtime behavior shaping | DynamoDB directive system with human-reviewed proposals |
+| Behavioral feedback loops | Reflection pipeline, pattern detection, capability gaps, directive proposals |
+| Cost optimization | Scoped tools, cached AI reports, model metadata, and model allowlists |
+| Plugin architecture | Local tool folders surfaced as filtered MCP categories |
+| Multi-platform messaging | Discord, OpenWebUI, and HTTP converging into one completions pipeline |
+| Observability | Prometheus metrics, Loki logs, Grafana dashboards, Discord status embeds |
+| Infrastructure as Code | Terraform, Packer, Docker images, k3s deployment |
+
+---
+
+## Running Locally
+
+```bash
+cd app
+pip install -r requirements.txt
+python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+```
+
+Runtime needs at least:
+
+- `OPENROUTER_API_KEY`
+- `opencode` on `PATH`
+- configured AWS/DynamoDB access for production storage paths
 
 ---
 
 ## Documentation
 
-| Document                                             | Contents                                                                                           |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [Architecture Deep Dive](docs/ARCHITECTURE.md)       | System prompt assembly, tool authoring, channel internals, storage details, model router mechanics |
-| [Comparative Analysis](docs/COMPARATIVE_ANALYSIS.md) | Detailed comparison with OpenHands, Claude Cowork, OpenClaw, Hermes Agent                          |
-| [Roadmap & Future Work](docs/THINGS_TO_EXPLORE.md)   | Known gaps, planned features, AI concepts to add                                                   |
+| Document | Contents |
+| --- | --- |
+| [Architecture Deep Dive](docs/ARCHITECTURE.md) | Current runtime, planner flow, scoped MCP configuration, storage, and routing |
+| [Comparative Analysis](docs/COMPARATIVE_ANALYSIS.md) | Comparison with adjacent open-source agent systems |
+| [Roadmap & Future Work](docs/THINGS_TO_EXPLORE.md) | Known gaps, planned features, and concepts to explore |
 
 ---
 

@@ -146,11 +146,13 @@ function ProgramEvaluationSection({
   loading,
   error,
   onRefresh,
+  readOnly = false,
 }: {
   report: ProgramEvaluationReport | null
   loading: boolean
   error: string | null
   onRefresh: () => void
+  readOnly?: boolean
 }) {
   return (
     <Paper withBorder p="md">
@@ -162,7 +164,7 @@ function ProgramEvaluationSection({
           {report?.cache_miss && <Badge color="gray" variant="light" size="sm">Not generated</Badge>}
           {report?.insufficient_data && <Badge color="yellow" variant="light" size="sm">Limited data</Badge>}
         </Group>
-        <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} loading={loading} onClick={onRefresh}>
+        <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} loading={loading} onClick={onRefresh} disabled={readOnly}>
           {report?.cache_miss ? 'Generate' : 'Refresh'}
         </Button>
       </Group>
@@ -208,6 +210,7 @@ function BlockAnalysisDetails({
   version,
   sex,
   onBundleUpdated,
+  readOnly = false,
 }: {
   bundle: BlockAnalysisBundle
   unit: WeightUnit
@@ -215,6 +218,7 @@ function BlockAnalysisDetails({
   version: string
   sex: 'male' | 'female'
   onBundleUpdated: (bundle: BlockAnalysisBundle) => void
+  readOnly?: boolean
 }) {
   const outcome = bundle.historical.competitionOutcome
   const summary = bundle.historical.analyticsSummary
@@ -259,6 +263,7 @@ function BlockAnalysisDetails({
   }, [bundle.block.blockKey])
 
   const saveStartMaxes = async () => {
+    if (readOnly) return
     setSavingStartMaxes(true)
     setStartMaxError(null)
     try {
@@ -346,7 +351,7 @@ function BlockAnalysisDetails({
             </Group>
             <Text fz="xs" c="dimmed">Set the athlete's maxes at the beginning of this block so deltas are not inferred from early sessions.</Text>
           </Stack>
-          <Button size="xs" leftSection={<Save size={14} />} loading={savingStartMaxes} onClick={saveStartMaxes}>
+          <Button size="xs" leftSection={<Save size={14} />} loading={savingStartMaxes} onClick={saveStartMaxes} disabled={readOnly}>
             Save
           </Button>
         </Group>
@@ -365,6 +370,7 @@ function BlockAnalysisDetails({
               rightSection={<Text size="xs" c="dimmed" pr="xs">kg</Text>}
               rightSectionWidth={40}
               step={0.5}
+              disabled={readOnly}
               onChange={(e) => {
                 const value = e.currentTarget.value
                 setStartMaxes((current) => ({
@@ -484,6 +490,7 @@ function BlockAnalysisDetails({
         loading={programEvaluationLoading}
         error={programEvaluationError}
         onRefresh={() => loadProgramEvaluation(true)}
+        readOnly={readOnly}
       />
 
       <BlockWeeklySurface
@@ -497,7 +504,7 @@ function BlockAnalysisDetails({
   )
 }
 
-export function PastBlocksPanel({ unit }: { unit: WeightUnit }) {
+export function PastBlocksPanel({ unit, readOnly = false }: { unit: WeightUnit; readOnly?: boolean }) {
   const { program, version } = useProgramStore()
   const { sex } = useSettingsStore()
   const [blocks, setBlocks] = useState<ProgramBlockIndexEntry[]>([])
@@ -603,7 +610,7 @@ export function PastBlocksPanel({ unit }: { unit: WeightUnit }) {
                       <Button size="xs" variant="light" leftSection={<Eye size={14} />} onClick={() => loadAnalysis(block.blockKey, false)}>
                         View
                       </Button>
-                      <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} onClick={() => loadAnalysis(block.blockKey, true)}>
+                      <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} onClick={() => loadAnalysis(block.blockKey, true)} disabled={readOnly}>
                         Refresh
                       </Button>
                       {block.cacheStatus?.cached && (
@@ -648,6 +655,7 @@ export function PastBlocksPanel({ unit }: { unit: WeightUnit }) {
           version={version}
           sex={sex}
           onBundleUpdated={setBundle}
+          readOnly={readOnly}
         />
       )}
     </Stack>
@@ -869,7 +877,7 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
   )
 }
 
-export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
+export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightUnit; readOnly?: boolean }) {
   const [blocks, setBlocks] = useState<ProgramBlockIndexEntry[]>([])
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [comparison, setComparison] = useState<AiBlockComparisonResult | null>(null)
@@ -914,6 +922,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
   }, [])
 
   const runComparison = () => {
+    if (readOnly) return
     setLoading(true)
     setError(null)
     fetchAiBlockComparison({
@@ -952,8 +961,8 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
             <Title order={3} fz="lg">Lifetime Compare</Title>
           </Group>
           <Group gap="xs">
-            <Button size="xs" variant="light" onClick={setAllPastBlocks}>All saved past blocks</Button>
-            <Button size="xs" leftSection={<Brain size={14} />} onClick={runComparison} disabled={!hasSourceBlocks || loading}>
+            <Button size="xs" variant="light" onClick={setAllPastBlocks} disabled={readOnly}>All saved past blocks</Button>
+            <Button size="xs" leftSection={<Brain size={14} />} onClick={runComparison} disabled={!hasSourceBlocks || loading || readOnly}>
               {comparison && !isMissingAiResult ? 'Regenerate AI Analysis' : 'Run AI Lifetime Analysis'}
             </Button>
           </Group>
@@ -987,6 +996,7 @@ export function LifetimeComparePanel({ unit }: { unit: WeightUnit }) {
                   setComparison(null)
                 }}
                 label={`${block.label}${block.linkedCompetition ? ` (${block.linkedCompetition.date})` : ' (training only)'}`}
+                disabled={readOnly}
               />
             )) : (
               <Text fz="sm" c="dimmed">No saved past block analyses are available yet.</Text>

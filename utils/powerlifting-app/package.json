@@ -6,7 +6,15 @@
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "test:live:session-save": "npm run test:live:session-save:ui",
+    "test:live:session-save:api": "node ../../scripts/test_powerlifting_session_save_live.mjs",
+    "test:live:session-save:ui": "node ../../scripts/test_powerlifting_session_save_ui_live.mjs",
+    "test:live:session-detail": "node ../../scripts/test_powerlifting_session_detail_ui_live.mjs",
+    "test:live:dashboard": "node ../../scripts/test_powerlifting_dashboard_ui_live.mjs",
+    "test:live:notes": "node ../../scripts/test_powerlifting_notes_ui_live.mjs",
+    "test:live:navigation": "node ../../scripts/test_powerlifting_navigation_ui_live.mjs",
+    "test:live:public-profile-analysis": "node ../../scripts/test_powerlifting_public_profile_analysis_live.mjs"
   },
   "overrides": {
     "react": "^19.2.0",

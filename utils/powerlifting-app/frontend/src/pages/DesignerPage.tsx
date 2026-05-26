@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Plus, Trash2, X, Save, BarChart3, Copy, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
+import { Plus, Trash2, Save, BarChart3, Copy, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 import {
-  Stack, Group, Text, Button, Paper, Badge, Modal, SimpleGrid,
-  Select, ActionIcon, Autocomplete, Progress, Box, Divider, TextInput
+  Stack, Group, Text, Button, Modal,
+  Select, Autocomplete, Box
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
@@ -32,6 +32,8 @@ import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
 import { programWeekStartDate, trainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
 import { toDisplayUnit, fromDisplayUnit, displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
+import { useAuth } from '@/auth/AuthProvider'
+import { LoadTypeBadge } from '@/components/shared/LoadTypeBadge'
 import type { Session, PlannedExercise, GlossaryExercise } from '@powerlifting/types'
 
 const MUSCLE_LABELS: Record<string, string> = {
@@ -60,13 +62,6 @@ const MUSCLE_LABELS: Record<string, string> = {
   serratus: 'Serratus',
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  planned: 'blue',
-  completed: 'green',
-  logged: 'yellow',
-  skipped: 'gray',
-}
-
 function toIsoDate(date: Date): string {
   return format(date, 'yyyy-MM-dd')
 }
@@ -80,9 +75,7 @@ interface PlannedExerciseWithId extends PlannedExercise {
   id: string
 }
 
-import { LoadTypeBadge } from '@/components/shared/LoadTypeBadge'
-
-function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: { 
+function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, readOnly = false }: { 
   ex: PlannedExerciseWithId; 
   onRemove: (id: string) => void;
   onUpdate: (id: string, f: keyof PlannedExercise, v: any) => void;
@@ -90,6 +83,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
   onMoveDown: (id: string) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  readOnly?: boolean;
 }) {
   const { unit } = useSettingsStore()
   const {
@@ -99,7 +93,7 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
     transform,
     transition,
     isDragging
-  } = useSortable({ id: ex.id })
+  } = useSortable({ id: ex.id, disabled: readOnly })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -112,113 +106,111 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
     switch (ex.load_source) {
       case 'rpe':
         return (
-          <TextInput
+          <input
+            className="if-designer-weight-inp"
             type="number"
             value={ex.rpe_target || ''}
             onChange={(e) => onUpdate(ex.id, 'rpe_target', Number(e.currentTarget.value) || null)}
             step={0.5}
-            w={70}
             placeholder="RPE"
+            disabled={readOnly}
           />
         )
       case 'percentage':
         return (
-          <Group gap={4} wrap="nowrap">
-            <Text size="xs" c="dimmed">~</Text>
-            <TextInput
+          <>
+            <span className="if-designer-at">~</span>
+            <input
+              className="if-designer-weight-inp"
               type="number"
               value={ex.kg !== null ? toDisplayUnit(ex.kg, unit) : ''}
               onChange={(e) => onUpdate(ex.id, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
-              w={70}
               placeholder={unit}
               step={0.5}
+              disabled={readOnly}
             />
-          </Group>
+          </>
         )
       case 'unresolvable':
-        return <Text size="sm" c="dimmed">—</Text>
+        return <span className="if-designer-at">—</span>
       case 'absolute':
       default:
         return (
-          <TextInput
+          <input
+            className="if-designer-weight-inp"
             type="number"
             value={ex.kg !== null ? toDisplayUnit(ex.kg, unit) : ''}
             onChange={(e) => onUpdate(ex.id, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
-            w={70}
             placeholder={unit}
             step={0.5}
+            disabled={readOnly}
           />
         )
     }
   }
 
   return (
-    <Paper ref={setNodeRef} style={style} withBorder p="xs" radius="sm">
-      <Group justify="space-between" gap="xs" mb={4}>
-        <Group gap="xs" style={{ flex: 1 }}>
-          <Box {...attributes} {...listeners} style={{ cursor: 'grab', padding: '4px 0' }}>
-            <GripVertical size={16} color="var(--mantine-color-gray-6)" />
-          </Box>
-          <Text size="sm" fw={500} truncate>{ex.name}</Text>
-          {ex.load_source && <LoadTypeBadge source={ex.load_source} />}
-        </Group>
-        <Group gap={2} wrap="nowrap">
-          <ActionIcon
-            variant="subtle"
-            size="sm"
-            onClick={() => onMoveUp(ex.id)}
-            disabled={!canMoveUp}
-            title="Move exercise up"
-            aria-label="Move exercise up"
-          >
-            <ArrowUp size={12} />
-          </ActionIcon>
-          <ActionIcon
-            variant="subtle"
-            size="sm"
-            onClick={() => onMoveDown(ex.id)}
-            disabled={!canMoveDown}
-            title="Move exercise down"
-            aria-label="Move exercise down"
-          >
-            <ArrowDown size={12} />
-          </ActionIcon>
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            size="sm"
-            onClick={() => onRemove(ex.id)}
-            title="Remove exercise"
-            aria-label="Remove exercise"
-          >
-            <Trash2 size={12} />
-          </ActionIcon>
-        </Group>
-      </Group>
-      <Group gap={6}>
-        <TextInput
-          type="number"
-          value={ex.sets || ''}
-          onChange={(e) => onUpdate(ex.id, 'sets', Number(e.currentTarget.value) || 0)}
-          w={60}
-          placeholder="Sets"
-        />
-        <Text size="xs" c="dimmed">x</Text>
-        <TextInput
-          type="number"
-          value={ex.reps || ''}
-          onChange={(e) => onUpdate(ex.id, 'reps', Number(e.currentTarget.value) || 0)}
-          w={60}
-          placeholder="Reps"
-        />
-        <Text size="xs" c="dimmed">@</Text>
-        {renderLoadInput()}
-      </Group>
-    </Paper>
+    <div ref={setNodeRef} style={style} className="if-designer-ex-block">
+      <span {...(readOnly ? {} : { ...attributes, ...listeners })} className="if-designer-drag-handle">
+        <GripVertical size={16} />
+      </span>
+      <span className="if-designer-ex-block-name">{ex.name}</span>
+      {ex.load_source && <LoadTypeBadge source={ex.load_source} />}
+      <input
+        className="if-designer-num-inp"
+        type="number"
+        value={ex.sets || ''}
+        onChange={(e) => onUpdate(ex.id, 'sets', Number(e.currentTarget.value) || 0)}
+        placeholder="Sets"
+        disabled={readOnly}
+      />
+      <span className="if-designer-at">x</span>
+      <input
+        className="if-designer-num-inp"
+        type="number"
+        value={ex.reps || ''}
+        onChange={(e) => onUpdate(ex.id, 'reps', Number(e.currentTarget.value) || 0)}
+        placeholder="Reps"
+        disabled={readOnly}
+      />
+      <span className="if-designer-at">@</span>
+      {renderLoadInput()}
+      <button
+        className="if-designer-icon-btn"
+        type="button"
+        onClick={() => onMoveUp(ex.id)}
+        disabled={!canMoveUp || readOnly}
+        title="Move exercise up"
+        aria-label="Move exercise up"
+      >
+        <ArrowUp size={13} />
+      </button>
+      <button
+        className="if-designer-icon-btn"
+        type="button"
+        onClick={() => onMoveDown(ex.id)}
+        disabled={!canMoveDown || readOnly}
+        title="Move exercise down"
+        aria-label="Move exercise down"
+      >
+        <ArrowDown size={13} />
+      </button>
+      <button
+        className="if-designer-icon-btn if-designer-icon-btn-danger"
+        type="button"
+        onClick={() => onRemove(ex.id)}
+        title="Remove exercise"
+        aria-label="Remove exercise"
+        disabled={readOnly}
+      >
+        <Trash2 size={13} />
+      </button>
+    </div>
   )
 }
 
 export default function DesignerPage() {
+  const { readOnly } = useAuth()
   const { program, version, createSession } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
@@ -566,171 +558,151 @@ export default function DesignerPage() {
   const autocompleteData = useMemo(() => Array.from(new Set(filteredGlossary.map(e => e.name))), [filteredGlossary])
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <Group gap="xs">
-          <Text component={Link} to="/designer" size="sm" c="dimmed">Designer</Text>
-          <Text c="dimmed">/</Text>
-          <Text fw={700} size="xl">Session Design</Text>
-        </Group>
-        <Group gap="sm" wrap="wrap">
-          <Select
-            value={String(selectedWeek)}
-            onChange={(v) => {
-              const w = Number(v ?? 1)
-              setSelectedWeek(w)
-            }}
-            data={weekOptions.map(w => ({ value: String(w), label: `Week ${w}` }))}
-            size="sm"
-            w={120}
-          />
-          <Button
-            leftSection={<Plus size={16} />}
-            size="sm"
-            onClick={() => openSessionEditor()}
-          >
-            Add Session
-          </Button>
-        </Group>
-      </Group>
+    <div className="if-designer-session-page">
+      <div className="if-designer-breadcrumb">
+        <Link to="/designer">Designer</Link> / <span>Session Design</span>
+      </div>
 
-      {/* Week Navigation & Copy Buttons */}
-      <Group justify="space-between" wrap="nowrap">
-        <Group gap="xs">
-          <Button 
-            variant="default" 
-            size="compact-sm" 
-            leftSection={<ArrowLeft size={14} />}
+      <div className="if-designer-top-bar">
+        <div className="if-designer-page-title">Session Design</div>
+        <div className="if-designer-top-right">
+          <button
+            type="button"
+            className="if-designer-btn"
+            disabled={selectedWeek <= 1 || readOnly}
+            onClick={() => handleCopySessions(selectedWeek - 1)}
+          >
+            <Copy size={14} /> Copy Previous
+          </button>
+          <button
+            type="button"
+            className="if-designer-btn"
+            disabled={selectedWeek >= totalWeeks || readOnly}
+            onClick={() => handleCopySessions(selectedWeek + 1)}
+          >
+            <Copy size={14} /> Copy Next
+          </button>
+          <button
+            type="button"
+            className="if-designer-btn if-designer-btn-primary"
+            onClick={() => openSessionEditor()}
+            disabled={readOnly}
+          >
+            <Plus size={14} /> Add Session
+          </button>
+        </div>
+      </div>
+
+      <div className="if-designer-week-bar">
+        <div className="if-designer-week-nav">
+          <button
+            type="button"
+            className="if-designer-btn"
             disabled={selectedWeek <= 1}
             onClick={() => setSelectedWeek(prev => prev - 1)}
           >
-            Prev Week
-          </Button>
-          <Button 
-            variant="default" 
-            size="compact-sm" 
-            rightSection={<ArrowRight size={14} />}
+            <ArrowLeft size={14} /> Prev Week
+          </button>
+          <button
+            type="button"
+            className="if-designer-btn"
             disabled={selectedWeek >= totalWeeks}
             onClick={() => setSelectedWeek(prev => prev + 1)}
           >
-            Next Week
-          </Button>
-        </Group>
-        <Group gap="xs">
-          <Button 
-            variant="light" 
-            size="compact-sm" 
-            leftSection={<Copy size={14} />}
-            disabled={selectedWeek <= 1}
-            onClick={() => handleCopySessions(selectedWeek - 1)}
-          >
-            Copy Previous
-          </Button>
-          <Button 
-            variant="light" 
-            size="compact-sm" 
-            leftSection={<Copy size={14} />}
-            disabled={selectedWeek >= totalWeeks}
-            onClick={() => handleCopySessions(selectedWeek + 1)}
-          >
-            Copy Next
-          </Button>
-        </Group>
-      </Group>
+            Next Week <ArrowRight size={14} />
+          </button>
+        </div>
+        <select
+          className="if-designer-week-selector"
+          value={selectedWeek}
+          onChange={(event) => setSelectedWeek(Number(event.currentTarget.value))}
+        >
+          {weekOptions.map(w => <option key={w} value={w}>Week {w}</option>)}
+        </select>
+      </div>
 
-      {/* Planned Volume Graph */}
-      {(plannedMuscleVolume.length > 0 || plannedSbdSets.squat + plannedSbdSets.bench + plannedSbdSets.deadlift > 0) && (
-        <Paper withBorder p="md">
-          <Group gap="xs" mb="md">
-            <BarChart3 size={18} />
-            <Text fw={500}>Planned Weekly Volume</Text>
-          </Group>
-          <Stack gap="xs">
-            {(() => {
-              const allItems = [
-                ...plannedMuscleVolume,
-                { label: 'Squat', sets: plannedSbdSets.squat },
-                { label: 'Bench', sets: plannedSbdSets.bench },
-                { label: 'Deadlift', sets: plannedSbdSets.deadlift },
-              ].filter(item => item.sets > 0)
-              const maxSets = Math.max(...allItems.map(v => v.sets), 1)
-              const sbdLabels = new Set(['Squat', 'Bench', 'Deadlift'])
-              return allItems.map((item, i) => (
-                <Box key={i}>
-                  <Group justify="space-between" mb={2}>
-                    <Text size="xs" fw={500}>{item.label}</Text>
-                    <Text size="xs" c="dimmed">{item.sets.toFixed(1)} sets</Text>
-                  </Group>
-                  <Progress
-                    value={(item.sets / maxSets) * 100}
-                    size="sm"
-                    color={sbdLabels.has(item.label) ? 'teal' : 'blue'}
-                    radius="xl"
-                  />
-                </Box>
-              ))
-            })()}
-          </Stack>
-        </Paper>
-      )}
+      <div className="if-designer-vol-card">
+        <div className="if-designer-vol-title"><BarChart3 size={16} /> Planned Weekly Volume</div>
+        {(() => {
+          const allItems = [
+            ...plannedMuscleVolume,
+            { label: 'Squat', sets: plannedSbdSets.squat },
+            { label: 'Bench', sets: plannedSbdSets.bench },
+            { label: 'Deadlift', sets: plannedSbdSets.deadlift },
+          ].filter(item => item.sets > 0)
+          const maxSets = Math.max(...allItems.map(v => v.sets), 1)
+          const sbdLabels = new Set(['Squat', 'Bench', 'Deadlift'])
+          if (allItems.length === 0) {
+            return <div className="if-designer-add-help">No planned volume for this week.</div>
+          }
+          return allItems.map((item, i) => (
+            <div className="if-designer-vol-row" key={`${item.label}-${i}`}>
+              <span className="if-designer-vol-label">{item.label}</span>
+              <span className="if-designer-vol-bar-wrap">
+                <span
+                  className="if-designer-vol-bar"
+                  style={{
+                    display: 'block',
+                    width: `${(item.sets / maxSets) * 100}%`,
+                    background: sbdLabels.has(item.label) ? 'hsl(142,60%,45%)' : 'hsl(214,70%,55%)',
+                  }}
+                />
+              </span>
+              <span className="if-designer-vol-count">{item.sets.toFixed(1).replace(/\.0$/, '')} sets</span>
+            </div>
+          ))
+        })()}
+      </div>
 
-      {/* Session cards */}
       {weekSessions.length > 0 ? (
-        <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="md">
-          {weekSessions.map((session, i) => (
-            <Paper
-              key={`${session.date}-${i}`}
-              withBorder
-              p="md"
-              style={{ cursor: 'pointer' }}
-              onClick={() => openSessionEditor(session, session.date, i)}
-            >
-              <Group justify="space-between" mb="xs">
-                <Text fw={500}>{session.day}</Text>
-                <Badge variant="light" color={STATUS_COLORS[session.status ?? 'planned'] || 'blue'} size="sm">
-                  {session.status || 'planned'}
-                </Badge>
-              </Group>
-              <Text size="sm" c="dimmed" mb="sm">{session.date}</Text>
+        <div className="if-designer-sess-grid">
+          {weekSessions.map((session, i) => {
+            const status = session.completed ? 'completed' : (session.status || 'planned')
+            const groups: Record<string, { sets: number; reps: number; kg: number | null }[]> = {}
+            for (const ex of session.planned_exercises || []) {
+              if (!groups[ex.name]) groups[ex.name] = []
+              groups[ex.name].push(ex)
+            }
+            return (
+              <button
+                key={`${session.date}-${i}`}
+                type="button"
+                className="if-designer-sess-card"
+                disabled={readOnly}
+                onClick={() => openSessionEditor(session, session.date, i)}
+              >
+                <div className="if-designer-sess-head">
+                  <span className="if-designer-sess-day">{session.day}</span>
+                  <span className="if-designer-status-pill" data-status={status}>{status}</span>
+                </div>
+                <div className="if-designer-sess-date">{session.date}</div>
 
-              {(session.planned_exercises || []).length > 0 ? (
-                <Stack gap={4}>
-                  {(() => {
-                    const groups: Record<string, { sets: number; reps: number; kg: number | null }[]> = {}
-                    for (const ex of session.planned_exercises!) {
-                      if (!groups[ex.name]) groups[ex.name] = []
-                      groups[ex.name].push(ex)
-                    }
-                    return Object.entries(groups).map(([name, items], j) => (
-                      <Group key={j} justify="space-between" wrap="nowrap">
-                        <Text size="sm" truncate style={{ flex: 1 }}>{name}</Text>
-                        <Stack gap={0} align="flex-end">
-                          {items.map((item, k) => (
-                            <Text key={k} size="sm" c="dimmed">
-                              {item.sets}x{item.reps}{item.kg !== null ? ` @${displayWeight(item.kg, unit)}` : ''}
-                            </Text>
-                          ))}
-                        </Stack>
-                      </Group>
-                    ))
-                  })()}
-                </Stack>
-              ) : (
-                <Text size="sm" c="dimmed">No exercises planned</Text>
-              )}
+                {Object.entries(groups).length > 0 ? (
+                  <div>
+                    {Object.entries(groups).map(([name, items], j) => (
+                      <div className="if-designer-ex-line" key={`${name}-${j}`}>
+                        <span className="if-designer-ex-line-name">{name}</span>
+                        <span className="if-designer-ex-line-sets">
+                          {items.map((item) => (
+                            `${item.sets}x${item.reps}${item.kg !== null ? ` @${displayWeight(item.kg, unit)}` : ''}`
+                          )).join('\n')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="if-designer-add-help">No exercises planned</div>
+                )}
 
-              {session.exercises?.length > 0 && (
-                <Text size="xs" c="dimmed" mt="sm" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} pt="sm">
-                  {session.exercises.length} exercises logged
-                </Text>
-              )}
-            </Paper>
-          ))}
-        </SimpleGrid>
+                {session.exercises?.length > 0 && (
+                  <div className="if-designer-logged">{session.exercises.length} exercises logged</div>
+                )}
+              </button>
+            )
+          })}
+        </div>
       ) : (
-        <Group justify="center" py={48}>
-          <Text c="dimmed">No sessions for Week {selectedWeek}. Click "Add Session" to plan one.</Text>
-        </Group>
+        <div className="if-designer-empty">No sessions for Week {selectedWeek}. Click "Add Session" to plan one.</div>
       )}
 
       {/* Session Editor Modal */}
@@ -739,6 +711,12 @@ export default function DesignerPage() {
         onClose={closeSessionEditor}
         title={editingSession ? 'Edit Session' : 'Plan Session'}
         size="lg"
+        classNames={{
+          content: 'if-designer-modal-content',
+          header: 'if-designer-modal-header',
+          title: 'if-designer-modal-title',
+          body: 'if-designer-modal-body',
+        }}
         styles={{
           content: {
             maxHeight: 'calc(var(--app-viewport-height, 100dvh) - 32px)',
@@ -754,28 +732,29 @@ export default function DesignerPage() {
           },
         }}
       >
-        <Stack gap="md">
-          <Stack gap="xs">
+        <div className="if-designer-modal-form">
+          <div>
             <DatePickerInput
               label="Date"
               value={sessionDate}
               onChange={setSessionDate}
               valueFormat="ddd MMM D, YYYY"
               defaultDate={selectedWeekStartDate}
+              disabled={readOnly}
               minDate={selectableWeekDates[0] ?? selectedWeekStartDate}
               maxDate={selectedWeekEndDate}
               clearable={false}
             />
-            <Group gap="xs" wrap="wrap">
-              <Badge variant="light">Week {selectedWeek}</Badge>
-              {inferredSessionDay && <Badge variant="light">{inferredSessionDay}</Badge>}
-              <Badge variant="light">{selectedPhase?.name ?? 'Unscheduled'}</Badge>
-            </Group>
-          </Stack>
+            <div className="if-designer-pill-row" style={{ marginTop: 8 }}>
+              <span className="if-designer-pill-tag">Week {selectedWeek}</span>
+              {inferredSessionDay && <span className="if-designer-pill-tag">{inferredSessionDay}</span>}
+              <span className="if-designer-pill-tag if-designer-pill-tag-info">{selectedPhase?.name ?? 'Unscheduled'}</span>
+            </div>
+          </div>
 
           {/* Planned exercises */}
-          <Stack gap="xs">
-            <Text size="sm" c="dimmed">Planned Exercises</Text>
+          <div>
+            <div className="if-designer-section-title">Planned Exercises</div>
 
             <DndContext
               sensors={sensors}
@@ -786,7 +765,7 @@ export default function DesignerPage() {
                 items={plannedExercises.map((ex) => ex.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <Stack gap="xs">
+                <div className="if-designer-ex-list">
                   {plannedExercises.map((ex, index) => (
                     <SortableExercise
                       key={ex.id}
@@ -797,9 +776,13 @@ export default function DesignerPage() {
                       onMoveDown={(id) => movePlannedExercise(id, 1)}
                       canMoveUp={index > 0}
                       canMoveDown={index < plannedExercises.length - 1}
+                      readOnly={readOnly}
                     />
                   ))}
-                </Stack>
+                  {plannedExercises.length === 0 && (
+                    <div className="if-designer-add-help">No exercises. Add below.</div>
+                  )}
+                </div>
               </SortableContext>
             </DndContext>
 
@@ -810,6 +793,7 @@ export default function DesignerPage() {
               data={autocompleteData}
               placeholder="Search exercises to add..."
               mt="sm"
+              disabled={readOnly}
               onOptionSubmit={(value) => {
                 const match = glossary.find(e => e.name.toLowerCase() === value.toLowerCase())
                 if (match) {
@@ -827,17 +811,15 @@ export default function DesignerPage() {
                 }
               }}
             />
-            <Text size="xs" c="dimmed">Select an exercise from the dropdown to add it.</Text>
-          </Stack>
+            <div className="if-designer-add-help">Select an exercise from the dropdown to add it.</div>
+          </div>
 
-          <Divider mt="md" />
-
-          <Group justify="space-between" mt="md">
+          <div className="if-designer-modal-foot">
             {editingSession ? (
-              <Button
-                color="red"
-                variant="subtle"
-                leftSection={<Trash2 size={16} />}
+              <button
+                type="button"
+                className="if-designer-btn if-designer-btn-danger"
+                disabled={readOnly}
                 onClick={async () => {
                   if (confirm('Are you sure you want to delete this session? This cannot be undone.')) {
                     try {
@@ -852,23 +834,26 @@ export default function DesignerPage() {
                   }
                 }}
               >
-                Delete Session
-              </Button>
+                <Trash2 size={14} /> Delete Session
+              </button>
             ) : <Box />}
             
-            <Group gap="sm">
-              <Button variant="default" onClick={closeSessionEditor}>
+            <div className="if-designer-modal-actions">
+              <button type="button" className="if-designer-btn" onClick={closeSessionEditor}>
                 Cancel
-              </Button>
-              <Button
-                leftSection={<Save size={16} />}
+              </button>
+              <button
+                type="button"
+                className="if-designer-btn if-designer-btn-primary"
                 onClick={saveSession}
+                disabled={readOnly}
               >
+                <Save size={14} />
                 {editingSession ? 'Update' : 'Create'} Session
-              </Button>
-            </Group>
-          </Group>
-        </Stack>
+              </button>
+            </div>
+          </div>
+        </div>
       </Modal>
 
       {/* Copy Confirmation Modal */}
@@ -900,6 +885,6 @@ export default function DesignerPage() {
           </Group>
         </Stack>
       </Modal>
-    </Stack>
+    </div>
   )
 }

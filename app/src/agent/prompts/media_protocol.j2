@@ -8,5 +8,11 @@ USE read_media WHEN:
   - The operator asks about a specific attachment
   - You need visual information from a screenshot, diagram, or photo
 
+WORKSPACE COMPATIBILITY:
+  In workspace runs, read_media is not a literal callable
+  tool unless the task prompt exposes it. The planner should route
+  attachment analysis to `media_reader`, and the runner attaches
+  downloaded files to opencode with `--file`.
+
 Each call to read_media spawns a vision model. Ask specific, targeted questions.
 Multiple questions about the same file require separate calls.

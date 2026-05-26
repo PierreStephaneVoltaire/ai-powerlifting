@@ -53,6 +53,12 @@ variable "dynamodb_health_table" {
   default     = "if-health"
 }
 
+variable "dynamodb_templates_table" {
+  description = "DynamoDB table for global powerlifting templates"
+  type        = string
+  default     = "if-health-templates"
+}
+
 variable "dynamodb_sessions_table" {
   description = "DynamoDB table for copied health sessions"
   type        = string

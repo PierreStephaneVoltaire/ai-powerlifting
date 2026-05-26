@@ -965,6 +965,50 @@ def summarize_diet_context(
     }
 
 
+def summarize_program_notes(
+    program: dict[str, Any],
+    window_start: date | None = None,
+) -> dict[str, Any]:
+    meta = program.get("meta") or {}
+    raw_notes = meta.get("block_notes") or program.get("block_notes") or []
+    notes: list[dict[str, Any]] = []
+
+    for raw in raw_notes:
+        if not isinstance(raw, dict):
+            continue
+        text = str(raw.get("notes") or "").strip()
+        if not text:
+            continue
+
+        note_date = raw.get("date") or str(raw.get("updated_at") or "")[:10]
+        parsed = _parse_date(note_date)
+        if parsed is None:
+            continue
+        if window_start and parsed < window_start:
+            continue
+
+        entry = {
+            "date": parsed.isoformat(),
+            "notes": text,
+            "updated_at": raw.get("updated_at"),
+        }
+        if raw.get("block"):
+            entry["block"] = raw.get("block")
+        notes.append(entry)
+
+    notes.sort(key=lambda n: (n["date"], str(n.get("updated_at") or "")))
+
+    return {
+        "entries": len(notes),
+        "chronological_notes": notes,
+        "interpretation": (
+            "Read these as dated, evolving athlete/program context. Older notes may conflict with newer notes; "
+            "treat conflicts as timeline information rather than a data error, and give newer dated notes more weight "
+            "when judging current state."
+        ),
+    }
+
+
 def _serialize_planned_exercise_for_prompt(ex: dict[str, Any]) -> dict[str, Any]:
     kg = ex.get("kg") or 0
     rpe = ex.get("rpe_target") or ex.get("rpe")

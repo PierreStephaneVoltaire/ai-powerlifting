@@ -38,7 +38,7 @@ interface ProgramState {
     index: number,
     data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: Session['wellness'] }
   ) => Promise<void>
-  saveSession: (date: string, index: number) => Promise<void>
+  saveSession: (date: string, index: number, session?: Session) => Promise<Session>
   updateMaxes: (maxes: {
     squat_kg: number
     bench_kg: number
@@ -243,23 +243,31 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     })
   },
 
-  saveSession: async (date, index) => {
+  saveSession: async (date, index, sessionOverride) => {
     const { program, version } = get()
-    if (!program) return
+    if (!program) throw new Error('Cannot save session before a program is loaded')
 
-    const session = program.sessions[index]
-    if (!session) return
+    const session = sessionOverride ?? program.sessions[index]
+    if (!session) throw new Error(`Cannot save session at index ${index}: session not found`)
 
     await api.updateSession(version, date, index, session)
 
     // Sync body weight to weight log if present
-    if (session.body_weight_kg) {
+    if (session.body_weight_kg != null) {
       api.addWeightEntry(version, { date: session.date, kg: session.body_weight_kg }).catch((e) =>
         console.error('Failed to sync body weight to weight log:', e)
       )
     }
 
-    set({ isDirty: false })
+    set((state) => {
+      if (!state.program) return { isDirty: false }
+      const sessions = [...state.program.sessions]
+      if (index >= 0 && index < sessions.length) {
+        sessions[index] = session
+      }
+      return { program: { ...state.program, sessions }, isDirty: false }
+    })
+    return session
   },
 
   updateMaxes: async (maxes) => {

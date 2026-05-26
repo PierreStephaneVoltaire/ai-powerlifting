@@ -10,6 +10,7 @@ interface Props {
   glossary: GlossaryExercise[]
   onSave: (session: TemplateSession) => void
   onClose: () => void
+  disabled?: boolean
 }
 
 const LOAD_TYPE_OPTIONS = [
@@ -23,7 +24,7 @@ function blankExercise(): TemplateExercise {
   return { name: '', sets: 3, reps: 5, load_type: 'rpe', load_value: null, rpe_target: 8, notes: '', glossary_id: undefined }
 }
 
-export function TemplateSessionModal({ session, glossary, onSave, onClose }: Props) {
+export function TemplateSessionModal({ session, glossary, onSave, onClose, disabled }: Props) {
   const [editing, setEditing] = useState<TemplateSession | null>(null)
 
   useEffect(() => {
@@ -102,6 +103,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
           label="Label"
           value={editing.label}
           onChange={(e) => setEditing(s => s ? { ...s, label: e.currentTarget.value } : s)}
+          disabled={disabled}
         />
         <Group gap="xs" grow>
           <TextInput
@@ -109,17 +111,20 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
             label="Week Number"
             value={editing.week_number}
             onChange={(e) => setEditing(s => s ? { ...s, week_number: Number(e.currentTarget.value) || 1 } : s)}
+            disabled={disabled}
           />
           <TextInput
             label="Day of Week"
             value={editing.day_of_week}
             onChange={(e) => setEditing(s => s ? { ...s, day_of_week: e.currentTarget.value } : s)}
+            disabled={disabled}
           />
           <TextInput
             type="number"
             label="Day Index"
             value={editing.day_index}
             onChange={(e) => setEditing(s => s ? { ...s, day_index: Number(e.currentTarget.value) } : s)}
+            disabled={disabled}
           />
         </Group>
 
@@ -138,12 +143,13 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                   data={glossaryNames}
                   onChange={(val) => handleExerciseNameChange(i, val)}
                   style={{ flex: 1 }}
+                  disabled={disabled}
                 />
                 <Group gap={2} wrap="nowrap" style={{ marginBottom: 1 }}>
                   <ActionIcon
                     variant="subtle"
                     onClick={() => moveExercise(i, -1)}
-                    disabled={i === 0}
+                    disabled={i === 0 || disabled}
                     title="Move exercise up"
                     aria-label="Move exercise up"
                   >
@@ -152,7 +158,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                   <ActionIcon
                     variant="subtle"
                     onClick={() => moveExercise(i, 1)}
-                    disabled={i === editing.exercises.length - 1}
+                    disabled={i === editing.exercises.length - 1 || disabled}
                     title="Move exercise down"
                     aria-label="Move exercise down"
                   >
@@ -164,6 +170,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                     onClick={() => removeExercise(i)}
                     title="Remove exercise"
                     aria-label="Remove exercise"
+                    disabled={disabled}
                   >
                     <Trash2 size={16} />
                   </ActionIcon>
@@ -176,12 +183,14 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                   label="Sets"
                   value={ex.sets}
                   onChange={(e) => updateExercise(i, { sets: Number(e.currentTarget.value) || 1 })}
+                  disabled={disabled}
                 />
                 <TextInput
                   type="number"
                   label="Reps"
                   value={ex.reps}
                   onChange={(e) => updateExercise(i, { reps: Number(e.currentTarget.value) || 1 })}
+                  disabled={disabled}
                 />
                 <Select
                   label="Load Type"
@@ -189,6 +198,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                   onChange={(v) => updateExercise(i, { load_type: (v as TemplateExercise['load_type']) ?? 'rpe' })}
                   data={LOAD_TYPE_OPTIONS}
                   allowDeselect={false}
+                  disabled={disabled}
                 />
                 {ex.load_type === 'rpe' && (
                   <TextInput
@@ -197,6 +207,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                     value={ex.rpe_target ?? ''}
                     onChange={(e) => updateExercise(i, { rpe_target: e.currentTarget.value === '' ? null : Number(e.currentTarget.value) })}
                     step={0.5}
+                    disabled={disabled}
                   />
                 )}
                 {(ex.load_type === 'absolute' || ex.load_type === 'percentage') && (
@@ -205,6 +216,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                     label={ex.load_type === 'absolute' ? 'Load (kg)' : 'Load (%)'}
                     value={ex.load_value ?? ''}
                     onChange={(e) => updateExercise(i, { load_value: e.currentTarget.value === '' ? null : Number(e.currentTarget.value) })}
+                    disabled={disabled}
                   />
                 )}
               </Group>
@@ -213,16 +225,17 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose }: Pro
                 label="Notes"
                 value={ex.notes}
                 onChange={(e) => updateExercise(i, { notes: e.currentTarget.value })}
+                disabled={disabled}
               />
             </Stack>
           ))}
         </Stack>
 
-        <Button variant="light" onClick={addExercise}>Add Exercise</Button>
+        <Button variant="light" onClick={addExercise} disabled={disabled}>Add Exercise</Button>
 
         <Group justify="flex-end" gap="xs">
           <Button variant="default" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave}>Save Session</Button>
+          <Button onClick={handleSave} disabled={disabled}>Save Session</Button>
         </Group>
       </Stack>
     </Modal>

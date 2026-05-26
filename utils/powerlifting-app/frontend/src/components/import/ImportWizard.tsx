@@ -92,7 +92,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 // Steps: Upload(0) → Classify(1) → Glossary(2) → AutoAdd(3) → Preview(4) → Completed
 const STEP_COUNT = 5 // 5 rendered steps → Completed triggers at index 5
 
-export const ImportWizard: React.FC = () => {
+export const ImportWizard: React.FC<{ readOnly?: boolean }> = ({ readOnly }) => {
   const [state, dispatch] = useReducer(wizardReducer, initialState)
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -132,7 +132,7 @@ export const ImportWizard: React.FC = () => {
             <Step1_Upload onUpload={(id) => {
               dispatch({ type: 'UPLOAD_SUCCESS', payload: id })
               setSearchParams({ import_id: id })
-            }} />
+            }} readOnly={readOnly} />
           </Stepper.Step>
 
           <Stepper.Step label="Classify" description="Template vs Log">
@@ -186,6 +186,7 @@ export const ImportWizard: React.FC = () => {
                 dispatch({ type: 'RESET' })
                 setSearchParams({})
               }}
+              readOnly={readOnly}
             />
           </Stepper.Completed>
         </Stepper>

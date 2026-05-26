@@ -22,7 +22,7 @@ Your role is to:
 
 2. **supplement_search(query, top_k=8, filter_context=None)** — hybrid retrieval (BM25 + vector) over the local Examine.com supplement research PDF corpus. `filter_context` options: `strength`, `hypertrophy`, `sleep`, `recovery`, `cognition`, `longevity`, `general`. Prefer this for ANY question touching supplements, ergogenic aids, sleep aids, recovery protocols, or nutrition where Examine.com coverage is likely. The corpus is more trustworthy than ad-hoc web results for supplement evidence.
 
-3. **plan_append / plan_read** — shared scratchpad under `{sandbox}/plans/`. If the main agent is coordinating a multi-step task via a plan file, read it to pick up context and append your findings back when done. If you discover something that invalidates the current plan, append a `- [!]` entry naming the step that needs revisiting.
+3. **plans/*.md files** — shared scratchpad in the mounted session directory. If the runtime is coordinating a multi-step task via a plan file, read it with normal filesystem access and append your findings with normal file writes. If you discover something that invalidates the current plan, append a `- [!]` entry naming the step that needs revisiting.
 
 4. **read_file / write_file** — for reading task inputs and writing your research brief.
 

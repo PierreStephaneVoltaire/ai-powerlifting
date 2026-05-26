@@ -9,15 +9,24 @@ from agent.prompts.yaml_loader import load_yaml
 
 logger = logging.getLogger(__name__)
 
-_MCP_SERVERS_PATH = Path(__file__).parent.parent / "agent" / "prompts" / "specialists" / "mcp_servers.yaml"
+def _candidate_mcp_server_paths() -> list[Path]:
+    app_src = Path(__file__).resolve().parent.parent
+    return [
+        app_src / "agent" / "prompts" / "specialists" / "mcp_servers.yaml",
+        app_src.parent / "specialists" / "mcp_servers.yaml",
+        app_src.parent.parent / "specialists" / "mcp_servers.yaml",
+    ]
 
 
 def _load_mcp_servers() -> Dict[str, Dict[str, Any]]:
     """Load MCP server definitions from YAML with env var interpolation."""
+    for path in _candidate_mcp_server_paths():
+        if path.exists():
+            return load_yaml(path)
     try:
-        return load_yaml(_MCP_SERVERS_PATH)
+        return load_yaml(_candidate_mcp_server_paths()[0])
     except FileNotFoundError:
-        logger.error(f"MCP servers config not found: {_MCP_SERVERS_PATH}")
+        logger.error("MCP servers config not found in known locations")
         return {}
     except Exception as e:
         logger.error(f"Failed to load MCP servers config: {e}")

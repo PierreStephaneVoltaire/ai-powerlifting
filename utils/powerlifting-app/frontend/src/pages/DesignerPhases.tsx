@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Edit2, Trash2, X, Save, ExternalLink } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
+import { useAuth } from '@/auth/AuthProvider'
 import { useUiStore } from '@/store/uiStore'
+import { phaseColor } from '@/utils/phases'
 import {
-  Paper, Title, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
+  Paper, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
   TextInput, Textarea, Modal, Box, Select,
 } from '@mantine/core'
 import type { Phase } from '@powerlifting/types'
@@ -12,6 +14,7 @@ import type { Phase } from '@powerlifting/types'
 const DEFAULT_BLOCK = 'current'
 
 export default function DesignerPhases() {
+  const { readOnly } = useAuth()
   const { program, updatePhases } = useProgramStore()
   const { pushToast } = useUiStore()
 
@@ -121,14 +124,14 @@ export default function DesignerPhases() {
   }
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
+    <Stack gap="md" className="if-mock-page">
+      <Group justify="space-between" className="if-mock-header">
         <Group gap="xs">
           <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
             Designer
           </Text>
           <Text c="dimmed">/</Text>
-          <Title order={2}>Phase Design</Title>
+          <h1 className="if-mock-title">Phase Design</h1>
         </Group>
         <Group gap="xs">
           <Select
@@ -144,6 +147,7 @@ export default function DesignerPhases() {
             size="sm"
             leftSection={<Plus size={16} />}
             onClick={() => openPhaseEditor()}
+            disabled={readOnly}
           >
             Add Phase
           </Button>
@@ -153,8 +157,10 @@ export default function DesignerPhases() {
       {phases.length > 0 ? (
         <Stack gap="sm">
           {phases.map((phase, i) => (
-            <Paper key={phase.name} withBorder p="md">
+            <Paper key={phase.name} withBorder p={0} className="if-card">
+              <Box p="14px 16px">
               <Group justify="space-between" wrap="nowrap">
+                <Box style={{ background: phaseColor(phase, phases), borderRadius: '50%', flexShrink: 0, height: 10, marginTop: 6, width: 10 }} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text fw={500}>{phase.name}</Text>
                   <Text size="sm" c="dimmed">
@@ -181,6 +187,7 @@ export default function DesignerPhases() {
                   <ActionIcon
                     variant="subtle"
                     onClick={() => openPhaseEditor(phase, i)}
+                    disabled={readOnly}
                   >
                     <Edit2 size={16} />
                   </ActionIcon>
@@ -188,11 +195,13 @@ export default function DesignerPhases() {
                     variant="subtle"
                     color="red"
                     onClick={() => deletePhase(phase.name)}
+                    disabled={readOnly}
                   >
                     <Trash2 size={16} />
                   </ActionIcon>
                 </Group>
-              </Group>
+                </Group>
+              </Box>
             </Paper>
           ))}
         </Stack>
@@ -219,6 +228,7 @@ export default function DesignerPhases() {
                 setPhaseForm(p => ({ ...p, name: val }));
               }}
               size="sm"
+              disabled={readOnly}
             />
           </Box>
 
@@ -230,6 +240,7 @@ export default function DesignerPhases() {
                 value={phaseForm.start_week || 1}
                 onChange={(e) => setPhaseForm(p => ({ ...p, start_week: Number(e.currentTarget.value) }))}
                 size="sm"
+                disabled={readOnly}
               />
             </Box>
             <Box>
@@ -239,6 +250,7 @@ export default function DesignerPhases() {
                 value={phaseForm.end_week || 4}
                 onChange={(e) => setPhaseForm(p => ({ ...p, end_week: Number(e.currentTarget.value) }))}
                 size="sm"
+                disabled={readOnly}
               />
             </Box>
           </SimpleGrid>
@@ -254,6 +266,7 @@ export default function DesignerPhases() {
               autosize
               minRows={2}
               size="sm"
+              disabled={readOnly}
             />
           </Box>
 
@@ -266,6 +279,7 @@ export default function DesignerPhases() {
                 onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
+                disabled={readOnly}
               />
             </Box>
             <Box>
@@ -276,6 +290,7 @@ export default function DesignerPhases() {
                 onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
                 step={0.5}
+                disabled={readOnly}
               />
             </Box>
             <Box>
@@ -285,6 +300,7 @@ export default function DesignerPhases() {
                 value={phaseForm.days_per_week ?? ''}
                 onChange={(e) => setPhaseForm(p => ({ ...p, days_per_week: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
                 size="sm"
+                disabled={readOnly}
               />
             </Box>
           </SimpleGrid>
@@ -300,6 +316,7 @@ export default function DesignerPhases() {
               autosize
               minRows={2}
               size="sm"
+              disabled={readOnly}
             />
           </Box>
 
@@ -310,6 +327,7 @@ export default function DesignerPhases() {
             <Button
               leftSection={<Save size={16} />}
               onClick={savePhase}
+              disabled={readOnly}
             >
               {isNewPhase ? 'Add' : 'Update'} Phase
             </Button>

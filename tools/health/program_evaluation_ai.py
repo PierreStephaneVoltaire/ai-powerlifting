@@ -30,6 +30,7 @@ from prompt_context import (
     summarize_measurements,
     summarize_phases,
     summarize_planned_sessions,
+    summarize_program_notes,
     summarize_program_meta,
     summarize_supplements,
 )
@@ -235,6 +236,7 @@ def _build_user_message(program: dict[str, Any], federation_library: dict[str, A
         window_start=window_start,
     )
     diet_context = summarize_diet_context(program, window_start=window_start, bodyweight_trend=bodyweight_trend)
+    program_notes = summarize_program_notes(program, window_start=window_start)
     goals = summarize_goals(program, federation_library=federation_library)
     competitions = summarize_competitions(
         program,
@@ -289,6 +291,7 @@ def _build_user_message(program: dict[str, Any], federation_library: dict[str, A
         "athlete_measurements": measurements,
         "supplements": supplements,
         "diet_context": diet_context,
+        "dated_program_notes": program_notes,
         "bodyweight_trend": bodyweight_trend,
         "completed_sessions": completed_sessions,
         "planned_sessions": planned_sessions,

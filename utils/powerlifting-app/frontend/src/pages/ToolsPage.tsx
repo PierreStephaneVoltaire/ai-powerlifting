@@ -4,8 +4,8 @@ import { Calculator, ActivitySquare, Scale, Percent, ArrowRightLeft, Trophy } fr
 
 export default function ToolsPage() {
   const tools = [
-    { to: '/tools/plate', icon: Calculator, title: 'Plate Calculator', desc: 'Calculate the plates you need for your target weight.' },
-    { to: '/tools/dots', icon: ActivitySquare, title: 'DOTS Calculator', desc: 'Calculate your DOTS score for powerlifting competitions.' },
+    { to: '/tools/plate', icon: Calculator, title: 'Plate Calc', desc: 'Calculate the plates you need for your target weight.' },
+    { to: '/tools/dots', icon: ActivitySquare, title: 'DOTS', desc: 'Calculate your DOTS score for powerlifting competitions.' },
     { to: '/tools/weight', icon: Scale, title: 'Weight Tracker', desc: 'Track your body weight and view your progress.' },
     { to: '/tools/percent', icon: Percent, title: '% of Max', desc: 'Calculate percentages of your 1RM for different lifts.' },
     { to: '/tools/converter', icon: ArrowRightLeft, title: 'Unit Converter', desc: 'Convert weights between kilograms and pounds.' },
@@ -19,7 +19,7 @@ export default function ToolsPage() {
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
         {tools.map((tool) => (
-          <UnstyledButton key={tool.to} component={Link} to={tool.to}>
+          <UnstyledButton key={tool.to} component={Link} to={tool.to} data-testid={`tools-link-${tool.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
             <Card withBorder shadow="sm" padding="lg">
               <Stack justify="space-between" h="100%">
                 <div>
