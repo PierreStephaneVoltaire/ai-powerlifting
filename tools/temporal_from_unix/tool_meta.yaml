@@ -1,10 +1,13 @@
 tools:
   unix_to_datetime:
-    description: "Convert a Unix timestamp (seconds or milliseconds since epoch) into a structured datetime representation. Returns the ISO 8601 format, human-readable date and time, day of week, and relative description (e.g., \"3 days ago\", \"in 2 weeks\"). Auto-detects seconds vs milliseconds based on magnitude (timestamps > 10^12 treated as milliseconds)."
+    description: "Convert a Unix timestamp (seconds or milliseconds since epoch) into a structured datetime representation. Returns the ISO 8601 format, human-readable date and time, day of week, and relative description (e.g., \"3 days ago\", \"in 2 weeks\"). Auto-detects seconds vs milliseconds based on magnitude (timestamps > 10^12 treated as milliseconds). Pass an optional IANA tz (e.g. \"America/New_York\") to also get local, local_date, local_time, local_offset, and local_tz fields in that timezone."
     parameters:
       type: object
       properties:
         unix_timestamp:
           type: number
           description: "Unix timestamp (seconds or milliseconds since epoch) to convert"
+        tz:
+          type: string
+          description: "Optional IANA timezone name (e.g. \"America/New_York\", \"Europe/London\"). When provided, the result includes local, local_date, local_time, local_offset, and local_tz fields converted to that timezone."
       required: ["unix_timestamp"]

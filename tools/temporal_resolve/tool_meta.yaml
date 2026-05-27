@@ -1,10 +1,13 @@
 tools:
   resolve_temporal_phrase:
-    description: "Parse human-readable temporal expressions and return structured date/time information. Handles relative phrases (\"next monday\", \"in 3 days\", \"2 weeks from friday\", \"end of month\"), absolute phrases (\"march 15\", \"2025-12-25\"), and combined expressions (\"next monday at 3pm\"). Returns the resolved date, day of week, and a human-readable description of how far in the future/past it is."
+    description: "Parse human-readable temporal expressions and return structured date/time information. Handles relative phrases (\"next monday\", \"in 3 days\", \"2 weeks from friday\", \"end of month\"), absolute phrases (\"march 15\", \"2025-12-25\"), and combined expressions (\"next monday at 3pm\"). Returns the resolved date, day of week, and a human-readable description of how far in the future/past it is. Pass an optional IANA tz (e.g. \"America/New_York\") to also get local_date, local_time, local_offset, and local_tz fields in that timezone."
     parameters:
       type: object
       properties:
         phrase:
           type: string
           description: "A natural language temporal expression to resolve. Examples: \"next monday\", \"in 3 days\", \"march 15 2025\", \"next monday at 3pm\""
+        tz:
+          type: string
+          description: "Optional IANA timezone name (e.g. \"America/New_York\", \"Europe/London\"). When provided, the result includes local_date, local_time, local_offset, and local_tz fields converted to that timezone."
       required: ["phrase"]

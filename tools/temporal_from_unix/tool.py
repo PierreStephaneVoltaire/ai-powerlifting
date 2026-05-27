@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def _format_result(result: Any) -> str:
@@ -38,7 +38,7 @@ def _relative_description(dt: datetime) -> str:
         return f"in ~{years} year{'s' if years != 1 else ''}" if is_future else f"~{years} year{'s' if years != 1 else ''} ago"
 
 
-def _unix_to_datetime(unix_timestamp: float) -> Dict[str, Any]:
+def _unix_to_datetime(unix_timestamp: float, tz: Optional[str] = None) -> Dict[str, Any]:
     try:
         ts = float(unix_timestamp)
     except (ValueError, TypeError):
@@ -53,19 +53,35 @@ def _unix_to_datetime(unix_timestamp: float) -> Dict[str, Any]:
     except (ValueError, OSError, OverflowError) as e:
         return {"error": f"Timestamp out of range: {e}"}
 
-    return {
+    result: Dict[str, Any] = {
         "unix_timestamp": int(unix_timestamp),
-        "iso8601": dt.isoformat(),
+        "utc": dt.isoformat(),
         "date": dt.strftime("%Y-%m-%d"),
-        "time": dt.strftime("%H:%M:%S"),
+        "time_utc": dt.strftime("%H:%M:%S"),
         "day_of_week": dt.strftime("%A"),
         "human_readable": dt.strftime("%B %d, %Y at %I:%M %p UTC"),
         "relative_description": _relative_description(dt),
     }
 
+    if tz:
+        try:
+            from zoneinfo import ZoneInfo
+            local = dt.astimezone(ZoneInfo(tz))
+            result["local"] = local.isoformat()
+            result["local_date"] = local.strftime("%Y-%m-%d")
+            result["local_time"] = local.strftime("%H:%M:%S")
+            result["local_offset"] = local.strftime("%z")
+            result["local_tz"] = tz
+            result["human_readable"] = local.strftime("%B %d, %Y at %I:%M %p") + f" {local.strftime('%Z')}"
+            result["day_of_week"] = local.strftime("%A")
+        except Exception as e:
+            result["tz_error"] = f"Could not convert to {tz!r}: {e}"
+
+    return result
+
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name == "unix_to_datetime":
-        result = _unix_to_datetime(args["unix_timestamp"])
+        result = _unix_to_datetime(args["unix_timestamp"], args.get("tz"))
         return _format_result(result)
     return f"Unknown temporal_from_unix tool: {name}"

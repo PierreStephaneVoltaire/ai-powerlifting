@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def _format_result(result: Any) -> str:
@@ -12,22 +12,26 @@ def _format_result(result: Any) -> str:
     return json.dumps(result, indent=2, default=str)
 
 
-def _resolve_phrase(phrase: str) -> Dict[str, Any]:
+def _resolve_phrase(phrase: str, tz: Optional[str] = None) -> Dict[str, Any]:
     import dateparser
 
+    now_utc = datetime.now(timezone.utc)
     parsed = dateparser.parse(
         phrase,
         settings={
             "PREFER_DATES_FROM": "future",
-            "RELATIVE_BASE": datetime.now(timezone.utc),
+            "RELATIVE_BASE": now_utc,
         },
     )
     if parsed is None:
         return {"error": f"Could not parse phrase: {phrase!r}", "phrase": phrase}
 
-    now = datetime.now(timezone.utc)
-    is_past = parsed < now
-    diff = parsed - now if not is_past else now - parsed
+    # Ensure UTC-aware for comparisons
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    is_past = parsed < now_utc
+    diff = parsed - now_utc if not is_past else now_utc - parsed
     days = abs(diff.days)
 
     if days == 0:
@@ -46,17 +50,34 @@ def _resolve_phrase(phrase: str) -> Dict[str, Any]:
         years = days // 365
         relative = f"in ~{years} year{'s' if years != 1 else ''}" if not is_past else f"~{years} year{'s' if years != 1 else ''} ago"
 
-    return {
+    result: Dict[str, Any] = {
         "phrase": phrase,
+        "utc": parsed.isoformat(),
         "date": parsed.strftime("%Y-%m-%d"),
+        "time_utc": parsed.strftime("%H:%M:%S"),
         "day_of_week": parsed.strftime("%A"),
         "relative_description": relative,
         "is_past": is_past,
     }
 
+    if tz:
+        try:
+            from zoneinfo import ZoneInfo
+            local = parsed.astimezone(ZoneInfo(tz))
+            result["local"] = local.isoformat()
+            result["local_date"] = local.strftime("%Y-%m-%d")
+            result["local_time"] = local.strftime("%H:%M:%S")
+            result["local_offset"] = local.strftime("%z")
+            result["local_tz"] = tz
+            result["day_of_week"] = local.strftime("%A")
+        except Exception as e:
+            result["tz_error"] = f"Could not convert to {tz!r}: {e}"
+
+    return result
+
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name == "resolve_temporal_phrase":
-        result = _resolve_phrase(args["phrase"])
+        result = _resolve_phrase(args["phrase"], args.get("tz"))
         return _format_result(result)
     return f"Unknown temporal_resolve tool: {name}"

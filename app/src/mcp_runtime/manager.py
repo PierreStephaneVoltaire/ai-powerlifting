@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -212,8 +212,7 @@ class MCPToolManager:
             if name == "get_current_date":
                 return json.dumps(
                     {
-                        "local": datetime.now().astimezone().isoformat(),
-                        "utc": datetime.utcnow().isoformat() + "Z",
+                        "utc": datetime.now(timezone.utc).isoformat(),
                     },
                     indent=2,
                 )

@@ -2152,6 +2152,26 @@ Keep the chain as short as possible. Every additional tool
 call is latency the operator feels.'
 put 4 6 "TOOL_COMPOSITION" "$C" tool core
 
+# ─── NEW: Operator Timezone ──────────────────────────────────────────────────
+
+C='The operator is in timezone America/New_York (EST/EDT). DST is
+handled automatically by the IANA zoneinfo database.
+
+When calling temporal tools that accept a tz parameter, always pass
+"America/New_York" as the tz argument. The tools will include local_date,
+local_time, local_offset, and local_tz fields in the response.
+
+Affected tools:
+  - resolve_temporal_phrase: pass tz="America/New_York"
+  - unix_to_datetime: pass tz="America/New_York"
+  - get_current_date: returns utc only; convert mentally or note the
+    offset from any of the above tool responses.
+
+When presenting times to the operator, use the local_* fields from the
+tool response, not the raw utc fields. Include the offset or abbreviation
+(EST / EDT) so it is unambiguous.'
+put 4 7 "OPERATOR_TIMEZONE" "$C" tool core
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TIER 5 — NOTES. Background context. Can be freely disregarded.
 # ═══════════════════════════════════════════════════════════════════════════════
