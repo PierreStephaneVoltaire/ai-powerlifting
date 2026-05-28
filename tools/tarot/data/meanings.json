@@ -1,0 +1,314 @@
+{
+  "the_fool": {
+    "upright": "The Fool represents new beginnings, a leap of faith, and the innocence of setting out on a journey without knowing the outcome. It signals a time to trust the process, take a risk, and embrace the unknown with an open heart.",
+    "reversed": "Reversed, The Fool warns of recklessness, poor judgment, or naivety. You may be taking unnecessary risks or ignoring consequences. Alternatively, it can indicate a fear of taking the leap."
+  },
+  "the_magician": {
+    "upright": "The Magician represents the ability to manifest your desires through focused will and the skillful use of available resources. All the tools you need are at hand \u2014 what remains is to channel your intention and act.",
+    "reversed": "Reversed, The Magician suggests manipulation, deceit, or the misuse of talents. You may be using your gifts for selfish ends, or someone may be deceiving you."
+  },
+  "the_high_priestess": {
+    "upright": "The High Priestess represents intuition, inner wisdom, and the power of the subconscious mind. She calls you to listen to your inner voice and allow understanding to unfold rather than forcing it.",
+    "reversed": "Reversed, The High Priestess indicates disconnection from your intuition, secrets being kept, or withdrawal from the world. You may be ignoring your inner knowing."
+  },
+  "the_empress": {
+    "upright": "The Empress represents abundance, nurturing energy, and the fertile ground from which all things grow. She embodies creation in all forms \u2014 artistic, emotional, physical, and material.",
+    "reversed": "Reversed, The Empress warns of over-dependence, smothering care, or creative stagnation. You may be neglecting yourself or giving so much that nothing is left for you."
+  },
+  "the_emperor": {
+    "upright": "The Emperor represents authority, structure, and the power of disciplined leadership. He calls for taking responsibility, establishing firm foundations, and leading with confidence.",
+    "reversed": "Reversed, The Emperor warns of authoritarianism, rigidity, or the abuse of power. You may be controlling too tightly, or lacking the discipline needed to succeed."
+  },
+  "the_hierophant": {
+    "upright": "The Hierophant represents tradition, established institutions, and the transmission of knowledge through formal structures. It suggests seeking guidance from a mentor and valuing collective wisdom.",
+    "reversed": "Reversed, The Hierophant signals a break from convention, rebellion against established norms, or the need to forge your own spiritual path."
+  },
+  "the_lovers": {
+    "upright": "The Lovers represent love, harmony, and the profound choice that comes from the heart. Beyond romantic love, this card speaks to any decision requiring alignment with your deepest values.",
+    "reversed": "Reversed, The Lovers indicate disharmony, misalignment of values, or an imbalance in a relationship. You may be facing a difficult choice where no option feels right."
+  },
+  "the_chariot": {
+    "upright": "The Chariot represents willpower, determination, and triumph through disciplined effort. The charioteer harnesses opposing forces and drives them toward a single goal.",
+    "reversed": "Reversed, The Chariot warns of losing control or direction. You may be pulled in conflicting directions or blocked by obstacles you cannot overcome through force alone."
+  },
+  "strength": {
+    "upright": "Strength represents inner fortitude, the quiet power that tames the beast through patience, compassion, and self-mastery. It signals a time to approach challenges with gentleness rather than aggression.",
+    "reversed": "Reversed, Strength indicates self-doubt, insecurity, or a loss of composure. You may be struggling to control raw emotions or feeling your inner reserves depleted."
+  },
+  "the_hermit": {
+    "upright": "The Hermit represents deliberate withdrawal from the world to seek inner truth. This card calls for solitude, reflection, and the willingness to go within for answers.",
+    "reversed": "Reversed, The Hermit warns of unhealthy isolation, loneliness, or a refusal to seek guidance. You may be cutting yourself off from needed connection."
+  },
+  "wheel_of_fortune": {
+    "upright": "The Wheel of Fortune represents the inevitability of change and the turning of cycles. What rises must fall; what falls will rise again. This card signals a turning point and asks you to adapt rather than resist.",
+    "reversed": "Reversed, the Wheel suggests bad luck, resistance to inevitable change, or being stuck in a negative cycle. It can also signal the need to break a repeating pattern."
+  },
+  "justice": {
+    "upright": "Justice represents fairness, truth, and the law of cause and effect. Every action has a consequence, and this card calls for an honest accounting and the acceptance of responsibility.",
+    "reversed": "Reversed, Justice warns of unfairness, dishonesty, or a refusal to face consequences. You may be dealing with a situation where truth is being obscured."
+  },
+  "the_hanged_man": {
+    "upright": "The Hanged Man represents voluntary surrender and the willingness to see the world from a radically different angle. Progress comes not from action but from acceptance and the shift in perspective that letting go brings.",
+    "reversed": "Reversed, The Hanged Man warns of unnecessary delays, resistance to surrender, or a sacrifice that serves no purpose. You may be stalling on a decision or refusing to let go."
+  },
+  "death": {
+    "upright": "Death represents transformation \u2014 the ending of one phase and the necessary clearing that makes way for the new. Something must die for something else to be born.",
+    "reversed": "Reversed, Death indicates resistance to necessary change, stagnation, or an incomplete transformation. You may be clinging to what is already gone."
+  },
+  "temperance": {
+    "upright": "Temperance represents balance, moderation, and the art of blending opposing forces into a harmonious whole. This card signals a time to seek the middle path and integrate disparate elements into unified purpose.",
+    "reversed": "Reversed, Temperance warns of imbalance, excess, or a lack of moderation. You may be overdoing something or struggling to bring competing aspects of your life into alignment."
+  },
+  "the_devil": {
+    "upright": "The Devil represents the shadow \u2014 the forces of attachment and bondage that keep you chained to habits, patterns, or materialism. The chains are loose; you could remove them. Liberation begins with seeing the chains clearly.",
+    "reversed": "Reversed, The Devil signals a breaking of chains, release from unhealthy attachments, or the reclaiming of personal power."
+  },
+  "the_tower": {
+    "upright": "The Tower represents sudden upheaval \u2014 the lightning strike that shatters false structures and reveals what was built on unstable ground. Something you relied on is being destroyed so that something more true can take its place.",
+    "reversed": "Reversed, The Tower suggests fear of change, avoidance of necessary upheaval, or a disaster delayed but not averted."
+  },
+  "the_star": {
+    "upright": "The Star represents hope, inspiration, and the calm renewal that follows a storm. This card signals a time of healing, clarity, and quiet faith.",
+    "reversed": "Reversed, The Star indicates despair, disconnection from faith, or a loss of hope. You may be struggling to believe that renewal is possible."
+  },
+  "the_moon": {
+    "upright": "The Moon represents illusion, fear, and the deep subconscious. Under moonlight, nothing is quite as it seems. Navigate by feeling rather than sight and understand that not everything is as it appears.",
+    "reversed": "Reversed, The Moon indicates emerging clarity, the dissipation of illusion, or the resolution of fears. What was murky is becoming visible."
+  },
+  "the_sun": {
+    "upright": "The Sun represents joy, success, vitality, and the confident warmth of being fully alive. It signals a time of clarity, achievement, and simple happiness.",
+    "reversed": "Reversed, The Sun suggests a temporary dimming of joy or a struggle to access confidence. You may need to reconnect with your inner child."
+  },
+  "judgement": {
+    "upright": "Judgement represents rebirth, the inner calling that summons you to rise to a higher version of yourself. This card signals a time of self-evaluation, forgiveness, and the decision to step into a new phase.",
+    "reversed": "Reversed, Judgement indicates self-doubt, denial of a calling, or a refusal to hear what you know you must do."
+  },
+  "the_world": {
+    "upright": "The World represents completion, wholeness, and the successful integration of all that has come before. This card signals the end of a major chapter and the readiness to begin again from a higher place.",
+    "reversed": "Reversed, The World indicates incompletion, a lack of closure, or the sense that something is unfinished."
+  },
+  "ace_of_wands": {
+    "upright": "The Ace of Wands represents a powerful new beginning fueled by creative energy, passion, and inspiration. A spark has been lit \u2014 an idea, an opportunity, a surge of motivation. Act on it while the fire is hot.",
+    "reversed": "Reversed, the Ace of Wands suggests a creative block, a lost spark, or a missed opportunity. You may feel uninspired or uncertain about a new direction."
+  },
+  "two_of_wands": {
+    "upright": "The Two of Wands represents planning, foresight, and the moment of decision when you hold the world in your hands. You have the resources and the vision; now choose a direction and commit.",
+    "reversed": "Reversed, the Two of Wands indicates poor planning, indecision, or fear of stepping into the unknown. You may be holding back from making a choice."
+  },
+  "three_of_wands": {
+    "upright": "The Three of Wands represents progress, the rewards of foresight, and expansion from having planted seeds and waited. You have taken the first steps; now watch your plans bear fruit.",
+    "reversed": "Reversed, the Three of Wands suggests obstacles, delays, or frustration with slow progress. You may be playing too small or encountering unforeseen difficulties."
+  },
+  "four_of_wands": {
+    "upright": "The Four of Wands represents celebration, homecoming, and the joy of reaching a milestone. It signals a time of harmony, community, and the pleasure of having built something stable enough to enjoy.",
+    "reversed": "Reversed, the Four of Wands indicates instability, a lack of support, or conflict in the home or community. You may feel transient and unsettled."
+  },
+  "five_of_wands": {
+    "upright": "The Five of Wands represents competition, struggle, and the creative tension that arises when different forces compete. It is not necessarily destructive \u2014 conflict can sharpen ideas and push growth.",
+    "reversed": "Reversed, the Five of Wands suggests the resolution of conflict, the avoidance of necessary confrontation, or inner turmoil not being expressed."
+  },
+  "six_of_wands": {
+    "upright": "The Six of Wands represents victory, recognition, and the public acknowledgment of achievement. You have won; allow yourself to be seen.",
+    "reversed": "Reversed, the Six of Wands warns of a fall from grace, loss of support, or the hollow feeling of success without recognition."
+  },
+  "seven_of_wands": {
+    "upright": "The Seven of Wands represents defiance, the courage to stand your ground when outnumbered or challenged. You hold the high ground; trust that your position is stronger than it appears.",
+    "reversed": "Reversed, the Seven of Wands suggests giving up, feeling overwhelmed by opposition, or yielding under pressure."
+  },
+  "eight_of_wands": {
+    "upright": "The Eight of Wands represents speed, rapid movement, and the swift arrival of change. Things are happening fast \u2014 act quickly and trust the momentum.",
+    "reversed": "Reversed, the Eight of Wands indicates delays, frustration, or the slowing of momentum. Progress that was rapid has stalled."
+  },
+  "nine_of_wands": {
+    "upright": "The Nine of Wands represents resilience, the stubborn persistence of someone who has been through battle and is still standing. You are close to the end; find the will to keep going.",
+    "reversed": "Reversed, the Nine of Wands suggests exhaustion, fatigue, or the feeling that you cannot take one more hit. You may need to rest before continuing."
+  },
+  "ten_of_wands": {
+    "upright": "The Ten of Wands represents the burden of carrying too much, the weight of overcommitment and responsibility. Consider what you are carrying and whether all of it is truly yours to bear.",
+    "reversed": "Reversed, the Ten of Wands signals release, the letting go of burdens, or the delegation of responsibility. You may be recognizing that you cannot carry everything alone."
+  },
+  "page_of_wands": {
+    "upright": "The Page of Wands represents the eager explorer, full of enthusiasm and excited by new possibilities. Follow your excitement and explore what inspires you.",
+    "reversed": "Reversed, the Page of Wands suggests lack of direction, procrastination, or scattered energy. You may be all enthusiasm with no follow-through."
+  },
+  "knight_of_wands": {
+    "upright": "The Knight of Wands represents action, passion, and the impulsive charge forward. A time of high energy and the courage to act on your passions \u2014 but haste without reflection can lead to trouble.",
+    "reversed": "Reversed, the Knight of Wands warns of recklessness, scattered energy, or destructive impulsiveness. You may be charging ahead without a plan."
+  },
+  "queen_of_wands": {
+    "upright": "The Queen of Wands represents confident, magnetic energy \u2014 a person who commands attention through warmth, charisma, and self-assurance. Own your power and lead with confidence.",
+    "reversed": "Reversed, the Queen of Wands suggests jealousy, insecurity, or the misuse of personal magnetism. You may be demanding attention without earning it."
+  },
+  "king_of_wands": {
+    "upright": "The King of Wands represents visionary leadership, the commanding presence of someone who leads through inspiration, courage, and honor. Take command and act with confidence and vision.",
+    "reversed": "Reversed, the King of Wands warns of impulsiveness, tyranny, or the arrogance that comes from power without accountability."
+  },
+  "ace_of_cups": {
+    "upright": "The Ace of Cups represents the overflow of emotion, the beginning of love, compassion, or spiritual connection. A new emotional beginning; let your feelings flow.",
+    "reversed": "Reversed, the Ace of Cups indicates emotional blockage, repressed feelings, or a disconnection from your inner life. You may be unable to access love or compassion."
+  },
+  "two_of_cups": {
+    "upright": "The Two of Cups represents unity, the deep connection between two people, and the beauty of partnership built on mutual respect and attraction. A coming together or reconciliation.",
+    "reversed": "Reversed, the Two of Cups indicates imbalance in a relationship, broken communication, or a separation. The bond may be strained or one-sided."
+  },
+  "three_of_cups": {
+    "upright": "The Three of Cups represents celebration, friendship, and the joy of community. A time of social joy, creative collaboration, and the pleasure of belonging.",
+    "reversed": "Reversed, the Three of Cups warns of overindulgence, gossip, or social exclusion. You may feel like the odd one out."
+  },
+  "four_of_cups": {
+    "upright": "The Four of Cups represents apathy, dissatisfaction, and the tendency to miss what is being offered because you are focused on what you lack. Look up from your discontent.",
+    "reversed": "Reversed, the Four of Cups suggests a withdrawal from apathy, a renewed interest in life, or the re-evaluation of what matters."
+  },
+  "five_of_cups": {
+    "upright": "The Five of Cups represents grief, loss, and the pain of focusing on what has spilled while ignoring what remains. Acknowledge the grief and then look up \u2014 two cups still stand.",
+    "reversed": "Reversed, the Five of Cups suggests acceptance, recovery, and the slow process of moving on from loss. You are beginning to see what remains."
+  },
+  "six_of_cups": {
+    "upright": "The Six of Cups represents nostalgia, the warmth of childhood memories, and the innocent pleasure of revisiting the past. A time of remembering or reunion.",
+    "reversed": "Reversed, the Six of Cups warns of being stuck in the past, holding unrealistic expectations based on nostalgia, or refusing to grow up."
+  },
+  "seven_of_cups": {
+    "upright": "The Seven of Cups represents choices, illusion, and the overwhelming array of possibilities that confront the imagination. Not everything that glitters is gold \u2014 choose carefully.",
+    "reversed": "Reversed, the Seven of Cups suggests the resolution of choices, the alignment with personal values, or clarity after confusion."
+  },
+  "eight_of_cups": {
+    "upright": "The Eight of Cups represents walking away from something that no longer fulfills you, the difficult choice to leave before you are forced out. Have the courage to seek what you truly need.",
+    "reversed": "Reversed, the Eight of Cups suggests fear of change, stagnation, or an inability to walk away from something that is no longer serving you."
+  },
+  "nine_of_cups": {
+    "upright": "The Nine of Cups represents contentment, emotional fulfillment, and the satisfaction of a wish granted. A time of pleasure, gratitude, and the happiness of having what you want.",
+    "reversed": "Reversed, the Nine of Cups warns of dissatisfaction despite having what you wanted, greed, or complacency. You may have gotten what you wished for but found it empty."
+  },
+  "ten_of_cups": {
+    "upright": "The Ten of Cups represents the fullness of emotional joy, the harmony of family, and the alignment of love, home, and purpose. The dream of the heart made real.",
+    "reversed": "Reversed, the Ten of Cups indicates family discord, broken dreams, or the shattering of the ideal of domestic happiness."
+  },
+  "page_of_cups": {
+    "upright": "The Page of Cups represents sensitivity, creative intuition, and the surprise of unexpected messages from the heart. Listen to your inner voice and honor creative impulses.",
+    "reversed": "Reversed, the Page of Cups suggests emotional immaturity, insecurity, or a creative block. You may be shutting out your feelings."
+  },
+  "knight_of_cups": {
+    "upright": "The Knight of Cups represents romance, charm, and the pursuit of ideals through the heart. A time of following your heart and being open to romantic or creative opportunities.",
+    "reversed": "Reversed, the Knight of Cups warns of unrealistic ideals, moodiness, or the disappointment when romantic fantasy meets reality."
+  },
+  "queen_of_cups": {
+    "upright": "The Queen of Cups represents deep compassion, emotional wisdom, and the ability to nurture others while staying connected to your own feelings. Hold space for others without losing yourself.",
+    "reversed": "Reversed, the Queen of Cups warns of co-dependency, emotional manipulation, or the martyrdom that comes from giving too much."
+  },
+  "king_of_cups": {
+    "upright": "The King of Cups represents emotional mastery, the wisdom that comes from understanding the heart without being ruled by it. Navigate complex feelings with grace and generosity.",
+    "reversed": "Reversed, the King of Cups warns of emotional manipulation, volatility, or the misuse of emotional intelligence."
+  },
+  "ace_of_swords": {
+    "upright": "The Ace of Swords represents the power of the mind, a breakthrough of clarity, and the force of truth cutting through confusion. Think clearly, speak truthfully, and act with precision.",
+    "reversed": "Reversed, the Ace of Swords indicates confusion, lack of clarity, or the misuse of mental force. You may be unable to find the clarity you need."
+  },
+  "two_of_swords": {
+    "upright": "The Two of Swords represents a difficult decision, a stalemate between opposing forces, and the avoidance that comes when no option feels right. The tension of an unavoidable choice.",
+    "reversed": "Reversed, the Two of Swords indicates that the stalemate is breaking, the blindfold is coming off, or the decision can no longer be avoided."
+  },
+  "three_of_swords": {
+    "upright": "The Three of Swords represents heartbreak, sorrow, and the sharp pain of emotional truth. It affirms that the pain is real and must be felt before it can heal.",
+    "reversed": "Reversed, the Three of Swords suggests recovery from heartbreak, the slow process of healing, and the release of sorrow."
+  },
+  "four_of_swords": {
+    "upright": "The Four of Swords represents rest, recovery, and the necessity of stepping back from the world to heal. Rest is productive \u2014 it is the ground from which new strength grows.",
+    "reversed": "Reversed, the Four of Swords warns of burnout, exhaustion, or the inability to rest when rest is needed. You may be pushing forward prematurely."
+  },
+  "five_of_swords": {
+    "upright": "The Five of Swords represents defeat, conflict, and the hollowness of a victory won at too great a cost. What did the fight cost you?",
+    "reversed": "Reversed, the Five of Swords suggests reconciliation, making amends, or the surrender that opens the door to peace."
+  },
+  "six_of_swords": {
+    "upright": "The Six of Swords represents transition, the journey from difficult waters to calmer shores. You are on your way to a better place \u2014 allow the passage.",
+    "reversed": "Reversed, the Six of Swords indicates stagnation, resistance to transition, or the inability to move on from a difficult situation."
+  },
+  "seven_of_swords": {
+    "upright": "The Seven of Swords represents deception, stealth, and the strategy of operating beneath the surface. Hidden motives, trickery, or the act of keeping something secret.",
+    "reversed": "Reversed, the Seven of Swords suggests confession, coming clean, or the exposure of a deception. You may be rethinking a dishonest approach."
+  },
+  "eight_of_swords": {
+    "upright": "The Eight of Swords represents feeling trapped, restricted, or powerless \u2014 but the prison is partly of your own making. Freedom begins in the mind.",
+    "reversed": "Reversed, the Eight of Swords indicates release from restriction, self-acceptance, and the new perspective that comes when you realize you are less trapped than you thought."
+  },
+  "nine_of_swords": {
+    "upright": "The Nine of Swords represents anxiety, nightmares, and the weight of worry that is often worse than the reality it fears. The worst may be in your imagination, not in the world.",
+    "reversed": "Reversed, the Nine of Swords indicates the easing of anxiety, inner clarity, and the relief that comes after a period of worry."
+  },
+  "ten_of_swords": {
+    "upright": "The Ten of Swords represents rock bottom, the final painful ending of a cycle. The worst has happened; from this absolute low point, the only direction is up.",
+    "reversed": "Reversed, the Ten of Swords suggests recovery, the slow regeneration that follows rock bottom, or the refusal to accept an inevitable ending."
+  },
+  "page_of_swords": {
+    "upright": "The Page of Swords represents curiosity, mental alertness, and the restless desire to seek truth. Stay vigilant, ask questions, and pursue the truth with determination.",
+    "reversed": "Reversed, the Page of Swords warns of deception, all talk and no action, or the misuse of mental energy through gossip or spying."
+  },
+  "knight_of_swords": {
+    "upright": "The Knight of Swords represents swift action, sharp intellect, and the relentless pursuit of a goal. Act decisively and pursue your ambitions with courage and directness.",
+    "reversed": "Reversed, the Knight of Swords warns of directionless energy, restlessness, or the recklessness that comes from acting without thinking."
+  },
+  "queen_of_swords": {
+    "upright": "The Queen of Swords represents independence, clear boundaries, and the power of objective truth delivered without apology. Set boundaries and rely on your own judgment.",
+    "reversed": "Reversed, the Queen of Swords warns of coldness, harshness, or the bitter edge that cuts when truth is delivered without compassion."
+  },
+  "king_of_swords": {
+    "upright": "The King of Swords represents intellectual authority, the command of truth and reason, and the discipline of a mind sharpened through experience. Lead with intellect and uphold standards of truth.",
+    "reversed": "Reversed, the King of Swords warns of manipulation through intellect, cruelty disguised as truth, or the abuse of authority."
+  },
+  "ace_of_pentacles": {
+    "upright": "The Ace of Pentacles represents a new material opportunity, the seed of prosperity, and the grounding energy that turns vision into tangible reality. A chance to invest in something real.",
+    "reversed": "Reversed, the Ace of Pentacles indicates a lost opportunity, poor planning, or a lack of grounding in material matters."
+  },
+  "two_of_pentacles": {
+    "upright": "The Two of Pentacles represents balance, adaptability, and the juggling act of managing competing demands. Balance is not stillness \u2014 it is movement.",
+    "reversed": "Reversed, the Two of Pentacles warns of imbalance, disorganization, or being over-committed. You may be dropping the balls you are trying to juggle."
+  },
+  "three_of_pentacles": {
+    "upright": "The Three of Pentacles represents teamwork, collaboration, and the mastery that comes from combining different skills toward a shared goal. Build something of quality through shared effort.",
+    "reversed": "Reversed, the Three of Pentacles warns of poor teamwork, lack of collaboration, or the failure to meet quality standards."
+  },
+  "four_of_pentacles": {
+    "upright": "The Four of Pentacles represents security, the desire to hold on tightly to what you have, and the stability that borders on stagnation. Are you protecting what matters or gripping so tightly nothing can flow?",
+    "reversed": "Reversed, the Four of Pentacles warns of greed, materialism, or the need to let go of excessive control. The security you cling to may be an illusion."
+  },
+  "five_of_pentacles": {
+    "upright": "The Five of Pentacles represents hardship, material loss, and the pain of feeling left out in the cold. Help is there \u2014 the door is lit; you must be willing to approach it.",
+    "reversed": "Reversed, the Five of Pentacles suggests recovery from hardship, the arrival of help, or the improvement of difficult circumstances."
+  },
+  "six_of_pentacles": {
+    "upright": "The Six of Pentacles represents generosity, the balance of giving and receiving, and the power dynamics inherent in the exchange of resources. Give generously and receive with grace.",
+    "reversed": "Reversed, the Six of Pentacles warns of selfishness, one-sided generosity, or the strings attached to gifts."
+  },
+  "seven_of_pentacles": {
+    "upright": "The Seven of Pentacles represents the pause after effort, the patient waiting for investment to bear fruit. The work is done; now let the harvest come.",
+    "reversed": "Reversed, the Seven of Pentacles warns of impatience, poor investment, or the lack of reward for your efforts."
+  },
+  "eight_of_pentacles": {
+    "upright": "The Eight of Pentacles represents dedication, craftsmanship, and the patient work of mastering a skill. Commit to the work and find satisfaction in the process of getting better.",
+    "reversed": "Reversed, the Eight of Pentacles warns of perfectionism, lack of ambition, or misdirected effort. You may be working hard on the wrong things."
+  },
+  "nine_of_pentacles": {
+    "upright": "The Nine of Pentacles represents abundance, self-sufficiency, and the luxury that comes from your own effort. Savor what you have earned.",
+    "reversed": "Reversed, the Nine of Pentacles warns of overinvestment in work at the expense of enjoyment, or the loss of self-sufficiency."
+  },
+  "ten_of_pentacles": {
+    "upright": "The Ten of Pentacles represents generational wealth, the establishment of a lasting legacy, and the fullness of material achievement that extends beyond the individual.",
+    "reversed": "Reversed, the Ten of Pentacles warns of financial instability, family disputes over money, or the loss of a legacy."
+  },
+  "page_of_pentacles": {
+    "upright": "The Page of Pentacles represents the student, the ambitious beginner, and the dedication to learning a new skill. Approach your goals with the earnestness of someone who knows mastery begins with the first step.",
+    "reversed": "Reversed, the Page of Pentacles warns of lack of progress, procrastination, or unrealistic goals. You may be failing to follow through."
+  },
+  "knight_of_pentacles": {
+    "upright": "The Knight of Pentacles represents diligence, routine, and the steady, reliable effort that builds lasting results. Be consistent and trust that slow and steady progress is more valuable than dramatic leaps.",
+    "reversed": "Reversed, the Knight of Pentacles warns of laziness, stagnation, or the inflexibility that comes from too much routine."
+  },
+  "queen_of_pentacles": {
+    "upright": "The Queen of Pentacles represents practical nurturing, the ability to create comfort and security through grounded, generous effort. Care for yourself and others practically.",
+    "reversed": "Reversed, the Queen of Pentacles warns of self-centeredness, jealousy, or smothering. You may be too focused on material comfort."
+  },
+  "king_of_pentacles": {
+    "upright": "The King of Pentacles represents wealth, mastery of the material world, and the leadership that comes from building something substantial and lasting. You have what you need; use it well.",
+    "reversed": "Reversed, the King of Pentacles warns of greed, financial irresponsibility, or the corruption that comes from valuing wealth above all else."
+  }
+}

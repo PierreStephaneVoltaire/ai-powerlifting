@@ -31,3 +31,13 @@ alpha_vantage:
   env:
     ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY}
     FASTMCP_LOG_LEVEL: ERROR
+
+tarot:
+  type: local
+  command: ["python", "/app/tools/mcp_server.py", "tarot"]
+  environment:
+    IF_TOOLS_ROOT: /app/tools
+    IF_MCP_ALLOWED_TOOLS: "tarot_draw_cards,tarot_card_meaning,tarot_spread_info"
+    PYTHONPATH: /app/src:/app
+  enabled: true
+  timeout: 30000
