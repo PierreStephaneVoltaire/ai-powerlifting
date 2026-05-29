@@ -258,14 +258,20 @@ locals {
       has_db   = true
       db_table = "powerlifting"
     }
+    directives-portal = {
+      port     = 3006
+      has_db   = true
+      db_table = "if-core"
+    }
   }
 
   portal_backend_config_checksums = {
-    "main-portal"      = sha1(jsonencode(kubernetes_config_map.main_portal_config.data))
-    "finance-portal"   = sha1(jsonencode(kubernetes_config_map.finance_portal_config.data))
-    "diary-portal"     = sha1(jsonencode(kubernetes_config_map.diary_portal_config.data))
-    "proposals-portal" = sha1(jsonencode(kubernetes_config_map.proposals_portal_config.data))
-    "powerlifting-app" = nonsensitive(sha1(jsonencode(kubernetes_config_map.powerlifting_app_config.data)))
+    "main-portal"       = sha1(jsonencode(kubernetes_config_map.main_portal_config.data))
+    "finance-portal"    = sha1(jsonencode(kubernetes_config_map.finance_portal_config.data))
+    "diary-portal"      = sha1(jsonencode(kubernetes_config_map.diary_portal_config.data))
+    "proposals-portal"  = sha1(jsonencode(kubernetes_config_map.proposals_portal_config.data))
+    "powerlifting-app"  = nonsensitive(sha1(jsonencode(kubernetes_config_map.powerlifting_app_config.data)))
+    "directives-portal" = sha1(jsonencode(kubernetes_config_map.directives_portal_config.data))
   }
 }
 

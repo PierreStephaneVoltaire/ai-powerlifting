@@ -51,6 +51,7 @@ export interface HubStatusResponse {
     finance: 'reachable' | 'unreachable'
     diary: 'reachable' | 'unreachable'
     proposals: 'reachable' | 'unreachable'
+    directives: 'reachable' | 'unreachable'
   }
   computed_at: string
 }

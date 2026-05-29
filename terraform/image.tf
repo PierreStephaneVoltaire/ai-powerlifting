@@ -13,7 +13,8 @@ resource "aws_ecr_repository" "portal_backends" {
     "finance-portal-backend",
     "diary-portal-backend",
     "proposals-portal-backend",
-    "powerlifting-app-backend"
+    "powerlifting-app-backend",
+    "directives-portal-backend"
   ])
 
   name                 = "${var.ecr_repository_prefix}-${each.key}"
@@ -30,7 +31,8 @@ resource "aws_ecr_repository" "portal_frontends" {
     "finance-portal-frontend",
     "diary-portal-frontend",
     "proposals-portal-frontend",
-    "powerlifting-app-frontend"
+    "powerlifting-app-frontend",
+    "directives-portal-frontend"
   ])
 
   name                 = "${var.ecr_repository_prefix}-${each.key}"
@@ -91,11 +93,12 @@ locals {
   }
 
   portal_api_paths = {
-    "main-portal"      = "/main"
-    "finance-portal"   = "/finance"
-    "diary-portal"     = "/diary"
-    "proposals-portal" = "/proposals"
-    "powerlifting-app" = "/api"
+    "main-portal"       = "/main"
+    "finance-portal"    = "/finance"
+    "diary-portal"      = "/diary"
+    "proposals-portal"  = "/proposals"
+    "powerlifting-app"  = "/api"
+    "directives-portal" = "/api"
   }
 }
 

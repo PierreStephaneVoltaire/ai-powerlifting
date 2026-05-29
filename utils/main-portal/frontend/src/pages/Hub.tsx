@@ -28,7 +28,12 @@ export function Hub() {
     finance: 'unreachable' as const,
     diary: 'unreachable' as const,
     proposals: 'unreachable' as const,
+    directives: 'unreachable' as const,
   }
+
+  const directivesLines: string[] = data?.portal_status?.directives === 'reachable'
+    ? ['Connected', 'CRUD + proxy active']
+    : ['Unavailable']
 
   // Build portal card data
   const healthLines: string[] = data?.health
@@ -111,6 +116,13 @@ export function Hub() {
             status={portalStatus.proposals}
             pendingCount={data?.proposals?.pending_count}
             lines={proposalsLines}
+          />
+          <PortalCard
+            name="Directives"
+            icon="📜"
+            href="https://directives.if-prototype.xyz"
+            status={portalStatus.directives}
+            lines={directivesLines}
           />
         </div>
       </section>

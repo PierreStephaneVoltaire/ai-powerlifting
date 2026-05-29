@@ -23,10 +23,11 @@ locals {
 
   # Backend ports matching the for_each in k8s-deployments.tf.
   portal_backend_ports = {
-    "main-portal"      = 3000
-    "finance-portal"   = 3002
-    "diary-portal"     = 3003
-    "proposals-portal" = 3004
-    "powerlifting-app" = 3005
+    "main-portal"       = 3000
+    "finance-portal"    = 3002
+    "diary-portal"      = 3003
+    "proposals-portal"  = 3004
+    "powerlifting-app"  = 3005
+    "directives-portal" = 3006
   }
 }
