@@ -16,6 +16,14 @@ Make the Discord webhook/listener flow robust for short bursts of messages in th
 
 Responses must not mix. The app must know whether it is currently classifying, responding, or implementing for a channel/task, and Discord sends must be serialized per channel.
 
+## Deployment Reality and Invariants (read before any phase)
+
+- `if-agent-api` currently runs at `replicas = 1` (`terraform/k8s-deployments.tf`, and the test deployment in `terraform/k8s-test.tf`). The plan intentionally prepares for horizontal scaling, so all locks/dedupe must be correct across pods, not only across in-process threads.
+- Because horizontal scaling is the goal, cross-pod coordination via DynamoDB conditional writes is a hard requirement, not an optimization. Today the same locks also serialize the in-process concurrency (Discord listener threads, the main asyncio loop, and `ThreadPoolExecutor` paths).
+- AWS credentials are already injected into the pod via the host-path `~/.aws` mount (`aws-credentials` volume in `terraform/k8s-deployments.tf`) and consumed through the boto3 default credential chain. There is no IRSA and no per-table IAM policy resource. Adding the new DynamoDB table requires no IAM/IRSA change. Do not add IAM or IRSA work to this plan.
+- The per-channel workspace is shared on purpose. There is one workspace directory per channel (`{mount}/{guild_id}/{channel_id}` from `flow/session_dirs.py`). Do not create a workspace per task. Concurrency safety comes from naming the per-run files and per-run OpenCode config/session state inside the shared directory, not from splitting directories.
+- `history.md`/`history.json` is one file per channel and is the source of truth for conversation content used by the classifier. New Discord messages (and edits) always update this single per-channel history file. DynamoDB never stores Discord message bodies.
+
 ## Existing Code Facts This Plan Must Respect
 
 This is a Python/FastAPI app running in pods, not a TypeScript service.
@@ -24,17 +32,18 @@ Current Discord path:
 
 1. `./app/src/channels/listeners/discord_listener.py`
    - `on_message` / `on_message_edit` receive Discord messages.
-   - They call `channels.debounce.push_message(conversation_id, message_dict)`.
-   - The dict already includes `message_id`, `guild_id`, `channel_id`, author display name, content, attachments, `channel_ref`, `discord_loop`, timestamps, and edit metadata.
+   - They call `channels.debounce.push_message(conversation_id, message_dict)` from the Discord listener thread/event loop.
+   - The dict already includes `message_id`, `guild_id`, `channel_id`, author display name, content, attachments, `channel_ref`, `discord_loop`, timestamps, and edit metadata (`is_edit`, `previous_content`).
+   - The live `channel_ref` (discord.TextChannel) and `discord_loop` are Python objects; they cannot be persisted to DynamoDB. When a coordinator wakes from a timer it must resolve a live channel handle from the active Discord client registry (`channels.listeners.discord_listener._active_clients` -> `client.get_channel(channel_id)`).
 2. `./app/src/channels/debounce.py`
-   - Current debounce is in-memory only.
-   - It buffers by `conversation_id` and flushes after `CHANNEL_DEBOUNCE_SECONDS`.
+   - Current debounce is in-memory only: module-level `_buffers`/`_timers` dicts guarded by a `threading.Lock`, with a `loop.call_later` flush timer that resets on every message.
    - It has no DynamoDB dedupe, no max wait, no per-channel classifier lock, no dirty flag.
+   - `push_message()` runs on the listener thread; `_schedule_flush()`/`_flush()` run on the main loop via `call_soon_threadsafe`.
 3. `./app/src/channels/dispatcher.py`
-   - Fetches recent Discord history.
+   - `dispatch_channel_batch()` fetches recent Discord history (`_fetch_discord_history`, limit 100, via `run_coroutine_threadsafe` on `discord_loop`).
    - Translates history + current batch to OpenAI-style messages.
    - Calls `process_chat_completion_internal()` once.
-   - Directly chunks and sends the final response to Discord.
+   - Directly chunks and sends the final response to Discord via `deliver_to_channel()`.
 4. `./app/src/channels/translators/discord_translator.py`
    - Builds `messages` and `_history_events` for the runtime.
 5. `./app/src/api/completions.py`
@@ -43,45 +52,57 @@ Current Discord path:
    - The first OpenCode `planner` run is already the router/classifier.
    - `_planner_prompt()` classifies into `interaction_type`, `specialist`, `thinking_mode`, and `selected_model`, and writes `plan.md`.
    - `run_if_flow()` then executes social/domain/technical routes.
-   - This plan extends that first planner/router into the batch classifier.
-7. Directives:
+   - `_run_planner()`, `_run_domain()`, `_run_technical()`, and `_synthesize_handoffs()` currently hardcode the filenames `history.md`, `plan.md`, `response.md`, `review.md`, and `.if/status.log`.
+   - This plan extends that first planner/router into the batch classifier and parameterizes those filenames per run.
+7. `./app/src/flow/opencode.py`
+   - `run_opencode()` launches `opencode run --agent ... --model ... --dir <session_dir>` with `cwd=session_dir` and `env=os.environ.copy()`.
+   - Session continuation is keyed on a per-agent marker file `.if/opencode-<agent>.session` inside the session dir.
+   - There is no subprocess registry and no external cancellation hook today; it only returns after `proc.communicate()` (or kills on timeout).
+8. `./app/src/flow/opencode_config.py`
+   - `write_opencode_config()` writes a single `opencode.json` at `session_dir/opencode.json` (the project config OpenCode reads from `--dir`).
+9. Directives:
    - Existing directive injection already happens through `_directive_block()` in `flow/runner.py`.
    - Specialist directives are injected through `_specialist_prompt()`.
-   - Directive storage already supports `global_directive` in `storage/directive_model.py`.
+   - Directive storage supports `global_directive` (confirm exact field/read path in `storage/directive_model.py` / `DirectiveStore.get_for_subagent()` before Phase 8).
    - The directive task here is only to ensure global directives are present in the relevant prompt contexts, not to invent a new directive system.
-8. DynamoDB/Terraform:
-   - Existing table definitions live in `./terraform/tables.tf`.
-   - Agent API config maps live in `./terraform/k8s-secrets.tf` and `./terraform/k8s-test.tf`.
-   - Use DynamoDB for the execution registry from the first implementation phase that needs persistence/locks.
+10. DynamoDB/Terraform:
+
+- Existing table definitions live in `./terraform/tables.tf` (all PK/SK, `PAY_PER_REQUEST`, `prevent_destroy`; `if-health` shows the TTL-on-`ttl` pattern to copy).
+- Agent API config maps live in `./terraform/k8s-secrets.tf` (live) and `./terraform/k8s-test.tf` (test).
+- Use DynamoDB for the execution registry from the first implementation phase that needs persistence/locks.
 
 ## Non-Negotiable Design Rules
 
 - Classification is not per Discord message.
 - The existing first OpenCode planner/router is the classifier boundary.
 - Classification scope is `channel_id`.
-- Only one classifier/router execution may run per Discord channel at a time.
+- Only one classifier/router execution may run per Discord channel at a time, enforced with a DynamoDB conditional-write lock so it holds across pods.
 - `channel_id` is not a long-running implementation lock.
 - A channel may have multiple active implementation tasks.
-- Independent tasks may run in parallel.
+- Independent tasks may run in parallel inside the one shared per-channel workspace.
 - Discord outbound sends must be serialized per channel.
 - Planner/domain/technical OpenCode runs must not send directly to Discord in the orchestrated path; they produce app-handled output that is enqueued to the outbox.
 - Use DynamoDB conditional writes for dedupe and locks.
+- The listener thread must never block on synchronous boto3 calls. All DynamoDB state updates triggered by an incoming Discord event must be scheduled off the listener thread (e.g. onto the main loop via `call_soon_threadsafe`, with boto3 wrapped in `asyncio.to_thread`).
 - Every phase below must leave the app in a fully functional state.
 - The end state replaces the Discord flow; each phase must define a working Discord path, not a parallel alternate product path.
 
 ## Target Runtime Flow
 
 ```text
-Discord message/create-edit event
-  -> update lightweight ChannelClassificationState in DynamoDB
+Discord message/create-edit event (listener thread)
+  -> schedule lightweight ChannelClassificationState update in DynamoDB off the listener thread
       (pending=true, dirty/debounce/max-wait timestamps, latest observed event metadata)
+  -> update the single per-channel history.md/history.json source of truth
   -> no Discord message content is persisted in DynamoDB
   -> one channel coordinator reaches debounce/max-wait deadline
-  -> acquire DynamoDB classifier lock for channel
+  -> acquire DynamoDB classifier lock for channel (conditional write, cross-pod safe)
+  -> resolve live channel handle from active Discord client registry
   -> fetch fresh Discord channel history after the lock is acquired
+  -> reconcile fresh history into the per-channel history.md/history.json
   -> derive batch activity from fresh history + stored cursors/timestamps
       (new messages after last cursor + edited messages since last classified time)
-  -> run existing OpenCode planner/router as batch classifier
+  -> run existing OpenCode planner/router as batch classifier (reads history.md)
   -> parse batch decisions
   -> persist ClassificationBatch + IntentRecord items
   -> apply decisions idempotently
@@ -89,6 +110,8 @@ Discord message/create-edit event
       -> create or update ImplementationTask items
       -> start/stop/pivot task workers where safe
   -> task workers run existing planner/domain/technical execution as needed
+      -> each run reads history.md and writes its own named plan/response/status files
+      -> each run uses its own per-run OpenCode config and session marker
   -> task outputs become DiscordOutboundMessage items
   -> per-channel outbound sender drains queue with DynamoDB lock
   -> if messages arrived while classifying, schedule next debounced classifier pass
@@ -96,41 +119,62 @@ Discord message/create-edit event
 
 Important source-of-truth rule:
 
-- Discord channel history is the source of truth for message content.
+- Discord channel history is the source of truth for message content. It is reconciled into the single per-channel `history.md`/`history.json`, which the classifier and workers read.
 - DynamoDB tracks pending activity, locks, cursors, task state, run records, decisions, and outbound queue items.
 - DynamoDB must not store full Discord message content as a parallel history store.
-- Edits are handled by marking the channel pending/dirty and then refetching updated channel history once the classifier lock is free.
+- Edits are handled by marking the channel pending/dirty, refetching updated channel history once the classifier lock is free, and updating the existing per-channel history entries in place.
 
 ## Shared Workspace File Naming
 
-Current `flow/history.py` and `flow/runner.py` use fixed names such as `history.md`, `history.json`, `plan.md`, `response.md`, `review.md`, and `.if/status.log` in the channel workspace. That is unsafe once one channel can have parallel tasks.
+The per-channel workspace is shared. Do not create a new workspace per task. Keep one shared per-channel directory and namespace the runtime files by batch/task/run so concurrent runs never read or write the same plan/response/status file.
 
-Do not create a new workspace per task unless later profiling proves file namespace isolation is easier than shared-workspace isolation. Prefer the existing per-channel workspace, but namespace runtime files by batch/task/run.
+The single exception is history: `history.md`/`history.json` stay as one shared per-channel file and remain the source of truth. The classifier and every worker read the same `history.md`.
 
 Required file naming pattern:
 
 ```text
+# Shared, one per channel (source of truth)
+history.md
+history.json
+
 # Classifier/router batch run
-history.batch.<batch_id>.md
-history.batch.<batch_id>.json
 classification.batch.<batch_id>.json
 plan.batch.<batch_id>.md
 .if/status.classifier.<run_id>.log
 
-# Implementation task run
-tasks/<task_id>/history.task.<task_id>.run.<run_id>.md
-tasks/<task_id>/history.task.<task_id>.run.<run_id>.json
-tasks/<task_id>/plan.task.<task_id>.run.<run_id>.md
-tasks/<task_id>/response.task.<task_id>.run.<run_id>.md
-tasks/<task_id>/review.task.<task_id>.run.<run_id>.md
-tasks/<task_id>/status.task.<task_id>.run.<run_id>.log
+# Implementation task run (written directly in the channel workspace root, IDs in the filename)
+plan.task.<task_id>.run.<run_id>.md
+response.task.<task_id>.run.<run_id>.md
+review.task.<task_id>.run.<run_id>.md
+.if/status.task.<task_id>.run.<run_id>.log
 ```
+
+Note: all per-run files live directly in the one shared per-channel workspace directory root, with the task/run IDs encoded in the filename. Do not create per-task subdirectories. OpenCode runs with `--dir <channel_workspace>` so every run shares the same `history.md`.
 
 Prompt rule:
 
-- Every OpenCode prompt must explicitly name the history, plan, response, review, and status files for that run.
-- Do not tell two concurrent OpenCode runs to read/write the same `plan.md`, `history.md`, `response.md`, or `.if/status.log`.
-- Update helper functions such as `write_history()`, `_run_planner()`, `_run_domain()`, and `_run_technical()` to accept explicit file paths/names instead of assuming global filenames.
+- Every OpenCode prompt must explicitly name the history file to read (`history.md`) and the exact plan, response, review, and status files for that run.
+- Do not tell two concurrent OpenCode runs to read/write the same plan, response, review, or status file.
+- The classifier writes its plan/decisions to the batch-named files; a task worker writes to its task/run-named files.
+- Update helper functions such as `write_history()`, `_run_planner()`, `_run_domain()`, `_run_technical()`, and `_synthesize_handoffs()` to accept explicit file paths/names instead of assuming global filenames. `history.md`/`history.json` remain shared; `plan`/`response`/`review`/`status` become per-run.
+
+## Per-Run OpenCode Config and Session State
+
+Two pieces of OpenCode state currently collide if multiple runs share the workspace. Both are fixed inside the shared directory; do not split the workspace.
+
+1. Project config (`opencode.json`). `write_opencode_config()` currently writes a single `session_dir/opencode.json`, which OpenCode reads from `--dir`. Two concurrent runs needing different scoped MCP tools would clobber each other.
+
+   Fix selection rule:
+   - If the run already has a `run_id` (every classifier and task executor run does, since this plan tracks runs via `OpenCodeRunRecord`), use **Option A**: `write_opencode_config()` writes a per-run config file `.if/opencode.run.<run_id>.json` and `run_opencode()` exports `OPENCODE_CONFIG=<that path>` in the subprocess environment. Do not write a root `session_dir/opencode.json` in the orchestrated path, because the project-directory `opencode.json` outranks `OPENCODE_CONFIG` in OpenCode's precedence and would override it.
+   - If a run has no `run_id`, use **Option B**: pass the scoped config inline via `OPENCODE_CONFIG_CONTENT`, which sits at the highest non-managed precedence tier and wins even if a root `opencode.json` is present.
+
+   OpenCode config precedence (lowest to highest): remote, global, `OPENCODE_CONFIG` file, project `opencode.json`, `.opencode` dirs, `OPENCODE_CONFIG_CONTENT`. Option A relies on there being no project `opencode.json`; Option B does not.
+
+2. Continue-session marker. `run_opencode()` keys continuation on `.if/opencode-<agent>.session`. Two concurrent runs of the same agent in one channel would share/clobber continue state.
+
+   Fix: namespace the marker per run, e.g. `.if/opencode-<agent>.run.<run_id>.session`, still inside the shared `.if/` directory. `run_opencode()` accepts the per-run marker path. The classifier may keep its existing per-agent marker since only one classifier runs per channel at a time.
+
+`run_opencode()` already does `env = os.environ.copy()`, so setting `OPENCODE_CONFIG` (Option A) or `OPENCODE_CONFIG_CONTENT` (Option B) is an additive env key. It must also accept the explicit config path / inline content, the per-run session-marker path, and (Phase 7) a `run_id` for the cancellable process registry.
 
 ## DynamoDB Execution Registry
 
@@ -144,10 +188,11 @@ Suggested table name/env:
 
 Terraform locations:
 
-- Add variable in `/home/sirsimpalot/Downloads/discord-ai-bot/terraform/variables.tf`.
-- Add table resource in `/home/sirsimpalot/Downloads/discord-ai-bot/terraform/tables.tf`.
-- Add env to live agent API ConfigMap in `/home/sirsimpalot/Downloads/discord-ai-bot/terraform/k8s-secrets.tf`.
-- Add env to test agent API ConfigMap in `/home/sirsimpalot/Downloads/discord-ai-bot/terraform/k8s-test.tf`.
+- Add variable in `./terraform/variables.tf`.
+- Add table resource in `./terraform/tables.tf`.
+- Add env to live agent API ConfigMap in `./terraform/k8s-secrets.tf`.
+- Add env to test agent API ConfigMap in `./terraform/k8s-test.tf`.
+- No IAM/IRSA changes are required (host-path credentials already cover DynamoDB).
 
 Table shape:
 
@@ -211,6 +256,8 @@ pk = CHANNEL#<channel_id>
 sk = OUTBOX#<priority>#<send_after_or_created_at>#<outbound_id>
 ```
 
+The outbound drainer reads the next item with a `query` on `pk = CHANNEL#<channel_id>` and `begins_with(sk, "OUTBOX#")`, ascending. No GSI is required for single-channel draining; do not add one unless a cross-channel scan need appears.
+
 Do not add `MSG#...` or `MESSAGE#...` registry items for Discord message bodies. The only Discord-message-related data in DynamoDB should be lightweight cursor/event metadata on channel state, batch records, intent source IDs, and task related IDs.
 
 DynamoDB write requirements:
@@ -218,15 +265,15 @@ DynamoDB write requirements:
 - Use `ConditionExpression` for lock acquire, idempotent intent application, and idempotent outbox enqueue.
 - Lock acquire must allow takeover when `lock_expires_at < now`.
 - Use `version` or conditional status checks for state transitions.
-- Convert all Python floats recursively to `Decimal(str(value))` before `put_item`, `update_item`, or batch writes. This applies to classifier confidence and nested decision payloads.
+- Convert all Python floats recursively to `Decimal(str(value))` before `put_item`, `update_item`, or batch writes. This applies to classifier confidence and nested decision payloads. Include a shared recursive float-to-Decimal helper in the new store.
 
 ## Data Objects
 
 Use Python dataclasses/Pydantic models in a new module such as:
 
-`/home/sirsimpalot/Downloads/discord-ai-bot/app/src/channels/execution_models.py`
+`./app/src/channels/execution_models.py`
 
-Keep JSON field names stable. Internal Python can be snake_case; DynamoDB payload can use snake_case to match Python conventions.
+Keep JSON field names stable. Internal Python is snake_case; DynamoDB payload uses snake_case to match Python conventions.
 
 ### ChannelClassificationState
 
@@ -257,9 +304,10 @@ class ChannelClassificationState:
 
 Notes:
 
-- `pending=True` means “there is channel activity to classify”; it does not mean messages are stored in DynamoDB.
+- `pending=True` means "there is channel activity to classify"; it does not mean messages are stored in DynamoDB.
 - `latest_observed_message_id` and timestamps are cursors/hints only.
 - On old message edits, `latest_observed_edit_at` and `dirty=True` are enough to force a fresh history fetch and reclassification pass.
+- `classifier_lock_owner` is a pod/instance identity (e.g. hostname + uuid) so lock ownership is meaningful once `replicas > 1`.
 
 ### ClassificationBatch
 
@@ -374,7 +422,7 @@ class ImplementationTask:
     ttl: int | None
 ```
 
-`queued_message_refs` contains message IDs/timestamps/reasons, not full message content. Workers fetch current Discord history before using those refs.
+`queued_message_refs` contains message IDs/timestamps/reasons, not full message content. Workers read the current per-channel `history.md` (reconciled from fresh Discord history) before using those refs.
 
 ### OpenCodeRunRecord
 
@@ -393,6 +441,8 @@ class OpenCodeRunRecord:
     completed_at: str | None
     title: str | None
     session_dir: str | None
+    config_path: str | None
+    session_marker_path: str | None
     history_path: str | None
     plan_path: str | None
     response_path: str | None
@@ -401,6 +451,8 @@ class OpenCodeRunRecord:
     error: str | None
     ttl: int | None
 ```
+
+`config_path` and `session_marker_path` capture the per-run OpenCode config file and continue-marker introduced in the per-run OpenCode section.
 
 ### DiscordOutboundMessage
 
@@ -437,9 +489,30 @@ class DiscordOutboundMessage:
     ttl: int | None
 ```
 
+## Phase 0 — Foundations and Invariants
+
+Functional outcome: shared models and helpers exist and the documented invariants are encoded, with no behavior change to the live Discord path.
+
+Implementation:
+
+1. Add `app/src/channels/execution_models.py` with all dataclasses above.
+2. Add a shared recursive float-to-Decimal helper (reuse the pattern from `ProgramStore._floats_to_decimals` / `tools/health/core.py::_floats_to_decimals`).
+3. Add a small instance-identity helper (hostname + uuid) for lock ownership, used later by classifier/outbound locks.
+4. Add config in `app/src/config.py`:
+   - `IF_EXECUTION_REGISTRY_TABLE_NAME` (default `if-agent-execution-registry`).
+   - `CHANNEL_CLASSIFIER_MAX_WAIT_SECONDS` (max wait ceiling; default e.g. 30).
+   - Reuse existing `CHANNEL_DEBOUNCE_SECONDS` for the quiet window, or add `CHANNEL_CLASSIFIER_DEBOUNCE_SECONDS` if a distinct value is needed.
+5. Do not wire anything into the live path yet.
+
+Definition of done:
+
+- Models and helpers import cleanly.
+- Unit tests cover float-to-Decimal conversion of nested decision payloads.
+- The existing Discord flow is byte-for-byte unchanged at runtime.
+
 ## Phase 1 — DynamoDB Execution Registry and Pending Activity Signal
 
-Functional outcome: Discord channel activity is durably signaled in DynamoDB before classification, without storing message content, and the existing one-response pipeline still works after fetching fresh channel history.
+Functional outcome: Discord channel activity is durably signaled in DynamoDB before classification, without storing message content, the single per-channel `history.md` stays the source of truth, and the existing one-response pipeline still works after fetching fresh channel history.
 
 Implementation:
 
@@ -448,32 +521,38 @@ Implementation:
    - `terraform/tables.tf`
    - `terraform/k8s-secrets.tf`
    - `terraform/k8s-test.tf`
-   - `app/src/config.py`
-2. Add execution models:
-   - `app/src/channels/execution_models.py`
-3. Add DynamoDB store:
+   - `app/src/config.py` (done in Phase 0)
+2. Add DynamoDB store:
    - `app/src/channels/execution_store.py`
-   - This store uses DynamoDB conditional writes for all registry state.
-   - Include a shared recursive float-to-Decimal helper.
-4. Update `discord_listener.py` message dicts:
+   - Uses DynamoDB conditional writes for all registry state.
+   - Uses the shared recursive float-to-Decimal helper.
+3. Update `discord_listener.py` message dicts:
    - add `author_id`;
    - add `reply_to_message_id` where available;
-   - add `event_type` as `message_create` or `message_edit`.
-5. Update `channels/debounce.py` or introduce `channels/channel_coordinator.py` so incoming Discord events update `CHANNEL#<channel_id>/STATE#classification` only:
+   - add `event_type` as `message_create` or `message_edit` (alongside the existing `is_edit`).
+4. Update `channels/debounce.py` or introduce `channels/channel_coordinator.py` so incoming Discord events update `CHANNEL#<channel_id>/STATE#classification` only, off the listener thread:
+   - schedule the state write onto the main loop (`call_soon_threadsafe`) and run boto3 via `asyncio.to_thread`; the listener thread must not block on DynamoDB;
    - set `pending=True`;
    - set/extend `debounce_until`;
    - set `batch_first_event_at` and `max_wait_until` when opening a new pending window;
    - update `latest_observed_event_at`, `latest_observed_message_id`, `latest_observed_edit_at`, and `pending_event_count`;
    - if state is already `classifying`, set `dirty=True`.
-6. For this phase only, after debounce expires and the classifier lock is acquired, fetch fresh Discord channel history using the existing dispatcher history fetch path, derive the current batch from `last_classified_message_id`/`last_classified_at`, and pass those freshly fetched messages to existing `dispatch_channel_batch()` exactly once. Update cursors after the existing pipeline returns.
+5. For this phase only, after debounce expires and the classifier lock is acquired:
+   - resolve a live channel handle from `discord_listener._active_clients` -> `client.get_channel(channel_id)` (and its loop) since `channel_ref`/`discord_loop` are not persisted;
+   - fetch fresh Discord channel history using the existing dispatcher history fetch path;
+   - reconcile that fresh history into the single per-channel `history.md`/`history.json`;
+   - derive the current batch from `last_classified_message_id`/`last_classified_at`;
+   - pass those freshly fetched messages to the existing `dispatch_channel_batch()` exactly once;
+   - update cursors after the existing pipeline returns.
 
 Definition of done:
 
 - Duplicate delivery does not create duplicate registry message records because no message records are written; repeated events only coalesce into the channel pending state.
 - Three rapid messages in the same channel become one pending channel state and one existing pipeline execution after fresh history fetch.
 - A message or edit arriving while the batch is being processed marks the channel dirty/pending for the next pass.
+- The listener thread is never blocked on a synchronous DynamoDB call.
 - Terraform validates and plans for the new DynamoDB table/env changes.
-- Existing Discord behavior still produces a response, but now through DynamoDB-backed pending activity state and fresh history fetch.
+- Existing Discord behavior still produces a response, now through DynamoDB-backed pending activity state and fresh-history reconciliation into the shared `history.md`.
 
 ## Phase 2 — Debounce/Classifier Locking and Dirty Reclassification
 
@@ -486,17 +565,18 @@ Implementation:
    - `debouncing -> classifying`
    - `classifying -> idle/debouncing`
 2. Add quiet-window and max-wait behavior:
-   - quiet window: use existing `CHANNEL_DEBOUNCE_SECONDS` or add more specific `CHANNEL_CLASSIFIER_DEBOUNCE_SECONDS` if needed;
-   - max wait: add `CHANNEL_CLASSIFIER_MAX_WAIT_SECONDS`.
+   - quiet window: existing `CHANNEL_DEBOUNCE_SECONDS` (or `CHANNEL_CLASSIFIER_DEBOUNCE_SECONDS`);
+   - max wait: `CHANNEL_CLASSIFIER_MAX_WAIT_SECONDS`.
+   - The coordinator replaces or wraps the current `call_later` reset loop so the quiet window cannot starve a busy channel past the max-wait ceiling.
 3. Add classifier lock fields on `STATE#classification`:
-   - `classifier_lock_owner`
+   - `classifier_lock_owner` (instance identity)
    - `classifier_lock_expires_at`
    - `active_classifier_run_id`
 4. Use DynamoDB conditional update for lock acquisition:
-   - acquire if no lock owner or lock expired;
+   - acquire if no lock owner or `classifier_lock_expires_at < now`;
    - fail if another pod owns a valid lock.
 5. While locked/classifying:
-   - new message/edit events update lightweight channel state only;
+   - new message/edit events update lightweight channel state only and reconcile into `history.md`;
    - state gets `dirty=True` and `pending=True`;
    - no second classifier starts immediately.
 6. When the current classifier finishes:
@@ -505,7 +585,7 @@ Implementation:
 
 Definition of done:
 
-- Two pods/store instances racing to classify one channel result in one winner.
+- Two pods/store instances racing to classify one channel result in one winner via the conditional write.
 - New messages during classification do not start a concurrent classifier.
 - Dirty pass runs after the first classification finishes.
 - Existing single-route response still works.
@@ -519,13 +599,14 @@ Do not create an unrelated classifier. Extend the existing planner/router path i
 Implementation:
 
 1. Extend `_planner_prompt()` so it explicitly knows when it is classifying a Discord channel batch.
-   - It must receive freshly fetched relevant channel history, a derived list of candidate source message IDs, active tasks, pending conflicts, bot recent messages, and directives.
-   - It must state: “You are classifying a debounced batch of Discord channel activity. You are not classifying a single message.”
-2. Extend planner output format.
-   - Current `plan.md` YAML supports one route.
-   - Add a batch mode that can write a JSON/YAML decisions array either in `plan.md` front matter or a sibling file such as `classification.json`.
-   - Keep existing single-route parsing valid only if the decisions array contains one route decision.
-3. Update `./app/src/flow/plan.py` to parse/validate batch decisions.
+   - It reads the shared `history.md`, plus a derived list of candidate source message IDs, active tasks, pending conflicts, bot recent messages, and directives.
+   - It must state: "You are classifying a debounced batch of Discord channel activity. You are not classifying a single message."
+2. Extend planner output without breaking single-route parsing.
+   - Keep `plan.md`/`IFPlan` single-route parsing intact for the non-batch path.
+   - Write batch decisions to a sibling file `classification.batch.<batch_id>.json`, not into `plan.md` front matter.
+   - Add a separate `parse_classification()` in `flow/plan.py` rather than overloading `IFPlan`.
+   - A classification with exactly one route decision must remain equivalent to today's single-route behavior.
+3. Update `flow/plan.py` to parse/validate batch decisions (specialist slugs must be known; `selected_model` must be in `models/model_ids.txt`).
 4. Required classifier/router output shape:
 
 ```json
@@ -569,7 +650,7 @@ Implementation:
 ```markdown
 You are classifying a debounced batch of Discord channel activity.
 You are not classifying a single message.
-Return batch decisions for the new unclassified messages only, using history and active tasks as context.
+Read history.md as the source of truth. Return batch decisions for the new unclassified messages only, using history and active tasks as context.
 You may return multiple decisions when the batch contains independent intents.
 Group related new messages into the same decision.
 Split unrelated conversations into separate decisions.
@@ -584,7 +665,7 @@ If two decisions would conflict on the same target task, merge them or return aw
 ```
 
 6. Store `ClassificationBatch` and `IntentRecord` items after parsing.
-7. Update channel cursors (`last_classified_message_id`, `last_classified_at`) after successful classification. Do not mark per-message registry rows because message content/rows are not stored.
+7. Update channel cursors (`last_classified_message_id`, `last_classified_at`) after successful classification. Do not write per-message registry rows.
 
 Definition of done:
 
@@ -600,19 +681,19 @@ Functional outcome: classifier/router decisions are applied idempotently, and ta
 Implementation:
 
 1. Add `app/src/channels/decision_applier.py`.
-2. Add idempotent application with conditional updates on `IntentRecord.status`.
+2. Add idempotent application with conditional updates on `IntentRecord.status` and idempotency keys on outbox enqueue.
 3. Implement actions:
    - `social_response`: enqueue a `DiscordOutboundMessage` using `socialResponseText`/`responseText`, or run a social response route if text was not provided.
    - `ask_clarifying_target`: enqueue clarifying question.
    - `ignore`: mark skipped/completed.
    - `start_new_task`: create `ImplementationTask`, enqueue task-started message if desired, and start async task worker.
-   - `append_to_active_implementation`: attach message IDs/content to task and queued context.
+   - `append_to_active_implementation`: attach message IDs/refs to task and queued context.
    - `queue_on_active_implementation`: queue for later task use.
    - `await_instruction_for_active_implementation`: set task `awaiting_instruction`, store conflict, enqueue conflict summary.
    - `cancel_active_implementation`: set `cancel_requested`, enqueue cancel confirmation.
-   - `pivot_active_implementation`: set `pivot_requested`, merge topic update, request worker restart in Phase 6.
+   - `pivot_active_implementation`: set `pivot_requested`, merge topic update, request worker restart in Phase 6/7.
 4. Task creation must not lock the entire channel.
-5. All task state writes go to DynamoDB registry.
+5. All task state writes go to the DynamoDB registry.
 
 Definition of done:
 
@@ -629,19 +710,19 @@ Implementation:
 
 1. Add `app/src/channels/outbound_queue.py`.
 2. Store `DiscordOutboundMessage` items under `CHANNEL#<channel_id>/OUTBOX#...`.
-3. Add `STATE#outbound` lock with owner/expiry.
-4. Use DynamoDB conditional update to acquire outbound lock.
-5. Drainer behavior:
+3. Add `STATE#outbound` lock with owner/expiry (instance identity), acquired by DynamoDB conditional update with expiry takeover.
+4. Drainer behavior:
    - acquire lock;
-   - lease next queued item;
+   - `query` next queued item (`begins_with(sk, "OUTBOX#")`, ascending);
    - mark `sending`;
-   - send through existing low-level `channels.delivery.deliver_to_channel()` / Discord send logic;
+   - send through existing `channels.delivery.deliver_to_channel()` / Discord send logic (resolving the live channel handle from the active client registry);
    - mark `sent` with `discord_message_id` when available;
    - continue until empty or lock window ends;
    - release lock.
-6. Change orchestrated Discord path so final outputs are enqueued, not directly posted by `dispatcher.py`.
-7. Decide how status embeds interact:
-   - existing status embeds may remain direct operational messages;
+5. Change the orchestrated Discord path so final outputs are enqueued, not directly posted by `dispatcher.py`.
+6. Status embeds:
+   - existing operational status embeds may remain direct;
+   - because tasks run in parallel, status-embed platform context must be re-established per worker (or each status carry its task identity) so a worker does not emit under another task's context;
    - final user-facing responses must go through the queue.
 
 Definition of done:
@@ -653,28 +734,33 @@ Definition of done:
 
 ## Phase 6 — First Fully Parallel Task Execution
 
-Functional outcome: unrelated tasks from one channel batch can run in parallel, and their final outputs are queued separately.
+Functional outcome: unrelated tasks from one channel batch can run in parallel inside the one shared channel workspace, and their final outputs are queued separately.
 
 Implementation:
 
 1. Add a task worker module, e.g. `app/src/channels/task_worker.py`.
 2. Worker receives `ImplementationTask`, source message IDs/refs, selected specialist/model, and planner intent.
-3. Before execution, worker fetches fresh Discord channel history and resolves source message refs to current message content.
+3. Before execution, the worker reads the current shared per-channel `history.md` (already reconciled from fresh Discord history by the classifier pass) and resolves source message refs against it.
 4. For each task, build a request/plan context scoped to that task, not the entire latest channel burst.
 5. Reuse existing execution functions:
    - for route planning, use the existing planner/router logic where needed;
    - for domain/technical/social, reuse the existing `flow.runner` machinery rather than inventing a second agent stack.
-6. Add `run_id` recording around OpenCode calls:
-   - update `run_opencode()` to accept optional `run_id` and record lifecycle to DynamoDB;
-   - do not assume unsupported OpenCode CLI flags such as `--title`/`--format json` unless verified. Run identity can be app-side metadata.
-7. When worker completes:
+6. Make concurrent runs safe in the shared workspace:
+   - each OpenCode run is told the exact plan/response/review/status file paths for that run (task/run-named), and reads the shared `history.md`;
+   - each run uses a per-run OpenCode config via `OPENCODE_CONFIG=.if/opencode.run.<run_id>.json` (Option A, since task runs have a `run_id`); do not write a root `session_dir/opencode.json` in this path;
+   - each run uses a per-run continue marker `.if/opencode-<agent>.run.<run_id>.session`;
+   - `write_opencode_config()`, `_run_planner()`, `_run_domain()`, `_run_technical()`, `_synthesize_handoffs()`, and `run_opencode()` accept these explicit paths.
+7. Add `run_id` recording around OpenCode calls:
+   - `run_opencode()` accepts an optional `run_id` and records lifecycle (`OpenCodeRunRecord`) to DynamoDB, including `config_path` and `session_marker_path`;
+   - do not assume unsupported OpenCode CLI flags such as `--title`/`--format json`; run identity is app-side metadata.
+8. When a worker completes:
    - update task status;
    - enqueue `task_completed` or `task_failed` outbound message;
-   - include attachments generated by existing `FILES:` handling/materialization.
+   - include attachments generated by existing `FILES:` handling/materialization (resolving artifacts from the task/run-named output files).
 
 Definition of done:
 
-- One batch with two unrelated tasks starts two workers in parallel.
+- One batch with two unrelated tasks starts two workers in parallel in the same channel workspace without clobbering each other's plan/response/config/session files.
 - Both write task/run records.
 - Both final responses are queued and sent serially.
 - A social response in the same batch can be sent without waiting for task completion.
@@ -685,20 +771,21 @@ Functional outcome: stop/pivot/wait instructions affect active implementation ta
 
 Implementation:
 
-1. Extend `run_opencode()` and worker management to support cancellation:
-   - task has `active_implementer_run_id`;
-   - cancel request marks task/run;
-   - worker checks control state;
-   - running subprocess is terminated gracefully, then killed after timeout if needed.
+1. Add a cancellable executor-process registry and extend `run_opencode()`:
+   - maintain an in-process registry keyed by `run_id` holding the live `asyncio.subprocess.Process` handle;
+   - record `OpenCodeRunRecord` lifecycle, including `cancel_requested`/`cancelled` statuses;
+   - the worker checks task/run control state cooperatively, and a cancel path terminates the subprocess gracefully (`proc.terminate()`), then `proc.kill()` after a grace timeout;
+   - only executor/task runs are cancellable; classifier/router runs are never cancelled.
+   - Note: with horizontal scaling, the live process handle lives only on the owning pod. The cancel request is recorded in DynamoDB (`cancel_requested`), and the pod that owns `active_implementer_run_id` acts on it. Workers must poll their own run's control state.
 2. `cancel_active_implementation`:
    - mark task `cancel_requested`;
-   - stop active run;
+   - owning worker stops the active run;
    - mark task completed/cancelled or stale according to final state;
    - enqueue confirmation.
 3. `pivot_active_implementation`:
    - cancel current run;
    - merge `topicUpdate` into task topic;
-   - start a new worker run using updated topic and queued context;
+   - start a new worker run (new `run_id`, new per-run files/config/marker) using updated topic and queued context;
    - enqueue pivot acknowledgement/update.
 4. `await_instruction_for_active_implementation`:
    - pause/stop current active run if continuing would be unsafe;
@@ -711,7 +798,7 @@ Implementation:
 Definition of done:
 
 - Cancel stops the targeted task run and does not stop channel classification.
-- Pivot restarts the targeted task with updated topic.
+- Pivot restarts the targeted task with updated topic and fresh per-run files.
 - Await-instruction blocks unsafe continuation and posts one conflict summary.
 - Operator follow-up resumes or pivots the same task.
 
@@ -721,8 +808,8 @@ Functional outcome: global directives are guaranteed to be included in classifie
 
 Implementation:
 
-1. Inspect current `_directive_block()` behavior in `flow/runner.py` and `DirectiveStore.get_for_subagent()` / formatting methods.
-2. Ensure directives with `global_directive=True` from operator pk are included for:
+1. First confirm the `global_directive` field and read path in `storage/directive_model.py` and `DirectiveStore.get_for_subagent()` / formatting methods.
+2. Ensure directives with `global_directive=True` from the operator pk are included for:
    - the first planner/router classifier prompt;
    - domain/technical/social worker prompts as appropriate;
    - specialist prompts that already receive filtered directives.
@@ -745,7 +832,7 @@ Required tests:
 
 1. Three messages arrive quickly in one channel.
    - One classifier/router run starts.
-   - Classifier input includes all three messages.
+   - Classifier input (via shared history.md) includes all three messages.
 2. A message arrives while classifier/router is running.
    - No second classifier starts immediately.
    - Channel is marked dirty.
@@ -756,7 +843,7 @@ Required tests:
    - Task starts separately.
 4. One batch has two unrelated code tasks.
    - Two `start_new_task` decisions.
-   - Two workers run in parallel.
+   - Two workers run in parallel in the same channel workspace with non-colliding per-run files/config/markers.
 5. Conflicting non-operator opinions target one active task.
    - One await-instruction decision.
    - Task pauses/stops.
@@ -769,31 +856,33 @@ Required tests:
    - No interleaved chunks.
 8. Duplicate Discord delivery or repeated gateway event.
    - No duplicate message rows are created; repeated events coalesce into the same pending channel state, and fresh history determines the actual batch.
-9. Two pods/store clients race on classifier lock.
+9. Two store clients race on the classifier lock (simulating two pods; runnable today as two concurrent in-process coroutines against the conditional write).
    - One wins.
-10. Two pods/store clients race on outbound lock.
-   - One drains.
+10. Two store clients race on the outbound lock.
+
+- One drains.
 
 Verification commands/process:
 
-- Unit tests for models, DynamoDB float conversion, conditional lock/idempotency behavior with mocks/stubs, classifier output parsing, decision idempotency, cursor/edit handling, and outbound ordering.
+- Unit tests for models, DynamoDB float conversion, conditional lock/idempotency behavior with mocks/stubs, classifier output parsing, decision idempotency, cursor/edit handling, per-run file/config/marker isolation, and outbound ordering.
 - Terraform validation only:
   - `terraform fmt`
   - `terraform validate`
   - `terraform plan`
-- Test pod verification in `if-portals-test` after building/deploying test images per repo workflow.
-- Inspect pod logs for classifier lock, dirty pass, task worker, and outbound queue events.
+- Test pod verification in `if-portals-test` after building/deploying test images per repo workflow (`scripts/build-test-images.sh`).
+- Inspect pod logs for classifier lock, dirty pass, task worker, per-run OpenCode config/session, and outbound queue events.
 
 ## Implementation Order Summary
 
 Each phase must be independently functional:
 
-1. DynamoDB registry + pending activity signal + fresh-history existing response still works.
-2. DynamoDB classifier locks + dirty/max-wait behavior works.
-3. Existing planner/router becomes batch classifier and emits decisions.
+0. Shared models, helpers, config, and invariants in place; no behavior change.
+1. DynamoDB registry + pending activity signal + fresh-history reconciled into shared history.md; existing response still works.
+2. DynamoDB classifier locks + dirty/max-wait behavior works across pods.
+3. Existing planner/router becomes batch classifier and emits decisions to a sibling classification file.
 4. Decisions apply idempotently and create task/outbox state.
 5. Outbound queue serializes Discord sends.
-6. Parallel task workers run and enqueue outputs.
-7. Cancel/pivot/await-instruction actually control active tasks.
-8. Global directives are guaranteed in prompts using existing directive system.
+6. Parallel task workers run in the shared channel workspace with per-run files/config/markers and enqueue outputs.
+7. Cancel/pivot/await-instruction control active tasks via the cancellable executor registry.
+8. Global directives are guaranteed in prompts using the existing directive system.
 9. Tests + Terraform validation + deployed pod verification.
