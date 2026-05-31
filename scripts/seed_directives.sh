@@ -28,7 +28,7 @@ put() {
       --arg now     "$NOW" \
       --argjson dtype "$dtype_json" \
       '{
-        pk:         {S: "DIR"},
+        pk:         {S: "operator"},
         sk:         {S: $sk},
         alpha:      {N: ($alpha|tostring)},
         beta:       {N: ($beta|tostring)},
@@ -43,7 +43,7 @@ put() {
     --no-cli-pager \
     --output json > /dev/null
 
-  echo "  PUT DIR ${sk} ${label} [${types[*]}]"
+  echo "  PUT operator ${sk} ${label} [${types[*]}]"
 }
 
 echo "[*] Seeding directives -> ${TABLE} (${REGION})"

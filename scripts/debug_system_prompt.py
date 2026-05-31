@@ -76,7 +76,7 @@ class Directive:
 # ── Load directives from DynamoDB (same logic as DirectiveStore.load) ──────
 def load_directives() -> List[Directive]:
     table = boto3.resource("dynamodb", region_name=AWS_REGION).Table(TABLE_NAME)
-    resp = table.query(KeyConditionExpression=Key("pk").eq("DIR"))
+    resp = table.query(KeyConditionExpression=Key("pk").eq("operator"))
     items = resp.get("Items", [])
 
     by_key: Dict[str, List[Directive]] = defaultdict(list)

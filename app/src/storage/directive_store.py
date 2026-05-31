@@ -46,17 +46,19 @@ class DirectiveStore:
         _region: AWS region
     """
     
-    def __init__(self, table_name: str = "if-core", region: str = "ca-central-1"):
+    def __init__(self, table_name: str = "if-core", region: str = "ca-central-1", pk: str = "operator"):
         """Initialize the directive store.
         
         Args:
             table_name: DynamoDB table name
             region: AWS region
+            pk: DynamoDB partition key for directives (default "operator")
         """
         self.table_name = table_name
         self._table = None
         self._cache: List[Directive] = []
         self._region = region
+        self._pk = pk
     
     @property
     def table(self):
@@ -68,7 +70,7 @@ class DirectiveStore:
         return self._table
     
     def load(self) -> List[Directive]:
-        """Query PK=DIR, return only highest-versioned active directive per alpha/beta.
+        """Query PK=<self._pk>, return only highest-versioned active directive per alpha/beta.
         
         This method loads all directives from DynamoDB, groups them by
         alpha/beta, and returns only the highest-versioned active directive
@@ -83,7 +85,7 @@ class DirectiveStore:
         try:
             logger.info(f"[DirectiveStore] Loading directives from {self.table_name}...")
             response = self.table.query(
-                KeyConditionExpression=Key("pk").eq("DIR")
+                KeyConditionExpression=Key("pk").eq(self._pk)
             )
             items = response.get("Items", [])
             logger.info(f"[DirectiveStore] Retrieved {len(items)} raw items from DynamoDB")
@@ -205,7 +207,7 @@ class DirectiveStore:
         base_key = f"{alpha:02d}#{beta:02d}"
         response = self.table.query(
             KeyConditionExpression=(
-                Key("pk").eq("DIR") & Key("sk").begins_with(base_key)
+                Key("pk").eq(self._pk) & Key("sk").begins_with(base_key)
             )
         )
         
@@ -225,7 +227,8 @@ class DirectiveStore:
         label: str,
         content: str,
         types: List[str],
-        created_by: str
+        created_by: str,
+        global_directive: bool = False,
     ) -> Directive:
         """Create new directive with version=1. Auto-assign beta via next_beta().
 
@@ -235,10 +238,16 @@ class DirectiveStore:
             content: Full directive text
             types: Domain types for this directive (e.g., ["core", "code"])
             created_by: "operator", "agent", or "reflection"
+            global_directive: If True, this directive applies to all users.
+                Only allowed when pk is "operator".
 
         Returns:
             The created Directive with assigned beta
         """
+        # Enforce: global directives only allowed for operator pk
+        if global_directive and self._pk != "operator":
+            raise ValueError("global_directive=True is only allowed when pk is 'operator'")
+
         beta = self.next_beta(alpha)
         now = datetime.now(timezone.utc).isoformat()
 
@@ -253,6 +262,8 @@ class DirectiveStore:
             active=True,
             created_at=now,
             superseded_at=None,
+            pk=self._pk,
+            global_directive=global_directive,
         )
         
         self.table.put_item(Item=directive.to_dynamodb_item())
@@ -296,7 +307,7 @@ class DirectiveStore:
         
         # Mark old version as superseded
         self.table.update_item(
-            Key={"pk": "DIR", "sk": existing.sort_key},
+            Key={"pk": self._pk, "sk": existing.sort_key},
             UpdateExpression=(
                 "SET active = :inactive, superseded_at = :superseded"
             ),
@@ -318,6 +329,8 @@ class DirectiveStore:
             active=True,
             created_at=now,
             superseded_at=None,
+            pk=self._pk,
+            global_directive=existing.global_directive,
         )
         
         self.table.put_item(Item=new_directive.to_dynamodb_item())
@@ -360,7 +373,7 @@ class DirectiveStore:
         
         now = datetime.now(timezone.utc).isoformat()
         self.table.update_item(
-            Key={"pk": "DIR", "sk": existing.sort_key},
+            Key={"pk": self._pk, "sk": existing.sort_key},
             UpdateExpression=(
                 "SET active = :inactive, superseded_at = :superseded"
             ),
@@ -401,7 +414,18 @@ class DirectiveStore:
         if alpha is None:
             return list(self._cache)
         return [d for d in self._cache if d.alpha == alpha]
-    
+
+    def get_all_global(self) -> List[Directive]:
+        """Get all active global directives from cache.
+
+        Global directives are those with global_directive=True. They apply
+        to ALL users regardless of pk.
+
+        Returns:
+            List of active global Directive objects
+        """
+        return [d for d in self._cache if d.global_directive and d.active]
+
     def get_history(self, alpha: int, beta: int) -> List[Directive]:
         """Get all versions of a directive (for audit/history).
         
@@ -415,7 +439,7 @@ class DirectiveStore:
         base_key = f"{alpha:02d}#{beta:02d}"
         response = self.table.query(
             KeyConditionExpression=(
-                Key("pk").eq("DIR") & Key("sk").begins_with(base_key)
+                Key("pk").eq(self._pk) & Key("sk").begins_with(base_key)
             )
         )
         
@@ -487,6 +511,175 @@ class DirectiveStore:
         result = list(result_by_key.values())
         result.sort(key=lambda d: (d.alpha, d.beta))
         return result
+
+    def _put_directive(
+        self,
+        alpha: int,
+        beta: int,
+        label: str,
+        content: str,
+        types: List[str],
+        created_by: str,
+        global_directive: bool = False,
+    ) -> Directive:
+        """Create a directive at an explicit alpha/beta position.
+
+        Unlike ``add()``, this does NOT auto-assign beta. Used by
+        ``bulk_reorder`` and the resequence step to place directives
+        at exact positions.
+
+        Args:
+            alpha: Alpha tier (0-5)
+            beta: Beta number (explicit, not auto-assigned)
+            label: Directive label
+            content: Full directive text
+            types: Domain types
+            created_by: Who created this directive
+            global_directive: If True, applies to all users
+
+        Returns:
+            The created Directive
+        """
+        now = datetime.now(timezone.utc).isoformat()
+
+        directive = Directive(
+            alpha=alpha,
+            beta=beta,
+            version=1,  # New directives always start at version 1
+            label=label,
+            content=content,
+            types=types,
+            created_by=created_by,
+            active=True,
+            created_at=now,
+            superseded_at=None,
+            pk=self._pk,
+            global_directive=global_directive,
+        )
+
+        self.table.put_item(Item=directive.to_dynamodb_item())
+
+        logger.info(
+            f"[DirectiveStore] Put directive {alpha}-{beta} v1: {label}"
+        )
+        return directive
+
+    def bulk_reorder(
+        self,
+        items: List[dict],
+    ) -> List[Directive]:
+        """Bulk reorder directives with collision/swap support.
+
+        Each item in ``items`` is a dict with keys:
+            old_alpha, old_beta, new_alpha, new_beta
+
+        When two items swap positions (A → B's slot, B → A's slot),
+        both are deactivated and recreated at the target positions.
+
+        After all moves, beta numbers within each alpha tier are
+        resequenced to be contiguous (1, 2, 3, …) so there are no gaps.
+
+        Args:
+            items: List of {old_alpha, old_beta, new_alpha, new_beta} dicts
+
+        Returns:
+            List of updated Directive objects after resequence
+
+        Raises:
+            ValueError: If a source directive is not found
+        """
+        # 1. Load fresh directives from DynamoDB
+        all_directives = self.load()
+
+        # 2. Build lookup by (alpha, beta)
+        by_key: Dict[tuple, Directive] = {(d.alpha, d.beta): d for d in all_directives}
+
+        # 3. Validate all source directives exist
+        for item in items:
+            key = (item["old_alpha"], item["old_beta"])
+            if key not in by_key:
+                raise ValueError(f"Directive {key[0]}-{key[1]} not found")
+
+        # 4. Build the mapping of old positions → new positions
+        move_map: Dict[tuple, tuple] = {}  # (old_a, old_b) → (new_a, new_b)
+        for item in items:
+            old_key = (item["old_alpha"], item["old_beta"])
+            new_key = (item["new_alpha"], item["new_beta"])
+            move_map[old_key] = new_key
+
+        # 5. Execute moves: deactivate all old positions first,
+        #    then recreate at new positions using _put_directive
+        #    (bypasses auto-beta-assign so we use exact target positions)
+        moved_directives: Dict[tuple, Directive] = {}  # new_key → directive data
+
+        # Deactivate all old positions first
+        for old_key in move_map:
+            source = by_key[old_key]
+            deactivated = self.deactivate(old_key[0], old_key[1], override=True)
+            if not deactivated:
+                raise ValueError(f"Failed to deactivate directive {old_key[0]}-{old_key[1]}")
+            moved_directives[move_map[old_key]] = source
+
+        # Create all moved directives at their new positions
+        for new_key, source in moved_directives.items():
+            self._put_directive(
+                alpha=new_key[0],
+                beta=new_key[1],
+                label=source.label,
+                content=source.content,
+                types=source.types,
+                created_by=source.created_by,
+                global_directive=source.global_directive,
+            )
+
+        # 6. Resequence betas within each alpha tier
+        #    After moves/swaps/deletions, beta numbers may have gaps.
+        #    Resequence so each tier has contiguous 1,2,3,...
+        all_directives = self.load()  # Reload after all changes
+
+        # Group by alpha
+        by_alpha: Dict[int, List[Directive]] = defaultdict(list)
+        for d in all_directives:
+            by_alpha[d.alpha].append(d)
+
+        resequence_items: List[dict] = []
+        for alpha, directives in sorted(by_alpha.items()):
+            # Sort by current beta to preserve order
+            directives.sort(key=lambda d: d.beta)
+            for idx, d in enumerate(directives, start=1):
+                if d.beta != idx:
+                    resequence_items.append({
+                        "old_alpha": d.alpha,
+                        "old_beta": d.beta,
+                        "new_alpha": d.alpha,
+                        "new_beta": idx,
+                    })
+
+        if resequence_items:
+            # Deactivate mismatched and recreate at correct beta
+            for item in resequence_items:
+                old_key = (item["old_alpha"], item["old_beta"])
+                source = None
+                for d in all_directives:
+                    if d.alpha == old_key[0] and d.beta == old_key[1]:
+                        source = d
+                        break
+                if source is None:
+                    continue
+                self.deactivate(old_key[0], old_key[1], override=True)
+                self._put_directive(
+                    alpha=item["new_alpha"],
+                    beta=item["new_beta"],
+                    label=source.label,
+                    content=source.content,
+                    types=source.types,
+                    created_by=source.created_by,
+                    global_directive=source.global_directive,
+                )
+
+        # Final reload
+        all_directives = self.load()
+        return all_directives
 
     def format_directives(self, directives: List[Directive]) -> str:
         """Format a list of directives for injection into a subagent prompt.

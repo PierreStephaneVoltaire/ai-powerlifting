@@ -2,7 +2,10 @@ import { useState } from 'react'
 import {
   Modal, Stack, Text, Group, Textarea, TextInput, TagsInput,
   Button, Badge, Divider, ScrollArea, Loader, Box,
+  useMantineTheme,
 } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
+import { Globe, Lock } from 'lucide-react'
 import { Directive, DirectiveHistoryResponse, ReviseDirectiveInput } from '../api/client'
 
 interface DirectiveDetailModalProps {
@@ -14,11 +17,13 @@ interface DirectiveDetailModalProps {
   onDelete: (alpha: number, beta: number) => Promise<void>
   onFetchHistory: (alpha: number, beta: number) => void
   onClearHistory: () => void
+  isOperator: boolean
 }
 
 export function DirectiveDetailModal({
   directive, history, historyLoading,
   onClose, onSave, onDelete, onFetchHistory, onClearHistory,
+  isOperator,
 }: DirectiveDetailModalProps) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -29,10 +34,19 @@ export function DirectiveDetailModal({
   const [content, setContent] = useState('')
   const [types, setTypes] = useState<string[]>([])
 
+  const theme = useMantineTheme()
+  const smBreakpoint = typeof theme.breakpoints.sm === 'string' ? parseFloat(theme.breakpoints.sm) : theme.breakpoints.sm
+  const isMobile = useMediaQuery(`(max-width: ${(smBreakpoint * 16) - 1}px)`)
+
   if (!directive) return null
 
+  const isReadOnly = directive.read_only
+  const canEdit = !isReadOnly || isOperator
+  const isProtected = directive.alpha === 0 && directive.beta === 1
+
   // Sync form when directive changes
-  if (label !== directive.label || content !== directive.content) {
+  const needsSync = label !== directive.label || content !== directive.content
+  if (needsSync) {
     setLabel(directive.label)
     setContent(directive.content)
     setTypes(directive.types ?? [])
@@ -66,8 +80,6 @@ export function DirectiveDetailModal({
     setShowHistory(s => !s)
   }
 
-  const isProtected = directive.alpha === 0 && directive.beta === 1
-
   return (
     <Modal
       opened={!!directive}
@@ -80,11 +92,24 @@ export function DirectiveDetailModal({
           <Text fw={600}>{directive.label}</Text>
         </Group>
       }
-      size="lg"
+      size={isMobile ? '100%' : 'lg'}
+      fullScreen={isMobile}
+      classNames={{
+        content: isMobile ? undefined : 'if-designer-modal-content',
+        header: 'if-designer-modal-header',
+        title: 'if-designer-modal-title',
+        body: 'if-designer-modal-body',
+      }}
     >
       <Stack gap="md">
         <Group gap="xs">
           <Badge variant="light" color="violet">v{directive.version}</Badge>
+          {directive.global_directive && (
+            <Badge size="xs" variant="light" color="orange" leftSection={<Globe size={10} />}>global</Badge>
+          )}
+          {isReadOnly && (
+            <Badge size="xs" variant="light" color="gray" leftSection={<Lock size={10} />}>read-only</Badge>
+          )}
           {directive.types?.map(t => (
             <Badge key={t} size="xs" variant="light" color="gray">{t}</Badge>
           ))}
@@ -93,9 +118,17 @@ export function DirectiveDetailModal({
           </Text>
         </Group>
 
+        {isReadOnly && !isOperator && (
+          <Box p="sm" style={{ background: 'var(--status-warning-bg)', borderRadius: 8, border: '0.5px solid var(--status-warning-border)' }}>
+            <Text size="xs" c="var(--status-warning-text)" fw={600}>
+              This is a global safety directive. It applies to all users and can only be modified by the operator.
+            </Text>
+          </Box>
+        )}
+
         <Divider />
 
-        {editing ? (
+        {editing && canEdit ? (
           <Stack gap="sm">
             <TextInput
               label="Label"
@@ -116,7 +149,7 @@ export function DirectiveDetailModal({
             <TagsInput
               label="Types"
               placeholder="Add type..."
-              defaultValue={types}
+              value={types}
               onChange={setTypes}
               data={['core', 'code', 'health', 'finance', 'memory', 'security', 'style', 'tool', 'metacognition', 'architecture']}
             />
@@ -134,7 +167,7 @@ export function DirectiveDetailModal({
           </Stack>
         ) : (
           <Stack gap="sm">
-            <ScrollArea.Autosize mah={300}>
+            <ScrollArea.Autosize mah={400}>
               <Text size="sm" style={{ whiteSpace: 'pre-wrap', fontFamily: "'IBM Plex Mono', monospace" }}>
                 {directive.content}
               </Text>
@@ -146,27 +179,29 @@ export function DirectiveDetailModal({
               <Button variant="subtle" size="xs" onClick={handleShowHistory}>
                 {showHistory ? 'Hide History' : 'Show History'}
               </Button>
-              <Group gap="xs">
-                {!isProtected && (
+              {canEdit && (
+                <Group gap="xs">
+                  {!isProtected && (
+                    <Button
+                      variant="subtle"
+                      color="red"
+                      size="xs"
+                      onClick={handleDelete}
+                      loading={deleting}
+                    >
+                      Delete
+                    </Button>
+                  )}
                   <Button
-                    variant="subtle"
-                    color="red"
+                    variant="gradient"
+                    gradient={{ from: 'violet.6', to: 'violet.4' }}
                     size="xs"
-                    onClick={handleDelete}
-                    loading={deleting}
+                    onClick={() => setEditing(true)}
                   >
-                    Delete
+                    Edit
                   </Button>
-                )}
-                <Button
-                  variant="gradient"
-                  gradient={{ from: 'violet.6', to: 'violet.4' }}
-                  size="xs"
-                  onClick={() => setEditing(true)}
-                >
-                  Edit
-                </Button>
-              </Group>
+                </Group>
+              )}
             </Group>
 
             {showHistory && (

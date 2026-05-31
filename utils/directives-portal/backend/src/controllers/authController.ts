@@ -113,6 +113,8 @@ export function getMe(req: Request, res: Response): void {
   res.json({
     user: req.user ?? null,
     authenticated: !!req.user,
+    mapped_pk: req.mapped_pk ?? null,
+    is_operator: req.mapped_pk === 'operator',
   })
 }
 

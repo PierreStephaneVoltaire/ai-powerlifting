@@ -5,7 +5,7 @@ Each directive has an alpha tier (priority) and beta number (order within tier),
 plus versioning for audit history.
 
 DynamoDB Schema:
-    PK: "DIR" (constant)
+    PK: configurable (default "operator", can be set per store instance)
     SK: "{alpha:02d}#{beta:02d}#v{version:03d}" (e.g., "02#19#v001")
 """
 from __future__ import annotations
@@ -30,6 +30,10 @@ class Directive:
         active: Whether this directive is active
         created_at: ISO 8601 timestamp of creation
         superseded_at: ISO 8601 timestamp when superseded by new version (or None)
+        pk: DynamoDB partition key (default "operator")
+        global_directive: If True, this directive applies to ALL users regardless of pk.
+            Only allowed when pk is "operator". Global directives are always fetched
+            by every user but are read-only for non-operator users.
     """
     alpha: int
     beta: int
@@ -41,6 +45,8 @@ class Directive:
     active: bool = True
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     superseded_at: Optional[str] = None
+    pk: str = "operator"
+    global_directive: bool = False
 
     @property
     def sort_key(self) -> str:
@@ -90,6 +96,9 @@ class Directive:
         else:
             types = ["core"]  # Default fallback
 
+        # Parse global_directive — defaults to False for backward compat
+        global_directive = bool(item.get("global_directive", False))
+
         return cls(
             alpha=alpha,
             beta=beta,
@@ -101,6 +110,8 @@ class Directive:
             created_by=item.get("created_by", "operator"),
             created_at=item.get("created_at", datetime.now(timezone.utc).isoformat()),
             superseded_at=item.get("superseded_at"),
+            pk=item.get("pk", "operator"),
+            global_directive=global_directive,
         )
     
     def to_dynamodb_item(self) -> dict:
@@ -110,7 +121,7 @@ class Directive:
             Dict suitable for DynamoDB put_item
         """
         item = {
-            "pk": "DIR",
+            "pk": self.pk,
             "sk": self.sort_key,
             "alpha": self.alpha,
             "beta": self.beta,
@@ -121,6 +132,7 @@ class Directive:
             "active": self.active,
             "created_by": self.created_by,
             "created_at": self.created_at,
+            "global_directive": self.global_directive,
         }
         # Only include superseded_at if it's set
         if self.superseded_at is not None:

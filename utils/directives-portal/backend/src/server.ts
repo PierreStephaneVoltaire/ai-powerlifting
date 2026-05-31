@@ -5,7 +5,7 @@ import pinoHttp from 'pino-http'
 import { createProxyMiddleware } from 'http-proxy-middleware'
 import { logger } from './utils/logger'
 import { authRouter } from './routes/auth'
-import { requireAuth, requireUserOptional } from './middleware/auth'
+import { requireAuth, requireUserOptional, resolvePk } from './middleware/auth'
 import { errorHandler } from './middleware/errorHandler'
 
 const app = express()
@@ -32,12 +32,32 @@ app.use('/api/auth', authRouter)
 
 app.use(requireUserOptional)
 
-// All directive routes require authentication and are proxied to FastAPI
-app.use('/api/directives', requireAuth, createProxyMiddleware({
+app.use('/api/directives', requireAuth, resolvePk, createProxyMiddleware({
   target: IF_AGENT_API_URL,
   changeOrigin: true,
-  pathRewrite: {
-    '^/api/directives': '/v1/directives',
+  // NOTE: No pathRewrite — Express 5 strips the mount path from req.url,
+  // so the regex '^/api/directives' would never match. Instead we rewrite
+  // the path in the proxyReq handler using req.originalUrl which is intact.
+  on: {
+    proxyReq: (proxyReq, req: express.Request) => {
+      const mappedPk = (req as any).mapped_pk
+      if (!mappedPk) {
+        proxyReq.destroy(new Error('No mapped_pk resolved for authenticated user'))
+        return
+      }
+      // req.originalUrl still has the full /api/directives/... path
+      // Replace /api/directives with /v1/directives to match the agent API router
+      const originalPath = req.originalUrl || '/'
+      const targetPath = originalPath.replace(/^\/api\/directives/, '/v1/directives')
+      const separator = targetPath.includes('?') ? '&' : '?'
+      let newPath = `${targetPath}${separator}pk=${encodeURIComponent(mappedPk)}`
+      // For list requests (GET / with no sub-path), always include global directives
+      const isListRequest = /^\/api\/directives\/?$/.test(req.originalUrl.split('?')[0])
+      if (isListRequest) {
+        newPath += '&include_global=true'
+      }
+      proxyReq.path = newPath
+    },
   },
 }))
 

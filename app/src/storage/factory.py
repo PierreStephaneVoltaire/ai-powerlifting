@@ -57,6 +57,7 @@ from config import (
 )
 
 _directive_store = None
+_directive_stores_by_pk: dict = {}  # Cache per-pk stores for portal use
 
 
 def init_directive_store() -> None:
@@ -78,9 +79,11 @@ def init_directive_store() -> None:
         
         _directive_store = DirectiveStore(
             table_name=DYNAMODB_DIRECTIVES_TABLE,
-            region=AWS_REGION
+            region=AWS_REGION,
+            pk="operator",
         )
         _directive_store.load()
+        _directive_stores_by_pk["operator"] = _directive_store
         logger.info(
             f"[DirectiveStore] Successfully initialized with {len(_directive_store._cache)} active directives "
             f"from table {DYNAMODB_DIRECTIVES_TABLE}"
@@ -91,17 +94,38 @@ def init_directive_store() -> None:
         raise RuntimeError(f"DirectiveStore initialization failed: {e}") from e
 
 
-def get_directive_store():
+def get_directive_store(pk: str = "operator"):
 
-    if _directive_store is None:
-        if not DIRECTIVE_STORE_ENABLED:
+    if pk == "operator":
+        if _directive_store is None:
+            if not DIRECTIVE_STORE_ENABLED:
+                raise RuntimeError(
+                    "Directive store is disabled. Set DIRECTIVE_STORE_ENABLED=true."
+                )
             raise RuntimeError(
-                "Directive store is disabled. Set DIRECTIVE_STORE_ENABLED=true."
+                "Directive store not initialized. Call init_directive_store()."
             )
+        return _directive_store
+    
+    # For non-default pk values, create or return a cached store instance
+    if pk in _directive_stores_by_pk:
+        return _directive_stores_by_pk[pk]
+    
+    if not DIRECTIVE_STORE_ENABLED:
         raise RuntimeError(
-            "Directive store not initialized. Call init_directive_store()."
+            "Directive store is disabled. Set DIRECTIVE_STORE_ENABLED=true."
         )
-    return _directive_store
+    
+    from storage.directive_store import DirectiveStore
+    store = DirectiveStore(
+        table_name=DYNAMODB_DIRECTIVES_TABLE,
+        region=AWS_REGION,
+        pk=pk,
+    )
+    store.load()
+    _directive_stores_by_pk[pk] = store
+    logger.info(f"[DirectiveStore] Created store for pk={pk} with {len(store._cache)} active directives")
+    return store
 
 
 _model_registry = None

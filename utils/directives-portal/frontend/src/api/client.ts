@@ -17,6 +17,8 @@ export interface Directive {
   types: string[]
   created_by: string
   created_at: string
+  global_directive: boolean
+  read_only: boolean
 }
 
 export interface DirectiveVersion {
@@ -54,6 +56,7 @@ export interface CreateDirectiveInput {
   content: string
   types?: string[]
   created_by?: string
+  global_directive?: boolean
 }
 
 export async function createDirective(input: CreateDirectiveInput): Promise<Directive> {
@@ -63,6 +66,7 @@ export async function createDirective(input: CreateDirectiveInput): Promise<Dire
     content: input.content,
     types: input.types ?? ['core'],
     created_by: input.created_by ?? 'operator',
+    global_directive: input.global_directive ?? false,
   })
   return res.data
 }
@@ -103,6 +107,22 @@ export async function reorderDirective(
 
 export async function deleteDirective(alpha: number, beta: number): Promise<void> {
   await api.delete(`/directives/${alpha}/${beta}`)
+}
+
+export interface BulkReorderItem {
+  old_alpha: number
+  old_beta: number
+  new_alpha: number
+  new_beta: number
+}
+
+export async function bulkReorderDirectives(
+  items: BulkReorderItem[]
+): Promise<Directive[]> {
+  const res = await api.put<{ directives: Directive[] }>('/directives/bulk-reorder', {
+    items,
+  })
+  return res.data.directives ?? []
 }
 
 export async function fetchDirectiveHistory(

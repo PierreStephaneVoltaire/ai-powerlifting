@@ -6,10 +6,12 @@ import {
   reviseDirective,
   reorderDirective,
   deleteDirective,
+  bulkReorderDirectives,
   fetchDirectiveHistory,
   DirectiveHistoryResponse,
   CreateDirectiveInput,
   ReviseDirectiveInput,
+  BulkReorderItem,
 } from '../api/client'
 
 interface DirectivesStore {
@@ -23,6 +25,7 @@ interface DirectivesStore {
   create: (input: CreateDirectiveInput) => Promise<Directive>
   revise: (alpha: number, beta: number, input: ReviseDirectiveInput) => Promise<Directive>
   reorder: (alpha: number, beta: number, newAlpha: number, newBeta: number) => Promise<Directive>
+  bulkReorder: (items: BulkReorderItem[]) => Promise<Directive[]>
   remove: (alpha: number, beta: number) => Promise<void>
   fetchHistory: (alpha: number, beta: number) => Promise<void>
   clearHistory: () => void
@@ -63,6 +66,12 @@ export const useDirectivesStore = create<DirectivesStore>((set, get) => ({
     const directive = await reorderDirective(alpha, beta, newAlpha, newBeta)
     await get().fetchAll()
     return directive
+  },
+
+  bulkReorder: async (items: BulkReorderItem[]) => {
+    const directives = await bulkReorderDirectives(items)
+    set({ directives })
+    return directives
   },
 
   remove: async (alpha: number, beta: number) => {
