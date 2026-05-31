@@ -1,3 +1,6 @@
+@import '@mantine/core/styles.css';
+@import '@mantine/notifications/styles.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -22,6 +25,43 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+    --status-info-bg: #dbeafe;
+    --status-info-text: #1d4ed8;
+    --status-info-border: #93c5fd;
+    --status-success-bg: #dcfce7;
+    --status-success-text: #15803d;
+    --status-success-border: #86efac;
+    --status-warning-bg: #fef3c7;
+    --status-warning-text: #b45309;
+    --status-warning-border: #fcd34d;
+    --status-danger-bg: #fee2e2;
+    --status-danger-text: #b91c1c;
+    --status-danger-border: #fca5a5;
+    --status-neutral-bg: #f1f5f9;
+    --status-neutral-text: #526071;
+    --status-neutral-border: #cbd5e1;
+    --font-sans: 'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --border-radius-md: 6px;
+    --border-radius-lg: 8px;
+    --color-background-primary: var(--bg-base);
+    --color-background-secondary: var(--bg-elevated);
+    --color-background-info: var(--status-info-bg);
+    --color-background-success: var(--status-success-bg);
+    --color-background-warning: var(--status-warning-bg);
+    --color-background-danger: var(--status-danger-bg);
+    --color-text-primary: var(--text-primary);
+    --color-text-secondary: var(--text-secondary);
+    --color-text-info: var(--status-info-text);
+    --color-text-success: var(--status-success-text);
+    --color-text-warning: var(--status-warning-text);
+    --color-text-danger: var(--status-danger-text);
+    --color-border-secondary: var(--border-default);
+    --color-border-tertiary: var(--border-subtle);
+    --color-border-info: var(--status-info-border);
+    --color-border-success: var(--status-success-border);
+    --color-border-warning: var(--status-warning-border);
+    --color-border-danger: var(--status-danger-border);
   }
 
   .dark {
@@ -42,6 +82,40 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+    --mantine-color-gray-0: 220 14.3% 14.3%;
+    --status-info-bg: #10213d;
+    --status-info-text: #93c5fd;
+    --status-info-border: #1d4ed8;
+    --status-success-bg: #102717;
+    --status-success-text: #86efac;
+    --status-success-border: #166534;
+    --status-warning-bg: #2d2110;
+    --status-warning-text: #fcd34d;
+    --status-warning-border: #92400e;
+    --status-danger-bg: #331316;
+    --status-danger-text: #fca5a5;
+    --status-danger-border: #991b1b;
+    --status-neutral-bg: #181b24;
+    --status-neutral-text: #8891aa;
+    --status-neutral-border: #2a2f45;
+    --color-background-primary: var(--bg-base);
+    --color-background-secondary: var(--bg-elevated);
+    --color-background-info: var(--status-info-bg);
+    --color-background-success: var(--status-success-bg);
+    --color-background-warning: var(--status-warning-bg);
+    --color-background-danger: var(--status-danger-bg);
+    --color-text-primary: var(--text-primary);
+    --color-text-secondary: var(--text-secondary);
+    --color-text-info: var(--status-info-text);
+    --color-text-success: var(--status-success-text);
+    --color-text-warning: var(--status-warning-text);
+    --color-text-danger: var(--status-danger-text);
+    --color-border-secondary: var(--border-default);
+    --color-border-tertiary: var(--border-subtle);
+    --color-border-info: var(--status-info-border);
+    --color-border-success: var(--status-success-border);
+    --color-border-warning: var(--status-warning-border);
+    --color-border-danger: var(--status-danger-border);
   }
 }
 
@@ -51,6 +125,188 @@
   }
   body {
     @apply bg-background text-foreground;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
   }
+}
+
+.if-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.if-card-title {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 10px;
+  font-weight: 500;
+  gap: 5px;
+  letter-spacing: 0.09em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.if-card {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: none;
+}
+
+:root,
+[data-mantine-color-scheme] {
+  --mantine-color-body: var(--bg-base) !important;
+  --mantine-color-text: var(--color-text-primary) !important;
+  --mantine-color-dimmed: var(--color-text-secondary) !important;
+  --mantine-color-default: var(--color-background-primary) !important;
+  --mantine-color-default-hover: var(--color-background-primary) !important;
+  --mantine-color-default-border: var(--color-border-tertiary) !important;
+  --mantine-color-placeholder: var(--color-text-secondary) !important;
+}
+
+.mantine-Paper-root,
+.mantine-Card-root {
+  color: var(--color-text-primary);
+}
+
+.mantine-Paper-root,
+.mantine-Card-root {
+  --paper-border-color: var(--color-border-tertiary);
+  background-color: var(--color-background-primary);
+}
+
+.mantine-Input-input,
+.mantine-TextInput-input,
+.mantine-Textarea-input,
+.mantine-Select-input,
+.mantine-Autocomplete-input,
+.mantine-NumberInput-input {
+  background: transparent !important;
+  border-color: var(--color-border-tertiary) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.mantine-Input-input::placeholder,
+.mantine-TextInput-input::placeholder,
+.mantine-Textarea-input::placeholder,
+.mantine-Select-input::placeholder,
+.mantine-Autocomplete-input::placeholder,
+.mantine-NumberInput-input::placeholder {
+  color: var(--color-text-secondary) !important;
+  opacity: 0.75;
+}
+
+.mantine-Popover-dropdown,
+.mantine-Menu-dropdown,
+.mantine-Select-dropdown,
+.mantine-Autocomplete-dropdown {
+  background: var(--color-background-primary) !important;
+  border-color: var(--color-border-tertiary) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.if-pill {
+  align-items: center;
+  border: 1px solid var(--status-neutral-border);
+  border-radius: 999px;
+  color: var(--status-neutral-text);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 500;
+  gap: 5px;
+  line-height: 1;
+  min-height: 22px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.if-pill-neutral {
+  background: var(--status-neutral-bg);
+  border-color: var(--status-neutral-border);
+  color: var(--status-neutral-text);
+}
+
+.if-pill-info {
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+  color: var(--status-info-text);
+}
+
+.if-pill-success {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: var(--status-success-text);
+}
+
+.if-pill-warning {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+  color: var(--status-warning-text);
+}
+
+.if-pill-danger {
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+  color: var(--status-danger-text);
+}
+
+.if-page-header {
+  align-items: flex-end;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.if-page-title {
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.if-small-label {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.if-list-row {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.if-list-row:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
 }

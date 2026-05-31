@@ -18,6 +18,7 @@ locals {
     if try(cfg.google_auth, false) == true
   }
 
+
   # Unique apex zones across all public apps — used for cloudflare_zone.managed and namecheap_domain_records.
   unique_zones = toset([for app, cfg in local.public_apps : cfg.zone])
 

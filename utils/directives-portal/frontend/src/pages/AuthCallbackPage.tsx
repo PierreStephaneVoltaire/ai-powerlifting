@@ -1,20 +1,18 @@
 import { useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Center, Loader, Text, Stack } from '@mantine/core'
 
 export function AuthCallbackPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    const error = searchParams.get('error')
-    if (error) {
-      navigate(`/login?error=${error}`)
-    } else {
-      // Auth cookie is set; redirect to main app
-      navigate('/')
-    }
-  }, [navigate, searchParams])
+    // The backend already set the httpOnly cookie via the Discord callback redirect.
+    // Just verify we're authed and go home.
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(res => res.json())
+      .then(() => navigate('/', { replace: true }))
+      .catch(() => navigate('/login?error=auth_failed', { replace: true }))
+  }, [navigate])
 
   return (
     <Center style={{ minHeight: '100vh' }}>

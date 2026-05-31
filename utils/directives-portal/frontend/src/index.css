@@ -1,41 +1,82 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@import '@mantine/core/styles.css';
+@import '@mantine/notifications/styles.css';
 
-:root {
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 262.1 83.3% 57.8%;
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --primary: 262.1 83.3% 57.8%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --radius: 0.5rem;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  /* Tier colors */
-  --tier-0-bg: #fef2f2;
-  --tier-1-bg: #fff7ed;
-  --tier-2-bg: #fefce8;
-  --tier-3-bg: #eff6ff;
-  --tier-4-bg: #f0fdfa;
-  --tier-5-bg: #f9fafb;
-  --tier-0-border: #fecaca;
-  --tier-1-border: #fed7aa;
-  --tier-2-border: #fef08a;
-  --tier-3-border: #bfdbfe;
-  --tier-4-border: #99f6e4;
-  --tier-5-border: #e5e7eb;
-}
+@layer base {
+  :root {
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 262.1 83.3% 57.8%;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --radius: 0.5rem;
+    --status-info-bg: #dbeafe;
+    --status-info-text: #1d4ed8;
+    --status-info-border: #93c5fd;
+    --status-success-bg: #dcfce7;
+    --status-success-text: #15803d;
+    --status-success-border: #86efac;
+    --status-warning-bg: #fef3c7;
+    --status-warning-text: #b45309;
+    --status-warning-border: #fcd34d;
+    --status-danger-bg: #fee2e2;
+    --status-danger-text: #b91c1c;
+    --status-danger-border: #fca5a5;
+    --status-neutral-bg: #f1f5f9;
+    --status-neutral-text: #526071;
+    --status-neutral-border: #cbd5e1;
+    --font-sans: 'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --border-radius-md: 6px;
+    --border-radius-lg: 8px;
+    --color-background-primary: var(--bg-base);
+    --color-background-secondary: var(--bg-elevated);
+    --color-background-info: var(--status-info-bg);
+    --color-background-success: var(--status-success-bg);
+    --color-background-warning: var(--status-warning-bg);
+    --color-background-danger: var(--status-danger-bg);
+    --color-text-primary: var(--text-primary);
+    --color-text-secondary: var(--text-secondary);
+    --color-text-info: var(--status-info-text);
+    --color-text-success: var(--status-success-text);
+    --color-text-warning: var(--status-warning-text);
+    --color-text-danger: var(--status-danger-text);
+    --color-border-secondary: var(--border-default);
+    --color-border-tertiary: var(--border-subtle);
+    --color-border-info: var(--status-info-border);
+    --color-border-success: var(--status-success-border);
+    --color-border-warning: var(--status-warning-border);
+    --color-border-danger: var(--status-danger-border);
+
+    /* Tier colors (directives-specific) */
+    --tier-0-bg: #fef2f2;
+    --tier-1-bg: #fff7ed;
+    --tier-2-bg: #fefce8;
+    --tier-3-bg: #eff6ff;
+    --tier-4-bg: #f0fdfa;
+    --tier-5-bg: #f9fafb;
+    --tier-0-border: #fecaca;
+    --tier-1-border: #fed7aa;
+    --tier-2-border: #fef08a;
+    --tier-3-border: #bfdbfe;
+    --tier-4-border: #99f6e4;
+    --tier-5-border: #e5e7eb;
+  }
 
 .dark {
   --border: 217.2 32.6% 17.5%;

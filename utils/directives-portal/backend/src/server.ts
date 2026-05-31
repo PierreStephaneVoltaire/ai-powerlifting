@@ -5,7 +5,7 @@ import pinoHttp from 'pino-http'
 import { createProxyMiddleware } from 'http-proxy-middleware'
 import { logger } from './utils/logger'
 import { authRouter } from './routes/auth'
-import { requireAuth } from './middleware/auth'
+import { requireAuth, requireUserOptional } from './middleware/auth'
 import { errorHandler } from './middleware/errorHandler'
 
 const app = express()
@@ -29,6 +29,8 @@ app.get('/health', (_req, res) => {
 
 // Auth routes — no auth required
 app.use('/api/auth', authRouter)
+
+app.use(requireUserOptional)
 
 // All directive routes require authentication and are proxied to FastAPI
 app.use('/api/directives', requireAuth, createProxyMiddleware({

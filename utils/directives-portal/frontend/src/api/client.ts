@@ -40,7 +40,7 @@ export interface DirectiveHistoryResponse {
 export async function fetchDirectives(alpha?: number): Promise<Directive[]> {
   const params = alpha !== undefined ? { alpha } : {}
   const res = await api.get<{ directives: Directive[] }>('/directives/', { params })
-  return res.data.directives
+  return res.data.directives ?? []
 }
 
 export async function fetchDirective(alpha: number, beta: number): Promise<Directive> {

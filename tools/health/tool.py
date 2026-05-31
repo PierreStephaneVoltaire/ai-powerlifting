@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -4356,7 +4357,7 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     import time as _time
     import boto3
     from datetime import datetime
-    from core import _get_store, _floats_to_decimals
+    from core import _get_store, _floats_to_decimals, _get_glossary_store
     from export import build_program_markdown
 
     from config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
@@ -4471,7 +4472,7 @@ def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     import time as _time
     import boto3
     from datetime import datetime, timezone
-    from core import _get_store, _floats_to_decimals
+    from core import _get_store, _floats_to_decimals, _get_glossary_store
     from export import build_program_markdown
     import tempfile
     import os

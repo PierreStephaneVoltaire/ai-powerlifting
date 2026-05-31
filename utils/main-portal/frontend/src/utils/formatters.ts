@@ -50,29 +50,23 @@ export function getTrendIcon(trend: string): string {
   }
 }
 
-export function getTrendColor(trend: string): string {
-  switch (trend) {
-    case 'improving': return 'text-green-500'
-    case 'declining_slow': return 'text-yellow-500'
-    case 'declining_fast': return 'text-red-500'
-    case 'stable':
-    default: return 'text-muted-foreground'
-  }
-}
-
-export function getLifeLoadColor(lifeLoad: string): string {
-  switch (lifeLoad) {
-    case 'low': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-    case 'moderate': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-    case 'high': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-    case 'very_high': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-    default: return 'bg-secondary text-secondary-foreground'
-  }
-}
-
+// getScoreColor: returns a CSS color string
 export function getScoreColor(score: number): string {
-  if (score >= 7) return 'text-green-500'
-  if (score >= 5) return 'text-yellow-500'
-  if (score >= 3) return 'text-orange-500'
-  return 'text-red-500'
+  if (score >= 7) return 'var(--status-success-text)'
+  if (score >= 4) return 'var(--status-warning-text)'
+  return 'var(--status-danger-text)'
+}
+
+// getTrendColor: returns a CSS color string
+export function getTrendColor(trend: string): string {
+  if (trend === 'improving') return 'var(--status-success-text)'
+  if (trend === 'declining_slow' || trend === 'declining_fast') return 'var(--status-danger-text)'
+  return 'var(--text-secondary)'
+}
+
+// getLifeLoadColor: returns an object with bg, text, border CSS var strings
+export function getLifeLoadColor(load: string): { bg: string; text: string; border: string } {
+  if (load === 'low') return { bg: 'var(--status-success-bg)', text: 'var(--status-success-text)', border: 'var(--status-success-border)' }
+  if (load === 'high' || load === 'very_high') return { bg: 'var(--status-danger-bg)', text: 'var(--status-danger-text)', border: 'var(--status-danger-border)' }
+  return { bg: 'var(--status-neutral-bg)', text: 'var(--status-neutral-text)', border: 'var(--status-neutral-border)' }
 }

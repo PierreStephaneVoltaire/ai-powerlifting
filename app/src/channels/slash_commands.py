@@ -175,6 +175,94 @@ def setup_command_tree(
                 f"Failed to delete messages: {e}", ephemeral=True
             )
 
+    # --- /chat_history ---
+    @tree.command(
+        name="chat_history",
+        description="Export recent channel history as a Markdown file",
+    )
+    @app_commands.describe(
+        limit="Number of recent messages to export (default 100, max 1000)",
+    )
+    async def chat_history_cmd(interaction: discord.Interaction, limit: int = 100):
+        if not interaction.channel:
+            await interaction.response.send_message(
+                "Cannot determine channel.", ephemeral=True
+            )
+            return
+
+        limit = max(1, min(limit, 1000))
+        await interaction.response.defer()
+
+        try:
+            from channels.history_export import (
+                discord_messages_to_history_events,
+                render_discord_history_markdown,
+            )
+            from flow.session_dirs import resolve_session_dir, safe_segment
+
+            messages: list[discord.Message] = []
+            async for message in interaction.channel.history(limit=limit):
+                messages.append(message)
+            messages.reverse()
+
+            bot_user = getattr(interaction.client, "user", None)
+            bot_user_id = getattr(bot_user, "id", None)
+            events = discord_messages_to_history_events(
+                messages,
+                bot_user_id=bot_user_id,
+            )
+
+            actual_channel_id = str(interaction.channel_id or channel_id)
+            request_data = {
+                "platform": "discord",
+                "channel_id": actual_channel_id,
+                "guild_id": str(interaction.guild_id or ""),
+                "conversation_id": actual_channel_id,
+            }
+            session_dir = resolve_session_dir(
+                request_data,
+                webhook=None,
+                cache_key=actual_channel_id,
+            )
+            export_dir = session_dir / "exports"
+            export_dir.mkdir(parents=True, exist_ok=True)
+
+            channel_name = str(getattr(interaction.channel, "name", "") or "")
+            filename = (
+                f"chat-history-{safe_segment(actual_channel_id, 'channel')}.md"
+            )
+            export_path = export_dir / filename
+            export_path.write_text(
+                render_discord_history_markdown(
+                    events,
+                    channel_name=channel_name,
+                    channel_id=actual_channel_id,
+                ),
+                encoding="utf-8",
+            )
+
+            await interaction.followup.send(
+                f"Exported {len(events)} message(s).",
+                file=discord.File(export_path, filename=filename),
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "Missing permissions to read history or upload files.",
+                ephemeral=True,
+            )
+        except discord.HTTPException as e:
+            logger.error(f"[SlashCmd] /chat_history Discord error: {e}")
+            await interaction.followup.send(
+                f"Failed to export chat history: {e}",
+                ephemeral=True,
+            )
+        except Exception as e:
+            logger.error(f"[SlashCmd] /chat_history error: {e}", exc_info=True)
+            await interaction.followup.send(
+                f"Error exporting chat history: {e}",
+                ephemeral=True,
+            )
+
     # --- Reflection commands ---
     def _make_reflection_handler(
         command_name: str, description: str, args_hint: str = "",
@@ -341,7 +429,7 @@ def setup_command_tree(
 
 
 STATIC_COMMAND_NAMES = {
-    "end_convo", "pondering", "clear", "reflect", "gaps",
+    "end_convo", "pondering", "clear", "chat_history", "reflect", "gaps",
     "patterns", "opinions", "growth", "meta", "tools",
     "import", "template", "program_archive",
 }

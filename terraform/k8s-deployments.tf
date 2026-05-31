@@ -234,34 +234,40 @@ resource "kubernetes_deployment" "if_agent_api" {
 locals {
   portals = {
     main-portal = {
-      port     = 3000
-      has_db   = false
-      db_table = null
+      port        = 3000
+      has_db      = false
+      db_table    = null
+      has_secrets = false
     }
     finance-portal = {
-      port     = 3002
-      has_db   = true
-      db_table = "if-finance"
+      port        = 3002
+      has_db      = true
+      db_table    = "if-finance"
+      has_secrets = false
     }
     diary-portal = {
-      port     = 3003
-      has_db   = true
-      db_table = "if-diary"
+      port        = 3003
+      has_db      = true
+      db_table    = "if-diary"
+      has_secrets = false
     }
     proposals-portal = {
-      port     = 3004
-      has_db   = true
-      db_table = "if-proposals"
+      port        = 3004
+      has_db      = true
+      db_table    = "if-proposals"
+      has_secrets = false
     }
     powerlifting-app = {
-      port     = 3005
-      has_db   = true
-      db_table = "powerlifting"
+      port        = 3005
+      has_db      = true
+      db_table    = "powerlifting"
+      has_secrets = false
     }
     directives-portal = {
-      port     = 3006
-      has_db   = true
-      db_table = "if-core"
+      port        = 3006
+      has_db      = true
+      db_table    = "if-core"
+      has_secrets = true
     }
   }
 
@@ -271,7 +277,7 @@ locals {
     "diary-portal"      = sha1(jsonencode(kubernetes_config_map.diary_portal_config.data))
     "proposals-portal"  = sha1(jsonencode(kubernetes_config_map.proposals_portal_config.data))
     "powerlifting-app"  = nonsensitive(sha1(jsonencode(kubernetes_config_map.powerlifting_app_config.data)))
-    "directives-portal" = sha1(jsonencode(kubernetes_config_map.directives_portal_config.data))
+    "directives-portal" = nonsensitive(sha1(join("", [jsonencode(kubernetes_config_map.directives_portal_config.data), jsonencode(kubernetes_secret.directives_portal_secrets.data)])))
   }
 }
 
@@ -287,7 +293,7 @@ resource "kubernetes_deployment" "portal_backends" {
   }
 
   spec {
-    replicas = each.key == "powerlifting-app" ? 1 : 0
+    replicas = contains(keys(local.public_apps), each.key) ? 1 : 0
 
     selector {
       match_labels = {
@@ -347,6 +353,15 @@ resource "kubernetes_deployment" "portal_backends" {
             }
           }
 
+          dynamic "env_from" {
+            for_each = each.value.has_secrets ? [1] : []
+            content {
+              secret_ref {
+                name = "${each.key}-secrets"
+              }
+            }
+          }
+
           volume_mount {
             name       = "aws-credentials"
             mount_path = "/root/.aws"
@@ -390,7 +405,7 @@ resource "kubernetes_deployment" "portal_frontends" {
   }
 
   spec {
-    replicas = each.key == "powerlifting-app" ? 1 : 0
+    replicas = contains(keys(local.public_apps), each.key) ? 1 : 0
 
     selector {
       match_labels = {

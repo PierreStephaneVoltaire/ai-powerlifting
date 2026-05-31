@@ -93,7 +93,7 @@ locals {
   }
 
   portal_api_paths = {
-    "main-portal"       = "/main"
+    "main-portal"       = ""
     "finance-portal"    = "/finance"
     "diary-portal"      = "/diary"
     "proposals-portal"  = "/proposals"
@@ -218,4 +218,3 @@ resource "null_resource" "rollout_restart_portal_frontends" {
     kubernetes_deployment.portal_frontends,
   ]
 }
-

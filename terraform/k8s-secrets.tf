@@ -238,17 +238,27 @@ resource "kubernetes_config_map" "directives_portal_config" {
   }
 
   data = {
-    AWS_REGION            = var.region
-    NODE_ENV              = "production"
-    PORT                  = "3006"
-    IF_AGENT_API_URL      = "http://if-agent-api:8000"
-    FRONTEND_URL          = "https://${local.app_domains["directives-portal"].domain}"
-    DISCORD_CLIENT_ID     = var.discord_client_id
-    DISCORD_CLIENT_SECRET = var.discord_client_secret
-    DISCORD_REDIRECT_URI  = "https://${local.app_domains["directives-portal"].domain}/api/auth/discord/callback"
+    AWS_REGION           = var.region
+    NODE_ENV             = "production"
+    PORT                 = "3006"
+    IF_AGENT_API_URL     = "http://if-agent-api:8000"
+    FRONTEND_URL         = "https://${local.app_domains["directives-portal"].domain}"
+    DISCORD_CLIENT_ID    = var.directives_discord_client_id != "" ? var.directives_discord_client_id : var.discord_client_id
+    DISCORD_REDIRECT_URI = var.directives_discord_redirect_uri != "" ? var.directives_discord_redirect_uri : "https://${local.app_domains["directives-portal"].domain}/api/auth/discord/callback"
+    COOKIE_DOMAIN        = var.directives_cookie_domain
+    COOKIE_SECURE        = var.cookie_secure
+  }
+}
+
+resource "kubernetes_secret" "directives_portal_secrets" {
+  metadata {
+    name      = "directives-portal-secrets"
+    namespace = kubernetes_namespace.if_portals.metadata[0].name
+  }
+
+  data = {
+    DISCORD_CLIENT_SECRET = var.directives_discord_client_secret != "" ? var.directives_discord_client_secret : var.discord_client_secret
     JWT_SECRET            = var.jwt_secret
-    COOKIE_DOMAIN         = var.cookie_domain
-    COOKIE_SECURE         = var.cookie_secure
   }
 }
 

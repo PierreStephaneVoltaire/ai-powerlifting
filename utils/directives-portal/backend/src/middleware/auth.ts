@@ -45,6 +45,26 @@ export function verifyState(state: string): boolean {
   }
 }
 
+export async function requireUserOptional(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  const token = req.cookies?.dir_auth
+  if (!token) {
+    req.user = null
+    req.isAuthenticated = false
+    return next()
+  }
+
+  const payload = verifyToken(token)
+  if (!payload) {
+    req.user = null
+    req.isAuthenticated = false
+    return next()
+  }
+
+  req.user = { discord_id: payload.discord_id, username: payload.username, avatar: payload.avatar }
+  req.isAuthenticated = true
+  next()
+}
+
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   const token = req.cookies?.dir_auth
   if (!token) {

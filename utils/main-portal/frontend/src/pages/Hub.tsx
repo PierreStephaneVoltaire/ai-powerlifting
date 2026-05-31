@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Stack, SimpleGrid, Text, Box } from '@mantine/core'
 import { useHubStore } from '../store/hubStore'
 import { PortalCard } from '../components/PortalCard'
 import { SignalStrip } from '../components/SignalStrip'
@@ -16,10 +17,10 @@ export function Hub() {
 
   if (error) {
     return (
-      <div className="p-4 rounded-lg bg-destructive/10 border border-destructive text-destructive">
-        <p className="font-medium">Failed to load hub status</p>
-        <p className="text-sm mt-1">{error}</p>
-      </div>
+      <Box p="sm" style={{ background: 'var(--status-danger-bg)', border: '0.5px solid var(--status-danger-border)', borderRadius: 'var(--border-radius-lg)' }}>
+        <Text fw={500}>Failed to load hub status</Text>
+        <Text size="sm" mt={4}>{error}</Text>
+      </Box>
     )
   }
 
@@ -72,10 +73,10 @@ export function Hub() {
     : ['Unavailable']
 
   return (
-    <div className="space-y-6">
+    <Stack gap="xl">
       {/* Signal Strip */}
       <section>
-        <h2 className="text-sm font-medium text-muted-foreground mb-2">Current Signals</h2>
+        <Text size="sm" fw={500} c="var(--text-secondary)" mb={8}>Current Signals</Text>
         <SignalStrip signals={data?.signals ?? null} loading={loading} />
       </section>
 
@@ -86,8 +87,8 @@ export function Hub() {
 
       {/* Portal Cards Grid */}
       <section>
-        <h2 className="text-sm font-medium text-muted-foreground mb-3">Portals</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Text size="sm" fw={500} c="var(--text-secondary)" mb={12}>Portals</Text>
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <PortalCard
             name="Health"
             icon="💪"
@@ -124,7 +125,7 @@ export function Hub() {
             status={portalStatus.directives}
             lines={directivesLines}
           />
-        </div>
+        </SimpleGrid>
       </section>
 
       {/* Alerts */}
@@ -134,10 +135,10 @@ export function Hub() {
 
       {/* Last Updated */}
       {data?.computed_at && (
-        <p className="text-xs text-muted-foreground text-right">
+        <Text size="xs" c="var(--text-muted)" ta="right">
           Updated {formatRelativeTime(data.computed_at)}
-        </p>
+        </Text>
       )}
-    </div>
+    </Stack>
   )
 }
