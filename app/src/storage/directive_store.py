@@ -313,6 +313,7 @@ class DirectiveStore:
             version=existing.version + 1,
             label=label or existing.label,
             content=content,
+            types=types if types is not None else existing.types,
             created_by=created_by,
             active=True,
             created_at=now,

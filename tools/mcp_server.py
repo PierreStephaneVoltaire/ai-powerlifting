@@ -27,6 +27,7 @@ TOOL_CATEGORIES = {
         "temporal_timezone",
         "temporal_to_unix",
     ],
+    "tarot": ["tarot"],
 }
 
 

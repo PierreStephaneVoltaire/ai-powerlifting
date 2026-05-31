@@ -15,6 +15,7 @@ const FINANCE_PORTAL_URL = process.env.FINANCE_PORTAL_URL || 'http://localhost:3
 const HEALTH_PORTAL_URL = process.env.HEALTH_PORTAL_URL || 'http://localhost:3001'
 const DIARY_PORTAL_URL = process.env.DIARY_PORTAL_URL || 'http://localhost:3003'
 const PROPOSALS_PORTAL_URL = process.env.PROPOSALS_PORTAL_URL || 'http://localhost:3004'
+const DIRECTIVES_PORTAL_URL = process.env.DIRECTIVES_PORTAL_URL || 'http://localhost:3006'
 
 async function fetchPortal<T>(url: string, label: string): Promise<{ data: T | null; reachable: boolean }> {
   try {
@@ -76,17 +77,19 @@ function computeAlerts(
 }
 
 export async function getHubStatus(): Promise<HubStatusResponse> {
-  const [healthResult, financeResult, diaryResult, proposalsResult] = await Promise.allSettled([
+  const [healthResult, financeResult, diaryResult, proposalsResult, directivesResult] = await Promise.allSettled([
     fetchPortal<HealthPortalResponse>(`${HEALTH_PORTAL_URL}/api/programs/current`, 'Health Portal'),
     fetchPortal<FinancePortalResponse>(`${FINANCE_PORTAL_URL}/api/finance/current`, 'Finance Portal'),
     fetchPortal<DiaryPortalResponse>(`${DIARY_PORTAL_URL}/api/signals/latest`, 'Diary Portal'),
     fetchPortal<ProposalsPortalResponse>(`${PROPOSALS_PORTAL_URL}/api/proposals?status=pending`, 'Proposals Portal'),
+    fetchPortal<unknown>(`${DIRECTIVES_PORTAL_URL}/health`, 'Directives Portal'),
   ])
 
   const health = healthResult.status === 'fulfilled' ? healthResult.value : { data: null, reachable: false }
   const finance = financeResult.status === 'fulfilled' ? financeResult.value : { data: null, reachable: false }
   const diary = diaryResult.status === 'fulfilled' ? diaryResult.value : { data: null, reachable: false }
   const proposals = proposalsResult.status === 'fulfilled' ? proposalsResult.value : { data: null, reachable: false }
+  const directives = directivesResult.status === 'fulfilled' ? directivesResult.value : { data: null, reachable: false }
 
   // Transform health data
   const healthData: HealthData | null = health.data ? {
@@ -145,6 +148,7 @@ export async function getHubStatus(): Promise<HubStatusResponse> {
       finance: finance.reachable ? 'reachable' : 'unreachable',
       diary: diary.reachable ? 'reachable' : 'unreachable',
       proposals: proposals.reachable ? 'reachable' : 'unreachable',
+      directives: directives.reachable ? 'reachable' : 'unreachable',
     },
     computed_at: new Date().toISOString(),
   }

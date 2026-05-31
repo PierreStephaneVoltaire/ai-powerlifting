@@ -141,7 +141,7 @@ MCP_SERVER_CATEGORIES = [
         "MCP_SERVER_CATEGORIES",
         "health,finance,diary,proposals,supplement_research,"
         "temporal_age,temporal_city_time,temporal_duration,temporal_from_unix,"
-        "temporal_resolve,temporal_timezone,temporal_to_unix",
+        "temporal_resolve,temporal_timezone,temporal_to_unix,tarot",
     ).split(",")
     if item.strip()
 ]

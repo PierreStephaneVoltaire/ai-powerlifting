@@ -151,13 +151,14 @@ resource "kubernetes_config_map" "main_portal_config" {
   }
 
   data = {
-    NODE_ENV             = "production"
-    PORT                 = "3000"
-    FINANCE_PORTAL_URL   = "http://finance-portal-backend:3002"
-    HEALTH_PORTAL_URL    = "http://powerlifting-app-backend:3005"
-    DIARY_PORTAL_URL     = "http://diary-portal-backend:3003"
-    PROPOSALS_PORTAL_URL = "http://proposals-portal-backend:3004"
-    FRONTEND_URL         = "http://main-portal-frontend:3001"
+    NODE_ENV              = "production"
+    PORT                  = "3000"
+    FINANCE_PORTAL_URL    = "http://finance-portal-backend:3002"
+    HEALTH_PORTAL_URL     = "http://powerlifting-app-backend:3005"
+    DIARY_PORTAL_URL      = "http://diary-portal-backend:3003"
+    PROPOSALS_PORTAL_URL  = "http://proposals-portal-backend:3004"
+    DIRECTIVES_PORTAL_URL = "http://directives-portal-backend:3006"
+    FRONTEND_URL          = "http://main-portal-frontend:3001"
   }
 }
 
@@ -227,6 +228,27 @@ resource "kubernetes_config_map" "powerlifting_app_config" {
     JWT_SECRET                = var.jwt_secret
     COOKIE_DOMAIN             = var.cookie_domain
     COOKIE_SECURE             = var.cookie_secure
+  }
+}
+
+resource "kubernetes_config_map" "directives_portal_config" {
+  metadata {
+    name      = "directives-portal-config"
+    namespace = kubernetes_namespace.if_portals.metadata[0].name
+  }
+
+  data = {
+    AWS_REGION            = var.region
+    NODE_ENV              = "production"
+    PORT                  = "3006"
+    IF_AGENT_API_URL      = "http://if-agent-api:8000"
+    FRONTEND_URL          = "https://${local.app_domains["directives-portal"].domain}"
+    DISCORD_CLIENT_ID     = var.discord_client_id
+    DISCORD_CLIENT_SECRET = var.discord_client_secret
+    DISCORD_REDIRECT_URI  = "https://${local.app_domains["directives-portal"].domain}/api/auth/discord/callback"
+    JWT_SECRET            = var.jwt_secret
+    COOKIE_DOMAIN         = var.cookie_domain
+    COOKIE_SECURE         = var.cookie_secure
   }
 }
 
