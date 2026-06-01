@@ -324,6 +324,13 @@ async def lifespan(app: FastAPI):
         logger.info("Debounce system initialized")
     except Exception as e:
         logger.warning(f"Debounce initialization failed: {e}")
+
+    try:
+        from channels.channel_coordinator import init_channel_coordinator
+        init_channel_coordinator(asyncio.get_running_loop())
+        logger.info("Channel coordinator initialized")
+    except Exception as e:
+        logger.warning(f"Channel coordinator initialization failed: {e}")
     
     try:
         store = get_webhook_store()

@@ -1,4 +1,4 @@
-"""IF plan/route/deliver flow."""
+
 from __future__ import annotations
 
 import logging
@@ -7,7 +7,9 @@ import os
 import re
 import shutil
 import sys
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -29,7 +31,15 @@ from .history import write_history
 from .model_catalog import format_model_catalog, load_model_ids, load_model_selection_rules
 from .opencode import run_opencode
 from .opencode_config import write_opencode_config
-from .plan import IFPlan, PlanParseError, fallback_plan, parse_plan_file
+from .plan import (
+    IFPlan,
+    PlanParseError,
+    ClassificationParseError,
+    ClassificationResult,
+    fallback_plan,
+    parse_classification_file,
+    parse_plan_file,
+)
 from .session_dirs import resolve_session_dir
 from .context import build_runtime_context, uploaded_file_paths
 
@@ -781,6 +791,54 @@ async def run_if_flow(
     cleaned, inline_refs = strip_files_line(content)
     refs.extend(inline_refs)
     return FlowResult(content=cleaned, file_refs=refs, plan=plan)
+
+
+async def execute_route(
+    plan: IFPlan,
+    session_dir: Path,
+    runtime_context: str,
+    http_client: httpx.AsyncClient | None = None,
+    uploaded_files: list[dict[str, Any]] | None = None,
+    thinking_mode_requested: bool = False,
+) -> FlowResult:
+    """Execute a pre-computed plan through the appropriate route.
+
+    Used by the batch classification path to execute classifier decisions
+    without re-running the planner.
+    """
+    await send_status(
+        StatusType.MODEL_SELECTED,
+        "Route Selected",
+        f"{plan.interaction_type} / {plan.specialist} / {plan.selected_model}",
+    )
+
+    if plan.interaction_type == "technical":
+        content, refs = await _run_technical(plan, session_dir, runtime_context, uploaded_files=uploaded_files)
+    elif plan.interaction_type == "domain":
+        content, refs = await _run_domain(plan, session_dir, runtime_context, uploaded_files=uploaded_files)
+    elif plan.thinking_mode or thinking_mode_requested:
+        content, refs = await _run_domain(
+            fallback_plan(
+                prompt=plan.prompt,
+                selected_model=plan.selected_model,
+                specialist=plan.specialist if plan.specialist != "general" else "planner",
+                interaction_type="domain",
+                reason="Thinking mode social route",
+            ),
+            session_dir,
+            runtime_context,
+            uploaded_files=uploaded_files,
+        )
+    else:
+        if http_client is None:
+            raise RuntimeError("http_client required for social route execution")
+        content = await _run_social(plan, http_client, runtime_context)
+        refs = []
+
+    cleaned, inline_refs = strip_files_line(content)
+    refs.extend(inline_refs)
+    return FlowResult(content=cleaned, file_refs=refs, plan=plan)
+
 
 
 async def run_specialist_flow(

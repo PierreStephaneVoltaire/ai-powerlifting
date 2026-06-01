@@ -101,6 +101,12 @@ variable "dynamodb_models_table" {
   default     = "if-models"
 }
 
+variable "dynamodb_execution_registry_table" {
+  description = "DynamoDB table for channel execution registry"
+  type        = string
+  default     = "if-agent-execution-registry"
+}
+
 variable "dynamodb_powerlifting_table" {
   description = "DynamoDB table for powerlifting app"
   type        = string

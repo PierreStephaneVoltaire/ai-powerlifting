@@ -1,7 +1,8 @@
 """Discord listener using discord.py.
 
 Runs a bot client in its own thread with its own event loop.
-Captures messages from the registered channel and pushes to debounce queue.
+Captures messages from the registered channel and pushes to the
+channel coordinator for DynamoDB-backed orchestration.
 Registers slash commands as guild commands on first connect (deduped).
 """
 from __future__ import annotations
@@ -18,12 +19,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Registry of active Discord clients keyed by webhook_id
 _active_clients: dict[str, discord.Client] = {}
 
 
 def get_discord_client() -> discord.Client | None:
-    """Return any active Discord client, or None if no listeners are running."""
     return next(iter(_active_clients.values()), None)
 
 
@@ -31,18 +30,7 @@ def create_discord_listener(
     record: "WebhookRecord",
     stop_event: threading.Event,
 ) -> Callable[[], None]:
-    """Create a Discord listener function for threading.
 
-    Returns a callable to be used as a Thread target. Runs a discord.py
-    client that listens to a single channel.
-
-    Args:
-        record: WebhookRecord containing Discord configuration
-        stop_event: Threading event to signal listener shutdown
-
-    Returns:
-        Callable that runs the Discord bot listener
-    """
     config = record.get_config()
     bot_token = config["bot_token"]
     channel_id = int(config["channel_id"])
@@ -50,7 +38,6 @@ def create_discord_listener(
     webhook_id = record.webhook_id
 
     def run() -> None:
-        """Run the Discord bot in its own event loop."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -59,7 +46,6 @@ def create_discord_listener(
         client = discord.Client(intents=intents)
         _active_clients[webhook_id] = client
 
-        # Set up slash command tree
         tree = app_commands.CommandTree(client)
 
         from channels.slash_commands import setup_command_tree, should_sync
@@ -79,20 +65,16 @@ def create_discord_listener(
                 f"Discord listener {webhook_id} connected as {client.user}"
             )
 
-            # Sync slash commands to guild (deduped)
             channel = client.get_channel(channel_id)
             if channel and hasattr(channel, "guild") and channel.guild:
                 guild = channel.guild
                 if should_sync(client.user.id, guild.id):
                     try:
                         tree.copy_global_to(guild=guild)
-                        
                         existing_commands = await tree.fetch_commands(guild=guild)
                         existing_names = {cmd.name for cmd in existing_commands}
-                        
                         local_commands = tree.get_commands(guild=guild)
                         local_names = {cmd.name for cmd in local_commands}
-                        
                         if existing_names != local_names:
                             await tree.sync(guild=guild)
                             logger.info(
@@ -122,17 +104,14 @@ def create_discord_listener(
 
         @client.event
         async def on_message(message: discord.Message):
-            # Ignore own messages and other bots
             if message.author == client.user or message.author.bot:
                 return
-            # Only listen to the registered channel
             if message.channel.id != channel_id:
                 return
 
-            # Import here to avoid circular dependency
-            from channels.debounce import push_message
+            from channels.channel_coordinator import push_discord_event
 
-            push_message(
+            push_discord_event(
                 conversation_id=conversation_id,
                 message={
                     "platform": "discord",
@@ -142,6 +121,7 @@ def create_discord_listener(
                     "guild_id": str(message.guild.id) if message.guild else "",
                     "channel_id": str(message.channel.id),
                     "author": message.author.display_name,
+                    "author_id": str(message.author.id),
                     "content": message.clean_content,
                     "attachments": [
                         {
@@ -155,9 +135,15 @@ def create_discord_listener(
                         for att in message.attachments
                     ],
                     "channel_ref": message.channel,
-                    "discord_loop": loop,  # Pass the Discord event loop for delivery
+                    "discord_loop": loop,
                     "timestamp": message.created_at.isoformat(),
                     "edited_at": message.edited_at.isoformat() if message.edited_at else "",
+                    "reply_to_message_id": (
+                        str(message.reference.message_id)
+                        if message.reference and getattr(message.reference, "message_id", None)
+                        else None
+                    ),
+                    "event_type": "message_create",
                 },
             )
             logger.debug(
@@ -172,9 +158,9 @@ def create_discord_listener(
             if after.channel.id != channel_id:
                 return
 
-            from channels.debounce import push_message
+            from channels.channel_coordinator import push_discord_event
 
-            push_message(
+            push_discord_event(
                 conversation_id=conversation_id,
                 message={
                     "platform": "discord",
@@ -184,6 +170,7 @@ def create_discord_listener(
                     "guild_id": str(after.guild.id) if after.guild else "",
                     "channel_id": str(after.channel.id),
                     "author": after.author.display_name,
+                    "author_id": str(after.author.id),
                     "content": after.clean_content,
                     "attachments": [
                         {
@@ -200,8 +187,14 @@ def create_discord_listener(
                     "discord_loop": loop,
                     "timestamp": after.created_at.isoformat(),
                     "edited_at": after.edited_at.isoformat() if after.edited_at else "",
+                    "reply_to_message_id": (
+                        str(after.reference.message_id)
+                        if after.reference and getattr(after.reference, "message_id", None)
+                        else None
+                    ),
                     "is_edit": True,
                     "previous_content": before.clean_content,
+                    "event_type": "message_edit",
                 },
             )
             logger.debug(
@@ -210,7 +203,6 @@ def create_discord_listener(
             )
 
         async def runner():
-            """Run the Discord client."""
             try:
                 await client.start(bot_token)
             except asyncio.CancelledError:
@@ -221,9 +213,7 @@ def create_discord_listener(
                 await client.close()
 
         async def main():
-            """Main async function that watches for stop signal."""
             task = asyncio.create_task(runner())
-            # Watch for stop signal from the manager
             while not stop_event.is_set():
                 await asyncio.sleep(1)
             task.cancel()

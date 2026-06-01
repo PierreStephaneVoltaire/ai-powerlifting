@@ -70,6 +70,7 @@ Current Discord path:
 - Existing table definitions live in `./terraform/tables.tf` (all PK/SK, `PAY_PER_REQUEST`, `prevent_destroy`; `if-health` shows the TTL-on-`ttl` pattern to copy).
 - Agent API config maps live in `./terraform/k8s-secrets.tf` (live) and `./terraform/k8s-test.tf` (test).
 - Use DynamoDB for the execution registry from the first implementation phase that needs persistence/locks.
+- don't add comments to the code
 
 ## Non-Negotiable Design Rules
 
@@ -702,6 +703,136 @@ Definition of done:
 - Social responses can be enqueued while an implementation task is running.
 - Await-instruction creates one visible conflict message and updates the targeted task.
 
+## Phase 4.5 — Correctness Hardening of the Phase 0–4 Base
+
+Review-driven course correction. This phase fixes outright-wrong items found in the
+Phase 0–4 implementation. It adds no new product behavior; it only makes the
+existing base actually run the batch classifier on the live path, makes the
+coordinator and store agree, makes the durable debounce/max-wait ceiling work
+across pods, makes intent state machines reach terminal states, and stops the
+classifier lock from being held during task execution. Complete this before Phase 5
+and Phase 6.
+
+Functional outcome: a normal Discord message no longer crashes the coordinator/store
+path, batch classification (not the legacy fallback) runs end to end, the max-wait
+ceiling is enforced from durable state, intents reach terminal status idempotently,
+and the classifier lock is released before any task route execution begins.
+
+### Findings being corrected
+
+A. Hard runtime bugs:
+  1. `flow/plan.py` defines `parse_classification_file` three times; the final
+     winning definition computes `result` but never returns it, so it returns
+     `None`. `batch_classifier.run_batch_classification` then fails on
+     `classification.batch_summary`, so batch classification never runs and the
+     coordinator silently falls back to the legacy `dispatch_channel_batch()` path.
+  2. Coordinator↔store signature mismatches raise `TypeError` on the live path:
+     - `channel_coordinator` calls
+       `store.update_channel_state_on_event(..., debounce_seconds=..., max_wait_seconds=...)`
+       but the store method accepts no such kwargs.
+     - `store.release_classifier_lock(channel_id, owner, debounce_seconds=...)` is
+       called with a kwarg the method does not accept.
+     - `store.update_cursors(channel_id, newest_user_id, now)` is called with three
+       positional args but the method only accepts two.
+  3. `batch_first_event_at`, `max_wait_until`, and `debounce_until` are read by the
+     coordinator but never written by `_update_state_on_event_sync`, so the durable
+     cross-pod max-wait ceiling is dead and starvation protection depends only on
+     the in-process `_max_wait_timers`.
+
+B. State-machine / idempotency bug:
+  4. In `decision_applier`, `apply_decision` transitions `pending→applying`, then
+     `_apply_start_new_task` transitions `applying→running`, then `apply_decision`
+     attempts `applying→completed`. The record is already in `running`, so the
+     conditional fails and `start_new_task` intents stick in `running` forever.
+
+C. Architectural invariant violation:
+  5. `_process_channel_batch` holds the classifier lock (duration 600s) across the
+     entire `apply_batch_decisions` → `_apply_start_new_task` → `execute_route`
+     call, turning the per-channel classifier lock into a long-running
+     implementation lock. This violates "`channel_id` is not a long-running
+     implementation lock" and "a channel may have multiple active implementation
+     tasks run in parallel," and it pre-empts the Phase 5–6 worker/outbox design.
+
+D. Lower severity but fix now:
+  6. Duplicate `decision_to_ifplan` logic exists in both `flow/runner.py`
+     (`_decision_to_ifplan`, dead) and `flow/batch_classifier.py` (used).
+  7. `update_cursors` ignores the timestamp and never stores `last_classified_at`;
+     `_derive_batch`/`_newest_user_message_id` compare snowflake IDs
+     lexicographically as strings instead of as integers; edited-message handling
+     (`edited_since`/`latest_observed_edit_at`) is not wired so edits below the
+     cursor never re-enter a batch.
+  8. The `force=True` max-wait path bypasses the "already classifying" guard and can
+     double-dispatch.
+
+### Implementation
+
+1. `flow/plan.py`: remove the duplicate `parse_classification_file` definitions.
+   Keep exactly one that returns a `ClassificationResult` carrying the passed
+   `batch_id`. Confirm `run_batch_classification` receives a non-None result.
+
+2. Reconcile coordinator↔store signatures (treat the store as the contract):
+   - `update_channel_state_on_event` accepts and uses `debounce_seconds` and
+     `max_wait_seconds`, or the coordinator stops passing them.
+   - `release_classifier_lock` accepts `debounce_seconds` (used to set
+     `debounce_until` on release), or the coordinator stops passing it.
+   - `update_cursors` accepts and persists `last_classified_at`, or the coordinator
+     stops passing the timestamp. Cursors must persist both
+     `last_classified_message_id` and `last_classified_at`.
+
+3. Persist the durable debounce/ceiling fields in `_update_state_on_event_sync`:
+   - When opening a new pending window, set `batch_first_event_at` and
+     `max_wait_until = batch_first_event_at + CHANNEL_CLASSIFIER_MAX_WAIT_SECONDS`.
+     Do not extend `max_wait_until` on later events in the same window.
+   - Set/extend `debounce_until = now + CHANNEL_CLASSIFIER_DEBOUNCE_SECONDS` on
+     every event.
+   - The coordinator's force decision must rely on the persisted `max_wait_until`
+     so the ceiling holds across pods, not only via the in-process timer.
+
+4. Fix the intent state machine in `decision_applier`:
+   - A handler either owns its full lifecycle (and `apply_decision` must not force
+     `applying→completed`), or handlers must not transition status themselves.
+   - `start_new_task` intents must reach a terminal state (`completed`/`failed`)
+     and never stick in `running`. Re-confirm replay idempotency.
+
+5. Stop holding the classifier lock during task execution:
+   - The classifier lock covers only: acquire lock → fetch/reconcile history → run
+     batch classifier → persist batch + intents → enqueue social/clarification
+     responses and create task records → release lock.
+   - Task route execution (`execute_route`) must not run inside the classifier
+     lock. For this phase, start it as a detached background task after the lock is
+     released (the full async worker + outbox arrives in Phases 5–6). This restores
+     the invariant that a channel can reclassify and run multiple tasks without the
+     classifier lock blocking them.
+
+6. Snowflake-safe cursors and edit handling:
+   - Compare message IDs as integers, not lexicographically, in `_derive_batch` and
+     `_newest_user_message_id`.
+   - Wire edited-message handling: edits below the cursor that set `dirty` must be
+     re-included in the next pass using `edited_since`/`latest_observed_edit_at`.
+
+7. Remove the dead duplicate `_decision_to_ifplan` in `flow/runner.py`; keep one
+   shared implementation.
+
+8. Add a re-entrancy guard so a `force=True` max-wait fire cannot dispatch while a
+   classifier is already `classifying` for that channel.
+
+### Definition of done
+
+- A normal incoming Discord message raises no `TypeError` in the coordinator or
+  store, and batch classification (not the legacy fallback) runs end to end.
+- `max_wait_until` is persisted, and a busy channel that keeps resetting the quiet
+  window is force-classified at the ceiling, verified via the stored field, not
+  only the in-process timer.
+- `start_new_task` intents end in a terminal status; replay creates no duplicate
+  tasks or outbox items.
+- The classifier lock is released before task route execution begins; a second
+  classifier pass can run on the same channel while a task is executing.
+- Cursor comparison is integer-based; an edit to an older message triggers a fresh
+  reclassification pass.
+- Unit tests cover: the single corrected `parse_classification_file`,
+  store/coordinator signature agreement, durable max-wait persistence, intent
+  terminal state, and integer cursor comparison.
+
 ## Phase 5 — Per-Channel Outbound Queue
 
 Functional outcome: parallel workers may finish simultaneously, but Discord sends are serialized per channel and chunks do not interleave.
@@ -881,6 +1012,7 @@ Each phase must be independently functional:
 2. DynamoDB classifier locks + dirty/max-wait behavior works across pods.
 3. Existing planner/router becomes batch classifier and emits decisions to a sibling classification file.
 4. Decisions apply idempotently and create task/outbox state.
+4.5. Correctness hardening of the Phase 0–4 base: fix the triple `parse_classification_file`, coordinator↔store signature mismatches, durable debounce/max-wait persistence, intent terminal-state bug, snowflake-safe cursors/edit handling, and release the classifier lock before task execution.
 5. Outbound queue serializes Discord sends.
 6. Parallel task workers run in the shared channel workspace with per-run files/config/markers and enqueue outputs.
 7. Cancel/pivot/await-instruction control active tasks via the cancellable executor registry.

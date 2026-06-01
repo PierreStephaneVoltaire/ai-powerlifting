@@ -51,22 +51,23 @@ resource "kubernetes_config_map" "if_agent_api_config" {
   }
 
   data = {
-    IF_CORE_TABLE_NAME          = var.dynamodb_core_table
-    IF_HEALTH_TABLE_NAME        = var.dynamodb_health_table
-    IF_TEMPLATES_TABLE_NAME     = var.dynamodb_templates_table
-    IF_TEMPLATES_LIBRARY_PK     = "template_library"
-    IF_SESSIONS_TABLE_NAME      = var.dynamodb_sessions_table
-    ANALYSIS_CACHE_TABLE_NAME   = var.dynamodb_analysis_cache_table
-    IF_FINANCE_TABLE_NAME       = var.dynamodb_finance_table
-    IF_DIARY_ENTRIES_TABLE_NAME = var.dynamodb_diary_entries_table
-    IF_DIARY_SIGNALS_TABLE_NAME = var.dynamodb_diary_signals_table
-    IF_PROPOSALS_TABLE_NAME     = var.dynamodb_proposals_table
-    IF_MODELS_TABLE_NAME        = var.dynamodb_models_table
-    POWERLIFTING_S3_BUCKET      = aws_s3_bucket.powerlifting_data.id
-    SPECIALISTS_PATH            = var.specialists_path
-    EXTERNAL_TOOLS_PATH         = var.tools_path
-    MODELS_PATH                 = var.models_path
-    SCRIPTS_PATH                = var.scripts_path
+    IF_CORE_TABLE_NAME               = var.dynamodb_core_table
+    IF_HEALTH_TABLE_NAME             = var.dynamodb_health_table
+    IF_TEMPLATES_TABLE_NAME          = var.dynamodb_templates_table
+    IF_TEMPLATES_LIBRARY_PK          = "template_library"
+    IF_SESSIONS_TABLE_NAME           = var.dynamodb_sessions_table
+    ANALYSIS_CACHE_TABLE_NAME        = var.dynamodb_analysis_cache_table
+    IF_FINANCE_TABLE_NAME            = var.dynamodb_finance_table
+    IF_DIARY_ENTRIES_TABLE_NAME      = var.dynamodb_diary_entries_table
+    IF_DIARY_SIGNALS_TABLE_NAME      = var.dynamodb_diary_signals_table
+    IF_PROPOSALS_TABLE_NAME          = var.dynamodb_proposals_table
+    IF_MODELS_TABLE_NAME             = var.dynamodb_models_table
+    IF_EXECUTION_REGISTRY_TABLE_NAME = var.dynamodb_execution_registry_table
+    POWERLIFTING_S3_BUCKET           = aws_s3_bucket.powerlifting_data.id
+    SPECIALISTS_PATH                 = var.specialists_path
+    EXTERNAL_TOOLS_PATH              = var.tools_path
+    MODELS_PATH                      = var.models_path
+    SCRIPTS_PATH                     = var.scripts_path
 
     CONTEXT_CONDENSE_THRESHOLD = tostring(var.context_condense_threshold)
     MESSAGE_WINDOW             = tostring(var.message_window)
