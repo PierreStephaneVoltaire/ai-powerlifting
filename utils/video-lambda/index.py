@@ -16,7 +16,6 @@ TABLE_NAME = os.environ.get('TABLE_NAME', 'if-health')
 SESSIONS_TABLE_NAME = os.environ.get('SESSIONS_TABLE_NAME', 'if-sessions')
 VIDEOS_BUCKET = os.environ.get('VIDEOS_BUCKET', 'powerlifting-session-videos')
 
-
 def handler(event, context):
     """S3 event handler for video thumbnail generation."""
     for record in event.get('Records', []):
@@ -31,7 +30,6 @@ def handler(event, context):
         print(f"Processing video: {key}")
 
         try:
-            # Get video metadata
             response = s3.head_object(Bucket=bucket, Key=key)
             metadata = response.get('Metadata', {})
 
@@ -57,7 +55,6 @@ def handler(event, context):
 
                 ffmpeg_path = '/opt/bin/ffmpeg' if os.path.exists('/opt/bin/ffmpeg') else 'ffmpeg'
 
-                # Transcode to H.264/AAC MP4 with FastStart for web streaming
                 print(f"Transcoding to: {target_video_key}")
                 transcode_cmd = [
                     ffmpeg_path,
@@ -73,7 +70,6 @@ def handler(event, context):
                 ]
                 subprocess.run(transcode_cmd, capture_output=True, check=True)
 
-                # Generate thumbnail at 1 second
                 print("Generating thumbnail...")
                 thumb_cmd = [
                     ffmpeg_path,
@@ -86,7 +82,6 @@ def handler(event, context):
                 ]
                 subprocess.run(thumb_cmd, capture_output=True, check=True)
 
-                # Upload processed video
                 with open(output_path, 'rb') as f:
                     s3.put_object(
                         Bucket=bucket,
@@ -95,7 +90,6 @@ def handler(event, context):
                         ContentType='video/mp4'
                     )
 
-                # Upload thumbnail
                 with open(thumbnail_path, 'rb') as f:
                     s3.put_object(
                         Bucket=bucket,
@@ -104,8 +98,6 @@ def handler(event, context):
                         ContentType='image/jpeg'
                     )
 
-            # Proxy URLs relative to the backend — s3_key is updated to the processed path
-            # so the backend's transformVideo always serves the correct file via the proxy.
             video_url = f"/api/videos/media/{target_video_key}"
             thumbnail_url = f"/api/videos/media/{thumbnail_key}"
 
@@ -118,7 +110,6 @@ def handler(event, context):
 
             print(f"Successfully processed video {video_id}")
 
-            # Delete the original raw upload to save storage
             print(f"Cleaning up original: {key}")
             s3.delete_object(Bucket=bucket, Key=key)
 
@@ -127,7 +118,6 @@ def handler(event, context):
             import traceback
             traceback.print_exc()
 
-            # Mark as failed in DynamoDB if we have enough metadata
             try:
                 head = s3.head_object(Bucket=bucket, Key=key)
                 meta = head.get('Metadata', {})
@@ -141,7 +131,6 @@ def handler(event, context):
                     )
             except Exception as update_err:
                 print(f"Failed to mark video as failed: {update_err}")
-
 
 def update_video_metadata(
     pk: str,
@@ -179,8 +168,6 @@ def update_video_metadata(
             for video in videos:
                 if video.get('video_id') == video_id:
                     video['video_url'] = video_url
-                    # Update s3_key to point at the processed MP4 so the backend
-                    # proxy URL is generated from the correct S3 object.
                     if video_s3_key:
                         video['s3_key'] = video_s3_key
                     video['thumbnail_url'] = thumbnail_url

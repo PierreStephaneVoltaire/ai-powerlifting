@@ -8,10 +8,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import core  # noqa: E402
-import template_apply  # noqa: E402
-from template_store import TemplateNotFoundError, TemplateStore  # noqa: E402
-
+import core
+import template_apply
+from template_store import TemplateNotFoundError, TemplateStore
 
 class FakeTemplateTable:
     def __init__(self) -> None:
@@ -24,12 +23,10 @@ class FakeTemplateTable:
     def put_item(self, Item: dict) -> None:
         self.items[(Item["pk"], Item["sk"])] = Item
 
-
 def make_store() -> TemplateStore:
     store = TemplateStore("fake", pk="template_library")
     store._table = FakeTemplateTable()
     return store
-
 
 def minimal_template(name: str) -> dict:
     return {
@@ -44,7 +41,6 @@ def minimal_template(name: str) -> dict:
             }
         ],
     }
-
 
 def test_global_template_store_filters_unpublished_drafts_by_author() -> None:
     store = make_store()
@@ -73,7 +69,6 @@ def test_global_template_store_filters_unpublished_drafts_by_author() -> None:
 
     store.set_published_sync(draft_sk, True, actor_pk="alice")
     assert {row["sk"] for row in store.list_templates_sync(actor_pk=None)} == {published_sk, draft_sk}
-
 
 def test_prepare_template_payload_normalizes_percentages_and_required_maxes() -> None:
     prepared = core._prepare_template_payload(
@@ -116,7 +111,6 @@ def test_prepare_template_payload_normalizes_percentages_and_required_maxes() ->
     assert prepared["glossary_resolution"]["unresolved"] == ["Unknown Curl"]
     assert session["exercises"][0]["load_value"] == pytest.approx(0.75)
     assert session["exercises"][2]["load_type"] == "unresolvable"
-
 
 def test_concretize_estimates_rpe_load_from_e1rm() -> None:
     template = {

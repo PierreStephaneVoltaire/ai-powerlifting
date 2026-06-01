@@ -1,18 +1,4 @@
-"""DynamoDB-backed global store for training templates.
 
-Templates are reusable, date-free programs.  They live in a global library
-partition rather than under a user's health program PK.  Visibility is controlled
-by template metadata:
-
-    - published templates are visible to everyone
-    - unpublished templates are visible only to their author
-    - mutations are author-only
-
-Schema:
-    - Template item: pk=<library_pk>, sk="template#<timestamp>#<shortid>"
-    - Index item: pk=<library_pk>, sk="template#index" -> list of summaries
-    - Import job item: pk=<library_pk>, sk="template_import#<job_id>"
-"""
 from __future__ import annotations
 
 import asyncio
@@ -27,14 +13,11 @@ import boto3
 
 logger = logging.getLogger(__name__)
 
-
 class TemplateNotFoundError(Exception):
     """Raised when a template is not found or not visible to the actor."""
 
-
 class TemplatePermissionError(Exception):
     """Raised when an actor cannot mutate a template."""
-
 
 class TemplateStore:
     """DynamoDB-backed store for global training templates."""
@@ -84,8 +67,6 @@ class TemplateStore:
 
     def _is_published_meta(self, meta: dict[str, Any]) -> bool:
         if "published" not in meta:
-            # Legacy imported templates did not have published metadata. Treat
-            # them as public until migration backfills the explicit field.
             return True
         return bool(meta.get("published"))
 
@@ -123,7 +104,6 @@ class TemplateStore:
     def _read_index_sync(self) -> list[dict[str, Any]]:
         resp = self.table.get_item(Key={"pk": self._pk, "sk": self.INDEX_SK})
         if "Item" not in resp:
-            # Backward-compatible read for a one-time migration window.
             resp = self.table.get_item(Key={"pk": self._pk, "sk": self.LEGACY_INDEX_SK})
         if "Item" not in resp:
             return []
@@ -244,7 +224,6 @@ class TemplateStore:
         incoming_meta = template_item.setdefault("meta", {})
         existing_meta = existing.get("meta") if isinstance(existing.get("meta"), dict) else {}
 
-        # Preserve server-owned permission fields.
         incoming_meta["created_at"] = existing_meta.get("created_at", now)
         incoming_meta["updated_at"] = now
         incoming_meta["author_pk"] = existing_meta.get("author_pk")

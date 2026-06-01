@@ -1,18 +1,4 @@
-"""Supplement research tool plugin — hybrid retrieval over Examine.com PDFs.
 
-Stores PDFs + extracted chunks in a LanceDB table with native FTS (BM25)
-and vector search. Hybrid queries combine both via an RRF reranker.
-
-Exports:
-    get_tools()       → SDK Tool objects (side effect: register_tool() call)
-    get_schemas()     → snake_case name → JSON schema
-    execute(name, args) → async dispatcher for non-agentic path
-
-S3 layout: s3://{POWERLIFTING_S3_BUCKET}/supplement-research/{context}/{file}.pdf
-Context tags are inferred from the first S3 path segment after the prefix
-(strength/hypertrophy/sleep/recovery/cognition/longevity). Files at the
-root fall back to context='general'.
-"""
 from __future__ import annotations
 
 import asyncio
@@ -38,11 +24,6 @@ from tools.sdk_compat import (
 
 logger = logging.getLogger(__name__)
 
-
-# =============================================================================
-# Configuration
-# =============================================================================
-
 SUPPLEMENT_S3_PREFIX = os.getenv("SUPPLEMENT_S3_PREFIX", "supplement-research/")
 SUPPLEMENT_DATA_DIR = Path(
     os.getenv("SUPPLEMENT_DATA_DIR", "./data/supplement-research.lancedb")
@@ -64,14 +45,8 @@ VALID_CONTEXTS = {
     "general",
 }
 
-# Lazy-init lock so concurrent callers don't double-pull from S3
 _init_lock = threading.Lock()
 _initialized = False
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
 
 def _run_async(coro):
     try:
@@ -84,12 +59,10 @@ def _run_async(coro):
             return pool.submit(asyncio.run, coro).result()
     return asyncio.run(coro)
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
 
 def _embedding_dimension() -> int:
     try:
@@ -98,11 +71,9 @@ def _embedding_dimension() -> int:
     except Exception:
         return int(os.getenv("EMBEDDING_DIMENSION", "384"))
 
-
 def _embed(texts: List[str]) -> List[List[float]]:
     from memory.embeddings import embed_batch
     return embed_batch(texts)
-
 
 def _context_from_key(key: str) -> str:
     """Infer context tag from S3 key like 'supplement-research/sleep/ashwagandha.pdf'."""
@@ -113,7 +84,6 @@ def _context_from_key(key: str) -> str:
         if tag in VALID_CONTEXTS:
             return tag
     return "general"
-
 
 def _chunk_text(text: str) -> List[str]:
     """Chunk text into ~CHUNK_SIZE_TOKENS with CHUNK_OVERLAP_TOKENS overlap.
@@ -147,14 +117,12 @@ def _chunk_text(text: str) -> List[str]:
         chunks.append(" ".join(current))
     return chunks if chunks else [text]
 
-
 def _compute_file_hash(path: Path) -> str:
     sha = hashlib.sha256()
     with open(path, "rb") as f:
         for block in iter(lambda: f.read(8192), b""):
             sha.update(block)
     return sha.hexdigest()
-
 
 def _load_hashes() -> Dict[str, str]:
     hf = SUPPLEMENT_DATA_DIR / HASH_FILE
@@ -166,15 +134,9 @@ def _load_hashes() -> Dict[str, str]:
         logger.warning(f"[supplement_research] Failed to load hash file: {e}")
         return {}
 
-
 def _save_hashes(hashes: Dict[str, str]) -> None:
     SUPPLEMENT_DATA_DIR.mkdir(parents=True, exist_ok=True)
     (SUPPLEMENT_DATA_DIR / HASH_FILE).write_text(json.dumps(hashes, indent=2))
-
-
-# =============================================================================
-# LanceDB schema + table access
-# =============================================================================
 
 def _get_schema():
     from lancedb.pydantic import LanceModel, Vector
@@ -193,7 +155,6 @@ def _get_schema():
 
     return SupplementChunk
 
-
 def _connect_table(create_if_missing: bool = True):
     import lancedb
 
@@ -207,11 +168,6 @@ def _connect_table(create_if_missing: bool = True):
     table = db.create_table(SUPPLEMENT_TABLE_NAME, schema=schema)
     logger.info(f"[supplement_research] Created LanceDB table at {SUPPLEMENT_DATA_DIR}")
     return db, table
-
-
-# =============================================================================
-# S3 sync
-# =============================================================================
 
 def _sync_pdfs_from_s3() -> List[Path]:
     """Pull all supplement-research PDFs from S3 to local PDF dir.
@@ -253,11 +209,6 @@ def _sync_pdfs_from_s3() -> List[Path]:
     )
     return sorted(SUPPLEMENT_PDF_DIR.rglob("*.pdf"))
 
-
-# =============================================================================
-# PDF extraction + indexing
-# =============================================================================
-
 def _extract_pdf_text(pdf_path: Path) -> str:
     try:
         from tika import parser as tika_parser
@@ -271,14 +222,12 @@ def _extract_pdf_text(pdf_path: Path) -> str:
         logger.error(f"[supplement_research] Tika extraction failed for {pdf_path.name}: {e}")
         return ""
 
-
 def _s3_key_for_pdf(pdf_path: Path) -> str:
     try:
         rel = pdf_path.relative_to(SUPPLEMENT_PDF_DIR).as_posix()
     except ValueError:
         rel = pdf_path.name
     return f"{SUPPLEMENT_S3_PREFIX}{rel}"
-
 
 def _index_pdfs(pdf_paths: List[Path], force: bool = False) -> Dict[str, int]:
     """Chunk, embed, and upsert the given PDFs into the LanceDB table.
@@ -309,7 +258,6 @@ def _index_pdfs(pdf_paths: List[Path], force: bool = False) -> Dict[str, int]:
             logger.warning(f"[supplement_research] No text extracted from {pdf.name}")
             continue
 
-        # Remove prior chunks for this source (by source_key, which is stable)
         try:
             table.delete(f"source_key = '{s3_key}'")
         except Exception:
@@ -338,14 +286,12 @@ def _index_pdfs(pdf_paths: List[Path], force: bool = False) -> Dict[str, int]:
 
     _save_hashes(new_hashes)
 
-    # (Re)build FTS over the text column so hybrid search sees fresh data.
     try:
         table.create_fts_index("text", replace=True)
     except Exception as e:
         logger.warning(f"[supplement_research] FTS index build failed: {e}")
 
     return {"indexed": indexed, "skipped": skipped, "total_pdfs": len(pdf_paths)}
-
 
 def _initialize(rebuild: bool = False) -> Dict[str, Any]:
     """Lazy initializer: pull from S3 (once) and index.
@@ -382,11 +328,6 @@ def _initialize(rebuild: bool = False) -> Dict[str, Any]:
         result = _index_pdfs(pdfs, force=rebuild)
         _initialized = True
         return {"status": "indexed", **result}
-
-
-# =============================================================================
-# Hybrid search
-# =============================================================================
 
 def _hybrid_search(
     query: str,
@@ -430,11 +371,6 @@ def _hybrid_search(
         })
     return out
 
-
-# =============================================================================
-# SDK Tool
-# =============================================================================
-
 class SupplementSearchAction(Action):
     query: str = Field(description="Natural-language research question.")
     top_k: int = Field(
@@ -456,10 +392,8 @@ class SupplementSearchAction(Action):
         ),
     )
 
-
 class SupplementSearchObservation(Observation):
     pass
-
 
 class SupplementSearchExecutor(
     ToolExecutor[SupplementSearchAction, SupplementSearchObservation]
@@ -501,7 +435,6 @@ class SupplementSearchExecutor(
                 f"ERROR: {type(e).__name__}: {e}", is_error=True
             )
 
-
 class SupplementSearchTool(
     ToolDefinition[SupplementSearchAction, SupplementSearchObservation]
 ):
@@ -521,13 +454,7 @@ class SupplementSearchTool(
             executor=SupplementSearchExecutor(),
         )]
 
-
 register_tool("SupplementSearchTool", SupplementSearchTool)
-
-
-# =============================================================================
-# Schema (for non-agentic specialists)
-# =============================================================================
 
 SUPPLEMENT_SEARCH_SCHEMA = {
     "name": "supplement_search",
@@ -571,18 +498,11 @@ SUPPLEMENT_SEARCH_SCHEMA = {
     },
 }
 
-
-# =============================================================================
-# Plugin exports
-# =============================================================================
-
 def get_tools() -> List[Tool]:
     return [Tool(name="SupplementSearchTool")]
 
-
 def get_schemas() -> Dict[str, dict]:
     return {"supplement_search": SUPPLEMENT_SEARCH_SCHEMA}
-
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name != "supplement_search":

@@ -1,4 +1,3 @@
-"""DynamoDB-backed store for standalone health session records."""
 from __future__ import annotations
 
 import asyncio
@@ -12,10 +11,8 @@ from typing import Any, Optional
 import boto3
 from boto3.dynamodb.conditions import Key
 
-
 DEFAULT_BLOCK = "current"
 SESSION_SK_PREFIX = "session#"
-
 
 def _to_dynamo(obj: Any) -> Any:
     if isinstance(obj, float):
@@ -25,7 +22,6 @@ def _to_dynamo(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_to_dynamo(v) for v in obj]
     return obj
-
 
 def _int_value(value: Any, default: int = 0) -> int:
     if isinstance(value, Decimal):
@@ -38,7 +34,6 @@ def _int_value(value: Any, default: int = 0) -> int:
         except ValueError:
             return default
     return default
-
 
 def parse_week_number(session: dict[str, Any]) -> int:
     raw_week_number = session.get("week_number")
@@ -53,10 +48,8 @@ def parse_week_number(session: dict[str, Any]) -> int:
             return int(match.group(1))
     return _int_value(week)
 
-
 def _phase_block(phase: dict[str, Any]) -> str:
     return str(phase.get("block") or DEFAULT_BLOCK)
-
 
 def resolve_phase(session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
     week_number = parse_week_number(session)
@@ -101,16 +94,13 @@ def resolve_phase(session: dict[str, Any], phases: Optional[list[dict[str, Any]]
         "block": block,
     }
 
-
 def _phase_ref(phase: dict[str, Any]) -> str:
     block = str(phase.get("block") or DEFAULT_BLOCK)
     name = str(phase.get("name") or "Unscheduled").replace("#", "-")
     return f"phase#{block}#W{phase.get('start_week', 0)}-W{phase.get('end_week', 0)}#{name}"
 
-
 def _program_version(program_sk: str) -> str:
     return program_sk.removeprefix("program#") if program_sk.startswith("program#") else program_sk
-
 
 def _program_version_number(program_sk: str) -> int | None:
     if not program_sk.startswith("program#v"):
@@ -119,7 +109,6 @@ def _program_version_number(program_sk: str) -> int | None:
         return int(program_sk.removeprefix("program#v"))
     except ValueError:
         return None
-
 
 def _public_session(item: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
     session = copy.deepcopy(item)
@@ -149,7 +138,6 @@ def _public_session(item: dict[str, Any], phases: Optional[list[dict[str, Any]]]
     session["phase_name"] = str(phase.get("name") or "Unscheduled")
     return session
 
-
 def _sort_key(item: dict[str, Any]) -> tuple[str, int, int, str]:
     return (
         str(item.get("date") or ""),
@@ -157,7 +145,6 @@ def _sort_key(item: dict[str, Any]) -> tuple[str, int, int, str]:
         _int_value(item.get("source_index"), default=0),
         str(item.get("sk") or ""),
     )
-
 
 class SessionStore:
     """Standalone session storage keyed by operator pk and program version."""

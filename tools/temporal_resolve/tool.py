@@ -1,16 +1,13 @@
-"""Temporal resolve tool plugin — parse natural language date/time phrases into concrete dates."""
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
 
 def _resolve_phrase(phrase: str, tz: Optional[str] = None) -> Dict[str, Any]:
     import dateparser
@@ -26,7 +23,6 @@ def _resolve_phrase(phrase: str, tz: Optional[str] = None) -> Dict[str, Any]:
     if parsed is None:
         return {"error": f"Could not parse phrase: {phrase!r}", "phrase": phrase}
 
-    # Ensure UTC-aware for comparisons
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
 
@@ -74,7 +70,6 @@ def _resolve_phrase(phrase: str, tz: Optional[str] = None) -> Dict[str, Any]:
             result["tz_error"] = f"Could not convert to {tz!r}: {e}"
 
     return result
-
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name == "resolve_temporal_phrase":

@@ -1,16 +1,13 @@
-"""Temporal from-unix tool plugin — convert Unix timestamp to structured datetime."""
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
 
 def _relative_description(dt: datetime) -> str:
     from dateutil.relativedelta import relativedelta
@@ -37,14 +34,12 @@ def _relative_description(dt: datetime) -> str:
         years = days // 365
         return f"in ~{years} year{'s' if years != 1 else ''}" if is_future else f"~{years} year{'s' if years != 1 else ''} ago"
 
-
 def _unix_to_datetime(unix_timestamp: float, tz: Optional[str] = None) -> Dict[str, Any]:
     try:
         ts = float(unix_timestamp)
     except (ValueError, TypeError):
         return {"error": f"Invalid timestamp: {unix_timestamp!r}"}
 
-    # Auto-detect milliseconds
     if abs(ts) > 1e12:
         ts = ts / 1000.0
 
@@ -78,7 +73,6 @@ def _unix_to_datetime(unix_timestamp: float, tz: Optional[str] = None) -> Dict[s
             result["tz_error"] = f"Could not convert to {tz!r}: {e}"
 
     return result
-
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name == "unix_to_datetime":

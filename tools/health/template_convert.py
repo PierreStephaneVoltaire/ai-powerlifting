@@ -1,7 +1,4 @@
-"""Logic for converting an existing Program block into a reusable Template.
 
-Strips all temporal and athlete-specific data while preserving structure.
-"""
 from __future__ import annotations
 
 import uuid
@@ -25,8 +22,6 @@ def derive_day_index(session: dict[str, Any], program: dict[str, Any]) -> int:
     """Return a 1-based day index (1-7) for ordering sessions within a week."""
     from datetime import date
     d = date.fromisoformat(session["date"])
-    # Adjust so Monday is 1 or just use weekday()
-    # Let's use weekday() where Monday is 0
     return d.weekday() + 1
 
 def derive_week_count(program: dict[str, Any]) -> int:
@@ -41,7 +36,6 @@ def derive_days_per_week(program: dict[str, Any]) -> int:
     if not sessions:
         return 0
     
-    # Count sessions in each week and take max
     weeks: dict[int, int] = {}
     for s in sessions:
         if not s.get("date"): continue
@@ -56,10 +50,9 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
     
     for session in program.get("sessions", []):
         if session.get("completed") or session.get("status") in ("logged", "completed"):
-            continue # Stripped per spec
+            continue
             
         tpl_exercises = []
-        # Use planned_exercises if available, else fallback to exercises
         exercises = session.get("planned_exercises") or session.get("exercises") or []
         
         for ex in exercises:
@@ -71,7 +64,6 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
             e1rm = e1rm_map.get(name)
             load_source = ex.get("load_source", "absolute")
             
-            # Inference logic from §10
             if load_source == "rpe" or (kg == 0 and rpe):
                 tpl_ex_fields = {
                     "load_type": "rpe",
@@ -115,10 +107,8 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
             "exercises": tpl_exercises
         })
         
-    # Sort sessions
     sessions.sort(key=lambda s: (s["week_number"], s["day_index"]))
     
-    # Prepare template
     return {
         "meta": {
             "name": f"Template from {program['meta'].get('program_name', 'Block')}",
@@ -130,7 +120,7 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
         },
         "phases": program.get("phases", []),
         "sessions": sessions,
-        "required_maxes": list(e1rm_map.keys()), # Initial guess based on map provided
+        "required_maxes": list(e1rm_map.keys()),
         "glossary_resolution": {
             "resolved": [ex.get("name") for s in sessions for ex in s["exercises"] if ex.get("glossary_id")],
             "unresolved": [ex.get("name") for s in sessions for ex in s["exercises"] if not ex.get("glossary_id")],

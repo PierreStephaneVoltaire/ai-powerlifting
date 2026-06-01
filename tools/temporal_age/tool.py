@@ -1,16 +1,13 @@
-"""Temporal age tool plugin — calculate age and birthday information from a birth date."""
 from __future__ import annotations
 
 import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
 
 _ZODIAC = [
     ((1, 20), (2, 18), "Aquarius"),
@@ -27,7 +24,6 @@ _ZODIAC = [
     ((12, 22), (1, 19), "Capricorn"),
 ]
 
-
 def _zodiac_sign(month: int, day: int) -> str:
     for start, end, sign in _ZODIAC:
         if start <= end:
@@ -37,7 +33,6 @@ def _zodiac_sign(month: int, day: int) -> str:
             if (month, day) >= start or (month, day) <= end:
                 return sign
     return "Unknown"
-
 
 def _calculate_age(birth_date_str: str, reference_date_str: Optional[str] = None) -> Dict[str, Any]:
     import dateparser
@@ -56,14 +51,12 @@ def _calculate_age(birth_date_str: str, reference_date_str: Optional[str] = None
 
     age = relativedelta(ref, birth)
 
-    # Next birthday: same month/day in reference year, or next year if already passed
     try:
         next_bday = birth.replace(year=ref.year)
         if next_bday < ref.date() if hasattr(ref, 'date') else next_bday < ref:
             next_bday = next_bday.replace(year=ref.year + 1)
         days_until = (next_bday - (ref.date() if hasattr(ref, 'date') else ref)).days
     except ValueError:
-        # Leap year birthday (Feb 29) — use Feb 28 on non-leap years
         next_bday = birth.replace(year=ref.year, day=28)
         if next_bday < (ref.date() if hasattr(ref, 'date') else ref):
             next_bday = birth.replace(year=ref.year + 1, day=28)
@@ -77,7 +70,6 @@ def _calculate_age(birth_date_str: str, reference_date_str: Optional[str] = None
         "days_until_birthday": days_until,
         "zodiac_sign": _zodiac_sign(birth.month, birth.day),
     }
-
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name == "calculate_age":

@@ -1,15 +1,12 @@
-"""Temporal timezone tool plugin — convert datetime between IANA timezones."""
 from __future__ import annotations
 
 import json
 from typing import Any, Dict
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
 
 def _convert_timezone(datetime_str: str, from_tz: str, to_tz: str) -> Dict[str, Any]:
     import dateparser
@@ -43,7 +40,6 @@ def _convert_timezone(datetime_str: str, from_tz: str, to_tz: str) -> Dict[str, 
         "from_offset": _fmt_offset(localized),
         "to_offset": _fmt_offset(converted),
     }
-
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name == "convert_timezone":

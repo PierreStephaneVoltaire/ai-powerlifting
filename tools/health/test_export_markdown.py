@@ -5,8 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from export import _fmt_failed_set_reasons, build_program_markdown  # noqa: E402
-
+from export import _fmt_failed_set_reasons, build_program_markdown
 
 def test_fmt_failed_set_reasons_keeps_valid_failed_reason_labels() -> None:
     assert _fmt_failed_set_reasons([
@@ -18,7 +17,6 @@ def test_fmt_failed_set_reasons_keeps_valid_failed_reason_labels() -> None:
         "set 2: Grip, Lockout; "
         "set 4: Misload / bad attempt selection, Fatigue"
     )
-
 
 def test_build_program_markdown_produces_narrative(tmp_path: Path) -> None:
     program = {
@@ -77,25 +75,21 @@ def test_build_program_markdown_produces_narrative(tmp_path: Path) -> None:
     text = out_path.read_text(encoding="utf-8")
     assert result == str(out_path)
 
-    # Title and overview
     assert "# Test Program" in text
     assert "**Started:** 2026-04-01" in text
     assert "**Current BW:** 82.5 kg" in text
     assert "### Target Lifts" in text
     assert "Squat 200 kg" in text
 
-    # Current maxes table
     assert "## Current Maxes" in text
     assert "Squat" in text
     assert "190" in text
 
-    # Phases as narrative
     assert "## Training Phases" in text
     assert "**Base**" in text
     assert "Weeks 1" in text
     assert "Build volume" in text
 
-    # Sessions with exercise tables
     assert "## Training Log" in text
     assert "**2026-04-02**" in text
     assert "Upper" in text
@@ -106,13 +100,10 @@ def test_build_program_markdown_produces_narrative(tmp_path: Path) -> None:
     assert "clean reps" in text
     assert "felt strong today" in text
 
-    # Training notes
     assert "keep bar speed high" in text
 
-    # No raw data dumps
     assert "## Raw Export" not in text
     assert "## Meta" not in text
-
 
 def test_build_program_markdown_escapes_pipes_in_tables(tmp_path: Path) -> None:
     program = {
@@ -150,10 +141,8 @@ def test_build_program_markdown_escapes_pipes_in_tables(tmp_path: Path) -> None:
     build_program_markdown(program, str(out_path))
     text = out_path.read_text(encoding="utf-8")
 
-    # Pipes in prose are fine, pipes in table cells are escaped
     assert "Bench \\| Press" in text
     assert "clean \\| reps" in text
-
 
 def test_build_program_markdown_empty_program(tmp_path: Path) -> None:
     program = {
@@ -168,7 +157,6 @@ def test_build_program_markdown_empty_program(tmp_path: Path) -> None:
     assert "# Empty" in text
     assert "## Current Maxes" not in text
     assert "## Training Log" not in text
-
 
 def test_session_notes_inline_not_in_notes_section(tmp_path: Path) -> None:
     program = {
@@ -195,21 +183,16 @@ def test_session_notes_inline_not_in_notes_section(tmp_path: Path) -> None:
     build_program_markdown(program, str(out_path))
     text = out_path.read_text(encoding="utf-8")
 
-    # Session notes appear inline in Training Log
     assert "## Training Log" in text
     assert "_felt strong_" in text
 
-    # Competition notes appear inline in Competitions
     assert "## Competitions" in text
     assert "bring knee sleeves" in text
 
-    # Goal notes appear in Goals table
     assert "## Goals" in text
     assert "need 580+" in text
 
-    # No session/competition notes duplicated in Notes section
     assert "## Notes" not in text
-
 
 def test_post_meet_report_renders_attempts_and_context(tmp_path: Path) -> None:
     program = {
@@ -252,7 +235,6 @@ def test_post_meet_report_renders_attempts_and_context(tmp_path: Path) -> None:
     assert "Judged technical / Depth, Command failure" in text
     assert "Attempt selection: 3/5" in text
     assert "belt lever loose" in text
-
 
 def test_dots_and_weight_trends(tmp_path: Path) -> None:
     program = {

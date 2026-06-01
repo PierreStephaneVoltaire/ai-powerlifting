@@ -10,7 +10,6 @@ import json
 import sys
 from pathlib import Path
 
-
 def main() -> None:
     plugin_dir = Path(__file__).parent
     tool_path = plugin_dir / "tool.py"
@@ -38,7 +37,6 @@ def main() -> None:
     json.dump({"ok": True, "result": str(result)}, sys.stdout)
     sys.stdout.write("\n")
     sys.stdout.flush()
-
 
 if __name__ == "__main__":
     try:

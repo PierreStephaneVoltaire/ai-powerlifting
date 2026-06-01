@@ -1,15 +1,12 @@
-"""Temporal duration tool plugin — calculate duration between two dates."""
 from __future__ import annotations
 
 import json
 from typing import Any, Dict
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
 
 def _calculate_duration(start_date_str: str, end_date_str: str) -> Dict[str, Any]:
     import dateparser
@@ -46,7 +43,6 @@ def _calculate_duration(start_date_str: str, end_date_str: str) -> Dict[str, Any
         "total_days": total_days,
         "description": description,
     }
-
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     if name == "time_duration":

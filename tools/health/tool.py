@@ -1,10 +1,4 @@
-"""Health tool plugin — training program management and powerlifting tools.
 
-Exports:
-    get_tools()       → SDK Tool objects (side effect: register_tool() calls)
-    get_schemas()     → snake_case name → JSON schema
-    execute(name, args) → async dispatcher for non-agentic path
-"""
 from __future__ import annotations
 
 import asyncio
@@ -23,11 +17,6 @@ from tools.sdk_compat import (
     ToolExecutor,
     register_tool,
 )
-
-
-# =============================================================================
-# Initial Setup: Sync powerlifting datasets from S3 to sandbox
-# =============================================================================
 
 def _sync_powerlifting_datasets():
     import os
@@ -71,24 +60,16 @@ def _sync_powerlifting_datasets():
         except Exception as e:
             logging.getLogger(__name__).warning(f"Health Plugin: [Background] Powerlifting dataset sync failed: {e}")
 
-        # Always attempt to warm the DataFrame cache after sync (covers both fresh
-        # downloads and restarts where files already exist on the PV).
         try:
             from powerlifting_stats import warm_cache
             warm_cache()
         except Exception as e:
             logging.getLogger(__name__).warning(f"Health Plugin: [Background] warm_cache() failed: {e}")
 
-    # Run sync in background thread to avoid blocking tool loading/app startup
     thread = threading.Thread(target=_sync_worker, daemon=True)
     thread.start()
 
 _sync_powerlifting_datasets()
-
-
-# =============================================================================
-# Helpers (duplicated from agent/tools/base to avoid cross-dir imports)
-# =============================================================================
 
 def _run_async(coro):
     try:
@@ -101,12 +82,10 @@ def _run_async(coro):
             return pool.submit(asyncio.run, coro).result()
     return asyncio.run(coro)
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
 
 def _sanitize_decimals(obj: Any) -> Any:
     if isinstance(obj, Decimal):
@@ -118,7 +97,6 @@ def _sanitize_decimals(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_sanitize_decimals(v) for v in obj]
     return obj
-
 
 def _get_glossary_sync(table_name: str) -> list[dict]:
     """Fetch glossary from DynamoDB for the active health partition."""
@@ -133,7 +111,6 @@ def _get_glossary_sync(table_name: str) -> list[dict]:
         return []
     return _sanitize_decimals(item.get("exercises", []))
 
-
 def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
     import boto3
 
@@ -145,27 +122,17 @@ def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
         return None
     return _sanitize_decimals(item)
 
-
-# =============================================================================
-# SDK Tool Classes (migrated from agent/tools/health_tools.py)
-# =============================================================================
-
-# --- health_get_program ---
-
 class HealthGetProgramAction(Action):
     pass
 
-
 class HealthGetProgramObservation(Observation):
     pass
-
 
 class HealthGetProgramExecutor(ToolExecutor[HealthGetProgramAction, HealthGetProgramObservation]):
     def __call__(self, action: HealthGetProgramAction, conversation=None) -> HealthGetProgramObservation:
         from core import health_get_program
         result = _run_async(health_get_program())
         return HealthGetProgramObservation.from_text(_format_result(result))
-
 
 class HealthGetProgramTool(ToolDefinition[HealthGetProgramAction, HealthGetProgramObservation]):
     @classmethod
@@ -180,23 +147,17 @@ class HealthGetProgramTool(ToolDefinition[HealthGetProgramAction, HealthGetProgr
             executor=HealthGetProgramExecutor(),
         )]
 
-
-# --- health_setup_status ---
-
 class HealthSetupStatusAction(Action):
     pass
 
-
 class HealthSetupStatusObservation(Observation):
     pass
-
 
 class HealthSetupStatusExecutor(ToolExecutor[HealthSetupStatusAction, HealthSetupStatusObservation]):
     def __call__(self, action: HealthSetupStatusAction, conversation=None) -> HealthSetupStatusObservation:
         from core import health_setup_status
         result = _run_async(health_setup_status())
         return HealthSetupStatusObservation.from_text(_format_result(result))
-
 
 class HealthSetupStatusTool(ToolDefinition[HealthSetupStatusAction, HealthSetupStatusObservation]):
     @classmethod
@@ -208,9 +169,6 @@ class HealthSetupStatusTool(ToolDefinition[HealthSetupStatusAction, HealthSetupS
             executor=HealthSetupStatusExecutor(),
         )]
 
-
-# --- health_setup_initialize ---
-
 class HealthSetupInitializeAction(Action):
     mode: str = Field(description="Initialization mode: blank, manual_sessions, or template")
     start_date: str = Field(description="Program start date (YYYY-MM-DD)")
@@ -219,10 +177,8 @@ class HealthSetupInitializeAction(Action):
     template_sk: Optional[str] = Field(default=None, description="Required when mode=template")
     maxes: Optional[Dict[str, float]] = Field(default=None, description="Optional maxes/e1RMs keyed by squat, bench, deadlift, or template glossary IDs")
 
-
 class HealthSetupInitializeObservation(Observation):
     pass
-
 
 class HealthSetupInitializeExecutor(ToolExecutor[HealthSetupInitializeAction, HealthSetupInitializeObservation]):
     def __call__(self, action: HealthSetupInitializeAction, conversation=None) -> HealthSetupInitializeObservation:
@@ -237,7 +193,6 @@ class HealthSetupInitializeExecutor(ToolExecutor[HealthSetupInitializeAction, He
         ))
         return HealthSetupInitializeObservation.from_text(_format_result(result))
 
-
 class HealthSetupInitializeTool(ToolDefinition[HealthSetupInitializeAction, HealthSetupInitializeObservation]):
     @classmethod
     def create(cls, conv_state=None, **params) -> Sequence["HealthSetupInitializeTool"]:
@@ -248,23 +203,17 @@ class HealthSetupInitializeTool(ToolDefinition[HealthSetupInitializeAction, Heal
             executor=HealthSetupInitializeExecutor(),
         )]
 
-
-# --- health_comp_countdown ---
-
 class HealthCompCountdownAction(Action):
     pass
 
-
 class HealthCompCountdownObservation(Observation):
     pass
-
 
 class HealthCompCountdownExecutor(ToolExecutor[HealthCompCountdownAction, HealthCompCountdownObservation]):
     def __call__(self, action: HealthCompCountdownAction, conversation=None) -> HealthCompCountdownObservation:
         from core import health_comp_countdown
         result = _run_async(health_comp_countdown())
         return HealthCompCountdownObservation.from_text(_format_result(result))
-
 
 class HealthCompCountdownTool(ToolDefinition[HealthCompCountdownAction, HealthCompCountdownObservation]):
     @classmethod
@@ -279,26 +228,20 @@ class HealthCompCountdownTool(ToolDefinition[HealthCompCountdownAction, HealthCo
             executor=HealthCompCountdownExecutor(),
         )]
 
-
-# --- health_update_session ---
-
 class HealthUpdateSessionAction(Action):
     date: str = Field(description="ISO8601 date string (YYYY-MM-DD) of the session to update")
     patch: Dict[str, Any] = Field(
         description="Dict with session fields to update. Allowed keys: completed, session_rpe, body_weight_kg, session_notes, exercises"
     )
 
-
 class HealthUpdateSessionObservation(Observation):
     pass
-
 
 class HealthUpdateSessionExecutor(ToolExecutor[HealthUpdateSessionAction, HealthUpdateSessionObservation]):
     def __call__(self, action: HealthUpdateSessionAction, conversation=None) -> HealthUpdateSessionObservation:
         from core import health_update_session
         result = _run_async(health_update_session(action.date, action.patch))
         return HealthUpdateSessionObservation.from_text(_format_result(result))
-
 
 class HealthUpdateSessionTool(ToolDefinition[HealthUpdateSessionAction, HealthUpdateSessionObservation]):
     @classmethod
@@ -313,26 +256,20 @@ class HealthUpdateSessionTool(ToolDefinition[HealthUpdateSessionAction, HealthUp
             executor=HealthUpdateSessionExecutor(),
         )]
 
-
-# --- health_new_version ---
-
 class HealthNewVersionAction(Action):
     change_reason: str = Field(description="Human-readable reason for the version change")
     patches: List[Dict[str, Any]] = Field(
         description="List of patches, each with 'path' (e.g., 'sessions[0].exercises[1].kg') and 'value' keys"
     )
 
-
 class HealthNewVersionObservation(Observation):
     pass
-
 
 class HealthNewVersionExecutor(ToolExecutor[HealthNewVersionAction, HealthNewVersionObservation]):
     def __call__(self, action: HealthNewVersionAction, conversation=None) -> HealthNewVersionObservation:
         from core import health_new_version
         result = _run_async(health_new_version(action.change_reason, action.patches))
         return HealthNewVersionObservation.from_text(_format_result(result))
-
 
 class HealthNewVersionTool(ToolDefinition[HealthNewVersionAction, HealthNewVersionObservation]):
     @classmethod
@@ -347,23 +284,17 @@ class HealthNewVersionTool(ToolDefinition[HealthNewVersionAction, HealthNewVersi
             executor=HealthNewVersionExecutor(),
         )]
 
-
-# --- kg_to_lb ---
-
 class KgToLbAction(Action):
     kg: float = Field(description="Weight in kilograms")
 
-
 class KgToLbObservation(Observation):
     pass
-
 
 class KgToLbExecutor(ToolExecutor[KgToLbAction, KgToLbObservation]):
     def __call__(self, action: KgToLbAction, conversation=None) -> KgToLbObservation:
         from core import kg_to_lb
         result = kg_to_lb(action.kg)
         return KgToLbObservation.from_text(_format_result(result))
-
 
 class KgToLbTool(ToolDefinition[KgToLbAction, KgToLbObservation]):
     @classmethod
@@ -375,23 +306,17 @@ class KgToLbTool(ToolDefinition[KgToLbAction, KgToLbObservation]):
             executor=KgToLbExecutor(),
         )]
 
-
-# --- lb_to_kg ---
-
 class LbToKgAction(Action):
     lb: float = Field(description="Weight in pounds")
 
-
 class LbToKgObservation(Observation):
     pass
-
 
 class LbToKgExecutor(ToolExecutor[LbToKgAction, LbToKgObservation]):
     def __call__(self, action: LbToKgAction, conversation=None) -> LbToKgObservation:
         from core import lb_to_kg
         result = lb_to_kg(action.lb)
         return LbToKgObservation.from_text(_format_result(result))
-
 
 class LbToKgTool(ToolDefinition[LbToKgAction, LbToKgObservation]):
     @classmethod
@@ -403,23 +328,17 @@ class LbToKgTool(ToolDefinition[LbToKgAction, LbToKgObservation]):
             executor=LbToKgExecutor(),
         )]
 
-
-# --- ipf_weight_classes ---
-
 class IpfWeightClassesAction(Action):
     sex: str = Field(description="Sex for weight classes: 'M' or 'F'")
 
-
 class IpfWeightClassesObservation(Observation):
     pass
-
 
 class IpfWeightClassesExecutor(ToolExecutor[IpfWeightClassesAction, IpfWeightClassesObservation]):
     def __call__(self, action: IpfWeightClassesAction, conversation=None) -> IpfWeightClassesObservation:
         from core import ipf_weight_classes
         result = ipf_weight_classes(action.sex)
         return IpfWeightClassesObservation.from_text(_format_result(result))
-
 
 class IpfWeightClassesTool(ToolDefinition[IpfWeightClassesAction, IpfWeightClassesObservation]):
     @classmethod
@@ -434,24 +353,18 @@ class IpfWeightClassesTool(ToolDefinition[IpfWeightClassesAction, IpfWeightClass
             executor=IpfWeightClassesExecutor(),
         )]
 
-
-# --- pct_of_max ---
-
 class PctOfMaxAction(Action):
     max_kg: float = Field(description="Maximum weight in kilograms")
     pct: float = Field(description="Percentage (0-150, not 0-1). E.g., 85 for 85%")
 
-
 class PctOfMaxObservation(Observation):
     pass
-
 
 class PctOfMaxExecutor(ToolExecutor[PctOfMaxAction, PctOfMaxObservation]):
     def __call__(self, action: PctOfMaxAction, conversation=None) -> PctOfMaxObservation:
         from core import pct_of_max
         result = pct_of_max(action.max_kg, action.pct)
         return PctOfMaxObservation.from_text(_format_result(result))
-
 
 class PctOfMaxTool(ToolDefinition[PctOfMaxAction, PctOfMaxObservation]):
     @classmethod
@@ -466,9 +379,6 @@ class PctOfMaxTool(ToolDefinition[PctOfMaxAction, PctOfMaxObservation]):
             executor=PctOfMaxExecutor(),
         )]
 
-
-# --- calculate_attempts ---
-
 class CalculateAttemptsAction(Action):
     lift: str = Field(description="Lift type: 'squat', 'bench', or 'deadlift'")
     opener_kg: float = Field(description="First attempt weight in kg")
@@ -476,10 +386,8 @@ class CalculateAttemptsAction(Action):
     j2_override: Optional[float] = Field(default=None, description="Override jump 2 from program prefs (kg)")
     last_felt: Optional[str] = Field(default=None, description="If 'hard', halve j2 for conservative third attempt")
 
-
 class CalculateAttemptsObservation(Observation):
     pass
-
 
 class CalculateAttemptsExecutor(ToolExecutor[CalculateAttemptsAction, CalculateAttemptsObservation]):
     def __call__(self, action: CalculateAttemptsAction, conversation=None) -> CalculateAttemptsObservation:
@@ -492,7 +400,6 @@ class CalculateAttemptsExecutor(ToolExecutor[CalculateAttemptsAction, CalculateA
             last_felt=action.last_felt,
         ))
         return CalculateAttemptsObservation.from_text(_format_result(result))
-
 
 class CalculateAttemptsTool(ToolDefinition[CalculateAttemptsAction, CalculateAttemptsObservation]):
     @classmethod
@@ -507,24 +414,18 @@ class CalculateAttemptsTool(ToolDefinition[CalculateAttemptsAction, CalculateAtt
             executor=CalculateAttemptsExecutor(),
         )]
 
-
-# --- health_rag_search ---
-
 class HealthRagSearchAction(Action):
     query: str = Field(description="Search query for health documents")
     n_results: int = Field(default=4, description="Number of results to return")
 
-
 class HealthRagSearchObservation(Observation):
     pass
-
 
 class HealthRagSearchExecutor(ToolExecutor[HealthRagSearchAction, HealthRagSearchObservation]):
     def __call__(self, action: HealthRagSearchAction, conversation=None) -> HealthRagSearchObservation:
         from core import health_rag_search
         result = _run_async(health_rag_search(action.query, action.n_results))
         return HealthRagSearchObservation.from_text(_format_result(result))
-
 
 class HealthRagSearchTool(ToolDefinition[HealthRagSearchAction, HealthRagSearchObservation]):
     @classmethod
@@ -539,23 +440,17 @@ class HealthRagSearchTool(ToolDefinition[HealthRagSearchAction, HealthRagSearchO
             executor=HealthRagSearchExecutor(),
         )]
 
-
-# --- health_get_competition ---
-
 class HealthGetCompetitionAction(Action):
     date: str = Field(description="Competition date (YYYY-MM-DD)")
 
-
 class HealthGetCompetitionObservation(Observation):
     pass
-
 
 class HealthGetCompetitionExecutor(ToolExecutor[HealthGetCompetitionAction, HealthGetCompetitionObservation]):
     def __call__(self, action: HealthGetCompetitionAction, conversation=None) -> HealthGetCompetitionObservation:
         from core import health_get_competition
         result = _run_async(health_get_competition(action.date))
         return HealthGetCompetitionObservation.from_text(_format_result(result))
-
 
 class HealthGetCompetitionTool(ToolDefinition[HealthGetCompetitionAction, HealthGetCompetitionObservation]):
     @classmethod
@@ -570,23 +465,17 @@ class HealthGetCompetitionTool(ToolDefinition[HealthGetCompetitionAction, Health
             executor=HealthGetCompetitionExecutor(),
         )]
 
-
-# --- health_list_competitions ---
-
 class HealthListCompetitionsAction(Action):
     pass
 
-
 class HealthListCompetitionsObservation(Observation):
     pass
-
 
 class HealthListCompetitionsExecutor(ToolExecutor[HealthListCompetitionsAction, HealthListCompetitionsObservation]):
     def __call__(self, action: HealthListCompetitionsAction, conversation=None) -> HealthListCompetitionsObservation:
         from core import health_list_competitions
         result = _run_async(health_list_competitions())
         return HealthListCompetitionsObservation.from_text(_format_result(result))
-
 
 class HealthListCompetitionsTool(ToolDefinition[HealthListCompetitionsAction, HealthListCompetitionsObservation]):
     @classmethod
@@ -601,24 +490,18 @@ class HealthListCompetitionsTool(ToolDefinition[HealthListCompetitionsAction, He
             executor=HealthListCompetitionsExecutor(),
         )]
 
-
-# --- health_get_diet_notes ---
-
 class HealthGetDietNotesAction(Action):
     start_date: Optional[str] = Field(default=None, description="Optional start of date range (YYYY-MM-DD)")
     end_date: Optional[str] = Field(default=None, description="Optional end of date range (YYYY-MM-DD)")
 
-
 class HealthGetDietNotesObservation(Observation):
     pass
-
 
 class HealthGetDietNotesExecutor(ToolExecutor[HealthGetDietNotesAction, HealthGetDietNotesObservation]):
     def __call__(self, action: HealthGetDietNotesAction, conversation=None) -> HealthGetDietNotesObservation:
         from core import health_get_diet_notes
         result = _run_async(health_get_diet_notes(action.start_date, action.end_date))
         return HealthGetDietNotesObservation.from_text(_format_result(result))
-
 
 class HealthGetDietNotesTool(ToolDefinition[HealthGetDietNotesAction, HealthGetDietNotesObservation]):
     @classmethod
@@ -633,23 +516,17 @@ class HealthGetDietNotesTool(ToolDefinition[HealthGetDietNotesAction, HealthGetD
             executor=HealthGetDietNotesExecutor(),
         )]
 
-
-# --- health_get_session ---
-
 class HealthGetSessionAction(Action):
     date: str = Field(description="Session date (YYYY-MM-DD)")
 
-
 class HealthGetSessionObservation(Observation):
     pass
-
 
 class HealthGetSessionExecutor(ToolExecutor[HealthGetSessionAction, HealthGetSessionObservation]):
     def __call__(self, action: HealthGetSessionAction, conversation=None) -> HealthGetSessionObservation:
         from core import health_get_session
         result = _run_async(health_get_session(action.date))
         return HealthGetSessionObservation.from_text(_format_result(result))
-
 
 class HealthGetSessionTool(ToolDefinition[HealthGetSessionAction, HealthGetSessionObservation]):
     @classmethod
@@ -664,24 +541,18 @@ class HealthGetSessionTool(ToolDefinition[HealthGetSessionAction, HealthGetSessi
             executor=HealthGetSessionExecutor(),
         )]
 
-
-# --- health_get_sessions_range ---
-
 class HealthGetSessionsRangeAction(Action):
     start_date: str = Field(description="Start of date range (YYYY-MM-DD)")
     end_date: str = Field(description="End of date range (YYYY-MM-DD)")
 
-
 class HealthGetSessionsRangeObservation(Observation):
     pass
-
 
 class HealthGetSessionsRangeExecutor(ToolExecutor[HealthGetSessionsRangeAction, HealthGetSessionsRangeObservation]):
     def __call__(self, action: HealthGetSessionsRangeAction, conversation=None) -> HealthGetSessionsRangeObservation:
         from core import health_get_sessions_range
         result = _run_async(health_get_sessions_range(action.start_date, action.end_date))
         return HealthGetSessionsRangeObservation.from_text(_format_result(result))
-
 
 class HealthGetSessionsRangeTool(ToolDefinition[HealthGetSessionsRangeAction, HealthGetSessionsRangeObservation]):
     @classmethod
@@ -696,23 +567,17 @@ class HealthGetSessionsRangeTool(ToolDefinition[HealthGetSessionsRangeAction, He
             executor=HealthGetSessionsRangeExecutor(),
         )]
 
-
-# --- health_get_supplements ---
-
 class HealthGetSupplementsAction(Action):
     pass
 
-
 class HealthGetSupplementsObservation(Observation):
     pass
-
 
 class HealthGetSupplementsExecutor(ToolExecutor[HealthGetSupplementsAction, HealthGetSupplementsObservation]):
     def __call__(self, action: HealthGetSupplementsAction, conversation=None) -> HealthGetSupplementsObservation:
         from core import health_get_supplements
         result = _run_async(health_get_supplements())
         return HealthGetSupplementsObservation.from_text(_format_result(result))
-
 
 class HealthGetSupplementsTool(ToolDefinition[HealthGetSupplementsAction, HealthGetSupplementsObservation]):
     @classmethod
@@ -727,23 +592,17 @@ class HealthGetSupplementsTool(ToolDefinition[HealthGetSupplementsAction, Health
             executor=HealthGetSupplementsExecutor(),
         )]
 
-
-# --- health_get_meta ---
-
 class HealthGetMetaAction(Action):
     pass
 
-
 class HealthGetMetaObservation(Observation):
     pass
-
 
 class HealthGetMetaExecutor(ToolExecutor[HealthGetMetaAction, HealthGetMetaObservation]):
     def __call__(self, action: HealthGetMetaAction, conversation=None) -> HealthGetMetaObservation:
         from core import health_get_meta
         result = _run_async(health_get_meta())
         return HealthGetMetaObservation.from_text(_format_result(result))
-
 
 class HealthGetMetaTool(ToolDefinition[HealthGetMetaAction, HealthGetMetaObservation]):
     @classmethod
@@ -759,23 +618,17 @@ class HealthGetMetaTool(ToolDefinition[HealthGetMetaAction, HealthGetMetaObserva
             executor=HealthGetMetaExecutor(),
         )]
 
-
-# --- health_get_phases ---
-
 class HealthGetPhasesAction(Action):
     pass
 
-
 class HealthGetPhasesObservation(Observation):
     pass
-
 
 class HealthGetPhasesExecutor(ToolExecutor[HealthGetPhasesAction, HealthGetPhasesObservation]):
     def __call__(self, action: HealthGetPhasesAction, conversation=None) -> HealthGetPhasesObservation:
         from core import health_get_phases
         result = _run_async(health_get_phases())
         return HealthGetPhasesObservation.from_text(_format_result(result))
-
 
 class HealthGetPhasesTool(ToolDefinition[HealthGetPhasesAction, HealthGetPhasesObservation]):
     @classmethod
@@ -790,23 +643,17 @@ class HealthGetPhasesTool(ToolDefinition[HealthGetPhasesAction, HealthGetPhasesO
             executor=HealthGetPhasesExecutor(),
         )]
 
-
-# --- health_get_current_maxes ---
-
 class HealthGetCurrentMaxesAction(Action):
     pass
 
-
 class HealthGetCurrentMaxesObservation(Observation):
     pass
-
 
 class HealthGetCurrentMaxesExecutor(ToolExecutor[HealthGetCurrentMaxesAction, HealthGetCurrentMaxesObservation]):
     def __call__(self, action: HealthGetCurrentMaxesAction, conversation=None) -> HealthGetCurrentMaxesObservation:
         from core import health_get_current_maxes
         result = _run_async(health_get_current_maxes())
         return HealthGetCurrentMaxesObservation.from_text(_format_result(result))
-
 
 class HealthGetCurrentMaxesTool(ToolDefinition[HealthGetCurrentMaxesAction, HealthGetCurrentMaxesObservation]):
     @classmethod
@@ -821,23 +668,17 @@ class HealthGetCurrentMaxesTool(ToolDefinition[HealthGetCurrentMaxesAction, Heal
             executor=HealthGetCurrentMaxesExecutor(),
         )]
 
-
-# --- health_get_goals ---
-
 class HealthGetGoalsAction(Action):
     pass
 
-
 class HealthGetGoalsObservation(Observation):
     pass
-
 
 class HealthGetGoalsExecutor(ToolExecutor[HealthGetGoalsAction, HealthGetGoalsObservation]):
     def __call__(self, action: HealthGetGoalsAction, conversation=None) -> HealthGetGoalsObservation:
         from core import health_get_goals
         result = _run_async(health_get_goals())
         return HealthGetGoalsObservation.from_text(_format_result(result))
-
 
 class HealthGetGoalsTool(ToolDefinition[HealthGetGoalsAction, HealthGetGoalsObservation]):
     @classmethod
@@ -852,25 +693,19 @@ class HealthGetGoalsTool(ToolDefinition[HealthGetGoalsAction, HealthGetGoalsObse
             executor=HealthGetGoalsExecutor(),
         )]
 
-
-# --- health_update_goals ---
-
 class HealthUpdateGoalsAction(Action):
     goals: List[Dict[str, Any]] = Field(
         description="Complete explicit goals array to write onto the current program block"
     )
 
-
 class HealthUpdateGoalsObservation(Observation):
     pass
-
 
 class HealthUpdateGoalsExecutor(ToolExecutor[HealthUpdateGoalsAction, HealthUpdateGoalsObservation]):
     def __call__(self, action: HealthUpdateGoalsAction, conversation=None) -> HealthUpdateGoalsObservation:
         from core import health_update_goals
         result = _run_async(health_update_goals(action.goals))
         return HealthUpdateGoalsObservation.from_text(_format_result(result))
-
 
 class HealthUpdateGoalsTool(ToolDefinition[HealthUpdateGoalsAction, HealthUpdateGoalsObservation]):
     @classmethod
@@ -885,23 +720,17 @@ class HealthUpdateGoalsTool(ToolDefinition[HealthUpdateGoalsAction, HealthUpdate
             executor=HealthUpdateGoalsExecutor(),
         )]
 
-
-# --- health_get_federation_library ---
-
 class HealthGetFederationLibraryAction(Action):
     pass
 
-
 class HealthGetFederationLibraryObservation(Observation):
     pass
-
 
 class HealthGetFederationLibraryExecutor(ToolExecutor[HealthGetFederationLibraryAction, HealthGetFederationLibraryObservation]):
     def __call__(self, action: HealthGetFederationLibraryAction, conversation=None) -> HealthGetFederationLibraryObservation:
         from core import health_get_federation_library
         result = _run_async(health_get_federation_library())
         return HealthGetFederationLibraryObservation.from_text(_format_result(result))
-
 
 class HealthGetFederationLibraryTool(ToolDefinition[HealthGetFederationLibraryAction, HealthGetFederationLibraryObservation]):
     @classmethod
@@ -916,19 +745,14 @@ class HealthGetFederationLibraryTool(ToolDefinition[HealthGetFederationLibraryAc
             executor=HealthGetFederationLibraryExecutor(),
         )]
 
-
-# --- health_update_federation_library ---
-
 class HealthUpdateFederationLibraryAction(Action):
     federations: List[Dict[str, Any]] = Field(description="Complete federation records array")
     qualification_standards: List[Dict[str, Any]] = Field(
         description="Complete qualification standards array linked to the federation ids above"
     )
 
-
 class HealthUpdateFederationLibraryObservation(Observation):
     pass
-
 
 class HealthUpdateFederationLibraryExecutor(ToolExecutor[HealthUpdateFederationLibraryAction, HealthUpdateFederationLibraryObservation]):
     def __call__(self, action: HealthUpdateFederationLibraryAction, conversation=None) -> HealthUpdateFederationLibraryObservation:
@@ -938,7 +762,6 @@ class HealthUpdateFederationLibraryExecutor(ToolExecutor[HealthUpdateFederationL
             "qualification_standards": action.qualification_standards,
         }))
         return HealthUpdateFederationLibraryObservation.from_text(_format_result(result))
-
 
 class HealthUpdateFederationLibraryTool(ToolDefinition[HealthUpdateFederationLibraryAction, HealthUpdateFederationLibraryObservation]):
     @classmethod
@@ -953,23 +776,17 @@ class HealthUpdateFederationLibraryTool(ToolDefinition[HealthUpdateFederationLib
             executor=HealthUpdateFederationLibraryExecutor(),
         )]
 
-
-# --- health_get_operator_prefs ---
-
 class HealthGetOperatorPrefsAction(Action):
     pass
 
-
 class HealthGetOperatorPrefsObservation(Observation):
     pass
-
 
 class HealthGetOperatorPrefsExecutor(ToolExecutor[HealthGetOperatorPrefsAction, HealthGetOperatorPrefsObservation]):
     def __call__(self, action: HealthGetOperatorPrefsAction, conversation=None) -> HealthGetOperatorPrefsObservation:
         from core import health_get_operator_prefs
         result = _run_async(health_get_operator_prefs())
         return HealthGetOperatorPrefsObservation.from_text(_format_result(result))
-
 
 class HealthGetOperatorPrefsTool(ToolDefinition[HealthGetOperatorPrefsAction, HealthGetOperatorPrefsObservation]):
     @classmethod
@@ -984,23 +801,17 @@ class HealthGetOperatorPrefsTool(ToolDefinition[HealthGetOperatorPrefsAction, He
             executor=HealthGetOperatorPrefsExecutor(),
         )]
 
-
-# --- health_get_breaks ---
-
 class HealthGetBreaksAction(Action):
     pass
 
-
 class HealthGetBreaksObservation(Observation):
     pass
-
 
 class HealthGetBreaksExecutor(ToolExecutor[HealthGetBreaksAction, HealthGetBreaksObservation]):
     def __call__(self, action: HealthGetBreaksAction, conversation=None) -> HealthGetBreaksObservation:
         from core import health_get_breaks
         result = _run_async(health_get_breaks())
         return HealthGetBreaksObservation.from_text(_format_result(result))
-
 
 class HealthGetBreaksTool(ToolDefinition[HealthGetBreaksAction, HealthGetBreaksObservation]):
     @classmethod
@@ -1015,24 +826,18 @@ class HealthGetBreaksTool(ToolDefinition[HealthGetBreaksAction, HealthGetBreaksO
             executor=HealthGetBreaksExecutor(),
         )]
 
-
-# --- days_until ---
-
 class DaysUntilAction(Action):
     target_date: str = Field(description="Target date (YYYY-MM-DD)")
     label: str = Field(default="target", description="Human label for the milestone, e.g. 'comp', 'deload'")
 
-
 class DaysUntilObservation(Observation):
     pass
-
 
 class DaysUntilExecutor(ToolExecutor[DaysUntilAction, DaysUntilObservation]):
     def __call__(self, action: DaysUntilAction, conversation=None) -> DaysUntilObservation:
         from core import days_until
         result = _run_async(days_until(action.target_date, action.label))
         return DaysUntilObservation.from_text(_format_result(result))
-
 
 class DaysUntilTool(ToolDefinition[DaysUntilAction, DaysUntilObservation]):
     @classmethod
@@ -1047,26 +852,20 @@ class DaysUntilTool(ToolDefinition[DaysUntilAction, DaysUntilObservation]):
             executor=DaysUntilExecutor(),
         )]
 
-
-# --- health_update_competition ---
-
 class HealthUpdateCompetitionAction(Action):
     date: str = Field(description="Competition date to update (YYYY-MM-DD)")
     patch: Dict[str, Any] = Field(
         description="Fields to update (targets, status, notes, between_comp_plan, comp_day_protocol, etc.)"
     )
 
-
 class HealthUpdateCompetitionObservation(Observation):
     pass
-
 
 class HealthUpdateCompetitionExecutor(ToolExecutor[HealthUpdateCompetitionAction, HealthUpdateCompetitionObservation]):
     def __call__(self, action: HealthUpdateCompetitionAction, conversation=None) -> HealthUpdateCompetitionObservation:
         from core import health_update_competition
         result = _run_async(health_update_competition(action.date, action.patch))
         return HealthUpdateCompetitionObservation.from_text(_format_result(result))
-
 
 class HealthUpdateCompetitionTool(ToolDefinition[HealthUpdateCompetitionAction, HealthUpdateCompetitionObservation]):
     @classmethod
@@ -1081,9 +880,6 @@ class HealthUpdateCompetitionTool(ToolDefinition[HealthUpdateCompetitionAction, 
             executor=HealthUpdateCompetitionExecutor(),
         )]
 
-
-# --- health_snapshot_competition_projection ---
-
 class HealthSnapshotCompetitionProjectionAction(Action):
     date: str = Field(description="Snapshot date (YYYY-MM-DD). Competitions on date + 7 days are considered.")
     version: str = Field(default="current", description="Program version to update")
@@ -1092,17 +888,14 @@ class HealthSnapshotCompetitionProjectionAction(Action):
         description="Allow backfilling a missing snapshot for a completed competition",
     )
 
-
 class HealthSnapshotCompetitionProjectionObservation(Observation):
     pass
-
 
 class HealthSnapshotCompetitionProjectionExecutor(ToolExecutor[HealthSnapshotCompetitionProjectionAction, HealthSnapshotCompetitionProjectionObservation]):
     def __call__(self, action: HealthSnapshotCompetitionProjectionAction, conversation=None) -> HealthSnapshotCompetitionProjectionObservation:
         from core import health_snapshot_competition_projection
         result = _run_async(health_snapshot_competition_projection(action.date, action.version, action.allow_retrospective))
         return HealthSnapshotCompetitionProjectionObservation.from_text(_format_result(result))
-
 
 class HealthSnapshotCompetitionProjectionTool(ToolDefinition[HealthSnapshotCompetitionProjectionAction, HealthSnapshotCompetitionProjectionObservation]):
     @classmethod
@@ -1117,9 +910,6 @@ class HealthSnapshotCompetitionProjectionTool(ToolDefinition[HealthSnapshotCompe
             executor=HealthSnapshotCompetitionProjectionExecutor(),
         )]
 
-
-# --- health_complete_competition ---
-
 class HealthCompleteCompetitionAction(Action):
     date: str = Field(description="Competition date to complete (YYYY-MM-DD)")
     results: Dict[str, Any] = Field(description="Best successful lift attempts and total")
@@ -1131,10 +921,8 @@ class HealthCompleteCompetitionAction(Action):
         description="Backfill a missing T-1 snapshot if it was not captured before completion",
     )
 
-
 class HealthCompleteCompetitionObservation(Observation):
     pass
-
 
 class HealthCompleteCompetitionExecutor(ToolExecutor[HealthCompleteCompetitionAction, HealthCompleteCompetitionObservation]):
     def __call__(self, action: HealthCompleteCompetitionAction, conversation=None) -> HealthCompleteCompetitionObservation:
@@ -1151,7 +939,6 @@ class HealthCompleteCompetitionExecutor(ToolExecutor[HealthCompleteCompetitionAc
         )
         return HealthCompleteCompetitionObservation.from_text(_format_result(result))
 
-
 class HealthCompleteCompetitionTool(ToolDefinition[HealthCompleteCompetitionAction, HealthCompleteCompetitionObservation]):
     @classmethod
     def create(cls, conv_state=None, **params) -> Sequence["HealthCompleteCompetitionTool"]:
@@ -1164,24 +951,18 @@ class HealthCompleteCompetitionTool(ToolDefinition[HealthCompleteCompetitionActi
             executor=HealthCompleteCompetitionExecutor(),
         )]
 
-
-# --- health_update_diet_note ---
-
 class HealthUpdateDietNoteAction(Action):
     date: str = Field(description="Date for the diet note (YYYY-MM-DD)")
     notes: str = Field(description="The diet notes content (replaces existing)")
 
-
 class HealthUpdateDietNoteObservation(Observation):
     pass
-
 
 class HealthUpdateDietNoteExecutor(ToolExecutor[HealthUpdateDietNoteAction, HealthUpdateDietNoteObservation]):
     def __call__(self, action: HealthUpdateDietNoteAction, conversation=None) -> HealthUpdateDietNoteObservation:
         from core import health_update_diet_note
         result = _run_async(health_update_diet_note(action.date, action.notes))
         return HealthUpdateDietNoteObservation.from_text(_format_result(result))
-
 
 class HealthUpdateDietNoteTool(ToolDefinition[HealthUpdateDietNoteAction, HealthUpdateDietNoteObservation]):
     @classmethod
@@ -1196,25 +977,19 @@ class HealthUpdateDietNoteTool(ToolDefinition[HealthUpdateDietNoteAction, Health
             executor=HealthUpdateDietNoteExecutor(),
         )]
 
-
-# --- health_update_supplements ---
-
 class HealthUpdateSupplementsAction(Action):
     patch: Dict[str, Any] = Field(
         description='{"supplements": [...]} or {"supplement_phases": [...]} or both'
     )
 
-
 class HealthUpdateSupplementsObservation(Observation):
     pass
-
 
 class HealthUpdateSupplementsExecutor(ToolExecutor[HealthUpdateSupplementsAction, HealthUpdateSupplementsObservation]):
     def __call__(self, action: HealthUpdateSupplementsAction, conversation=None) -> HealthUpdateSupplementsObservation:
         from core import health_update_supplements
         result = _run_async(health_update_supplements(action.patch))
         return HealthUpdateSupplementsObservation.from_text(_format_result(result))
-
 
 class HealthUpdateSupplementsTool(ToolDefinition[HealthUpdateSupplementsAction, HealthUpdateSupplementsObservation]):
     @classmethod
@@ -1229,9 +1004,6 @@ class HealthUpdateSupplementsTool(ToolDefinition[HealthUpdateSupplementsAction, 
             executor=HealthUpdateSupplementsExecutor(),
         )]
 
-
-# --- health_create_session ---
-
 class HealthCreateSessionAction(Action):
     date: str = Field(description="Session date (YYYY-MM-DD)")
     day: str = Field(description="Day label e.g. 'Monday'")
@@ -1239,17 +1011,14 @@ class HealthCreateSessionAction(Action):
     exercises: Optional[List[Dict[str, Any]]] = Field(default=None, description="Optional list of exercises {name, sets, reps, kg, rpe, notes}")
     session_notes: str = Field(default="", description="Optional session notes")
 
-
 class HealthCreateSessionObservation(Observation):
     pass
-
 
 class HealthCreateSessionExecutor(ToolExecutor[HealthCreateSessionAction, HealthCreateSessionObservation]):
     def __call__(self, action: HealthCreateSessionAction, conversation=None) -> HealthCreateSessionObservation:
         from core import health_create_session
         result = _run_async(health_create_session(action.date, action.day, action.week_number, action.exercises, action.session_notes))
         return HealthCreateSessionObservation.from_text(_format_result(result))
-
 
 class HealthCreateSessionTool(ToolDefinition[HealthCreateSessionAction, HealthCreateSessionObservation]):
     @classmethod
@@ -1261,23 +1030,17 @@ class HealthCreateSessionTool(ToolDefinition[HealthCreateSessionAction, HealthCr
             executor=HealthCreateSessionExecutor(),
         )]
 
-
-# --- health_delete_session ---
-
 class HealthDeleteSessionAction(Action):
     date: str = Field(description="Session date to delete (YYYY-MM-DD)")
 
-
 class HealthDeleteSessionObservation(Observation):
     pass
-
 
 class HealthDeleteSessionExecutor(ToolExecutor[HealthDeleteSessionAction, HealthDeleteSessionObservation]):
     def __call__(self, action: HealthDeleteSessionAction, conversation=None) -> HealthDeleteSessionObservation:
         from core import health_delete_session
         result = _run_async(health_delete_session(action.date))
         return HealthDeleteSessionObservation.from_text(_format_result(result))
-
 
 class HealthDeleteSessionTool(ToolDefinition[HealthDeleteSessionAction, HealthDeleteSessionObservation]):
     @classmethod
@@ -1289,24 +1052,18 @@ class HealthDeleteSessionTool(ToolDefinition[HealthDeleteSessionAction, HealthDe
             executor=HealthDeleteSessionExecutor(),
         )]
 
-
-# --- health_reschedule_session ---
-
 class HealthRescheduleSessionAction(Action):
     old_date: str = Field(description="Current session date (YYYY-MM-DD)")
     new_date: str = Field(description="Target date to move to (YYYY-MM-DD)")
 
-
 class HealthRescheduleSessionObservation(Observation):
     pass
-
 
 class HealthRescheduleSessionExecutor(ToolExecutor[HealthRescheduleSessionAction, HealthRescheduleSessionObservation]):
     def __call__(self, action: HealthRescheduleSessionAction, conversation=None) -> HealthRescheduleSessionObservation:
         from core import health_reschedule_session
         result = _run_async(health_reschedule_session(action.old_date, action.new_date))
         return HealthRescheduleSessionObservation.from_text(_format_result(result))
-
 
 class HealthRescheduleSessionTool(ToolDefinition[HealthRescheduleSessionAction, HealthRescheduleSessionObservation]):
     @classmethod
@@ -1318,24 +1075,18 @@ class HealthRescheduleSessionTool(ToolDefinition[HealthRescheduleSessionAction, 
             executor=HealthRescheduleSessionExecutor(),
         )]
 
-
-# --- health_add_exercise ---
-
 class HealthAddExerciseAction(Action):
     date: str = Field(description="Session date (YYYY-MM-DD)")
     exercise: Dict[str, Any] = Field(description="Exercise dict: {name (required), sets, reps, kg, rpe, notes}")
 
-
 class HealthAddExerciseObservation(Observation):
     pass
-
 
 class HealthAddExerciseExecutor(ToolExecutor[HealthAddExerciseAction, HealthAddExerciseObservation]):
     def __call__(self, action: HealthAddExerciseAction, conversation=None) -> HealthAddExerciseObservation:
         from core import health_add_exercise
         result = _run_async(health_add_exercise(action.date, action.exercise))
         return HealthAddExerciseObservation.from_text(_format_result(result))
-
 
 class HealthAddExerciseTool(ToolDefinition[HealthAddExerciseAction, HealthAddExerciseObservation]):
     @classmethod
@@ -1347,24 +1098,18 @@ class HealthAddExerciseTool(ToolDefinition[HealthAddExerciseAction, HealthAddExe
             executor=HealthAddExerciseExecutor(),
         )]
 
-
-# --- health_remove_exercise ---
-
 class HealthRemoveExerciseAction(Action):
     date: str = Field(description="Session date (YYYY-MM-DD)")
     exercise_index: int = Field(description="Zero-based index of the exercise to remove")
 
-
 class HealthRemoveExerciseObservation(Observation):
     pass
-
 
 class HealthRemoveExerciseExecutor(ToolExecutor[HealthRemoveExerciseAction, HealthRemoveExerciseObservation]):
     def __call__(self, action: HealthRemoveExerciseAction, conversation=None) -> HealthRemoveExerciseObservation:
         from core import health_remove_exercise
         result = _run_async(health_remove_exercise(action.date, action.exercise_index))
         return HealthRemoveExerciseObservation.from_text(_format_result(result))
-
 
 class HealthRemoveExerciseTool(ToolDefinition[HealthRemoveExerciseAction, HealthRemoveExerciseObservation]):
     @classmethod
@@ -1376,9 +1121,6 @@ class HealthRemoveExerciseTool(ToolDefinition[HealthRemoveExerciseAction, Health
             executor=HealthRemoveExerciseExecutor(),
         )]
 
-
-# --- health_create_competition ---
-
 class HealthCreateCompetitionAction(Action):
     competition: Dict[str, Any] = Field(
         description="Competition dict: name (required), date YYYY-MM-DD (required), federation (required), "
@@ -1386,17 +1128,14 @@ class HealthCreateCompetitionAction(Action):
                     "weight_class_kg, location, targets {squat_kg, bench_kg, deadlift_kg, total_kg}, notes"
     )
 
-
 class HealthCreateCompetitionObservation(Observation):
     pass
-
 
 class HealthCreateCompetitionExecutor(ToolExecutor[HealthCreateCompetitionAction, HealthCreateCompetitionObservation]):
     def __call__(self, action: HealthCreateCompetitionAction, conversation=None) -> HealthCreateCompetitionObservation:
         from core import health_create_competition
         result = _run_async(health_create_competition(action.competition))
         return HealthCreateCompetitionObservation.from_text(_format_result(result))
-
 
 class HealthCreateCompetitionTool(ToolDefinition[HealthCreateCompetitionAction, HealthCreateCompetitionObservation]):
     @classmethod
@@ -1408,23 +1147,17 @@ class HealthCreateCompetitionTool(ToolDefinition[HealthCreateCompetitionAction, 
             executor=HealthCreateCompetitionExecutor(),
         )]
 
-
-# --- health_delete_competition ---
-
 class HealthDeleteCompetitionAction(Action):
     date: str = Field(description="Competition date to delete (YYYY-MM-DD)")
 
-
 class HealthDeleteCompetitionObservation(Observation):
     pass
-
 
 class HealthDeleteCompetitionExecutor(ToolExecutor[HealthDeleteCompetitionAction, HealthDeleteCompetitionObservation]):
     def __call__(self, action: HealthDeleteCompetitionAction, conversation=None) -> HealthDeleteCompetitionObservation:
         from core import health_delete_competition
         result = _run_async(health_delete_competition(action.date))
         return HealthDeleteCompetitionObservation.from_text(_format_result(result))
-
 
 class HealthDeleteCompetitionTool(ToolDefinition[HealthDeleteCompetitionAction, HealthDeleteCompetitionObservation]):
     @classmethod
@@ -1436,23 +1169,17 @@ class HealthDeleteCompetitionTool(ToolDefinition[HealthDeleteCompetitionAction, 
             executor=HealthDeleteCompetitionExecutor(),
         )]
 
-
-# --- health_delete_diet_note ---
-
 class HealthDeleteDietNoteAction(Action):
     date: str = Field(description="Diet note date to delete (YYYY-MM-DD)")
 
-
 class HealthDeleteDietNoteObservation(Observation):
     pass
-
 
 class HealthDeleteDietNoteExecutor(ToolExecutor[HealthDeleteDietNoteAction, HealthDeleteDietNoteObservation]):
     def __call__(self, action: HealthDeleteDietNoteAction, conversation=None) -> HealthDeleteDietNoteObservation:
         from core import health_delete_diet_note
         result = _run_async(health_delete_diet_note(action.date))
         return HealthDeleteDietNoteObservation.from_text(_format_result(result))
-
 
 class HealthDeleteDietNoteTool(ToolDefinition[HealthDeleteDietNoteAction, HealthDeleteDietNoteObservation]):
     @classmethod
@@ -1464,9 +1191,6 @@ class HealthDeleteDietNoteTool(ToolDefinition[HealthDeleteDietNoteAction, Health
             executor=HealthDeleteDietNoteExecutor(),
         )]
 
-
-# --- health_update_meta ---
-
 class HealthUpdateMetaAction(Action):
     updates: Dict[str, Any] = Field(
         description="Dict of meta fields to update. Allowed: program_name, comp_date, target_squat_kg, "
@@ -1474,17 +1198,14 @@ class HealthUpdateMetaAction(Action):
                     "current_body_weight_kg, federation, practicing_for, program_start"
     )
 
-
 class HealthUpdateMetaObservation(Observation):
     pass
-
 
 class HealthUpdateMetaExecutor(ToolExecutor[HealthUpdateMetaAction, HealthUpdateMetaObservation]):
     def __call__(self, action: HealthUpdateMetaAction, conversation=None) -> HealthUpdateMetaObservation:
         from core import health_update_meta
         result = _run_async(health_update_meta(action.updates))
         return HealthUpdateMetaObservation.from_text(_format_result(result))
-
 
 class HealthUpdateMetaTool(ToolDefinition[HealthUpdateMetaAction, HealthUpdateMetaObservation]):
     @classmethod
@@ -1499,25 +1220,19 @@ class HealthUpdateMetaTool(ToolDefinition[HealthUpdateMetaAction, HealthUpdateMe
             executor=HealthUpdateMetaExecutor(),
         )]
 
-
-# --- health_update_phases ---
-
 class HealthUpdatePhasesAction(Action):
     phases: List[Dict[str, Any]] = Field(
         description="Complete phases list. Each phase: {name (required), start_week (int), end_week (int), intent (str)}"
     )
 
-
 class HealthUpdatePhasesObservation(Observation):
     pass
-
 
 class HealthUpdatePhasesExecutor(ToolExecutor[HealthUpdatePhasesAction, HealthUpdatePhasesObservation]):
     def __call__(self, action: HealthUpdatePhasesAction, conversation=None) -> HealthUpdatePhasesObservation:
         from core import health_update_phases
         result = _run_async(health_update_phases(action.phases))
         return HealthUpdatePhasesObservation.from_text(_format_result(result))
-
 
 class HealthUpdatePhasesTool(ToolDefinition[HealthUpdatePhasesAction, HealthUpdatePhasesObservation]):
     @classmethod
@@ -1529,25 +1244,19 @@ class HealthUpdatePhasesTool(ToolDefinition[HealthUpdatePhasesAction, HealthUpda
             executor=HealthUpdatePhasesExecutor(),
         )]
 
-
-# --- health_update_current_maxes ---
-
 class HealthUpdateCurrentMaxesAction(Action):
     squat_kg: Optional[float] = Field(default=None, description="New squat max in kg (omit to leave unchanged)")
     bench_kg: Optional[float] = Field(default=None, description="New bench max in kg (omit to leave unchanged)")
     deadlift_kg: Optional[float] = Field(default=None, description="New deadlift max in kg (omit to leave unchanged)")
 
-
 class HealthUpdateCurrentMaxesObservation(Observation):
     pass
-
 
 class HealthUpdateCurrentMaxesExecutor(ToolExecutor[HealthUpdateCurrentMaxesAction, HealthUpdateCurrentMaxesObservation]):
     def __call__(self, action: HealthUpdateCurrentMaxesAction, conversation=None) -> HealthUpdateCurrentMaxesObservation:
         from core import health_update_current_maxes
         result = _run_async(health_update_current_maxes(action.squat_kg, action.bench_kg, action.deadlift_kg))
         return HealthUpdateCurrentMaxesObservation.from_text(_format_result(result))
-
 
 class HealthUpdateCurrentMaxesTool(ToolDefinition[HealthUpdateCurrentMaxesAction, HealthUpdateCurrentMaxesObservation]):
     @classmethod
@@ -1558,11 +1267,6 @@ class HealthUpdateCurrentMaxesTool(ToolDefinition[HealthUpdateCurrentMaxesAction
             observation_type=HealthUpdateCurrentMaxesObservation,
             executor=HealthUpdateCurrentMaxesExecutor(),
         )]
-
-
-# =============================================================================
-# Register all SDK tools
-# =============================================================================
 
 register_tool("HealthGetProgramTool", HealthGetProgramTool)
 register_tool("HealthSetupStatusTool", HealthSetupStatusTool)
@@ -1608,13 +1312,6 @@ register_tool("HealthDeleteDietNoteTool", HealthDeleteDietNoteTool)
 register_tool("HealthUpdateMetaTool", HealthUpdateMetaTool)
 register_tool("HealthUpdatePhasesTool", HealthUpdatePhasesTool)
 register_tool("HealthUpdateCurrentMaxesTool", HealthUpdateCurrentMaxesTool)
-
-
-# =============================================================================
-# Analytics & Export Tools
-# =============================================================================
-
-# --- export_program_history ---
 
 def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
     """Assemble the analysis bundle threaded into the XLSX export.
@@ -1701,9 +1398,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
             first = datetime.fromisoformat(block_sessions[0]["date"][:10])
             last = datetime.fromisoformat(block_sessions[-1]["date"][:10])
             diff_days = abs((last - first).days)
-            # Frontend uses Math.ceil(diff / 7), so days//7 + 1 or similar
-            # Since frontend does: diffTime / (7 days), then Math.ceil
-            # Let's match frontend more closely:
             effective_weeks = max(int((diff_days / 7) + 0.999), 4)
     except Exception as e:
         logger.warning("export: effective_weeks calculation failed: %s", e)
@@ -1740,7 +1434,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
 
     return bundle
 
-
 def _read_cached_correlation(weeks: int = 4) -> dict | None:
     """Return the cached correlation report for the current window, or None."""
     from datetime import datetime, timedelta
@@ -1768,14 +1461,12 @@ def _read_cached_correlation(weeks: int = 4) -> dict | None:
         report["weeks"] = weeks
     return _sanitize_decimals(report)
 
-
 def _scope_program_to_current_block(program: dict) -> dict:
     """Return a shallow copy of program with phases and sessions filtered to the current block only."""
     scoped = dict(program)
     scoped["phases"] = [p for p in program.get("phases", []) if (p.get("block") or "current") == "current"]
     scoped["sessions"] = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
     return scoped
-
 
 def _normalize_export_format(format_value: str | None) -> str:
     export_format = str(format_value or "xlsx").strip().lower()
@@ -1784,7 +1475,6 @@ def _normalize_export_format(format_value: str | None) -> str:
     if export_format == "xlsx":
         return "xlsx"
     raise ValueError(f"Unsupported export format: {format_value!r}. Use 'xlsx' or 'markdown'.")
-
 
 def _write_program_export(program: dict, sessions: list[dict], out_dir: str, format_value: str | None) -> tuple[str, str, str]:
     import os
@@ -1808,14 +1498,11 @@ def _write_program_export(program: dict, sessions: list[dict], out_dir: str, for
     build_program_xlsx(scoped_program, out_path, analysis=analysis, export_context=analysis)
     return filename, description, export_format
 
-
 class ExportProgramHistoryAction(Action):
     format: str = Field(default="xlsx", description="Export format: 'xlsx' or 'markdown'")
 
-
 class ExportProgramHistoryObservation(Observation):
     pass
-
 
 class ExportProgramHistoryExecutor(ToolExecutor[ExportProgramHistoryAction, ExportProgramHistoryObservation]):
     def __init__(self, chat_id: str):
@@ -1847,7 +1534,6 @@ class ExportProgramHistoryExecutor(ToolExecutor[ExportProgramHistoryAction, Expo
             f"FILES: {filename} ({description})"
         )
 
-
 class ExportProgramHistoryTool(ToolDefinition[ExportProgramHistoryAction, ExportProgramHistoryObservation]):
     @classmethod
     def create(cls, conv_state=None, chat_id: str = "", **params) -> Sequence["ExportProgramHistoryTool"]:
@@ -1865,17 +1551,12 @@ class ExportProgramHistoryTool(ToolDefinition[ExportProgramHistoryAction, Export
             executor=ExportProgramHistoryExecutor(chat_id=chat_id),
         )]
 
-
-# --- analyze_progression ---
-
 class AnalyzeProgressionAction(Action):
     exercise_name: str = Field(description="Name of the exercise (e.g. 'Squat', 'Bench Press')")
     weeks: Optional[int] = Field(default=None, description="Number of recent weeks to analyze (default: all available)")
 
-
 class AnalyzeProgressionObservation(Observation):
     pass
-
 
 class AnalyzeProgressionExecutor(ToolExecutor[AnalyzeProgressionAction, AnalyzeProgressionObservation]):
     def __call__(self, action: AnalyzeProgressionAction, conversation=None) -> AnalyzeProgressionObservation:
@@ -1897,7 +1578,6 @@ class AnalyzeProgressionExecutor(ToolExecutor[AnalyzeProgressionAction, AnalyzeP
         result = progression_rate(sessions, action.exercise_name, program_start)
         return AnalyzeProgressionObservation.from_text(_format_result(result))
 
-
 class AnalyzeProgressionTool(ToolDefinition[AnalyzeProgressionAction, AnalyzeProgressionObservation]):
     @classmethod
     def create(cls, conv_state=None, **params) -> Sequence["AnalyzeProgressionTool"]:
@@ -1911,17 +1591,12 @@ class AnalyzeProgressionTool(ToolDefinition[AnalyzeProgressionAction, AnalyzePro
             executor=AnalyzeProgressionExecutor(),
         )]
 
-
-# --- analyze_rpe_drift ---
-
 class AnalyzeRpeDriftAction(Action):
     exercise_name: str = Field(description="Name of the exercise")
     window_weeks: int = Field(default=4, description="Number of weeks to analyze for drift")
 
-
 class AnalyzeRpeDriftObservation(Observation):
     pass
-
 
 class AnalyzeRpeDriftExecutor(ToolExecutor[AnalyzeRpeDriftAction, AnalyzeRpeDriftObservation]):
     def __call__(self, action: AnalyzeRpeDriftAction, conversation=None) -> AnalyzeRpeDriftObservation:
@@ -1934,7 +1609,6 @@ class AnalyzeRpeDriftExecutor(ToolExecutor[AnalyzeRpeDriftAction, AnalyzeRpeDrif
 
         result = rpe_drift(sessions, action.exercise_name, program_start, action.window_weeks)
         return AnalyzeRpeDriftObservation.from_text(_format_result(result))
-
 
 class AnalyzeRpeDriftTool(ToolDefinition[AnalyzeRpeDriftAction, AnalyzeRpeDriftObservation]):
     @classmethod
@@ -1949,25 +1623,19 @@ class AnalyzeRpeDriftTool(ToolDefinition[AnalyzeRpeDriftAction, AnalyzeRpeDriftO
             executor=AnalyzeRpeDriftExecutor(),
         )]
 
-
-# --- estimate_1rm ---
-
 class Estimate1rmAction(Action):
     weight_kg: float = Field(description="Weight lifted in kg")
     reps: int = Field(description="Number of repetitions performed")
     rpe: Optional[int] = Field(default=None, description="RPE of the set (6-10), enables RPE-based estimation")
 
-
 class Estimate1rmObservation(Observation):
     pass
-
 
 class Estimate1rmExecutor(ToolExecutor[Estimate1rmAction, Estimate1rmObservation]):
     def __call__(self, action: Estimate1rmAction, conversation=None) -> Estimate1rmObservation:
         from analytics import estimate_1rm
         result = estimate_1rm(action.weight_kg, action.reps, action.rpe)
         return Estimate1rmObservation.from_text(_format_result(result))
-
 
 class Estimate1rmTool(ToolDefinition[Estimate1rmAction, Estimate1rmObservation]):
     @classmethod
@@ -1982,25 +1650,19 @@ class Estimate1rmTool(ToolDefinition[Estimate1rmAction, Estimate1rmObservation])
             executor=Estimate1rmExecutor(),
         )]
 
-
-# --- calculate_dots ---
-
 class CalculateDotsAction(Action):
     total_kg: float = Field(description="Combined squat + bench + deadlift total in kg")
     bodyweight_kg: float = Field(description="Lifter bodyweight in kg")
     sex: str = Field(description="'male' or 'female'")
 
-
 class CalculateDotsObservation(Observation):
     pass
-
 
 class CalculateDotsExecutor(ToolExecutor[CalculateDotsAction, CalculateDotsObservation]):
     def __call__(self, action: CalculateDotsAction, conversation=None) -> CalculateDotsObservation:
         from analytics import calculate_dots
         result = calculate_dots(action.total_kg, action.bodyweight_kg, action.sex)
         return CalculateDotsObservation.from_text(_format_result({"dots": result}))
-
 
 class CalculateDotsTool(ToolDefinition[CalculateDotsAction, CalculateDotsObservation]):
     @classmethod
@@ -2015,9 +1677,6 @@ class CalculateDotsTool(ToolDefinition[CalculateDotsAction, CalculateDotsObserva
             executor=CalculateDotsExecutor(),
         )]
 
-
-# --- weekly_analysis ---
-
 class WeeklyAnalysisAction(Action):
     weeks: int = Field(default=1, description="Number of weeks to analyze (default: 1)")
     block: str = Field(default="current", description="Program block filter (default 'current')")
@@ -2030,10 +1689,8 @@ class WeeklyAnalysisAction(Action):
     program: Optional[Dict[str, Any]] = Field(default=None, description="Optional program snapshot supplied by the caller")
     sessions: Optional[List[Dict[str, Any]]] = Field(default=None, description="Optional session snapshot supplied by the caller")
 
-
 class WeeklyAnalysisObservation(Observation):
     pass
-
 
 class WeeklyAnalysisExecutor(ToolExecutor[WeeklyAnalysisAction, WeeklyAnalysisObservation]):
     def __call__(self, action: WeeklyAnalysisAction, conversation=None) -> WeeklyAnalysisObservation:
@@ -2065,7 +1722,6 @@ class WeeklyAnalysisExecutor(ToolExecutor[WeeklyAnalysisAction, WeeklyAnalysisOb
         )
         return WeeklyAnalysisObservation.from_text(_format_result(result))
 
-
 class WeeklyAnalysisTool(ToolDefinition[WeeklyAnalysisAction, WeeklyAnalysisObservation]):
     @classmethod
     def create(cls, conv_state=None, **params) -> Sequence["WeeklyAnalysisTool"]:
@@ -2081,7 +1737,6 @@ class WeeklyAnalysisTool(ToolDefinition[WeeklyAnalysisAction, WeeklyAnalysisObse
             executor=WeeklyAnalysisExecutor(),
         )]
 
-
 register_tool("ExportProgramHistoryTool", ExportProgramHistoryTool)
 register_tool("AnalyzeProgressionTool", AnalyzeProgressionTool)
 register_tool("AnalyzeRpeDriftTool", AnalyzeRpeDriftTool)
@@ -2089,19 +1744,14 @@ register_tool("Estimate1rmTool", Estimate1rmTool)
 register_tool("CalculateDotsTool", CalculateDotsTool)
 register_tool("WeeklyAnalysisTool", WeeklyAnalysisTool)
 
-
-# --- correlation_analysis ---
-
 class CorrelationAnalysisAction(Action):
     weeks: int = Field(default=4, description="Rolling window in weeks (default 4)")
     block: str = Field(default="current", description="Program block filter (default 'current')")
     refresh: bool = Field(default=False, description="Force regeneration, ignore cache")
     cache_only: bool = Field(default=False, description="Return only cached results; do not generate a new AI report")
 
-
 class CorrelationAnalysisObservation(Observation):
     pass
-
 
 class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, CorrelationAnalysisObservation]):
     def __call__(self, action: CorrelationAnalysisAction, conversation=None) -> CorrelationAnalysisObservation:
@@ -2171,7 +1821,6 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
             "generated_at": generated_at,
             "window_start": window_start_str,
             "weeks": action.weeks,
-            # 7-day TTL — not invalidated by session changes
             "expires_at": int(time.time()) + 7 * 86400,
         }))
 
@@ -2180,7 +1829,6 @@ class CorrelationAnalysisExecutor(ToolExecutor[CorrelationAnalysisAction, Correl
         report["window_start"] = window_start_str
         report["weeks"] = action.weeks
         return CorrelationAnalysisObservation.from_text(_format_result(report))
-
 
 class CorrelationAnalysisTool(ToolDefinition[CorrelationAnalysisAction, CorrelationAnalysisObservation]):
     @classmethod
@@ -2196,18 +1844,13 @@ class CorrelationAnalysisTool(ToolDefinition[CorrelationAnalysisAction, Correlat
             executor=CorrelationAnalysisExecutor(),
         )]
 
-
-# --- fatigue_profile_estimate ---
-
 class FatigueProfileEstimateAction(Action):
     exercise: dict = Field(
         description="Exercise metadata: name, category, equipment, muscles, description, how_to_perform, why_do_it"
     )
 
-
 class FatigueProfileEstimateObservation(Observation):
     pass
-
 
 class FatigueProfileEstimateExecutor(ToolExecutor[FatigueProfileEstimateAction, FatigueProfileEstimateObservation]):
     def __call__(self, action: FatigueProfileEstimateAction, conversation=None) -> FatigueProfileEstimateObservation:
@@ -2219,7 +1862,6 @@ class FatigueProfileEstimateExecutor(ToolExecutor[FatigueProfileEstimateAction, 
             lift_profiles=lift_profiles,
         ))
         return FatigueProfileEstimateObservation.from_text(_format_result(result))
-
 
 class FatigueProfileEstimateTool(ToolDefinition[FatigueProfileEstimateAction, FatigueProfileEstimateObservation]):
     @classmethod
@@ -2234,7 +1876,6 @@ class FatigueProfileEstimateTool(ToolDefinition[FatigueProfileEstimateAction, Fa
             executor=FatigueProfileEstimateExecutor(),
         )]
 
-
 class MuscleGroupEstimateAction(Action):
     exercise: dict = Field(
         description="Exercise metadata: name, category, equipment, description, how_to_perform, why_do_it, and any existing muscle annotations"
@@ -2244,10 +1885,8 @@ class MuscleGroupEstimateAction(Action):
         description="Optional squat/bench/deadlift lift profiles to use as immediate context for the estimate",
     )
 
-
 class MuscleGroupEstimateObservation(Observation):
     pass
-
 
 class MuscleGroupEstimateExecutor(ToolExecutor[MuscleGroupEstimateAction, MuscleGroupEstimateObservation]):
     def __call__(self, action: MuscleGroupEstimateAction, conversation=None) -> MuscleGroupEstimateObservation:
@@ -2256,7 +1895,6 @@ class MuscleGroupEstimateExecutor(ToolExecutor[MuscleGroupEstimateAction, Muscle
             "lift_profiles": action.lift_profiles,
         })
         return MuscleGroupEstimateObservation.from_text(_format_result(result))
-
 
 class MuscleGroupEstimateTool(ToolDefinition[MuscleGroupEstimateAction, MuscleGroupEstimateObservation]):
     @classmethod
@@ -2271,7 +1909,6 @@ class MuscleGroupEstimateTool(ToolDefinition[MuscleGroupEstimateAction, MuscleGr
             executor=MuscleGroupEstimateExecutor(),
         )]
 
-
 class GlossaryGenerateTextAction(Action):
     exercise: dict = Field(
         description="Exercise metadata: name, category, equipment, primary_muscles, secondary_muscles, tertiary_muscles"
@@ -2281,10 +1918,8 @@ class GlossaryGenerateTextAction(Action):
         description="Optional squat/bench/deadlift lift profiles to use as brief context",
     )
 
-
 class GlossaryGenerateTextObservation(Observation):
     pass
-
 
 class GlossaryGenerateTextExecutor(ToolExecutor[GlossaryGenerateTextAction, GlossaryGenerateTextObservation]):
     def __call__(self, action: GlossaryGenerateTextAction, conversation=None) -> GlossaryGenerateTextObservation:
@@ -2293,7 +1928,6 @@ class GlossaryGenerateTextExecutor(ToolExecutor[GlossaryGenerateTextAction, Glos
             "lift_profiles": action.lift_profiles,
         })
         return GlossaryGenerateTextObservation.from_text(_format_result(result))
-
 
 class GlossaryGenerateTextTool(ToolDefinition[GlossaryGenerateTextAction, GlossaryGenerateTextObservation]):
     @classmethod
@@ -2308,21 +1942,17 @@ class GlossaryGenerateTextTool(ToolDefinition[GlossaryGenerateTextAction, Glossa
             executor=GlossaryGenerateTextExecutor(),
         )]
 
-
 class LiftProfileReviewAction(Action):
     profile: dict = Field(description="Lift profile dict with lift, style_notes, sticking_points, primary_muscle, and volume_tolerance")
 
-
 class LiftProfileReviewObservation(Observation):
     pass
-
 
 class LiftProfileReviewExecutor(ToolExecutor[LiftProfileReviewAction, LiftProfileReviewObservation]):
     def __call__(self, action: LiftProfileReviewAction, conversation=None) -> LiftProfileReviewObservation:
         from lift_profile_ai import review_lift_profile
         result = _run_async(review_lift_profile(action.profile))
         return LiftProfileReviewObservation.from_text(_format_result(result))
-
 
 class LiftProfileReviewTool(ToolDefinition[LiftProfileReviewAction, LiftProfileReviewObservation]):
     @classmethod
@@ -2337,21 +1967,17 @@ class LiftProfileReviewTool(ToolDefinition[LiftProfileReviewAction, LiftProfileR
             executor=LiftProfileReviewExecutor(),
         )]
 
-
 class LiftProfileRewriteEstimateAction(Action):
     profile: dict = Field(description="Lift profile dict to clean up and estimate a 1-2 INOL stimulus coefficient for")
 
-
 class LiftProfileRewriteEstimateObservation(Observation):
     pass
-
 
 class LiftProfileRewriteEstimateExecutor(ToolExecutor[LiftProfileRewriteEstimateAction, LiftProfileRewriteEstimateObservation]):
     def __call__(self, action: LiftProfileRewriteEstimateAction, conversation=None) -> LiftProfileRewriteEstimateObservation:
         from lift_profile_ai import rewrite_and_estimate_lift_profile
         result = _run_async(rewrite_and_estimate_lift_profile(action.profile))
         return LiftProfileRewriteEstimateObservation.from_text(_format_result(result))
-
 
 class LiftProfileRewriteEstimateTool(ToolDefinition[LiftProfileRewriteEstimateAction, LiftProfileRewriteEstimateObservation]):
     @classmethod
@@ -2366,7 +1992,6 @@ class LiftProfileRewriteEstimateTool(ToolDefinition[LiftProfileRewriteEstimateAc
             executor=LiftProfileRewriteEstimateExecutor(),
         )]
 
-
 register_tool("CorrelationAnalysisTool", CorrelationAnalysisTool)
 register_tool("FatigueProfileEstimateTool", FatigueProfileEstimateTool)
 register_tool("MuscleGroupEstimateTool", MuscleGroupEstimateTool)
@@ -2374,24 +1999,18 @@ register_tool("GlossaryGenerateTextTool", GlossaryGenerateTextTool)
 register_tool("LiftProfileReviewTool", LiftProfileReviewTool)
 register_tool("LiftProfileRewriteEstimateTool", LiftProfileRewriteEstimateTool)
 
-
-# --- program_evaluation ---
-
 class ProgramEvaluationAction(Action):
     refresh: bool = Field(default=False, description="Force regeneration, ignore cache")
     cache_only: bool = Field(default=False, description="Return only cached results; do not generate a new AI report")
 
-
 class ProgramEvaluationObservation(Observation):
     pass
-
 
 class ProgramEvaluationExecutor(ToolExecutor[ProgramEvaluationAction, ProgramEvaluationObservation]):
     def __call__(self, action: ProgramEvaluationAction, conversation=None) -> ProgramEvaluationObservation:
         from core import health_program_evaluation
         result = _run_async(health_program_evaluation(refresh=action.refresh, cache_only=action.cache_only))
         return ProgramEvaluationObservation.from_text(_format_result(result))
-
 
 class ProgramEvaluationTool(ToolDefinition[ProgramEvaluationAction, ProgramEvaluationObservation]):
     @classmethod
@@ -2409,19 +2028,13 @@ class ProgramEvaluationTool(ToolDefinition[ProgramEvaluationAction, ProgramEvalu
             executor=ProgramEvaluationExecutor(),
         )]
 
-
 register_tool("ProgramEvaluationTool", ProgramEvaluationTool)
-
-
-# --- powerlifting_filter_categories ---
 
 class PowerliftingFilterCategoriesAction(Action):
     pass
 
-
 class PowerliftingFilterCategoriesObservation(Observation):
     pass
-
 
 class PowerliftingFilterCategoriesExecutor(ToolExecutor[PowerliftingFilterCategoriesAction, PowerliftingFilterCategoriesObservation]):
     def __call__(self, action: PowerliftingFilterCategoriesAction, conversation=None) -> PowerliftingFilterCategoriesObservation:
@@ -2434,7 +2047,6 @@ class PowerliftingFilterCategoriesExecutor(ToolExecutor[PowerliftingFilterCatego
             return PowerliftingFilterCategoriesObservation.from_text(f"ERROR: Dataset not ready. {e}")
         except FileNotFoundError as e:
             return PowerliftingFilterCategoriesObservation.from_text(f"ERROR: Dataset missing. {e}")
-
 
 class PowerliftingFilterCategoriesTool(ToolDefinition[PowerliftingFilterCategoriesAction, PowerliftingFilterCategoriesObservation]):
     @classmethod
@@ -2450,9 +2062,6 @@ class PowerliftingFilterCategoriesTool(ToolDefinition[PowerliftingFilterCategori
         )]
 
 register_tool("PowerliftingFilterCategoriesTool", PowerliftingFilterCategoriesTool)
-
-
-# --- analyze_powerlifting_stats ---
 
 class AnalyzePowerliftingStatsAction(Action):
     squat_kg: Optional[float] = Field(default=None, description="User's best squat in kg")
@@ -2471,10 +2080,8 @@ class AnalyzePowerliftingStatsAction(Action):
     event_type: Optional[str] = Field(default=None, description="Filter by event type (e.g. SBD)")
     min_dots: Optional[float] = Field(default=None, description="Minimum DOTS score")
 
-
 class AnalyzePowerliftingStatsObservation(Observation):
     pass
-
 
 class AnalyzePowerliftingStatsExecutor(ToolExecutor[AnalyzePowerliftingStatsAction, AnalyzePowerliftingStatsObservation]):
     def __call__(self, action: AnalyzePowerliftingStatsAction, conversation=None) -> AnalyzePowerliftingStatsObservation:
@@ -2507,7 +2114,6 @@ class AnalyzePowerliftingStatsExecutor(ToolExecutor[AnalyzePowerliftingStatsActi
         )
         return AnalyzePowerliftingStatsObservation.from_text(_format_result(stats))
 
-
 class AnalyzePowerliftingStatsTool(ToolDefinition[AnalyzePowerliftingStatsAction, AnalyzePowerliftingStatsObservation]):
     @classmethod
     def create(cls, conv_state=None, **params) -> Sequence["AnalyzePowerliftingStatsTool"]:
@@ -2523,11 +2129,6 @@ class AnalyzePowerliftingStatsTool(ToolDefinition[AnalyzePowerliftingStatsAction
         )]
 
 register_tool("AnalyzePowerliftingStatsTool", AnalyzePowerliftingStatsTool)
-
-
-# =============================================================================
-# Plugin contract: get_tools()
-# =============================================================================
 
 def get_tools() -> List[Tool]:
     """Get all health SDK Tool objects (side effect: register_tool already called above)."""
@@ -2616,11 +2217,6 @@ def get_tools() -> List[Tool]:
         Tool(name="PowerliftingFilterCategoriesTool"),
         Tool(name="AnalyzePowerliftingStatsTool"),
     ]
-
-
-# =============================================================================
-# Plugin contract: get_schemas() — JSON schemas for non-agentic specialist path
-# =============================================================================
 
 def get_schemas() -> Dict[str, Dict[str, Any]]:
     """Return snake_case tool name → JSON schema mapping."""
@@ -3856,11 +3452,6 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
         },
     }
 
-
-# =============================================================================
-# Route helpers for analytics/export tools (non-agentic specialist path)
-# =============================================================================
-
 def _get_program_and_sessions(refresh_program: bool = False):
     """Fetch program from store, return (program, sessions, program_start)."""
     from core import _get_store
@@ -3871,7 +3462,6 @@ def _get_program_and_sessions(refresh_program: bool = False):
     sessions = program.get("sessions", [])
     program_start = program.get("meta", {}).get("program_start", "")
     return program, sessions, program_start
-
 
 def _get_analysis_program_and_sessions(args: dict, refresh_program: bool = False):
     """Use caller-supplied snapshots when available; otherwise load from the store."""
@@ -3888,12 +3478,10 @@ def _get_analysis_program_and_sessions(args: dict, refresh_program: bool = False
 
     return _get_program_and_sessions(refresh_program=refresh_program)
 
-
 def _do_health_invalidate_program_cache(args):
     from core import _get_store
     _get_store().invalidate_cache()
     return {"success": True}
-
 
 def _do_export(args):
     import json
@@ -3916,28 +3504,23 @@ def _do_export(args):
     })
     return f"{payload}\nFILES: {filename} ({description})"
 
-
 def _do_analyze_progression(args):
     from analytics import progression_rate
     program, sessions, program_start = _get_program_and_sessions()
     return progression_rate(sessions, args["exercise_name"], program_start)
-
 
 def _do_analyze_rpe_drift(args):
     from analytics import rpe_drift
     program, sessions, program_start = _get_program_and_sessions()
     return rpe_drift(sessions, args["exercise_name"], program_start, args.get("window_weeks", 4))
 
-
 def _do_estimate_1rm(args):
     from analytics import estimate_1rm
     return estimate_1rm(args["weight_kg"], args["reps"], args.get("rpe"))
 
-
 def _do_calculate_dots(args):
     from analytics import calculate_dots
     return {"dots": calculate_dots(args["total_kg"], args["bodyweight_kg"], args["sex"])}
-
 
 def _do_weekly_analysis(args):
     from config import IF_HEALTH_TABLE_NAME
@@ -3958,7 +3541,6 @@ def _do_weekly_analysis(args):
         week_start=args.get("week_start"),
         week_end=args.get("week_end"),
     )
-
 
 def _do_analysis_section(args):
     from analytics import weekly_analysis_section
@@ -3981,7 +3563,6 @@ def _do_analysis_section(args):
         block=args.get("block", "current"),
         glossary=glossary,
     )
-
 
 def _do_correlation_analysis(args):
     from datetime import datetime, timedelta
@@ -4060,7 +3641,6 @@ def _do_correlation_analysis(args):
     report["weeks"] = weeks
     return report
 
-
 def _do_block_correlation_analysis(args):
     from datetime import datetime
     from correlation_ai import generate_correlation_report
@@ -4095,7 +3675,6 @@ def _do_block_correlation_analysis(args):
         report["weeks"] = weeks
     return report
 
-
 def _fatigue_context():
     """Return (program_meta, lift_profiles) for fatigue estimation, or (None, None) on failure."""
     try:
@@ -4107,7 +3686,6 @@ def _fatigue_context():
         return None, None
     return program.get("meta") or None, program.get("lift_profiles") or None
 
-
 def _do_fatigue_profile_estimate(args):
     from fatigue_ai import estimate_fatigue_profile
     program_meta, lift_profiles = _fatigue_context()
@@ -4116,7 +3694,6 @@ def _do_fatigue_profile_estimate(args):
         program_meta=program_meta,
         lift_profiles=lift_profiles,
     ))
-
 
 def _do_muscle_group_estimate(args):
     from muscle_group_ai import estimate_muscle_groups
@@ -4130,7 +3707,6 @@ def _do_muscle_group_estimate(args):
         lift_profiles=lift_profiles,
     ))
 
-
 def _do_glossary_generate_text(args):
     from glossary_text_ai import generate_glossary_text
     _, stored_lift_profiles = _fatigue_context()
@@ -4142,31 +3718,25 @@ def _do_glossary_generate_text(args):
         lift_profiles=lift_profiles,
     ))
 
-
 def _do_lift_profile_review(args):
     from lift_profile_ai import review_lift_profile
     return _run_async(review_lift_profile(args["profile"]))
-
 
 def _do_lift_profile_rewrite_and_estimate(args):
     from lift_profile_ai import rewrite_and_estimate_lift_profile
     return _run_async(rewrite_and_estimate_lift_profile(args["profile"]))
 
-
 def _do_lift_profile_rewrite(args):
     from lift_profile_ai import rewrite_lift_profile
     return _run_async(rewrite_lift_profile(args["profile"]))
-
 
 def _do_lift_profile_estimate_stimulus(args):
     from lift_profile_ai import estimate_lift_profile_stimulus
     return _run_async(estimate_lift_profile_stimulus(args["profile"]))
 
-
 def _do_program_evaluation(args):
     from core import health_program_evaluation
     return _run_async(health_program_evaluation(refresh=args.get("refresh", False), cache_only=args.get("cache_only", False)))
-
 
 def _do_block_program_evaluation(args):
     from program_evaluation_ai import generate_program_evaluation_report
@@ -4195,7 +3765,6 @@ def _do_block_program_evaluation(args):
         federation_library=federation_library,
     ))
 
-
 def _do_multi_block_comparison_analysis(args):
     from multi_block_comparison_ai import generate_multi_block_comparison_report
 
@@ -4203,7 +3772,6 @@ def _do_multi_block_comparison_analysis(args):
     if not isinstance(payload, dict):
         payload = {}
     return _run_async(generate_multi_block_comparison_report(payload))
-
 
 def _do_powerlifting_filter_categories(args):
     from powerlifting_stats import load_data, get_filter_categories, DatasetNotReadyError
@@ -4214,7 +3782,6 @@ def _do_powerlifting_filter_categories(args):
         return f"ERROR: Dataset not ready. {str(e)}"
     except FileNotFoundError as e:
         return f"ERROR: Dataset missing. {str(e)}"
-
 
 def _do_analyze_powerlifting_stats(args):
     from powerlifting_stats import load_data, filter_dataset, analyze_stats, DatasetNotReadyError
@@ -4246,7 +3813,6 @@ def _do_analyze_powerlifting_stats(args):
          sex_code=args.get("sex_code"),
      )
 
-
 def _do_powerlifting_ranking_percentile(args):
     from powerlifting_stats import load_data, compute_ranking_percentiles, DatasetNotReadyError
     try:
@@ -4268,7 +3834,6 @@ def _do_powerlifting_ranking_percentile(args):
         equipment=args.get("equipment"),
     )
 
-
 def _do_export_program_markdown(args: Dict[str, Any]) -> str:
     """Generate a markdown export of the current program and return its content as a string."""
     import os
@@ -4286,9 +3851,7 @@ def _do_export_program_markdown(args: Dict[str, Any]) -> str:
         markdown = f.read()
     return {"markdown": markdown, "length": len(markdown)}
 
-
 _DETERMINISTIC_ANALYSIS_SECTIONS = ["overview", "fatigue_readiness", "peaking", "workload", "alerts"]
-
 
 def _build_sectioned_week_analysis(
     program: dict,
@@ -4309,7 +3872,6 @@ def _build_sectioned_week_analysis(
         week_end=week_end,
         ref_date=ref_date,
     )
-
 
 def _build_sectioned_analysis(
     program: dict,
@@ -4343,7 +3905,6 @@ def _build_sectioned_analysis(
         ))
     return result
 
-
 async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     """Regenerate deterministic current-block analysis caches and markdown export.
 
@@ -4374,13 +3935,11 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     cache_pk = f"analysis#{pk}"
     expires_at = int(_time.time()) + 7 * 86400
 
-    # Build analysis windows from program (replicate TypeScript buildAnalysisWindows logic)
     program_start = (program.get("meta") or {}).get("program_start") or next(
         (s.get("date") for s in sessions if (s.get("block") or "current") == "current"), None
     ) or datetime.utcnow().date().isoformat()
 
     current_sessions = [s for s in sessions if (s.get("block") or "current") == "current"]
-    # Sort by week_number to find current week
     current_week = max(
         (int(s.get("week_number", 0)) for s in current_sessions if s.get("week_number")),
         default=1
@@ -4425,7 +3984,6 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as exc:
             errors.append(f"window {window_key}: {exc}")
 
-    # Generate markdown export
     try:
         out_path = os.path.join(tempfile.gettempdir(), "program_history_regen.md")
         scoped_program = _scope_program_to_current_block(program)
@@ -4464,7 +4022,6 @@ async def _do_regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
             + (f" {len(errors)} non-fatal errors: {'; '.join(errors)}" if errors else "")
         ),
     }
-
 
 def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     """Return cached markdown export, regenerating only when stale or dirty."""
@@ -4537,7 +4094,6 @@ def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as exc:
         logging.getLogger(__name__).warning("get_analysis_markdown cache path failed: %s", exc)
 
-    # Fallback: generate fresh markdown in-process if the cache path failed.
     store.invalidate_cache()
     program = _run_async(store.get_program())
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
@@ -4580,11 +4136,6 @@ def _do_get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
     return {"markdown": markdown, "generated_at": generated_at, "cached": False}
-
-
-# =============================================================================
-# Plugin contract: execute() — async dispatcher for non-agentic specialist path
-# =============================================================================
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     """Route health tool calls to the underlying health module functions."""
@@ -4769,9 +4320,6 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
     if not handler:
         return f"Unknown health tool: {name}"
 
-    # If pk is supplied (e.g. from portal auth), override user-scoped health
-    # stores. Templates are globally partitioned; pk is passed to template tools
-    # above as actor identity instead of rewriting the template library PK.
     override_pk = args.get("pk")
     saved_pk = None
     if override_pk:
@@ -4790,7 +4338,6 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         if asyncio.iscoroutine(result):
             result = await result
     finally:
-        # Restore original pk to avoid leaking across calls
         if saved_pk is not None:
             for getter in (_get_store, _get_import_store, _get_glossary_store, _get_federation_store):
                 try:
@@ -4802,23 +4349,18 @@ async def execute(name: str, args: Dict[str, Any]) -> str:
         return result
     return json.dumps(result, indent=2, default=str)
 
-# --- import_parse_file ---
-
 class ImportParseFileAction(Action):
     base64_content: str = Field(description="Base64 encoded spreadsheet file content")
     filename: str = Field(description="Name of the file including extension")
 
-
 class ImportParseFileObservation(Observation):
     pass
-
 
 class ImportParseFileExecutor(ToolExecutor[ImportParseFileAction, ImportParseFileObservation]):
     def __call__(self, action: ImportParseFileAction, conversation=None) -> ImportParseFileObservation:
         from core import import_parse_file
         result = _run_async(import_parse_file(action.base64_content, action.filename))
         return ImportParseFileObservation.from_text(_format_result(result))
-
 
 class ImportParseFileTool(ToolDefinition[ImportParseFileAction, ImportParseFileObservation]):
     @classmethod
@@ -4830,26 +4372,20 @@ class ImportParseFileTool(ToolDefinition[ImportParseFileAction, ImportParseFileO
             executor=ImportParseFileExecutor(),
         )]
 
-
-# --- import_apply ---
-
 class ImportApplyAction(Action):
     import_id: str = Field(description="ID of the staged import to apply")
     merge_strategy: str = Field(default="append", description="Merge strategy: append, replace_planned, selective")
     conflict_resolutions: Optional[List[Dict[str, Any]]] = Field(default=None, description="Resolutions for session conflicts")
     start_date: Optional[str] = Field(default=None, description="Start date for templates (YYYY-MM-DD)")
 
-
 class ImportApplyObservation(Observation):
     pass
-
 
 class ImportApplyExecutor(ToolExecutor[ImportApplyAction, ImportApplyObservation]):
     def __call__(self, action: ImportApplyAction, conversation=None) -> ImportApplyObservation:
         from core import import_apply
         result = _run_async(import_apply(action.import_id, action.merge_strategy, action.conflict_resolutions, action.start_date))
         return ImportApplyObservation.from_text(_format_result(result))
-
 
 class ImportApplyTool(ToolDefinition[ImportApplyAction, ImportApplyObservation]):
     @classmethod
@@ -4861,23 +4397,18 @@ class ImportApplyTool(ToolDefinition[ImportApplyAction, ImportApplyObservation])
             executor=ImportApplyExecutor(),
         )]
 
-# --- import_reject ---
-
 class ImportRejectAction(Action):
     import_id: str = Field(description="ID of the staged import to reject")
     reason: Optional[str] = Field(default=None, description="Reason for rejection")
 
-
 class ImportRejectObservation(Observation):
     pass
-
 
 class ImportRejectExecutor(ToolExecutor[ImportRejectAction, ImportRejectObservation]):
     def __call__(self, action: ImportRejectAction, conversation=None) -> ImportRejectObservation:
         from core import import_reject
         result = _run_async(import_reject(action.import_id, action.reason))
         return ImportRejectObservation.from_text(_format_result(result))
-
 
 class ImportRejectTool(ToolDefinition[ImportRejectAction, ImportRejectObservation]):
     @classmethod
@@ -4889,22 +4420,17 @@ class ImportRejectTool(ToolDefinition[ImportRejectAction, ImportRejectObservatio
             executor=ImportRejectExecutor(),
         )]
 
-# --- import_list_pending ---
-
 class ImportListPendingAction(Action):
     import_type: Optional[str] = Field(default=None, description="Filter by type: template, session_import")
 
-
 class ImportListPendingObservation(Observation):
     pass
-
 
 class ImportListPendingExecutor(ToolExecutor[ImportListPendingAction, ImportListPendingObservation]):
     def __call__(self, action: ImportListPendingAction, conversation=None) -> ImportListPendingObservation:
         from core import import_list_pending
         result = _run_async(import_list_pending(action.import_type))
         return ImportListPendingObservation.from_text(_format_result(result))
-
 
 class ImportListPendingTool(ToolDefinition[ImportListPendingAction, ImportListPendingObservation]):
     @classmethod
@@ -4916,22 +4442,17 @@ class ImportListPendingTool(ToolDefinition[ImportListPendingAction, ImportListPe
             executor=ImportListPendingExecutor(),
         )]
 
-# --- import_get_pending ---
-
 class ImportGetPendingAction(Action):
     import_id: str = Field(description="The import ID to fetch")
 
-
 class ImportGetPendingObservation(Observation):
     pass
-
 
 class ImportGetPendingExecutor(ToolExecutor[ImportGetPendingAction, ImportGetPendingObservation]):
     def __call__(self, action: ImportGetPendingAction, conversation=None) -> ImportGetPendingObservation:
         from core import import_get_pending
         result = _run_async(import_get_pending(action.import_id))
         return ImportGetPendingObservation.from_text(_format_result(result))
-
 
 class ImportGetPendingTool(ToolDefinition[ImportGetPendingAction, ImportGetPendingObservation]):
     @classmethod
@@ -4943,22 +4464,17 @@ class ImportGetPendingTool(ToolDefinition[ImportGetPendingAction, ImportGetPendi
             executor=ImportGetPendingExecutor(),
         )]
 
-# --- template_list ---
-
 class TemplateListAction(Action):
     include_archived: bool = Field(default=False, description="Whether to include archived templates")
 
-
 class TemplateListObservation(Observation):
     pass
-
 
 class TemplateListExecutor(ToolExecutor[TemplateListAction, TemplateListObservation]):
     def __call__(self, action: TemplateListAction, conversation=None) -> TemplateListObservation:
         from core import template_list
         result = _run_async(template_list(action.include_archived))
         return TemplateListObservation.from_text(_format_result(result))
-
 
 class TemplateListTool(ToolDefinition[TemplateListAction, TemplateListObservation]):
     @classmethod
@@ -4970,22 +4486,17 @@ class TemplateListTool(ToolDefinition[TemplateListAction, TemplateListObservatio
             executor=TemplateListExecutor(),
         )]
 
-# --- template_get ---
-
 class TemplateGetAction(Action):
     sk: str = Field(description="SK of the template to retrieve (e.g. template#v001)")
 
-
 class TemplateGetObservation(Observation):
     pass
-
 
 class TemplateGetExecutor(ToolExecutor[TemplateGetAction, TemplateGetObservation]):
     def __call__(self, action: TemplateGetAction, conversation=None) -> TemplateGetObservation:
         from core import template_get
         result = _run_async(template_get(action.sk))
         return TemplateGetObservation.from_text(_format_result(result))
-
 
 class TemplateGetTool(ToolDefinition[TemplateGetAction, TemplateGetObservation]):
     @classmethod
@@ -4997,25 +4508,20 @@ class TemplateGetTool(ToolDefinition[TemplateGetAction, TemplateGetObservation])
             executor=TemplateGetExecutor(),
         )]
 
-# --- template_apply ---
-
 class TemplateApplyAction(Action):
     sk: str = Field(description="SK of the template to apply")
     target: str = Field(default="new_block", description="Target: new_block, append, replace_planned")
     start_date: Optional[str] = Field(default=None, description="Start date (YYYY-MM-DD)")
     week_start_day: str = Field(default="Monday", description="Week start day")
 
-
 class TemplateApplyObservation(Observation):
     pass
-
 
 class TemplateApplyExecutor(ToolExecutor[TemplateApplyAction, TemplateApplyObservation]):
     def __call__(self, action: TemplateApplyAction, conversation=None) -> TemplateApplyObservation:
         from core import template_apply
         result = _run_async(template_apply(action.sk, action.target, action.start_date, action.week_start_day))
         return TemplateApplyObservation.from_text(_format_result(result))
-
 
 class TemplateApplyTool(ToolDefinition[TemplateApplyAction, TemplateApplyObservation]):
     @classmethod
@@ -5027,8 +4533,6 @@ class TemplateApplyTool(ToolDefinition[TemplateApplyAction, TemplateApplyObserva
             executor=TemplateApplyExecutor(),
         )]
 
-# --- template_apply_confirm ---
-
 class TemplateApplyConfirmAction(Action):
     sk: str = Field(description="SK of the template to apply")
     backfilled_maxes: Optional[Dict[str, float]] = Field(default=None, description="Manual or AI backfilled maxes")
@@ -5036,17 +4540,14 @@ class TemplateApplyConfirmAction(Action):
     week_start_day: str = Field(default="Monday", description="Week start day")
     target: str = Field(default="new_block", description="Target: new_block, append, replace_planned")
 
-
 class TemplateApplyConfirmObservation(Observation):
     pass
-
 
 class TemplateApplyConfirmExecutor(ToolExecutor[TemplateApplyConfirmAction, TemplateApplyConfirmObservation]):
     def __call__(self, action: TemplateApplyConfirmAction, conversation=None) -> TemplateApplyConfirmObservation:
         from core import template_apply_confirm
         result = _run_async(template_apply_confirm(action.sk, action.backfilled_maxes, action.start_date, action.week_start_day, action.target))
         return TemplateApplyConfirmObservation.from_text(_format_result(result))
-
 
 class TemplateApplyConfirmTool(ToolDefinition[TemplateApplyConfirmAction, TemplateApplyConfirmObservation]):
     @classmethod
@@ -5058,22 +4559,17 @@ class TemplateApplyConfirmTool(ToolDefinition[TemplateApplyConfirmAction, Templa
             executor=TemplateApplyConfirmExecutor(),
         )]
 
-# --- template_evaluate ---
-
 class TemplateEvaluateAction(Action):
     sk: str = Field(description="SK of the template to evaluate")
 
-
 class TemplateEvaluateObservation(Observation):
     pass
-
 
 class TemplateEvaluateExecutor(ToolExecutor[TemplateEvaluateAction, TemplateEvaluateObservation]):
     def __call__(self, action: TemplateEvaluateAction, conversation=None) -> TemplateEvaluateObservation:
         from core import template_evaluate
         result = _run_async(template_evaluate(action.sk))
         return TemplateEvaluateObservation.from_text(_format_result(result))
-
 
 class TemplateEvaluateTool(ToolDefinition[TemplateEvaluateAction, TemplateEvaluateObservation]):
     @classmethod
@@ -5085,23 +4581,18 @@ class TemplateEvaluateTool(ToolDefinition[TemplateEvaluateAction, TemplateEvalua
             executor=TemplateEvaluateExecutor(),
         )]
 
-# --- template_create_from_block ---
-
 class TemplateCreateFromBlockAction(Action):
     name: str = Field(description="Name for the new template")
     program_sk: Optional[str] = Field(default=None, description="SK of source program version (defaults to current)")
 
-
 class TemplateCreateFromBlockObservation(Observation):
     pass
-
 
 class TemplateCreateFromBlockExecutor(ToolExecutor[TemplateCreateFromBlockAction, TemplateCreateFromBlockObservation]):
     def __call__(self, action: TemplateCreateFromBlockAction, conversation=None) -> TemplateCreateFromBlockObservation:
         from core import template_create_from_block
         result = _run_async(template_create_from_block(action.name, action.program_sk))
         return TemplateCreateFromBlockObservation.from_text(_format_result(result))
-
 
 class TemplateCreateFromBlockTool(ToolDefinition[TemplateCreateFromBlockAction, TemplateCreateFromBlockObservation]):
     @classmethod
@@ -5113,23 +4604,18 @@ class TemplateCreateFromBlockTool(ToolDefinition[TemplateCreateFromBlockAction, 
             executor=TemplateCreateFromBlockExecutor(),
         )]
 
-# --- template_copy ---
-
 class TemplateCopyAction(Action):
     sk: str = Field(description="SK of the template to copy")
     new_name: str = Field(description="Name for the new template")
 
-
 class TemplateCopyObservation(Observation):
     pass
-
 
 class TemplateCopyExecutor(ToolExecutor[TemplateCopyAction, TemplateCopyObservation]):
     def __call__(self, action: TemplateCopyAction, conversation=None) -> TemplateCopyObservation:
         from core import template_copy
         result = _run_async(template_copy(action.sk, action.new_name))
         return TemplateCopyObservation.from_text(_format_result(result))
-
 
 class TemplateCopyTool(ToolDefinition[TemplateCopyAction, TemplateCopyObservation]):
     @classmethod
@@ -5141,22 +4627,17 @@ class TemplateCopyTool(ToolDefinition[TemplateCopyAction, TemplateCopyObservatio
             executor=TemplateCopyExecutor(),
         )]
 
-# --- template_archive ---
-
 class TemplateArchiveAction(Action):
     sk: str = Field(description="SK of the template to archive")
 
-
 class TemplateArchiveObservation(Observation):
     pass
-
 
 class TemplateArchiveExecutor(ToolExecutor[TemplateArchiveAction, TemplateArchiveObservation]):
     def __call__(self, action: TemplateArchiveAction, conversation=None) -> TemplateArchiveObservation:
         from core import template_archive
         result = _run_async(template_archive(action.sk))
         return TemplateArchiveObservation.from_text(_format_result(result))
-
 
 class TemplateArchiveTool(ToolDefinition[TemplateArchiveAction, TemplateArchiveObservation]):
     @classmethod
@@ -5168,22 +4649,17 @@ class TemplateArchiveTool(ToolDefinition[TemplateArchiveAction, TemplateArchiveO
             executor=TemplateArchiveExecutor(),
         )]
 
-# --- template_unarchive ---
-
 class TemplateUnarchiveAction(Action):
     sk: str = Field(description="SK of the template to unarchive")
 
-
 class TemplateUnarchiveObservation(Observation):
     pass
-
 
 class TemplateUnarchiveExecutor(ToolExecutor[TemplateUnarchiveAction, TemplateUnarchiveObservation]):
     def __call__(self, action: TemplateUnarchiveAction, conversation=None) -> TemplateUnarchiveObservation:
         from core import template_unarchive
         result = _run_async(template_unarchive(action.sk))
         return TemplateUnarchiveObservation.from_text(_format_result(result))
-
 
 class TemplateUnarchiveTool(ToolDefinition[TemplateUnarchiveAction, TemplateUnarchiveObservation]):
     @classmethod
@@ -5195,25 +4671,20 @@ class TemplateUnarchiveTool(ToolDefinition[TemplateUnarchiveAction, TemplateUnar
             executor=TemplateUnarchiveExecutor(),
         )]
 
-# --- template_create_blank ---
-
 class TemplateCreateBlankAction(Action):
     name: str = Field(description="Name for the new template")
     description: str = Field(default="", description="Optional description")
     estimated_weeks: int = Field(default=4, description="Estimated program duration in weeks")
     days_per_week: int = Field(default=3, description="Training days per week")
 
-
 class TemplateCreateBlankObservation(Observation):
     pass
-
 
 class TemplateCreateBlankExecutor(ToolExecutor[TemplateCreateBlankAction, TemplateCreateBlankObservation]):
     def __call__(self, action: TemplateCreateBlankAction, conversation=None) -> TemplateCreateBlankObservation:
         from core import template_create_blank
         result = _run_async(template_create_blank(action.name, action.description, action.estimated_weeks, action.days_per_week))
         return TemplateCreateBlankObservation.from_text(_format_result(result))
-
 
 class TemplateCreateBlankTool(ToolDefinition[TemplateCreateBlankAction, TemplateCreateBlankObservation]):
     @classmethod
@@ -5225,24 +4696,18 @@ class TemplateCreateBlankTool(ToolDefinition[TemplateCreateBlankAction, Template
             executor=TemplateCreateBlankExecutor(),
         )]
 
-
-# --- template_update ---
-
 class TemplateUpdateAction(Action):
     sk: str = Field(description="SK of the template to update (e.g. template#v001)")
     template: Dict = Field(description="Full template object to write back")
 
-
 class TemplateUpdateObservation(Observation):
     pass
-
 
 class TemplateUpdateExecutor(ToolExecutor[TemplateUpdateAction, TemplateUpdateObservation]):
     def __call__(self, action: TemplateUpdateAction, conversation=None) -> TemplateUpdateObservation:
         from core import template_update
         result = _run_async(template_update(action.sk, action.template))
         return TemplateUpdateObservation.from_text(_format_result(result))
-
 
 class TemplateUpdateTool(ToolDefinition[TemplateUpdateAction, TemplateUpdateObservation]):
     @classmethod
@@ -5254,22 +4719,17 @@ class TemplateUpdateTool(ToolDefinition[TemplateUpdateAction, TemplateUpdateObse
             executor=TemplateUpdateExecutor(),
         )]
 
-# --- program_archive ---
-
 class ProgramArchiveAction(Action):
     sk: str = Field(description="SK of the program version to archive")
 
-
 class ProgramArchiveObservation(Observation):
     pass
-
 
 class ProgramArchiveExecutor(ToolExecutor[ProgramArchiveAction, ProgramArchiveObservation]):
     def __call__(self, action: ProgramArchiveAction, conversation=None) -> ProgramArchiveObservation:
         from core import program_archive
         result = _run_async(program_archive(action.sk))
         return ProgramArchiveObservation.from_text(_format_result(result))
-
 
 class ProgramArchiveTool(ToolDefinition[ProgramArchiveAction, ProgramArchiveObservation]):
     @classmethod
@@ -5281,22 +4741,17 @@ class ProgramArchiveTool(ToolDefinition[ProgramArchiveAction, ProgramArchiveObse
             executor=ProgramArchiveExecutor(),
         )]
 
-# --- program_unarchive ---
-
 class ProgramUnarchiveAction(Action):
     sk: str = Field(description="SK of the program version to unarchive")
 
-
 class ProgramUnarchiveObservation(Observation):
     pass
-
 
 class ProgramUnarchiveExecutor(ToolExecutor[ProgramUnarchiveAction, ProgramUnarchiveObservation]):
     def __call__(self, action: ProgramUnarchiveAction, conversation=None) -> ProgramUnarchiveObservation:
         from core import program_unarchive
         result = _run_async(program_unarchive(action.sk))
         return ProgramUnarchiveObservation.from_text(_format_result(result))
-
 
 class ProgramUnarchiveTool(ToolDefinition[ProgramUnarchiveAction, ProgramUnarchiveObservation]):
     @classmethod
@@ -5308,22 +4763,17 @@ class ProgramUnarchiveTool(ToolDefinition[ProgramUnarchiveAction, ProgramUnarchi
             executor=ProgramUnarchiveExecutor(),
         )]
 
-# --- glossary_add ---
-
 class GlossaryAddAction(Action):
     exercise: Dict[str, Any] = Field(description="Exercise object with name, category, equipment")
 
-
 class GlossaryAddObservation(Observation):
     pass
-
 
 class GlossaryAddExecutor(ToolExecutor[GlossaryAddAction, GlossaryAddObservation]):
     def __call__(self, action: GlossaryAddAction, conversation=None) -> GlossaryAddObservation:
         from core import glossary_add
         result = _run_async(glossary_add(action.exercise))
         return GlossaryAddObservation.from_text(_format_result(result))
-
 
 class GlossaryAddTool(ToolDefinition[GlossaryAddAction, GlossaryAddObservation]):
     @classmethod
@@ -5335,23 +4785,18 @@ class GlossaryAddTool(ToolDefinition[GlossaryAddAction, GlossaryAddObservation])
             executor=GlossaryAddExecutor(),
         )]
 
-# --- glossary_update ---
-
 class GlossaryUpdateAction(Action):
     id: str = Field(description="ID of the exercise to update")
     fields: Dict[str, Any] = Field(description="Fields to update")
 
-
 class GlossaryUpdateObservation(Observation):
     pass
-
 
 class GlossaryUpdateExecutor(ToolExecutor[GlossaryUpdateAction, GlossaryUpdateObservation]):
     def __call__(self, action: GlossaryUpdateAction, conversation=None) -> GlossaryUpdateObservation:
         from core import glossary_update
         result = _run_async(glossary_update(action.id, action.fields))
         return GlossaryUpdateObservation.from_text(_format_result(result))
-
 
 class GlossaryUpdateTool(ToolDefinition[GlossaryUpdateAction, GlossaryUpdateObservation]):
     @classmethod
@@ -5363,24 +4808,19 @@ class GlossaryUpdateTool(ToolDefinition[GlossaryUpdateAction, GlossaryUpdateObse
             executor=GlossaryUpdateExecutor(),
         )]
 
-# --- glossary_set_e1rm ---
-
 class GlossarySetE1rmAction(Action):
     id: str = Field(description="Exercise ID")
     value_kg: float = Field(description="e1RM estimate in kg")
     method: str = Field(default="manual", description="Method: manual, ai_backfill, logged")
 
-
 class GlossarySetE1rmObservation(Observation):
     pass
-
 
 class GlossarySetE1rmExecutor(ToolExecutor[GlossarySetE1rmAction, GlossarySetE1rmObservation]):
     def __call__(self, action: GlossarySetE1rmAction, conversation=None) -> GlossarySetE1rmObservation:
         from core import glossary_set_e1rm
         result = _run_async(glossary_set_e1rm(action.id, action.value_kg, action.method))
         return GlossarySetE1rmObservation.from_text(_format_result(result))
-
 
 class GlossarySetE1rmTool(ToolDefinition[GlossarySetE1rmAction, GlossarySetE1rmObservation]):
     @classmethod
@@ -5392,22 +4832,17 @@ class GlossarySetE1rmTool(ToolDefinition[GlossarySetE1rmAction, GlossarySetE1rmO
             executor=GlossarySetE1rmExecutor(),
         )]
 
-# --- glossary_estimate_e1rm ---
-
 class GlossaryEstimateE1rmAction(Action):
     id: str = Field(description="Exercise ID to estimate e1RM for")
 
-
 class GlossaryEstimateE1rmObservation(Observation):
     pass
-
 
 class GlossaryEstimateE1rmExecutor(ToolExecutor[GlossaryEstimateE1rmAction, GlossaryEstimateE1rmObservation]):
     def __call__(self, action: GlossaryEstimateE1rmAction, conversation=None) -> GlossaryEstimateE1rmObservation:
         from core import glossary_estimate_e1rm
         result = _run_async(glossary_estimate_e1rm(action.id))
         return GlossaryEstimateE1rmObservation.from_text(_format_result(result))
-
 
 class GlossaryEstimateE1rmTool(ToolDefinition[GlossaryEstimateE1rmAction, GlossaryEstimateE1rmObservation]):
     @classmethod
@@ -5419,22 +4854,17 @@ class GlossaryEstimateE1rmTool(ToolDefinition[GlossaryEstimateE1rmAction, Glossa
             executor=GlossaryEstimateE1rmExecutor(),
         )]
 
-# --- glossary_estimate_fatigue ---
-
 class GlossaryEstimateFatigueAction(Action):
     id: str = Field(description="Exercise ID to estimate fatigue profile for")
 
-
 class GlossaryEstimateFatigueObservation(Observation):
     pass
-
 
 class GlossaryEstimateFatigueExecutor(ToolExecutor[GlossaryEstimateFatigueAction, GlossaryEstimateFatigueObservation]):
     def __call__(self, action: GlossaryEstimateFatigueAction, conversation=None) -> GlossaryEstimateFatigueObservation:
         from core import glossary_estimate_fatigue
         result = _run_async(glossary_estimate_fatigue(action.id))
         return GlossaryEstimateFatigueObservation.from_text(_format_result(result))
-
 
 class GlossaryEstimateFatigueTool(ToolDefinition[GlossaryEstimateFatigueAction, GlossaryEstimateFatigueObservation]):
     @classmethod
@@ -5446,21 +4876,17 @@ class GlossaryEstimateFatigueTool(ToolDefinition[GlossaryEstimateFatigueAction, 
             executor=GlossaryEstimateFatigueExecutor(),
         )]
 
-
 class GlossaryEstimateMusclesAction(Action):
     id: str = Field(description="Exercise ID to estimate muscle groups for")
 
-
 class GlossaryEstimateMusclesObservation(Observation):
     pass
-
 
 class GlossaryEstimateMusclesExecutor(ToolExecutor[GlossaryEstimateMusclesAction, GlossaryEstimateMusclesObservation]):
     def __call__(self, action: GlossaryEstimateMusclesAction, conversation=None) -> GlossaryEstimateMusclesObservation:
         from core import glossary_estimate_muscles
         result = _run_async(glossary_estimate_muscles(action.id))
         return GlossaryEstimateMusclesObservation.from_text(_format_result(result))
-
 
 class GlossaryEstimateMusclesTool(ToolDefinition[GlossaryEstimateMusclesAction, GlossaryEstimateMusclesObservation]):
     @classmethod
@@ -5472,21 +4898,17 @@ class GlossaryEstimateMusclesTool(ToolDefinition[GlossaryEstimateMusclesAction, 
             executor=GlossaryEstimateMusclesExecutor(),
         )]
 
-
 class HealthGetLifetimeComparisonAction(Action):
     block_keys: list[str] = Field(description="Keys of the blocks to compare.")
 
-
 class HealthGetLifetimeComparisonObservation(Observation):
     pass
-
 
 class HealthGetLifetimeComparisonExecutor(ToolExecutor[HealthGetLifetimeComparisonAction, HealthGetLifetimeComparisonObservation]):
     def __call__(self, action: HealthGetLifetimeComparisonAction, conversation=None) -> HealthGetLifetimeComparisonObservation:
         from core import health_get_lifetime_comparison
         result = _run_async(health_get_lifetime_comparison(action.block_keys))
         return HealthGetLifetimeComparisonObservation.from_text(_format_result(result))
-
 
 class HealthGetLifetimeComparisonTool(ToolDefinition[HealthGetLifetimeComparisonAction, HealthGetLifetimeComparisonObservation]):
     @classmethod
@@ -5503,23 +4925,17 @@ class HealthGetLifetimeComparisonTool(ToolDefinition[HealthGetLifetimeComparison
             executor=HealthGetLifetimeComparisonExecutor(),
         )]
 
-
-# --- health_suggest_e1rm_multipliers ---
-
 class HealthSuggestE1rmMultipliersAction(Action):
     pass
 
-
 class HealthSuggestE1rmMultipliersObservation(Observation):
     pass
-
 
 class HealthSuggestE1rmMultipliersExecutor(ToolExecutor[HealthSuggestE1rmMultipliersAction, HealthSuggestE1rmMultipliersObservation]):
     def __call__(self, action: HealthSuggestE1rmMultipliersAction, conversation=None) -> HealthSuggestE1rmMultipliersObservation:
         from core import health_suggest_e1rm_multipliers
         result = _run_async(health_suggest_e1rm_multipliers())
         return HealthSuggestE1rmMultipliersObservation.from_text(_format_result(result))
-
 
 class HealthSuggestE1rmMultipliersTool(ToolDefinition[HealthSuggestE1rmMultipliersAction, HealthSuggestE1rmMultipliersObservation]):
     @classmethod
@@ -5534,7 +4950,6 @@ class HealthSuggestE1rmMultipliersTool(ToolDefinition[HealthSuggestE1rmMultiplie
             observation_type=HealthSuggestE1rmMultipliersObservation,
             executor=HealthSuggestE1rmMultipliersExecutor(),
         )]
-
 
 register_tool("HealthSuggestE1rmMultipliersTool", HealthSuggestE1rmMultipliersTool)
 register_tool("HealthGetLifetimeComparisonTool", HealthGetLifetimeComparisonTool)

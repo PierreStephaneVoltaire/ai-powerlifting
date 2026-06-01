@@ -1,19 +1,10 @@
-"""Tarot tool plugin — card draw, meaning lookup, and spread information.
 
-Exports:
-    get_schemas()     -> snake_case name -> JSON schema
-    execute(name, args) -> async dispatcher for specialist path
-"""
 from __future__ import annotations
 
 import json
 import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-# ---------------------------------------------------------------------------
-# Card catalogue — all 78 Rider-Waite cards
-# ---------------------------------------------------------------------------
 
 MAJOR_ARCANA = [
     "the fool", "the magician", "the high priestess", "the empress",
@@ -34,23 +25,14 @@ MINOR_ARCANA = [
     f"{value} of {suit}" for suit in MINOR_SUITS for value in MINOR_VALUES
 ]
 
-ALL_CARDS: List[str] = MAJOR_ARCANA + MINOR_ARCANA  # 78 total
-
-# ---------------------------------------------------------------------------
-# Slug mapping — card name -> filename slug
-# ---------------------------------------------------------------------------
+ALL_CARDS: List[str] = MAJOR_ARCANA + MINOR_ARCANA
 
 def _card_slug(card_name: str) -> str:
     """Convert a card name like 'the high priestess' to 'the_high_priestess'."""
     return card_name.replace(" ", "_")
 
-# ---------------------------------------------------------------------------
-# Image path resolution
-# ---------------------------------------------------------------------------
-
 _TAROT_ROOT = Path(__file__).resolve().parent
 _ASSETS_DIR = _TAROT_ROOT / "assets" / "cards"
-
 
 def _image_path(card_name: str) -> tuple:
     """Return (absolute_path | None, image_missing: bool) for a card PNG."""
@@ -60,12 +42,7 @@ def _image_path(card_name: str) -> tuple:
         return str(path), False
     return None, True
 
-# ---------------------------------------------------------------------------
-# Meanings data
-# ---------------------------------------------------------------------------
-
 _MEANINGS: Optional[Dict[str, Dict[str, str]]] = None
-
 
 def _load_meanings() -> Dict[str, Dict[str, str]]:
     """Load meanings.json lazily. Keys are normalised card names."""
@@ -77,22 +54,15 @@ def _load_meanings() -> Dict[str, Dict[str, str]]:
         return {}
     with open(meanings_path, "r", encoding="utf-8") as f:
         raw = json.load(f)
-    # Normalise keys: lowercase and strip, also build space-key index
     normalised = {}
     for k, v in raw.items():
         key = k.lower().strip()
         normalised[key] = v
-        # Also index by spaces version (e.g. "the high priestess" -> "the_high_priestess" already a key)
-        # and by underscore version (e.g. "the_high_priestess" -> "the high priestess")
         alt = key.replace("_", " ")
         if alt not in normalised:
             normalised[alt] = v
     _MEANINGS = normalised
     return _MEANINGS
-
-# ---------------------------------------------------------------------------
-# Spread definitions
-# ---------------------------------------------------------------------------
 
 SPREADS: Dict[int, Dict[str, Any]] = {
     1: {
@@ -122,10 +92,6 @@ SPREADS: Dict[int, Dict[str, Any]] = {
 
 SUPPORTED_N = sorted(SPREADS.keys())
 
-# ---------------------------------------------------------------------------
-# Normalisation helpers
-# ---------------------------------------------------------------------------
-
 def _normalise_card_name(raw: str) -> tuple:
     """Normalise a card name and detect orientation.
 
@@ -142,10 +108,6 @@ def _normalise_card_name(raw: str) -> tuple:
         text = text[len("reversed "):].strip()
 
     return text, orientation
-
-# ---------------------------------------------------------------------------
-# Tool: tarot_draw_cards
-# ---------------------------------------------------------------------------
 
 def _draw_cards(
     n: int,
@@ -184,10 +146,6 @@ def _draw_cards(
         "cards": cards,
     }
 
-# ---------------------------------------------------------------------------
-# Tool: tarot_card_meaning
-# ---------------------------------------------------------------------------
-
 def _card_meaning(card_name: str, orientation: Optional[str] = None) -> Dict[str, Any]:
     normalised, detected_orientation = _normalise_card_name(card_name)
     final_orientation = orientation or detected_orientation
@@ -195,17 +153,15 @@ def _card_meaning(card_name: str, orientation: Optional[str] = None) -> Dict[str
     meanings = _load_meanings()
     entry = meanings.get(normalised)
 
-    # Fallback: try alternate key formats
     if entry is None:
         for alt in [
-            normalised.replace(" ", "_"),          # spaces -> underscores
-            normalised.replace("_", " "),          # underscores -> spaces
+            normalised.replace(" ", "_"),
+            normalised.replace("_", " "),
         ]:
             entry = meanings.get(alt)
             if entry is not None:
                 break
 
-    # Fallback: try without/with leading "the "
     if entry is None:
         if normalised.startswith("the "):
             entry = meanings.get(normalised[4:])
@@ -222,10 +178,6 @@ def _card_meaning(card_name: str, orientation: Optional[str] = None) -> Dict[str
         "reversed": entry.get("reversed", ""),
     }
 
-# ---------------------------------------------------------------------------
-# Tool: tarot_spread_info
-# ---------------------------------------------------------------------------
-
 def _spread_info(n: int) -> Dict[str, Any]:
     if n not in SPREADS:
         return {"error": f"Unsupported spread size: {n}. Supported: {SUPPORTED_N}"}
@@ -235,10 +187,6 @@ def _spread_info(n: int) -> Dict[str, Any]:
         "n": n,
         "positions": spread["positions"],
     }
-
-# ---------------------------------------------------------------------------
-# Plugin contract: get_schemas()
-# ---------------------------------------------------------------------------
 
 def get_schemas() -> Dict[str, Dict[str, Any]]:
     return {
@@ -317,11 +265,6 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             },
         },
     }
-
-
-# ---------------------------------------------------------------------------
-# Plugin contract: execute()
-# ---------------------------------------------------------------------------
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     """Route tarot tool calls."""

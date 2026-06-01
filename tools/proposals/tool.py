@@ -1,18 +1,4 @@
-"""Proposal tool plugin — agent-proposed directives and implementation proposals.
 
-Provides tools for:
-- create_proposal(): Agent creates a proposal (capped at 3 per summarization)
-- list_proposals(): Query proposals with optional status filter
-- resolve_proposal(): User approves/rejects a proposal
-- generate_implementation_plan(): Generate step-by-step plan for approved proposals
-
-Design principle: Agent proposes, user approves.
-
-Exports:
-    get_tools()       -> SDK Tool objects (side effect: register_tool() calls)
-    get_schemas()     -> snake_case name -> JSON schema
-    execute(name, args) -> async dispatcher for non-agentic path
-"""
 from __future__ import annotations
 
 import asyncio
@@ -30,11 +16,6 @@ from tools.sdk_compat import (
     register_tool,
 )
 
-
-# =============================================================================
-# Helpers (duplicated from agent/tools/base to avoid cross-dir imports)
-# =============================================================================
-
 def _run_async(coro):
     try:
         loop = asyncio.get_running_loop()
@@ -46,16 +27,10 @@ def _run_async(coro):
             return pool.submit(asyncio.run, coro).result()
     return asyncio.run(coro)
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
-
-
-# =============================================================================
-# Type aliases
-# =============================================================================
 
 ProposalType = Literal[
     "new_directive",
@@ -72,13 +47,11 @@ ProposalStatus = Literal[
     "implemented",
 ]
 
-
 def _proposal_table():
     import boto3
     from config import AWS_REGION, IF_PROPOSALS_TABLE_NAME
 
     return boto3.resource("dynamodb", region_name=AWS_REGION).Table(IF_PROPOSALS_TABLE_NAME)
-
 
 async def create_proposal(
     *,
@@ -108,7 +81,6 @@ async def create_proposal(
     _proposal_table().put_item(Item=item)
     return {"proposal": item}
 
-
 async def list_proposals(
     status: Optional[str] = None,
     user_pk: str = "operator",
@@ -125,7 +97,6 @@ async def list_proposals(
     if status:
         proposals = [p for p in proposals if p.get("status") == status]
     return {"proposals": proposals}
-
 
 async def resolve_proposal(
     *,
@@ -153,7 +124,6 @@ async def resolve_proposal(
     )
     return {"proposal": response.get("Attributes", {})}
 
-
 async def generate_implementation_plan(
     *,
     proposal_sk: str,
@@ -172,13 +142,6 @@ async def generate_implementation_plan(
     ]
     return {"proposal_sk": proposal_sk, "title": proposal.get("title"), "implementation_plan": plan}
 
-
-# =============================================================================
-# SDK Tool Classes
-# =============================================================================
-
-# --- create_proposal ---
-
 class CreateProposalAction(Action):
     type: ProposalType = Field(description="Type: new_directive, rewrite_directive, deprecate_directive, new_tool, system_observation")
     title: str = Field(description="Short title for the proposal")
@@ -187,10 +150,8 @@ class CreateProposalAction(Action):
     target_id: Optional[str] = Field(default=None, description="For rewrite/deprecate, the SK of target directive")
     user_pk: str = Field(default="operator", description="User partition key")
 
-
 class CreateProposalObservation(Observation):
     pass
-
 
 class CreateProposalExecutor(ToolExecutor[CreateProposalAction, CreateProposalObservation]):
     def __call__(self, action: CreateProposalAction, conversation=None) -> CreateProposalObservation:
@@ -203,7 +164,6 @@ class CreateProposalExecutor(ToolExecutor[CreateProposalAction, CreateProposalOb
             user_pk=action.user_pk,
         ))
         return CreateProposalObservation.from_text(_format_result(result))
-
 
 class CreateProposalTool(ToolDefinition[CreateProposalAction, CreateProposalObservation]):
     @classmethod
@@ -219,18 +179,13 @@ class CreateProposalTool(ToolDefinition[CreateProposalAction, CreateProposalObse
             executor=CreateProposalExecutor(),
         )]
 
-
-# --- list_proposals ---
-
 class ListProposalsAction(Action):
     status: Optional[ProposalStatus] = Field(default=None, description="Filter by status: pending, approved, rejected, implemented")
     user_pk: str = Field(default="operator", description="User partition key")
     limit: int = Field(default=20, description="Maximum number of proposals to return")
 
-
 class ListProposalsObservation(Observation):
     pass
-
 
 class ListProposalsExecutor(ToolExecutor[ListProposalsAction, ListProposalsObservation]):
     def __call__(self, action: ListProposalsAction, conversation=None) -> ListProposalsObservation:
@@ -240,7 +195,6 @@ class ListProposalsExecutor(ToolExecutor[ListProposalsAction, ListProposalsObser
             limit=action.limit,
         ))
         return ListProposalsObservation.from_text(_format_result(result))
-
 
 class ListProposalsTool(ToolDefinition[ListProposalsAction, ListProposalsObservation]):
     @classmethod
@@ -255,19 +209,14 @@ class ListProposalsTool(ToolDefinition[ListProposalsAction, ListProposalsObserva
             executor=ListProposalsExecutor(),
         )]
 
-
-# --- resolve_proposal ---
-
 class ResolveProposalAction(Action):
     sk: str = Field(description="Sort key of the proposal (e.g., proposal#2026-03-14T10:00:00Z)")
     decision: Literal["approved", "rejected"] = Field(description="Decision: approved or rejected")
     reason: Optional[str] = Field(default=None, description="Reason for rejection (required if rejected)")
     user_pk: str = Field(default="operator", description="User partition key")
 
-
 class ResolveProposalObservation(Observation):
     pass
-
 
 class ResolveProposalExecutor(ToolExecutor[ResolveProposalAction, ResolveProposalObservation]):
     def __call__(self, action: ResolveProposalAction, conversation=None) -> ResolveProposalObservation:
@@ -278,7 +227,6 @@ class ResolveProposalExecutor(ToolExecutor[ResolveProposalAction, ResolveProposa
             user_pk=action.user_pk,
         ))
         return ResolveProposalObservation.from_text(_format_result(result))
-
 
 class ResolveProposalTool(ToolDefinition[ResolveProposalAction, ResolveProposalObservation]):
     @classmethod
@@ -293,17 +241,12 @@ class ResolveProposalTool(ToolDefinition[ResolveProposalAction, ResolveProposalO
             executor=ResolveProposalExecutor(),
         )]
 
-
-# --- generate_implementation_plan ---
-
 class GenerateImplementationPlanAction(Action):
     proposal_sk: str = Field(description="Sort key of the approved proposal")
     user_pk: str = Field(default="operator", description="User partition key")
 
-
 class GenerateImplementationPlanObservation(Observation):
     pass
-
 
 class GenerateImplementationPlanExecutor(ToolExecutor[GenerateImplementationPlanAction, GenerateImplementationPlanObservation]):
     def __call__(self, action: GenerateImplementationPlanAction, conversation=None) -> GenerateImplementationPlanObservation:
@@ -312,7 +255,6 @@ class GenerateImplementationPlanExecutor(ToolExecutor[GenerateImplementationPlan
             user_pk=action.user_pk,
         ))
         return GenerateImplementationPlanObservation.from_text(_format_result(result))
-
 
 class GenerateImplementationPlanTool(ToolDefinition[GenerateImplementationPlanAction, GenerateImplementationPlanObservation]):
     @classmethod
@@ -327,20 +269,10 @@ class GenerateImplementationPlanTool(ToolDefinition[GenerateImplementationPlanAc
             executor=GenerateImplementationPlanExecutor(),
         )]
 
-
-# =============================================================================
-# Register all SDK tools
-# =============================================================================
-
 register_tool("CreateProposalTool", CreateProposalTool)
 register_tool("ListProposalsTool", ListProposalsTool)
 register_tool("ResolveProposalTool", ResolveProposalTool)
 register_tool("GenerateImplementationPlanTool", GenerateImplementationPlanTool)
-
-
-# =============================================================================
-# Plugin contract: get_tools()
-# =============================================================================
 
 def get_tools() -> List[Tool]:
     """Get all proposal SDK Tool objects (side effect: register_tool already called above)."""
@@ -350,11 +282,6 @@ def get_tools() -> List[Tool]:
         Tool(name="ResolveProposalTool"),
         Tool(name="GenerateImplementationPlanTool"),
     ]
-
-
-# =============================================================================
-# Plugin contract: get_schemas() -- JSON schemas for non-agentic specialist path
-# =============================================================================
 
 def get_schemas() -> Dict[str, Dict[str, Any]]:
     """Return snake_case tool name -> JSON schema mapping."""
@@ -440,11 +367,6 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             },
         },
     }
-
-
-# =============================================================================
-# Plugin contract: execute() -- async dispatcher for non-agentic specialist path
-# =============================================================================
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     """Route proposal tool calls to the underlying proposal module functions."""

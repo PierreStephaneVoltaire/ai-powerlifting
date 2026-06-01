@@ -1,15 +1,9 @@
-#!/usr/bin/env python3
-"""Standalone plugin runner — executes inside per-plugin uv venv.
 
-Reads:  {"name": "<tool_name>", "args": {...}} from stdin (one JSON line)
-Writes: {"ok": true, "result": "<string>"} or {"ok": false, "error": "<msg>"} to stdout
-"""
 import asyncio
 import importlib.util
 import json
 import sys
 from pathlib import Path
-
 
 def main() -> None:
     plugin_dir = Path(__file__).parent
@@ -38,7 +32,6 @@ def main() -> None:
     json.dump({"ok": True, "result": str(result)}, sys.stdout)
     sys.stdout.write("\n")
     sys.stdout.flush()
-
 
 if __name__ == "__main__":
     try:

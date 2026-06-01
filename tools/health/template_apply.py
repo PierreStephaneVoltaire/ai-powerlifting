@@ -1,7 +1,4 @@
-"""Logic for applying a Template to a concrete Program block.
 
-Handles the Max Resolution Gate, e1RM resolution, and calendar mapping.
-"""
 from __future__ import annotations
 
 import math
@@ -19,25 +16,18 @@ def check_max_resolution_gate(
     current_maxes: dict[str, float], 
     glossary_exercises: list[dict[str, Any]]
 ) -> list[str]:
-    """Return list of glossary_ids that need e1RM but have none.
-    
-    A max is resolved if:
-    1. It's in current_maxes (SBD)
-    2. The glossary entry has e1rm_estimate
-    """
+
     required_ids = template.get("required_maxes", [])
     missing = []
     
     glossary_map = {ex["id"]: ex for ex in glossary_exercises}
     
     for gid in required_ids:
-        # SBD check
         if gid in ["squat", "bench", "deadlift"]:
             if gid not in current_maxes or not current_maxes[gid]:
                 missing.append(gid)
             continue
             
-        # Accessory check
         ex = glossary_map.get(gid)
         if not ex:
             missing.append(gid)
@@ -149,7 +139,7 @@ def concretize(
             "status": "planned",
             "completed": False,
             "planned_exercises": exercises,
-            "exercises": [], # actuals start empty
+            "exercises": [],
             "session_notes": ""
         })
         

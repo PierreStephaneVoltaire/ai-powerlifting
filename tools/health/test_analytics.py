@@ -13,24 +13,20 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import analytics  # noqa: E402
-import core  # noqa: E402
-import template_apply  # noqa: E402
-
+import analytics
+import core
+import template_apply
 
 TODAY = date(2026, 4, 24)
-
 
 class FrozenDate(date):
     @classmethod
     def today(cls) -> "FrozenDate":
         return cls(TODAY.year, TODAY.month, TODAY.day)
 
-
 @pytest.fixture(autouse=True)
 def freeze_today(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(analytics, "date", FrozenDate)
-
 
 def test_save_program_version_converts_nested_floats(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
@@ -76,7 +72,6 @@ def test_save_program_version_converts_nested_floats(monkeypatch: pytest.MonkeyP
     assert captured["invalidated"] is True
     assert captured["cache_invalidated"][0] == "operator"
 
-
 def make_exercise(name: str, kg: float, reps: int, sets: int = 1, **extra) -> dict:
     exercise = {
         "name": name,
@@ -86,7 +81,6 @@ def make_exercise(name: str, kg: float, reps: int, sets: int = 1, **extra) -> di
     }
     exercise.update(extra)
     return exercise
-
 
 def make_session(
     days_ago: int,
@@ -114,7 +108,6 @@ def make_session(
         session["wellness"] = wellness
     return session
 
-
 def make_wellness(sleep: int, soreness: int, mood: int, stress: int, energy: int) -> dict:
     return {
         "sleep": sleep,
@@ -124,7 +117,6 @@ def make_wellness(sleep: int, soreness: int, mood: int, stress: int, energy: int
         "energy": energy,
         "recorded_at": TODAY.isoformat(),
     }
-
 
 def make_sbd_session(
     days_ago: int,
@@ -148,9 +140,7 @@ def make_sbd_session(
         completed=completed,
     )
 
-
 def test_fatigue_index_resets_streak_on_skipped_week() -> None:
-    # 5 weeks of heavy training
     sessions = []
     for week_idx in range(1, 6):
         for day in range(3):
@@ -165,14 +155,10 @@ def test_fatigue_index_resets_streak_on_skipped_week() -> None:
     
     program_start = (TODAY - timedelta(days=42)).isoformat()
     
-    # Check streak at week 5
     fi_w5 = analytics.fatigue_index(sessions, program_start=program_start, ref_date=TODAY, days=60)
-    # week 5 is index 5
     w5_data = next(f for wk, f in fi_w5["weekly_fis"] if wk == 5)
     assert w5_data["components"]["overload_streak"] > 0
     
-    # Now skip week 6
-    # week 7 has training again
     for day in range(3):
         sessions.append(
             make_session(
@@ -183,8 +169,6 @@ def test_fatigue_index_resets_streak_on_skipped_week() -> None:
             )
         )
     
-    # Week 6 is missing (skipped)
-    # The streak should reset at week 6 and be low at week 7
     ref_future = TODAY + timedelta(days=14)
     fi_w7 = analytics.fatigue_index(sessions, program_start=program_start, ref_date=ref_future, days=60)
     
@@ -192,8 +176,7 @@ def test_fatigue_index_resets_streak_on_skipped_week() -> None:
     w7_data = next(f for wk, f in fi_w7["weekly_fis"] if wk == 7)
     
     assert w6_data["components"]["overload_streak"] == 0
-    assert w7_data["components"]["overload_streak"] == 0.25 # Streak starts over
-
+    assert w7_data["components"]["overload_streak"] == 0.25
 
 def test_fatigue_physics_is_nonlinear() -> None:
     profile = {"axial": 1.0, "neural": 1.0, "peripheral": 1.0, "systemic": 1.0}
@@ -208,7 +191,6 @@ def test_fatigue_physics_is_nonlinear() -> None:
     assert neural_95 > neural_90
     assert axial_90x3 > axial_70x3
     assert systemic_90 > systemic_70
-
 
 def test_set_statuses_drive_executed_volume_and_failures() -> None:
     exercise = make_exercise(
@@ -225,13 +207,11 @@ def test_set_statuses_drive_executed_volume_and_failures() -> None:
     assert analytics._executed_volume(exercise) == 1000
     assert analytics._count_failed_sets(exercise) == 1
 
-
 def test_set_statuses_fallback_to_legacy_failed_sets() -> None:
     exercise = make_exercise("Bench Press", 80, 5, sets=3, failed_sets=[False, True, False])
 
     assert analytics._executed_sets(exercise) == 3
     assert analytics._count_failed_sets(exercise) == 1
-
 
 @pytest.mark.parametrize(
     ("avg_rpe", "expected"),
@@ -255,7 +235,6 @@ def test_fatigue_index_rpe_stress_mapping(avg_rpe: float, expected: float) -> No
     assert result["components"]["rpe_stress"] == pytest.approx(expected, abs=1e-3)
     assert result["score"] == pytest.approx(expected * 0.15, abs=1e-3)
 
-
 def test_progression_rate_returns_fit_metrics() -> None:
     sessions = [
         make_session(21, [make_exercise("Squat", 100, 1)], session_rpe=10, week_number=1),
@@ -271,17 +250,10 @@ def test_progression_rate_returns_fit_metrics() -> None:
     assert result["r2"] == pytest.approx(1.0, abs=1e-6)
     assert result["r_squared"] == pytest.approx(1.0, abs=1e-6)
 
-
 def test_exercise_stats_ignores_skipped_sets() -> None:
-    # Exercise with 1 completed set at 200kg and 1 skipped set at 231kg
     ex = make_exercise("Deadlift", 200, 1)
     ex["set_statuses"] = ["completed", "skipped"]
     ex["sets"] = 2
-    # In this case, 'kg' in exercise usually refers to the intended load.
-    # If the user performed 200 and skipped 231, they might have updated the exercise kg to 231
-    # but only completed the first set at a lower weight or intended to do 231 but skipped it.
-    # Usually, 'kg' is the actual load for the executed sets.
-    # Let's simulate the scenario where kg=231 is in the exercise but the executed sets don't count it.
     ex_skipped = {
         "name": "Deadlift",
         "kg": 231,
@@ -314,12 +286,9 @@ def test_exercise_stats_ignores_skipped_sets() -> None:
 
     result = analytics.weekly_analysis(program, sessions, ref_date="2026-04-15")
 
-    # The max_kg should be 200, not 231
     assert result["exercise_stats"]["Deadlift"]["max_kg"] == 200
     assert result["exercise_stats"]["Deadlift"]["total_sets"] == 1
-    # Check lifts report as well
     assert result["lifts"]["deadlift"]["max_kg"] == 200
-
 
 def test_estimate_maxes_from_comps_ignores_skipped_status() -> None:
     competitions = [
@@ -345,12 +314,10 @@ def test_estimate_maxes_from_comps_ignores_skipped_status() -> None:
         }
     ]
     
-    # Should pick Real Meet results, not Skipped Meet
     maxes = analytics._estimate_maxes_from_comps(competitions, reference_date=date(2026, 5, 10))
     assert maxes["squat"] == 200
     assert maxes["bench"] == 100
     assert maxes["deadlift"] == 250
-
 
 def test_rpe_drift_returns_fit_metrics() -> None:
     sessions = [
@@ -366,7 +333,6 @@ def test_rpe_drift_returns_fit_metrics() -> None:
     assert result["fit_quality"] == pytest.approx(1.0, abs=1e-6)
     assert result["r2"] == pytest.approx(1.0, abs=1e-6)
     assert result["r_squared"] == pytest.approx(1.0, abs=1e-6)
-
 
 def test_compute_inol_uses_per_lift_thresholds_and_smoothing() -> None:
     sessions = [
@@ -405,7 +371,6 @@ def test_compute_inol_uses_per_lift_thresholds_and_smoothing() -> None:
     assert "low_stimulus_deadlift" in result["flags"]
     assert "overreaching_risk_bench" not in result["flags"]
     assert "low_stimulus_bench" not in result["flags"]
-
 
 def test_compute_acwr_daily_ewma_and_labels() -> None:
     sessions: list[dict] = []
@@ -456,7 +421,6 @@ def test_compute_acwr_daily_ewma_and_labels() -> None:
     assert result["dimensions"]["axial"]["label"] == "Load spike (expected during planned overreach)"
     assert result["dimensions"]["neural"]["label"].endswith("(expected during planned overreach)")
     assert math.isfinite(result["composite"])
-
 
 def test_weekly_analysis_respects_requested_window() -> None:
     sessions = [
@@ -525,7 +489,6 @@ def test_weekly_analysis_respects_requested_window() -> None:
     assert result_12["compliance"]["planned"] == 12
     assert result_12["compliance"]["completed"] == 12
 
-
 def test_compute_acwr_requires_25_calendar_days() -> None:
     sessions = [
         make_session(
@@ -545,7 +508,6 @@ def test_compute_acwr_requires_25_calendar_days() -> None:
 
     assert result["status"] == "insufficient_data"
     assert "25 calendar days" in result["reason"]
-
 
 def test_compute_acwr_accepts_25_calendar_days() -> None:
     sessions = [
@@ -567,7 +529,6 @@ def test_compute_acwr_accepts_25_calendar_days() -> None:
     assert "status" not in result
     assert result["composite"] is not None
     assert math.isfinite(result["composite"])
-
 
 def test_weekly_analysis_previous_week_window_excludes_current_week() -> None:
     program = {
@@ -591,7 +552,6 @@ def test_weekly_analysis_previous_week_window_excludes_current_week() -> None:
 
     assert result["sessions_analyzed"] == 1
     assert result["exercise_stats"]["Squat"]["max_kg"] == 100
-
 
 def test_weekly_analysis_training_week_window_overrides_calendar_start() -> None:
     program = {
@@ -623,7 +583,6 @@ def test_weekly_analysis_training_week_window_overrides_calendar_start() -> None
     assert result["exercise_stats"]["Squat"]["max_kg"] == 140
     assert result["compliance"]["planned"] == 2
     assert result["compliance"]["completed"] == 2
-
 
 def test_weekly_analysis_section_matches_full_report_sections() -> None:
     glossary = [
@@ -699,7 +658,6 @@ def test_weekly_analysis_section_matches_full_report_sections() -> None:
         for key in keys:
             assert payload[key] == full[key]
 
-
 def test_weekly_analysis_uses_stored_saturday_week_start_for_current_block() -> None:
     program = {
         "meta": {
@@ -728,7 +686,6 @@ def test_weekly_analysis_uses_stored_saturday_week_start_for_current_block() -> 
     assert "Bench Press" in result["exercise_stats"]
     assert "Squat" not in result["exercise_stats"]
 
-
 def test_weekly_analysis_ref_date_drives_current_week_instead_of_today() -> None:
     program = {
         "meta": {"program_start": "2026-04-01"},
@@ -752,7 +709,6 @@ def test_weekly_analysis_ref_date_drives_current_week_instead_of_today() -> None
     assert result["selected_week_start"] == 3
     assert result["sessions_analyzed"] == 1
     assert result["exercise_stats"]["Squat"]["max_kg"] == 100
-
 
 def test_weekly_analysis_week_gaps_count_positionally() -> None:
     program = {
@@ -779,7 +735,6 @@ def test_weekly_analysis_week_gaps_count_positionally() -> None:
     assert result["selected_week_end"] == 5
     assert result["selected_week_count"] == 4
     assert result["sessions_analyzed"] == 2
-
 
 def test_weekly_analysis_saturday_current_week_uses_week_13_after_skipped_week_12() -> None:
     program = {
@@ -865,7 +820,6 @@ def test_weekly_analysis_saturday_current_week_uses_week_13_after_skipped_week_1
         for session in result["selected_session_context"]
     )
 
-
 def test_weekly_analysis_empty_current_week_keeps_history_current_state() -> None:
     program = {
         "meta": {
@@ -900,7 +854,6 @@ def test_weekly_analysis_empty_current_week_keeps_history_current_state() -> Non
     assert result["current_maxes"]["squat"] > 0
     assert result["current_maxes"]["bench"] > 0
 
-
 def test_weekly_analysis_infers_skipped_compliance_without_mutating_sessions() -> None:
     planned = {
         "date": "2026-04-08",
@@ -933,7 +886,6 @@ def test_weekly_analysis_infers_skipped_compliance_without_mutating_sessions() -
     assert planned["status"] == "planned"
     assert "_inferred_skipped" not in planned
 
-
 def test_template_concretize_accepts_all_week_start_days() -> None:
     template = {
         "sessions": [
@@ -954,7 +906,6 @@ def test_template_concretize_accepts_all_week_start_days() -> None:
         sessions = template_apply.concretize(template, {}, [], date(2026, 4, 1), week_start_day)
         assert isinstance(sessions, list)
 
-
 def test_template_concretize_shifted_week_one_drops_pre_program_start_sessions() -> None:
     template = {
         "sessions": [
@@ -968,7 +919,6 @@ def test_template_concretize_shifted_week_one_drops_pre_program_start_sessions()
 
     assert [session["date"] for session in sessions] == ["2026-04-01"]
     assert sessions[0]["day"] == "Wednesday"
-
 
 def test_compute_banister_ffm_constant_load_stays_balanced() -> None:
     sessions = [
@@ -997,7 +947,6 @@ def test_compute_banister_ffm_constant_load_stays_balanced() -> None:
     assert result["series"][0]["ctl"] == pytest.approx(result["series"][-1]["ctl"], abs=1e-6)
     assert result["series"][0]["atl"] == pytest.approx(result["series"][-1]["atl"], abs=1e-6)
 
-
 def test_compute_monotony_strain_flags_high_monotony_and_strain_spike() -> None:
     sessions = []
     for week_idx in range(5):
@@ -1025,7 +974,6 @@ def test_compute_monotony_strain_flags_high_monotony_and_strain_spike() -> None:
     assert result["weekly"][0]["monotony"] > 2.0
     assert "high_monotony" in result["weekly"][0]["flags"]
     assert "strain_spike" in result["weekly"][-1]["flags"]
-
 
 def test_compute_decoupling_flags_fatigue_dominant_streak() -> None:
     sessions = []
@@ -1073,7 +1021,6 @@ def test_compute_decoupling_flags_fatigue_dominant_streak() -> None:
     assert result["current"]["decoupling"] < 0
     assert "decoupling_fatigue_dominant" in result["flags"]
     assert len(result["series"]) >= 3
-
 
 def test_compute_taper_quality_gates_and_scores_inside_window() -> None:
     sessions = []
@@ -1162,7 +1109,6 @@ def test_compute_taper_quality_gates_and_scores_inside_window() -> None:
     assert result["label"] in {"good", "excellent"}
     assert set(result["components"].keys()) == {"volume_reduction", "intensity_maintained", "fatigue_trend", "tsb"}
 
-
 def test_weekly_analysis_includes_peaking_layer_payloads() -> None:
     sessions = []
     for week_idx in range(8):
@@ -1235,7 +1181,6 @@ def test_weekly_analysis_includes_peaking_layer_payloads() -> None:
     assert "taper_quality" in result
     assert result["taper_quality"] is not None
     assert result["taper_quality"]["score"] >= 60
-
 
 def test_weekly_analysis_includes_projection_calibration_and_landmarks() -> None:
     sessions = [
@@ -1327,7 +1272,6 @@ def test_weekly_analysis_includes_projection_calibration_and_landmarks() -> None
     assert result["volume_landmarks"]["bench"]["confidence"] == "low"
     assert result["specificity_ratio"]["expected_band"] is not None
     assert result["specificity_ratio"]["narrow_status"] in {"below_expected", "within_expected", "above_expected"}
-
 
 def test_generate_alerts_returns_deterministic_order(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(analytics, "fatigue_index", lambda *args, **kwargs: {"score": 0.50})
@@ -1449,7 +1393,6 @@ def test_generate_alerts_returns_deterministic_order(monkeypatch: pytest.MonkeyP
     assert alerts[3]["message"] == "You are in deep overload. Performance should rebound after a deload."
     assert alerts[-1]["message"] == "You're projected to exceed the qualifying total for this meet."
 
-
 def test_generate_alerts_uses_goal_owned_qualifying_total_when_competition_has_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(analytics, "fatigue_index", lambda *args, **kwargs: {"score": 0.20})
     monkeypatch.setattr(analytics, "compute_readiness_score", lambda *args, **kwargs: {"score": 60.0})
@@ -1521,7 +1464,6 @@ def test_generate_alerts_uses_goal_owned_qualifying_total_when_competition_has_n
 
     assert alerts[-1]["message"] == "You're projected to exceed the qualifying total for this meet."
     assert "qualifying_total=550.0" in alerts[-1]["raw_detail"]
-
 
 def test_weekly_analysis_includes_alerts_and_peaking_timeline_projection() -> None:
     sessions = []
@@ -1628,7 +1570,6 @@ def test_weekly_analysis_includes_alerts_and_peaking_timeline_projection() -> No
     baseline_point = next(point for point in baseline["peaking_timeline"]["series"] if point["date"] == future_session_date.isoformat())
     assert future_point["projected_tsb"] < baseline_point["projected_tsb"]
 
-
 def test_weekly_analysis_peaking_timeline_ignores_noncanonical_planned_exercises() -> None:
     sessions = [
         make_sbd_session(14, 150, 110, 180, session_rpe=8, week_number=1),
@@ -1711,7 +1652,6 @@ def test_weekly_analysis_peaking_timeline_ignores_noncanonical_planned_exercises
     assert result["peaking_timeline"]["comp_date"] == (TODAY + timedelta(days=14)).isoformat()
     assert result["peaking_timeline"]["series"]
 
-
 def test_compute_prr_uses_snapshot_and_skips_invalid_lifts() -> None:
     partial_results = {
         "squat_kg": 210,
@@ -1750,7 +1690,6 @@ def test_compute_prr_uses_snapshot_and_skips_invalid_lifts() -> None:
     assert full["bench"] == pytest.approx(1.031, abs=1e-3)
     assert full["deadlift"] == pytest.approx(1.042, abs=1e-3)
     assert full["total"] == pytest.approx(1.042, abs=1e-3)
-
 
 def test_meet_projection_uses_calibrated_lambda_and_20_percent_ceiling() -> None:
     sessions = [
@@ -1804,7 +1743,6 @@ def test_meet_projection_uses_calibrated_lambda_and_20_percent_ceiling() -> None
     assert result["squat"] <= 120.0
     assert result["total"] <= 360.0
 
-
 @pytest.mark.parametrize(
     ("weeks", "expected_confidence", "expects_data"),
     [
@@ -1840,7 +1778,6 @@ def test_compute_volume_landmarks_confidence_thresholds(
     assert squat["mav"] is not None
     assert squat["mrv"] is not None
 
-
 def test_compute_specificity_ratio_uses_expected_band_and_flags() -> None:
     sessions = [
         make_session(
@@ -1868,7 +1805,6 @@ def test_compute_specificity_ratio_uses_expected_band_and_flags() -> None:
     assert result["narrow_status"] == "below_expected"
     assert result["broad_status"] == "above_expected"
     assert "specificity_below_expected" in result["flags"]
-
 
 def test_health_snapshot_and_completion_backfill_use_versioned_program(monkeypatch: pytest.MonkeyPatch) -> None:
     snapshot_program = {
@@ -1999,7 +1935,6 @@ def test_health_snapshot_and_completion_backfill_use_versioned_program(monkeypat
     assert completion_saved["program"]["competitions"][0]["status"] == "completed"
     assert completion_saved["program"]["competitions"][0]["post_meet_report"]["attempt_selection_grade"] == 4
 
-
 def test_readiness_wellness_penalty_and_fallback() -> None:
     sessions = [
         make_session(0, [], wellness=make_wellness(5, 5, 5, 5, 5)),
@@ -2013,7 +1948,6 @@ def test_readiness_wellness_penalty_and_fallback() -> None:
     fallback = analytics._readiness_wellness_component([make_session(0, [])], reference_date=TODAY)
     assert fallback["mean"] is None
     assert fallback["penalty"] == pytest.approx(0.5, abs=1e-6)
-
 
 def test_readiness_performance_trend_penalizes_negative_slope_only() -> None:
     current_maxes = {"squat": 100, "bench": 100, "deadlift": 100}
@@ -2042,7 +1976,6 @@ def test_readiness_performance_trend_penalizes_negative_slope_only() -> None:
     )
     assert positive["slope_kg_per_week"] == pytest.approx(5.0, abs=1e-6)
     assert positive["penalty"] == pytest.approx(0.0, abs=1e-6)
-
 
 def test_readiness_bodyweight_component_is_cut_aware_and_falls_back_without_series() -> None:
     program = {
@@ -2075,7 +2008,6 @@ def test_readiness_bodyweight_component_is_cut_aware_and_falls_back_without_seri
     fallback = analytics._readiness_bodyweight_component([make_session(0, [], body_weight_kg=None)], program, reference_date=TODAY)
     assert fallback["mode"] == "fallback"
     assert fallback["penalty"] == pytest.approx(0.5, abs=1e-6)
-
 
 def test_compute_readiness_score_uses_new_components(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(analytics, "fatigue_index", lambda *args, **kwargs: {"score": 0.2})
@@ -2127,7 +2059,6 @@ def test_compute_readiness_score_uses_new_components(monkeypatch: pytest.MonkeyP
     assert result["training_readiness_confidence"] == pytest.approx(1.0, abs=1e-6)
     assert result["external_readiness_confidence"] == pytest.approx(1.0, abs=1e-6)
 
-
 def test_fatigue_index_uses_one_based_calendar_weeks() -> None:
     program_start = (TODAY - timedelta(days=28)).isoformat()
     sessions = [
@@ -2152,7 +2083,6 @@ def test_fatigue_index_uses_one_based_calendar_weeks() -> None:
     assert result["fatigue_model"] == "reservoir_v2"
     assert result["components"]["fatigue_window_weeks"] == 5
     assert result["components"]["current_state_fi"] == result["score"]
-
 
 def test_fatigue_current_state_is_stable_across_filters() -> None:
     program_start_date = TODAY - timedelta(days=56)
@@ -2183,7 +2113,6 @@ def test_fatigue_current_state_is_stable_across_filters() -> None:
 
     assert full["score"] == pytest.approx(one_week["score"], abs=1e-6)
     assert full["window_mean_fi"] != one_week["window_mean_fi"]
-
 
 def test_smolov_style_bench_localized_reservoir_is_not_diluted() -> None:
     program_start = TODAY - timedelta(days=70)
@@ -2227,7 +2156,6 @@ def test_smolov_style_bench_localized_reservoir_is_not_diluted() -> None:
     assert max(dims.values()) >= 0.75
     assert "localized_fatigue_high" in result["flags"]
 
-
 def test_inol_ramp_up_grace_and_later_low_stimulus_flag() -> None:
     program_start = (TODAY - timedelta(days=28)).isoformat()
     week1 = [make_session(28, [make_exercise("Squat", 100, 1, sets=1)], week_number=1)]
@@ -2262,7 +2190,6 @@ def test_inol_ramp_up_grace_and_later_low_stimulus_flag() -> None:
     assert later["ramp_up_grace"]["squat"] is False
     assert "low_stimulus_squat" in later["flags"]
 
-
 def test_inol_trend_pressure_strengthens_high_warning() -> None:
     program_start = (TODAY - timedelta(days=35)).isoformat()
     history = [
@@ -2286,7 +2213,6 @@ def test_inol_trend_pressure_strengthens_high_warning() -> None:
     assert result["trend_pressure"]["bench"]["value"] > 0.35
     assert "overreaching_risk_bench" in result["flags"]
 
-
 def test_monotony_small_loads_are_capped_and_require_training_days() -> None:
     sessions = [
         make_session(0, [make_exercise("Squat", 20, 1, sets=1, failed=True)], session_rpe=10, week_number=1)
@@ -2304,7 +2230,6 @@ def test_monotony_small_loads_are_capped_and_require_training_days() -> None:
     assert row["strain"] < 1_000_000
     assert row["nonzero_training_days"] == 1
     assert "high_monotony" not in row["flags"]
-
 
 def test_planned_load_resolver_and_unresolved_sets() -> None:
     current_maxes = {"squat": 200, "bench": 100}
@@ -2335,7 +2260,6 @@ def test_planned_load_resolver_and_unresolved_sets() -> None:
     assert (TODAY + timedelta(days=1)) in daily
     assert unresolved == 2
 
-
 def test_accessory_e1rm_estimate_is_used_for_intensity() -> None:
     intensity = analytics._resolve_intensity(
         "leg press",
@@ -2353,7 +2277,6 @@ def test_accessory_e1rm_estimate_is_used_for_intensity() -> None:
     )
 
     assert intensity == pytest.approx(0.5, abs=1e-6)
-
 
 def test_specificity_target_prefers_primary_goal_meet() -> None:
     program = {

@@ -6,8 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import prompt_context  # noqa: E402
-
+import prompt_context
 
 def test_summarize_goals_resolves_linked_standard_and_competition() -> None:
     program = {
@@ -79,7 +78,6 @@ def test_summarize_goals_resolves_linked_standard_and_competition() -> None:
     assert goal["linked_competition"]["goal_federation_eligible"] is True
     assert goal["linked_competition"]["weight_class_alignment"] == "target"
 
-
 def test_summarize_program_notes_keeps_chronological_evolving_context() -> None:
     program = {
         "meta": {
@@ -109,7 +107,6 @@ def test_summarize_program_notes_keeps_chronological_evolving_context() -> None:
     assert [note["date"] for note in result["chronological_notes"]] == ["2026-04-03", "2026-04-10"]
     assert "conflict" in result["interpretation"]
     assert "newer dated notes" in result["interpretation"]
-
 
 def test_summarize_competitions_uses_goal_priority_and_goal_owned_standard() -> None:
     program = {
@@ -182,7 +179,6 @@ def test_summarize_competitions_uses_goal_priority_and_goal_owned_standard() -> 
     assert result["competitions"][1]["linked_goals"][0]["linked_standard"]["required_total_kg"] == 570
     assert result["competitions"][1]["governing_goal"]["required_total_kg"] == 570
     assert result["competitions"][1]["linked_goals"][0]["goal_federation_eligible"] is True
-
 
 def test_summarize_competitions_keeps_harder_primary_standard_when_goal_has_multiple_paths() -> None:
     program = {
@@ -268,7 +264,6 @@ def test_summarize_competitions_keeps_harder_primary_standard_when_goal_has_mult
     assert result["competitions"][0]["governing_goal"]["matching_required_total_kg"] == 570
     assert result["competitions"][0]["notes"] == "Primary qualifying shot."
     assert result["competitions"][1]["governing_goal"]["required_total_kg"] == 570
-
 
 def test_summarize_meet_interference_flags_close_turnaround() -> None:
     program = {

@@ -1,8 +1,4 @@
-"""Prompt template loader for health AI modules.
 
-Mirrors the pattern in app/src/agent/prompts/loader.py.
-Loads static (.j2 read as-is) and rendered Jinja2 templates from this directory.
-"""
 from __future__ import annotations
 
 import logging
@@ -17,7 +13,6 @@ PROMPTS_DIR = Path(__file__).parent
 
 _jinja_env: Optional[Environment] = None
 
-
 def _get_env() -> Environment:
     global _jinja_env
     if _jinja_env is None:
@@ -29,7 +24,6 @@ def _get_env() -> Environment:
             keep_trailing_newline=True,
         )
     return _jinja_env
-
 
 def load_system_prompt(name: str) -> str:
     """Load a static system prompt template (no variables).
@@ -44,7 +38,6 @@ def load_system_prompt(name: str) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Prompt template not found: {path}")
     return path.read_text(encoding="utf-8").strip()
-
 
 def render_prompt(name: str, **kwargs) -> str:
     """Render a Jinja2 template with the given variables.
