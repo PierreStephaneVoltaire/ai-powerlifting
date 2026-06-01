@@ -32,6 +32,7 @@ from channels.execution_models import (
     get_instance_identity,
     IntentRecord,
     ImplementationTask,
+    OpenCodeRunRecord,
 )
 from config import IF_EXECUTION_REGISTRY_TABLE_NAME, AWS_REGION
 
@@ -898,3 +899,278 @@ class ExecutionStore:
             idempotency_key=item.get("idempotency_key", ""),
             ttl=item.get("ttl"),
         )
+
+    async def acquire_outbound_lock(
+        self, channel_id: str, owner: str, expires_at: str
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._acquire_outbound_lock_sync, channel_id, owner, expires_at
+        )
+
+    def _acquire_outbound_lock_sync(
+        self, channel_id: str, owner: str, expires_at: str
+    ) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        pk = f"CHANNEL#{channel_id}"
+        sk = "STATE#outbound"
+        try:
+            self.table.update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression=(
+                    "SET outbound_lock_owner = :owner,"
+                    " outbound_lock_expires_at = :expires,"
+                    " updated_at = :now"
+                ),
+                ConditionExpression=(
+                    "attribute_not_exists(outbound_lock_owner)"
+                    " OR outbound_lock_expires_at < :now_str"
+                ),
+                ExpressionAttributeValues={
+                    ":owner": owner,
+                    ":expires": expires_at,
+                    ":now": now,
+                    ":now_str": now,
+                },
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                logger.info("Outbound lock acquisition failed for channel %s", channel_id)
+                return False
+            raise
+
+    async def release_outbound_lock(
+        self, channel_id: str, owner: str
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._release_outbound_lock_sync, channel_id, owner
+        )
+
+    def _release_outbound_lock_sync(
+        self, channel_id: str, owner: str
+    ) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        pk = f"CHANNEL#{channel_id}"
+        sk = "STATE#outbound"
+        try:
+            self.table.update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression="REMOVE outbound_lock_owner, outbound_lock_expires_at SET updated_at = :now",
+                ConditionExpression="outbound_lock_owner = :owner",
+                ExpressionAttributeValues={":owner": owner, ":now": now},
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                logger.info(
+                    "Outbound lock release failed for channel %s (owner mismatch)",
+                    channel_id,
+                )
+                return False
+            raise
+
+    async def get_outbound_state(
+        self, channel_id: str
+    ) -> Optional[Dict[str, Any]]:
+        return await asyncio.to_thread(self._get_outbound_state_sync, channel_id)
+
+    def _get_outbound_state_sync(
+        self, channel_id: str
+    ) -> Optional[Dict[str, Any]]:
+        resp = self.table.get_item(
+            Key={"pk": f"CHANNEL#{channel_id}", "sk": "STATE#outbound"}
+        )
+        return resp.get("Item")
+
+    async def query_outbox(
+        self, channel_id: str, limit: int = 10
+    ) -> List[DiscordOutboundMessage]:
+        return await asyncio.to_thread(self._query_outbox_sync, channel_id, limit)
+
+    def _query_outbox_sync(
+        self, channel_id: str, limit: int
+    ) -> List[DiscordOutboundMessage]:
+        pk = f"CHANNEL#{channel_id}"
+        try:
+            resp = self.table.query(
+                KeyConditionExpression="pk = :pk AND begins_with(sk, :prefix)",
+                ExpressionAttributeValues={":pk": pk, ":prefix": "OUTBOX#"},
+                Limit=limit,
+                ScanIndexForward=True,
+            )
+            items = resp.get("Items", [])
+            return [self._item_to_outbound_message(item) for item in items]
+        except ClientError:
+            logger.exception("Failed to query outbox for channel %s", channel_id)
+            return []
+
+    async def update_outbound_message_status(
+        self,
+        channel_id: str,
+        outbound_id: str,
+        from_status: str,
+        to_status: str,
+        **extra_updates: Any,
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._update_outbound_status_sync,
+            channel_id,
+            outbound_id,
+            from_status,
+            to_status,
+            **extra_updates,
+        )
+
+    def _update_outbound_status_sync(
+        self,
+        channel_id: str,
+        outbound_id: str,
+        from_status: str,
+        to_status: str,
+        **extra_updates: Any,
+    ) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        pk = f"CHANNEL#{channel_id}"
+        update_parts = ["#st = :to_status", "updated_at = :now"]
+        attr_names = {"#st": "status"}
+        attr_values: Dict[str, Any] = {
+            ":to_status": to_status,
+            ":from_status": from_status,
+            ":now": now,
+        }
+        for k, v in extra_updates.items():
+            update_parts.append(f"{k} = :eu_{k}")
+            attr_values[f":eu_{k}"] = floats_to_decimals(v)
+        try:
+            resp = self.table.query(
+                KeyConditionExpression="pk = :pk AND begins_with(sk, :prefix)",
+                FilterExpression="outbound_id = :oid",
+                ExpressionAttributeValues={
+                    ":pk": pk,
+                    ":prefix": "OUTBOX#",
+                    ":oid": outbound_id,
+                },
+                Limit=1,
+            )
+            items = resp.get("Items", [])
+            if not items:
+                logger.warning(
+                    "Outbound message %s not found for status update", outbound_id
+                )
+                return False
+            sk = items[0]["sk"]
+            self.table.update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression="SET " + ", ".join(update_parts),
+                ConditionExpression="#st = :from_status",
+                ExpressionAttributeNames=attr_names,
+                ExpressionAttributeValues=attr_values,
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                logger.info(
+                    "Outbound status %s->%s failed for %s (condition)",
+                    from_status,
+                    to_status,
+                    outbound_id,
+                )
+                return False
+            raise
+
+    async def put_run_record(self, record: OpenCodeRunRecord) -> None:
+        await asyncio.to_thread(self._put_run_record_sync, record)
+
+    def _put_run_record_sync(self, record: OpenCodeRunRecord) -> None:
+        item: Dict[str, Any] = {
+            "pk": f"RUN#{record.run_id}",
+            "sk": "META",
+            "run_id": record.run_id,
+            "channel_id": record.channel_id or "",
+            "task_id": record.task_id or "",
+            "batch_id": record.batch_id or "",
+            "kind": record.kind,
+            "agent": record.agent,
+            "model": record.model,
+            "status": record.status,
+            "started_at": record.started_at,
+        }
+        if record.completed_at is not None:
+            item["completed_at"] = record.completed_at
+        if record.title is not None:
+            item["title"] = record.title
+        if record.session_dir is not None:
+            item["session_dir"] = record.session_dir
+        if record.config_path is not None:
+            item["config_path"] = record.config_path
+        if record.session_marker_path is not None:
+            item["session_marker_path"] = record.session_marker_path
+        if record.history_path is not None:
+            item["history_path"] = record.history_path
+        if record.plan_path is not None:
+            item["plan_path"] = record.plan_path
+        if record.response_path is not None:
+            item["response_path"] = record.response_path
+        if record.status_path is not None:
+            item["status_path"] = record.status_path
+        if record.returncode is not None:
+            item["returncode"] = record.returncode
+        if record.error is not None:
+            item["error"] = record.error[:2000]
+        if record.ttl is not None:
+            item["ttl"] = record.ttl
+        if record.task_id:
+            task_item = dict(item)
+            task_item["pk"] = f"TASK#{record.task_id}"
+            task_item["sk"] = f"RUN#{record.run_id}"
+            try:
+                self.table.put_item(Item=floats_to_decimals(task_item))
+            except ClientError:
+                logger.debug("Task-indexed run record write failed for %s", record.run_id)
+        self.table.put_item(Item=floats_to_decimals(item))
+
+    async def update_run_record_status(
+        self,
+        run_id: str,
+        event: str,
+        **kwargs: Any,
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._update_run_record_status_sync, run_id, event, **kwargs
+        )
+
+    def _update_run_record_status_sync(
+        self,
+        run_id: str,
+        event: str,
+        **kwargs: Any,
+    ) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        pk = f"RUN#{run_id}"
+        sk = "META"
+        update_parts = ["#st = :status", "updated_at = :now"]
+        attr_names = {"#st": "status"}
+        attr_values: Dict[str, Any] = {
+            ":status": event,
+            ":now": now,
+        }
+        for k, v in kwargs.items():
+            if k == "returncode":
+                update_parts.append("returncode = :kw_returncode")
+                attr_values[":kw_returncode"] = v
+            elif k == "error":
+                update_parts.append("error = :kw_error")
+                attr_values[":kw_error"] = str(v)[:2000] if v else ""
+        if event in ("completed", "failed", "timed_out", "cancelled"):
+            update_parts.append("completed_at = :now")
+        try:
+            self.table.update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression="SET " + ", ".join(update_parts),
+                ExpressionAttributeNames=attr_names,
+                ExpressionAttributeValues=attr_values,
+            )
+            return True
+        except ClientError:
+            logger.debug("Run record status update failed for %s", run_id)
+            return False

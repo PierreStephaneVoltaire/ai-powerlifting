@@ -74,6 +74,7 @@ def write_opencode_config(
     *,
     tool_names: list[str] | set[str] | None = None,
     mcp_servers: list[str] | set[str] | None = None,
+    run_id: str | None = None,
 ) -> Path:
     """Write a scoped OpenCode config into the current session workspace.
 
@@ -81,6 +82,14 @@ def write_opencode_config(
     filtered with ``IF_MCP_ALLOWED_TOOLS`` so the server only lists the selected
     specialist's declared tool names. Explicit ``mcp_servers`` remain for
     external MCP servers such as AWS docs and Yahoo Finance.
+
+    When ``run_id`` is provided, the config is written to
+    ``.if/opencode.run.<run_id>.json`` instead of the root
+    ``session_dir/opencode.json``. This prevents concurrent runs in the
+    same shared workspace from clobbering each other's MCP configuration.
+    The per-run path should be passed to ``run_opencode()`` via the
+    ``config_path`` parameter, which sets ``OPENCODE_CONFIG`` in the
+    subprocess environment.
     """
     session_dir.mkdir(parents=True, exist_ok=True)
     tool_set = {
@@ -118,6 +127,11 @@ def write_opencode_config(
         "$schema": "https://opencode.ai/config.json",
         "mcp": mcp,
     }
-    path = session_dir / "opencode.json"
+    if run_id:
+        state_dir = session_dir / ".if"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        path = state_dir / f"opencode.run.{run_id}.json"
+    else:
+        path = session_dir / "opencode.json"
     path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path

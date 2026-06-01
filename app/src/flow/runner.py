@@ -1,6 +1,6 @@
-
 from __future__ import annotations
 
+import asyncio
 import logging
 import json
 import os
@@ -308,10 +308,10 @@ async def _run_social(plan: IFPlan, http_client: httpx.AsyncClient, runtime_cont
     )
 
 
-def _status_file(session_dir: Path) -> Path:
+def _status_file(session_dir: Path, filename: str | None = None) -> Path:
     status_dir = session_dir / ".if"
     status_dir.mkdir(parents=True, exist_ok=True)
-    path = status_dir / "status.log"
+    path = status_dir / (filename or "status.log")
     path.write_text("", encoding="utf-8")
     return path
 
@@ -399,14 +399,14 @@ async def _prepare_powerlifting_workspace(session_dir: Path) -> str:
         )
 
 
-def _domain_prompt(plan: IFPlan, runtime_context: str, workspace_context: str = "") -> str:
+def _domain_prompt(plan: IFPlan, runtime_context: str, workspace_context: str = "", response_filename: str = "response.md") -> str:
     specialist_block, specialist_tools, _ = _specialist_prompt(plan.specialist, plan.prompt)
     return "\n\n".join(
         part
         for part in (
             "You are running as IF inside a persistent mounted conversation workspace.",
             "Read `history.md` for conversation context. It is incremental and edit-aware.",
-            "Write the final user-facing answer to `response.md`.",
+            f"Write the final user-facing answer to `{response_filename}`.",
             "Keep any generated deliverable files in this session directory.",
             "Use the IF personality and current directives below; do not rely on hardcoded generated agent files for personality.",
             _main_system_prompt(),
@@ -469,20 +469,24 @@ async def _synthesize_handoffs(
     primary: str,
     child_outputs: list[str],
     uploaded_files: list[dict[str, Any]] | None,
+    run_id: str | None = None,
+    response_filename: str | None = None,
+    status_filename: str | None = None,
 ) -> str:
     if not child_outputs:
         return primary
 
-    status_file = _status_file(session_dir)
-    response_path = session_dir / "response.md"
+    status_file = _status_file(session_dir, filename=status_filename)
+    _response_filename = response_filename or "response.md"
+    response_path = session_dir / _response_filename
     response_path.unlink(missing_ok=True)
-    write_opencode_config(session_dir, tool_names=[], mcp_servers=[])
+    config_path = write_opencode_config(session_dir, tool_names=[], mcp_servers=[], run_id=run_id)
     agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
     synthesis_prompt = "\n\n".join(
         [
             "You are IF integrating completed specialist handoffs.",
             "Read `history.md` only if needed for context.",
-            "Write the final user-facing answer to `response.md`.",
+            f"Write the final user-facing answer to `{_response_filename}`.",
             "Do not emit HANDOFF_REQUIRED unless a genuinely new blocking dependency remains.",
             "Preserve the IF personality, core directives, and domain caveats.",
             "Runtime context:",
@@ -493,6 +497,11 @@ async def _synthesize_handoffs(
             "\n\n---\n\n".join(child_outputs),
         ]
     )
+    session_marker_path: Path | None = None
+    if run_id:
+        state_dir = session_dir / ".if"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        session_marker_path = state_dir / f"opencode-{agent}.run.{run_id}.session"
     result = await run_opencode(
         agent=agent,
         model=plan.selected_model,
@@ -502,6 +511,9 @@ async def _synthesize_handoffs(
         status_file=status_file,
         status_callback=_opencode_status,
         files=uploaded_file_paths(uploaded_files),
+        run_id=run_id,
+        config_path=config_path if run_id else None,
+        session_marker_path=session_marker_path,
     )
     if result.returncode != 0:
         logger.warning("Handoff synthesis failed for %s: %s", plan.specialist, result.stderr[:1000])
@@ -519,14 +531,24 @@ async def _run_domain(
     uploaded_files: list[dict[str, Any]] | None = None,
     handoff_depth: int = 0,
     opencode_timeout: int | None = None,
+    run_id: str | None = None,
+    response_filename: str | None = None,
+    status_filename: str | None = None,
+    cancel_event: asyncio.Event | None = None,
 ) -> tuple[str, list[FileRef]]:
     before = _snapshot_files(session_dir)
-    status_file = _status_file(session_dir)
-    response_path = session_dir / "response.md"
+    status_file = _status_file(session_dir, filename=status_filename)
+    _response_filename = response_filename or "response.md"
+    response_path = session_dir / _response_filename
     response_path.unlink(missing_ok=True)
     _, specialist_tools, specialist_mcp_servers = _specialist_prompt(plan.specialist, plan.prompt)
-    write_opencode_config(session_dir, tool_names=specialist_tools, mcp_servers=specialist_mcp_servers)
+    config_path = write_opencode_config(session_dir, tool_names=specialist_tools, mcp_servers=specialist_mcp_servers, run_id=run_id)
     agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
+    session_marker_path: Path | None = None
+    if run_id:
+        state_dir = session_dir / ".if"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        session_marker_path = state_dir / f"opencode-{agent}.run.{run_id}.session"
     workspace_context = ""
     if plan.specialist == "powerlifting_coach":
         workspace_context = await _prepare_powerlifting_workspace(session_dir)
@@ -535,12 +557,16 @@ async def _run_domain(
         agent=agent,
         model=plan.selected_model,
         session_dir=session_dir,
-        prompt=_domain_prompt(plan, runtime_context, workspace_context),
+        prompt=_domain_prompt(plan, runtime_context, workspace_context, response_filename=_response_filename),
         continue_session=True,
         status_file=status_file,
         status_callback=_opencode_status,
         files=uploaded_file_paths(uploaded_files),
         timeout=opencode_timeout,
+        run_id=run_id,
+        config_path=config_path if run_id else None,
+        session_marker_path=session_marker_path,
+        cancel_event=cancel_event,
     )
     if result.returncode != 0:
         await send_status(StatusType.SUBAGENT_FAILED, "Domain Agent Failed", result.stderr[:500])
@@ -595,6 +621,9 @@ async def _run_domain(
             primary,
             child_outputs,
             uploaded_files,
+            run_id=run_id,
+            response_filename=_response_filename,
+            status_filename=status_filename,
         )
     elif handoffs:
         content = f"{primary}\n\n[HANDOFF FAILED] Maximum handoff depth reached.".strip()
@@ -609,6 +638,18 @@ def _snapshot_files(session_dir: Path) -> set[Path]:
     return {p.resolve() for p in session_dir.rglob("*") if p.is_file()}
 
 
+_PER_RUN_ARTIFACT_PREFIXES = (
+    "plan.task.",
+    "response.task.",
+    "review.task.",
+    "status.task.",
+)
+
+
+def _is_per_run_runtime_file(name: str) -> bool:
+    return any(name.startswith(prefix) for prefix in _PER_RUN_ARTIFACT_PREFIXES)
+
+
 def _artifact_refs(session_dir: Path, before: set[Path]) -> list[FileRef]:
     refs: list[FileRef] = []
     for path in sorted(p for p in session_dir.rglob("*") if p.is_file()):
@@ -616,6 +657,8 @@ def _artifact_refs(session_dir: Path, before: set[Path]) -> list[FileRef]:
         if rel_parts and rel_parts[0].startswith("."):
             continue
         if path.name in IF_TECHNICAL_ARTIFACT_EXCLUDES:
+            continue
+        if _is_per_run_runtime_file(path.name):
             continue
         resolved = path.resolve()
         if resolved in before:
@@ -630,20 +673,32 @@ async def _run_technical(
     session_dir: Path,
     runtime_context: str,
     uploaded_files: list[dict[str, Any]] | None = None,
+    run_id: str | None = None,
+    response_filename: str | None = None,
+    review_filename: str | None = None,
+    status_filename: str | None = None,
+    cancel_event: asyncio.Event | None = None,
 ) -> tuple[str, list[FileRef]]:
     before = _snapshot_files(session_dir)
-    status_file = _status_file(session_dir)
-    response_path = session_dir / "response.md"
-    review_path = session_dir / "review.md"
+    status_file = _status_file(session_dir, filename=status_filename)
+    _response_filename = response_filename or "response.md"
+    _review_filename = review_filename or "review.md"
+    response_path = session_dir / _response_filename
+    review_path = session_dir / _review_filename
     response_path.unlink(missing_ok=True)
     review_path.unlink(missing_ok=True)
-    write_opencode_config(session_dir, tool_names=[], mcp_servers=[])
+    config_path = write_opencode_config(session_dir, tool_names=[], mcp_servers=[], run_id=run_id)
+    session_marker_path: Path | None = None
+    if run_id:
+        state_dir = session_dir / ".if"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        session_marker_path = state_dir / f"opencode-build.run.{run_id}.session"
     technical_prompt = f"""Use the current directory as the session workspace.
 
 Read `history.md` for conversation context. It is incremental and edit-aware.
 This directory is a persistent mount for this Discord conversation; previous files may be relevant.
 Append concise progress lines to `.if/status.log` before long-running steps and after important commands.
-Implement the user's request from the prompt below. Write the final user-facing answer to `response.md`.
+Implement the user's request from the prompt below. Write the final user-facing answer to `{_response_filename}`.
 Keep any generated deliverable files in this session directory.
 
 Runtime context:
@@ -662,24 +717,37 @@ Prompt:
         status_file=status_file,
         status_callback=_opencode_status,
         files=uploaded_file_paths(uploaded_files),
+        run_id=run_id,
+        config_path=config_path if run_id else None,
+        session_marker_path=session_marker_path,
+        cancel_event=cancel_event,
     )
     if result.returncode != 0:
         await send_status(StatusType.SUBAGENT_FAILED, "Technical Build Failed", result.stderr[:500])
         raise RuntimeError(result.stderr or result.stdout)
     await send_status(StatusType.SUBAGENT_COMPLETED, "Technical Build Completed", plan.selected_model)
 
-    review_prompt = """Review the build output in this directory.
+    review_prompt = f"""Review the build output in this directory.
 
-Write `review.md`.
+Write `{_review_filename}`.
 If the build must be retried, write `RETRY` on line 1 and then explain the required changes.
 Otherwise write `OK` on line 1 and a concise review summary after it.
 """
+    review_session_marker: Path | None = None
+    if run_id:
+        state_dir = session_dir / ".if"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        review_session_marker = state_dir / f"opencode-planner.run.{run_id}.review.session"
     review = await run_opencode(
         agent="planner",
         model=OPENCODE_PLANNER_MODEL,
         session_dir=session_dir,
         prompt=review_prompt,
         continue_session=True,
+        run_id=run_id,
+        config_path=config_path if run_id else None,
+        session_marker_path=review_session_marker,
+        cancel_event=cancel_event,
     )
     if review.returncode != 0:
         logger.warning("Technical review failed: %s", review.stderr[:1000])
@@ -693,6 +761,11 @@ Reviewer requested one retry. Review context:
 {review_path.read_text(encoding="utf-8", errors="replace")}
 """
             response_path.unlink(missing_ok=True)
+            retry_session_marker: Path | None = None
+            if run_id:
+                state_dir = session_dir / ".if"
+                state_dir.mkdir(parents=True, exist_ok=True)
+                retry_session_marker = state_dir / f"opencode-build.run.{run_id}.retry.session"
             retry = await run_opencode(
                 agent="build",
                 model=plan.selected_model,
@@ -702,6 +775,10 @@ Reviewer requested one retry. Review context:
                 status_file=status_file,
                 status_callback=_opencode_status,
                 files=uploaded_file_paths(uploaded_files),
+                run_id=run_id,
+                config_path=config_path if run_id else None,
+                session_marker_path=retry_session_marker,
+                cancel_event=cancel_event,
             )
             if retry.returncode != 0:
                 raise RuntimeError(retry.stderr or retry.stdout)
@@ -800,6 +877,11 @@ async def execute_route(
     http_client: httpx.AsyncClient | None = None,
     uploaded_files: list[dict[str, Any]] | None = None,
     thinking_mode_requested: bool = False,
+    run_id: str | None = None,
+    response_filename: str | None = None,
+    review_filename: str | None = None,
+    status_filename: str | None = None,
+    cancel_event: asyncio.Event | None = None,
 ) -> FlowResult:
     """Execute a pre-computed plan through the appropriate route.
 
@@ -813,9 +895,9 @@ async def execute_route(
     )
 
     if plan.interaction_type == "technical":
-        content, refs = await _run_technical(plan, session_dir, runtime_context, uploaded_files=uploaded_files)
+        content, refs = await _run_technical(plan, session_dir, runtime_context, uploaded_files=uploaded_files, run_id=run_id, response_filename=response_filename, review_filename=review_filename, status_filename=status_filename, cancel_event=cancel_event)
     elif plan.interaction_type == "domain":
-        content, refs = await _run_domain(plan, session_dir, runtime_context, uploaded_files=uploaded_files)
+        content, refs = await _run_domain(plan, session_dir, runtime_context, uploaded_files=uploaded_files, run_id=run_id, response_filename=response_filename, status_filename=status_filename, cancel_event=cancel_event)
     elif plan.thinking_mode or thinking_mode_requested:
         content, refs = await _run_domain(
             fallback_plan(
@@ -828,6 +910,10 @@ async def execute_route(
             session_dir,
             runtime_context,
             uploaded_files=uploaded_files,
+            run_id=run_id,
+            response_filename=response_filename,
+            status_filename=status_filename,
+            cancel_event=cancel_event,
         )
     else:
         if http_client is None:

@@ -12,10 +12,6 @@ from channels.execution_models import ClassifierDecision, IntentRecord, Implemen
 from channels.decision_applier import apply_decision, apply_batch_decisions
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _make_decision(**overrides) -> ClassifierDecision:
     defaults = dict(
         intent_id="intent-1",
@@ -54,8 +50,6 @@ def _make_intent(decision: ClassifierDecision, batch_id: str = "batch-1") -> Int
 
 
 def _mock_store():
-    """Return a MagicMock with AsyncMock methods matching the ExecutionStore
-    interface used by the decision applier."""
     store = MagicMock()
     store.get_intent_record = AsyncMock(return_value=None)
     store.update_intent_record_status = AsyncMock(return_value=True)
@@ -67,20 +61,16 @@ def _mock_store():
     return store
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
 @pytest.mark.asyncio
 async def test_apply_decision_skips_non_pending_intent():
-    """Intent already completed returns True without further work."""
     decision = _make_decision()
     intent = _make_intent(decision)
     intent.status = "completed"
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -94,12 +84,12 @@ async def test_apply_decision_skips_non_pending_intent():
 
 @pytest.mark.asyncio
 async def test_apply_decision_fails_if_intent_not_found():
-    """Returns False when get_intent_record returns None."""
     decision = _make_decision()
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=None)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -112,14 +102,14 @@ async def test_apply_decision_fails_if_intent_not_found():
 
 @pytest.mark.asyncio
 async def test_apply_decision_fails_if_pending_to_applying_fails():
-    """Conditional update from pending->applying fails, returns True (already handled)."""
     decision = _make_decision()
     intent = _make_intent(decision)
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
     store.update_intent_record_status = AsyncMock(return_value=False)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -127,13 +117,11 @@ async def test_apply_decision_fails_if_pending_to_applying_fails():
             conversation_id="conv-1",
         )
 
-    # Transition failed means something else already picked it up
     assert result is True
 
 
 @pytest.mark.asyncio
 async def test_social_response_with_text():
-    """Enqueues a social_response outbound message when text is provided."""
     decision = _make_decision(
         action="social_response",
         social_response_text="Hello there!",
@@ -142,7 +130,8 @@ async def test_social_response_with_text():
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain") as mock_drain:
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -155,11 +144,11 @@ async def test_social_response_with_text():
     msg = store.put_outbound_message.call_args[0][0]
     assert msg.type == "social_response"
     assert msg.content == "Hello there!"
+    mock_drain.assert_called()
 
 
 @pytest.mark.asyncio
 async def test_clarifying_question():
-    """Enqueues a clarifying_question outbound with priority 3."""
     decision = _make_decision(
         action="ask_clarifying_target",
         kind="clarification",
@@ -169,7 +158,8 @@ async def test_clarifying_question():
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -187,13 +177,13 @@ async def test_clarifying_question():
 
 @pytest.mark.asyncio
 async def test_ignore_action():
-    """No outbound message; intent transitions to 'skipped'."""
     decision = _make_decision(action="ignore", kind="ignore")
     intent = _make_intent(decision)
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -203,29 +193,15 @@ async def test_ignore_action():
 
     assert result is True
     store.put_outbound_message.assert_not_called()
-    # The ignore handler sets to "skipped", then apply_decision sets to "completed"
-    # because result is True.
-    # First call: applying -> skipped (from _apply_ignore)
-    # Second call: applying -> completed (from apply_decision)
-    # But wait — apply_decision only calls update_intent_record_status once more
-    # after the handler returns. The handler itself also called it.
-    # Let's check the last call is the one from apply_decision (applying->completed)
-    # and that the handler was called with skipped.
     status_calls = store.update_intent_record_status.call_args_list
-    # _apply_ignore: applying -> skipped
     assert any(
         c.kwargs.get("to_status") == "skipped" or (len(c.args) > 2 and c.args[2] == "skipped")
-        for c in status_calls
-    ) or any(
-        c.kwargs.get("to_status") == "skipped"
         for c in status_calls
     )
 
 
 @pytest.mark.asyncio
 async def test_start_new_task_creates_task_record():
-    """Patches decision_to_ifplan, execute_route, _resolve_session_dir,
-    build_runtime_context; verifies put_implementation_task called."""
     decision = _make_decision(
         action="start_new_task",
         kind="task",
@@ -245,10 +221,11 @@ async def test_start_new_task_creates_task_record():
     fake_session_dir = Path("/tmp/fake-session")
 
     with patch("channels.decision_applier.get_execution_store", return_value=store), \
-         patch("flow.batch_classifier.decision_to_ifplan", return_value=MagicMock()) as mock_ifplan, \
+         patch("flow.batch_classifier.decision_to_ifplan", return_value=MagicMock()), \
          patch("flow.runner.execute_route", new_callable=AsyncMock, return_value=mock_flow_result), \
          patch("channels.channel_coordinator._resolve_session_dir", return_value=fake_session_dir), \
-         patch("flow.context.build_runtime_context", return_value=MagicMock()):
+         patch("flow.context.build_runtime_context", return_value=MagicMock()), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -269,7 +246,6 @@ async def test_start_new_task_creates_task_record():
 
 @pytest.mark.asyncio
 async def test_append_to_active_requires_target_task_id():
-    """Returns False when target_task_id is missing."""
     decision = _make_decision(
         action="append_to_active_implementation",
         kind="implementation_control",
@@ -279,7 +255,8 @@ async def test_append_to_active_requires_target_task_id():
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -292,7 +269,6 @@ async def test_append_to_active_requires_target_task_id():
 
 @pytest.mark.asyncio
 async def test_append_to_active_appends_refs():
-    """Appends refs with reason 'append_to_active'."""
     decision = _make_decision(
         action="append_to_active_implementation",
         kind="implementation_control",
@@ -312,7 +288,8 @@ async def test_append_to_active_appends_refs():
     store.get_intent_record = AsyncMock(return_value=intent)
     store.get_implementation_task = AsyncMock(return_value=existing_task)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -322,9 +299,6 @@ async def test_append_to_active_appends_refs():
 
     assert result is True
     store.append_task_queued_refs.assert_called_once()
-    call_kwargs = store.append_task_queued_refs.call_args
-    refs = call_kwargs.kwargs.get("refs") or call_kwargs[1].get("refs") if isinstance(call_kwargs[1], dict) else call_kwargs.kwargs.get("refs")
-    # Check refs via kwargs
     refs = store.append_task_queued_refs.call_args.kwargs["refs"]
     assert len(refs) == 2
     assert refs[0]["reason"] == "append_to_active"
@@ -334,7 +308,6 @@ async def test_append_to_active_appends_refs():
 
 @pytest.mark.asyncio
 async def test_queue_on_active():
-    """Appends refs with reason 'queued'."""
     decision = _make_decision(
         action="queue_on_active_implementation",
         kind="implementation_control",
@@ -354,7 +327,8 @@ async def test_queue_on_active():
     store.get_intent_record = AsyncMock(return_value=intent)
     store.get_implementation_task = AsyncMock(return_value=existing_task)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -371,7 +345,6 @@ async def test_queue_on_active():
 
 @pytest.mark.asyncio
 async def test_await_instruction_sets_awaiting():
-    """Task transitions to 'awaiting_instruction' with pending_conflict."""
     decision = _make_decision(
         action="await_instruction_for_active_implementation",
         kind="implementation_control",
@@ -390,7 +363,8 @@ async def test_await_instruction_sets_awaiting():
     store.get_intent_record = AsyncMock(return_value=intent)
     store.get_implementation_task = AsyncMock(return_value=existing_task)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -409,7 +383,6 @@ async def test_await_instruction_sets_awaiting():
 
 @pytest.mark.asyncio
 async def test_cancel_implementation():
-    """Task transitions to 'cancel_requested'."""
     decision = _make_decision(
         action="cancel_active_implementation",
         kind="implementation_control",
@@ -427,7 +400,8 @@ async def test_cancel_implementation():
     store.get_intent_record = AsyncMock(return_value=intent)
     store.get_implementation_task = AsyncMock(return_value=existing_task)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -442,7 +416,6 @@ async def test_cancel_implementation():
 
 @pytest.mark.asyncio
 async def test_pivot_implementation_merges_topic():
-    """Topic merge, 'pivot_requested' status."""
     decision = _make_decision(
         action="pivot_active_implementation",
         kind="implementation_control",
@@ -462,7 +435,8 @@ async def test_pivot_implementation_merges_topic():
     store.get_intent_record = AsyncMock(return_value=intent)
     store.get_implementation_task = AsyncMock(return_value=existing_task)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -480,7 +454,6 @@ async def test_pivot_implementation_merges_topic():
 
 @pytest.mark.asyncio
 async def test_apply_batch_decisions():
-    """Two decisions applied in sequence."""
     d1 = _make_decision(intent_id="int-a", action="social_response", social_response_text="Hi")
     d2 = _make_decision(intent_id="int-b", action="ignore", kind="ignore")
     i1 = _make_intent(d1)
@@ -496,7 +469,8 @@ async def test_apply_batch_decisions():
 
     store.get_intent_record = AsyncMock(side_effect=_get_intent)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         results = await apply_batch_decisions(
             decisions=[d1, d2],
             batch_id="batch-1",
@@ -511,7 +485,6 @@ async def test_apply_batch_decisions():
 
 @pytest.mark.asyncio
 async def test_enqueue_message_idempotency():
-    """Idempotency key follows batch:intent:type:outbound_id format."""
     decision = _make_decision(
         action="social_response",
         social_response_text="Test idempotency",
@@ -520,7 +493,8 @@ async def test_enqueue_message_idempotency():
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -531,17 +505,15 @@ async def test_enqueue_message_idempotency():
     assert result is True
     store.put_outbound_message.assert_called_once()
     msg = store.put_outbound_message.call_args[0][0]
-    # Format: {batch_id}:{intent_id}:{msg_type}:{outbound_id}
     parts = msg.idempotency_key.split(":")
     assert parts[0] == "batch-1"
     assert parts[1] == "intent-1"
     assert parts[2] == "social_response"
-    assert len(parts) == 4  # outbound_id is UUID-like
+    assert len(parts) == 3
 
 
 @pytest.mark.asyncio
 async def test_decision_failure_updates_intent_to_failed():
-    """Handler error updates intent to 'failed'."""
     decision = _make_decision(
         action="cancel_active_implementation",
         kind="implementation_control",
@@ -550,10 +522,10 @@ async def test_decision_failure_updates_intent_to_failed():
     intent = _make_intent(decision)
     store = _mock_store()
     store.get_intent_record = AsyncMock(return_value=intent)
-    # get_implementation_task raises to trigger the except block in apply_decision
     store.get_implementation_task = AsyncMock(side_effect=RuntimeError("boom"))
 
-    with patch("channels.decision_applier.get_execution_store", return_value=store):
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain"):
         result = await apply_decision(
             decision=decision,
             batch_id="batch-1",
@@ -562,8 +534,55 @@ async def test_decision_failure_updates_intent_to_failed():
         )
 
     assert result is False
-    # Check that the intent was transitioned to "failed"
     status_calls = store.update_intent_record_status.call_args_list
-    # The last call should be the failure transition from apply_decision's except block
     last_call = status_calls[-1]
     assert last_call.kwargs.get("to_status") == "failed" or last_call[1].get("to_status") == "failed"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_triggers_drain():
+    """schedule_drain is called when outbound message is stored."""
+    decision = _make_decision(
+        action="social_response",
+        social_response_text="Hello!",
+    )
+    intent = _make_intent(decision)
+    store = _mock_store()
+    store.get_intent_record = AsyncMock(return_value=intent)
+
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain") as mock_drain:
+        result = await apply_decision(
+            decision=decision,
+            batch_id="batch-1",
+            channel_id="chan-1",
+            conversation_id="conv-1",
+        )
+
+    assert result is True
+    mock_drain.assert_called_once_with("chan-1")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_no_drain_on_store_failure():
+    """schedule_drain is NOT called when put_outbound_message returns False."""
+    decision = _make_decision(
+        action="social_response",
+        social_response_text="Hello!",
+    )
+    intent = _make_intent(decision)
+    store = _mock_store()
+    store.get_intent_record = AsyncMock(return_value=intent)
+    store.put_outbound_message = AsyncMock(return_value=False)
+
+    with patch("channels.decision_applier.get_execution_store", return_value=store), \
+         patch("channels.outbound_queue.schedule_drain") as mock_drain:
+        result = await apply_decision(
+            decision=decision,
+            batch_id="batch-1",
+            channel_id="chan-1",
+            conversation_id="conv-1",
+        )
+
+    assert result is False
+    mock_drain.assert_not_called()

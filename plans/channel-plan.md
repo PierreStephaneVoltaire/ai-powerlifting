@@ -896,6 +896,114 @@ Definition of done:
 - Both final responses are queued and sent serially.
 - A social response in the same batch can be sent without waiting for task completion.
 
+## Phase 6.5 — Correctness Hardening of the Phase 5–6 Base
+
+Review-driven course correction. This phase fixes outright-wrong items found in
+the Phase 5–6 implementation. It adds no new product behavior; it only makes the
+per-run OpenCode config and session marker actually take effect, removes a live-path
+regression in `run_if_flow`, fixes the technical review prompt/RETRY loop, and makes
+the outbound enqueue genuinely idempotent. Complete this before Phase 7 and Phase 8.
+
+Functional outcome: orchestrated domain/technical runs receive their own scoped MCP
+config and their own continue-session marker (so concurrent runs in the shared
+workspace neither lose their tools nor clobber each other's session state), the
+normal `run_if_flow` path no longer raises `NameError`, the technical RETRY loop
+works with parameterized filenames, and replaying a decision or re-running a worker
+does not create duplicate outbound messages.
+
+### Findings being corrected
+
+A. Per-run OpenCode config written but never used:
+  1. `_run_domain`, `_run_technical`, and `_synthesize_handoffs` call
+     `write_opencode_config(..., run_id=run_id)`, which (per the Option A rule) writes
+     only `.if/opencode.run.<run_id>.json` and intentionally does not write the root
+     `session_dir/opencode.json`. But those functions then call `run_opencode()`
+     without passing `config_path=`, so `OPENCODE_CONFIG` is never set in the
+     subprocess env. The per-run config file is orphaned and the run executes with no
+     scoped MCP config at all. The `write_opencode_config()` return value is discarded.
+
+B. Per-run session marker never wired:
+  2. `run_opencode()` accepts `session_marker_path`, but `_run_domain`,
+     `_run_technical`, and `_synthesize_handoffs` never construct or pass one, so all
+     runs still key continuation on the shared `.if/opencode-<agent>.session`. Two
+     concurrent same-agent runs in one channel clobber each other's continue state,
+     which is exactly what the per-run marker was meant to prevent.
+     `_synthesize_handoffs` also does not pass `run_id` to `run_opencode()`.
+
+C. Live-path regression in `run_if_flow`:
+  3. In `run_if_flow` (the normal, non-orchestrated path), the thinking-mode social
+     branch passes `run_id`, `response_filename`, and `status_filename` to
+     `_run_domain`, but those names are not defined in `run_if_flow`'s scope (they only
+     exist as parameters of `execute_route`). This raises `NameError` whenever that
+     branch is hit. The per-run-filename arguments belong only in `execute_route`, not
+     in `run_if_flow`.
+
+D. Technical review prompt / RETRY loop bug:
+  4. In `_run_technical`, `review_prompt` is a plain (non-f) string but contains
+     `` `{_review_filename}` ``. The reviewer is told to write a literally-braced
+     filename instead of the real review file, while RETRY detection reads
+     `review_path` derived from `_review_filename`. The review file and RETRY check no
+     longer agree, so the retry path silently breaks.
+
+E. Outbound enqueue idempotency is a no-op:
+  5. `_enqueue_message` builds `idempotency_key = "<batch>:<intent>:<type>:<outbound_id>"`
+     and the outbox `sk` also embeds the fresh `outbound_id`. The
+     `put_outbound_message` conditional write therefore never collides, so the
+     "idempotent outbox enqueue" requirement is not met. Today most enqueues are
+     gated by intent state, but Phase 7 pivot/retry re-runs a worker and would emit
+     duplicate `task_completed`/`task_failed` messages.
+
+### Implementation
+
+1. Make the per-run OpenCode config take effect in the orchestrated path:
+   - Capture the path returned by `write_opencode_config(..., run_id=run_id)` in
+     `_run_domain`, `_run_technical`, and `_synthesize_handoffs`.
+   - Pass that path to `run_opencode()` as `config_path=` so it sets
+     `OPENCODE_CONFIG` in the subprocess env.
+   - Keep the Option A invariant: when `run_id` is set, do not also write a root
+     `session_dir/opencode.json` (it would outrank `OPENCODE_CONFIG`).
+
+2. Wire the per-run continue-session marker:
+   - Construct `.if/opencode-<agent>.run.<run_id>.session` in `_run_domain`,
+     `_run_technical`, and `_synthesize_handoffs` when `run_id` is set, and pass it as
+     `session_marker_path=` to `run_opencode()`.
+   - Give `_synthesize_handoffs` a `run_id` (already threaded from `_run_domain`) and
+     pass it to `run_opencode()` so its run is recorded and isolated.
+   - When `run_id` is absent (legacy single-run path), keep today's shared
+     per-agent marker behavior.
+
+3. Remove the live-path regression in `run_if_flow`:
+   - Drop `run_id`, `response_filename`, and `status_filename` from the
+     thinking-mode social `_run_domain` call inside `run_if_flow`; that path uses the
+     default shared filenames. Only `execute_route` (the orchestrated worker path)
+     passes per-run filenames.
+
+4. Fix the technical review prompt and RETRY loop:
+   - Make `review_prompt` an f-string (or `.format`) so `{_review_filename}` resolves
+     to the actual review filename, and confirm RETRY detection reads the same file.
+
+5. Make outbound enqueue idempotent:
+   - Build a stable `idempotency_key` that does not include the random
+     `outbound_id` (for example `"<batch>:<intent>:<type>"`, and for task lifecycle
+     messages `"<task_id>:<type>"`). Base the dedupe condition on this stable key so
+     replaying a decision or re-running a worker does not create duplicate outbox
+     rows. Keep the float-to-Decimal conversion on the write.
+
+### Definition of done
+
+- An orchestrated domain run receives its scoped MCP config: `OPENCODE_CONFIG`
+  points at `.if/opencode.run.<run_id>.json` and no root `opencode.json` is written
+  for that run.
+- Two concurrent same-agent runs in one channel use distinct per-run session markers
+  and do not clobber each other's continue state.
+- The normal `run_if_flow` thinking-mode social path runs without `NameError`.
+- The technical RETRY loop writes and reads the same review file with parameterized
+  filenames; a `RETRY` first line triggers exactly one retry.
+- Replaying a decision and re-running a completed worker each produce no duplicate
+  outbound messages.
+- Unit tests cover: `config_path`/`session_marker_path` plumbing into `run_opencode`,
+  the corrected review-prompt filename, and stable outbound idempotency-key dedupe.
+
 ## Phase 7 — Cancellation, Pivot, and Await-Instruction Enforcement
 
 Functional outcome: stop/pivot/wait instructions affect active implementation tasks, not classifier/router runs.
@@ -932,6 +1040,113 @@ Definition of done:
 - Pivot restarts the targeted task with updated topic and fresh per-run files.
 - Await-instruction blocks unsafe continuation and posts one conflict summary.
 - Operator follow-up resumes or pivots the same task.
+
+## Phase 7.5 — Correctness Hardening of the Phase 7 Base
+
+Review-driven course correction. Fixes outright-wrong items found in the Phase 7
+implementation. No new product behavior; it makes pivot/await restart reliably,
+stops internal runtime files from leaking to Discord, makes recurring lifecycle
+messages enqueue correctly, and removes a busy-spin/broken test in the outbound
+drainer. Complete this before Phase 8.
+
+### Findings being corrected
+
+A. Internal per-run artifacts leak to Discord:
+  1. `_artifact_refs` filters only the static names in
+     `IF_TECHNICAL_ARTIFACT_EXCLUDES` (`response.md`, `plan.md`, `review.md`,
+     `status.log`, etc.). The Phase 6 per-run files written in the workspace root
+     (`response.task.<task_id>.run.<run_id>.md`, `plan.task.*.md`,
+     `review.task.*.md`) do not match, so a task worker attaches its own
+     response/plan/review markdown to the user as "generated artifacts."
+
+B. Pivot/await restart is unreachable when no run is live:
+  2. `_apply_pivot_implementation` only sets `pivot_requested` and calls
+     `request_cancel`; the real restart happens in the running worker's
+     `_handle_cancel_outcome`. When `task.active_implementer_run_id` is None
+     (e.g., the task was `awaiting_instruction` and the prior run already exited),
+     no worker is running to catch the cancel and restart, so the task is stuck in
+     `pivot_requested`. Phase 7 DoD ("Pivot restarts the targeted task") is unmet.
+
+C. Idempotency key drops legitimate recurring messages:
+  3. The stable lifecycle key `{task_id}:{msg_type}` is correct for terminal types
+     (`task_completed`, `task_failed`, `cancel_confirmation`), but `task_update`
+     and `await_instruction` recur over a task's life (each pivot/conflict). The
+     coarse key dedups the 2nd+ occurrence, so later pivot/await updates are
+     silently dropped from the outbox.
+
+D. Outbound drainer busy-spin and broken tests:
+  4. `_drain_loop` has no `await` sleep or iteration guard; if `query_outbox` keeps
+     returning the same `queued` item, it spins as fast as DynamoDB will answer
+     until the lock window ends. `tests/test_outbound_queue.py` triggers exactly
+     this with a static `query_outbox` mock that never changes item status and
+     leaves `_resolve_discord_handle` unpatched, causing a ~120s, multi-GB hang.
+
+E. Lower severity but fix now:
+  5. `test_task_worker.py` does not insert `app/src` on `sys.path`, so it cannot be
+     collected on its own (only works when run alongside a test that sets the path).
+  6. Duplicate `ConditionalCheckFailedException` block in
+     `_update_outbound_status_sync`.
+  7. The review and retry `run_opencode` calls in `_run_technical` do not pass
+     `run_id`/`cancel_event`, so a cancel during review/retry is ignored and those
+     runs are not registered/recorded.
+  8. The pivot restart in `_handle_cancel_outcome` passes a stale `from_status`
+     (`pivot_requested`) to the restarted worker's first task transition, which then
+     fails silently because the task is already `implementing`.
+
+### Implementation
+
+1. Exclude per-run runtime files from artifact attachment:
+   - In `_artifact_refs` (or the worker before enqueue), skip files matching the
+     per-run patterns `plan.task.*.run.*.md`, `response.task.*.run.*.md`,
+     `review.task.*.run.*.md`, and `status.task.*.run.*.log`, in addition to the
+     existing `IF_TECHNICAL_ARTIFACT_EXCLUDES`. Only genuine deliverables should be
+     attached.
+
+2. Make pivot/await restart reliable with no live run:
+   - When `_apply_pivot_implementation` (or the next classifier batch that resolves
+     an awaiting task) requests a pivot and there is no live
+     `active_implementer_run_id`, start a fresh task worker directly instead of
+     relying on a running worker to catch the cancel. The "running worker restarts
+     itself" path stays for the live-run case; add the no-live-run fallback so the
+     task cannot stick in `pivot_requested`.
+
+3. Make recurring lifecycle messages enqueueable:
+   - Keep `{task_id}:{msg_type}` only for genuinely terminal messages
+     (`task_completed`, `task_failed`, `cancel_confirmation`). For recurring types
+     (`task_update`, `await_instruction`), include a per-occurrence discriminator
+     (e.g., `run_id` or `intent_id`) in the idempotency key so distinct
+     pivots/conflicts are not collapsed, while still deduping true replays of the
+     same occurrence.
+
+4. Harden the outbound drainer and fix its tests:
+   - Add a small `await asyncio.sleep(...)` and/or a max-iterations/no-progress
+     guard in `_drain_loop` so it cannot busy-spin if an item fails to advance.
+   - Fix `tests/test_outbound_queue.py` so `query_outbox` returns an empty list
+     after items are marked sent/failed (or patches `_resolve_discord_handle`), so
+     the drain loop terminates promptly instead of running for the full lock window.
+
+5. Lower-severity cleanups:
+   - Add the `sys.path` insert to `test_task_worker.py`.
+   - Remove the duplicate conditional block in `_update_outbound_status_sync`.
+   - Pass `run_id`/`cancel_event` (and per-run config/marker) to the review and
+     retry `run_opencode` calls in `_run_technical`, or document that those phases
+     are intentionally non-cancellable.
+   - Pass the restarted worker its real current status as `from_status` on pivot
+     restart.
+
+### Definition of done
+
+- A completed task worker attaches only real deliverables; its own
+  `response.task.*`, `plan.task.*`, `review.task.*`, and `status.task.*` files are
+  never sent to Discord.
+- A pivot or await-resolution on a task with no live run starts a fresh run and the
+  task never sticks in `pivot_requested`.
+- Two successive `task_update`/`await_instruction` messages for the same task are
+  both enqueued; a true replay of one occurrence is still deduped.
+- `tests/test_outbound_queue.py` completes in well under a few seconds with no
+  multi-GB memory growth, and `_drain_loop` cannot busy-spin.
+- Unit tests cover: per-run artifact exclusion, pivot/await restart with no live
+  run, recurring-vs-terminal idempotency keys, and bounded outbound drain.
 
 ## Phase 8 — Global Directive Inclusion Check
 
@@ -1015,6 +1230,8 @@ Each phase must be independently functional:
 4.5. Correctness hardening of the Phase 0–4 base: fix the triple `parse_classification_file`, coordinator↔store signature mismatches, durable debounce/max-wait persistence, intent terminal-state bug, snowflake-safe cursors/edit handling, and release the classifier lock before task execution.
 5. Outbound queue serializes Discord sends.
 6. Parallel task workers run in the shared channel workspace with per-run files/config/markers and enqueue outputs.
+6.5. Correctness hardening of the Phase 5–6 base: wire the per-run OpenCode config (`config_path`/`OPENCODE_CONFIG`) and per-run session marker into orchestrated runs, remove the `run_if_flow` thinking-mode `NameError` regression, fix the technical review prompt/RETRY filename, and make outbound enqueue idempotency-key dedupe stable.
 7. Cancel/pivot/await-instruction control active tasks via the cancellable executor registry.
+7.5. Correctness hardening of the Phase 7 base: exclude per-run runtime files from Discord attachments, make pivot/await restart reliable when no run is live, fix idempotency keys for recurring task_update/await_instruction messages, and harden/repair the outbound drainer busy-spin and its tests.
 8. Global directives are guaranteed in prompts using the existing directive system.
 9. Tests + Terraform validation + deployed pod verification.

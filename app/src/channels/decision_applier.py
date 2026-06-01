@@ -1,9 +1,10 @@
-"""Decision Applier — Phase 4 of the Discord channel orchestration plan.
+"""Decision Applier - Phase 4/5 of the Discord channel orchestration plan.
 
 Translates ClassifierDecision records into concrete side effects: outbound
 messages, implementation task CRUD, and route execution.  Every action is
 idempotent via DynamoDB conditional writes and intent-status state machines
 defined in ExecutionStore.
+
 """
 from __future__ import annotations
 
@@ -171,11 +172,18 @@ async def _enqueue_message(
     batch_id: Optional[str] = None,
     reply_to_message_id: Optional[str] = None,
     attachments: Optional[list] = None,
-    channel_ref: Any = None,
-    discord_loop: Any = None,
+    **_extra: Any,
 ) -> bool:
     outbound_id = str(uuid.uuid4())
-    idempotency_key = f"{batch_id or 'nb'}:{intent_id or 'ni'}:{msg_type}:{outbound_id}"
+    _TERMINAL_TASK_TYPES = {"task_completed", "task_failed", "cancel_confirmation"}
+    _RECURRING_TASK_TYPES = {"task_update", "await_instruction", "task_started"}
+    if task_id and msg_type in _TERMINAL_TASK_TYPES:
+        idempotency_key = f"{task_id}:{msg_type}"
+    elif task_id and msg_type in _RECURRING_TASK_TYPES:
+        discriminator = intent_id or batch_id or outbound_id
+        idempotency_key = f"{task_id}:{msg_type}:{discriminator}"
+    else:
+        idempotency_key = f"{batch_id or 'nb'}:{intent_id or 'ni'}:{msg_type}"
     now = datetime.now(timezone.utc).isoformat()
     msg = DiscordOutboundMessage(
         outbound_id=outbound_id,
@@ -195,35 +203,10 @@ async def _enqueue_message(
         idempotency_key=idempotency_key,
     )
     stored = await store.put_outbound_message(msg)
-    if channel_ref is not None and discord_loop is not None:
-        _deliver_outbound_now(msg, channel_ref, discord_loop)
+    if stored:
+        from channels.outbound_queue import schedule_drain
+        schedule_drain(channel_id)
     return stored
-
-
-def _deliver_outbound_now(
-    msg: DiscordOutboundMessage,
-    channel_ref: Any,
-    discord_loop: Any,
-) -> None:
-    from channels.chunker import chunk_response
-    from channels.delivery import deliver_to_channel
-    try:
-        chunks = chunk_response(msg.content)
-        import asyncio
-        asyncio.ensure_future(
-            deliver_to_channel(
-                platform="discord",
-                channel_ref=channel_ref,
-                chunks=chunks,
-                attachments=msg.attachments,
-                discord_loop=discord_loop,
-            )
-        )
-    except Exception:
-        logger.exception(
-            "Immediate delivery failed for outbound %s",
-            msg.outbound_id,
-        )
 
 
 async def _apply_social_response(
@@ -276,8 +259,6 @@ async def _apply_social_response(
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
         reply_to_message_id=reply_to,
-        channel_ref=kwargs.get("channel_ref"),
-        discord_loop=kwargs.get("discord_loop"),
     )
 
 
@@ -299,8 +280,6 @@ async def _apply_clarifying_question(
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
         reply_to_message_id=reply_to,
-        channel_ref=kwargs.get("channel_ref"),
-        discord_loop=kwargs.get("discord_loop"),
     )
 
 
@@ -372,120 +351,18 @@ async def _apply_start_new_task(
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
         reply_to_message_id=root_msg_id or None,
-        channel_ref=channel_ref,
-        discord_loop=discord_loop,
     )
     import asyncio as _asyncio
-    _asyncio.ensure_future(_run_task_execution(
+    from channels.task_worker import run_task_worker
+    _asyncio.ensure_future(run_task_worker(
+        task=task,
         decision=decision,
-        intent_id=intent.intent_id,
         batch_id=intent.batch_id,
-        task_id=task_id,
-        channel_id=channel_id,
-        conversation_id=conversation_id,
+        intent_id=intent.intent_id,
         channel_ref=channel_ref,
         discord_loop=discord_loop,
-        store=store,
     ))
     return True
-
-
-async def _run_task_execution(
-    decision: ClassifierDecision,
-    intent_id: str,
-    batch_id: str,
-    task_id: str,
-    channel_id: str,
-    conversation_id: str,
-    channel_ref: Any,
-    discord_loop: Any,
-    store: Any,
-) -> None:
-    from flow.batch_classifier import decision_to_ifplan
-    from flow.runner import execute_route
-    from flow.context import build_runtime_context
-    from channels.channel_coordinator import _resolve_session_dir
-
-    plan = decision_to_ifplan(decision)
-    guild_id = str(channel_ref.guild.id) if channel_ref and hasattr(channel_ref, "guild") else "unknown"
-    session_dir = _resolve_session_dir(channel_id, guild_id)
-    http_client = None
-    try:
-        from main import app
-        http_client = getattr(app.state, "http_client", None)
-    except Exception:
-        pass
-    runtime_context = build_runtime_context(
-        messages=[],
-        context_id=conversation_id,
-        cache_key=conversation_id,
-        session_dir=Path(str(session_dir)),
-    )
-    try:
-        flow_result = await execute_route(
-            plan=plan,
-            session_dir=Path(str(session_dir)),
-            runtime_context=runtime_context,
-            http_client=http_client,
-        )
-        await store.update_implementation_task(
-            channel_id=channel_id,
-            task_id=task_id,
-            from_status="implementing",
-            to_status="completed",
-        )
-        result_attachments = [
-            {"filename": ref.filename, "url": ref.url, "local_path": ref.local_path}
-            for ref in flow_result.file_refs
-        ] if flow_result.file_refs else []
-        await _enqueue_message(
-            store=store,
-            channel_id=channel_id,
-            conversation_id=conversation_id,
-            msg_type="task_completed",
-            content=flow_result.content,
-            priority=5,
-            task_id=task_id,
-            intent_id=intent_id,
-            batch_id=batch_id,
-            attachments=result_attachments,
-            channel_ref=channel_ref,
-            discord_loop=discord_loop,
-        )
-        await store.update_intent_record_status(
-            batch_id=batch_id,
-            intent_id=intent_id,
-            from_status="running",
-            to_status="completed",
-        )
-    except Exception:
-        logger.exception("Route execution failed for task %s", task_id)
-        await store.update_implementation_task(
-            channel_id=channel_id,
-            task_id=task_id,
-            from_status="implementing",
-            to_status="failed",
-        )
-        await _enqueue_message(
-            store=store,
-            channel_id=channel_id,
-            conversation_id=conversation_id,
-            msg_type="task_failed",
-            content=f"Task failed: {task_id}",
-            priority=5,
-            task_id=task_id,
-            intent_id=intent_id,
-            batch_id=batch_id,
-            channel_ref=channel_ref,
-            discord_loop=discord_loop,
-        )
-        await store.update_intent_record_status(
-            batch_id=batch_id,
-            intent_id=intent_id,
-            from_status="running",
-            to_status="failed",
-            error="execution_failed",
-        )
 
 
 async def _apply_append_to_active(
@@ -495,6 +372,9 @@ async def _apply_append_to_active(
     **kwargs: Any,
 ) -> bool:
     channel_id = kwargs["channel_id"]
+    conversation_id = kwargs["conversation_id"]
+    channel_ref = kwargs.get("channel_ref")
+    discord_loop = kwargs.get("discord_loop")
     if not decision.target_task_id:
         logger.error("append_to_active requires target_task_id for intent %s", decision.intent_id)
         return False
@@ -503,19 +383,40 @@ async def _apply_append_to_active(
         logger.error("Task %s not found for append_to_active", decision.target_task_id)
         return False
     new_refs = [
-        {
-            "message_id": mid,
-            "reason": "append_to_active",
-            "intent_id": decision.intent_id,
-        }
+        {"message_id": mid, "reason": "append_to_active", "intent_id": decision.intent_id}
         for mid in decision.source_message_ids
     ]
-    return await store.append_task_queued_refs(
+    appended = await store.append_task_queued_refs(
         channel_id=channel_id,
         task_id=decision.target_task_id,
         refs=new_refs,
         expected_version=task.version,
     )
+    if not appended:
+        return False
+    if task.status == "awaiting_instruction":
+        resumed = await store.update_implementation_task(
+            channel_id=channel_id,
+            task_id=decision.target_task_id,
+            from_status="awaiting_instruction",
+            to_status="implementing",
+            active_implementer_run_id=None,
+            pending_conflict=None,
+        )
+        if resumed:
+            import asyncio as _asyncio
+            from channels.task_worker import run_task_worker
+            refreshed_task = await store.get_implementation_task(channel_id, decision.target_task_id)
+            if refreshed_task:
+                _asyncio.ensure_future(run_task_worker(
+                    task=refreshed_task,
+                    decision=decision,
+                    batch_id=intent.batch_id,
+                    intent_id=decision.intent_id,
+                    channel_ref=channel_ref,
+                    discord_loop=discord_loop,
+                ))
+    return True
 
 
 async def _apply_queue_on_active(
@@ -533,11 +434,7 @@ async def _apply_queue_on_active(
         logger.error("Task %s not found for queue_on_active", decision.target_task_id)
         return False
     new_refs = [
-        {
-            "message_id": mid,
-            "reason": "queued",
-            "intent_id": decision.intent_id,
-        }
+        {"message_id": mid, "reason": "queued", "intent_id": decision.intent_id}
         for mid in decision.source_message_ids
     ]
     return await store.append_task_queued_refs(
@@ -556,8 +453,6 @@ async def _apply_await_instruction(
 ) -> bool:
     channel_id = kwargs["channel_id"]
     conversation_id = kwargs["conversation_id"]
-    channel_ref = kwargs.get("channel_ref")
-    discord_loop = kwargs.get("discord_loop")
     if not decision.target_task_id:
         logger.error("await_instruction requires target_task_id for intent %s", decision.intent_id)
         return False
@@ -575,6 +470,19 @@ async def _apply_await_instruction(
     )
     if not updated:
         return False
+    if task.active_implementer_run_id:
+        try:
+            await store.update_run_record_status(
+                run_id=task.active_implementer_run_id,
+                event="cancel_requested",
+            )
+        except Exception:
+            logger.debug("Failed to record cancel_requested on run record %s for await_instruction", task.active_implementer_run_id)
+        try:
+            from channels.cancellable_executor import request_cancel as _request_cancel
+            _request_cancel(task.active_implementer_run_id)
+        except Exception:
+            logger.debug("Cancellable executor request_cancel failed for await_instruction run %s (may be on another pod)", task.active_implementer_run_id)
     conflict_summary = conflict.get("summary", "") if conflict else ""
     conflict_type = conflict.get("type", "unknown") if conflict else "unknown"
     content = f"Task {decision.target_task_id} awaiting instruction ({conflict_type})"
@@ -590,8 +498,6 @@ async def _apply_await_instruction(
         task_id=decision.target_task_id,
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
-        channel_ref=channel_ref,
-        discord_loop=discord_loop,
     )
 
 
@@ -603,8 +509,6 @@ async def _apply_cancel_implementation(
 ) -> bool:
     channel_id = kwargs["channel_id"]
     conversation_id = kwargs["conversation_id"]
-    channel_ref = kwargs.get("channel_ref")
-    discord_loop = kwargs.get("discord_loop")
     if not decision.target_task_id:
         logger.error("cancel_implementation requires target_task_id for intent %s", decision.intent_id)
         return False
@@ -620,6 +524,19 @@ async def _apply_cancel_implementation(
     )
     if not updated:
         return False
+    if task.active_implementer_run_id:
+        try:
+            await store.update_run_record_status(
+                run_id=task.active_implementer_run_id,
+                event="cancel_requested",
+            )
+        except Exception:
+            logger.debug("Failed to record cancel_requested on run record %s", task.active_implementer_run_id)
+        try:
+            from channels.cancellable_executor import request_cancel as _request_cancel
+            _request_cancel(task.active_implementer_run_id)
+        except Exception:
+            logger.debug("Cancellable executor request_cancel failed for run %s (may be on another pod)", task.active_implementer_run_id)
     return await _enqueue_message(
         store=store,
         channel_id=channel_id,
@@ -630,8 +547,6 @@ async def _apply_cancel_implementation(
         task_id=decision.target_task_id,
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
-        channel_ref=channel_ref,
-        discord_loop=discord_loop,
     )
 
 
@@ -643,8 +558,6 @@ async def _apply_pivot_implementation(
 ) -> bool:
     channel_id = kwargs["channel_id"]
     conversation_id = kwargs["conversation_id"]
-    channel_ref = kwargs.get("channel_ref")
-    discord_loop = kwargs.get("discord_loop")
     if not decision.target_task_id:
         logger.error("pivot_implementation requires target_task_id for intent %s", decision.intent_id)
         return False
@@ -664,6 +577,32 @@ async def _apply_pivot_implementation(
     )
     if not updated:
         return False
+    if task.active_implementer_run_id:
+        try:
+            await store.update_run_record_status(
+                run_id=task.active_implementer_run_id,
+                event="cancel_requested",
+            )
+        except Exception:
+            logger.debug("Failed to record cancel_requested on run record %s for pivot", task.active_implementer_run_id)
+        try:
+            from channels.cancellable_executor import request_cancel as _request_cancel
+            _request_cancel(task.active_implementer_run_id)
+        except Exception:
+            logger.debug("Cancellable executor request_cancel failed for pivot run %s (may be on another pod)", task.active_implementer_run_id)
+    else:
+        refreshed_task = await store.get_implementation_task(channel_id, decision.target_task_id)
+        if refreshed_task is not None:
+            import asyncio as _asyncio
+            from channels.task_worker import run_task_worker
+            _asyncio.ensure_future(run_task_worker(
+                task=refreshed_task,
+                decision=decision,
+                batch_id=intent.batch_id,
+                intent_id=intent.intent_id,
+                channel_ref=kwargs.get("channel_ref"),
+                discord_loop=kwargs.get("discord_loop"),
+            ))
     return await _enqueue_message(
         store=store,
         channel_id=channel_id,
@@ -674,6 +613,4 @@ async def _apply_pivot_implementation(
         task_id=decision.target_task_id,
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
-        channel_ref=channel_ref,
-        discord_loop=discord_loop,
     )
