@@ -1,17 +1,17 @@
-"""DynamoDB-backed execution registry for channel orchestration.
 
-Phase 2: Implements proper ChannelClassificationState transitions with
-DynamoDB conditional writes, classifier lock acquisition with expiry takeover,
-and dirty/pending-aware lock release that transitions to debouncing when
-new activity arrived during classification.
 
-Phase 3: Adds ClassificationBatch and IntentRecord persistence, plus
-active-task queries for the batch classifier prompt context.
 
-Phase 4: Adds ImplementationTask CRUD with conditional writes, IntentRecord
-status transitions, and DiscordOutboundMessage persistence with idempotency
-keys for the decision applier.
-"""
+
+
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
 
 import asyncio
@@ -53,13 +53,11 @@ TASK_STATUS_TRANSITIONS: Dict[str, List[str]] = {
 
 _store: Optional[ExecutionStore] = None
 
-
 def get_execution_store() -> ExecutionStore:
     global _store
     if _store is None:
         _store = ExecutionStore()
     return _store
-
 
 class ExecutionStore:
     def __init__(

@@ -92,7 +92,6 @@ async def generate_import_parse_report(
         message = choices[0].get("message", {})
         tool_calls = message.get("tool_calls", [])
         if not tool_calls:
-            # Fallback to content if no tool call but content looks like JSON
             content = message.get("content", "").strip()
             if content.startswith("{"):
                 return _sanitize_floats(json.loads(content))

@@ -1,4 +1,4 @@
-"""Runtime context assembly for the IF workspace flow."""
+
 from __future__ import annotations
 
 import json
@@ -21,10 +21,8 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-
 def _project_root() -> Path:
     return PROJECT_ROOT
-
 
 def _text_from_content(content: Any) -> str:
     if isinstance(content, str):
@@ -37,18 +35,15 @@ def _text_from_content(content: Any) -> str:
         return "\n".join(parts)
     return str(content or "")
 
-
 def _latest_user_text(messages: list[dict[str, Any]]) -> str:
     for msg in reversed(messages):
         if msg.get("role") == "user":
             return _text_from_content(msg.get("content"))
     return ""
 
-
 def _runtime_tool_command() -> str:
     pythonpath = os.pathsep.join([str(APP_SRC), str(PROJECT_ROOT)])
     return f"PYTHONPATH={pythonpath!r} {sys.executable} -m flow.runtime_tool"
-
 
 def _load_prompt_text(name: str) -> str:
     try:
@@ -58,7 +53,6 @@ def _load_prompt_text(name: str) -> str:
     except Exception as exc:
         logger.debug("Prompt template unavailable: %s: %s", name, exc)
         return ""
-
 
 def _load_skill_text(name: str) -> str:
     path = Path(SKILLS_PATH) / name / "SKILL.md"
@@ -70,7 +64,6 @@ def _load_skill_text(name: str) -> str:
         logger.debug("Skill unavailable: %s: %s", name, exc)
         return ""
 
-
 def _thinking_skill_block() -> str:
     skills = []
     for name in ("deep_think", "sequential_plan", "parallel_analysis"):
@@ -81,9 +74,8 @@ def _thinking_skill_block() -> str:
         return ""
     return "═══ THINKING MODE SKILLS ═══\n" + "\n\n".join(skills)
 
-
 def get_operator_context(messages: list[dict[str, Any]], context_id: str) -> str:
-    """Search LanceDB user facts for context relevant to the current turn."""
+
     if not context_id:
         return ""
     query = _latest_user_text(messages).strip()
@@ -111,9 +103,8 @@ def get_operator_context(messages: list[dict[str, Any]], context_id: str) -> str
         logger.warning("Failed to retrieve operator context: %s", exc)
         return ""
 
-
 def get_current_signals(user_pk: str = IF_USER_PK) -> dict[str, Any]:
-    """Fetch current diary/training signals without importing SDK tool modules."""
+
     result: dict[str, Any] = {
         "mental_health_score": None,
         "trend": None,
@@ -156,7 +147,6 @@ def get_current_signals(user_pk: str = IF_USER_PK) -> dict[str, Any]:
 
     return {key: value for key, value in result.items() if value not in (None, [], {})}
 
-
 def _upload_manifest(session_dir: Path, uploaded_files: list[dict[str, Any]] | None) -> str:
     files: list[Path] = []
     for item in uploaded_files or []:
@@ -181,7 +171,6 @@ def _upload_manifest(session_dir: Path, uploaded_files: list[dict[str, Any]] | N
     lines.append("Use text/CSV/spreadsheet files directly. For images or media, use the attached file context or choose `media_reader`.")
     return "\n".join(lines)
 
-
 def build_runtime_context(
     *,
     messages: list[dict[str, Any]],
@@ -191,7 +180,7 @@ def build_runtime_context(
     uploaded_files: list[dict[str, Any]] | None = None,
     thinking_mode_requested: bool = False,
 ) -> str:
-    """Build the compatibility block injected into planner and opencode prompts."""
+
     blocks: list[str] = []
 
     signals = get_current_signals()
@@ -267,7 +256,6 @@ def build_runtime_context(
             blocks.append(skill_block)
 
     return "\n\n".join(block for block in blocks if block).strip()
-
 
 def uploaded_file_paths(uploaded_files: list[dict[str, Any]] | None) -> list[Path]:
     paths: list[Path] = []

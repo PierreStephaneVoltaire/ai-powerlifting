@@ -17,14 +17,12 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Try to import tika for PDF extraction
 try:
     from tika import parser as tika_parser
     TIKA_AVAILABLE = True
 except ImportError:
     TIKA_AVAILABLE = False
     logger.warning("[HealthDocsRAG] Apache Tika not available. PDF extraction will fail.")
-
 
 class HealthDocsRAG:
     """ChromaDB-backed RAG for health documents.
@@ -72,15 +70,12 @@ class HealthDocsRAG:
             logger.error("[HealthDocsRAG] Cannot index docs: Apache Tika not available")
             return
         
-        # Ensure docs directory exists
         if not self._docs_dir.exists():
             logger.warning(f"[HealthDocsRAG] Docs directory does not exist: {self._docs_dir}")
             return
         
-        # Load existing hashes
         stored_hashes = self._load_hashes()
         
-        # Find all PDF files
         pdf_files = list(self._docs_dir.glob("*.pdf"))
         if not pdf_files:
             logger.info(f"[HealthDocsRAG] No PDF files found in {self._docs_dir}")
@@ -97,28 +92,22 @@ class HealthDocsRAG:
             file_hash = self._compute_file_hash(pdf_path)
             file_str = str(pdf_path)
             
-            # Check if file has changed
             if file_str in stored_hashes and stored_hashes[file_str] == file_hash:
-                # File unchanged, keep existing hash
                 new_hashes[file_str] = file_hash
                 skipped_count += 1
                 logger.debug(f"[HealthDocsRAG] Skipping unchanged file: {pdf_path.name}")
                 continue
             
-            # File is new or changed - extract and index
             logger.info(f"[HealthDocsRAG] Indexing: {pdf_path.name}")
             
             try:
-                # Extract text from PDF
                 text = await self._extract_text(pdf_path)
                 if not text or not text.strip():
                     logger.warning(f"[HealthDocsRAG] No text extracted from: {pdf_path.name}")
                     continue
                 
-                # Delete existing chunks for this file
                 self._delete_file_chunks(collection, file_str)
                 
-                # Chunk and index
                 chunks = self._chunk_text(text)
                 for i, chunk in enumerate(chunks):
                     chunk_id = self._make_chunk_id(file_str, i)
@@ -140,7 +129,6 @@ class HealthDocsRAG:
             except Exception as e:
                 logger.error(f"[HealthDocsRAG] Failed to index {pdf_path.name}: {e}")
         
-        # Save updated hashes
         self._save_hashes(new_hashes)
         
         logger.info(
@@ -160,14 +148,12 @@ class HealthDocsRAG:
         """
         collection = self._get_or_create_collection()
         
-        # Query the collection
         results = collection.query(
             query_texts=[q],
             n_results=n_results,
             include=["documents", "metadatas", "distances"]
         )
         
-        # Format results
         formatted = []
         if results and results.get("documents"):
             documents = results["documents"][0]
@@ -178,9 +164,7 @@ class HealthDocsRAG:
                 meta = metadatas[i] if i < len(metadatas) else {}
                 distance = distances[i] if i < len(distances) else 0.0
                 
-                # Convert distance to similarity score (1 - normalized distance)
-                # ChromaDB returns L2 distance by default
-                score = max(0.0, 1.0 - (distance / 2.0))  # Rough normalization
+                score = max(0.0, 1.0 - (distance / 2.0))
                 
                 formatted.append({
                     "text": doc,
@@ -197,20 +181,17 @@ class HealthDocsRAG:
         """
         logger.info("[HealthDocsRAG] Starting full rebuild...")
         
-        # Delete and recreate collection
         try:
             self._client.delete_collection(self.COLLECTION_NAME)
             logger.debug(f"[HealthDocsRAG] Deleted collection: {self.COLLECTION_NAME}")
         except Exception:
-            pass  # Collection might not exist
+            pass
         
         self._collection = None
         
-        # Clear stored hashes
         if self._hash_file.exists():
             self._hash_file.unlink()
         
-        # Re-index all docs
         await self.index_docs()
         
         logger.info("[HealthDocsRAG] Full rebuild complete")
@@ -230,7 +211,6 @@ class HealthDocsRAG:
     def _save_hashes(self, hashes: dict) -> None:
         """Save file hashes to sidecar file."""
         try:
-            # Ensure directory exists
             self._docs_dir.mkdir(parents=True, exist_ok=True)
             
             with open(self._hash_file, "w") as f:
@@ -268,7 +248,6 @@ class HealthDocsRAG:
         Uses simple word-based approximation (4 chars ~= 1 token).
         Maintains CHUNK_OVERLAP_TOKENS overlap between chunks.
         """
-        # Approximate tokens by words (rough but fast)
         words = text.split()
         chars_per_chunk = self.CHUNK_SIZE_TOKENS * 4
         overlap_chars = self.CHUNK_OVERLAP_TOKENS * 4
@@ -278,15 +257,12 @@ class HealthDocsRAG:
         current_length = 0
         
         for word in words:
-            word_len = len(word) + 1  # +1 for space
+            word_len = len(word) + 1
             
             if current_length + word_len > chars_per_chunk and current_chunk:
-                # Save current chunk
                 chunk_text = " ".join(current_chunk)
                 chunks.append(chunk_text)
                 
-                # Start new chunk with overlap
-                # Keep last ~overlap_chars worth of words
                 overlap_words = []
                 overlap_len = 0
                 for w in reversed(current_chunk):
@@ -301,7 +277,6 @@ class HealthDocsRAG:
             current_chunk.append(word)
             current_length += word_len
         
-        # Don't forget the last chunk
         if current_chunk:
             chunks.append(" ".join(current_chunk))
         
@@ -309,14 +284,12 @@ class HealthDocsRAG:
     
     def _make_chunk_id(self, file_path: str, chunk_index: int) -> str:
         """Create a unique ID for a chunk."""
-        # Use hash of file path + index for consistent IDs
         hash_input = f"{file_path}:{chunk_index}"
         return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
     
     def _delete_file_chunks(self, collection: Any, file_path: str) -> None:
         """Delete all chunks for a given file."""
         try:
-            # Query for chunks with this source path
             results = collection.get(
                 where={"source_path": file_path},
                 include=[]

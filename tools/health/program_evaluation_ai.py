@@ -185,7 +185,6 @@ _TOOL_SCHEMA = {
     },
 }
 
-
 def _parse_date(value: str | None) -> date | None:
     if not value:
         return None
@@ -194,10 +193,8 @@ def _parse_date(value: str | None) -> date | None:
     except ValueError:
         return None
 
-
 def _current_block_sessions(program: dict[str, Any]) -> list[dict[str, Any]]:
     return [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
-
 
 def _analysis_weeks(program: dict[str, Any], sessions: list[dict[str, Any]]) -> int:
     meta = program.get("meta", {})
@@ -207,7 +204,6 @@ def _analysis_weeks(program: dict[str, Any], sessions: list[dict[str, Any]]) -> 
 
     weeks = [int(s.get("week_number") or 0) for s in sessions if s.get("week_number")]
     return max(1, max(weeks) if weeks else 1)
-
 
 def _sanitize_floats(obj: Any) -> Any:
     """Recursively replace NaN/Inf with None so json.dumps produces valid JSON."""
@@ -221,7 +217,6 @@ def _sanitize_floats(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [_sanitize_floats(v) for v in obj]
     return obj
-
 
 def _build_user_message(program: dict[str, Any], federation_library: dict[str, Any] | None = None) -> str:
     meta = program.get("meta", {})
@@ -301,7 +296,6 @@ def _build_user_message(program: dict[str, Any], federation_library: dict[str, A
     }
 
     return json.dumps(_sanitize_floats(payload), indent=2, default=str)
-
 
 async def generate_program_evaluation_report(
     program: dict[str, Any],

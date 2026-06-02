@@ -22,11 +22,6 @@ from tools.sdk_compat import (
     register_tool,
 )
 
-
-# =============================================================================
-# Helpers (duplicated from agent/tools/base to avoid cross-dir imports)
-# =============================================================================
-
 def _run_async(coro):
     try:
         loop = asyncio.get_running_loop()
@@ -38,33 +33,22 @@ def _run_async(coro):
             return pool.submit(asyncio.run, coro).result()
     return asyncio.run(coro)
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
 
-
-# =============================================================================
-# SDK Tool Classes (migrated from agent/tools/finance_tools.py)
-# =============================================================================
-
-# --- finance_get_profile ---
-
 class FinanceGetProfileAction(Action):
     pass
 
-
 class FinanceGetProfileObservation(Observation):
     pass
-
 
 class FinanceGetProfileExecutor(ToolExecutor[FinanceGetProfileAction, FinanceGetProfileObservation]):
     def __call__(self, action: FinanceGetProfileAction, conversation=None) -> FinanceGetProfileObservation:
         from finance import finance_get_profile
         result = _run_async(finance_get_profile())
         return FinanceGetProfileObservation.from_text(_format_result(result))
-
 
 class FinanceGetProfileTool(ToolDefinition[FinanceGetProfileAction, FinanceGetProfileObservation]):
     @classmethod
@@ -79,23 +63,17 @@ class FinanceGetProfileTool(ToolDefinition[FinanceGetProfileAction, FinanceGetPr
             executor=FinanceGetProfileExecutor(),
         )]
 
-
-# --- finance_get_goals ---
-
 class FinanceGetGoalsAction(Action):
     pass
 
-
 class FinanceGetGoalsObservation(Observation):
     pass
-
 
 class FinanceGetGoalsExecutor(ToolExecutor[FinanceGetGoalsAction, FinanceGetGoalsObservation]):
     def __call__(self, action: FinanceGetGoalsAction, conversation=None) -> FinanceGetGoalsObservation:
         from finance import finance_get_goals
         result = _run_async(finance_get_goals())
         return FinanceGetGoalsObservation.from_text(_format_result(result))
-
 
 class FinanceGetGoalsTool(ToolDefinition[FinanceGetGoalsAction, FinanceGetGoalsObservation]):
     @classmethod
@@ -111,23 +89,17 @@ class FinanceGetGoalsTool(ToolDefinition[FinanceGetGoalsAction, FinanceGetGoalsO
             executor=FinanceGetGoalsExecutor(),
         )]
 
-
-# --- finance_get_risk_profile ---
-
 class FinanceGetRiskProfileAction(Action):
     pass
 
-
 class FinanceGetRiskProfileObservation(Observation):
     pass
-
 
 class FinanceGetRiskProfileExecutor(ToolExecutor[FinanceGetRiskProfileAction, FinanceGetRiskProfileObservation]):
     def __call__(self, action: FinanceGetRiskProfileAction, conversation=None) -> FinanceGetRiskProfileObservation:
         from finance import finance_get_risk_profile
         result = _run_async(finance_get_risk_profile())
         return FinanceGetRiskProfileObservation.from_text(_format_result(result))
-
 
 class FinanceGetRiskProfileTool(ToolDefinition[FinanceGetRiskProfileAction, FinanceGetRiskProfileObservation]):
     @classmethod
@@ -142,23 +114,17 @@ class FinanceGetRiskProfileTool(ToolDefinition[FinanceGetRiskProfileAction, Fina
             executor=FinanceGetRiskProfileExecutor(),
         )]
 
-
-# --- finance_get_net_worth ---
-
 class FinanceGetNetWorthAction(Action):
     pass
 
-
 class FinanceGetNetWorthObservation(Observation):
     pass
-
 
 class FinanceGetNetWorthExecutor(ToolExecutor[FinanceGetNetWorthAction, FinanceGetNetWorthObservation]):
     def __call__(self, action: FinanceGetNetWorthAction, conversation=None) -> FinanceGetNetWorthObservation:
         from finance import finance_get_net_worth
         result = _run_async(finance_get_net_worth())
         return FinanceGetNetWorthObservation.from_text(_format_result(result))
-
 
 class FinanceGetNetWorthTool(ToolDefinition[FinanceGetNetWorthAction, FinanceGetNetWorthObservation]):
     @classmethod
@@ -172,23 +138,17 @@ class FinanceGetNetWorthTool(ToolDefinition[FinanceGetNetWorthAction, FinanceGet
             executor=FinanceGetNetWorthExecutor(),
         )]
 
-
-# --- finance_get_accounts ---
-
 class FinanceGetAccountsAction(Action):
     pass
 
-
 class FinanceGetAccountsObservation(Observation):
     pass
-
 
 class FinanceGetAccountsExecutor(ToolExecutor[FinanceGetAccountsAction, FinanceGetAccountsObservation]):
     def __call__(self, action: FinanceGetAccountsAction, conversation=None) -> FinanceGetAccountsObservation:
         from finance import finance_get_accounts
         result = _run_async(finance_get_accounts())
         return FinanceGetAccountsObservation.from_text(_format_result(result))
-
 
 class FinanceGetAccountsTool(ToolDefinition[FinanceGetAccountsAction, FinanceGetAccountsObservation]):
     @classmethod
@@ -203,23 +163,17 @@ class FinanceGetAccountsTool(ToolDefinition[FinanceGetAccountsAction, FinanceGet
             executor=FinanceGetAccountsExecutor(),
         )]
 
-
-# --- finance_get_investments ---
-
 class FinanceGetInvestmentsAction(Action):
     pass
 
-
 class FinanceGetInvestmentsObservation(Observation):
     pass
-
 
 class FinanceGetInvestmentsExecutor(ToolExecutor[FinanceGetInvestmentsAction, FinanceGetInvestmentsObservation]):
     def __call__(self, action: FinanceGetInvestmentsAction, conversation=None) -> FinanceGetInvestmentsObservation:
         from finance import finance_get_investments
         result = _run_async(finance_get_investments())
         return FinanceGetInvestmentsObservation.from_text(_format_result(result))
-
 
 class FinanceGetInvestmentsTool(ToolDefinition[FinanceGetInvestmentsAction, FinanceGetInvestmentsObservation]):
     @classmethod
@@ -234,23 +188,17 @@ class FinanceGetInvestmentsTool(ToolDefinition[FinanceGetInvestmentsAction, Fina
             executor=FinanceGetInvestmentsExecutor(),
         )]
 
-
-# --- finance_get_cashflow ---
-
 class FinanceGetCashflowAction(Action):
     pass
 
-
 class FinanceGetCashflowObservation(Observation):
     pass
-
 
 class FinanceGetCashflowExecutor(ToolExecutor[FinanceGetCashflowAction, FinanceGetCashflowObservation]):
     def __call__(self, action: FinanceGetCashflowAction, conversation=None) -> FinanceGetCashflowObservation:
         from finance import finance_get_cashflow
         result = _run_async(finance_get_cashflow())
         return FinanceGetCashflowObservation.from_text(_format_result(result))
-
 
 class FinanceGetCashflowTool(ToolDefinition[FinanceGetCashflowAction, FinanceGetCashflowObservation]):
     @classmethod
@@ -265,23 +213,17 @@ class FinanceGetCashflowTool(ToolDefinition[FinanceGetCashflowAction, FinanceGet
             executor=FinanceGetCashflowExecutor(),
         )]
 
-
-# --- finance_get_tax ---
-
 class FinanceGetTaxAction(Action):
     pass
 
-
 class FinanceGetTaxObservation(Observation):
     pass
-
 
 class FinanceGetTaxExecutor(ToolExecutor[FinanceGetTaxAction, FinanceGetTaxObservation]):
     def __call__(self, action: FinanceGetTaxAction, conversation=None) -> FinanceGetTaxObservation:
         from finance import finance_get_tax
         result = _run_async(finance_get_tax())
         return FinanceGetTaxObservation.from_text(_format_result(result))
-
 
 class FinanceGetTaxTool(ToolDefinition[FinanceGetTaxAction, FinanceGetTaxObservation]):
     @classmethod
@@ -296,23 +238,17 @@ class FinanceGetTaxTool(ToolDefinition[FinanceGetTaxAction, FinanceGetTaxObserva
             executor=FinanceGetTaxExecutor(),
         )]
 
-
-# --- finance_get_insurance ---
-
 class FinanceGetInsuranceAction(Action):
     pass
 
-
 class FinanceGetInsuranceObservation(Observation):
     pass
-
 
 class FinanceGetInsuranceExecutor(ToolExecutor[FinanceGetInsuranceAction, FinanceGetInsuranceObservation]):
     def __call__(self, action: FinanceGetInsuranceAction, conversation=None) -> FinanceGetInsuranceObservation:
         from finance import finance_get_insurance
         result = _run_async(finance_get_insurance())
         return FinanceGetInsuranceObservation.from_text(_format_result(result))
-
 
 class FinanceGetInsuranceTool(ToolDefinition[FinanceGetInsuranceAction, FinanceGetInsuranceObservation]):
     @classmethod
@@ -327,23 +263,17 @@ class FinanceGetInsuranceTool(ToolDefinition[FinanceGetInsuranceAction, FinanceG
             executor=FinanceGetInsuranceExecutor(),
         )]
 
-
-# --- finance_get_agent_context ---
-
 class FinanceGetAgentContextAction(Action):
     pass
 
-
 class FinanceGetAgentContextObservation(Observation):
     pass
-
 
 class FinanceGetAgentContextExecutor(ToolExecutor[FinanceGetAgentContextAction, FinanceGetAgentContextObservation]):
     def __call__(self, action: FinanceGetAgentContextAction, conversation=None) -> FinanceGetAgentContextObservation:
         from finance import finance_get_agent_context
         result = _run_async(finance_get_agent_context())
         return FinanceGetAgentContextObservation.from_text(_format_result(result))
-
 
 class FinanceGetAgentContextTool(ToolDefinition[FinanceGetAgentContextAction, FinanceGetAgentContextObservation]):
     @classmethod
@@ -358,9 +288,6 @@ class FinanceGetAgentContextTool(ToolDefinition[FinanceGetAgentContextAction, Fi
             executor=FinanceGetAgentContextExecutor(),
         )]
 
-
-# --- finance_update_profile ---
-
 class FinanceUpdateProfileAction(Action):
     updates: Dict[str, Any] = Field(
         description="Profile fields to update. Supports: age, net_monthly_income, "
@@ -369,17 +296,14 @@ class FinanceUpdateProfileAction(Action):
                     "secondary_income (list)."
     )
 
-
 class FinanceUpdateProfileObservation(Observation):
     pass
-
 
 class FinanceUpdateProfileExecutor(ToolExecutor[FinanceUpdateProfileAction, FinanceUpdateProfileObservation]):
     def __call__(self, action: FinanceUpdateProfileAction, conversation=None) -> FinanceUpdateProfileObservation:
         from finance import finance_update_profile
         result = _run_async(finance_update_profile(action.updates))
         return FinanceUpdateProfileObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateProfileTool(ToolDefinition[FinanceUpdateProfileAction, FinanceUpdateProfileObservation]):
     @classmethod
@@ -391,25 +315,19 @@ class FinanceUpdateProfileTool(ToolDefinition[FinanceUpdateProfileAction, Financ
             executor=FinanceUpdateProfileExecutor(),
         )]
 
-
-# --- finance_update_goals ---
-
 class FinanceUpdateGoalsAction(Action):
     short_term: Optional[List[Dict[str, Any]]] = Field(default=None, description="Replace short-term goals array (<1yr)")
     medium_term: Optional[List[Dict[str, Any]]] = Field(default=None, description="Replace medium-term goals array (1-5yr)")
     long_term: Optional[List[Dict[str, Any]]] = Field(default=None, description="Replace long-term goals array (5yr+)")
 
-
 class FinanceUpdateGoalsObservation(Observation):
     pass
-
 
 class FinanceUpdateGoalsExecutor(ToolExecutor[FinanceUpdateGoalsAction, FinanceUpdateGoalsObservation]):
     def __call__(self, action: FinanceUpdateGoalsAction, conversation=None) -> FinanceUpdateGoalsObservation:
         from finance import finance_update_goals
         result = _run_async(finance_update_goals(action.short_term, action.medium_term, action.long_term))
         return FinanceUpdateGoalsObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateGoalsTool(ToolDefinition[FinanceUpdateGoalsAction, FinanceUpdateGoalsObservation]):
     @classmethod
@@ -425,26 +343,20 @@ class FinanceUpdateGoalsTool(ToolDefinition[FinanceUpdateGoalsAction, FinanceUpd
             executor=FinanceUpdateGoalsExecutor(),
         )]
 
-
-# --- finance_update_risk_profile ---
-
 class FinanceUpdateRiskProfileAction(Action):
     updates: Dict[str, Any] = Field(
         description="Risk profile fields: tolerance (conservative/moderate/aggressive), "
                     "time_horizon_years, investment_philosophy, max_drawdown_comfort_pct, notes."
     )
 
-
 class FinanceUpdateRiskProfileObservation(Observation):
     pass
-
 
 class FinanceUpdateRiskProfileExecutor(ToolExecutor[FinanceUpdateRiskProfileAction, FinanceUpdateRiskProfileObservation]):
     def __call__(self, action: FinanceUpdateRiskProfileAction, conversation=None) -> FinanceUpdateRiskProfileObservation:
         from finance import finance_update_risk_profile
         result = _run_async(finance_update_risk_profile(action.updates))
         return FinanceUpdateRiskProfileObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateRiskProfileTool(ToolDefinition[FinanceUpdateRiskProfileAction, FinanceUpdateRiskProfileObservation]):
     @classmethod
@@ -456,25 +368,19 @@ class FinanceUpdateRiskProfileTool(ToolDefinition[FinanceUpdateRiskProfileAction
             executor=FinanceUpdateRiskProfileExecutor(),
         )]
 
-
-# --- finance_update_net_worth ---
-
 class FinanceUpdateNetWorthAction(Action):
     total_assets: Optional[float] = Field(default=None, description="Total assets in dollars")
     total_liabilities: Optional[float] = Field(default=None, description="Total liabilities in dollars")
     as_of: Optional[str] = Field(default=None, description="Snapshot date (YYYY-MM-DD)")
 
-
 class FinanceUpdateNetWorthObservation(Observation):
     pass
-
 
 class FinanceUpdateNetWorthExecutor(ToolExecutor[FinanceUpdateNetWorthAction, FinanceUpdateNetWorthObservation]):
     def __call__(self, action: FinanceUpdateNetWorthAction, conversation=None) -> FinanceUpdateNetWorthObservation:
         from finance import finance_update_net_worth
         result = _run_async(finance_update_net_worth(action.total_assets, action.total_liabilities, action.as_of))
         return FinanceUpdateNetWorthObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateNetWorthTool(ToolDefinition[FinanceUpdateNetWorthAction, FinanceUpdateNetWorthObservation]):
     @classmethod
@@ -486,25 +392,19 @@ class FinanceUpdateNetWorthTool(ToolDefinition[FinanceUpdateNetWorthAction, Fina
             executor=FinanceUpdateNetWorthExecutor(),
         )]
 
-
-# --- finance_update_account ---
-
 class FinanceUpdateAccountAction(Action):
     account_type: str = Field(description="Account type: chequing, savings, credit_cards, lines_of_credit, loans")
     account_id: str = Field(description="Account id field value")
     updates: Dict[str, Any] = Field(description="Fields to update on the account")
 
-
 class FinanceUpdateAccountObservation(Observation):
     pass
-
 
 class FinanceUpdateAccountExecutor(ToolExecutor[FinanceUpdateAccountAction, FinanceUpdateAccountObservation]):
     def __call__(self, action: FinanceUpdateAccountAction, conversation=None) -> FinanceUpdateAccountObservation:
         from finance import finance_update_account
         result = _run_async(finance_update_account(action.account_type, action.account_id, action.updates))
         return FinanceUpdateAccountObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateAccountTool(ToolDefinition[FinanceUpdateAccountAction, FinanceUpdateAccountObservation]):
     @classmethod
@@ -520,9 +420,6 @@ class FinanceUpdateAccountTool(ToolDefinition[FinanceUpdateAccountAction, Financ
             executor=FinanceUpdateAccountExecutor(),
         )]
 
-
-# --- finance_add_holding ---
-
 class FinanceAddHoldingAction(Action):
     account_id: str = Field(description="Investment account id")
     ticker: str = Field(description="Ticker symbol (e.g. AAPL, VFV.TO)")
@@ -531,10 +428,8 @@ class FinanceAddHoldingAction(Action):
     current_price: Optional[float] = Field(default=None, description="Current market price per share")
     notes: str = Field(default="", description="Optional notes")
 
-
 class FinanceAddHoldingObservation(Observation):
     pass
-
 
 class FinanceAddHoldingExecutor(ToolExecutor[FinanceAddHoldingAction, FinanceAddHoldingObservation]):
     def __call__(self, action: FinanceAddHoldingAction, conversation=None) -> FinanceAddHoldingObservation:
@@ -544,7 +439,6 @@ class FinanceAddHoldingExecutor(ToolExecutor[FinanceAddHoldingAction, FinanceAdd
             action.avg_cost, action.current_price, action.notes
         ))
         return FinanceAddHoldingObservation.from_text(_format_result(result))
-
 
 class FinanceAddHoldingTool(ToolDefinition[FinanceAddHoldingAction, FinanceAddHoldingObservation]):
     @classmethod
@@ -556,25 +450,19 @@ class FinanceAddHoldingTool(ToolDefinition[FinanceAddHoldingAction, FinanceAddHo
             executor=FinanceAddHoldingExecutor(),
         )]
 
-
-# --- finance_update_holding ---
-
 class FinanceUpdateHoldingAction(Action):
     account_id: str = Field(description="Investment account id")
     ticker: str = Field(description="Ticker symbol to update")
     updates: Dict[str, Any] = Field(description="Fields: shares, avg_cost, current_price, notes")
 
-
 class FinanceUpdateHoldingObservation(Observation):
     pass
-
 
 class FinanceUpdateHoldingExecutor(ToolExecutor[FinanceUpdateHoldingAction, FinanceUpdateHoldingObservation]):
     def __call__(self, action: FinanceUpdateHoldingAction, conversation=None) -> FinanceUpdateHoldingObservation:
         from finance import finance_update_holding
         result = _run_async(finance_update_holding(action.account_id, action.ticker, action.updates))
         return FinanceUpdateHoldingObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateHoldingTool(ToolDefinition[FinanceUpdateHoldingAction, FinanceUpdateHoldingObservation]):
     @classmethod
@@ -586,23 +474,17 @@ class FinanceUpdateHoldingTool(ToolDefinition[FinanceUpdateHoldingAction, Financ
             executor=FinanceUpdateHoldingExecutor(),
         )]
 
-
-# --- finance_update_watchlist ---
-
 class FinanceUpdateWatchlistAction(Action):
     watchlist: List[Dict[str, Any]] = Field(description="New watchlist array. Each item: {ticker, notes}")
 
-
 class FinanceUpdateWatchlistObservation(Observation):
     pass
-
 
 class FinanceUpdateWatchlistExecutor(ToolExecutor[FinanceUpdateWatchlistAction, FinanceUpdateWatchlistObservation]):
     def __call__(self, action: FinanceUpdateWatchlistAction, conversation=None) -> FinanceUpdateWatchlistObservation:
         from finance import finance_update_watchlist
         result = _run_async(finance_update_watchlist(action.watchlist))
         return FinanceUpdateWatchlistObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateWatchlistTool(ToolDefinition[FinanceUpdateWatchlistAction, FinanceUpdateWatchlistObservation]):
     @classmethod
@@ -614,9 +496,6 @@ class FinanceUpdateWatchlistTool(ToolDefinition[FinanceUpdateWatchlistAction, Fi
             executor=FinanceUpdateWatchlistExecutor(),
         )]
 
-
-# --- finance_update_cashflow ---
-
 class FinanceUpdateCashflowAction(Action):
     updates: Dict[str, Any] = Field(
         description="Cashflow sections to update. Keys: net_monthly_income (number), "
@@ -625,17 +504,14 @@ class FinanceUpdateCashflowAction(Action):
                     "Omit sections you don't want to change. Totals are recomputed automatically."
     )
 
-
 class FinanceUpdateCashflowObservation(Observation):
     pass
-
 
 class FinanceUpdateCashflowExecutor(ToolExecutor[FinanceUpdateCashflowAction, FinanceUpdateCashflowObservation]):
     def __call__(self, action: FinanceUpdateCashflowAction, conversation=None) -> FinanceUpdateCashflowObservation:
         from finance import finance_update_cashflow
         result = _run_async(finance_update_cashflow(action.updates))
         return FinanceUpdateCashflowObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateCashflowTool(ToolDefinition[FinanceUpdateCashflowAction, FinanceUpdateCashflowObservation]):
     @classmethod
@@ -650,9 +526,6 @@ class FinanceUpdateCashflowTool(ToolDefinition[FinanceUpdateCashflowAction, Fina
             executor=FinanceUpdateCashflowExecutor(),
         )]
 
-
-# --- finance_update_tax ---
-
 class FinanceUpdateTaxAction(Action):
     updates: Dict[str, Any] = Field(
         description="Tax fields to update: rrsp_room, rrsp_ytd_contributions, "
@@ -660,17 +533,14 @@ class FinanceUpdateTaxAction(Action):
                     "capital_gains_ytd, tax_refund_owing, or others."
     )
 
-
 class FinanceUpdateTaxObservation(Observation):
     pass
-
 
 class FinanceUpdateTaxExecutor(ToolExecutor[FinanceUpdateTaxAction, FinanceUpdateTaxObservation]):
     def __call__(self, action: FinanceUpdateTaxAction, conversation=None) -> FinanceUpdateTaxObservation:
         from finance import finance_update_tax
         result = _run_async(finance_update_tax(action.updates))
         return FinanceUpdateTaxObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateTaxTool(ToolDefinition[FinanceUpdateTaxAction, FinanceUpdateTaxObservation]):
     @classmethod
@@ -682,26 +552,20 @@ class FinanceUpdateTaxTool(ToolDefinition[FinanceUpdateTaxAction, FinanceUpdateT
             executor=FinanceUpdateTaxExecutor(),
         )]
 
-
-# --- finance_update_insurance ---
-
 class FinanceUpdateInsuranceAction(Action):
     policies: List[Dict[str, Any]] = Field(
         description="Full insurance policies list. Each policy: "
                     "{type, provider, coverage_amount, premium, deductible, renewal_date, beneficiaries, notes}."
     )
 
-
 class FinanceUpdateInsuranceObservation(Observation):
     pass
-
 
 class FinanceUpdateInsuranceExecutor(ToolExecutor[FinanceUpdateInsuranceAction, FinanceUpdateInsuranceObservation]):
     def __call__(self, action: FinanceUpdateInsuranceAction, conversation=None) -> FinanceUpdateInsuranceObservation:
         from finance import finance_update_insurance
         result = _run_async(finance_update_insurance(action.policies))
         return FinanceUpdateInsuranceObservation.from_text(_format_result(result))
-
 
 class FinanceUpdateInsuranceTool(ToolDefinition[FinanceUpdateInsuranceAction, FinanceUpdateInsuranceObservation]):
     @classmethod
@@ -713,12 +577,6 @@ class FinanceUpdateInsuranceTool(ToolDefinition[FinanceUpdateInsuranceAction, Fi
             executor=FinanceUpdateInsuranceExecutor(),
         )]
 
-
-# =============================================================================
-# Register all SDK tools
-# =============================================================================
-
-# Reads
 register_tool("FinanceGetProfileTool", FinanceGetProfileTool)
 register_tool("FinanceGetGoalsTool", FinanceGetGoalsTool)
 register_tool("FinanceGetRiskProfileTool", FinanceGetRiskProfileTool)
@@ -730,7 +588,6 @@ register_tool("FinanceGetTaxTool", FinanceGetTaxTool)
 register_tool("FinanceGetInsuranceTool", FinanceGetInsuranceTool)
 register_tool("FinanceGetAgentContextTool", FinanceGetAgentContextTool)
 
-# Writes
 register_tool("FinanceUpdateProfileTool", FinanceUpdateProfileTool)
 register_tool("FinanceUpdateGoalsTool", FinanceUpdateGoalsTool)
 register_tool("FinanceUpdateRiskProfileTool", FinanceUpdateRiskProfileTool)
@@ -743,15 +600,9 @@ register_tool("FinanceUpdateCashflowTool", FinanceUpdateCashflowTool)
 register_tool("FinanceUpdateTaxTool", FinanceUpdateTaxTool)
 register_tool("FinanceUpdateInsuranceTool", FinanceUpdateInsuranceTool)
 
-
-# =============================================================================
-# Plugin contract: get_tools()
-# =============================================================================
-
 def get_tools() -> List[Tool]:
     """Get all finance SDK Tool objects (side effect: register_tool already called above)."""
     return [
-        # Reads
         Tool(name="FinanceGetProfileTool"),
         Tool(name="FinanceGetGoalsTool"),
         Tool(name="FinanceGetRiskProfileTool"),
@@ -762,7 +613,6 @@ def get_tools() -> List[Tool]:
         Tool(name="FinanceGetTaxTool"),
         Tool(name="FinanceGetInsuranceTool"),
         Tool(name="FinanceGetAgentContextTool"),
-        # Writes
         Tool(name="FinanceUpdateProfileTool"),
         Tool(name="FinanceUpdateGoalsTool"),
         Tool(name="FinanceUpdateRiskProfileTool"),
@@ -775,11 +625,6 @@ def get_tools() -> List[Tool]:
         Tool(name="FinanceUpdateTaxTool"),
         Tool(name="FinanceUpdateInsuranceTool"),
     ]
-
-
-# =============================================================================
-# Plugin contract: get_schemas() — JSON schemas for non-agentic specialist path
-# =============================================================================
 
 def get_schemas() -> Dict[str, Dict[str, Any]]:
     """Return snake_case tool name -> JSON schema mapping."""
@@ -970,11 +815,6 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             },
         },
     }
-
-
-# =============================================================================
-# Plugin contract: execute() — async dispatcher for non-agentic specialist path
-# =============================================================================
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     """Route finance tool calls to the underlying finance module functions."""

@@ -13,13 +13,11 @@ if APP_SRC not in sys.path:
 
 from channels.channel_coordinator import _derive_batch, _is_bot_message, _newest_user_message_id
 
-
 class FakeAuthor:
     def __init__(self, author_id: int, display_name: str = "user", bot: bool = False):
         self.id = author_id
         self.display_name = display_name
         self.bot = bot
-
 
 class FakeMessage:
     def __init__(self, msg_id: int, author_id: int, content: str = "hello", bot: bool = False):
@@ -28,42 +26,27 @@ class FakeMessage:
         self.content = content
         self.clean_content = content
 
-
 BOT_ID = 999
-
-
-# ======================================================================
-# _is_bot_message
-# ======================================================================
 
 def test_is_bot_message_by_bot_id():
     msg = FakeMessage(1, BOT_ID)
     assert _is_bot_message(msg, bot_id=BOT_ID) is True
 
-
 def test_is_bot_message_by_bot_flag():
     msg = FakeMessage(1, 111, bot=True)
     assert _is_bot_message(msg, bot_id=BOT_ID) is True
-
 
 def test_is_not_bot_message():
     msg = FakeMessage(1, 123, bot=False)
     assert _is_bot_message(msg, bot_id=BOT_ID) is False
 
-
 def test_is_bot_message_none_bot_id_but_bot_flag():
     msg = FakeMessage(1, 111, bot=True)
     assert _is_bot_message(msg, bot_id=None) is True
 
-
 def test_is_bot_message_none_bot_id_normal_user():
     msg = FakeMessage(1, 123, bot=False)
     assert _is_bot_message(msg, bot_id=None) is False
-
-
-# ======================================================================
-# _derive_batch with bot filtering
-# ======================================================================
 
 def test_derive_batch_excludes_bot_messages_with_cursor():
     history = [
@@ -77,7 +60,6 @@ def test_derive_batch_excludes_bot_messages_with_cursor():
     assert result[0].id == 13
     assert result[0].author.id == 123
 
-
 def test_derive_batch_excludes_bot_messages_no_cursor():
     history = [
         FakeMessage(10, 123, "user msg"),
@@ -90,7 +72,6 @@ def test_derive_batch_excludes_bot_messages_no_cursor():
     assert result[0].id == 10
     assert result[1].id == 12
 
-
 def test_derive_batch_all_bot_messages_returns_empty():
     history = [
         FakeMessage(10, BOT_ID, "bot 1", bot=True),
@@ -98,7 +79,6 @@ def test_derive_batch_all_bot_messages_returns_empty():
     ]
     result = _derive_batch(list(reversed(history)), None, bot_id=BOT_ID)
     assert result == []
-
 
 def test_derive_batch_no_bot_messages_unchanged():
     history = [
@@ -108,7 +88,6 @@ def test_derive_batch_no_bot_messages_unchanged():
     result = _derive_batch(list(reversed(history)), "10", bot_id=BOT_ID)
     assert len(result) == 1
     assert result[0].id == 11
-
 
 def test_derive_batch_bot_between_user_messages():
     history = [
@@ -120,11 +99,9 @@ def test_derive_batch_bot_between_user_messages():
     assert len(result) == 1
     assert result[0].id == 12
 
-
 def test_derive_batch_empty_history():
     result = _derive_batch([], None, bot_id=BOT_ID)
     assert result == []
-
 
 def test_derive_batch_interleaved_bots_and_users_with_cursor():
     history = [
@@ -139,11 +116,6 @@ def test_derive_batch_interleaved_bots_and_users_with_cursor():
     assert result[0].id == 12
     assert result[1].id == 14
 
-
-# ======================================================================
-# _newest_user_message_id
-# ======================================================================
-
 def test_newest_user_message_id_skips_bot():
     history = [
         FakeMessage(14, BOT_ID, "bot newest", bot=True),
@@ -151,7 +123,6 @@ def test_newest_user_message_id_skips_bot():
     ]
     result = _newest_user_message_id(history, bot_id=BOT_ID)
     assert result == "13"
-
 
 def test_newest_user_message_id_returns_newest_user():
     history = [
@@ -161,7 +132,6 @@ def test_newest_user_message_id_returns_newest_user():
     result = _newest_user_message_id(history, bot_id=BOT_ID)
     assert result == "15"
 
-
 def test_newest_user_message_id_all_bots():
     history = [
         FakeMessage(14, BOT_ID, "bot", bot=True),
@@ -169,11 +139,9 @@ def test_newest_user_message_id_all_bots():
     result = _newest_user_message_id(history, bot_id=BOT_ID)
     assert result is None
 
-
 def test_newest_user_message_id_empty():
     result = _newest_user_message_id([], bot_id=BOT_ID)
     assert result is None
-
 
 def test_newest_user_message_id_skips_generic_bots():
     history = [
@@ -182,7 +150,6 @@ def test_newest_user_message_id_skips_generic_bots():
     ]
     result = _newest_user_message_id(history, bot_id=BOT_ID)
     assert result == "13"
-
 
 def test_loop_scenario_simulated():
     """Simulate the exact infinite loop scenario that was happening.
@@ -196,7 +163,6 @@ def test_loop_scenario_simulated():
     history = [bot_msg, user_msg]
     result = _derive_batch(history, "10", bot_id=BOT_ID)
     assert len(result) == 0
-
 
 def test_loop_scenario_with_new_user_msg_after_bot():
     """After bot responds, a new user message arrives.

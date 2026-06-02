@@ -31,42 +31,26 @@ from channels.execution_models import (
 )
 from channels.execution_store import ExecutionStore, VALID_TRANSITIONS
 
-
-# ======================================================================
-# VALID_TRANSITIONS
-# ======================================================================
-
 def test_valid_transitions_idle_to_debouncing():
     assert "debouncing" in VALID_TRANSITIONS["idle"]
-
 
 def test_valid_transitions_debouncing_to_classifying():
     assert "classifying" in VALID_TRANSITIONS["debouncing"]
 
-
 def test_valid_transitions_classifying_to_idle():
     assert "idle" in VALID_TRANSITIONS["classifying"]
-
 
 def test_valid_transitions_classifying_to_debouncing():
     assert "debouncing" in VALID_TRANSITIONS["classifying"]
 
-
 def test_valid_transitions_no_idle_to_classifying():
     assert "classifying" not in VALID_TRANSITIONS.get("idle", [])
-
 
 def test_valid_transitions_no_debouncing_to_idle():
     assert "idle" not in VALID_TRANSITIONS.get("debouncing", [])
 
-
 def test_valid_transitions_no_classifying_to_debouncing_other():
     assert "debouncing" in VALID_TRANSITIONS["classifying"]
-
-
-# ======================================================================
-# transition_channel_state
-# ======================================================================
 
 def test_transition_sync_rejects_invalid_transition():
     store = ExecutionStore.__new__(ExecutionStore)
@@ -77,7 +61,6 @@ def test_transition_sync_rejects_invalid_transition():
     assert result is False
     store._table.update_item.assert_not_called()
 
-
 def test_transition_sync_rejects_debouncing_to_idle():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -86,7 +69,6 @@ def test_transition_sync_rejects_debouncing_to_idle():
     result = store._transition_sync("ch1", "debouncing", "idle", None)
     assert result is False
     store._table.update_item.assert_not_called()
-
 
 def test_transition_sync_calls_update_item_on_valid_transition():
     from botocore.exceptions import ClientError
@@ -101,7 +83,6 @@ def test_transition_sync_calls_update_item_on_valid_transition():
     call_kwargs = store._table.update_item.call_args
     assert "#status = :to_status" in call_kwargs.kwargs.get("UpdateExpression", call_kwargs[1].get("UpdateExpression", ""))
 
-
 def test_transition_sync_returns_false_on_conditional_check_failed():
     from botocore.exceptions import ClientError
     store = ExecutionStore.__new__(ExecutionStore)
@@ -112,7 +93,6 @@ def test_transition_sync_returns_false_on_conditional_check_failed():
     store._table.update_item.side_effect = ClientError(err_response, "UpdateItem")
     result = store._transition_sync("ch1", "idle", "debouncing", None)
     assert result is False
-
 
 def test_transition_sync_passes_extra_updates():
     store = ExecutionStore.__new__(ExecutionStore)
@@ -129,11 +109,6 @@ def test_transition_sync_passes_extra_updates():
     update_expr = call_kwargs.kwargs.get("UpdateExpression", call_kwargs[1].get("UpdateExpression", ""))
     assert "#debounce_until" in update_expr
     assert "#pending" in update_expr
-
-
-# ======================================================================
-# update_channel_state_on_event — classifying state
-# ======================================================================
 
 def test_update_state_sets_dirty_and_pending_when_classifying():
     store = ExecutionStore.__new__(ExecutionStore)
@@ -167,7 +142,6 @@ def test_update_state_sets_dirty_and_pending_when_classifying():
     assert item.get("pending") is True
     assert int(item.get("pending_event_count", 0)) == 1
 
-
 def test_update_state_sets_dirty_on_edit_while_classifying():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -199,11 +173,6 @@ def test_update_state_sets_dirty_on_edit_while_classifying():
     assert item.get("dirty") is True
     assert item.get("pending") is True
     assert item.get("latest_observed_edit_at") == now
-
-
-# ======================================================================
-# acquire_classifier_lock — active_classifier_run_id
-# ======================================================================
 
 def test_acquire_lock_sets_active_classifier_run_id():
     store = ExecutionStore.__new__(ExecutionStore)
@@ -237,7 +206,6 @@ def test_acquire_lock_sets_active_classifier_run_id():
     assert item.get("status") == "classifying"
     assert item.get("dirty") is False
 
-
 def test_acquire_lock_uses_provided_run_id():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -267,7 +235,6 @@ def test_acquire_lock_uses_provided_run_id():
     item = put_call.kwargs.get("Item", put_call[1].get("Item", {}))
     assert item.get("active_classifier_run_id") == "my-custom-run-id"
 
-
 def test_acquire_lock_fails_when_lock_held_by_other():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -293,7 +260,6 @@ def test_acquire_lock_fails_when_lock_held_by_other():
     store._table.get_item.return_value = {"Item": current_item}
     result = store._acquire_lock_sync("ch1", "owner-A", "2099-01-01T00:00:00Z", None)
     assert result is False
-
 
 def test_acquire_lock_succeeds_when_expired():
     store = ExecutionStore.__new__(ExecutionStore)
@@ -326,7 +292,6 @@ def test_acquire_lock_succeeds_when_expired():
     assert item.get("classifier_lock_owner") == "owner-A"
     assert item.get("dirty") is False
 
-
 def test_acquire_lock_returns_false_on_version_conflict():
     from botocore.exceptions import ClientError
     store = ExecutionStore.__new__(ExecutionStore)
@@ -354,11 +319,6 @@ def test_acquire_lock_returns_false_on_version_conflict():
     store._table.put_item.side_effect = ClientError(err_response, "PutItem")
     result = store._acquire_lock_sync("ch1", "owner-A", "2099-01-01T00:00:00Z", None)
     assert result is False
-
-
-# ======================================================================
-# release_classifier_lock — dirty/pending-aware release
-# ======================================================================
 
 def test_release_lock_transitions_to_idle_when_clean():
     store = ExecutionStore.__new__(ExecutionStore)
@@ -392,7 +352,6 @@ def test_release_lock_transitions_to_idle_when_clean():
     assert item.get("classifier_lock_owner") == ""
     assert item.get("active_classifier_run_id") == ""
 
-
 def test_release_lock_transitions_to_debouncing_when_dirty():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -425,7 +384,6 @@ def test_release_lock_transitions_to_debouncing_when_dirty():
     assert item.get("classifier_lock_owner") == ""
     assert item.get("active_classifier_run_id") == ""
 
-
 def test_release_lock_transitions_to_debouncing_when_pending():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -454,7 +412,6 @@ def test_release_lock_transitions_to_debouncing_when_pending():
     item = put_call.kwargs.get("Item", put_call[1].get("Item", {}))
     assert item.get("status") == "debouncing"
 
-
 def test_release_lock_noop_when_owner_mismatch():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -471,7 +428,6 @@ def test_release_lock_noop_when_owner_mismatch():
     store._table.get_item.return_value = {"Item": current_item}
     store._release_lock_sync("ch1", "owner-A", 0.0)
     store._table.put_item.assert_not_called()
-
 
 def test_release_lock_uses_default_debounce_when_zero():
     store = ExecutionStore.__new__(ExecutionStore)
@@ -493,11 +449,6 @@ def test_release_lock_uses_default_debounce_when_zero():
     item = put_call.kwargs.get("Item", put_call[1].get("Item", {}))
     assert item.get("status") == "debouncing"
     assert item.get("debounce_until") is not None
-
-
-# ======================================================================
-# Lock race — two concurrent callers
-# ======================================================================
 
 def test_lock_race_one_winner():
     from botocore.exceptions import ClientError
@@ -535,11 +486,6 @@ def test_lock_race_one_winner():
     assert result1 is True
     assert result2 is False
 
-
-# ======================================================================
-# Integration: full state lifecycle
-# ======================================================================
-
 def test_full_lifecycle_idle_debouncing_classifying_idle():
     store = ExecutionStore.__new__(ExecutionStore)
     store.table_name = "test"
@@ -555,14 +501,12 @@ def test_full_lifecycle_idle_debouncing_classifying_idle():
     assert first_item.get("pending") is True
     assert first_item.get("dirty") is False
 
-
 def test_instance_identity_stability():
     id1 = get_instance_identity()
     id2 = get_instance_identity()
     assert id1 != id2
     assert "/" in id1
     assert "/" in id2
-
 
 def test_floats_to_decimals_in_state_payload():
     payload = {
@@ -575,14 +519,12 @@ def test_floats_to_decimals_in_state_payload():
     assert result["nested"]["score"] == Decimal("0.8")
     assert result["items"] == [Decimal("1.0"), Decimal("2.5")]
 
-
 def test_floats_to_decimals_preserves_bool():
     assert floats_to_decimals(True) is True
     assert floats_to_decimals(False) is False
     result = floats_to_decimals({"pending": True, "dirty": False})
     assert result["pending"] is True
     assert result["dirty"] is False
-
 
 def test_floats_to_decimals_handles_decimal_already():
     d = Decimal("1.5")

@@ -6,11 +6,9 @@ from typing import Optional
 from config import STORE_BACKEND
 from storage.protocol import WebhookStore
 
-
 logger = logging.getLogger(__name__)
 
 _store: Optional[WebhookStore] = None
-
 
 def init_store() -> None:
 
@@ -30,13 +28,11 @@ def init_store() -> None:
     else:
         raise ValueError(f"Unknown STORE_BACKEND: {STORE_BACKEND}")
 
-
 def get_webhook_store() -> WebhookStore:
 
     if _store is None:
         raise RuntimeError("Store not initialized. Call init_store().")
     return _store
-
 
 def close_store() -> None:
 
@@ -47,8 +43,6 @@ def close_store() -> None:
     _store = None
     logger.info("Storage backend closed")
 
-
-
 from config import (
     DIRECTIVE_STORE_ENABLED,
     DYNAMODB_DIRECTIVES_TABLE,
@@ -57,15 +51,14 @@ from config import (
 )
 
 _directive_store = None
-_directive_stores_by_pk: dict = {}  # Cache per-pk stores for portal use
-
+_directive_stores_by_pk: dict = {}
 
 def init_directive_store() -> None:
-    """Initialize the directive store and load directives from DynamoDB.
-    
-    Raises:
-        RuntimeError: If directive store fails to initialize or load from DynamoDB
-    """
+
+
+
+
+
     global _directive_store
     
     if not DIRECTIVE_STORE_ENABLED:
@@ -93,7 +86,6 @@ def init_directive_store() -> None:
         logger.error(f"[DirectiveStore] Check AWS credentials, DynamoDB table exists, and network connectivity")
         raise RuntimeError(f"DirectiveStore initialization failed: {e}") from e
 
-
 def get_directive_store(pk: str = "operator"):
 
     if pk == "operator":
@@ -107,7 +99,6 @@ def get_directive_store(pk: str = "operator"):
             )
         return _directive_store
     
-    # For non-default pk values, create or return a cached store instance
     if pk in _directive_stores_by_pk:
         return _directive_stores_by_pk[pk]
     
@@ -127,12 +118,10 @@ def get_directive_store(pk: str = "operator"):
     logger.info(f"[DirectiveStore] Created store for pk={pk} with {len(store._cache)} active directives")
     return store
 
-
 _model_registry = None
 
-
 def init_model_registry() -> None:
-    """Initialize the model registry and load from DynamoDB."""
+
     global _model_registry
 
     try:
@@ -150,7 +139,6 @@ def init_model_registry() -> None:
     except Exception as e:
         logger.warning(f"[ModelRegistry] Failed to initialize: {type(e).__name__}: {e}")
         _model_registry = None
-
 
 def get_model_registry():
     if _model_registry is None:

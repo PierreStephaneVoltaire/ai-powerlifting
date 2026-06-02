@@ -1,22 +1,22 @@
-"""Channel coordinator for Discord event orchestration.
 
-Phase 2: DynamoDB-backed classifier locking with debounce/max-wait ceiling
-enforcement.  One and only one classifier may run per channel at a time
-across pods.  New events arriving during classification mark the channel
-pending/dirty and trigger a fresh debounced pass after the current classifier
-finishes.
 
-Phase 3: The batch dispatch now runs the extended planner/router as a
-batch classifier, which can emit multiple intent decisions per debounced
-batch.  Social decisions with text are delivered directly; task decisions
-are executed through the existing route machinery via execute_route().
-If batch classification fails, the coordinator falls back to the legacy
-dispatch_channel_batch() pipeline for backward compatibility.
 
-Bot message filtering: the bot's own responses are excluded from batch
-derivation and cursor updates so the bot never classifies its own output
-as new user activity.
-"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
 
 import asyncio
@@ -45,7 +45,6 @@ _active_classifier_owners: Dict[str, str] = {}
 CLASSIFIER_LOCK_DURATION_SECONDS = 600
 LOCK_RETRY_DEBOUNCE_SECONDS = 2.0
 
-
 def init_channel_coordinator(loop: asyncio.AbstractEventLoop) -> None:
     global _main_loop
     _main_loop = loop
@@ -54,7 +53,6 @@ def init_channel_coordinator(loop: asyncio.AbstractEventLoop) -> None:
         f"(debounce={CHANNEL_CLASSIFIER_DEBOUNCE_SECONDS}s, "
         f"max_wait={CHANNEL_CLASSIFIER_MAX_WAIT_SECONDS}s)"
     )
-
 
 def push_discord_event(conversation_id: str, message: Dict[str, Any]) -> None:
     if _main_loop is None:
@@ -77,10 +75,8 @@ def push_discord_event(conversation_id: str, message: Dict[str, Any]) -> None:
         _schedule_state_update, channel_id, message
     )
 
-
 def _schedule_state_update(channel_id: str, message: Dict[str, Any]) -> None:
     asyncio.ensure_future(_update_state_and_schedule(channel_id, message))
-
 
 async def _update_state_and_schedule(channel_id: str, message: Dict[str, Any]) -> None:
     store = get_execution_store()
@@ -105,7 +101,6 @@ async def _update_state_and_schedule(channel_id: str, message: Dict[str, Any]) -
 
     _schedule_timers(channel_id)
 
-
 def _schedule_timers(channel_id: str) -> None:
     if _main_loop is None:
         return
@@ -126,7 +121,6 @@ def _schedule_timers(channel_id: str) -> None:
             lambda: asyncio.ensure_future(_process_channel_batch(channel_id, force=True)),
         )
         _max_wait_timers[channel_id] = max_wait_handle
-
 
 def _schedule_reschedule_timers(channel_id: str) -> None:
     if _main_loop is None:
@@ -153,7 +147,6 @@ def _schedule_reschedule_timers(channel_id: str) -> None:
         )
         _max_wait_timers[channel_id] = max_wait_handle
 
-
 def _cancel_timers(channel_id: str) -> None:
     debounce = _debounce_timers.pop(channel_id, None)
     if debounce is not None:
@@ -161,7 +154,6 @@ def _cancel_timers(channel_id: str) -> None:
     max_wait = _max_wait_timers.pop(channel_id, None)
     if max_wait is not None:
         max_wait.cancel()
-
 
 async def _process_channel_batch(channel_id: str, force: bool = False) -> None:
     _cancel_timers(channel_id)
@@ -241,7 +233,6 @@ async def _process_channel_batch(channel_id: str, force: bool = False) -> None:
     if batch_dispatch_args is not None:
         asyncio.ensure_future(_dispatch_batch_decisions(batch_dispatch_args))
 
-
 async def _collect_batch_dispatch(channel_id: str) -> Optional[Dict[str, Any]]:
     from channels.listeners.discord_listener import _active_clients
     store = get_execution_store()
@@ -318,7 +309,6 @@ async def _collect_batch_dispatch(channel_id: str) -> Optional[Dict[str, Any]]:
         "newest_user_id": _newest_user_message_id(history_messages, bot_id=bot_id),
     }
 
-
 async def _dispatch_batch_decisions(args: Dict[str, Any]) -> None:
     store = get_execution_store()
     channel_id = args["channel_id"]
@@ -372,7 +362,6 @@ async def _dispatch_batch_decisions(args: Dict[str, Any]) -> None:
         except Exception as e:
             logger.warning(f"Cursor update failed for channel {channel_id}: {e}")
 
-
 async def _reconcile_history(
     channel_id: str, guild_id: str, history_messages: List[Any]
 ) -> None:
@@ -406,7 +395,6 @@ async def _reconcile_history(
     if history_events:
         write_history(session_dir, messages=[], history_events=history_events)
 
-
 def _resolve_session_dir(channel_id: str, guild_id: str) -> Any:
     from flow.session_dirs import safe_segment
     from pathlib import Path
@@ -415,7 +403,6 @@ def _resolve_session_dir(channel_id: str, guild_id: str) -> Any:
     path = Path(OPENCODE_WORKSPACE_BASE) / guild_seg / channel_seg
     path.mkdir(parents=True, exist_ok=True)
     return path
-
 
 def _newest_user_message_id(
     history_messages: List[Any], bot_id: Optional[int] = None,
@@ -427,7 +414,6 @@ def _newest_user_message_id(
             continue
         return str(msg.id)
     return None
-
 
 def _derive_batch(
     history_messages: List[Any],
@@ -463,14 +449,12 @@ def _derive_batch(
     new_msgs.sort(key=lambda m: int(m.id))
     return new_msgs
 
-
 def _is_bot_message(msg: Any, bot_id: Optional[int] = None) -> bool:
     if bot_id and msg.author.id == bot_id:
         return True
     if getattr(msg.author, "bot", False):
         return True
     return False
-
 
 def _discord_message_to_dict(
     msg: Any, conversation_id: str, webhook_id: str, discord_loop: Any,

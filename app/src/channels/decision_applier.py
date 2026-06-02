@@ -1,11 +1,11 @@
-"""Decision Applier - Phase 4/5 of the Discord channel orchestration plan.
 
-Translates ClassifierDecision records into concrete side effects: outbound
-messages, implementation task CRUD, and route execution.  Every action is
-idempotent via DynamoDB conditional writes and intent-status state machines
-defined in ExecutionStore.
 
-"""
+
+
+
+
+
+
 from __future__ import annotations
 
 import logging
@@ -35,7 +35,6 @@ _ACTION_DISPATCH = {
     "cancel_active_implementation": "_apply_cancel_implementation",
     "pivot_active_implementation": "_apply_pivot_implementation",
 }
-
 
 async def apply_decision(
     decision: ClassifierDecision,
@@ -137,7 +136,6 @@ async def apply_decision(
             )
     return result
 
-
 async def apply_batch_decisions(
     decisions: List[ClassifierDecision],
     batch_id: str,
@@ -158,7 +156,6 @@ async def apply_batch_decisions(
         )
         results.append(result)
     return results
-
 
 async def _enqueue_message(
     store: Any,
@@ -207,7 +204,6 @@ async def _enqueue_message(
         from channels.outbound_queue import schedule_drain
         schedule_drain(channel_id)
     return stored
-
 
 async def _apply_social_response(
     decision: ClassifierDecision,
@@ -261,7 +257,6 @@ async def _apply_social_response(
         reply_to_message_id=reply_to,
     )
 
-
 async def _apply_clarifying_question(
     decision: ClassifierDecision,
     intent: IntentRecord,
@@ -282,7 +277,6 @@ async def _apply_clarifying_question(
         reply_to_message_id=reply_to,
     )
 
-
 async def _apply_ignore(
     decision: ClassifierDecision,
     intent: IntentRecord,
@@ -295,7 +289,6 @@ async def _apply_ignore(
         from_status="applying",
         to_status="skipped",
     )
-
 
 async def _apply_start_new_task(
     decision: ClassifierDecision,
@@ -364,7 +357,6 @@ async def _apply_start_new_task(
     ))
     return True
 
-
 async def _apply_append_to_active(
     decision: ClassifierDecision,
     intent: IntentRecord,
@@ -418,7 +410,6 @@ async def _apply_append_to_active(
                 ))
     return True
 
-
 async def _apply_queue_on_active(
     decision: ClassifierDecision,
     intent: IntentRecord,
@@ -443,7 +434,6 @@ async def _apply_queue_on_active(
         refs=new_refs,
         expected_version=task.version,
     )
-
 
 async def _apply_await_instruction(
     decision: ClassifierDecision,
@@ -500,7 +490,6 @@ async def _apply_await_instruction(
         batch_id=intent.batch_id,
     )
 
-
 async def _apply_cancel_implementation(
     decision: ClassifierDecision,
     intent: IntentRecord,
@@ -548,7 +537,6 @@ async def _apply_cancel_implementation(
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
     )
-
 
 async def _apply_pivot_implementation(
     decision: ClassifierDecision,

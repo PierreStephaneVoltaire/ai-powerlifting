@@ -10,7 +10,6 @@ import pytest
 from channels.execution_models import OpenCodeRunRecord, ImplementationTask
 from channels.task_worker import _per_run_filenames
 
-
 class TestPerRunFilenames:
     def test_response_filename_format(self):
         result = _per_run_filenames("task-1", "run-1")
@@ -42,7 +41,6 @@ class TestPerRunFilenames:
         result = _per_run_filenames(task_id, run_id)
         assert task_id in result["response_filename"]
         assert run_id in result["response_filename"]
-
 
 class TestOpenCodeRunRecord:
     def test_run_record_defaults(self):
@@ -81,7 +79,6 @@ class TestOpenCodeRunRecord:
         assert record.config_path == "/tmp/.if/opencode.run.r1.json"
         assert record.session_marker_path == "/tmp/.if/opencode-coder.run.r1.session"
 
-
 class TestWriteOpencodeConfigRunId:
     def test_config_path_without_run_id(self):
         from pathlib import Path
@@ -106,7 +103,6 @@ class TestWriteOpencodeConfigRunId:
             assert path == session_dir / ".if" / "opencode.run.run-abc.json"
             assert path.exists()
             assert not (session_dir / "opencode.json").exists()
-
 
 class TestRunnerPerRunParams:
     def test_status_file_default(self):

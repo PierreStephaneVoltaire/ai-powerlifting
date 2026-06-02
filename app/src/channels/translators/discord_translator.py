@@ -1,8 +1,8 @@
-"""Discord message translator.
 
-Converts a debounced Discord message batch into a ChatCompletionRequest
-format that can be processed by the existing agent pipeline.
-"""
+
+
+
+
 from __future__ import annotations
 import logging
 from typing import Dict, List, Any, Optional
@@ -11,33 +11,28 @@ from config import API_MODEL_NAME
 
 logger = logging.getLogger(__name__)
 
-
 def translate_discord_batch(
     messages: List[Dict[str, Any]],
     conversation_id: str,
     history_messages: Optional[List[Any]] = None,
 ) -> Dict[str, Any]:
-    """Convert Discord message batch to ChatCompletionRequest format.
 
-    Takes channel history + current message batch and builds a full
-    conversation context for the agent.
 
-    Args:
-        messages: List of message dicts from Discord listener (current)
-        conversation_id: Conversation ID for this batch
-        history_messages: List of discord.Message objects from channel history
 
-    Returns:
-        Dict matching ChatCompletionRequest shape with messages and metadata
-    """
+
+
+
+
+
+
+
+
+
+
     pending_uploads: List[Dict[str, Any]] = []
     api_messages: List[Dict[str, Any]] = []
     history_events: List[Dict[str, Any]] = []
 
-    # Get the bot's own user ID directly from the active Discord client.
-    # This is reliable regardless of whether IF has sent any messages in
-    # the fetched history window (avoids the fragile "scan for a bot message"
-    # heuristic that left bot_id=None when no prior IF messages existed).
     bot_id = None
     try:
         from channels.listeners.discord_listener import get_discord_client
@@ -47,7 +42,6 @@ def translate_discord_batch(
     except Exception:
         pass
 
-    # Process history messages (they come newest-first, we need oldest-first for API)
     if history_messages:
         for msg in reversed(history_messages):
             content = msg.clean_content
@@ -55,14 +49,12 @@ def translate_discord_batch(
                 continue
 
             if bot_id and msg.author.id == bot_id:
-                # IF's own message → assistant role
                 api_messages.append({
                     "role": "assistant",
                     "content": content,
                 })
                 role = "assistant"
             else:
-                # All other messages (human or other bots) → user role
                 author = msg.author.display_name if msg.author else "unknown"
                 api_messages.append({
                     "role": "user",
@@ -80,7 +72,6 @@ def translate_discord_batch(
                 "source": "discord_history",
             })
 
-    # Append current messages from debounce queue
     for msg in messages:
         text = msg.get("content", "")
         author = msg.get("author", "unknown")
@@ -99,7 +90,6 @@ def translate_discord_batch(
                 "source": "discord_current",
             })
 
-        # Extract attachments for upload
         for att in msg.get("attachments", []):
             ct = att.get("content_type", "")
             url = att.get("url", "")
@@ -112,7 +102,6 @@ def translate_discord_batch(
                     "content_type": ct,
                 })
 
-    # Add attachment references to the last user message
     if pending_uploads:
         last_user_idx = None
         for i in range(len(api_messages) - 1, -1, -1):

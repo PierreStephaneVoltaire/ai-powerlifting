@@ -63,14 +63,12 @@ _TOOL_SCHEMA = {
     },
 }
 
-
 def _executed_sets(ex: dict) -> float:
     """Count completed or failed sets."""
     statuses = ex.get("set_statuses")
     if statuses and isinstance(statuses, list):
         return float(sum(1 for status in statuses if status in {"completed", "failed"}))
     return float(ex.get("sets") or 0)
-
 
 def _build_weekly_e1rm(sessions: list[dict], cutoff_str: str) -> dict[int, dict[str, float]]:
     """Build weekly best e1RM estimates per big lift from sessions."""
@@ -93,10 +91,8 @@ def _build_weekly_e1rm(sessions: list[dict], cutoff_str: str) -> dict[int, dict[
             if kg <= 0 or reps <= 0 or _executed_sets(ex) <= 0:
                 continue
 
-            # Estimate e1RM via Epley formula
             e1rm = kg * (1 + reps / 30) if reps < 30 else kg
 
-            # Map to big lift
             lift = None
             if "squat" in name_lower and "back" not in name_lower.replace("backout", ""):
                 lift = "squat"
@@ -114,7 +110,6 @@ def _build_weekly_e1rm(sessions: list[dict], cutoff_str: str) -> dict[int, dict[
                 weekly[wn][lift] = max(weekly[wn].get(lift, 0), e1rm)
 
     return weekly
-
 
 def _build_weekly_accessory_volume(sessions: list[dict], cutoff_str: str) -> dict[int, dict[str, float]]:
     """Build weekly volume (sets × reps × kg) per accessory exercise."""
@@ -136,7 +131,6 @@ def _build_weekly_accessory_volume(sessions: list[dict], cutoff_str: str) -> dic
             name = ex.get("name", "")
             name_lower = name.lower().strip()
 
-            # Skip main competition lifts (keep accessories)
             if name_lower in big_lift_names:
                 continue
             if name_lower in ("squat", "bench press", "deadlift"):
@@ -151,7 +145,6 @@ def _build_weekly_accessory_volume(sessions: list[dict], cutoff_str: str) -> dic
             weekly[wn][name] = weekly[wn].get(name, 0) + vol
 
     return weekly
-
 
 def _build_user_message(
     weeks: int,
@@ -191,7 +184,6 @@ def _build_user_message(
         exercise_roi=exercise_roi,
     )
 
-
 async def generate_correlation_report(
     sessions: list[dict],
     lift_profiles: list[dict],
@@ -212,7 +204,6 @@ async def generate_correlation_report(
             "insufficient_data_reason": f"Only {distinct_weeks} weeks of data found. Need at least 4.",
         }
 
-    # Build enriched context
     meta = program.get("meta", {}) if program else {}
     athlete_measurements = {
         "height_cm": meta.get("height_cm"),
@@ -222,7 +213,6 @@ async def generate_correlation_report(
         "current_body_weight_kg": meta.get("current_body_weight_kg"),
     }
 
-    # Weeks to primary comp
     exercise_roi: list[dict] | None = None
     try:
         from prompt_context import (

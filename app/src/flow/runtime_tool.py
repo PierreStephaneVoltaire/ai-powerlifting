@@ -1,11 +1,10 @@
-"""Small CLI for opencode runs to access IF runtime stores."""
+
 from __future__ import annotations
 
 import json
 import sys
 from datetime import datetime, timezone
 from typing import Any
-
 
 def _load_args() -> tuple[str, dict[str, Any]]:
     if len(sys.argv) < 2:
@@ -17,11 +16,9 @@ def _load_args() -> tuple[str, dict[str, Any]]:
         raise SystemExit("json_args must be a JSON object")
     return tool_name, args
 
-
 def _print(value: Any) -> int:
     print(json.dumps(value, indent=2, default=str))
     return 0
-
 
 def _user_facts_search(args: dict[str, Any]) -> list[dict[str, Any]]:
     from memory.user_facts import FactCategory, get_user_fact_store
@@ -39,7 +36,6 @@ def _user_facts_search(args: dict[str, Any]) -> list[dict[str, Any]]:
         limit=int(args.get("limit") or 5),
     )
     return [fact.to_dict() for fact in facts]
-
 
 def _user_facts_add(args: dict[str, Any]) -> dict[str, Any]:
     from memory.user_facts import FactCategory, FactSource, get_user_fact_store
@@ -60,7 +56,6 @@ def _user_facts_add(args: dict[str, Any]) -> dict[str, Any]:
     )
     return {"ok": True, "fact_id": fact_id}
 
-
 def _user_facts_supersede(args: dict[str, Any]) -> dict[str, Any]:
     from memory.user_facts import get_user_fact_store
 
@@ -78,7 +73,6 @@ def _user_facts_supersede(args: dict[str, Any]) -> dict[str, Any]:
         cache_key=str(args.get("cache_key") or ""),
     )
     return {"ok": True, "fact": fact.to_dict() if fact else None}
-
 
 def _capability_gap_log(args: dict[str, Any]) -> dict[str, Any]:
     from config import REFLECTION_CONTEXT_ID
@@ -111,7 +105,6 @@ def _capability_gap_log(args: dict[str, Any]) -> dict[str, Any]:
         "logged_at": datetime.now(timezone.utc).isoformat(),
     }
 
-
 def main() -> int:
     tool_name, args = _load_args()
     tools = {
@@ -127,7 +120,6 @@ def main() -> int:
         return _print(fn(args))
     except Exception as exc:
         return _print({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

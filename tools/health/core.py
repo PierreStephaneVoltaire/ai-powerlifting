@@ -18,20 +18,15 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, Literal
 
-# Import from health infrastructure module (app/src/health/)
-
 logger = logging.getLogger(__name__)
 
-
-# Module-level store instance (set via init_tools)
 _store: Optional[ProgramStore] = None
 _template_store: Optional[Any] = None
 _import_store: Optional[Any] = None
 _glossary_store: Optional[Any] = None
 _federation_store: Optional[Any] = None
 _analysis_cache_store: Optional[Any] = None
-_rag: Optional[Any] = None  # HealthDocsRAG type, avoid circular import
-
+_rag: Optional[Any] = None
 
 def _get_store():
     """Lazily create and return the ProgramStore singleton."""
@@ -134,7 +129,6 @@ async def health_suggest_e1rm_multipliers() -> dict:
     if not program:
         return {"error": "Program not found."}
 
-    # Fetch max history
     max_history_item = await asyncio.get_running_loop().run_in_executor(
         None,
         _get_versioned_item_sync,
@@ -160,11 +154,9 @@ def _get_rag():
         logger.info("[HealthTools] HealthDocsRAG initialised from env vars")
     return _rag
 
-
 def _get_table_and_pk():
     store = _get_store()
     return store.table, store.pk, store
-
 
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
@@ -173,7 +165,6 @@ def _resolve_program_sk(table, pk: str, version: str) -> str:
             return pointer.get("ref_sk", "program#v001")
         return "program#v001"
     return f"program#{version}"
-
 
 def _load_program_version(version: str, pk: str | None = None) -> tuple[dict, str, Any]:
     table, default_pk, _store = _get_table_and_pk()
@@ -198,7 +189,6 @@ def _load_program_version(version: str, pk: str | None = None) -> tuple[dict, st
     )
     return program, sk, _store
 
-
 def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None:
     table, default_pk, store = _get_table_and_pk()
     active_pk = pk or default_pk
@@ -222,7 +212,6 @@ def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None
         )
     store.invalidate_cache()
 
-
 WEEK_START_DAYS = {
     "Monday",
     "Tuesday",
@@ -233,7 +222,6 @@ WEEK_START_DAYS = {
     "Sunday",
 }
 
-
 def _valid_iso_date(value: str) -> bool:
     if not isinstance(value, str) or not re.match(r"^\d{4}-\d{2}-\d{2}$", value):
         return False
@@ -241,7 +229,6 @@ def _valid_iso_date(value: str) -> bool:
         return date.fromisoformat(value).isoformat() == value
     except ValueError:
         return False
-
 
 def _setup_current_program_sk(store) -> str | None:
     pointer = store.table.get_item(Key={"pk": store.pk, "sk": store.POINTER_SK}).get("Item")
@@ -262,7 +249,6 @@ def _setup_current_program_sk(store) -> str | None:
         program = store.table.get_item(Key={"pk": store.pk, "sk": "program#v001"}).get("Item")
         return "program#v001" if program else None
 
-
 async def health_setup_status() -> dict:
     """Return first-class setup state for the active health data partition."""
     store = _get_store()
@@ -277,7 +263,6 @@ async def health_setup_status() -> dict:
         "needsSetup": not has_current,
         "currentProgramSk": current_sk,
     }
-
 
 def _setup_last_comp() -> dict:
     return {
@@ -301,7 +286,6 @@ def _setup_last_comp() -> dict:
         },
     }
 
-
 def _setup_goal() -> dict:
     return {
         "id": str(uuid.uuid4()),
@@ -312,7 +296,6 @@ def _setup_goal() -> dict:
         "strategy_mode": "train_through",
         "risk_tolerance": "low",
     }
-
 
 def _setup_phases(template: dict | None = None) -> list[dict]:
     if template:
@@ -340,7 +323,6 @@ def _setup_phases(template: dict | None = None) -> list[dict]:
         "block": "current",
     }]
 
-
 def _positive_maxes(maxes: dict | None) -> dict[str, float]:
     if not isinstance(maxes, dict):
         return {}
@@ -354,12 +336,10 @@ def _positive_maxes(maxes: dict | None) -> dict[str, float]:
             out[str(key)] = number
     return out
 
-
 def _setup_template(sk: str) -> dict | None:
     active_pk = _get_store().pk
     template_store = _get_template_store()
     return template_store.get_template_sync(sk, actor_pk=active_pk)
-
 
 def _setup_missing_maxes(template: dict, maxes: dict[str, float]) -> list[str]:
     missing = []
@@ -367,7 +347,6 @@ def _setup_missing_maxes(template: dict, maxes: dict[str, float]) -> list[str]:
         if maxes.get(str(exercise_id)) is None:
             missing.append(str(exercise_id))
     return missing
-
 
 def _setup_concretize_template(
     template: dict,
@@ -395,7 +374,6 @@ def _setup_concretize_template(
         session.setdefault("status", "planned")
         session.setdefault("completed", False)
     return sessions
-
 
 def _setup_program(
     pk: str,
@@ -483,7 +461,6 @@ def _setup_program(
         }
     return program
 
-
 def _write_initial_program_sync(store, program: dict) -> None:
     program_item = copy.deepcopy(program)
     sessions = program_item.pop("sessions", [])
@@ -508,7 +485,6 @@ def _write_initial_program_sync(store, program: dict) -> None:
         ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
     )
     store.invalidate_cache()
-
 
 async def health_setup_initialize(
     mode: str,
@@ -577,7 +553,6 @@ async def health_setup_initialize(
         "sessionCount": len(program.get("sessions") or []),
     }
 
-
 GOAL_TYPES = {
     "qualify_for_federation",
     "hit_total",
@@ -606,10 +581,8 @@ STANDARD_SEXES = {"male", "female"}
 STANDARD_EQUIPMENT = {"raw", "wraps", "single-ply", "multi-ply"}
 STANDARD_EVENTS = {"sbd", "bench-only", "deadlift-only"}
 
-
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 def _validate_iso_date(value: Any, field_name: str) -> None:
     if value in (None, ""):
@@ -617,7 +590,6 @@ def _validate_iso_date(value: Any, field_name: str) -> None:
     if not isinstance(value, str):
         raise ValueError(f"{field_name} must be a YYYY-MM-DD string")
     datetime.strptime(value, "%Y-%m-%d")
-
 
 def _validate_choice(value: Any, valid_values: set[str], field_name: str, default: str | None = None) -> str:
     resolved = value if value not in (None, "") else default
@@ -627,7 +599,6 @@ def _validate_choice(value: Any, valid_values: set[str], field_name: str, defaul
     if resolved not in valid_values:
         raise ValueError(f"{field_name} must be one of {sorted(valid_values)}")
     return resolved
-
 
 def _string_list_with_legacy(values: Any, legacy_value: Any, field_name: str) -> list[str]:
     resolved: list[str] = []
@@ -642,7 +613,6 @@ def _string_list_with_legacy(values: Any, legacy_value: Any, field_name: str) ->
     if legacy_text and legacy_text not in resolved:
         resolved.append(legacy_text)
     return resolved
-
 
 def _sanitize_goal_record(goal: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(goal, dict):
@@ -731,7 +701,6 @@ def _sanitize_goal_record(goal: dict[str, Any]) -> dict[str, Any]:
 
     return clean_goal
 
-
 def _sanitize_federation_record(record: dict[str, Any], now: str) -> dict[str, Any]:
     if not isinstance(record, dict):
         raise ValueError("Each federation must be an object")
@@ -754,7 +723,6 @@ def _sanitize_federation_record(record: dict[str, Any], now: str) -> dict[str, A
             clean_record[field] = value
 
     return clean_record
-
 
 def _sanitize_qualification_standard(
     record: dict[str, Any],
@@ -821,7 +789,6 @@ def _sanitize_qualification_standard(
 
     return clean_record
 
-
 def _build_federation_library_payload(library: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(library, dict):
         raise ValueError("library must be an object")
@@ -853,7 +820,6 @@ def _build_federation_library_payload(library: dict[str, Any]) -> dict[str, Any]
         "qualification_standards": standards,
     }
 
-
 async def _write_federation_library(library: dict[str, Any]) -> dict[str, Any]:
     store = _get_federation_store()
     item = _floats_to_decimals(library)
@@ -865,7 +831,6 @@ async def _write_federation_library(library: dict[str, Any]) -> dict[str, Any]:
         logger.warning("[HealthTools] Analysis cache invalidation failed after federation update: %s", exc)
     return library
 
-
 def _string_ids(values: Any) -> list[str]:
     if not isinstance(values, list):
         return []
@@ -876,7 +841,6 @@ def _string_ids(values: Any) -> list[str]:
             deduped.append(text)
     return deduped
 
-
 def _competition_snapshot_payload(projection: dict, snapshot_date: date) -> dict:
     return {
         "squat_kg": projection.get("squat"),
@@ -884,7 +848,6 @@ def _competition_snapshot_payload(projection: dict, snapshot_date: date) -> dict
         "deadlift_kg": projection.get("deadlift"),
         "total_kg": projection.get("total"),
     }
-
 
 def _snapshot_competitions_in_program(
     program: dict,
@@ -931,7 +894,6 @@ def _snapshot_competitions_in_program(
         meta["updated_at"] = datetime.utcnow().isoformat()
 
     return program, updated
-
 
 def _complete_competition_in_program(
     program: dict,
@@ -982,11 +944,6 @@ def _complete_competition_in_program(
     meta["updated_at"] = datetime.utcnow().isoformat()
     return target
 
-
-# =============================================================================
-# Tool Functions
-# =============================================================================
-
 async def health_get_program() -> dict:
     """Get the full training program.
 
@@ -999,7 +956,6 @@ async def health_get_program() -> dict:
     """
     store = _get_store()
     return await store.get_program()
-
 
 async def health_comp_countdown() -> dict:
     """Calculate competition countdown metrics.
@@ -1033,7 +989,6 @@ async def health_comp_countdown() -> dict:
 
     today = date.today()
 
-    # Calculate days/weeks to comp
     if comp_date_str:
         try:
             comp_date = datetime.strptime(comp_date_str, "%Y-%m-%d").date()
@@ -1046,7 +1001,6 @@ async def health_comp_countdown() -> dict:
         days_to_comp = None
         weeks_to_comp = None
 
-    # Calculate current week from program start
     program_start_str = meta.get("program_start")
     if program_start_str:
         try:
@@ -1058,7 +1012,6 @@ async def health_comp_countdown() -> dict:
     else:
         current_week = 1
 
-    # Find current phase
     phases = program.get("phases", [])
     current_phase = None
     for phase in phases:
@@ -1068,7 +1021,6 @@ async def health_comp_countdown() -> dict:
             current_phase = phase.get("name", "Unknown")
             break
 
-    # Check if in break period
     breaks = program.get("breaks", [])
     in_break = False
     next_break = None
@@ -1086,7 +1038,6 @@ async def health_comp_countdown() -> dict:
                 in_break = True
                 break
 
-            # Track next break
             if break_start > today:
                 if next_break is None or break_start < datetime.strptime(
                     next_break, "%Y-%m-%d"
@@ -1095,7 +1046,6 @@ async def health_comp_countdown() -> dict:
         except (ValueError, KeyError):
             continue
 
-    # Count remaining sessions
     sessions = program.get("sessions", [])
     sessions_remaining = sum(
         1 for s in sessions
@@ -1111,7 +1061,6 @@ async def health_comp_countdown() -> dict:
         "next_break": next_break,
         "sessions_remaining": sessions_remaining,
     }
-
 
 async def health_update_session(date_str: str, patch: dict) -> dict:
     """Update a session by date with the given patch.
@@ -1136,13 +1085,11 @@ async def health_update_session(date_str: str, patch: dict) -> dict:
         ValueError: If date format invalid, patch keys invalid, or session not found
         RuntimeError: If store not initialized or DynamoDB fails
     """
-    # Validate date format
     try:
         datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
         raise ValueError(f"Invalid date format: {date_str}. Expected YYYY-MM-DD.")
 
-    # Validate patch keys
     allowed_keys = {"completed", "session_rpe", "body_weight_kg", "session_notes", "exercises"}
     unknown_keys = set(patch.keys()) - allowed_keys
     if unknown_keys:
@@ -1162,15 +1109,12 @@ async def health_update_session(date_str: str, patch: dict) -> dict:
         except Exception as exc:
             logger.warning("[HealthTools] Markdown export dirty marker failed: %s", exc)
 
-    # Find and return the updated session
     sessions = updated_program.get("sessions", [])
     for session in sessions:
         if session.get("date") == date_str:
             return session
 
-    # Should not reach here if update_session worked correctly
     raise RuntimeError(f"Session update succeeded but session not found: {date_str}")
-
 
 async def health_new_version(change_reason: str, patches: list[dict]) -> dict:
     """Create a new major version of the program.
@@ -1197,7 +1141,6 @@ async def health_new_version(change_reason: str, patches: list[dict]) -> dict:
         "change_reason": change_reason,
     }
 
-
 def kg_to_lb(kg: float) -> dict:
     """Convert kilograms to pounds.
 
@@ -1216,7 +1159,6 @@ def kg_to_lb(kg: float) -> dict:
     lb = round(kg * 2.20462, 1)
     return {"kg": kg, "lb": lb}
 
-
 def lb_to_kg(lb: float) -> dict:
     """Convert pounds to kilograms.
 
@@ -1234,7 +1176,6 @@ def lb_to_kg(lb: float) -> dict:
 
     kg = round(lb / 2.20462, 2)
     return {"lb": lb, "kg": kg}
-
 
 def ipf_weight_classes(sex: str) -> dict:
     """Get IPF weight classes for the given sex.
@@ -1262,24 +1203,18 @@ def ipf_weight_classes(sex: str) -> dict:
         "F": [47, 52, 57, 63, 69, 76, 84, "84+"],
     }
 
-    # Try to get operator's weight class from program
     operator_class_kg = None
     if _store is not None:
         try:
-            # This is sync but we're in a sync function
-            # The cache should be warm after startup
             import asyncio
             loop = asyncio.get_running_loop()
-            # Create a task to get the program
             future = asyncio.ensure_future(_store.get_program())
             try:
                 program = loop.run_until_complete(future)
                 operator_class_kg = program.get("meta", {}).get("weight_class_kg")
             except:
-                # Cache might not be warm, that's okay
                 pass
         except RuntimeError:
-            # No running loop, try to get from cache directly
             if _store._cache is not None:
                 operator_class_kg = _store._cache.get("meta", {}).get("weight_class_kg")
 
@@ -1288,7 +1223,6 @@ def ipf_weight_classes(sex: str) -> dict:
         "classes_kg": CLASSES[sex],
         "operator_class_kg": operator_class_kg,
     }
-
 
 def pct_of_max(max_kg: float, pct: float) -> dict:
     """Calculate percentage of max weight.
@@ -1326,7 +1260,6 @@ def pct_of_max(max_kg: float, pct: float) -> dict:
         "lb": lb,
     }
 
-
 async def calculate_attempts(
     lift: str,
     opener_kg: float,
@@ -1363,7 +1296,6 @@ async def calculate_attempts(
     store = _get_store()
     program = await store.get_program()
 
-    # Get default jumps from program prefs
     operator_prefs = program.get("operator_prefs", {})
     attempt_jumps = operator_prefs.get("attempt_jumps", {})
     lift_jumps = attempt_jumps.get(lift, {"j1": 10, "j2": 10})
@@ -1371,22 +1303,18 @@ async def calculate_attempts(
     j1 = j1_override if j1_override is not None else lift_jumps.get("j1", 10)
     j2 = j2_override if j2_override is not None else lift_jumps.get("j2", 10)
 
-    # Adjust j2 if last felt hard
     if last_felt == "hard":
-        j2 = round(j2 / 2 / 2.5) * 2.5  # Halve and round to nearest 2.5
+        j2 = round(j2 / 2 / 2.5) * 2.5
 
-    # Calculate attempts
     attempt_1 = opener_kg
     attempt_2 = round((attempt_1 + j1) / 2.5) * 2.5
     attempt_3 = round((attempt_2 + j2) / 2.5) * 2.5
 
-    # Get current max for validation
     current_maxes = program.get("current_maxes", {})
     current_max = current_maxes.get(lift)
 
     warnings = []
 
-    # Warn if opener < 70% of max
     if current_max:
         min_opener = current_max * 0.7
         if opener_kg < min_opener:
@@ -1395,7 +1323,6 @@ async def calculate_attempts(
                 f"Consider an opener of at least {round(min_opener / 2.5) * 2.5}kg."
             )
 
-        # Warn if attempt 3 exceeds max
         if attempt_3 > current_max:
             warnings.append(
                 f"Attempt 3 ({attempt_3}kg) exceeds current max of {current_max}kg — "
@@ -1411,7 +1338,6 @@ async def calculate_attempts(
         "warnings": warnings,
     }
 
-
 async def health_get_meta() -> dict:
     """Get program metadata without the full program.
 
@@ -1423,7 +1349,6 @@ async def health_get_meta() -> dict:
     program = await store.get_program()
     return program.get("meta", {})
 
-
 async def health_get_phases() -> list[dict]:
     """Get training phases (name, weeks, intent).
 
@@ -1433,7 +1358,6 @@ async def health_get_phases() -> list[dict]:
     store = _get_store()
     program = await store.get_program()
     return program.get("phases", [])
-
 
 async def health_get_current_maxes() -> dict:
     """Get current competition maxes.
@@ -1445,18 +1369,15 @@ async def health_get_current_maxes() -> dict:
     program = await store.get_program()
     return program.get("current_maxes", {})
 
-
 async def health_get_goals() -> list[dict]:
     """Get explicit goals attached to the current program block."""
     store = _get_store()
     program = await store.get_program()
     return program.get("goals", []) or []
 
-
 async def health_get_federation_library() -> dict:
     """Get the shared federation and qualification standards library."""
     return await _get_federation_store().get_library()
-
 
 async def health_get_operator_prefs() -> dict:
     """Get operator preferences (attempt jumps, etc).
@@ -1468,7 +1389,6 @@ async def health_get_operator_prefs() -> dict:
     program = await store.get_program()
     return program.get("operator_prefs", {})
 
-
 async def health_get_breaks() -> list[dict]:
     """Get scheduled breaks/deload periods.
 
@@ -1478,7 +1398,6 @@ async def health_get_breaks() -> list[dict]:
     store = _get_store()
     program = await store.get_program()
     return program.get("breaks", [])
-
 
 async def days_until(target_date: str, label: str = "target") -> dict:
     """Calculate days until a target date.
@@ -1501,7 +1420,6 @@ async def days_until(target_date: str, label: str = "target") -> dict:
     Raises:
         ValueError: If target_date format invalid
     """
-    # Validate date format
     try:
         target = datetime.strptime(target_date, "%Y-%m-%d").date()
     except ValueError:
@@ -1513,7 +1431,6 @@ async def days_until(target_date: str, label: str = "target") -> dict:
     delta = (target - today).days
 
     if delta > 0:
-        # Future date
         return {
             "label": label,
             "target_date": target_date,
@@ -1524,7 +1441,6 @@ async def days_until(target_date: str, label: str = "target") -> dict:
             "is_past": False,
         }
     else:
-        # Past date
         return {
             "label": label,
             "target_date": target_date,
@@ -1534,7 +1450,6 @@ async def days_until(target_date: str, label: str = "target") -> dict:
             "days_elapsed_since": abs(delta),
             "is_past": True,
         }
-
 
 async def health_rag_search(query: str, n_results: int = 4) -> list[dict]:
     """Search health documents using semantic search.
@@ -1556,11 +1471,6 @@ async def health_rag_search(query: str, n_results: int = 4) -> list[dict]:
 
     return await _rag.query(query, n_results=n_results)
 
-
-# =============================================================================
-# Granular Load Tools (Read-Only)
-# =============================================================================
-
 def _resolve_phase(session: dict, phases: list[dict]) -> dict:
     """Resolve the phase object for a session based on week_number.
 
@@ -1578,7 +1488,6 @@ def _resolve_phase(session: dict, phases: list[dict]) -> dict:
         if start <= week_number <= end:
             return phase
     return phases[0] if phases else {}
-
 
 async def health_get_competition(date: str) -> dict:
     """Load a specific competition by date.
@@ -1603,7 +1512,6 @@ async def health_get_competition(date: str) -> dict:
 
     raise ValueError(f"Competition not found with date={date}")
 
-
 async def health_list_competitions() -> list[dict]:
     """List all competitions with summary info.
 
@@ -1625,10 +1533,8 @@ async def health_list_competitions() -> list[dict]:
             "federation": comp.get("federation"),
         })
 
-    # Sort by date ascending
     summaries.sort(key=lambda x: x.get("date", ""))
     return summaries
-
 
 async def health_get_diet_notes(
     start_date: str | None = None,
@@ -1648,7 +1554,6 @@ async def health_get_diet_notes(
 
     diet_notes = program.get("diet_notes", [])
 
-    # Filter by date range if specified
     if start_date or end_date:
         filtered = []
         for note in diet_notes:
@@ -1660,10 +1565,8 @@ async def health_get_diet_notes(
             filtered.append(note)
         diet_notes = filtered
 
-    # Sort by date descending (most recent first)
     diet_notes.sort(key=lambda x: x.get("date", ""), reverse=True)
     return diet_notes
-
 
 async def health_get_session(date: str) -> dict:
     """Load a single session by date.
@@ -1685,13 +1588,11 @@ async def health_get_session(date: str) -> dict:
 
     for session in sessions:
         if session.get("date") == date:
-            # Add resolved phase
             session_copy = dict(session)
             session_copy["phase"] = _resolve_phase(session, phases)
             return session_copy
 
     raise ValueError(f"Session not found with date={date}")
-
 
 async def health_get_sessions_range(start_date: str, end_date: str) -> list[dict]:
     """Load sessions within a date range.
@@ -1717,10 +1618,8 @@ async def health_get_sessions_range(start_date: str, end_date: str) -> list[dict
             session_copy["phase"] = _resolve_phase(session, phases)
             result.append(session_copy)
 
-    # Sort by date ascending
     result.sort(key=lambda x: x.get("date", ""))
     return result
-
 
 async def health_get_supplements() -> dict:
     """Load supplements and supplement phases.
@@ -1735,11 +1634,6 @@ async def health_get_supplements() -> dict:
         "supplements": program.get("supplements", []),
         "supplement_phases": program.get("supplement_phases", []),
     }
-
-
-# =============================================================================
-# Granular Edit Tools (Create Minor Version)
-# =============================================================================
 
 async def health_update_competition(date: str, patch: dict) -> dict:
     """Update a competition by date.
@@ -1772,15 +1666,12 @@ async def health_update_competition(date: str, patch: dict) -> dict:
     if comp_idx is None:
         raise ValueError(f"Competition not found with date={date}")
 
-    # Apply patch
     for key, value in patch.items():
         competitions[comp_idx][key] = value
 
-    # Write new minor version
     await store._write_new_version(new_program, minor=True)
 
     return competitions[comp_idx]
-
 
 async def health_snapshot_competition_projection(
     date: str,
@@ -1807,7 +1698,6 @@ async def health_snapshot_competition_projection(
         "updated": len(updated),
         "competitions": updated,
     }
-
 
 async def health_complete_competition(
     date: str,
@@ -1842,7 +1732,6 @@ async def health_complete_competition(
     _save_program_version(program, sk)
     return updated_comp
 
-
 async def health_update_diet_note(date: str, notes: str) -> dict:
     """Update or create a diet note for a specific date.
 
@@ -1863,7 +1752,6 @@ async def health_update_diet_note(date: str, notes: str) -> dict:
 
     diet_notes = new_program.get("diet_notes", [])
 
-    # Find existing or create new
     note_idx = None
     for i, note in enumerate(diet_notes):
         if note.get("date") == date:
@@ -1879,11 +1767,9 @@ async def health_update_diet_note(date: str, notes: str) -> dict:
 
     new_program["diet_notes"] = diet_notes
 
-    # Write new minor version
     await store._write_new_version(new_program, minor=True)
 
     return new_note
-
 
 async def health_update_supplements(patch: dict) -> dict:
     """Update supplements or supplement phases.
@@ -1908,18 +1794,12 @@ async def health_update_supplements(patch: dict) -> dict:
     if "supplement_phases" in patch:
         new_program["supplement_phases"] = patch["supplement_phases"]
 
-    # Write new minor version
     await store._write_new_version(new_program, minor=True)
 
     return {
         "supplements": new_program.get("supplements", []),
         "supplement_phases": new_program.get("supplement_phases", []),
     }
-
-
-# =============================================================================
-# Session CRUD
-# =============================================================================
 
 async def health_create_session(
     date: str,
@@ -1943,7 +1823,6 @@ async def health_create_session(
     Raises:
         ValueError: If session already exists on that date
     """
-    # Validate date format
     datetime.strptime(date, "%Y-%m-%d")
 
     store = _get_store()
@@ -1974,7 +1853,6 @@ async def health_create_session(
     store.invalidate_cache()
     return created
 
-
 async def health_delete_session(date: str) -> dict:
     """Delete a training session by date.
 
@@ -2000,7 +1878,6 @@ async def health_delete_session(date: str) -> dict:
     ).delete_session(program_sk, date)
     store.invalidate_cache()
     return result
-
 
 async def health_reschedule_session(old_date: str, new_date: str) -> dict:
     """Move a session to a different date.
@@ -2040,7 +1917,6 @@ async def health_reschedule_session(old_date: str, new_date: str) -> dict:
     store.invalidate_cache()
     return updated
 
-
 async def health_add_exercise(date: str, exercise: dict) -> dict:
     """Add an exercise to a session.
 
@@ -2073,7 +1949,6 @@ async def health_add_exercise(date: str, exercise: dict) -> dict:
     ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
     store.invalidate_cache()
     return {"date": date, "exercises": updated.get("exercises", [])}
-
 
 async def health_remove_exercise(date: str, exercise_index: int) -> dict:
     """Remove an exercise from a session by index.
@@ -2108,11 +1983,6 @@ async def health_remove_exercise(date: str, exercise_index: int) -> dict:
     ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
     store.invalidate_cache()
     return {"date": date, "exercises": exercises}
-
-
-# =============================================================================
-# Competition CRUD
-# =============================================================================
 
 async def health_create_competition(competition: dict) -> dict:
     """Create a new competition entry.
@@ -2162,7 +2032,6 @@ async def health_create_competition(competition: dict) -> dict:
     await store._write_new_version(new_program, minor=True)
     return new_comp
 
-
 async def health_delete_competition(date: str) -> dict:
     """Delete a competition by date.
 
@@ -2189,11 +2058,6 @@ async def health_delete_competition(date: str) -> dict:
 
     await store._write_new_version(new_program, minor=True)
     return {"deleted": date}
-
-
-# =============================================================================
-# Diet Note Delete
-# =============================================================================
 
 async def health_delete_diet_note(date: str) -> dict:
     """Delete a diet note by date.
@@ -2222,11 +2086,6 @@ async def health_delete_diet_note(date: str) -> dict:
     await store._write_new_version(new_program, minor=True)
     return {"deleted": date}
 
-
-# =============================================================================
-# Meta & Structure Updates
-# =============================================================================
-
 async def health_update_goals(goals: list[dict]) -> list[dict]:
     """Replace the explicit goals array on the current program block."""
     import copy
@@ -2248,12 +2107,10 @@ async def health_update_goals(goals: list[dict]) -> list[dict]:
     await store._write_new_version(new_program, minor=True)
     return cleaned_goals
 
-
 async def health_update_federation_library(library: dict) -> dict:
     """Replace the shared federation library document."""
     payload = _build_federation_library_payload(library)
     return await _write_federation_library(payload)
-
 
 async def health_update_meta(updates: dict) -> dict:
     """Update program metadata fields.
@@ -2292,7 +2149,6 @@ async def health_update_meta(updates: dict) -> dict:
     await store._write_new_version(new_program, minor=True)
     return meta
 
-
 async def health_update_phases(phases: list[dict]) -> list[dict]:
     """Replace the full phases array.
 
@@ -2319,7 +2175,6 @@ async def health_update_phases(phases: list[dict]) -> list[dict]:
 
     await store._write_new_version(new_program, minor=True)
     return phases
-
 
 async def health_update_current_maxes(
     squat_kg: float | None = None,
@@ -2358,7 +2213,6 @@ async def health_update_current_maxes(
     await store._write_new_version(new_program, minor=True)
     return maxes
 
-
 def _floats_to_decimals(obj):
     """Recursively convert float values to Decimal for DynamoDB compatibility.
 
@@ -2373,7 +2227,6 @@ def _floats_to_decimals(obj):
     if isinstance(obj, list):
         return [_floats_to_decimals(v) for v in obj]
     return obj
-
 
 async def health_program_evaluation(refresh: bool = False, cache_only: bool = False) -> dict:
     """Generate a conservative full-block program evaluation.
@@ -2452,7 +2305,6 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
 
     import time as _time
     if not (report.get("insufficient_data") and str(report.get("insufficient_data_reason", "")).startswith("AI evaluation failed")):
-        # DynamoDB does not support Python float — convert all floats to Decimal before writing
         dynamo_item = _floats_to_decimals({
             "pk": active_pk,
             "sk": cache_sk,
@@ -2460,16 +2312,11 @@ async def health_program_evaluation(refresh: bool = False, cache_only: bool = Fa
             "generated_at": generated_at,
             "window_start": window_start,
             "weeks": len(completed_weeks),
-            # 7-day TTL — cache is intentionally not invalidated on session changes
             "expires_at": int(_time.time()) + 7 * 86400,
         })
         table.put_item(Item=dynamo_item)
 
     return report
-
-# =============================================================================
-# Import & Template Tools
-# =============================================================================
 
 async def import_parse_file(base64_content: str, filename: str) -> dict:
     """Parse a spreadsheet file and stage it as a pending import."""
@@ -2482,21 +2329,17 @@ async def import_parse_file(base64_content: str, filename: str) -> dict:
     file_bytes = base64.b64decode(base64_content)
     fhash = file_hash(file_bytes)
     
-    # 1. Extraction
     if filename.lower().endswith(".xlsx"):
         rows, sheet_name = extract_xlsx(file_bytes)
     else:
         rows = extract_csv(file_bytes)
         sheet_name = "CSV"
 
-    # 2. Classification
     classification = preclassify_rows(rows)
     if not classification:
         report = await generate_classification_report(rows)
         classification = report.get("classification", "ambiguous")
 
-    # 3. AI Parse
-    # Get athlete context for better parsing
     store = _get_store()
     try:
         program = await store.get_program()
@@ -2511,15 +2354,13 @@ async def import_parse_file(base64_content: str, filename: str) -> dict:
         "current_program_weeks": current_weeks
     }
 
-    # Flatten rows to text for AI if it's too large, but usually we just send the JSON
     parse_result = await generate_import_parse_report(
-        file_content=json.dumps(rows[:100], indent=2, default=str), # Limit rows for token safety
+        file_content=json.dumps(rows[:100], indent=2, default=str),
         file_name=filename,
         classification=classification,
         athlete_context=athlete_context
     )
 
-    # 4. Glossary Resolution
     glossary_store = _get_glossary_store()
     glossary = await glossary_store.get_glossary()
     
@@ -2530,7 +2371,6 @@ async def import_parse_file(base64_content: str, filename: str) -> dict:
         if ex.get("name")
     ))
     
-    # Fuzzy pre-match
     resolved = {}
     unresolved_names = []
     for name in unique_names:
@@ -2540,20 +2380,17 @@ async def import_parse_file(base64_content: str, filename: str) -> dict:
         else:
             unresolved_names.append(name)
             
-    # AI resolution for the rest
     if unresolved_names:
         ai_res = await generate_glossary_resolve_report(unresolved_names, glossary)
         for res in ai_res.get("resolutions", []):
             if res.get("matched_id"):
                 resolved[res["input"]] = res["matched_id"]
 
-    # Map resolved IDs back into parse_result
     for sess in parse_result.get("sessions", []):
         for ex in sess.get("exercises", []):
             if ex.get("name") in resolved:
                 ex["glossary_id"] = resolved[ex["name"]]
 
-    # 5. Stage in DynamoDB
     import_store = _get_import_store()
     import_id = await import_store.stage_import({
         "import_type": "template" if classification == "template" else "session_import",
@@ -2591,7 +2428,6 @@ async def import_apply(
 
     if import_type == "template":
         template_store = _get_template_store()
-        # Convert parse result to template format
         template = {
             "meta": {
                 "name": f"Imported {pending.get('source_filename', 'template').split('.')[0]}",
@@ -2599,7 +2435,7 @@ async def import_apply(
                 "source_filename": pending.get("source_filename"),
                 "source_file_hash": pending.get("source_file_hash"),
                 "estimated_weeks": max([s.get("week_number", 0) for s in parse_result.get("sessions", [])] or [0]),
-                "days_per_week": 4, # Guess or derive
+                "days_per_week": 4,
                 "archived": False
             },
             "phases": parse_result.get("phases", []),
@@ -2611,7 +2447,7 @@ async def import_apply(
                 if ex.get("glossary_id")
             ])),
             "glossary_resolution": {
-                "resolved": [], # Fill based on resolution
+                "resolved": [],
                 "unresolved": [],
                 "auto_added": [],
                 "resolution_status": "resolved"
@@ -2627,22 +2463,18 @@ async def import_apply(
         await import_store.mark_applied(import_id, datetime.now(timezone.utc).isoformat())
         return {"status": "applied", "target_sk": sk}
     else:
-        # Session Import
         store = _get_store()
         program = await store.get_program()
         new_program = copy.deepcopy(program)
         
-        # Merge logic based on merge_strategy
         staged_sessions = parse_result.get("sessions", [])
         if not staged_sessions:
             raise ValueError("No sessions found in staged import")
             
         existing_sessions = new_program.get("sessions", [])
         
-        # Mapping of existing sessions by date
         existing_map = {s["date"]: s for s in existing_sessions}
         
-        # Resolution map
         resolutions = {r["session_date"]: r["action"] for r in (conflict_resolutions or [])}
         
         applied_count = 0
@@ -2659,24 +2491,19 @@ async def import_apply(
                     skipped_count += 1
                     continue
                 elif action == "overwrite" or action == "replace_planned":
-                    # Replace
                     existing_map[s_date].update(staged)
                     applied_count += 1
                 elif action == "merge" or action == "append":
-                    # Merge exercises
                     existing_map[s_date].setdefault("exercises", []).extend(staged.get("exercises", []))
                     existing_map[s_date].setdefault("planned_exercises", []).extend(staged.get("planned_exercises", []))
                     applied_count += 1
             else:
-                # New session
                 existing_sessions.append(staged)
                 existing_map[s_date] = staged
                 applied_count += 1
         
-        # Re-sort sessions
         new_program["sessions"] = sorted(existing_sessions, key=lambda s: s.get("date", ""))
         
-        # Write new version
         await store._write_new_version(new_program, minor=False)
         await import_store.mark_applied(import_id, datetime.now(timezone.utc).isoformat())
         
@@ -2686,7 +2513,6 @@ async def import_apply(
             "skipped_count": skipped_count,
             "new_version": new_program["meta"].get("version_label")
         }
-
 
 async def import_reject(import_id: str, reason: str | None = None) -> dict:
     import_store = _get_import_store()
@@ -2708,10 +2534,8 @@ async def import_get_pending(import_id: str) -> dict:
 def _template_actor(actor_pk: str | None = None) -> str:
     return str(actor_pk or _get_store().pk)
 
-
 def _template_author(author: str | None, actor_pk: str | None) -> str:
     return str(author or actor_pk or _template_actor(actor_pk))
-
 
 def _template_days_per_week(sessions: list[dict]) -> int:
     by_week: dict[int, set[str]] = {}
@@ -2723,7 +2547,6 @@ def _template_days_per_week(sessions: list[dict]) -> int:
         raw_day = session.get("day_index") or session.get("day_of_week") or session.get("label") or "1"
         by_week.setdefault(week_number, set()).add(str(raw_day))
     return max((len(days) for days in by_week.values()), default=0)
-
 
 def _template_normalize_day(session: dict) -> None:
     weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -2739,7 +2562,6 @@ def _template_normalize_day(session: dict) -> None:
     idx = max(1, min(7, idx))
     session["day_index"] = idx
     session["day_of_week"] = weekdays[idx - 1]
-
 
 def _prepare_template_payload(template: dict) -> dict:
     prepared = copy.deepcopy(template)
@@ -2821,7 +2643,6 @@ def _prepare_template_payload(template: dict) -> dict:
     }
     return prepared
 
-
 async def template_list(include_archived: bool = False, actor_pk: str | None = None) -> list[dict]:
     template_store = _get_template_store()
     return await template_store.list_templates(include_archived, actor_pk=actor_pk)
@@ -2871,7 +2692,6 @@ async def template_apply(
             "week_start_day": resolved_week_start_day,
         }
         
-    # Preview concretization
     from datetime import date
     s_date = date.fromisoformat(start_date) if start_date else date.today()
     
@@ -2920,8 +2740,6 @@ async def template_apply_confirm(
     for session in sessions:
         session["block"] = "current"
     
-    # Create new program version
-    # Stripping existing sessions if it's a new block
     new_program = copy.deepcopy(program)
     new_program["sessions"] = sessions
     new_program.setdefault("meta", {})
@@ -2951,10 +2769,8 @@ async def template_evaluate(sk: str, actor_pk: str | None = None) -> dict:
     if not template:
         raise ValueError(f"Template not found: {sk}")
     
-    # Get athlete context
     store = _get_store()
     program = await store.get_program()
-    # Mocking advanced metrics for now
     athlete_context = {
         "current_maxes": program.get("current_maxes", {}),
         "dots_score": 350,
@@ -2963,10 +2779,7 @@ async def template_evaluate(sk: str, actor_pk: str | None = None) -> dict:
     
     report = await generate_template_evaluate_report(template, athlete_context)
     
-    # Store report on template
     template["meta"]["ai_evaluation"] = report
-    # We need a way to update template meta without changing SK
-    # For now, just return it
     return report
 
 async def template_create_from_block(
@@ -2979,12 +2792,10 @@ async def template_create_from_block(
     
     store = _get_store()
     if program_sk:
-        # Load specific version - need ProgramStore to support this
-        program = await store.get_program() # Fallback to current
+        program = await store.get_program()
     else:
         program = await store.get_program()
         
-    # Get e1RM map for conversion
     e1rm_map = program.get("current_maxes", {})
     
     template = convert_block_to_template(program, e1rm_map)
@@ -3066,7 +2877,6 @@ async def template_create_from_payload(
     )
     return {"status": "created", "sk": sk}
 
-
 async def template_update(sk: str, template: dict, actor_pk: str | None = None) -> dict:
     prepared = _prepare_template_payload(template)
     template_store = _get_template_store()
@@ -3083,12 +2893,10 @@ async def template_unarchive(sk: str, actor_pk: str | None = None) -> dict:
     await template_store.unarchive_template(sk, actor_pk=_template_actor(actor_pk))
     return {"status": "unarchived", "sk": sk}
 
-
 async def template_publish(sk: str, actor_pk: str | None = None) -> dict:
     template_store = _get_template_store()
     await template_store.set_published(sk, True, actor_pk=_template_actor(actor_pk))
     return {"status": "published", "sk": sk}
-
 
 async def template_unpublish(sk: str, actor_pk: str | None = None) -> dict:
     template_store = _get_template_store()

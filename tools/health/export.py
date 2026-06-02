@@ -16,15 +16,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-
-# Shared styles
 _HEADER_FONT = Font(bold=True, size=11)
 _SECTION_FONT = Font(bold=True, size=11, color="1F3864")
 _HEADER_FILL = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
 _SECTION_FILL = PatternFill(start_color="E7ECF5", end_color="E7ECF5", fill_type="solid")
 _WRAP = Alignment(wrap_text=True, vertical="top")
 
-# openpyxl cell content limit
 _CELL_CHAR_LIMIT = 32000
 _FAILED_SET_REASON_LABELS = {
     "strength_failure": "Strength failure",
@@ -59,7 +56,6 @@ _COMPETITION_LIFT_LABELS = {
     "deadlift": "Deadlift",
 }
 
-
 def _num(v: Any) -> Any:
     """Coerce a value to an Excel-compatible scalar."""
     if isinstance(v, Decimal):
@@ -68,10 +64,8 @@ def _num(v: Any) -> Any:
         return str(v)
     return v
 
-
 def _is_blank(v: Any) -> bool:
     return v is None or v == ""
-
 
 def _parse_date(value: str | None) -> date | None:
     if not value:
@@ -81,19 +75,16 @@ def _parse_date(value: str | None) -> date | None:
     except ValueError:
         return None
 
-
 def _extract_phase_name(phase: Any) -> str:
     """Extract phase name from either a string or a phase dict."""
     if isinstance(phase, dict):
         return phase.get("name", "")
     return phase if isinstance(phase, str) else str(phase)
 
-
 def _truncate(val: Any, limit: int = _CELL_CHAR_LIMIT) -> Any:
     if isinstance(val, str) and len(val) > limit:
         return val[: limit - 30] + "... [truncated]"
     return val
-
 
 def _serialize_json(value: Any) -> str:
     if value is None:
@@ -102,7 +93,6 @@ def _serialize_json(value: Any) -> str:
         return json.dumps(value, default=str, ensure_ascii=True, sort_keys=True)
     except TypeError:
         return str(value)
-
 
 def _fmt_failed_set_reasons(value: Any) -> str:
     if not isinstance(value, list):
@@ -120,7 +110,6 @@ def _fmt_failed_set_reasons(value: Any) -> str:
             set_chunks.append(f"set {index}: {', '.join(labels)}")
     return "; ".join(set_chunks)
 
-
 def _fmt_competition_miss_reasons(value: Any) -> str:
     if not isinstance(value, list):
         return ""
@@ -130,35 +119,29 @@ def _fmt_competition_miss_reasons(value: Any) -> str:
         if isinstance(reason, str) and reason in _COMPETITION_MISS_REASON_LABELS
     )
 
-
 def _first_non_blank(*values: Any) -> Any:
     for value in values:
         if not _is_blank(value):
             return value
     return ""
 
-
 def _write_sheet(ws, headers: list[str], rows: list[list[Any]], col_widths: dict[int, int] | None = None):
     """Write a header row + data rows to a worksheet."""
-    # Header
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
         cell.font = _HEADER_FONT
         cell.fill = _HEADER_FILL
         cell.alignment = _WRAP
 
-    # Data
     for row_idx, row_data in enumerate(rows, 2):
         for col_idx, value in enumerate(row_data, 1):
             ws.cell(row=row_idx, column=col_idx, value=_truncate(_num(value)))
 
-    # Column widths
     max_col = len(headers)
     for col_idx in range(1, max_col + 1):
         if col_widths and col_idx in col_widths:
             width = col_widths[col_idx]
         else:
-            # Auto-width from header + data
             max_len = len(str(headers[col_idx - 1]))
             for row_idx in range(2, len(rows) + 2):
                 val = ws.cell(row=row_idx, column=col_idx).value
@@ -167,9 +150,7 @@ def _write_sheet(ws, headers: list[str], rows: list[list[Any]], col_widths: dict
             width = min(max_len + 2, 50)
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
-    # Freeze top row
     ws.freeze_panes = "A2"
-
 
 def _write_section_label(ws, row_idx: int, label: str, width: int = 1):
     """Write a bold, filled section label row starting at column A."""
@@ -178,7 +159,6 @@ def _write_section_label(ws, row_idx: int, label: str, width: int = 1):
     cell.fill = _SECTION_FILL
     if width > 1:
         ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=width)
-
 
 def _autosize_columns(ws, max_cols: int, min_width: int = 10, max_width: int = 60):
     """Size columns based on longest value in any row."""
@@ -194,7 +174,6 @@ def _autosize_columns(ws, max_cols: int, min_width: int = 10, max_width: int = 6
                 max_len = longest_line
         ws.column_dimensions[get_column_letter(col_idx)].width = min(max_len + 2, max_width)
 
-
 def _fmt(val: Any) -> Any:
     """Format a value for a key-value cell: join lists, coerce numbers, truncate."""
     if val is None:
@@ -204,7 +183,6 @@ def _fmt(val: Any) -> Any:
     if isinstance(val, list):
         return "; ".join(str(_num(v)) for v in val)
     return _truncate(_num(val))
-
 
 def _flatten_rows(value: Any, prefix: str = "") -> list[tuple[str, Any]]:
     rows: list[tuple[str, Any]] = []
@@ -221,11 +199,9 @@ def _flatten_rows(value: Any, prefix: str = "") -> list[tuple[str, Any]]:
     rows.append((prefix or "(root)", _truncate(_fmt(value))))
     return rows
 
-
 def _write_kv_sheet(ws, rows: list[tuple[str, Any]], section_width: int = 2) -> None:
     _write_sheet(ws, ["Field", "Value"], [[k, v] for k, v in rows], col_widths={1: 34, 2: 72})
     ws.freeze_panes = "A2"
-
 
 def _write_raw_sheet(wb: Workbook, title: str, payload: dict[str, Any]) -> None:
     ws = wb.create_sheet(title)
@@ -238,7 +214,6 @@ def _write_raw_sheet(wb: Workbook, title: str, payload: dict[str, Any]) -> None:
         rows.append(["—", "(empty)", ""])
     _write_sheet(ws, headers, rows, col_widths={1: 18, 2: 52, 3: 72})
 
-
 def _safe_list(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
@@ -246,10 +221,8 @@ def _safe_list(value: Any) -> list[Any]:
         return []
     return [value]
 
-
 def _deepcopy_rows(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     return [copy.deepcopy(row) for row in (rows or [])]
-
 
 def _bodyweight_candidates(sessions: list[dict[str, Any]], idx: int) -> tuple[tuple[Any, str] | None, tuple[Any, str] | None]:
     prev: tuple[Any, str] | None = None
@@ -271,7 +244,6 @@ def _bodyweight_candidates(sessions: list[dict[str, Any]], idx: int) -> tuple[tu
 
     return prev, next_
 
-
 def _nearest_weight_log_value(
     target_date: date | None,
     weight_log: list[dict[str, Any]],
@@ -289,7 +261,6 @@ def _nearest_weight_log_value(
             best = (delta, entry.get("kg"))
     return best[1] if best is not None else ""
 
-
 def _resolve_bodyweight_for_session(
     sessions: list[dict[str, Any]],
     idx: int,
@@ -305,7 +276,6 @@ def _resolve_bodyweight_for_session(
     if prev and next_:
         prev_distance = 0
         next_distance = 0
-        # Index distance is sufficient because sessions are exported in date order.
         for offset in range(1, len(sessions)):
             if idx - offset >= 0 and not _is_blank(sessions[idx - offset].get("body_weight_kg")):
                 prev_distance = offset
@@ -331,7 +301,6 @@ def _resolve_bodyweight_for_session(
         return _num(meta_bw), "meta"
 
     return 0.0, "fallback"
-
 
 def _resolve_bodyweight_for_date(
     target_date: str | None,
@@ -365,7 +334,6 @@ def _resolve_bodyweight_for_date(
         return _num(meta_bw), "meta"
 
     return 0.0, "fallback"
-
 
 def _build_program_workbook(
     program: dict,
@@ -428,7 +396,6 @@ def _build_program_workbook(
 
     prepared_sessions = _prepare_sessions_for_export(sessions, weight_log, meta, phases)
 
-    # ---- Base program sheets ----
     _write_meta_sheet(wb, meta, creator=creator, program_pk=program_pk, version_token=version_token, sex=sex)
     _write_goals_sheet(wb, meta, goals, competitions, sex, federation_library)
     _write_federation_standards_sheet(wb, federation_library)
@@ -449,7 +416,6 @@ def _build_program_workbook(
     _write_notes_sheet(wb, meta, phases, prepared_sessions, competitions, diet_notes, supplement_phases)
     _write_breaks_and_prefs_sheet(wb, breaks, operator_prefs, meta)
 
-    # ---- Analysis sheets ----
     if analysis is not None:
         _write_weekly_analysis_sheet(wb, analysis.get("weekly") or {})
         _write_trends_sheet(wb, prepared_sessions, weight_log, diet_notes, sex, meta)
@@ -463,7 +429,6 @@ def _build_program_workbook(
         _write_correlation_sheet(wb, None)
         _write_program_evaluation_sheet(wb, None)
 
-    # ---- Raw backup ----
     _write_raw_sheet(
         wb,
         "Raw Export",
@@ -478,7 +443,6 @@ def _build_program_workbook(
     )
 
     return wb
-
 
 def build_program_xlsx(
     program: dict,
@@ -502,7 +466,6 @@ def build_program_xlsx(
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     wb.save(out_path)
     return out_path
-
 
 def build_program_markdown(
     program: dict,
@@ -559,17 +522,10 @@ def build_program_markdown(
         f.write(md)
     return out_path
 
-
-# ---------------------------------------------------------------------------
-# Markdown narrative helpers
-# ---------------------------------------------------------------------------
-
-
 def _tcell(value: Any) -> str:
     if value is None or _is_blank(value):
         return ""
     return str(_num(value)).replace("|", "\\|").replace("\n", " ").replace("\r", "")
-
 
 def _md_table(headers: list[str], rows: list[list[Any]]) -> str:
     if not rows:
@@ -585,17 +541,14 @@ def _md_table(headers: list[str], rows: list[list[Any]]) -> str:
         lines.append("| " + " | ".join(cells[: len(headers)]) + " |")
     return "\n".join(lines)
 
-
 def _txt(value: Any) -> str:
     if value is None or _is_blank(value):
         return ""
     return str(_num(value)).strip()
 
-
 def _first_line(value: Any) -> str:
     text = _txt(value)
     return text.split("\n")[0].strip() if text else ""
-
 
 def _md_overview(meta: dict, creator: str, version_token: str, sex: str) -> str:
     name = meta.get("program_name") or "Training Program"
@@ -655,7 +608,6 @@ def _md_overview(meta: dict, creator: str, version_token: str, sex: str) -> str:
 
     return "\n".join(lines).rstrip()
 
-
 def _md_goals(meta: dict, goals: list[dict], competitions: list[dict], sex: str, federation_library: dict | None) -> str:
     if not goals:
         return ""
@@ -684,7 +636,6 @@ def _md_goals(meta: dict, goals: list[dict], competitions: list[dict], sex: str,
 
     return "\n".join(lines).rstrip()
 
-
 def _md_current_maxes(current_maxes: dict) -> str:
     if not current_maxes:
         return ""
@@ -696,7 +647,6 @@ def _md_current_maxes(current_maxes: dict) -> str:
         rows.append([lift.replace("_", " ").title(), val])
 
     return "## Current Maxes\n\n" + _md_table(["Lift", "1RM (kg)"], rows) if rows else ""
-
 
 def _md_max_history(max_history: list[dict], sex: str, meta: dict) -> str:
     if not max_history:
@@ -711,7 +661,6 @@ def _md_max_history(max_history: list[dict], sex: str, meta: dict) -> str:
         rows.append([entry.get("date", ""), entry.get("squat_kg", ""), entry.get("bench_kg", ""), entry.get("deadlift_kg", ""), total, bw, dots, entry.get("context", "")])
 
     return "## Max History\n\n" + _md_table(headers, rows)
-
 
 def _md_phases(phases: list[dict]) -> str:
     if not phases:
@@ -752,7 +701,6 @@ def _md_phases(phases: list[dict]) -> str:
         lines.append("")
 
     return "\n".join(lines).rstrip()
-
 
 def _md_sessions(sessions: list[dict]) -> str:
     if not sessions:
@@ -849,7 +797,6 @@ def _md_sessions(sessions: list[dict]) -> str:
             lines.append("")
 
     return "\n".join(lines).rstrip()
-
 
 def _md_competitions(
     competitions: list[dict], sessions: list[dict], weight_log: list[dict],
@@ -979,7 +926,6 @@ def _md_competitions(
 
     return "\n".join(lines).rstrip()
 
-
 def _md_biometrics(diet_notes: list[dict]) -> str:
     if not diet_notes:
         return ""
@@ -1022,7 +968,6 @@ def _md_biometrics(diet_notes: list[dict]) -> str:
 
     return "\n".join(lines).rstrip()
 
-
 def _md_weight_log(weight_log: list[dict]) -> str:
     if not weight_log:
         return ""
@@ -1059,7 +1004,6 @@ def _md_weight_log(weight_log: list[dict]) -> str:
 
     return "\n".join(lines).rstrip()
 
-
 def _md_supplements(supplements: list[dict], supplement_phases: list[dict]) -> str:
     if not supplements and not supplement_phases:
         return ""
@@ -1085,7 +1029,6 @@ def _md_supplements(supplements: list[dict], supplement_phases: list[dict]) -> s
             lines.append(f"**{phase_name}{week_range}:** {phase['notes']}")
 
     return "\n".join(lines).rstrip()
-
 
 def _md_lift_profiles(lift_profiles: list[dict]) -> str:
     if not lift_profiles:
@@ -1125,7 +1068,6 @@ def _md_lift_profiles(lift_profiles: list[dict]) -> str:
 
     return "\n".join(lines).rstrip()
 
-
 def _md_analysis(
     analysis: dict | None, sessions: list[dict], weight_log: list[dict],
     diet_notes: list[dict], sex: str, meta: dict,
@@ -1144,13 +1086,11 @@ def _md_analysis(
         lines.extend(_md_weekly_analysis(weekly))
         lines.append("")
 
-    # e1RM Progression & DOTS Trend — from session data
     dots_rows = _build_dots_trend_rows(sessions, weight_log, sex, meta)
     if dots_rows:
         lines.extend(_md_dots_trend(dots_rows))
         lines.append("")
 
-    # Body Weight Trend — from weight log and session data
     bw_section = _md_weight_trend_analysis(sessions, weight_log, meta)
     if bw_section:
         lines.extend(bw_section)
@@ -1165,7 +1105,6 @@ def _md_analysis(
         lines.append("")
 
     return "\n".join(lines).rstrip()
-
 
 def _md_weekly_analysis(weekly: dict) -> list[str]:
     lines = ["### Weekly Summary", ""]
@@ -1255,11 +1194,9 @@ def _md_weekly_analysis(weekly: dict) -> list[str]:
 
     return lines
 
-
 def _md_dots_trend(trend_rows: list[dict]) -> list[str]:
     lines = ["### e1RM Progression & DOTS Trend", ""]
 
-    # Summary: change over time
     with_dots = [r for r in trend_rows if not _is_blank(r.get("dots"))]
     if len(with_dots) >= 2:
         first = with_dots[0]
@@ -1288,9 +1225,7 @@ def _md_dots_trend(trend_rows: list[dict]) -> list[str]:
 
     return lines
 
-
 def _md_weight_trend_analysis(sessions: list[dict], weight_log: list[dict], meta: dict) -> list[str]:
-    # Gather bodyweight points from weight log first, then sessions as fallback
     points: list[tuple[str, float]] = []
     if weight_log:
         for entry in sorted(weight_log, key=lambda e: str(e.get("date", ""))):
@@ -1318,7 +1253,6 @@ def _md_weight_trend_analysis(sessions: list[dict], weight_log: list[dict], meta
     lines.append(f"**{latest_kg} kg** ({'+' if change > 0 else ''}{change} kg over {len(points)} entries, {direction}). Started at {oldest_kg} kg on {oldest_date}.")
     lines.append("")
 
-    # Show last 12 entries
     if len(points) > 2:
         shown = points[-12:]
         headers = ["Date", "Weight (kg)", "Change"]
@@ -1334,7 +1268,6 @@ def _md_weight_trend_analysis(sessions: list[dict], weight_log: list[dict], meta
         lines.append(_md_table(headers, rows))
 
     return lines
-
 
 def _md_correlation(correlation: dict) -> list[str]:
     if correlation.get("insufficient_data"):
@@ -1366,7 +1299,6 @@ def _md_correlation(correlation: dict) -> list[str]:
         lines.append("No correlation findings reported.")
 
     return lines
-
 
 def _md_program_evaluation(evaluation: dict) -> list[str]:
     if evaluation.get("insufficient_data"):
@@ -1439,7 +1371,6 @@ def _md_program_evaluation(evaluation: dict) -> list[str]:
 
     return lines
 
-
 def _md_notes(
     meta: dict, phases: list[dict], sessions: list[dict],
     competitions: list[dict], diet_notes: list[dict],
@@ -1479,13 +1410,7 @@ def _md_notes(
 
     return "\n".join(lines).rstrip()
 
-
-# ---------------------------------------------------------------------------
-# Analysis sheet builders
-# ---------------------------------------------------------------------------
-
 _MISSING_NOTE = "Not yet generated — open the Analysis page and let the report render before exporting."
-
 
 def _write_lift_profiles_sheet(wb: Workbook, lift_profiles: list[dict]) -> None:
     ws = wb.create_sheet("Lift Profiles")
@@ -1516,7 +1441,6 @@ def _write_lift_profiles_sheet(wb: Workbook, lift_profiles: list[dict]) -> None:
     if not rows:
         rows.append(["—", "No lift profiles recorded on this program.", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={2: 40, 3: 40, 7: 36})
-
 
 def _write_weekly_analysis_sheet(wb: Workbook, weekly: dict) -> None:
     ws = wb.create_sheet("Weekly Analysis")
@@ -1587,7 +1511,6 @@ def _write_weekly_analysis_sheet(wb: Workbook, weekly: dict) -> None:
     ]
     _write_sheet(ws, ["Field", "Value"], rows, col_widths={1: 32, 2: 60})
 
-
 def _write_per_lift_metrics_sheet(wb: Workbook, weekly: dict) -> None:
     ws = wb.create_sheet("Per-Lift Metrics")
 
@@ -1624,7 +1547,6 @@ def _write_per_lift_metrics_sheet(wb: Workbook, weekly: dict) -> None:
         ws.cell(row=row_idx, column=1, value="No tracked lifts in the window.")
         row_idx += 1
 
-    # Projections sub-section
     row_idx += 1
     _write_section_label(ws, row_idx, "Projections", width=len(headers))
     row_idx += 1
@@ -1655,7 +1577,6 @@ def _write_per_lift_metrics_sheet(wb: Workbook, weekly: dict) -> None:
     _autosize_columns(ws, max_cols=len(headers))
     ws.freeze_panes = "A2"
 
-
 def _write_correlation_sheet(wb: Workbook, correlation: dict | None) -> None:
     ws = wb.create_sheet("ROI Correlation")
 
@@ -1663,7 +1584,6 @@ def _write_correlation_sheet(wb: Workbook, correlation: dict | None) -> None:
         _write_sheet(ws, ["Field", "Value"], [["Status", _MISSING_NOTE]])
         return
 
-    # Header block
     header_rows = [
         ["Summary", _fmt(correlation.get("summary"))],
         ["Generated At", _fmt(correlation.get("generated_at"))],
@@ -1718,7 +1638,6 @@ def _write_correlation_sheet(wb: Workbook, correlation: dict | None) -> None:
 
     _autosize_columns(ws, max_cols=6)
 
-
 def _write_program_evaluation_sheet(wb: Workbook, evaluation: dict | None) -> None:
     ws = wb.create_sheet("Program Evaluation")
 
@@ -1751,7 +1670,6 @@ def _write_program_evaluation_sheet(wb: Workbook, evaluation: dict | None) -> No
         _autosize_columns(ws, max_cols=4)
         return
 
-    # String-list sections
     for label, key in (("What's Working", "what_is_working"),
                        ("What's Not Working", "what_is_not_working"),
                        ("Monitoring Focus", "monitoring_focus")):
@@ -1769,7 +1687,6 @@ def _write_program_evaluation_sheet(wb: Workbook, evaluation: dict | None) -> No
             next_row += 1
         next_row += 1
 
-    # Competition Alignment
     _write_section_label(ws, next_row, "Competition Alignment", width=4)
     next_row += 1
     ca_headers = ["Competition", "Role", "Alignment", "Reason"]
@@ -1884,7 +1801,6 @@ def _write_program_evaluation_sheet(wb: Workbook, evaluation: dict | None) -> No
         next_row += 1
     next_row += 1
 
-    # Small Changes
     _write_section_label(ws, next_row, "Small Changes", width=4)
     next_row += 1
     sc_headers = ["Change", "Why", "Risk", "Priority"]
@@ -1911,12 +1827,6 @@ def _write_program_evaluation_sheet(wb: Workbook, evaluation: dict | None) -> No
 
     _autosize_columns(ws, max_cols=4, max_width=70)
 
-
-# ---------------------------------------------------------------------------
-# Full export sheet builders
-# ---------------------------------------------------------------------------
-
-
 def _calculate_dots_value(total_kg: Any, bodyweight_kg: Any, sex: str) -> Any:
     if _is_blank(total_kg) or _is_blank(bodyweight_kg):
         return ""
@@ -1927,7 +1837,6 @@ def _calculate_dots_value(total_kg: Any, bodyweight_kg: Any, sex: str) -> Any:
     except Exception:
         return ""
 
-
 def _epley_1rm(weight_kg: Any, reps: Any) -> float:
     try:
         weight = float(weight_kg)
@@ -1937,7 +1846,6 @@ def _epley_1rm(weight_kg: Any, reps: Any) -> float:
     if weight <= 0 or reps_val <= 0:
         return 0.0
     return round(weight * (1 + reps_val / 30.0), 1)
-
 
 def _resolve_total_kg(payload: dict[str, Any]) -> Any:
     total = payload.get("total_kg")
@@ -1950,7 +1858,6 @@ def _resolve_total_kg(payload: dict[str, Any]) -> Any:
         except (TypeError, ValueError):
             return ""
     return ""
-
 
 def _prepare_sessions_for_export(
     sessions: list[dict[str, Any]],
@@ -2003,7 +1910,6 @@ def _prepare_sessions_for_export(
             }
     return ordered
 
-
 def _write_meta_sheet(
     wb: Workbook,
     meta: dict[str, Any],
@@ -2048,7 +1954,6 @@ def _write_meta_sheet(
         ["Change Log", _serialize_json(meta.get("change_log", []))],
     ]
     _write_kv_sheet(ws, rows)
-
 
 def _write_goals_sheet(
     wb: Workbook,
@@ -2222,7 +2127,6 @@ def _write_goals_sheet(
 
     _autosize_columns(ws, max_cols=max(len(headers), len(comp_headers)))
 
-
 def _write_federation_standards_sheet(wb: Workbook, federation_library: dict[str, Any] | None) -> None:
     ws = wb.create_sheet("Federation Standards")
     library = federation_library or {}
@@ -2301,7 +2205,6 @@ def _write_federation_standards_sheet(wb: Workbook, federation_library: dict[str
 
     _autosize_columns(ws, max_cols=len(std_headers))
 
-
 def _write_current_maxes_sheet(wb: Workbook, current_maxes: dict[str, Any]) -> None:
     ws = wb.create_sheet("Current Maxes")
     rows: list[list[Any]] = []
@@ -2312,7 +2215,6 @@ def _write_current_maxes_sheet(wb: Workbook, current_maxes: dict[str, Any]) -> N
     if not rows:
         rows.append(["—", "No current maxes recorded"])
     _write_sheet(ws, ["Lift", "Current Max (kg)"], rows)
-
 
 def _write_max_history_sheet(
     wb: Workbook,
@@ -2340,7 +2242,6 @@ def _write_max_history_sheet(
         rows.append(["—", "", "", "", "", "", "", "No max history recorded"])
     _write_sheet(ws, headers, rows)
 
-
 def _write_phases_sheet(wb: Workbook, phases: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Phases")
     headers = ["Phase", "Block", "Start Week", "End Week", "Intent", "Target RPE Min", "Target RPE Max", "Days/Week", "Notes"]
@@ -2360,7 +2261,6 @@ def _write_phases_sheet(wb: Workbook, phases: list[dict[str, Any]]) -> None:
     if not rows:
         rows.append(["—", "current", "", "", "No phases recorded", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={5: 28, 9: 40})
-
 
 def _write_sessions_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Sessions")
@@ -2397,7 +2297,6 @@ def _write_sessions_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
         rows.append(["—", "", "", "", "", "", "", "No sessions recorded", "", "", "", "", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={19: 42})
 
-
 def _write_planned_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Planned Exercises")
     headers = ["Date", "Week", "Block", "Phase", "Exercise", "Sets", "Reps", "Weight (kg)", "Load Source", "RPE Target", "Notes", "Session Status"]
@@ -2422,7 +2321,6 @@ def _write_planned_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]])
     if not rows:
         rows.append(["—", "", "", "", "No planned exercises recorded", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows)
-
 
 def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Exercises")
@@ -2461,7 +2359,6 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
     if not rows:
         rows.append(["—", "", "", "", "No exercises recorded", "", "", "", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={11: 36, 13: 40})
-
 
 def _write_competitions_sheet(
     wb: Workbook,
@@ -2532,7 +2429,6 @@ def _write_competitions_sheet(
         rows.append(["—", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "No competitions recorded", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={24: 40, 25: 48, 26: 36, 27: 36})
 
-
 def _write_biometrics_sheet(wb: Workbook, diet_notes: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Biometrics")
     headers = ["Date", "Notes", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)", "Sleep (hrs)", "Water", "Water Unit", "Consistent"]
@@ -2554,7 +2450,6 @@ def _write_biometrics_sheet(wb: Workbook, diet_notes: list[dict[str, Any]]) -> N
         rows.append(["—", "No biometrics entries recorded", "", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={2: 44})
 
-
 def _write_weight_log_sheet(wb: Workbook, weight_log: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Weight Log")
     headers = ["Date", "Kg", "Delta From Previous", "Notes"]
@@ -2575,7 +2470,6 @@ def _write_weight_log_sheet(wb: Workbook, weight_log: list[dict[str, Any]]) -> N
         rows.append(["—", "", "", "No weight log recorded"])
     _write_sheet(ws, headers, rows)
 
-
 def _write_supplements_sheet(wb: Workbook, supplements: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Supplements")
     headers = ["Name", "Dose"]
@@ -2583,7 +2477,6 @@ def _write_supplements_sheet(wb: Workbook, supplements: list[dict[str, Any]]) ->
     if not rows:
         rows.append(["—", "No supplements recorded"])
     _write_sheet(ws, headers, rows)
-
 
 def _write_supplement_phases_sheet(wb: Workbook, supplement_phases: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Supplement Phases")
@@ -2621,7 +2514,6 @@ def _write_supplement_phases_sheet(wb: Workbook, supplement_phases: list[dict[st
     if not rows:
         rows.append(["—", "", "", "", "", "No supplement phases recorded", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={9: 34, 10: 36})
-
 
 def _write_exercise_glossary_sheet(wb: Workbook, glossary: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Exercise Glossary")
@@ -2665,7 +2557,6 @@ def _write_exercise_glossary_sheet(wb: Workbook, glossary: list[dict[str, Any]])
         rows.append(["—", "", "", "", "", "", "", "", "No glossary entries recorded", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={2: 34, 9: 34, 10: 44, 11: 38, 18: 38})
 
-
 def _write_videos_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Videos")
     headers = ["Session Date", "Block", "Exercise", "Set #", "Notes", "Uploaded At", "Video URL", "Thumbnail URL", "Thumbnail Status"]
@@ -2686,7 +2577,6 @@ def _write_videos_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
     if not rows:
         rows.append(["—", "", "No videos recorded", "", "", "", "", "", ""])
     _write_sheet(ws, headers, rows, col_widths={5: 34, 7: 42, 8: 42})
-
 
 def _write_notes_sheet(
     wb: Workbook,
@@ -2735,7 +2625,6 @@ def _write_notes_sheet(
         rows.append(["—", "", "No notes recorded", ""])
     _write_sheet(ws, headers, rows, col_widths={4: 56})
 
-
 def _write_breaks_and_prefs_sheet(
     wb: Workbook,
     breaks: list[dict[str, Any]],
@@ -2754,7 +2643,6 @@ def _write_breaks_and_prefs_sheet(
         rows.append(["Breaks", "[]"])
     _write_kv_sheet(ws, rows)
 
-
 def _write_trends_sheet(
     wb: Workbook,
     sessions: list[dict[str, Any]],
@@ -2766,7 +2654,6 @@ def _write_trends_sheet(
     ws = wb.create_sheet("Trends")
     row = 1
 
-    # Bodyweight trend
     _write_section_label(ws, row, "Bodyweight Trend", width=6)
     row += 1
     bw_rows: list[list[Any]] = []
@@ -2816,7 +2703,6 @@ def _write_trends_sheet(
             row += 1
         row += 1
 
-    # Nutrition trend
     _write_section_label(ws, row, "Nutrition Trend", width=6)
     row += 1
     if diet_notes:
@@ -2864,7 +2750,6 @@ def _write_trends_sheet(
         ws.cell(row=row, column=1, value="No nutrition data recorded")
         row += 2
 
-    # DOTS trend
     _write_section_label(ws, row, "DOTS Trend", width=6)
     row += 1
     trend_rows = _build_dots_trend_rows(sessions, weight_log, sex, meta)
@@ -2888,7 +2773,6 @@ def _write_trends_sheet(
         ws.cell(row=row, column=1, value="No DOTS trend data available")
 
     _autosize_columns(ws, max_cols=10, max_width=60)
-
 
 def _build_dots_trend_rows(
     sessions: list[dict[str, Any]],

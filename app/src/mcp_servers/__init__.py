@@ -1,4 +1,4 @@
-"""MCP server configuration module."""
+
 from .config import (
     MCP_SERVERS,
     PRESET_MCP_MAP,

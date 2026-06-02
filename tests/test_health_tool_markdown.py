@@ -3,13 +3,11 @@ import sys
 import types
 from pathlib import Path
 
-
 def _module(name, **attrs):
     module = types.ModuleType(name)
     for attr_name, value in attrs.items():
         setattr(module, attr_name, value)
     return module
-
 
 def test_get_analysis_markdown_logs_cache_failure_and_falls_back(monkeypatch, caplog):
     monkeypatch.setenv("IF_MCP_ALLOWED_TOOLS", "1")

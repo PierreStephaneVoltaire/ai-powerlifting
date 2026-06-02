@@ -97,7 +97,6 @@ _ALIASES = {
     "serratus anterior": "serratus",
 }
 
-
 def _detect_related_lifts(exercise: dict) -> list[str]:
     name = (exercise.get("name") or "").strip().lower()
     category = (exercise.get("category") or "").strip().lower()
@@ -119,7 +118,6 @@ def _detect_related_lifts(exercise: dict) -> list[str]:
 
     return related
 
-
 def _format_athlete_context(meta: dict | None) -> list[str]:
     if not meta:
         return []
@@ -137,7 +135,6 @@ def _format_athlete_context(meta: dict | None) -> list[str]:
     for k, v in present:
         lines.append(f"  {k}: {v}")
     return lines
-
 
 def _select_lift_profiles(
     exercise: dict,
@@ -159,7 +156,6 @@ def _select_lift_profiles(
     selected = [big_three[lift] for lift in ordered_lifts if lift in big_three]
     return related_lifts, selected
 
-
 def _format_lift_profiles(related_lifts: list[str], profiles: list[dict]) -> list[str]:
     if not profiles:
         return []
@@ -175,7 +171,6 @@ def _format_lift_profiles(related_lifts: list[str], profiles: list[dict]) -> lis
                 lines.append(f"  {field}: {value}")
     return lines
 
-
 def _build_user_message(
     exercise: dict,
     program_meta: dict | None = None,
@@ -189,14 +184,12 @@ def _build_user_message(
         lift_profile_lines=_format_lift_profiles(related_lifts, contextual_profiles),
     )
 
-
 def _normalize_muscle(value: str) -> str | None:
     token = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
     if not token:
         return None
     token = _ALIASES.get(token.replace("_", " "), token)
     return token if token in ALLOWED_MUSCLES else None
-
 
 def _normalize_bucket(values: list[str] | None, seen: set[str], limit: int) -> list[str]:
     result: list[str] = []
@@ -209,7 +202,6 @@ def _normalize_bucket(values: list[str] | None, seen: set[str], limit: int) -> l
         if len(result) >= limit:
             break
     return result
-
 
 async def estimate_muscle_groups(
     exercise: dict,

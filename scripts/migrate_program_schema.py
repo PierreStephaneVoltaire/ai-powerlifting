@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Migrate program schema to add planned/actual session model, fatigue categories, and current_maxes.
 
 Reads the current program version from DynamoDB, applies additive schema changes,
@@ -25,8 +24,6 @@ import boto3
 
 POINTER_SK = "program#current"
 PROGRAM_SK_PREFIX = "program#v"
-
-# ── Fatigue category classification patterns ──────────────────────────────────
 
 PRIMARY_AXIAL_KEYWORDS = [
     "squat",
@@ -57,7 +54,6 @@ SECONDARY_KEYWORDS = [
     "paused deadlift",
 ]
 
-
 def classify_fatigue_category(name: str) -> str:
     """Auto-classify an exercise's fatigue category by name matching.
 
@@ -66,24 +62,19 @@ def classify_fatigue_category(name: str) -> str:
     """
     lower = name.lower()
 
-    # Check secondary first -- these are more specific patterns
     for kw in SECONDARY_KEYWORDS:
         if kw in lower:
             return "secondary"
 
-    # Primary axial -- squat/deadlift and their main variations
     for kw in PRIMARY_AXIAL_KEYWORDS:
         if kw in lower:
             return "primary_axial"
 
-    # Primary upper -- bench/ohp
-    # Exclude accessory bench work already caught by secondary
     for kw in PRIMARY_UPPER_KEYWORDS:
         if kw in lower:
             return "primary_upper"
 
     return "accessory"
-
 
 def to_d(obj: Any) -> Any:
     """Recursively convert floats to Decimal for DynamoDB."""
@@ -95,18 +86,15 @@ def to_d(obj: Any) -> Any:
         return [to_d(i) for i in obj]
     return obj
 
-
 def generate_session_id(date: str, index: int) -> str:
     """Generate a stable UUID5 from session date and index."""
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"session:{date}:{index}"))
-
 
 def load_program(table, pk: str) -> tuple[dict, int, str]:
     """Load the current program via pointer. Returns (program, version, ref_sk)."""
     pointer_resp = table.get_item(Key={"pk": pk, "sk": POINTER_SK})
 
     if "Item" not in pointer_resp:
-        # No pointer -- scan for latest version
         from boto3.dynamodb.conditions import Attr
 
         scan_result = table.scan(
@@ -148,7 +136,6 @@ def load_program(table, pk: str) -> tuple[dict, int, str]:
             print(f"ERROR: Cannot parse version from ref_sk: {ref_sk!r}", file=sys.stderr)
             sys.exit(1)
 
-    # Load program data
     program_resp = table.get_item(Key={"pk": pk, "sk": ref_sk})
     if "Item" not in program_resp:
         print(f"ERROR: Program item not found at {ref_sk}.", file=sys.stderr)
@@ -160,43 +147,36 @@ def load_program(table, pk: str) -> tuple[dict, int, str]:
 
     return program, version, ref_sk
 
-
 def migrate_sessions(sessions: list[dict]) -> tuple[list[dict], bool]:
     """Migrate session schema. Returns (sessions, changed_flag)."""
     changed = False
 
     for i, session in enumerate(sessions):
-        # Generate stable id if missing
         if "id" not in session:
             date = session.get("date", "")
             session["id"] = generate_session_id(date, i)
             changed = True
 
-        # Set status based on completed field (idempotent -- skip if already set)
         if "status" not in session:
             completed = session.get("completed", False)
             session["status"] = "completed" if completed else "planned"
             changed = True
 
-        # Convert phase from dict to string name
         phase = session.get("phase")
         if isinstance(phase, dict):
             session["phase"] = phase.get("name", "")
             changed = True
 
-        # Add planned_exercises if missing
         if "planned_exercises" not in session:
             session["planned_exercises"] = []
             changed = True
 
-        # Add failed: False to all exercises that lack the field
         for exercise in session.get("exercises", []):
             if "failed" not in exercise:
                 exercise["failed"] = False
                 changed = True
 
     return sessions, changed
-
 
 def migrate_phases(phases: list[dict]) -> tuple[list[dict], bool]:
     """Add missing metadata fields to phases. Returns (phases, changed_flag)."""
@@ -215,7 +195,6 @@ def migrate_phases(phases: list[dict]) -> tuple[list[dict], bool]:
                 changed = True
 
     return phases, changed
-
 
 def migrate_glossary(program: dict, table, pk: str) -> tuple[list[dict], bool]:
     """Add fatigue_category to glossary exercises. Returns (exercises, changed_flag)."""
@@ -241,7 +220,6 @@ def migrate_glossary(program: dict, table, pk: str) -> tuple[list[dict], bool]:
 
     return exercises, changed
 
-
 def populate_current_maxes(program: dict) -> tuple[dict, bool]:
     """Populate current_maxes from most recent competition results.
 
@@ -249,13 +227,10 @@ def populate_current_maxes(program: dict) -> tuple[dict, bool]:
     """
     existing = program.get("current_maxes", {})
     if existing:
-        # Already populated -- skip
         return existing, False
 
     competitions = program.get("competitions", [])
 
-    # Find the most recent competition with results
-    # Sort by date descending, take the first one with results
     sorted_comps = sorted(competitions, key=lambda c: c.get("date", ""), reverse=True)
 
     for comp in sorted_comps:
@@ -271,7 +246,6 @@ def populate_current_maxes(program: dict) -> tuple[dict, bool]:
             if maxes:
                 return maxes, True
 
-    # Also check meta.last_comp.results
     last_comp = program.get("meta", {}).get("last_comp", {})
     results = last_comp.get("results", {})
     if results:
@@ -286,7 +260,6 @@ def populate_current_maxes(program: dict) -> tuple[dict, bool]:
             return maxes, True
 
     return {}, False
-
 
 def main():
     parser = argparse.ArgumentParser(description="Migrate program schema")
@@ -308,17 +281,14 @@ def main():
 
     table = boto3.resource("dynamodb", region_name=args.region).Table(args.table)
 
-    # Load current program
     print("[migrate] Loading current program...")
     program, version, ref_sk = load_program(table, args.pk)
     print(f"[migrate] Current version: {version} ({ref_sk})")
     print()
 
-    # Deep copy for modification
     new_program = copy.deepcopy(program)
     any_changed = False
 
-    # ── 1. Migrate sessions ─────────────────────────────────────────────────
     print("[migrate] Migrating sessions...")
     sessions = new_program.get("sessions", [])
     print(f"  {len(sessions)} sessions to process")
@@ -330,7 +300,6 @@ def main():
         print(f"  Sessions already up to date")
     any_changed = any_changed or sessions_changed
 
-    # ── 2. Migrate phases ───────────────────────────────────────────────────
     print("[migrate] Migrating phases...")
     phases = new_program.get("phases", [])
     print(f"  {len(phases)} phases to process")
@@ -342,12 +311,10 @@ def main():
         print(f"  Phases already up to date")
     any_changed = any_changed or phases_changed
 
-    # ── 3. Migrate glossary ─────────────────────────────────────────────────
     print("[migrate] Migrating glossary exercises...")
     glossary_exercises, glossary_changed = migrate_glossary(new_program, table, args.pk)
     if glossary_exercises:
         print(f"  {len(glossary_exercises)} glossary exercises processed")
-        # Count by category
         cats = {}
         for ex in glossary_exercises:
             cat = ex.get("fatigue_category", "accessory")
@@ -359,7 +326,6 @@ def main():
         print(f"  Glossary already up to date")
     any_changed = any_changed or glossary_changed
 
-    # ── 4. Populate current_maxes ───────────────────────────────────────────
     print("[migrate] Populating current_maxes...")
     maxes, maxes_changed = populate_current_maxes(new_program)
     if maxes_changed:
@@ -371,19 +337,16 @@ def main():
         print(f"  No competition results found -- current_maxes not populated")
     any_changed = any_changed or maxes_changed
 
-    # ── Summary ─────────────────────────────────────────────────────────────
     print()
 
     if not any_changed:
         print("[migrate] No changes needed. Program already up to date.")
         return
 
-    # Calculate new version
     new_version = version + 1
     new_sk = f"{PROGRAM_SK_PREFIX}{new_version:03d}"
     now = datetime.now(timezone.utc).isoformat()
 
-    # Update meta
     if "meta" not in new_program:
         new_program["meta"] = {}
     new_program["meta"]["updated_at"] = now
@@ -399,7 +362,6 @@ def main():
             print(f"  Would update glossary: pk={args.pk!r}, sk=glossary#v1")
         print()
 
-        # Print sample migrated session
         if sessions_changed and sessions:
             print("  Sample migrated session (first):")
             sample = {k: v for k, v in sessions[0].items() if k in ("id", "date", "status", "phase", "planned_exercises")}
@@ -410,13 +372,11 @@ def main():
             print(f"    {json.dumps(sample, indent=4, default=str)}")
         return
 
-    # ── Write new program version ───────────────────────────────────────────
     print("[migrate] Writing new program version...")
     program_item = to_d({"pk": args.pk, "sk": new_sk, **new_program})
     table.put_item(Item=program_item)
     print(f"  Written: pk={args.pk!r}, sk={new_sk!r}")
 
-    # ── Update pointer ──────────────────────────────────────────────────────
     print("[migrate] Updating pointer...")
     pointer_item = to_d({
         "pk": args.pk,
@@ -428,7 +388,6 @@ def main():
     table.put_item(Item=pointer_item)
     print(f"  Pointer updated: version={new_version}")
 
-    # ── Write glossary (separate item) ──────────────────────────────────────
     if glossary_changed and glossary_exercises:
         print("[migrate] Writing updated glossary...")
         glossary_item = to_d({
@@ -449,7 +408,6 @@ def main():
         print(f"  Glossary exercises classified: {len(glossary_exercises)}")
     if maxes:
         print(f"  Current maxes: {maxes}")
-
 
 if __name__ == "__main__":
     main()

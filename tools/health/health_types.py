@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, List, Optional, Union, Literal
 
-# LoadSource = "absolute" | "rpe" | "percentage" | "unresolvable"
 LoadSource = Literal["absolute", "rpe", "percentage", "unresolvable"]
 LoadType = LoadSource
 WeekStartDay = Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]

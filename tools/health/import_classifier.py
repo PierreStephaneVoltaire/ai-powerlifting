@@ -80,10 +80,9 @@ def preclassify_rows(rows: list[dict[str, Any]]) -> Optional[str]:
     if not rows:
         return None
         
-    # Heuristic 1: Look for date-like columns
     date_cols = [k for k in rows[0].keys() if "date" in k.lower()]
     has_actual_dates = False
-    for row in rows[:20]: # Check first 20 rows
+    for row in rows[:20]:
         for col in date_cols:
             val = row.get(col)
             if val and (isinstance(val, (datetime, date)) or (isinstance(val, str) and "-" in val and len(val) >= 8)):
@@ -94,13 +93,10 @@ def preclassify_rows(rows: list[dict[str, Any]]) -> Optional[str]:
     if has_actual_dates:
         return "session_import"
 
-    # Heuristic 2: Week/Day without dates
     week_cols = [k for k in rows[0].keys() if "week" in k.lower()]
     if week_cols:
-        # If we have "Week 1", "Week 2" etc but no dates, it's likely a template
         return "template"
 
-    # Heuristic 3: RPE/% presence
     load_cols = [k for k in rows[0].keys() if any(x in k.lower() for x in ["rpe", "percentage", "%", "target"])]
     if load_cols and not has_actual_dates:
         return "template"

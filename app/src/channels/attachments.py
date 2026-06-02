@@ -6,7 +6,6 @@ from app_sandbox.local import get_local_sandbox
 
 logger = logging.getLogger(__name__)
 
-# These are still used by the dispatcher for spreadsheet-specific import nudges.
 ALLOWED_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",
@@ -19,9 +18,9 @@ async def download_discord_attachments(
     conversation_id: str,
     target_uploads_dir: Path | None = None,
 ) -> List[Dict[str, Any]]:
-    """Download each attachment URL into the per-conversation sandbox uploads dir.
-    Returns updated attachments list with a `local_path` key added to each.
-    """
+
+
+
     if not attachments:
         return []
 
@@ -56,7 +55,6 @@ async def download_discord_attachments(
                 local_path.write_bytes(response.content)
                 logger.info(f"[Attachments] Downloaded to {local_path}")
                 
-                # Add local_path to attachment record
                 updated_att = dict(att)
                 updated_att["local_path"] = str(local_path)
                 updated_att["size_kb"] = len(response.content) // 1024

@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 CURRENT_BLOCK_TTL_DAYS = 7
 
-
 class AnalysisCacheStore:
     def __init__(
         self,
@@ -55,14 +54,10 @@ class AnalysisCacheStore:
             )
         return self._table
 
-    # ── Low-level helpers ─────────────────────────────────────────────────────
-
     def _hydrate_item(self, item: dict) -> Optional[Any]:
         """Decode a DynamoDB item's payload — plain JSON (new) or gzip+b64 (legacy)."""
-        # New format: plain JSON string in `payload`
         payload_str = item.get("payload", "")
 
-        # Sharded new format
         if not payload_str:
             shard_count = int(item.get("shard_count", 0))
             sk = item.get("sk", "")
@@ -74,7 +69,6 @@ class AnalysisCacheStore:
                     parts.append(p_resp.get("Item", {}).get("payload", ""))
                 payload_str = "".join(parts)
 
-        # Legacy gzip+base64 (schema v4 and earlier)
         if not payload_str:
             legacy_b64 = item.get("payload_gzip_b64", "")
             if legacy_b64:
@@ -86,7 +80,6 @@ class AnalysisCacheStore:
                     logger.error("[AnalysisCacheStore] Legacy gzip decode failed: %s", exc)
                     return None
 
-            # Legacy sharded gzip
             if not payload_str:
                 shard_count = int(item.get("shard_count", 0))
                 sk = item.get("sk", "")
@@ -135,8 +128,6 @@ class AnalysisCacheStore:
         if extra_fields:
             item.update(extra_fields)
         self.table.put_item(Item=item)
-
-    # ── Block analysis (used by agents to inspect block cache state) ──────────
 
     def get_cached_block_analysis(self, block_key: str) -> Optional[dict]:
         """Find the latest version of this block analysis in DynamoDB."""
@@ -197,8 +188,6 @@ class AnalysisCacheStore:
             logger.error("[AnalysisCacheStore] list_block_cache_statuses failed: %s", exc)
         return statuses
 
-    # ── Weekly window analysis ────────────────────────────────────────────────
-
     def get_window_analysis(
         self,
         window_key: str,
@@ -235,13 +224,11 @@ class AnalysisCacheStore:
             if not block_key
             else f"weekly_analysis#{window_key}#{block_key}"
         )
-        effective_ttl = ttl_days if not block_key else None  # past blocks never expire
+        effective_ttl = ttl_days if not block_key else None
         try:
             self._put_json_item(sk, payload, ttl_days=effective_ttl)
         except Exception as exc:
             logger.error("[AnalysisCacheStore] put_window_analysis failed: %s", exc)
-
-    # ── Markdown export cache ─────────────────────────────────────────────────
 
     def get_markdown_cache(self, block_key: str = "current") -> Optional[dict]:
         """Read cached markdown export. Returns {markdown, generated_at} or None."""
@@ -253,7 +240,6 @@ class AnalysisCacheStore:
             data = self._hydrate_item(item)
             if not data:
                 return None
-            # Data may be {"markdown": "..."} or a raw string
             markdown = data.get("markdown", "") if isinstance(data, dict) else str(data)
             if not markdown:
                 return None

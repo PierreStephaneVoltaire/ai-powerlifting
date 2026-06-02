@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Generate opencode agent markdown files from IF specialists."""
 from __future__ import annotations
 
@@ -6,20 +5,16 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SPECIALISTS_DIR = ROOT / "specialists"
 OUTPUT_DIR = ROOT / ".opencode" / "agent"
 
-# Handle both repo root and container /app root
 PERSONALITY_PATH = ROOT / "app" / "main_system_prompt.txt"
 if not PERSONALITY_PATH.exists():
     PERSONALITY_PATH = ROOT / "main_system_prompt.txt"
 
-
 def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-
 
 def render_agent(slug: str, config: dict) -> str:
     description = " ".join(str(config.get("description", slug)).split())
@@ -72,7 +67,6 @@ def render_agent(slug: str, config: dict) -> str:
     ]
     return "\n".join(lines)
 
-
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if not PERSONALITY_PATH.exists():
@@ -91,7 +85,6 @@ def main() -> None:
         (OUTPUT_DIR / f"{slug}.md").write_text(output, encoding="utf-8")
         written += 1
     print(f"Generated {written} opencode agent files in {OUTPUT_DIR}")
-
 
 if __name__ == "__main__":
     main()

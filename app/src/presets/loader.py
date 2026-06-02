@@ -1,34 +1,31 @@
-"""Preset loader for OpenRouter presets.
 
-This module handles static preset definitions for routing.
-Presets are the core routing targets - each preset represents a configured model
-with specific behaviors and capabilities.
-"""
+
+
+
+
+
 import logging
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class Preset:
-    """Represents an OpenRouter preset configuration."""
+
     slug: str
     name: str
     description: str
-    model: str  # Format: @preset/{slug}
+    model: str
     
     def to_dict(self) -> Dict[str, str]:
-        """Convert preset to dictionary format."""
+
         return {
             "name": self.name,
             "description": self.description,
             "model": self.model,
         }
 
-
-# Static preset definitions
 STATIC_PRESETS = [
     Preset(
         slug="architecture",
@@ -224,32 +221,31 @@ STATIC_PRESETS = [
 ]
 
 class PresetManager:
-    """Manages static presets for routing.
-    
-    The preset manager:
-    1. Loads static preset definitions at startup
-    2. Builds an in-memory map of presets
-    3. Provides preset lookup and listing functionality
-    """
+
+
+
+
+
+
+
     
     def __init__(self):
         self.presets: Dict[str, Preset] = {}
         self._initialized = False
     
     def load_presets(self) -> None:
-        """Load static presets.
-        
-        This must be called during server startup.
-        
-        Raises:
-            RuntimeError: If no presets are available
-        """
+
+
+
+
+
+
+
         if not STATIC_PRESETS:
             raise RuntimeError(
                 "No presets defined. Add at least one preset to STATIC_PRESETS."
             )
         
-        # Build preset map from static definitions
         for preset in STATIC_PRESETS:
             self.presets[preset.slug] = preset
             logger.info(f"Loaded preset: {preset.slug} - {preset.description[:50]}...")
@@ -263,62 +259,59 @@ class PresetManager:
         logger.info(f"Successfully loaded {len(self.presets)} preset(s)")
     
     def get_preset(self, slug: str) -> Optional[Preset]:
-        """Get a preset by slug.
-        
-        Args:
-            slug: Preset slug identifier
-            
-        Returns:
-            Preset if found, None otherwise
-        """
+
+
+
+
+
+
+
+
         return self.presets.get(slug)
     
     def get_all_presets(self) -> Dict[str, Preset]:
-        """Get all loaded presets.
-        
-        Returns:
-            Dictionary of slug -> Preset
-        """
+
+
+
+
+
         return self.presets.copy()
     
     def get_preset_descriptions(self) -> Dict[str, str]:
-        """Get preset descriptions for routing.
-        
-        This is used by the scoring models to determine which preset fits.
-        
-        Returns:
-            Dictionary of slug -> description
-        """
+
+
+
+
+
+
+
         return {
             slug: preset.description
             for slug, preset in self.presets.items()
         }
     
     def is_initialized(self) -> bool:
-        """Check if presets have been loaded."""
+
         return self._initialized
     
     def slugs(self) -> List[str]:
-        """Get list of all preset slugs.
-        
-        This is used by the command parser to validate preset names.
-        
-        Returns:
-            List of preset slug strings
-        """
+
+
+
+
+
+
+
         return list(self.presets.keys())
 
-
-# Global preset manager instance
 _preset_manager: Optional[PresetManager] = None
 
-
 def get_preset_manager() -> PresetManager:
-    """Get the global preset manager instance.
-    
-    Returns:
-        PresetManager singleton
-    """
+
+
+
+
+
     global _preset_manager
     if _preset_manager is None:
         _preset_manager = PresetManager()

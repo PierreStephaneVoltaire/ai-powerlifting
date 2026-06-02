@@ -1,14 +1,14 @@
-"""Task worker for Phase 6 parallel task execution.
 
-Each worker runs one ImplementationTask in the shared per-channel workspace
-using per-run plan/response/review/status file names, per-run OpenCode config,
-and per-run session markers. Workers record OpenCodeRunRecord lifecycle to
-DynamoDB and enqueue outbound messages on completion.
 
-Phase 7: Workers create a cancel_event for cooperative cancellation.
-After execution (or RunCancelledError), the worker checks the task status
-to handle cancel/pivot/await-instruction outcomes.
-"""
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
 
 import asyncio
@@ -24,14 +24,12 @@ from config import OPENCODE_CANCEL_POLL_INTERVAL_SECONDS
 
 logger = logging.getLogger(__name__)
 
-
 def _per_run_filenames(task_id: str, run_id: str) -> dict[str, str]:
     return {
         "response_filename": f"response.task.{task_id}.run.{run_id}.md",
         "review_filename": f"review.task.{task_id}.run.{run_id}.md",
         "status_filename": f"status.task.{task_id}.run.{run_id}.log",
     }
-
 
 async def _poll_task_control(
     task_id: str,
@@ -59,7 +57,6 @@ async def _poll_task_control(
                 return
         except Exception as exc:
             logger.debug("Poll task control failed for %s: %s", task_id, exc)
-
 
 async def run_task_worker(
     *,
@@ -284,7 +281,6 @@ async def run_task_worker(
             except asyncio.CancelledError:
                 pass
         clear_platform_context()
-
 
 async def _handle_cancel_outcome(
     *,

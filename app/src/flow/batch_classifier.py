@@ -1,8 +1,8 @@
-"""Batch classifier for Discord channel orchestration — Phase 3.
 
-Extends the existing planner/router into a batch classifier that can
-emit multiple intent decisions for a debounced Discord channel batch.
-"""
+
+
+
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +30,6 @@ from .plan import (
 
 logger = logging.getLogger(__name__)
 
-
 def _main_system_prompt() -> str:
     path = PROJECT_ROOT / "main_system_prompt.txt"
     if not path.exists():
@@ -38,7 +37,6 @@ def _main_system_prompt() -> str:
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
     return "You are IF, a direct, pragmatic assistant."
-
 
 def _directive_block(types: list[str] | None = None) -> str:
     try:
@@ -52,7 +50,6 @@ def _directive_block(types: list[str] | None = None) -> str:
     except Exception as exc:
         logger.debug("Directive injection unavailable: %s", exc)
         return ""
-
 
 def _specialist_catalog() -> tuple[set[str], str]:
     try:
@@ -68,10 +65,8 @@ def _specialist_catalog() -> tuple[set[str], str]:
         lines.append(f"- {spec.slug}: {spec.description}")
     return slugs, "\n".join(lines)
 
-
 async def _opencode_status(line: str) -> None:
     await send_status(StatusType.TOOL_STARTED, "opencode", line)
-
 
 def batch_classifier_prompt(
     history_path: Path,
@@ -168,10 +163,8 @@ Classification rules:
 - Every decision must have a unique `intentId`.
 """
 
-
 class BatchClassificationError(RuntimeError):
     pass
-
 
 def decision_to_ifplan(decision: ClassifierDecision) -> IFPlan:
     specialist = decision.selected_specialist or "general"
@@ -209,7 +202,6 @@ def decision_to_ifplan(decision: ClassifierDecision) -> IFPlan:
         interaction_type=interaction_type,
         reason=decision.reason or "Batch classifier decision",
     )
-
 
 async def run_batch_classification(
     session_dir: Path,

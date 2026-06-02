@@ -10,7 +10,6 @@ from typing import Any, Optional
 
 from analytics import calculate_dots
 
-
 def _num(value: Any) -> float:
     if value is None:
         return 0.0
@@ -21,7 +20,6 @@ def _num(value: Any) -> float:
     except (TypeError, ValueError):
         return 0.0
 
-
 def _parse_date(value: str | None) -> Optional[date]:
     if not value:
         return None
@@ -29,7 +27,6 @@ def _parse_date(value: str | None) -> Optional[date]:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError:
         return None
-
 
 def _safe_dots(total_kg: float, bodyweight_kg: float, sex: str) -> float | None:
     if total_kg <= 0 or bodyweight_kg <= 0:
@@ -39,7 +36,6 @@ def _safe_dots(total_kg: float, bodyweight_kg: float, sex: str) -> float | None:
     except Exception:
         return None
 
-
 def _serialize_wellness(wellness: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(wellness, dict):
         return None
@@ -47,7 +43,6 @@ def _serialize_wellness(wellness: dict[str, Any] | None) -> dict[str, Any] | Non
     if all(values.get(key) is None for key in ("sleep", "soreness", "mood", "stress", "energy")):
         return None
     return values
-
 
 def summarize_program_meta(meta: dict[str, Any]) -> dict[str, Any]:
     last_comp = meta.get("last_comp") or {}
@@ -79,7 +74,6 @@ def summarize_program_meta(meta: dict[str, Any]) -> dict[str, Any]:
         } if last_comp else None,
     }
 
-
 def summarize_lift_profiles(lift_profiles: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     if not lift_profiles:
         return []
@@ -99,7 +93,6 @@ def summarize_lift_profiles(lift_profiles: list[dict[str, Any]] | None) -> list[
         })
     return ordered
 
-
 def summarize_phases(phases: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     if not phases:
         return []
@@ -118,7 +111,6 @@ def summarize_phases(phases: list[dict[str, Any]] | None) -> list[dict[str, Any]
         for phase in ordered
     ]
 
-
 def summarize_measurements(meta: dict[str, Any]) -> dict[str, Any]:
     return {
         "height_cm": meta.get("height_cm"),
@@ -128,16 +120,13 @@ def summarize_measurements(meta: dict[str, Any]) -> dict[str, Any]:
         "weight_class_kg": meta.get("weight_class_kg"),
     }
 
-
 def _positive_num(value: Any) -> float | None:
     num = _num(value)
     return round(num, 1) if num > 0 else None
 
-
 def _goal_priority_rank(priority: str | None) -> int:
     order = {"primary": 0, "secondary": 1, "optional": 2}
     return order.get(str(priority or "optional"), 99)
-
 
 def _goal_type_rank(goal_type: str | None) -> int:
     order = {
@@ -154,7 +143,6 @@ def _goal_type_rank(goal_type: str | None) -> int:
     }
     return order.get(str(goal_type or "coach_defined"), 99)
 
-
 def _string_list(values: Any) -> list[str]:
     if not isinstance(values, list):
         return []
@@ -165,7 +153,6 @@ def _string_list(values: Any) -> list[str]:
             deduped.append(text)
     return deduped
 
-
 def _federation_brief(federation: dict[str, Any] | None) -> dict[str, Any] | None:
     if not federation:
         return None
@@ -174,7 +161,6 @@ def _federation_brief(federation: dict[str, Any] | None) -> dict[str, Any] | Non
         "name": federation.get("name"),
         "abbreviation": federation.get("abbreviation"),
     }
-
 
 def _resolve_competition_host_federation(
     comp: dict[str, Any] | None,
@@ -198,7 +184,6 @@ def _resolve_competition_host_federation(
             return federation
     return None
 
-
 def _competition_eligible_federation_ids(
     comp: dict[str, Any] | None,
     federations_by_id: dict[str, dict[str, Any]] | None = None,
@@ -214,7 +199,6 @@ def _competition_eligible_federation_ids(
         if federation_id not in ids:
             ids.append(federation_id)
     return ids
-
 
 def _weight_class_alignment(
     competition_weight_class_kg: float | None,
@@ -233,7 +217,6 @@ def _weight_class_alignment(
         return "acceptable"
     return "mismatch"
 
-
 def _group_goals_by_competition(goals: list[dict[str, Any]] | None) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for goal in goals or []:
@@ -246,7 +229,6 @@ def _group_goals_by_competition(goals: list[dict[str, Any]] | None) -> dict[str,
     for comp_date in grouped:
         grouped[comp_date].sort(key=_goal_sort_key)
     return grouped
-
 
 def _competition_strategy_pressure(goals_for_competition: list[dict[str, Any]] | None) -> str:
     if not goals_for_competition:
@@ -263,7 +245,6 @@ def _competition_strategy_pressure(goals_for_competition: list[dict[str, Any]] |
         return "controlled"
     return "aggressive"
 
-
 def _build_federation_maps(federation_library: dict[str, Any] | None) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     library = federation_library or {}
     federations = {
@@ -278,7 +259,6 @@ def _build_federation_maps(federation_library: dict[str, Any] | None) -> tuple[d
     }
     return federations, standards
 
-
 def _competition_goal_priorities(goals: list[dict[str, Any]] | None) -> dict[str, str]:
     priorities: dict[str, str] = {}
     for goal in goals or []:
@@ -288,7 +268,6 @@ def _competition_goal_priorities(goals: list[dict[str, Any]] | None) -> dict[str
             if existing is None or _goal_priority_rank(priority) < _goal_priority_rank(existing):
                 priorities[comp_date] = priority
     return priorities
-
 
 def _goal_required_total(goal: dict[str, Any] | None) -> float | None:
     if not isinstance(goal, dict):
@@ -300,7 +279,6 @@ def _goal_required_total(goal: dict[str, Any] | None) -> float | None:
     if target_total is not None:
         return target_total
     return _positive_num((goal.get("linked_standard") or {}).get("required_total_kg"))
-
 
 def _goal_success_metric(goal: dict[str, Any], target_total: float | None) -> dict[str, Any]:
     goal_type = str(goal.get("goal_type") or "")
@@ -345,7 +323,6 @@ def _goal_success_metric(goal: dict[str, Any], target_total: float | None) -> di
         "instruction": "Judge success by the explicit fields attached to this goal type.",
     }
 
-
 def _goal_sort_key(goal: dict[str, Any]) -> tuple[int, int, float, str]:
     required_total = _goal_required_total(goal)
     return (
@@ -354,7 +331,6 @@ def _goal_sort_key(goal: dict[str, Any]) -> tuple[int, int, float, str]:
         -(required_total or 0.0),
         str(goal.get("title") or ""),
     )
-
 
 def _group_goals_by_eligible_opportunity(goals: list[dict[str, Any]] | None) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
@@ -368,18 +344,15 @@ def _group_goals_by_eligible_opportunity(goals: list[dict[str, Any]] | None) -> 
         grouped[comp_date].sort(key=_goal_sort_key)
     return grouped
 
-
 def _goal_target_competition_dates(goal: dict[str, Any] | None) -> list[str]:
     if not isinstance(goal, dict):
         return []
     return _string_list(list(goal.get("target_competition_dates") or []) + [goal.get("target_competition_date")])
 
-
 def _goal_target_standard_ids(goal: dict[str, Any] | None) -> list[str]:
     if not isinstance(goal, dict):
         return []
     return _string_list(list(goal.get("target_standard_ids") or []) + [goal.get("target_standard_id")])
-
 
 def _goal_linked_standards(goal: dict[str, Any], standards_by_id: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     linked: list[dict[str, Any]] = []
@@ -388,7 +361,6 @@ def _goal_linked_standards(goal: dict[str, Any], standards_by_id: dict[str, dict
         if standard is not None:
             linked.append(standard)
     return linked
-
 
 def _goal_primary_standard(goal: dict[str, Any], standards_by_id: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     standards = _goal_linked_standards(goal, standards_by_id)
@@ -401,7 +373,6 @@ def _goal_primary_standard(goal: dict[str, Any], standards_by_id: dict[str, dict
     ] or standards
     candidates.sort(key=lambda standard: -(_positive_num(standard.get("required_total_kg")) or 0.0))
     return candidates[0]
-
 
 def summarize_goals(
     program: dict[str, Any],
@@ -625,7 +596,6 @@ def summarize_goals(
         "competition_goal_priorities": competition_goal_priorities,
     }
 
-
 def summarize_competitions(
     program: dict[str, Any],
     reference_date: date | None = None,
@@ -765,7 +735,6 @@ def summarize_competitions(
         "competitions": rows,
     }
 
-
 def summarize_meet_interference(
     program: dict[str, Any],
     reference_date: date | None = None,
@@ -842,7 +811,6 @@ def summarize_meet_interference(
 
     return rows
 
-
 def summarize_bodyweight_trend(
     sessions: list[dict[str, Any]],
     weight_log: list[dict[str, Any]] | None = None,
@@ -899,7 +867,6 @@ def summarize_bodyweight_trend(
         "direction": direction,
         "entries": len(points),
     }
-
 
 def summarize_diet_context(
     program: dict[str, Any],
@@ -964,7 +931,6 @@ def summarize_diet_context(
         "entries": len(diet_notes),
     }
 
-
 def summarize_program_notes(
     program: dict[str, Any],
     window_start: date | None = None,
@@ -1008,7 +974,6 @@ def summarize_program_notes(
         ),
     }
 
-
 def _serialize_planned_exercise_for_prompt(ex: dict[str, Any]) -> dict[str, Any]:
     kg = ex.get("kg") or 0
     rpe = ex.get("rpe_target") or ex.get("rpe")
@@ -1044,7 +1009,6 @@ def _serialize_planned_exercise_for_prompt(ex: dict[str, Any]) -> dict[str, Any]
         "set_statuses": ex.get("set_statuses"),
     }
 
-
 def summarize_planned_sessions(
     sessions: list[dict[str, Any]],
     limit: int | None = None,
@@ -1069,7 +1033,6 @@ def summarize_planned_sessions(
             "wellness": _serialize_wellness(session.get("wellness")),
         })
     return rows
-
 
 def summarize_completed_sessions(
     sessions: list[dict[str, Any]],
@@ -1111,7 +1074,6 @@ def summarize_completed_sessions(
         })
     return rows
 
-
 def summarize_supplements(program: dict[str, Any]) -> dict[str, Any]:
     supplements = [
         {
@@ -1147,7 +1109,6 @@ def summarize_supplements(program: dict[str, Any]) -> dict[str, Any]:
         "supplements": supplements,
         "supplement_phases": phases,
     }
-
 
 def summarize_exercise_roi(
     program: dict[str, Any],
@@ -1196,7 +1157,6 @@ def summarize_exercise_roi(
 
     rows.sort(key=lambda row: abs(float(row["pearson_r"] or 0.0)), reverse=True)
     return rows[:top_n]
-
 
 FORMULA_REFERENCE = """\
 HOW THE ANALYSIS PAGE METRICS ARE CALCULATED

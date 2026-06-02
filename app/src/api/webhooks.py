@@ -14,8 +14,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/webhooks", tags=["webhooks"])
 
-
-
 class DiscordConfig(BaseModel):
 
     bot_token: str = Field(..., description="Discord bot token")
@@ -25,13 +23,11 @@ class DiscordConfig(BaseModel):
         description="Specialist slug to lock this channel to. Leave blank for normal planner-based routing.",
     )
 
-
 class OpenWebUIConfig(BaseModel):
 
     base_url: str = Field(..., description="OpenWebUI server base URL")
     channel_id: str = Field(..., description="OpenWebUI channel ID")
     api_key: str = Field(..., description="OpenWebUI API key")
-
 
 class RegisterWebhookRequest(BaseModel):
 
@@ -48,8 +44,6 @@ class RegisterWebhookRequest(BaseModel):
         None, description="OpenWebUI configuration (required if platform is openwebui)"
     )
 
-
-
 class WebhookResponse(BaseModel):
 
     webhook_id: str
@@ -59,13 +53,10 @@ class WebhookResponse(BaseModel):
     status: str
     pinned_specialist: str = ""
 
-
 class WebhookListResponse(BaseModel):
 
     webhooks: List[WebhookResponse]
     total: int
-
-
 
 @router.post("/register", response_model=WebhookResponse)
 async def register_webhook(req: RegisterWebhookRequest):
@@ -130,7 +121,6 @@ async def register_webhook(req: RegisterWebhookRequest):
         pinned_specialist=record.pinned_specialist,
     )
 
-
 @router.get("/", response_model=WebhookListResponse)
 async def list_all_webhooks():
 
@@ -153,7 +143,6 @@ async def list_all_webhooks():
         webhooks=webhooks,
         total=len(webhooks),
     )
-
 
 @router.get("/active", response_model=WebhookListResponse)
 async def list_active_webhooks():
@@ -178,7 +167,6 @@ async def list_active_webhooks():
         total=len(webhooks),
     )
 
-
 @router.get("/{webhook_id}", response_model=WebhookResponse)
 async def get_webhook(webhook_id: str):
 
@@ -199,7 +187,6 @@ async def get_webhook(webhook_id: str):
         status=record.status,
         pinned_specialist=record.pinned_specialist or "",
     )
-
 
 @router.delete("/{webhook_id}")
 async def delete_webhook(webhook_id: str):
@@ -223,7 +210,6 @@ async def delete_webhook(webhook_id: str):
         "status": "deactivated",
         "webhook_id": webhook_id,
     }
-
 
 @router.post("/{webhook_id}/restart")
 async def restart_webhook(webhook_id: str):

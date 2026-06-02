@@ -1,8 +1,8 @@
-"""OpenWebUI channel listener (polling-based).
 
-Polls the OpenWebUI channel message API on a short interval.
-Captures new messages and pushes to debounce queue.
-"""
+
+
+
+
 from __future__ import annotations
 import asyncio
 import threading
@@ -18,23 +18,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 def create_openwebui_listener(
     record: "WebhookRecord",
     stop_event: threading.Event,
 ) -> Callable[[], None]:
-    """Create an OpenWebUI listener function for threading.
-    
-    Returns a callable to be used as a Thread target. Polls the OpenWebUI
-    channel API for new messages.
-    
-    Args:
-        record: WebhookRecord containing OpenWebUI configuration
-        stop_event: Threading event to signal listener shutdown
-        
-    Returns:
-        Callable that runs the OpenWebUI polling listener
-    """
+
+
+
+
+
+
+
+
+
+
+
+
     config = record.get_config()
     base_url = config["base_url"].rstrip("/")
     channel_id = config["channel_id"]
@@ -43,12 +42,12 @@ def create_openwebui_listener(
     webhook_id = record.webhook_id
 
     def run() -> None:
-        """Run the OpenWebUI polling loop."""
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         async def poll():
-            """Poll OpenWebUI for new messages."""
+
             last_seen_id: str | None = None
 
             async with httpx.AsyncClient(
@@ -62,7 +61,6 @@ def create_openwebui_listener(
                         if last_seen_id:
                             params["after"] = last_seen_id
 
-                        # OpenWebUI channel messages endpoint
                         resp = await client.get(
                             f"/api/v1/channels/{channel_id}/messages",
                             params=params,
@@ -70,18 +68,14 @@ def create_openwebui_listener(
 
                         if resp.status_code == 200:
                             data = resp.json()
-                            # Handle both paginated and direct response formats
                             messages = data.get("data", data.get("messages", []))
 
                             for msg in messages:
-                                # Skip assistant messages
                                 if msg.get("role") == "assistant":
                                     continue
 
-                                # Import here to avoid circular dependency
                                 from channels.debounce import push_message
 
-                                # Extract author name
                                 author = "unknown"
                                 user = msg.get("user", {})
                                 if isinstance(user, dict):
@@ -89,7 +83,6 @@ def create_openwebui_listener(
                                 elif isinstance(user, str):
                                     author = user
 
-                                # Extract attachments
                                 attachments = []
                                 for f in msg.get("files", []):
                                     file_url = f.get("url", "")
@@ -125,11 +118,9 @@ def create_openwebui_listener(
                                     f"OpenWebUI message from {author} "
                                     f"in {webhook_id}: {msg.get('content', '')[:50]}..."
                                 )
-                                # Update last seen ID
                                 last_seen_id = msg.get("id", last_seen_id)
 
                         elif resp.status_code == 304:
-                            # Not modified - no new messages
                             pass
                         elif resp.status_code == 401:
                             logger.error(
@@ -160,7 +151,6 @@ def create_openwebui_listener(
                             f"OpenWebUI listener error for {webhook_id}: {e}"
                         )
 
-                    # Wait before next poll
                     await asyncio.sleep(OPENWEBUI_POLL_INTERVAL)
 
         try:

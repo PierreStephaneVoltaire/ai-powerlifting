@@ -37,11 +37,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
-
 SSE_PREFIX = "data: "
 SSE_DONE = "data: [DONE]\n\n"
-
 
 def make_sse_chunk(text: str, chunk_id: str, model: str) -> str:
 
@@ -57,7 +54,6 @@ def make_sse_chunk(text: str, chunk_id: str, model: str) -> str:
         ],
     )
     return f"{SSE_PREFIX}{chunk.model_dump_json()}\n\n"
-
 
 def extract_text_from_sse(chunk: str) -> str:
 
@@ -78,7 +74,6 @@ def extract_text_from_sse(chunk: str) -> str:
         pass
     
     return ""
-
 
 async def stream_with_files_strip(
     original_stream: AsyncGenerator[str, None],
@@ -120,7 +115,6 @@ async def stream_with_files_strip(
     
     yield SSE_DONE
 
-
 def resolve_cache_key(
     request_data: Dict[str, Any],
     webhook: Optional["WebhookRecord"] = None
@@ -154,25 +148,24 @@ def resolve_cache_key(
 
     return "default"
 
-
 def build_context_id(
     request_data: Dict[str, Any],
     webhook: Optional["WebhookRecord"] = None
 ) -> str:
-    """Build a context ID for LanceDB storage.
 
-    Context ID format:
-    - OpenWebUI chat: openwebui_{chat_id}
-    - OpenWebUI channel: openwebui_{channel_id}
-    - Discord channel: discord_{channel_id}
 
-    Args:
-        request_data: The request data dict
-        webhook: Optional webhook record
 
-    Returns:
-        Context ID string
-    """
+
+
+
+
+
+
+
+
+
+
+
     if webhook:
         config = webhook.get_config()
         platform = webhook.platform.lower()
@@ -188,7 +181,6 @@ def build_context_id(
     if chat_id:
         return f"openwebui_{chat_id}"
 
-    # Fallback: hash of first message
     messages = request_data.get("messages", [])
     if messages:
         content = messages[0].get("content", "")
@@ -204,17 +196,16 @@ def build_context_id(
 
     return "openwebui_default"
 
-
 def format_conversation_history(messages: List[Dict], max_messages: int = 50) -> str:
-    """Format message history (excluding the last message) into a labeled block.
 
-    Args:
-        messages: Full message list in OpenAI format
-        max_messages: Maximum number of history messages to include
 
-    Returns:
-        Formatted history string with [role] labels, or empty string
-    """
+
+
+
+
+
+
+
     history = messages[:-1] if len(messages) > 1 else []
     if not history:
         return ""
@@ -233,7 +224,6 @@ def format_conversation_history(messages: List[Dict], max_messages: int = 50) ->
             lines.append(f"[{role}] {content}")
     return "\n".join(lines)
 
-
 def extract_message_window(messages: List[Dict], window_size: int = 5) -> List[str]:
 
     window = []
@@ -250,7 +240,6 @@ def extract_message_window(messages: List[Dict], window_size: int = 5) -> List[s
                 window.append(" ".join(text_parts))
     return window
 
-
 def extract_last_user_message(messages: List[Dict]) -> str:
 
     for msg in reversed(messages):
@@ -266,9 +255,8 @@ def extract_last_user_message(messages: List[Dict]) -> str:
                 return " ".join(text_parts)
     return ""
 
-
 def _parse_json_object_args(raw_args: str) -> Dict[str, Any]:
-    """Parse slash-command tool args as a JSON object."""
+
     raw_args = raw_args.strip()
     if not raw_args:
         return {}
@@ -278,9 +266,8 @@ def _parse_json_object_args(raw_args: str) -> Dict[str, Any]:
         raise ValueError("Tool arguments must be a JSON object.")
     return parsed
 
-
 def _find_specialist_for_tool(tool_name: str) -> Optional[str]:
-    """Pick the best specialist to handle a human slash tool invocation."""
+
     try:
         from agent.specialists import list_specialists
 
@@ -292,15 +279,13 @@ def _find_specialist_for_tool(tool_name: str) -> Optional[str]:
         if not candidates:
             return None
 
-        # Prefer read-oriented specialists over *_write when a tool is shared.
         candidates.sort(key=lambda slug: (slug.endswith("_write"), slug))
         return candidates[0]
     except Exception:
         return None
 
-
 def _specialist_model_override(request_data: Dict[str, Any]) -> Optional[str]:
-    """Return an internal specialist model override from request metadata."""
+
     metadata = request_data.get("metadata")
     if not isinstance(metadata, dict):
         return None
@@ -308,7 +293,6 @@ def _specialist_model_override(request_data: Dict[str, Any]) -> Optional[str]:
     if metadata.get("use_health_helper_model") is True:
         return HEALTH_HELPER_MODEL
     return None
-
 
 async def process_chat_completion_internal(
     request_data: Dict[str, Any],
@@ -325,7 +309,6 @@ async def process_chat_completion_internal(
     last_user_message = extract_last_user_message(messages)
     logger.info(f"[Request] cache_key={cache_key} | user={request_data.get('user', '?')} | prompt={last_user_message[:80]}")
 
-    # Direct tool invoke — bypass agent, call tool imperatively
     if direct_invoke:
         import re
         match = re.match(r'^/(\w+)\s*(.*)', last_user_message.strip(), re.DOTALL)
@@ -338,7 +321,6 @@ async def process_chat_completion_internal(
         except (json.JSONDecodeError, ValueError) as e:
             return json.dumps({"error": f"Invalid tool arguments: {e}"}), []
 
-        # Inject sandbox key — file-emitting tools write to SANDBOX_PATH/cache_key/
         args["_conversation_id"] = cache_key
 
         registry = get_mcp_manager()
@@ -347,7 +329,6 @@ async def process_chat_completion_internal(
 
         result = await registry.call_tool(tool_name, args)
 
-        # Strip FILES: lines and log refs (mirrors the normal agent path)
         cleaned, file_refs = strip_files_line(result)
         if file_refs:
             log_file_refs(cache_key, file_refs)
@@ -403,11 +384,9 @@ async def process_chat_completion_internal(
             return cmd.response_text, []
         
         if cmd.action == CommandAction.PIN_PRESET:
-            # Pin to specific tier (pondering mode uses tier 2/heavy)
             cached_state = cache.get_or_create(cache_key)
-            # Map preset names to tiers
             tier_map = {
-                "pondering": 2,  # Heavy tier for pondering
+                "pondering": 2,
                 "heavy": 2,
                 "standard": 1,
                 "air": 0,
@@ -566,13 +545,10 @@ async def process_chat_completion_internal(
                 return content, []
         return str(response), []
 
-    # Keep cache state for slash commands and heartbeat metadata. The
-    # opencode planner now selects route/model for the actual response.
     cached_state = cache.get_or_create(cache_key)
     if cached_state.pondering or (cached_state.pinned and cached_state.pinned_tier == 2):
         request_data["_thinking_mode_requested"] = True
 
-    # Persist cache state
     try:
         from storage.factory import get_webhook_store
         store = get_webhook_store()
@@ -637,7 +613,6 @@ async def process_chat_completion_internal(
 
     logger.info(f"[Response] cache_key={cache_key} | content_len={len(flow_result.content)} | attachments={len(attachments)}")
     return flow_result.content, attachments
-
 
 @router.post("/v1/chat/completions")
 async def chat_completions(
@@ -716,7 +691,6 @@ async def chat_completions(
             )
         ]
     )
-
 
 @router.post("/api/v1/chat/completions")
 async def chat_completions_alias(

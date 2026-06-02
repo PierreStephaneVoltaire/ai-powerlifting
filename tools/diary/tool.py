@@ -22,11 +22,6 @@ from tools.sdk_compat import (
     register_tool,
 )
 
-
-# =============================================================================
-# Helpers (duplicated from agent/tools/base to avoid cross-dir imports)
-# =============================================================================
-
 def _run_async(coro):
     try:
         loop = asyncio.get_running_loop()
@@ -38,34 +33,23 @@ def _run_async(coro):
             return pool.submit(asyncio.run, coro).result()
     return asyncio.run(coro)
 
-
 def _format_result(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, indent=2, default=str)
 
-
-# =============================================================================
-# SDK Tool Classes (migrated from agent/tools/diary_tools.py)
-# =============================================================================
-
-# --- write_diary_entry ---
-
 class WriteDiaryEntryAction(Action):
     content: str = Field(description="Raw journal/rant text to write")
     user_pk: str = Field(default="operator", description="User partition key")
 
-
 class WriteDiaryEntryObservation(Observation):
     pass
-
 
 class WriteDiaryEntryExecutor(ToolExecutor[WriteDiaryEntryAction, WriteDiaryEntryObservation]):
     def __call__(self, action: WriteDiaryEntryAction, conversation=None) -> WriteDiaryEntryObservation:
         from diary import write_diary_entry
         result = _run_async(write_diary_entry(action.content, action.user_pk))
         return WriteDiaryEntryObservation.from_text(_format_result(result))
-
 
 class WriteDiaryEntryTool(ToolDefinition[WriteDiaryEntryAction, WriteDiaryEntryObservation]):
     @classmethod
@@ -80,23 +64,17 @@ class WriteDiaryEntryTool(ToolDefinition[WriteDiaryEntryAction, WriteDiaryEntryO
             executor=WriteDiaryEntryExecutor(),
         )]
 
-
-# --- compute_diary_signal ---
-
 class ComputeDiarySignalAction(Action):
     user_pk: str = Field(default="operator", description="User partition key")
 
-
 class ComputeDiarySignalObservation(Observation):
     pass
-
 
 class ComputeDiarySignalExecutor(ToolExecutor[ComputeDiarySignalAction, ComputeDiarySignalObservation]):
     def __call__(self, action: ComputeDiarySignalAction, conversation=None) -> ComputeDiarySignalObservation:
         from diary import compute_diary_signal
         result = _run_async(compute_diary_signal(action.user_pk))
         return ComputeDiarySignalObservation.from_text(_format_result(result))
-
 
 class ComputeDiarySignalTool(ToolDefinition[ComputeDiarySignalAction, ComputeDiarySignalObservation]):
     @classmethod
@@ -112,18 +90,8 @@ class ComputeDiarySignalTool(ToolDefinition[ComputeDiarySignalAction, ComputeDia
             executor=ComputeDiarySignalExecutor(),
         )]
 
-
-# =============================================================================
-# Register all SDK tools
-# =============================================================================
-
 register_tool("WriteDiaryEntryTool", WriteDiaryEntryTool)
 register_tool("ComputeDiarySignalTool", ComputeDiarySignalTool)
-
-
-# =============================================================================
-# Plugin contract: get_tools()
-# =============================================================================
 
 def get_tools() -> List[Tool]:
     """Get all diary SDK Tool objects (side effect: register_tool already called above)."""
@@ -131,11 +99,6 @@ def get_tools() -> List[Tool]:
         Tool(name="WriteDiaryEntryTool"),
         Tool(name="ComputeDiarySignalTool"),
     ]
-
-
-# =============================================================================
-# Plugin contract: get_schemas() -- JSON schemas for non-agentic specialist path
-# =============================================================================
 
 def get_schemas() -> Dict[str, Dict[str, Any]]:
     """Return snake_case tool name -> JSON schema mapping."""
@@ -181,11 +144,6 @@ def get_schemas() -> Dict[str, Dict[str, Any]]:
             },
         },
     }
-
-
-# =============================================================================
-# Plugin contract: execute() -- async dispatcher for non-agentic specialist path
-# =============================================================================
 
 async def execute(name: str, args: Dict[str, Any]) -> str:
     """Route diary tool calls to the underlying diary module functions."""

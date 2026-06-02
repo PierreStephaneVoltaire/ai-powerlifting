@@ -1,21 +1,20 @@
-#!/usr/bin/env python3
-"""One-shot migration script: ChromaDB -> LanceDB.
 
-Migrates all user facts from ChromaDB to LanceDB storage.
-Each fact is re-embedded using the new embedding model.
 
-Usage:
-    python -m memory.migrate_chroma [--dry-run] [--context-id CONTEXT_ID]
 
-Options:
-    --dry-run           Show what would be migrated without making changes
-    --context-id ID     Assign a specific context_id to all migrated facts
-                        (default: "migrated_default")
 
-Environment Variables:
-    FACTS_BASE_PATH     Base path for LanceDB storage (default: ./data/facts)
-    MEMORY_DB_PATH      Path to existing ChromaDB (default: ./data/memory_db)
-"""
+
+
+
+
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
 import argparse
 import json
@@ -25,7 +24,6 @@ import sys
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 
-# Setup path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 logger = logging.getLogger(__name__)
@@ -34,16 +32,15 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-
 def get_chroma_collection(db_path: str):
-    """Get the ChromaDB collection.
 
-    Args:
-        db_path: Path to ChromaDB database
 
-    Returns:
-        ChromaDB collection object
-    """
+
+
+
+
+
+
     try:
         import chromadb
         from chromadb.config import Settings
@@ -64,7 +61,6 @@ def get_chroma_collection(db_path: str):
         metadata={"description": "User facts store"}
     )
 
-
 def migrate_fact(
     fact_id: str,
     document: str,
@@ -72,22 +68,21 @@ def migrate_fact(
     context_id: str,
     dry_run: bool = False,
 ) -> Optional[str]:
-    """Migrate a single fact from ChromaDB to LanceDB.
 
-    Args:
-        fact_id: The fact ID
-        document: The document content
-        metadata: ChromaDB metadata
-        context_id: Context ID for LanceDB
-        dry_run: If True, don't actually write
 
-    Returns:
-        New fact ID or None if skipped
-    """
+
+
+
+
+
+
+
+
+
+
     from memory.lancedb_store import get_table, clear_table_cache
     from memory.embeddings import embed
 
-    # Extract fields from metadata
     username = metadata.get("username", "unknown")
     category = metadata.get("category", "personal")
     source = metadata.get("source", "user_stated")
@@ -98,7 +93,6 @@ def migrate_fact(
     superseded_by = metadata.get("superseded_by") or None
     active = metadata.get("active", True)
 
-    # Handle metadata_json
     metadata_json = metadata.get("metadata_json", "{}")
     if isinstance(metadata_json, str):
         try:
@@ -112,10 +106,8 @@ def migrate_fact(
         logger.info(f"[DRY RUN] Would migrate: [{category}] {document[:50]}...")
         return fact_id
 
-    # Generate new embedding
     vector = embed(document)
 
-    # Build row for LanceDB
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "id": fact_id,
@@ -134,33 +126,30 @@ def migrate_fact(
         "metadata_json": json.dumps(fact_metadata),
     }
 
-    # Get table and add row
     table = get_table(context_id)
     table.add([row])
 
     return fact_id
-
 
 def migrate(
     chroma_path: str,
     context_id: str = "migrated_default",
     dry_run: bool = False,
 ) -> Dict[str, int]:
-    """Run the migration.
 
-    Args:
-        chroma_path: Path to ChromaDB database
-        context_id: Context ID for all migrated facts
-        dry_run: If True, don't actually write
 
-    Returns:
-        Dict with migration stats
-    """
+
+
+
+
+
+
+
+
     logger.info(f"Starting migration from ChromaDB ({chroma_path}) to LanceDB")
     logger.info(f"Context ID: {context_id}")
     logger.info(f"Dry run: {dry_run}")
 
-    # Get ChromaDB collection
     collection = get_chroma_collection(chroma_path)
     total = collection.count()
     logger.info(f"Found {total} documents in ChromaDB")
@@ -169,7 +158,6 @@ def migrate(
         logger.info("No documents to migrate")
         return {"total": 0, "migrated": 0, "errors": 0}
 
-    # Fetch all documents
     results = collection.get(
         include=["documents", "metadatas", "embeddings"]
     )
@@ -201,7 +189,6 @@ def migrate(
             if new_id:
                 stats["migrated"] += 1
 
-            # Progress logging
             if (i + 1) % 100 == 0:
                 logger.info(f"Progress: {i + 1}/{total}")
 
@@ -211,7 +198,6 @@ def migrate(
 
     logger.info(f"Migration complete: {stats}")
     return stats
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -235,10 +221,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Get paths
     chroma_path = args.chroma_path or os.getenv("MEMORY_DB_PATH", "./data/memory_db")
 
-    # Run migration
     stats = migrate(
         chroma_path=chroma_path,
         context_id=args.context_id,
@@ -250,7 +234,6 @@ def main():
         logger.info("Run without --dry-run to perform the actual migration.")
 
     return 0 if stats["errors"] == 0 else 1
-
 
 if __name__ == "__main__":
     sys.exit(main())

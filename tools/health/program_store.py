@@ -21,16 +21,13 @@ from boto3.dynamodb.conditions import Key, Attr
 
 logger = logging.getLogger(__name__)
 
-
 class ProgramNotFoundError(Exception):
     """Raised when pointer item does not exist in DynamoDB."""
     pass
 
-
 class CurrentProgramHasFutureSessionsError(Exception):
     """Raised when trying to archive a program that still has planned future sessions."""
     pass
-
 
 class ProgramStore:
     """DynamoDB-backed store for training programs with versioning support.
@@ -59,7 +56,7 @@ class ProgramStore:
         self._pk = pk
         self._region = region
         self._sessions_table_name = os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions")
-        self._table = None  # Lazy-loaded via property
+        self._table = None
         self._cache: Optional[dict] = None
         self._cache_version: Optional[int] = None
 
@@ -143,7 +140,6 @@ class ProgramStore:
         logger.debug("[ProgramStore] Cache miss, loading from DynamoDB")
         
         try:
-            # Run synchronous DynamoDB operations in executor
             program = await asyncio.get_running_loop().run_in_executor(
                 None, self._load_program_sync
             )
@@ -160,14 +156,12 @@ class ProgramStore:
     
     def _load_program_sync(self) -> dict:
         """Synchronous program loading logic."""
-        # Read pointer item
         logger.info(f"[ProgramStore] Reading pointer from table='{self._table_name}' region='{self._region}': pk={self._pk}, sk={self.POINTER_SK}")
         pointer_resp = self.table.get_item(
             Key={"pk": self._pk, "sk": self.POINTER_SK}
         )
 
         if "Item" not in pointer_resp:
-            # No pointer found - try to auto-create from existing program versions
             logger.info(f"[ProgramStore] Pointer not found, scanning for existing program versions...")
             try:
                 scan_result = self.table.scan(
@@ -181,7 +175,6 @@ class ProgramStore:
                         "Create a program using new_version() first."
                     )
 
-                # Find highest version number
                 latest_version = 0
                 latest_sk = None
                 for item in items:
@@ -202,7 +195,6 @@ class ProgramStore:
                         "Create a program using new_version() first."
                     )
 
-                # Auto-create pointer
                 now = datetime.now(timezone.utc).isoformat()
                 pointer_item = {
                     "pk": self._pk,
@@ -214,7 +206,6 @@ class ProgramStore:
                 self.table.put_item(Item=pointer_item)
                 logger.info(f"[ProgramStore] Auto-created pointer to version {latest_version} ({latest_sk})")
 
-                # Re-read pointer
                 pointer_resp = self.table.get_item(
                     Key={"pk": self._pk, "sk": self.POINTER_SK}
                 )
@@ -234,7 +225,6 @@ class ProgramStore:
         
         logger.debug(f"[ProgramStore] Pointer points to version={version}, ref_sk={ref_sk}")
         
-        # Read program item
         logger.debug(f"[ProgramStore] Reading program: pk={self._pk}, sk={ref_sk}")
         program_resp = self.table.get_item(
             Key={"pk": self._pk, "sk": ref_sk}
@@ -248,7 +238,6 @@ class ProgramStore:
             )
         
         program = dict(program_resp["Item"])
-        # Remove DynamoDB keys from returned program
         program.pop("pk", None)
         program.pop("sk", None)
         program["sessions"] = self._get_session_store().list_sessions_sync(
@@ -305,13 +294,10 @@ class ProgramStore:
             ValueError: If patch path is invalid
             RuntimeError: If DynamoDB operation fails
         """
-        # Get current program (from cache or DynamoDB)
         program = await self.get_program()
         
-        # Deep copy for modification
         new_program = copy.deepcopy(program)
         
-        # Apply each patch
         for patch in patches:
             path = patch.get("path", "")
             value = patch.get("value")
@@ -321,7 +307,6 @@ class ProgramStore:
             
             self._apply_patch(new_program, path, value)
         
-        # Add change reason to meta
         if "meta" not in new_program:
             new_program["meta"] = {}
         if "change_log" not in new_program["meta"]:
@@ -331,7 +316,6 @@ class ProgramStore:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
         
-        # Write new major version
         updated_program = await self._write_new_version(new_program, minor=False)
         
         return updated_program
@@ -354,21 +338,17 @@ class ProgramStore:
         """
         import re
         
-        # Parse path into segments
         segments = []
         for part in path.split("."):
-            # Handle array indices: sessions[0] -> ("sessions", 0)
             match = re.match(r"^(\w+)\[(\d+)\]$", part)
             if match:
                 segments.append((match.group(1), int(match.group(2))))
             else:
                 segments.append((part, None))
         
-        # Navigate to parent and set value
         current = obj
         for i, (key, idx) in enumerate(segments[:-1]):
             if idx is not None:
-                # Array access
                 if key not in current:
                     raise ValueError(f"Invalid path '{path}': '{key}' not found")
                 if not isinstance(current[key], list):
@@ -377,14 +357,12 @@ class ProgramStore:
                     raise ValueError(f"Invalid path '{path}': index {idx} out of range")
                 current = current[key][idx]
             else:
-                # Dict access
                 if not isinstance(current, dict):
                     raise ValueError(f"Invalid path '{path}': expected dict at '{key}'")
                 if key not in current:
                     raise ValueError(f"Invalid path '{path}': '{key}' not found")
                 current = current[key]
         
-        # Set final value
         final_key, final_idx = segments[-1]
         if final_idx is not None:
             if final_key not in current:
@@ -414,7 +392,6 @@ class ProgramStore:
             RuntimeError: If DynamoDB operation fails
         """
         try:
-            # Run synchronous DynamoDB operations in executor
             result = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: self._write_new_version_sync(program, minor)
             )
@@ -432,7 +409,6 @@ class ProgramStore:
         None values are left as-is (DynamoDB accepts null).
         """
         if isinstance(obj, float):
-            # Use string conversion to preserve precision and avoid floating-point artifacts
             return Decimal(str(obj))
         if isinstance(obj, dict):
             return {k: ProgramStore._floats_to_decimals(v) for k, v in obj.items()}
@@ -444,7 +420,6 @@ class ProgramStore:
         """Synchronous version writing logic."""
         now = datetime.now(timezone.utc).isoformat()
         
-        # Get current version from pointer
         logger.debug(f"[ProgramStore] Reading current pointer for version increment")
         pointer_resp = self.table.get_item(
             Key={"pk": self._pk, "sk": self.POINTER_SK}
@@ -455,10 +430,8 @@ class ProgramStore:
         else:
             current_version = 0
         
-        # Calculate new version
         new_version_int = current_version + 1
         
-        # Version label (for display purposes)
         if "meta" not in program:
             program["meta"] = {}
         
@@ -475,8 +448,6 @@ class ProgramStore:
         program["meta"]["version_label"] = new_label
         program["meta"]["updated_at"] = now
         
-        # Create new program item. Sessions now live in if-sessions, so keep
-        # program versions lean and clone/write session rows under the new SK.
         new_sk = f"{self.PROGRAM_SK_PREFIX}{new_version_int:03d}"
 
         sessions = copy.deepcopy(program.get("sessions", []))
@@ -489,7 +460,6 @@ class ProgramStore:
             **program_without_sessions
         }
         
-        # DynamoDB does not support Python float — convert all floats to Decimal
         program_item = self._floats_to_decimals(program_item)
         
         logger.debug(f"[ProgramStore] Writing new program version: sk={new_sk}, label={new_label}")
@@ -501,7 +471,6 @@ class ProgramStore:
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
         )
         
-        # Update pointer
         pointer_item = {
             "pk": self._pk,
             "sk": self.POINTER_SK,
@@ -537,19 +506,16 @@ class ProgramStore:
 
     def _archive_sync(self, sk: str) -> None:
         """Synchronous archive logic."""
-        # Read program item
         resp = self.table.get_item(Key={"pk": self._pk, "sk": sk})
         if "Item" not in resp:
             raise ProgramNotFoundError(f"Program not found: {sk}")
         
         program = resp["Item"]
         
-        # Check if it's the current program
         pointer_resp = self.table.get_item(Key={"pk": self._pk, "sk": self.POINTER_SK})
         is_current = "Item" in pointer_resp and pointer_resp["Item"].get("ref_sk") == sk
         
         if is_current:
-            # Rule: cannot archive if it has incomplete future sessions
             sessions = self._get_session_store().list_sessions_sync(
                 sk,
                 program.get("phases", []) if isinstance(program.get("phases"), list) else [],
@@ -564,7 +530,6 @@ class ProgramStore:
                     "Mark them as completed or skipped first, or delete them."
                 )
 
-        # Update program item with archive fields
         now = datetime.now(timezone.utc).isoformat()
         if "meta" not in program:
             program["meta"] = {}
@@ -575,7 +540,6 @@ class ProgramStore:
         logger.info(f"[ProgramStore] Archived program {sk}")
         
         if is_current:
-            # Flip pointer to most recent non-archived
             self._repoint_current_to_latest_non_archived_sync()
 
     def _repoint_current_to_latest_non_archived_sync(self) -> None:
@@ -583,13 +547,9 @@ class ProgramStore:
         programs = self._list_programs_sync(include_archived=False)
         if not programs:
             logger.warning("[ProgramStore] No non-archived programs found to repoint 'program#current'")
-            # Optionally delete the pointer or leave it?
-            # Plan says "flip current pointer to most recent non-archived", implying it should exist.
-            # If none, we might just delete the pointer.
             self.table.delete_item(Key={"pk": self._pk, "sk": self.POINTER_SK})
             return
 
-        # Sort by version (sk) descending
         programs.sort(key=lambda p: p["sk"], reverse=True)
         latest = programs[0]
         
@@ -661,11 +621,9 @@ class ProgramStore:
                 if not item.get("meta", {}).get("archived", False)
             ]
         
-        # Clean up items for return
         results = []
         for item in items:
             p = dict(item)
-            # We can keep 'sk' here as it's useful for listing
             results.append(p)
             
         return results

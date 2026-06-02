@@ -9,7 +9,6 @@ APP_SRC = str(Path(__file__).resolve().parent.parent / "app" / "src")
 if APP_SRC not in sys.path:
     sys.path.insert(0, APP_SRC)
 
-
 def _make_ifplan(interaction_type="domain", specialist="coder", model="deepseek/deepseek-v4-flash"):
     from flow.plan import IFPlan
     return IFPlan(
@@ -21,7 +20,6 @@ def _make_ifplan(interaction_type="domain", specialist="coder", model="deepseek/
         prompt="Do the thing",
         raw="---\n---\nDo the thing",
     )
-
 
 class TestConfigPathPlumbing:
     @pytest.mark.asyncio
@@ -81,7 +79,6 @@ class TestConfigPathPlumbing:
         kw = mock_oc.call_args_list[0].kwargs
         assert kw.get("config_path") == expected_config
 
-
 class TestSessionMarkerPlumbing:
     @pytest.mark.asyncio
     async def test_run_domain_passes_per_run_marker(self, tmp_path):
@@ -131,7 +128,6 @@ class TestSessionMarkerPlumbing:
         assert run_id_a in str(markers[0])
         assert run_id_b in str(markers[1])
 
-
 class TestRunIfFlowThinkingModeNoNameError:
     @pytest.mark.asyncio
     async def test_thinking_mode_social_no_name_error(self, tmp_path):
@@ -178,7 +174,6 @@ class TestRunIfFlowThinkingModeNoNameError:
         assert "run_id" not in kw
         assert "response_filename" not in kw
         assert "status_filename" not in kw
-
 
 class TestTechnicalReviewPromptFString:
     @pytest.mark.asyncio
@@ -228,7 +223,6 @@ class TestTechnicalReviewPromptFString:
         assert calls["n"] == 3
         assert content == "fixed"
 
-
 class TestOutboundIdempotencyKey:
     @pytest.mark.asyncio
     async def test_social_response_key_stable(self):
@@ -277,7 +271,6 @@ class TestOutboundIdempotencyKey:
         keys = [m.idempotency_key for m in captured]
         assert len(set(keys)) == 1
         assert keys[0] == "b1:i1:clarifying_question"
-
 
 class TestSynthesizeHandoffsMarkerPlumbing:
     @pytest.mark.asyncio

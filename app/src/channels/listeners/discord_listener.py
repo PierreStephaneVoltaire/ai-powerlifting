@@ -1,10 +1,10 @@
-"""Discord listener using discord.py.
 
-Runs a bot client in its own thread with its own event loop.
-Captures messages from the registered channel and pushes to the
-channel coordinator for DynamoDB-backed orchestration.
-Registers slash commands as guild commands on first connect (deduped).
-"""
+
+
+
+
+
+
 from __future__ import annotations
 import asyncio
 import threading
@@ -21,10 +21,8 @@ logger = logging.getLogger(__name__)
 
 _active_clients: dict[str, discord.Client] = {}
 
-
 def get_discord_client() -> discord.Client | None:
     return next(iter(_active_clients.values()), None)
-
 
 def create_discord_listener(
     record: "WebhookRecord",

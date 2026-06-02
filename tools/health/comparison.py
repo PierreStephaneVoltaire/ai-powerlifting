@@ -6,7 +6,6 @@ from statistics import median
 
 logger = logging.getLogger(__name__)
 
-# Constants and Tables (Mirrored from Node.js / Python analytics)
 _PRIMARY_LIFT_NAMES = {"squat", "bench", "deadlift", "bench press"}
 
 def canonical_lift(name: str) -> Optional[str]:
@@ -29,26 +28,21 @@ def _num(val: Any) -> float:
 
 def build_block_comparison(bundles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Port of Node.js buildBlockComparison logic."""
-    # 1. Sort bundles by start date
     ordered = sorted(bundles, key=lambda b: b.get("block", {}).get("startDate", ""))
     
     rows = []
     for b in ordered:
         rows.append(_comparison_row(b))
     
-    # 2. Build consolidated ROI
     exercise_roi = _build_consolidated_exercise_roi(ordered)
     
-    # 3. Build trend series
     trend_series = []
     for b in ordered:
         trend_series.extend(_build_block_trend_series(b))
     
-    # 4. Build dose-response
     lift_dose_response = _build_lift_dose_response(ordered)
     training_day_response = _build_training_day_response(rows, trend_series)
     
-    # 5. Build trends object for charts
     point = lambda r, v: {"blockKey": r["blockKey"], "label": r["label"], "value": v}
     trends = {
         "actualTotal": [point(r, r["actualTotalKg"]) for r in rows],
@@ -60,7 +54,6 @@ def build_block_comparison(bundles: List[Dict[str, Any]]) -> Dict[str, Any]:
         "volume": [point(r, r["totalVolumeKg"]) for r in rows],
     }
     
-    # 6. Pattern signals
     pattern_signals = _build_pattern_signals(rows, exercise_roi, training_day_response, trend_series)
     
     return {
@@ -107,10 +100,8 @@ def _comparison_row(bundle: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def _build_consolidated_exercise_roi(bundles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    # Consolidation logic for exercise ROI signals across blocks
     signals = {}
     for b in bundles:
-        # Check if we have an AI correlation report for this block
         roi_findings = b.get("correlation_report", {}).get("findings", [])
         for f in roi_findings:
             ex = f.get("exercise")
@@ -136,11 +127,10 @@ def _build_consolidated_exercise_roi(bundles: List[Dict[str, Any]]) -> List[Dict
             if isinstance(lifts, list):
                 for l in lifts: s["correlatedLifts"].add(l)
     
-    # Also incorporate raw volume stats from each block's weekly stats
     for b in bundles:
         exercise_stats = b.get("weekly", {}).get("exercise_stats", {})
         for name, stats in exercise_stats.items():
-            if name not in signals: continue # Only track exercises that have AI ROI signals for now
+            if name not in signals: continue
             s = signals[name]
             s["totalSets"] += int(_num(stats.get("total_sets")))
             s["totalVolume"] += _num(stats.get("total_volume"))
@@ -168,8 +158,6 @@ def _build_consolidated_exercise_roi(bundles: List[Dict[str, Any]]) -> List[Dict
     return sorted(result, key=lambda x: x["score"], reverse=True)
 
 def _build_block_trend_series(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
-    # Port of buildBlockTrendSeries
-    # This usually needs session data, but we might be able to use the weekly monotony_strain rows
     monotony = bundle.get("weekly", {}).get("monotony_strain", {})
     weekly_rows = monotony.get("weekly", [])
     
@@ -182,8 +170,6 @@ def _build_block_trend_series(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
             "weekStart": row.get("week_start"),
             "trainingDays": row.get("nonzero_training_days", 0),
             "strain": row.get("strain"),
-            # Note: squat/bench/deadlift/total/dots would need raw session data for accurate per-week bests
-            # If we don't have sessions, we can't fully reconstruct this series.
         })
     return result
 
@@ -198,7 +184,6 @@ def _build_lift_dose_response(bundles: List[Dict[str, Any]]) -> List[Dict[str, A
         exercise_stats = weekly.get("exercise_stats", {})
         
         for lift in ["squat", "bench", "deadlift"]:
-            # Aggregate sets/volume for this lift category
             l_sets = 0
             l_vol = 0
             for name, stats in exercise_stats.items():

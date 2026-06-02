@@ -1,15 +1,15 @@
-"""DynamoDB-backed model registry with in-memory caching.
 
-Stores metadata for OpenRouter models the operator cares about.
-Loaded at startup and refreshed from the OpenRouter API.
 
-Usage:
-    registry = ModelRegistry(table_name="if-models", region="ca-central-1")
-    registry.load()
 
-    model = registry.get("anthropic/claude-sonnet-4")
-    sorted = registry.sort_models(["model-a", "model-b"], "price_asc")
-"""
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
 
 import logging
@@ -22,10 +22,9 @@ import boto3
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class ModelInfo:
-    """Metadata for a single OpenRouter model."""
+
 
     model_id: str
     context_size: int
@@ -91,7 +90,7 @@ class ModelInfo:
         )
 
     def avg_price(self) -> float:
-        """Average combined input+output price across providers (per token)."""
+
         if not self.input_pricing:
             return float("inf")
         total = 0.0
@@ -106,12 +105,11 @@ class ModelInfo:
             count += 1
         return total / max(count, 1)
 
-
 class ModelRegistry:
-    """DynamoDB-backed model registry with in-memory caching.
 
-    Follows the DirectiveStore pattern: PK/SK, lazy boto3 table, cache on load.
-    """
+
+
+
 
     def __init__(self, table_name: str = "if-models", region: str = "ca-central-1"):
         self.table_name = table_name
@@ -128,7 +126,7 @@ class ModelRegistry:
         return self._table
 
     def load(self) -> Dict[str, ModelInfo]:
-        """Query PK=MODEL, populate in-memory cache."""
+
         from botocore.exceptions import ClientError
 
         try:
@@ -162,7 +160,7 @@ class ModelRegistry:
         return [self._cache[mid] for mid in model_ids if mid in self._cache]
 
     def sort_models(self, model_ids: List[str], strategy: str) -> List[str]:
-        """Sort model IDs by the given strategy. Unknown models go last."""
+
         known = [(mid, self._cache.get(mid)) for mid in model_ids]
         unknown = [mid for mid, info in known if info is None]
         known = [(mid, info) for mid, info in known if info is not None]
@@ -209,18 +207,18 @@ class ModelRegistry:
             raise
 
     def refresh_endpoint_stats(self, api_key: str) -> int:
-        """Fetch per-provider latency/throughput from OpenRouter endpoints API.
 
-        For each cached model, hits /api/v1/models/{id}/endpoints and picks
-        the best latency (min p50) and throughput (max p50) across providers.
-        Updates both DynamoDB and the in-memory cache.
 
-        Args:
-            api_key: OpenRouter API key
 
-        Returns:
-            Number of models updated
-        """
+
+
+
+
+
+
+
+
+
         import json as _json
 
         updated = 0

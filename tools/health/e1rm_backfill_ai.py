@@ -23,7 +23,6 @@ from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
 
-
 def _json_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)

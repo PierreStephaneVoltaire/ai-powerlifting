@@ -11,7 +11,6 @@ import yaml
 
 from channels.execution_models import ClassifierDecision
 
-
 INTERACTION_TYPES = {"social", "domain", "technical"}
 
 VALID_CLASSIFIER_KINDS = {"social", "task", "implementation_control", "clarification", "ignore"}
@@ -43,14 +42,11 @@ KIND_ACTION_COMPAT: dict[str, set[str]] = {
     "ignore": {"ignore"},
 }
 
-
 class PlanParseError(ValueError):
     pass
 
-
 class ClassificationParseError(ValueError):
     pass
-
 
 @dataclass(frozen=True)
 class IFPlan:
@@ -62,9 +58,7 @@ class IFPlan:
     prompt: str
     raw: str
 
-
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
-
 
 def parse_plan_text(
     text: str,
@@ -113,14 +107,12 @@ def parse_plan_text(
         raw=text,
     )
 
-
 def parse_plan_file(
     path: Path,
     eligible_models: list[str],
     known_specialists: set[str],
 ) -> IFPlan:
     return parse_plan_text(path.read_text(encoding="utf-8"), eligible_models, known_specialists)
-
 
 def fallback_plan(
     prompt: str,
@@ -149,14 +141,12 @@ def fallback_plan(
         raw=raw,
     )
 
-
 @dataclass(frozen=True)
 class ClassificationResult:
     batch_id: str
     batch_summary: str
     decisions: list[ClassifierDecision]
     raw: str
-
 
 _CAMEL_TO_SNAKE = {
     "intentId": "intent_id",
@@ -172,13 +162,11 @@ _CAMEL_TO_SNAKE = {
     "batchSummary": "batch_summary",
 }
 
-
 def _camelize_to_snake(d: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k, v in d.items():
         out[_CAMEL_TO_SNAKE.get(k, k)] = v
     return out
-
 
 def parse_classification_text(
     text: str,
@@ -284,7 +272,6 @@ def parse_classification_text(
         decisions=parsed,
         raw=text,
     )
-
 
 def parse_classification_file(
     path: Path,

@@ -3,8 +3,6 @@ from typing import List, Optional, Dict, Any, Literal, Union
 from pydantic import BaseModel, Field
 from datetime import datetime
 
-
-
 class Model(BaseModel):
 
     id: str
@@ -12,13 +10,10 @@ class Model(BaseModel):
     created: int = Field(default_factory=lambda: int(datetime.now().timestamp()))
     owned_by: str = "if-prototype"
 
-
 class ModelList(BaseModel):
 
     object: Literal["list"] = "list"
     data: List[Model]
-
-
 
 class ChatCompletionMessage(BaseModel):
 
@@ -27,7 +22,6 @@ class ChatCompletionMessage(BaseModel):
     name: Optional[str] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
     tool_call_id: Optional[str] = None
-
 
 class ChatCompletionRequest(BaseModel):
 
@@ -46,13 +40,11 @@ class ChatCompletionRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     chat_id: Optional[str] = None
 
-
 class ChatCompletionChoice(BaseModel):
 
     index: int
     message: ChatCompletionMessage
     finish_reason: Optional[str] = None
-
 
 class Usage(BaseModel):
 
@@ -60,13 +52,11 @@ class Usage(BaseModel):
     completion_tokens: int
     total_tokens: int
 
-
 class Attachment(BaseModel):
 
     filename: str
     content_type: str
     url: str
-
 
 class ChatCompletionResponse(BaseModel):
 
@@ -78,21 +68,17 @@ class ChatCompletionResponse(BaseModel):
     usage: Optional[Usage] = None
     attachments: Optional[List[Attachment]] = None
 
-
-
 class ChatCompletionChunkDelta(BaseModel):
 
     role: Optional[str] = None
     content: Optional[str] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
 
-
 class ChatCompletionChunkChoice(BaseModel):
 
     index: int
     delta: ChatCompletionChunkDelta
     finish_reason: Optional[str] = None
-
 
 class ChatCompletionChunk(BaseModel):
 
@@ -102,15 +88,12 @@ class ChatCompletionChunk(BaseModel):
     model: str
     choices: List[ChatCompletionChunkChoice]
 
-
-
 class ErrorDetail(BaseModel):
 
     type: str
     code: Optional[str] = None
     message: str
     param: Optional[str] = None
-
 
 class ErrorResponse(BaseModel):
 

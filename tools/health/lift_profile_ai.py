@@ -110,12 +110,10 @@ _ESTIMATE_TOOL_SCHEMA = {
     },
 }
 
-
 SCORE_EXPLANATION = (
     "Score is 0-100 completeness for estimating a lift-specific INOL stimulus coefficient: "
     "style/setup 40 points, sticking point 35 points, primary muscle driver 25 points."
 )
-
 
 def _profile_payload(profile: dict[str, Any]) -> str:
     keep = {
@@ -128,10 +126,8 @@ def _profile_payload(profile: dict[str, Any]) -> str:
     }
     return json.dumps(keep, indent=2)
 
-
 def _round_to_nearest(value: float, step: float = 0.05) -> float:
     return round(round(value / step) * step, 2)
-
 
 def _clamp_coeff(value: Any) -> float:
     try:
@@ -140,10 +136,8 @@ def _clamp_coeff(value: Any) -> float:
         raw = 1.0
     return max(1.0, min(2.0, _round_to_nearest(raw)))
 
-
 def _has_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
-
 
 def _dedupe(items: list[Any]) -> list[str]:
     out: list[str] = []
@@ -155,7 +149,6 @@ def _dedupe(items: list[Any]) -> list[str]:
         out.append(text)
         seen.add(text.lower())
     return out
-
 
 def _fallback_review(profile: dict[str, Any]) -> dict[str, Any]:
     lift = str(profile.get("lift", "")).lower()
@@ -260,7 +253,6 @@ def _fallback_review(profile: dict[str, Any]) -> dict[str, Any]:
         "suggestions": _dedupe(style_notes + sticking_notes + primary_notes),
     }
 
-
 def _fallback_rewrite_and_estimate(profile: dict[str, Any]) -> dict[str, Any]:
     review = _fallback_review(profile)
     return {
@@ -278,7 +270,6 @@ def _fallback_rewrite_and_estimate(profile: dict[str, Any]) -> dict[str, Any]:
         "missing_details": review["missing_details"],
     }
 
-
 def _fallback_rewrite(profile: dict[str, Any]) -> dict[str, Any]:
     review = _fallback_review(profile)
     return {
@@ -289,7 +280,6 @@ def _fallback_rewrite(profile: dict[str, Any]) -> dict[str, Any]:
         "volume_tolerance": profile.get("volume_tolerance", "moderate"),
         "missing_details": review["missing_details"],
     }
-
 
 def _fallback_estimate(profile: dict[str, Any]) -> dict[str, Any]:
     review = _fallback_review(profile)
@@ -307,7 +297,6 @@ def _fallback_estimate(profile: dict[str, Any]) -> dict[str, Any]:
         "completeness_score": review["completeness_score"],
         "missing_details": review["missing_details"],
     }
-
 
 async def _call_tool(
     system_prompt: str,
@@ -356,7 +345,6 @@ async def _call_tool(
     args_str = tool_calls[0].get("function", {}).get("arguments", "{}")
     return json.loads(args_str)
 
-
 async def review_lift_profile(profile: dict[str, Any], *, use_helper_model: bool = False) -> dict[str, Any]:
     lift = str(profile.get("lift", "")).lower()
     if lift not in LIFTS:
@@ -394,7 +382,6 @@ async def review_lift_profile(profile: dict[str, Any], *, use_helper_model: bool
         logger.warning("[LiftProfileAI] review failed: %s", e)
         return baseline
 
-
 async def rewrite_lift_profile(profile: dict[str, Any]) -> dict[str, Any]:
     lift = str(profile.get("lift", "")).lower()
     if lift not in LIFTS:
@@ -426,7 +413,6 @@ async def rewrite_lift_profile(profile: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         logger.warning("[LiftProfileAI] rewrite failed: %s", e)
         return _fallback_rewrite(profile)
-
 
 async def estimate_lift_profile_stimulus(profile: dict[str, Any]) -> dict[str, Any]:
     lift = str(profile.get("lift", "")).lower()
@@ -472,7 +458,6 @@ async def estimate_lift_profile_stimulus(profile: dict[str, Any]) -> dict[str, A
     except Exception as e:
         logger.warning("[LiftProfileAI] estimate failed: %s", e)
         return _fallback_estimate(profile)
-
 
 async def rewrite_and_estimate_lift_profile(profile: dict[str, Any]) -> dict[str, Any]:
     lift = str(profile.get("lift", "")).lower()

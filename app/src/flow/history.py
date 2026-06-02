@@ -1,4 +1,4 @@
-"""Incremental markdown history writer for the planning stage."""
+
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +6,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
-
 
 def _content_to_text(content: Any) -> str:
     if isinstance(content, str):
@@ -26,7 +25,6 @@ def _content_to_text(content: Any) -> str:
         return ""
     return str(content)
 
-
 def _message_key(index: int, msg: dict[str, Any]) -> str:
     for key in ("id", "message_id"):
         if msg.get(key):
@@ -34,7 +32,6 @@ def _message_key(index: int, msg: dict[str, Any]) -> str:
     raw = f"{msg.get('role', 'user')}|{msg.get('created_at', '')}|{_content_to_text(msg.get('content'))}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     return f"synthetic-{index}-{digest}"
-
 
 def _normalize_event(index: int, msg: dict[str, Any]) -> dict[str, Any] | None:
     content = _content_to_text(msg.get("content")).strip()
@@ -52,7 +49,6 @@ def _normalize_event(index: int, msg: dict[str, Any]) -> dict[str, Any] | None:
         "source": str(msg.get("source") or ""),
     }
 
-
 def _load_events(path: Path) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return {}
@@ -64,10 +60,8 @@ def _load_events(path: Path) -> dict[str, dict[str, Any]]:
         return {}
     return {}
 
-
 def _event_sort_key(event: dict[str, Any]) -> tuple[str, str]:
     return (str(event.get("created_at") or ""), str(event.get("id") or ""))
-
 
 def render_history_markdown(events: Iterable[dict[str, Any]]) -> str:
     lines = [
@@ -86,7 +80,6 @@ def render_history_markdown(events: Iterable[dict[str, Any]]) -> str:
             meta.append(f"edited={event.get('edited_at')}")
         lines.extend([f"## {index}. {label}", "", f"<!-- {' | '.join(meta)} -->", "", str(event.get("content", "")), ""])
     return "\n".join(lines).rstrip() + "\n"
-
 
 def write_history(
     session_dir: Path,

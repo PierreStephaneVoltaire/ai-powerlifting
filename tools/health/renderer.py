@@ -1,27 +1,11 @@
-"""Health module markdown renderer.
 
-Converts program dicts to compact markdown for system prompt injection.
-Designed to fit in subagent context windows where tokens still matter.
-"""
 from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any, Optional
 
-
 def render_program_summary(program: dict, max_sessions: int = 5) -> str:
-    """Render full program as compact markdown summary.
-    
-    This output is designed for system prompt injection into subagent
-    contexts. Keep it tight - tokens matter.
-    
-    Args:
-        program: Full program dict from ProgramStore
-        max_sessions: Maximum number of upcoming sessions to show
-        
-    Returns:
-        Compact markdown string summarizing the program
-    """
+  
     lines = []
     
     meta = program.get("meta", {})
@@ -30,21 +14,17 @@ def render_program_summary(program: dict, max_sessions: int = 5) -> str:
     diet_notes = program.get("diet_notes", [])
     supplements = program.get("supplements", [])
     
-    # Calculate current week and phase
     current_week = _calculate_current_week(meta.get("program_start", ""))
     total_weeks = _calculate_total_weeks(phases)
     current_phase = _find_current_phase(phases, current_week)
     
-    # Calculate days to competition
     comp_date_str = meta.get("comp_date", "")
     days_to_comp = _calculate_days_to_comp(comp_date_str)
     
-    # Header line
     phase_name = current_phase.get("name", "Unknown") if current_phase else "Unknown"
     header = f"## Training Program — Week {current_week} / {total_weeks} ({phase_name})"
     lines.append(header)
     
-    # Meta line
     comp_display = f"{comp_date_str}" if comp_date_str else "N/A"
     days_display = f"({days_to_comp} days)" if days_to_comp is not None else ""
     target_total = meta.get("target_total_kg")
@@ -56,7 +36,6 @@ def render_program_summary(program: dict, max_sessions: int = 5) -> str:
     lines.append(meta_line)
     lines.append("")
     
-    # Phases table
     if phases:
         lines.append("### Phases")
         lines.append("| Phase | Weeks | Intent |")
@@ -68,7 +47,6 @@ def render_program_summary(program: dict, max_sessions: int = 5) -> str:
             lines.append(f"| {name} | {start}-{end} | {intent} |")
         lines.append("")
     
-    # Upcoming sessions
     upcoming = _get_upcoming_sessions(sessions, max_sessions)
     if upcoming:
         lines.append(f"### Upcoming Sessions (next {len(upcoming)})")
@@ -86,16 +64,14 @@ def render_program_summary(program: dict, max_sessions: int = 5) -> str:
             lines.append(f"| {session_date} | {day_name} | {exercise_names} | {notes} |")
         lines.append("")
     
-    # Current diet protocol
     if diet_notes:
-        current_diet = diet_notes[-1]  # Most recent entry
+        current_diet = diet_notes[-1]
         lines.append("### Diet Protocol (current)")
         diet_text = current_diet.get("notes", "")
         if diet_text:
             lines.append(diet_text)
         lines.append("")
     
-    # Supplements
     if supplements:
         lines.append("### Supplements")
         for supp in supplements:
@@ -105,7 +81,6 @@ def render_program_summary(program: dict, max_sessions: int = 5) -> str:
         lines.append("")
     
     return "\n".join(lines).strip()
-
 
 def render_session(session: dict) -> str:
     """Render single session as compact markdown.
@@ -128,10 +103,8 @@ def render_session(session: dict) -> str:
     exercises = session.get("exercises", [])
     notes = session.get("session_notes", "")
     
-    # Header
     lines.append(f"## Session: {session_date} ({day_name})")
     
-    # Status line
     if completed:
         status = "Completed"
         if session_rpe:
@@ -143,7 +116,6 @@ def render_session(session: dict) -> str:
     lines.append(f"**Status:** {status}  |  **Body Weight:** {weight_display}")
     lines.append("")
     
-    # Exercises table
     if exercises:
         lines.append("### Exercises")
         lines.append("| Exercise | Sets x Reps | Weight | RPE |")
@@ -157,16 +129,10 @@ def render_session(session: dict) -> str:
             lines.append(f"| {name} | {sets}x{reps} | {weight_str} | {rpe} |")
         lines.append("")
     
-    # Notes
     if notes:
         lines.append(f"**Notes:** {notes}")
     
     return "\n".join(lines).strip()
-
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
 
 def _calculate_current_week(program_start: str) -> int:
     """Calculate current training week from program start date.
@@ -188,7 +154,6 @@ def _calculate_current_week(program_start: str) -> int:
     except ValueError:
         return 1
 
-
 def _calculate_total_weeks(phases: list[dict]) -> int:
     """Calculate total program weeks from phases.
     
@@ -209,7 +174,6 @@ def _calculate_total_weeks(phases: list[dict]) -> int:
     
     return max_week if max_week > 0 else 12
 
-
 def _find_current_phase(phases: list[dict], current_week: int) -> Optional[dict]:
     """Find the phase containing the current week.
     
@@ -226,7 +190,6 @@ def _find_current_phase(phases: list[dict], current_week: int) -> Optional[dict]
         if start <= current_week <= end:
             return phase
     return None
-
 
 def _calculate_days_to_comp(comp_date_str: str) -> Optional[int]:
     """Calculate days until competition.
@@ -246,7 +209,6 @@ def _calculate_days_to_comp(comp_date_str: str) -> Optional[int]:
         return (comp_date - today).days
     except ValueError:
         return None
-
 
 def _get_upcoming_sessions(sessions: list[dict], max_sessions: int) -> list[dict]:
     """Get upcoming sessions (date >= today).
@@ -273,8 +235,6 @@ def _get_upcoming_sessions(sessions: list[dict], max_sessions: int) -> list[dict
         except ValueError:
             continue
     
-    # Sort by date
     upcoming.sort(key=lambda s: s.get("date", ""))
     
-    # Limit to max_sessions
     return upcoming[:max_sessions]

@@ -17,11 +17,6 @@ from typing import Any, Literal, Optional
 
 from scipy.stats import kendalltau, theilslopes
 
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 DOTS_COEFFICIENTS: dict[str, dict[str, float]] = {
     "male": {
         "a": -307.75076,
@@ -164,9 +159,7 @@ _CONSERVATIVE_REP_PCT: dict[int, float] = {
     5: 0.875,
 }
 
-# Primary high-fatiguing lifts for deload intensity condition check.
 _PRIMARY_LIFT_NAMES: frozenset[str] = frozenset({"squat", "deadlift"})
-
 
 def _num(v: Any) -> float:
     if v is None:
@@ -180,7 +173,6 @@ def _num(v: Any) -> float:
     except (ValueError, TypeError):
         return 0.0
 
-
 def _count_failed_sets(ex: dict) -> int:
     statuses = ex.get("set_statuses")
     if statuses and isinstance(statuses, list):
@@ -192,24 +184,20 @@ def _count_failed_sets(ex: dict) -> int:
         return int(_num(ex.get("sets", 0)))
     return 0
 
-
 def _executed_sets(ex: dict) -> float:
     statuses = ex.get("set_statuses")
     if statuses and isinstance(statuses, list):
         return float(sum(1 for status in statuses if status in {"completed", "failed"}))
     return _num(ex.get("sets", 0))
 
-
 def _executed_volume(ex: dict) -> float:
     return _executed_sets(ex) * _num(ex.get("reps", 0)) * _num(ex.get("kg", 0))
-
 
 def _mad(values: list[float]) -> float:
     if not values:
         return 0.0
     center = median(values)
     return median(abs(v - center) for v in values)
-
 
 def _fit_quality(xs: list[float], ys: list[float], slope: float, intercept: float) -> tuple[float, float]:
     if len(xs) < 2:
@@ -227,7 +215,6 @@ def _fit_quality(xs: list[float], ys: list[float], slope: float, intercept: floa
         quality = _clamp(1.0 - (residual_mad / series_mad), 0.0, 1.0)
     return round(float(tau), 3), round(float(quality), 3)
 
-
 def _estimate_e1rm_from_set(weight_kg: float, reps: int, rpe: Any = None) -> float | None:
     """Estimate 1RM from a single set using the same tables as the rest of the module."""
     if rpe is not None:
@@ -244,11 +231,6 @@ def _estimate_e1rm_from_set(weight_kg: float, reps: int, rpe: Any = None) -> flo
         if pct is not None:
             return weight_kg / pct
     return None
-
-
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
 
 def _ols(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
     n = len(xs)
@@ -269,7 +251,6 @@ def _ols(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
     r_squared = 1.0 - (ss_res / ss_tot) if abs(ss_tot) > 1e-12 else 0.0
     return slope, intercept, r_squared
 
-
 def _pearson(xs: list[float], ys: list[float]) -> float:
     n = len(xs)
     if n < 3:
@@ -283,10 +264,8 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
         return 0.0
     return num / (den_x * den_y)
 
-
 def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
-
 
 def _parse_date(s: str) -> Optional[date]:
     if not s:
@@ -295,7 +274,6 @@ def _parse_date(s: str) -> Optional[date]:
         return datetime.strptime(s, "%Y-%m-%d").date()
     except (ValueError, TypeError):
         return None
-
 
 def _session_week_num(session: dict, program_start: str = "") -> Optional[int]:
     """Return the integer week number for a session.
@@ -316,7 +294,6 @@ def _session_week_num(session: dict, program_start: str = "") -> Optional[int]:
             return max(1, (d - start).days // 7 + 1)
     return None
 
-
 def _parse_week_bound(value: Any) -> Optional[int]:
     if value is None or value == "":
         return None
@@ -326,10 +303,8 @@ def _parse_week_bound(value: Any) -> Optional[int]:
         return None
     return week if week > 0 else None
 
-
 def _is_completed_session(session: dict) -> bool:
     return bool(session.get("completed") or session.get("status") in ("logged", "completed"))
-
 
 def _resolve_week_window(
     sessions: list[dict],
@@ -367,7 +342,6 @@ def _resolve_week_window(
             end = start
     return start, end
 
-
 def _sessions_in_week_window(
     sessions: list[dict],
     program_start: str,
@@ -381,13 +355,11 @@ def _sessions_in_week_window(
         and week_start <= wk <= week_end
     ]
 
-
 def _session_date_bounds(sessions: list[dict]) -> tuple[Optional[date], Optional[date]]:
     dates = sorted(d for s in sessions if (d := _parse_date(s.get("date", ""))) is not None)
     if not dates:
         return None, None
     return dates[0], dates[-1]
-
 
 def _week_index(session: dict, program_start: str) -> Optional[float]:
     """Float week offset — kept for legacy callers; use _session_week_num for grouping."""
@@ -396,7 +368,6 @@ def _week_index(session: dict, program_start: str) -> Optional[float]:
     if d is None or start is None:
         return None
     return (d - start).days / 7.0
-
 
 def _get_exercise_sessions(sessions: list[dict], exercise_name: str) -> list[dict]:
     name_lower = exercise_name.lower()
@@ -409,7 +380,6 @@ def _get_exercise_sessions(sessions: list[dict], exercise_name: str) -> list[dic
                 out.append(s)
                 break
     return out
-
 
 def _compute_weekly_volume_load(sessions: list[dict], program_start: str) -> dict[int, float]:
     weekly: dict[int, float] = {}
@@ -424,7 +394,6 @@ def _compute_weekly_volume_load(sessions: list[dict], program_start: str) -> dic
             week_load += _executed_volume(ex)
         weekly[wk] = weekly.get(wk, 0.0) + week_load
     return weekly
-
 
 def _best_primary_e1rm_for_sessions(w_sessions: list[dict]) -> Optional[float]:
     best: Optional[float] = None
@@ -452,7 +421,6 @@ def _best_primary_e1rm_for_sessions(w_sessions: list[dict]) -> Optional[float]:
             if e1rm is not None and (best is None or e1rm > best):
                 best = e1rm
     return best
-
 
 def _detect_deloads(
     sessions: list[dict],
@@ -567,7 +535,6 @@ def _detect_deloads(
 
     return results
 
-
 def _effective_training_data(
     sessions: list[dict],
     program_start: str,
@@ -583,13 +550,7 @@ def _effective_training_data(
     filtered = [s for s in sessions if _session_week_num(s, program_start) not in excluded_weeks]
     return filtered, effective_map
 
-
-# ---------------------------------------------------------------------------
-# Fatigue dimension helpers
-# ---------------------------------------------------------------------------
-
 logger = logging.getLogger(__name__)
-
 
 def _get_fatigue_profile(exercise_name: str, glossary: list[dict] | None = None) -> dict:
     if glossary:
@@ -602,12 +563,10 @@ def _get_fatigue_profile(exercise_name: str, glossary: list[dict] | None = None)
     logger.warning(f"No fatigue profile for {exercise_name}")
     return dict(_DEFAULT_FATIGUE_PROFILE)
 
-
 def _neural_scaling(I: float) -> float:
     if I <= _FATIGUE_NEURAL_FLOOR:
         return 0.0
     return ((I - _FATIGUE_NEURAL_FLOOR) / (_FATIGUE_NEURAL_CEILING - _FATIGUE_NEURAL_FLOOR)) ** 3
-
 
 def _per_set_fatigue(weight: float, reps: int, profile: dict, I: float, rpe: float | None = None) -> dict:
     rpe_multiplier = 1.0
@@ -619,7 +578,6 @@ def _per_set_fatigue(weight: float, reps: int, profile: dict, I: float, rpe: flo
         "peripheral": profile["peripheral"] * (weight ** _FATIGUE_PERIPHERAL_EXPONENT) * reps * rpe_multiplier,
         "systemic": profile["systemic"] * weight * reps * (1 + _FATIGUE_SYSTEMIC_BETA * I) * rpe_multiplier,
     }
-
 
 def _weekly_fatigue_by_dimension(
     sessions: list[dict],
@@ -655,8 +613,6 @@ def _weekly_fatigue_by_dimension(
                 week_dim[dim] += sf[dim] * sets
         weekly[wk] = week_dim
     return weekly
-
-
 
 def _resolve_intensity(name_lower: str, weight: float, reps: int, rpe: float | None, current_maxes: dict, glossary: list[dict] | None) -> float:
     e1rm = None
@@ -706,7 +662,6 @@ def _resolve_intensity(name_lower: str, weight: float, reps: int, rpe: float | N
     if "machine" in cat or "compound" in cat: return 0.65
     return 0.55
 
-
 def _daily_fatigue_by_dimension(
     sessions: list[dict],
     glossary: list[dict] | None,
@@ -741,7 +696,6 @@ def _daily_fatigue_by_dimension(
                 day_dim[dim] += sf[dim] * sets
     return daily
 
-
 def _fatigue_reservoir_series(
     sessions: list[dict],
     glossary: list[dict] | None,
@@ -774,7 +728,6 @@ def _fatigue_reservoir_series(
         day += timedelta(days=1)
 
     return series
-
 
 def _reservoir_stress_for_day(
     reservoir_series: list[dict[str, Any]],
@@ -829,10 +782,8 @@ def _reservoir_stress_for_day(
         "context_days_used": len(baseline_rows),
     }
 
-
 def _composite_load_from_dimensions(dimensions: dict[str, float]) -> float:
     return sum(dimensions.get(dim, 0.0) * weight for dim, weight in _DIMENSION_WEIGHTS.items())
-
 
 def _banister_dimension_baselines(
     sessions: list[dict],
@@ -858,7 +809,6 @@ def _banister_dimension_baselines(
 
     return baselines
 
-
 def _normalized_banister_load(dims: dict[str, float], baselines: dict[str, float]) -> float:
     return 100.0 * (
         0.30 * dims.get("axial", 0.0) / max(baselines.get("axial", 1.0), 1.0)
@@ -866,7 +816,6 @@ def _normalized_banister_load(dims: dict[str, float], baselines: dict[str, float
         + 0.25 * dims.get("peripheral", 0.0) / max(baselines.get("peripheral", 1.0), 1.0)
         + 0.15 * dims.get("systemic", 0.0) / max(baselines.get("systemic", 1.0), 1.0)
     )
-
 
 def _composite_daily_load_series(
     sessions: list[dict],
@@ -905,18 +854,15 @@ def _composite_daily_load_series(
 
     return series, start_day
 
-
 def _week_start_for_date(day: date, start_day: date) -> date:
     offset = (day - start_day).days
     return start_day + timedelta(days=(offset // 7) * 7)
-
 
 def _population_sd(values: list[float]) -> float:
     if len(values) < 2:
         return 0.0
     mean_val = sum(values) / len(values)
     return math.sqrt(sum((value - mean_val) ** 2 for value in values) / len(values))
-
 
 def _tsb_label(tsb: float) -> str:
     if tsb < -30:
@@ -929,7 +875,6 @@ def _tsb_label(tsb: float) -> str:
         return "Peaking window"
     return "Detraining risk"
 
-
 def _acwr_zone(value: float | None) -> str:
     if value is None:
         return "unknown"
@@ -941,13 +886,11 @@ def _acwr_zone(value: float | None) -> str:
         return "rapid_increase"
     return "load_spike"
 
-
 def _acwr_label(zone: str, planned_overreach: bool = False) -> str:
     base = _ACWR_ZONE_LABELS.get(zone, "Unknown")
     if planned_overreach and zone != "unknown":
         return f"{base} (expected during planned overreach)"
     return base
-
 
 def _ewma_acwr_from_daily_loads(
     daily_loads: list[float],
@@ -966,7 +909,6 @@ def _ewma_acwr_from_daily_loads(
     if chronic <= 1e-12:
         return None
     return round(acute / chronic, 3)
-
 
 def _compute_dimensional_acwr(
     daily_fatigue: dict[date, dict[str, float]],
@@ -1022,7 +964,6 @@ def _compute_dimensional_acwr(
         },
     }
 
-
 def _compute_dimensional_spike(
     weekly_fatigue: dict[int, dict[str, float]],
     deload_weeks: list[int] | None = None,
@@ -1041,11 +982,6 @@ def _compute_dimensional_spike(
     valid = {k: v for k, v in dimensions.items() if v is not None}
     composite = round(sum(valid.get(k, 0) * _DIMENSION_WEIGHTS[k] for k in _DIMENSION_WEIGHTS if k in valid), 3) if valid else None
     return {"dimensions": dimensions, "composite": composite}
-
-
-# ---------------------------------------------------------------------------
-# Public algorithms
-# ---------------------------------------------------------------------------
 
 def estimate_1rm(weight_kg: float, reps: int, rpe: Optional[int] = None) -> dict:
     w = _num(weight_kg)
@@ -1066,7 +1002,6 @@ def estimate_1rm(weight_kg: float, reps: int, rpe: Optional[int] = None) -> dict
     return {"e1rm": e1rm, "method": method, "input_weight_kg": round(w, 1),
             "epley": None, "brzycki": None, "rpe_based": rpe_based}
 
-
 def calculate_dots(total_kg: float, bodyweight_kg: float, sex: str) -> float:
     sex_key = sex.lower()
     if sex_key not in DOTS_COEFFICIENTS:
@@ -1078,7 +1013,6 @@ def calculate_dots(total_kg: float, bodyweight_kg: float, sex: str) -> float:
     if abs(denom) < 1e-12:
         return 0.0
     return round((500 / denom) * total, 2)
-
 
 def progression_rate(
     sessions: list[dict],
@@ -1152,14 +1086,12 @@ def progression_rate(
         "slope_kg_per_week": round(slope, 2),
         "kendall_tau": kendall_tau,
         "fit_quality": fit_quality,
-        # Backward compatibility for one release.
         "r2": fit_quality,
         "r_squared": fit_quality,
         "points": [(round(float(x), 1), round(y, 1)) for x, y in zip(xs, ys)],
         "method": "theilsen",
         "deload_weeks_excluded": deload_count,
     }
-
 
 def volume_intensity_correlation(sessions: list[dict], exercise_name: str, program_start: str = "") -> dict:
     if not program_start:
@@ -1193,7 +1125,6 @@ def volume_intensity_correlation(sessions: list[dict], exercise_name: str, progr
         "volume_series": [(w, round(v, 0)) for w, v in zip(weeks, vol_series)],
         "intensity_series": [(w, round(i, 1)) for w, i in zip(weeks, int_series)],
     }
-
 
 def rpe_drift(
     sessions: list[dict],
@@ -1287,7 +1218,6 @@ def rpe_drift(
         "mode": "residual" if use_residual else "raw",
     }
 
-
 def fatigue_index(
     sessions: list[dict],
     days: int = 14,
@@ -1313,13 +1243,10 @@ def fatigue_index(
     else:
         start = end - timedelta(days=days)
         
-    # Find all sessions up to end to build history for baselines
     history_sessions = [s for s in sessions if (d := _parse_date(s.get("date", ""))) is not None and d <= end and (s.get("completed") or s.get("status") in ("logged", "completed"))]
     
-    # We need to compute weekly FI for weeks overlapping the selected window
     window_week_count = max(1, math.ceil(((end - start).days + 1) / 7))
     
-    # Group all history sessions by calendar week (from program start or earliest)
     if not program_start:
         program_start = _infer_program_start(history_sessions)
     start_day = _parse_date(program_start) if program_start else (min([_parse_date(s.get("date", "")) for s in history_sessions]) if history_sessions else date.today())
@@ -1332,11 +1259,9 @@ def fatigue_index(
         if wk is not None:
             weeks_dict.setdefault(wk, []).append(s)
             
-    # compute baselines (median of 6-8 non-deload weeks before evaluated week)
     deload_info = _detect_deloads(history_sessions, program_start)
     deload_weeks = {d["week_num"] for d in deload_info if d["is_deload"] or d["is_break"]}
     
-    # Get fatigue by dimension for all weeks
     weekly_dims = _weekly_fatigue_by_dimension(history_sessions, glossary, program_start, current_maxes or {})
     reservoir_series = _fatigue_reservoir_series(
         history_sessions,
@@ -1383,7 +1308,6 @@ def fatigue_index(
         baseline, conf = get_baseline_for_week(wk)
         cur_dims = weekly_dims.get(wk, {"axial": 0, "neural": 0, "peripheral": 0, "systemic": 0})
         
-        # 1. Failure stress
         failed_sets = 0
         total_compound_sets = 0
         for s in wk_sessions:
@@ -1396,7 +1320,6 @@ def fatigue_index(
         failed_ratio = failed_sets / total_compound_sets if total_compound_sets > 0 else 0
         failure_stress = _clamp(failed_ratio / 0.15, 0, 1)
         
-        # 2. Acute spike stress
         wk_start_date = start_day + timedelta(days=(wk - 1) * 7)
         wk_end_date = wk_start_date + timedelta(days=6)
         recent_for_spike = [s for s in history_sessions if (d := _parse_date(s.get("date", ""))) and d <= wk_end_date and d >= wk_start_date - timedelta(days=28)]
@@ -1405,7 +1328,6 @@ def fatigue_index(
         comp_spike = spike_res.get("composite") or 0.0
         acute_spike_stress = _clamp((comp_spike - 0.05) / 0.35, 0, 1)
         
-        # 3. RPE stress
         rpe_excesses = []
         high_rpes = 0
         total_rpes = 0
@@ -1424,15 +1346,12 @@ def fatigue_index(
         rpe_freq = high_rpes / total_rpes if total_rpes > 0 else 0.0
         rpe_stress = _clamp(0.70 * rpe_base + 0.30 * rpe_freq, 0, 1)
         
-        # 4. Chronic load stress. This remains the public key for
-        # compatibility, but is now the decaying reservoir stress model.
         reservoir_wk_end_date = start_day + timedelta(days=(wk - 1) * 7 + 6)
         reservoir_wk_end_date = min(reservoir_wk_end_date, end)
         reservoir = _reservoir_stress_for_day(reservoir_series, reservoir_wk_end_date)
         reservoir_stress = reservoir["composite"]
         chronic_load_stress = reservoir_stress
         
-        # 5. Intensity density stress
         heavy = 0
         very_heavy = 0
         eligible = 0
@@ -1475,7 +1394,6 @@ def fatigue_index(
         vheavy_ratio = very_heavy / eligible if eligible > 0 else 0
         intensity_density_stress = _clamp(0.60 * heavy_ratio / 0.35 + 0.40 * vheavy_ratio / 0.15, 0, 1)
         
-        # 6. Monotony stress
         monotony_res = compute_monotony_strain(wk_sessions, glossary, program_start, current_maxes)
         monotony = monotony_res.get("monotony", 0)
         strain = monotony_res.get("strain", 0)
@@ -1496,7 +1414,6 @@ def fatigue_index(
         m_stress2 = _clamp((strain / med_strain - 1.0) / 0.5, 0, 1) if med_strain > 0 else 0
         monotony_stress = max(m_stress1, m_stress2)
         
-        # 7. Overload streak
         acwr_result = compute_acwr(history_sessions, glossary, program_start, current_maxes or {}, ref_date=wk_end_date)
         acwr_val = acwr_result.get("composite", 0) or 0
         is_overload = False
@@ -1543,7 +1460,6 @@ def fatigue_index(
             "conf": reservoir["confidence"] or conf
         }
         
-    # Aggregate over selected window
     start_wk = _calendar_week_num(start, start_day)
     end_wk = _calendar_week_num(end, start_day)
     
@@ -1612,12 +1528,10 @@ def fatigue_index(
         "flags": flags,
     }
 
-
 def _get_session_compliance_stats(session: dict) -> dict:
     planned_exs = session.get("planned_exercises") or []
     actual_exs = session.get("exercises") or []
 
-    # If no planned exercises but session is completed, assume 100% compliance for this session's volume
     if not planned_exs and _is_completed_session(session):
         exec_sets = sum(_executed_sets(ex) for ex in actual_exs)
         exec_reps = sum(_executed_sets(ex) * _num(ex.get("reps", 0)) for ex in actual_exs)
@@ -1641,7 +1555,6 @@ def _get_session_compliance_stats(session: dict) -> dict:
         "p_reps": p_reps, "c_reps": c_reps,
         "p_vol": p_vol, "c_vol": c_vol,
     }
-
 
 def session_compliance(sessions: list[dict], phases: list[dict], program_start: str, weeks: int = 4, ref_date: date | None = None) -> dict:
     """All weeks counted — no deload/break exclusions."""
@@ -1703,7 +1616,6 @@ def session_compliance(sessions: list[dict], phases: list[dict], program_start: 
         "completed_volume": total_c_vol,
         "vol_compliance_pct": vol_compliance_pct,
     }
-
 
 def session_compliance_for_week_window(
     sessions: list[dict],
@@ -1779,7 +1691,6 @@ def session_compliance_for_week_window(
         "vol_compliance_pct": vol_compliance_pct,
     }
 
-
 def _session_wellness_values(session: dict) -> list[float]:
     wellness = session.get("wellness")
     if not isinstance(wellness, dict):
@@ -1793,7 +1704,6 @@ def _session_wellness_values(session: dict) -> list[float]:
         if 1 <= num <= 5:
             values.append(num)
     return values
-
 
 def _readiness_wellness_component(
     sessions: list[dict],
@@ -1821,7 +1731,6 @@ def _readiness_wellness_component(
         "penalty": round(_clamp(1.0 - (mean_value / 5.0), 0.0, 1.0), 3),
         "entries": entries,
     }
-
 
 def _readiness_performance_trend_component(
     sessions: list[dict],
@@ -1883,7 +1792,6 @@ def _readiness_performance_trend_component(
         "points": len(daily_series),
     }
 
-
 def _next_competition(program: dict, reference_date: date | None = None) -> dict[str, Any] | None:
     ref = reference_date or date.today()
     competitions = sorted(program.get("competitions", []), key=lambda c: c.get("date", ""))
@@ -1902,7 +1810,6 @@ def _next_competition(program: dict, reference_date: date | None = None) -> dict
             "weight_class_kg": meta.get("weight_class_kg"),
         }
     return None
-
 
 def _readiness_bodyweight_component(
     sessions: list[dict],
@@ -1972,7 +1879,6 @@ def _readiness_bodyweight_component(
         "weeks_to_comp": None,
     }
 
-
 def _estimate_maxes_from_comps(competitions: list[dict], reference_date: date | None = None) -> dict:
     best: dict[str, float] = {}
     ref = reference_date or date.today()
@@ -1995,7 +1901,6 @@ def _estimate_maxes_from_comps(competitions: list[dict], reference_date: date | 
         if best:
             return best
     return {}
-
 
 def _estimate_maxes_from_sessions(
     sessions: list[dict],
@@ -2046,7 +1951,6 @@ def _estimate_maxes_from_sessions(
             result[lift] = sorted_vals[idx]
     return result if len(result) >= 2 else {}
 
-
 def _resolve_projection_lambda_multiplier(program: dict, reference_date: date | None = None) -> dict[str, Any]:
     ref = reference_date or date.today()
     competitions = program.get("competitions", []) or []
@@ -2084,7 +1988,6 @@ def _resolve_projection_lambda_multiplier(program: dict, reference_date: date | 
         "lambda_multiplier": lambda_multiplier,
     }
 
-
 def compute_prr(results: dict, projected_at_t_minus_1w: dict | None = None) -> dict:
     snapshot = projected_at_t_minus_1w
     if snapshot is None and isinstance(results, dict):
@@ -2113,10 +2016,8 @@ def compute_prr(results: dict, projected_at_t_minus_1w: dict | None = None) -> d
 
     return prr
 
-
 def _calendar_week_num(session_date: date, start_day: date) -> int:
     return max(1, ((session_date - start_day).days // 7) + 1)
-
 
 def compute_volume_landmarks(
     sessions: list[dict],
@@ -2239,7 +2140,6 @@ def compute_volume_landmarks(
                     if "score" in fi_result:
                         next_week_fi = fi_result["score"]
                     
-                    # Optional: get readiness
                     readiness_result = compute_readiness_score(next_week_sessions, program={}, glossary=glossary, program_start=program_start, reference_date=next_week_ref)
                     if "score" in readiness_result:
                         next_week_readiness = readiness_result["score"]
@@ -2322,7 +2222,6 @@ def compute_volume_landmarks(
                 mrv = row["avg_sets"]
                 break
                 
-        # Fallback if no MRV found with count >= 3
         if mrv is None:
             max_count = max(row["count"] for row in summaries)
             for row in summaries:
@@ -2341,7 +2240,6 @@ def compute_volume_landmarks(
         }
 
     return result
-
 
 def meet_projection(
     program: dict,
@@ -2370,8 +2268,6 @@ def meet_projection(
     if not program_start:
         program_start = _infer_program_start(sessions)
 
-    # Prefer the most recent completed competition results when available.
-    # Fall back to session-derived estimates when no competition data exists.
     comp_maxes = _estimate_maxes_from_comps(program.get("competitions", []), reference_date=ref)
     session_maxes = _estimate_maxes_from_sessions(sessions, reference_date=ref)
     maxes = comp_maxes or session_maxes
@@ -2409,8 +2305,6 @@ def meet_projection(
 
     n_t = max(0, weeks_to_comp - weeks_taper - planned_deload_weeks)
 
-    # Time-proportional ceiling: closer comps get tighter cap (10%),
-    # further comps allow slightly more room for legitimate gains.
     ceiling_pct = min(0.20, 0.10 + (0.005 * max(0.0, weeks_to_comp - 8.0)))
 
     lifts = {}
@@ -2466,7 +2360,6 @@ def meet_projection(
         "projection_calibration": projection_calibration,
     }
 
-
 def _lift_stimulus_coefficients(lift_profiles: list[dict] | None) -> dict[str, float]:
     """Return per-lift INOL stimulus multipliers, defaulting to 1.0."""
     coeffs = {"squat": 1.0, "bench": 1.0, "deadlift": 1.0}
@@ -2477,7 +2370,6 @@ def _lift_stimulus_coefficients(lift_profiles: list[dict] | None) -> dict[str, f
         raw_coeff = profile.get("stimulus_coefficient")
         coeffs[lift] = round(_clamp(_num(raw_coeff) if raw_coeff is not None else 1.0, 1.0, 2.0), 2)
     return coeffs
-
 
 def compute_e1rm_multiplier_suggestions(
     program: dict,
@@ -2491,7 +2383,6 @@ def compute_e1rm_multiplier_suggestions(
     lift_profiles = program.get("lift_profiles", [])
     current_multipliers = _lift_e1rm_multipliers(lift_profiles)
 
-    # 1. Gather all actuals (comps and max history)
     actuals = []
     for c in competitions:
         if c.get("status") == "completed" and (c_date := _parse_date(c.get("date", ""))):
@@ -2514,17 +2405,14 @@ def compute_e1rm_multiplier_suggestions(
                 "deadlift": _num(entry.get("deadlift_kg")),
             })
 
-    # 2. Compute ratios per lift
     ratios_by_lift: dict[str, list[float]] = {"squat": [], "bench": [], "deadlift": []}
     sources_by_lift: dict[str, list[str]] = {"squat": [], "bench": [], "deadlift": []}
 
     for act in sorted(actuals, key=lambda x: x["date"], reverse=True):
         act_date = act["date"]
-        # Skip if too far in the future
         if act_date > ref:
             continue
 
-        # Find raw session estimates as of that date
         raw_estimates = _estimate_maxes_from_sessions(sessions, lookback_days=42, reference_date=act_date)
 
         for lift in ["squat", "bench", "deadlift"]:
@@ -2533,12 +2421,10 @@ def compute_e1rm_multiplier_suggestions(
 
             if act_val > 0 and raw_val > 0:
                 ratio = act_val / raw_val
-                # Sanity check: 0.80 to 1.15
                 if 0.80 <= ratio <= 1.15:
                     ratios_by_lift[lift].append(ratio)
                     sources_by_lift[lift].append(act["source"])
 
-    # 3. Generate suggestions
     suggestions = {}
     for lift in ["squat", "bench", "deadlift"]:
         ratios = ratios_by_lift[lift]
@@ -2548,9 +2434,7 @@ def compute_e1rm_multiplier_suggestions(
             suggestions[lift] = None
             continue
 
-        # Use median ratio for stability
         suggested = median(ratios)
-        # Final clamp to 0.85 - 1.10
         clamped = round(_clamp(suggested, 0.85, 1.10), 2)
         diff = round(clamped - current, 2)
 
@@ -2572,7 +2456,6 @@ def compute_e1rm_multiplier_suggestions(
 
     return suggestions
 
-
 def _lift_inol_thresholds(lift_profiles: list[dict] | None) -> dict[str, dict[str, float]]:
     """Return per-lift INOL thresholds, applying lift-profile overrides when present."""
     thresholds = {lift: dict(bounds) for lift, bounds in _DEFAULT_INOL_THRESHOLDS.items()}
@@ -2589,7 +2472,6 @@ def _lift_inol_thresholds(lift_profiles: list[dict] | None) -> dict[str, dict[st
         if thresholds[lift]["high"] < thresholds[lift]["low"]:
             thresholds[lift]["high"] = thresholds[lift]["low"]
     return thresholds
-
 
 def _phase_inol_multiplier(phase: dict | None, effective_week: int | None = None) -> float:
     if not phase:
@@ -2610,14 +2492,12 @@ def _phase_inol_multiplier(phase: dict | None, effective_week: int | None = None
         return 0.70
     return 1.0
 
-
 def _inol_uncertainty_multiplier(selected_weeks: int) -> tuple[float, float]:
     if selected_weeks <= 1:
         return 0.75, 1.25
     if selected_weeks <= 2:
         return 0.85, 1.15
     return 1.0, 1.0
-
 
 def _lift_weekly_volume_ri(
     sessions: list[dict],
@@ -2656,7 +2536,6 @@ def _lift_weekly_volume_ri(
         for row in lift_weeks.values():
             row["avg_ri"] = row["ri_weighted_sum"] / row["ri_sets"] if row["ri_sets"] > 0 else 0.0
     return result
-
 
 def compute_inol(
     sessions: list[dict],
@@ -2833,7 +2712,6 @@ def compute_inol(
         "flags": flags,
     }
 
-
 def compute_acwr(
     sessions: list[dict],
     glossary: list[dict] | None = None,
@@ -2863,7 +2741,6 @@ def compute_acwr(
     if acwr_result.get("status") == "insufficient_data":
         return acwr_result
     return acwr_result
-
 
 def compute_banister_ffm(
     sessions: list[dict],
@@ -2937,7 +2814,6 @@ def compute_banister_ffm(
         "model": "normalized_dimension_banister_v2",
     }
 
-
 def compute_monotony_strain(
     sessions: list[dict],
     glossary: list[dict] | None = None,
@@ -3007,7 +2883,6 @@ def compute_monotony_strain(
         "nonzero_training_days": latest.get("nonzero_training_days", 0),
     }
 
-
 def _group_completed_sessions_by_week(
     sessions: list[dict],
     start_day: date,
@@ -3024,10 +2899,8 @@ def _group_completed_sessions_by_week(
         grouped.setdefault(week_start, []).append(session)
     return grouped
 
-
 def _canonical_lift_from_name(name: str) -> str | None:
     return {"squat": "squat", "bench press": "bench", "bench": "bench", "deadlift": "deadlift"}.get(name.lower().strip())
-
 
 def _weekly_sbd_e1rm_total(week_sessions: list[dict]) -> float | None:
     weekly_totals: dict[str, float] = {}
@@ -3049,7 +2922,6 @@ def _weekly_sbd_e1rm_total(week_sessions: list[dict]) -> float | None:
         return None
     return sum(weekly_totals.values())
 
-
 def _weekly_top_intensity(week_sessions: list[dict], current_maxes: dict) -> float | None:
     best = 0.0
     for session in week_sessions:
@@ -3065,7 +2937,6 @@ def _weekly_top_intensity(week_sessions: list[dict], current_maxes: dict) -> flo
                 continue
             best = max(best, kg / max_val)
     return best if best > 0 else None
-
 
 def compute_decoupling(
     sessions: list[dict],
@@ -3154,7 +3025,6 @@ def compute_decoupling(
         "flags": flags,
     }
 
-
 def _find_taper_start(
     program: dict,
     comp_date: date,
@@ -3186,7 +3056,6 @@ def _find_taper_start(
         return comp_window_start
     return min(named_taper_start, comp_window_start)
 
-
 def _window_sums_from_daily_series(
     daily_series: list[dict[str, Any]],
     window_start: date,
@@ -3198,7 +3067,6 @@ def _window_sums_from_daily_series(
         if window_start <= day <= window_end:
             total += _num(row["load"])
     return total
-
 
 def _max_relative_intensity_between(
     sessions: list[dict],
@@ -3225,7 +3093,6 @@ def _max_relative_intensity_between(
                 continue
             best = max(best, kg / max_val)
     return best if best > 0 else None
-
 
 def compute_taper_quality(
     program: dict,
@@ -3414,7 +3281,6 @@ def compute_taper_quality(
         },
     }
 
-
 def compute_attempt_selection(projected_maxes: dict, attempt_pct: dict | None = None) -> dict | None:
     if not projected_maxes:
         return None
@@ -3446,7 +3312,6 @@ def compute_attempt_selection(projected_maxes: dict, attempt_pct: dict | None = 
     result["total"] = round(third_total, 1)
     result["attempt_pct_used"] = pcts
     return result
-
 
 def compute_ri_distribution(sessions: list[dict], current_maxes: dict | None = None) -> dict:
     if not current_maxes:
@@ -3489,7 +3354,6 @@ def compute_ri_distribution(sessions: list[dict], current_maxes: dict | None = N
     }
     return {"overall": overall_out, "per_lift": per_lift_out}
 
-
 def _specificity_expected_band(weeks_to_comp: float | None) -> dict[str, Any] | None:
     if weeks_to_comp is None or weeks_to_comp < 0:
         return None
@@ -3499,7 +3363,6 @@ def _specificity_expected_band(weeks_to_comp: float | None) -> dict[str, Any] | 
         if weeks_to_comp >= min_weeks and (max_weeks is None or weeks_to_comp < max_weeks):
             return band
     return None
-
 
 def compute_specificity_ratio(
     sessions: list[dict],
@@ -3577,7 +3440,6 @@ def compute_specificity_ratio(
         "flags": flags,
     }
 
-
 def _select_specificity_target_competition(program: dict, ref_date: date) -> dict[str, Any] | None:
     competitions = [
         c for c in program.get("competitions", [])
@@ -3617,7 +3479,6 @@ def _select_specificity_target_competition(program: dict, ref_date: date) -> dic
 
     nearest = sorted(competitions, key=lambda c: c.get("date", ""))[0]
     return {**nearest, "selection_reason": "nearest_confirmed"}
-
 
 def compute_readiness_score(
     sessions: list[dict],
@@ -3726,7 +3587,6 @@ def compute_readiness_score(
         "external_readiness_confidence": external_conf,
     }
 
-
 _WEEKLY_ANALYSIS_SECTION_KEYS = {
     "overview",
     "fatigue_readiness",
@@ -3734,7 +3594,6 @@ _WEEKLY_ANALYSIS_SECTION_KEYS = {
     "workload",
     "alerts",
 }
-
 
 def _weekly_analysis_window_context(
     program: dict,
@@ -3865,7 +3724,6 @@ def _weekly_analysis_window_context(
         "completed_history_to_ref": completed_history_to_ref,
     }
 
-
 def _analysis_exercise_stats(completed_in_window: list[dict]) -> dict[str, dict[str, Any]]:
     exercise_stats: dict[str, dict[str, Any]] = {}
     for s in completed_in_window:
@@ -3890,13 +3748,11 @@ def _analysis_exercise_stats(completed_in_window: list[dict]) -> dict[str, dict[
         v["max_kg"] = round(v["max_kg"], 1)
     return exercise_stats
 
-
 def _analysis_current_maxes(ctx: dict[str, Any]) -> tuple[dict | None, dict | None, dict | None]:
     comp_maxes_raw = _estimate_maxes_from_comps(ctx["program"].get("competitions", []), reference_date=ctx["ref"])
     session_maxes_raw = _estimate_maxes_from_sessions(ctx["completed_history_to_ref"], reference_date=ctx["ref"])
     current_maxes_raw = comp_maxes_raw or session_maxes_raw
     return current_maxes_raw, comp_maxes_raw, session_maxes_raw
-
 
 def _analysis_current_maxes_out(current_maxes_raw: dict | None, comp_maxes_raw: dict | None, session_maxes_raw: dict | None) -> dict[str, Any]:
     maxes_method = "comp_results" if comp_maxes_raw else ("session_estimated" if session_maxes_raw else "none")
@@ -3909,7 +3765,6 @@ def _analysis_current_maxes_out(current_maxes_raw: dict | None, comp_maxes_raw: 
     current_maxes_out["method"] = maxes_method
     return current_maxes_out
 
-
 def _analysis_target_rpe_midpoint(current_phase: dict | None) -> float | None:
     if not current_phase:
         return None
@@ -3918,7 +3773,6 @@ def _analysis_target_rpe_midpoint(current_phase: dict | None) -> float | None:
     if t_min is not None and t_max is not None:
         return (_num(t_min) + _num(t_max)) / 2.0
     return None
-
 
 def _analysis_compliance_obj(ctx: dict[str, Any]) -> dict[str, Any]:
     if ctx["selected_week_start"] is not None and ctx["selected_week_end"] is not None:
@@ -3954,7 +3808,6 @@ def _analysis_compliance_obj(ctx: dict[str, Any]) -> dict[str, Any]:
         "vol_pct": compliance_result.get("vol_compliance_pct", 0),
     }
 
-
 def _analysis_deload_info(ctx: dict[str, Any]) -> dict[str, Any]:
     deload_info_raw = _detect_deloads(ctx["sessions"], ctx["program_start"])
     return {
@@ -3962,7 +3815,6 @@ def _analysis_deload_info(ctx: dict[str, Any]) -> dict[str, Any]:
         "break_weeks": [d["week_num"] for d in deload_info_raw if d["is_break"]],
         "effective_training_weeks": sum(1 for d in deload_info_raw if d["effective_index"] >= 0),
     }
-
 
 def _analysis_projection_payload(ctx: dict[str, Any], current_maxes_out: dict[str, Any]) -> dict[str, Any]:
     program = ctx["program"]
@@ -4043,7 +3895,6 @@ def _analysis_projection_payload(ctx: dict[str, Any], current_maxes_out: dict[st
         "attempt_selection": attempt_selection,
     }
 
-
 def _analysis_workload_payload(ctx: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     completed_in_window = ctx["completed_in_window"]
     sessions = ctx["sessions"]
@@ -4120,7 +3971,6 @@ def _analysis_workload_payload(ctx: dict[str, Any]) -> tuple[dict[str, Any], lis
         lifts_report[ex_name] = lift_data
 
     return {"lifts": lifts_report, "exercise_stats": exercise_stats}, flags
-
 
 def weekly_analysis_section(
     program: dict,
@@ -4443,7 +4293,6 @@ def weekly_analysis_section(
         "flags": all_flags,
     }
 
-
 def weekly_analysis(
     program: dict,
     sessions: list[dict],
@@ -4461,7 +4310,6 @@ def weekly_analysis(
     phases = program.get("phases", [])
     program_start = meta.get("program_start", "")
 
-    # Block filter
     if block:
         sessions = [s for s in sessions if s.get("block", "current") == block]
 
@@ -4469,9 +4317,6 @@ def weekly_analysis(
     current_phase = _find_current_phase(phases, current_week)
     phase_name = current_phase.get("name", "Unknown") if current_phase else "Unknown"
 
-    # Window filter. Session-derived summaries are keyed by the user's training
-    # week number, not calendar weeks. Explicit date windows are still accepted
-    # for older callers that have not moved to week_start/week_end yet.
     end = _parse_date(window_end) if window_end else (_parse_date(ref_date) if ref_date else date.today())
     ref = end
     start = _parse_date(window_start) if window_start else None
@@ -4540,7 +4385,6 @@ def weekly_analysis(
             reverse=True,
         )
 
-        # Completed sessions in window are selected-window summaries only.
         completed_in_window = sorted(
             [
                 s for s in completed_history_to_ref
@@ -4559,7 +4403,6 @@ def weekly_analysis(
             selected_week_end = max(selected_week_nums)
         selected_week_count = max(1, int(weeks or 1))
 
-    # Exercise stats: completed sessions only, to avoid inflated counts from planned sessions
     exercise_stats: dict[str, dict[str, Any]] = {}
     for s in completed_in_window:
         for ex in s.get("exercises", []):
@@ -4584,7 +4427,6 @@ def weekly_analysis(
 
     sessions_analyzed = len(completed_in_window)
 
-    # Identify main lifts (from completed sessions only)
     exercise_names = {ex.get("name", "").lower().strip() for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name") and _executed_sets(ex) > 0}
     tracked_lifts = []
     lift_alias_map = {}
@@ -4594,7 +4436,6 @@ def weekly_analysis(
             if output_key not in tracked_lifts:
                 tracked_lifts.append(output_key)
 
-    # Per-lift analysis (progression/volume use full block history for slope accuracy)
     lifts_report = {}
     all_flags = []
     for lift_key in tracked_lifts:
@@ -4650,13 +4491,10 @@ def weekly_analysis(
             for ex in s.get("exercises", [])
             if ex.get("name", "").lower().strip() == ex_name
         ))
-        # Add actual executed metrics to the report
         lift_data["max_kg"] = round(float(max([_num(ex.get("kg", 0)) for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name", "").lower().strip() == ex_name and _executed_sets(ex) > 0] or [0.0])), 1)
         lift_data["total_volume"] = round(float(sum([_executed_volume(ex) for s in completed_in_window for ex in s.get("exercises", []) if ex.get("name", "").lower().strip() == ex_name])), 1)
         lifts_report[ex_name] = lift_data
 
-    # Maxes are estimated from the latest completed competition when possible,
-    # otherwise from the 90th percentile of qualifying session e1RMs.
     comp_maxes_raw = _estimate_maxes_from_comps(program.get("competitions", []), reference_date=ref)
     session_maxes_raw = _estimate_maxes_from_sessions(completed_history_to_ref, reference_date=ref)
     current_maxes_raw = comp_maxes_raw or session_maxes_raw
@@ -4712,7 +4550,6 @@ def weekly_analysis(
         "vol_pct": compliance_result.get("vol_compliance_pct", 0),
     }
 
-    # Deload detection (from full block history for accurate detection)
     deload_info_raw = _detect_deloads(sessions, program_start)
     deload_info = {
         "deload_weeks": [d["week_num"] for d in deload_info_raw if d["is_deload"]],
@@ -4720,7 +4557,6 @@ def weekly_analysis(
         "effective_training_weeks": sum(1 for d in deload_info_raw if d["effective_index"] >= 0),
     }
 
-    # Current maxes output
     maxes_method = "comp_results" if comp_maxes_raw else ("session_estimated" if session_maxes_raw else "none")
     current_maxes_out: dict[str, Any] = {}
     if current_maxes_raw:
@@ -4730,7 +4566,6 @@ def weekly_analysis(
                 current_maxes_out[lk] = round(_num(val), 1)
     current_maxes_out["method"] = maxes_method
 
-    # DOTS
     estimated_dots = None
     estimated_dots_reason = None
     bodyweight = _num(
@@ -4751,7 +4586,6 @@ def weekly_analysis(
     else:
         estimated_dots_reason = "Missing sex or bodyweight"
 
-    # Meet projections
     projections: list[dict[str, Any]] = []
     projection_reason = None
     today = ref
@@ -4785,7 +4619,6 @@ def weekly_analysis(
         else:
             projection_reason = proj.get("reason", "Insufficient data for projection")
 
-    # Attempt selection
     attempt_selection = None
     if projections:
         attempt_pct = meta.get("attempt_pct")
@@ -4797,12 +4630,6 @@ def weekly_analysis(
         if projected_maxes:
             attempt_selection = compute_attempt_selection(projected_maxes, attempt_pct)
 
-    # -----------------------------------------------------------------------
-    # Window summaries use completed_in_window. Current-state models use
-    # completed_history_to_ref so they remain stable across window filters.
-    # -----------------------------------------------------------------------
-
-    # Fatigue dimensions
     fatigue_dimensions = None
     banister = None
     monotony_strain = None
@@ -4979,7 +4806,6 @@ def weekly_analysis(
         "peaking_timeline": peaking_timeline,
     }
 
-
 def _planned_overreach_for_week(phases: list[dict], current_week: int | None, program_start: str = "") -> bool:
     if not phases:
         return False
@@ -4990,7 +4816,6 @@ def _planned_overreach_for_week(phases: list[dict], current_week: int | None, pr
     intent = str(current_phase.get("intent", "")).lower()
     target_rpe_max = _num(current_phase.get("target_rpe_max"))
     return "overreach" in intent or target_rpe_max >= 9.0
-
 
 def _competition_qualifying_total(competition: dict) -> float | None:
     if not isinstance(competition, dict):
@@ -5008,11 +4833,9 @@ def _competition_qualifying_total(competition: dict) -> float | None:
             return round(total, 1)
     return None
 
-
 def _goal_priority_rank(priority: str | None) -> int:
     order = {"primary": 0, "secondary": 1, "optional": 2}
     return order.get(str(priority or "optional"), 99)
-
 
 def _competition_goal_qualifying_total(program: dict, competition_date: str) -> float | None:
     candidates: list[tuple[int, float]] = []
@@ -5037,7 +4860,6 @@ def _competition_goal_qualifying_total(program: dict, competition_date: str) -> 
         return None
     candidates.sort(key=lambda item: (item[0], item[1]))
     return candidates[0][1]
-
 
 def _planned_exercise_weight(ex: dict, current_maxes: dict[str, Any]) -> float | None:
     load_type = (
@@ -5093,7 +4915,6 @@ def _planned_exercise_weight(ex: dict, current_maxes: dict[str, Any]) -> float |
         return None
     return None
 
-
 def _future_planned_daily_fatigue(
     sessions: list[dict],
     glossary: list[dict] | None,
@@ -5137,7 +4958,6 @@ def _future_planned_daily_fatigue(
                 day_dims[dim] += sf[dim] * sets
     return daily, unresolved_sets
 
-
 def _build_specificity_band_segments(program_start: str, comp_date: date) -> list[dict[str, Any]]:
     start_day = _parse_date(program_start)
     if start_day is None:
@@ -5173,7 +4993,6 @@ def _build_specificity_band_segments(program_start: str, comp_date: date) -> lis
             }
         )
     return segments
-
 
 def _build_specificity_timeline(
     sessions: list[dict],
@@ -5221,7 +5040,6 @@ def _build_specificity_timeline(
             }
         )
     return points
-
 
 def _build_peaking_timeline(
     program: dict,
@@ -5448,7 +5266,6 @@ def _build_peaking_timeline(
         "specificity_bands": specificity_bands,
     }
 
-
 def generate_alerts(
     analysis: dict[str, Any],
     program: dict,
@@ -5665,11 +5482,6 @@ def generate_alerts(
     alerts.sort(key=lambda item: (severity_order.get(item.get("severity", "info"), 99), source_order.get(item.get("source", ""), 99)))
     return alerts
 
-
-# ---------------------------------------------------------------------------
-# Renderer helpers
-# ---------------------------------------------------------------------------
-
 def _calculate_current_week(program_start: str, sessions: list[dict] = None) -> int:
     if sessions:
         valid_weeks = []
@@ -5696,13 +5508,11 @@ def _calculate_current_week(program_start: str, sessions: list[dict] = None) -> 
     except ValueError:
         return 1
 
-
 def _find_current_phase(phases: list[dict], current_week: int) -> Optional[dict]:
     for phase in phases:
         if phase.get("start_week", 0) <= current_week <= phase.get("end_week", 0):
             return phase
     return None
-
 
 def _infer_program_start(sessions: list[dict]) -> str:
     dates = [d for s in sessions if (d := _parse_date(s.get("date", "")))]

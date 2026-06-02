@@ -80,10 +80,8 @@ _TOOL_SCHEMA = {
     },
 }
 
-
 def _round_to_nearest(value: float, step: float = 0.05) -> float:
     return round(round(value / step) * step, 2)
-
 
 def _build_user_message(exercise: dict) -> str:
     parts = [f"Exercise: {exercise.get('name', 'Unknown')}"]
@@ -100,7 +98,6 @@ def _build_user_message(exercise: dict) -> str:
     if exercise.get("notes"):
         parts.append(f"Notes: {exercise['notes']}")
     return "\n".join(parts)
-
 
 async def estimate_fatigue_profile(exercise: dict) -> dict:
     """Call LLM to estimate 4-dimensional fatigue profile for an exercise."""
@@ -142,14 +139,12 @@ async def estimate_fatigue_profile(exercise: dict) -> dict:
         "reasoning": args.get("reasoning", ""),
     }
 
-
 def get_glossary(table):
     resp = table.get_item(Key={"pk": "operator", "sk": "glossary#v1"})
     item = resp.get("Item")
     if not item:
         return []
     return item.get("exercises", [])
-
 
 def save_glossary(table, exercises):
     table.put_item(Item={
@@ -158,7 +153,6 @@ def save_glossary(table, exercises):
         "exercises": exercises,
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     })
-
 
 async def backfill(dry_run=False, exercise_name=None):
     dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
@@ -194,7 +188,6 @@ async def backfill(dry_run=False, exercise_name=None):
     if not dry_run and updated:
         save_glossary(table, exercises)
         print(f"Saved {len(exercises)} exercises")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Backfill fatigue profiles for glossary exercises")

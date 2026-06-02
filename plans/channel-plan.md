@@ -721,48 +721,44 @@ and the classifier lock is released before any task route execution begins.
 ### Findings being corrected
 
 A. Hard runtime bugs:
-  1. `flow/plan.py` defines `parse_classification_file` three times; the final
-     winning definition computes `result` but never returns it, so it returns
-     `None`. `batch_classifier.run_batch_classification` then fails on
-     `classification.batch_summary`, so batch classification never runs and the
-     coordinator silently falls back to the legacy `dispatch_channel_batch()` path.
-  2. Coordinator↔store signature mismatches raise `TypeError` on the live path:
-     - `channel_coordinator` calls
-       `store.update_channel_state_on_event(..., debounce_seconds=..., max_wait_seconds=...)`
-       but the store method accepts no such kwargs.
-     - `store.release_classifier_lock(channel_id, owner, debounce_seconds=...)` is
-       called with a kwarg the method does not accept.
-     - `store.update_cursors(channel_id, newest_user_id, now)` is called with three
-       positional args but the method only accepts two.
-  3. `batch_first_event_at`, `max_wait_until`, and `debounce_until` are read by the
-     coordinator but never written by `_update_state_on_event_sync`, so the durable
-     cross-pod max-wait ceiling is dead and starvation protection depends only on
-     the in-process `_max_wait_timers`.
 
-B. State-machine / idempotency bug:
-  4. In `decision_applier`, `apply_decision` transitions `pending→applying`, then
-     `_apply_start_new_task` transitions `applying→running`, then `apply_decision`
-     attempts `applying→completed`. The record is already in `running`, so the
-     conditional fails and `start_new_task` intents stick in `running` forever.
+1. `flow/plan.py` defines `parse_classification_file` three times; the final
+   winning definition computes `result` but never returns it, so it returns
+   `None`. `batch_classifier.run_batch_classification` then fails on
+   `classification.batch_summary`, so batch classification never runs and the
+   coordinator silently falls back to the legacy `dispatch_channel_batch()` path.
+2. Coordinator↔store signature mismatches raise `TypeError` on the live path:
+   - `channel_coordinator` calls
+     `store.update_channel_state_on_event(..., debounce_seconds=..., max_wait_seconds=...)`
+     but the store method accepts no such kwargs.
+   - `store.release_classifier_lock(channel_id, owner, debounce_seconds=...)` is
+     called with a kwarg the method does not accept.
+   - `store.update_cursors(channel_id, newest_user_id, now)` is called with three
+     positional args but the method only accepts two.
+3. `batch_first_event_at`, `max_wait_until`, and `debounce_until` are read by the
+   coordinator but never written by `_update_state_on_event_sync`, so the durable
+   cross-pod max-wait ceiling is dead and starvation protection depends only on
+   the in-process `_max_wait_timers`.
 
-C. Architectural invariant violation:
-  5. `_process_channel_batch` holds the classifier lock (duration 600s) across the
-     entire `apply_batch_decisions` → `_apply_start_new_task` → `execute_route`
-     call, turning the per-channel classifier lock into a long-running
-     implementation lock. This violates "`channel_id` is not a long-running
-     implementation lock" and "a channel may have multiple active implementation
-     tasks run in parallel," and it pre-empts the Phase 5–6 worker/outbox design.
+B. State-machine / idempotency bug: 4. In `decision_applier`, `apply_decision` transitions `pending→applying`, then
+`_apply_start_new_task` transitions `applying→running`, then `apply_decision`
+attempts `applying→completed`. The record is already in `running`, so the
+conditional fails and `start_new_task` intents stick in `running` forever.
 
-D. Lower severity but fix now:
-  6. Duplicate `decision_to_ifplan` logic exists in both `flow/runner.py`
-     (`_decision_to_ifplan`, dead) and `flow/batch_classifier.py` (used).
-  7. `update_cursors` ignores the timestamp and never stores `last_classified_at`;
-     `_derive_batch`/`_newest_user_message_id` compare snowflake IDs
-     lexicographically as strings instead of as integers; edited-message handling
-     (`edited_since`/`latest_observed_edit_at`) is not wired so edits below the
-     cursor never re-enter a batch.
-  8. The `force=True` max-wait path bypasses the "already classifying" guard and can
-     double-dispatch.
+C. Architectural invariant violation: 5. `_process_channel_batch` holds the classifier lock (duration 600s) across the
+entire `apply_batch_decisions` → `_apply_start_new_task` → `execute_route`
+call, turning the per-channel classifier lock into a long-running
+implementation lock. This violates "`channel_id` is not a long-running
+implementation lock" and "a channel may have multiple active implementation
+tasks run in parallel," and it pre-empts the Phase 5–6 worker/outbox design.
+
+D. Lower severity but fix now: 6. Duplicate `decision_to_ifplan` logic exists in both `flow/runner.py`
+(`_decision_to_ifplan`, dead) and `flow/batch_classifier.py` (used). 7. `update_cursors` ignores the timestamp and never stores `last_classified_at`;
+`_derive_batch`/`_newest_user_message_id` compare snowflake IDs
+lexicographically as strings instead of as integers; edited-message handling
+(`edited_since`/`latest_observed_edit_at`) is not wired so edits below the
+cursor never re-enter a batch. 8. The `force=True` max-wait path bypasses the "already classifying" guard and can
+double-dispatch.
 
 ### Implementation
 
@@ -914,44 +910,41 @@ does not create duplicate outbound messages.
 ### Findings being corrected
 
 A. Per-run OpenCode config written but never used:
-  1. `_run_domain`, `_run_technical`, and `_synthesize_handoffs` call
-     `write_opencode_config(..., run_id=run_id)`, which (per the Option A rule) writes
-     only `.if/opencode.run.<run_id>.json` and intentionally does not write the root
-     `session_dir/opencode.json`. But those functions then call `run_opencode()`
-     without passing `config_path=`, so `OPENCODE_CONFIG` is never set in the
-     subprocess env. The per-run config file is orphaned and the run executes with no
-     scoped MCP config at all. The `write_opencode_config()` return value is discarded.
 
-B. Per-run session marker never wired:
-  2. `run_opencode()` accepts `session_marker_path`, but `_run_domain`,
-     `_run_technical`, and `_synthesize_handoffs` never construct or pass one, so all
-     runs still key continuation on the shared `.if/opencode-<agent>.session`. Two
-     concurrent same-agent runs in one channel clobber each other's continue state,
-     which is exactly what the per-run marker was meant to prevent.
-     `_synthesize_handoffs` also does not pass `run_id` to `run_opencode()`.
+1. `_run_domain`, `_run_technical`, and `_synthesize_handoffs` call
+   `write_opencode_config(..., run_id=run_id)`, which (per the Option A rule) writes
+   only `.if/opencode.run.<run_id>.json` and intentionally does not write the root
+   `session_dir/opencode.json`. But those functions then call `run_opencode()`
+   without passing `config_path=`, so `OPENCODE_CONFIG` is never set in the
+   subprocess env. The per-run config file is orphaned and the run executes with no
+   scoped MCP config at all. The `write_opencode_config()` return value is discarded.
 
-C. Live-path regression in `run_if_flow`:
-  3. In `run_if_flow` (the normal, non-orchestrated path), the thinking-mode social
-     branch passes `run_id`, `response_filename`, and `status_filename` to
-     `_run_domain`, but those names are not defined in `run_if_flow`'s scope (they only
-     exist as parameters of `execute_route`). This raises `NameError` whenever that
-     branch is hit. The per-run-filename arguments belong only in `execute_route`, not
-     in `run_if_flow`.
+B. Per-run session marker never wired: 2. `run_opencode()` accepts `session_marker_path`, but `_run_domain`,
+`_run_technical`, and `_synthesize_handoffs` never construct or pass one, so all
+runs still key continuation on the shared `.if/opencode-<agent>.session`. Two
+concurrent same-agent runs in one channel clobber each other's continue state,
+which is exactly what the per-run marker was meant to prevent.
+`_synthesize_handoffs` also does not pass `run_id` to `run_opencode()`.
 
-D. Technical review prompt / RETRY loop bug:
-  4. In `_run_technical`, `review_prompt` is a plain (non-f) string but contains
-     `` `{_review_filename}` ``. The reviewer is told to write a literally-braced
-     filename instead of the real review file, while RETRY detection reads
-     `review_path` derived from `_review_filename`. The review file and RETRY check no
-     longer agree, so the retry path silently breaks.
+C. Live-path regression in `run_if_flow`: 3. In `run_if_flow` (the normal, non-orchestrated path), the thinking-mode social
+branch passes `run_id`, `response_filename`, and `status_filename` to
+`_run_domain`, but those names are not defined in `run_if_flow`'s scope (they only
+exist as parameters of `execute_route`). This raises `NameError` whenever that
+branch is hit. The per-run-filename arguments belong only in `execute_route`, not
+in `run_if_flow`.
 
-E. Outbound enqueue idempotency is a no-op:
-  5. `_enqueue_message` builds `idempotency_key = "<batch>:<intent>:<type>:<outbound_id>"`
-     and the outbox `sk` also embeds the fresh `outbound_id`. The
-     `put_outbound_message` conditional write therefore never collides, so the
-     "idempotent outbox enqueue" requirement is not met. Today most enqueues are
-     gated by intent state, but Phase 7 pivot/retry re-runs a worker and would emit
-     duplicate `task_completed`/`task_failed` messages.
+D. Technical review prompt / RETRY loop bug: 4. In `_run_technical`, `review_prompt` is a plain (non-f) string but contains
+`` `{_review_filename}` ``. The reviewer is told to write a literally-braced
+filename instead of the real review file, while RETRY detection reads
+`review_path` derived from `_review_filename`. The review file and RETRY check no
+longer agree, so the retry path silently breaks.
+
+E. Outbound enqueue idempotency is a no-op: 5. `_enqueue_message` builds `idempotency_key = "<batch>:<intent>:<type>:<outbound_id>"`
+and the outbox `sk` also embeds the fresh `outbound_id`. The
+`put_outbound_message` conditional write therefore never collides, so the
+"idempotent outbox enqueue" requirement is not met. Today most enqueues are
+gated by intent state, but Phase 7 pivot/retry re-runs a worker and would emit
+duplicate `task_completed`/`task_failed` messages.
 
 ### Implementation
 
@@ -1052,46 +1045,40 @@ drainer. Complete this before Phase 8.
 ### Findings being corrected
 
 A. Internal per-run artifacts leak to Discord:
-  1. `_artifact_refs` filters only the static names in
-     `IF_TECHNICAL_ARTIFACT_EXCLUDES` (`response.md`, `plan.md`, `review.md`,
-     `status.log`, etc.). The Phase 6 per-run files written in the workspace root
-     (`response.task.<task_id>.run.<run_id>.md`, `plan.task.*.md`,
-     `review.task.*.md`) do not match, so a task worker attaches its own
-     response/plan/review markdown to the user as "generated artifacts."
 
-B. Pivot/await restart is unreachable when no run is live:
-  2. `_apply_pivot_implementation` only sets `pivot_requested` and calls
-     `request_cancel`; the real restart happens in the running worker's
-     `_handle_cancel_outcome`. When `task.active_implementer_run_id` is None
-     (e.g., the task was `awaiting_instruction` and the prior run already exited),
-     no worker is running to catch the cancel and restart, so the task is stuck in
-     `pivot_requested`. Phase 7 DoD ("Pivot restarts the targeted task") is unmet.
+1. `_artifact_refs` filters only the static names in
+   `IF_TECHNICAL_ARTIFACT_EXCLUDES` (`response.md`, `plan.md`, `review.md`,
+   `status.log`, etc.). The Phase 6 per-run files written in the workspace root
+   (`response.task.<task_id>.run.<run_id>.md`, `plan.task.*.md`,
+   `review.task.*.md`) do not match, so a task worker attaches its own
+   response/plan/review markdown to the user as "generated artifacts."
 
-C. Idempotency key drops legitimate recurring messages:
-  3. The stable lifecycle key `{task_id}:{msg_type}` is correct for terminal types
-     (`task_completed`, `task_failed`, `cancel_confirmation`), but `task_update`
-     and `await_instruction` recur over a task's life (each pivot/conflict). The
-     coarse key dedups the 2nd+ occurrence, so later pivot/await updates are
-     silently dropped from the outbox.
+B. Pivot/await restart is unreachable when no run is live: 2. `_apply_pivot_implementation` only sets `pivot_requested` and calls
+`request_cancel`; the real restart happens in the running worker's
+`_handle_cancel_outcome`. When `task.active_implementer_run_id` is None
+(e.g., the task was `awaiting_instruction` and the prior run already exited),
+no worker is running to catch the cancel and restart, so the task is stuck in
+`pivot_requested`. Phase 7 DoD ("Pivot restarts the targeted task") is unmet.
 
-D. Outbound drainer busy-spin and broken tests:
-  4. `_drain_loop` has no `await` sleep or iteration guard; if `query_outbox` keeps
-     returning the same `queued` item, it spins as fast as DynamoDB will answer
-     until the lock window ends. `tests/test_outbound_queue.py` triggers exactly
-     this with a static `query_outbox` mock that never changes item status and
-     leaves `_resolve_discord_handle` unpatched, causing a ~120s, multi-GB hang.
+C. Idempotency key drops legitimate recurring messages: 3. The stable lifecycle key `{task_id}:{msg_type}` is correct for terminal types
+(`task_completed`, `task_failed`, `cancel_confirmation`), but `task_update`
+and `await_instruction` recur over a task's life (each pivot/conflict). The
+coarse key dedups the 2nd+ occurrence, so later pivot/await updates are
+silently dropped from the outbox.
 
-E. Lower severity but fix now:
-  5. `test_task_worker.py` does not insert `app/src` on `sys.path`, so it cannot be
-     collected on its own (only works when run alongside a test that sets the path).
-  6. Duplicate `ConditionalCheckFailedException` block in
-     `_update_outbound_status_sync`.
-  7. The review and retry `run_opencode` calls in `_run_technical` do not pass
-     `run_id`/`cancel_event`, so a cancel during review/retry is ignored and those
-     runs are not registered/recorded.
-  8. The pivot restart in `_handle_cancel_outcome` passes a stale `from_status`
-     (`pivot_requested`) to the restarted worker's first task transition, which then
-     fails silently because the task is already `implementing`.
+D. Outbound drainer busy-spin and broken tests: 4. `_drain_loop` has no `await` sleep or iteration guard; if `query_outbox` keeps
+returning the same `queued` item, it spins as fast as DynamoDB will answer
+until the lock window ends. `tests/test_outbound_queue.py` triggers exactly
+this with a static `query_outbox` mock that never changes item status and
+leaves `_resolve_discord_handle` unpatched, causing a ~120s, multi-GB hang.
+
+E. Lower severity but fix now: 5. `test_task_worker.py` does not insert `app/src` on `sys.path`, so it cannot be
+collected on its own (only works when run alongside a test that sets the path). 6. Duplicate `ConditionalCheckFailedException` block in
+`_update_outbound_status_sync`. 7. The review and retry `run_opencode` calls in `_run_technical` do not pass
+`run_id`/`cancel_event`, so a cancel during review/retry is ignored and those
+runs are not registered/recorded. 8. The pivot restart in `_handle_cancel_outcome` passes a stale `from_status`
+(`pivot_requested`) to the restarted worker's first task transition, which then
+fails silently because the task is already `implementing`.
 
 ### Implementation
 
@@ -1163,6 +1150,7 @@ Implementation:
 4. Do not invent a new multi-user directive store unless the current code lacks a needed read path.
 5. If current `get_for_subagent()` excludes global directives accidentally, update that method or add a narrow helper so global directives are merged into existing filtered results.
 6. Preserve directive priority/order metadata in formatted output.
+7. all prompts text/templates shoiuld be writtent in the app/src/agent/prompts folder
 
 Definition of done:
 
@@ -1227,11 +1215,11 @@ Each phase must be independently functional:
 2. DynamoDB classifier locks + dirty/max-wait behavior works across pods.
 3. Existing planner/router becomes batch classifier and emits decisions to a sibling classification file.
 4. Decisions apply idempotently and create task/outbox state.
-4.5. Correctness hardening of the Phase 0–4 base: fix the triple `parse_classification_file`, coordinator↔store signature mismatches, durable debounce/max-wait persistence, intent terminal-state bug, snowflake-safe cursors/edit handling, and release the classifier lock before task execution.
+   4.5. Correctness hardening of the Phase 0–4 base: fix the triple `parse_classification_file`, coordinator↔store signature mismatches, durable debounce/max-wait persistence, intent terminal-state bug, snowflake-safe cursors/edit handling, and release the classifier lock before task execution.
 5. Outbound queue serializes Discord sends.
 6. Parallel task workers run in the shared channel workspace with per-run files/config/markers and enqueue outputs.
-6.5. Correctness hardening of the Phase 5–6 base: wire the per-run OpenCode config (`config_path`/`OPENCODE_CONFIG`) and per-run session marker into orchestrated runs, remove the `run_if_flow` thinking-mode `NameError` regression, fix the technical review prompt/RETRY filename, and make outbound enqueue idempotency-key dedupe stable.
+   6.5. Correctness hardening of the Phase 5–6 base: wire the per-run OpenCode config (`config_path`/`OPENCODE_CONFIG`) and per-run session marker into orchestrated runs, remove the `run_if_flow` thinking-mode `NameError` regression, fix the technical review prompt/RETRY filename, and make outbound enqueue idempotency-key dedupe stable.
 7. Cancel/pivot/await-instruction control active tasks via the cancellable executor registry.
-7.5. Correctness hardening of the Phase 7 base: exclude per-run runtime files from Discord attachments, make pivot/await restart reliable when no run is live, fix idempotency keys for recurring task_update/await_instruction messages, and harden/repair the outbound drainer busy-spin and its tests.
+   7.5. Correctness hardening of the Phase 7 base: exclude per-run runtime files from Discord attachments, make pivot/await restart reliable when no run is live, fix idempotency keys for recurring task_update/await_instruction messages, and harden/repair the outbound drainer busy-spin and its tests.
 8. Global directives are guaranteed in prompts using the existing directive system.
 9. Tests + Terraform validation + deployed pod verification.

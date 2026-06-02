@@ -1,10 +1,10 @@
-"""Discord status embed system.
 
-Sends lightweight, color-coded embeds to Discord channels for operational
-visibility. Only sends for Discord platform — no-ops for API/OpenWebUI.
 
-Embeds are sent as separate small messages per event (not edited in-place).
-"""
+
+
+
+
+
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +14,6 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
-
 
 class StatusType(Enum):
     MESSAGE_RECEIVED = "message_received"
@@ -26,18 +25,16 @@ class StatusType(Enum):
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
 
-
 _STATUS_COLORS = {
-    StatusType.MESSAGE_RECEIVED: 0x3498DB,   # blue
-    StatusType.MODEL_SELECTED: 0x2ECC71,     # green
-    StatusType.SUBAGENT_SPAWNING: 0xF39C12,   # yellow
-    StatusType.SUBAGENT_COMPLETED: 0x2ECC71,  # green
-    StatusType.SUBAGENT_FAILED: 0xE74C3C,     # red
-    StatusType.TOOL_STARTED: 0x9B59B6,        # purple
-    StatusType.TOOL_COMPLETED: 0x2ECC71,      # green
-    StatusType.TOOL_FAILED: 0xE74C3C,         # red
+    StatusType.MESSAGE_RECEIVED: 0x3498DB,
+    StatusType.MODEL_SELECTED: 0x2ECC71,
+    StatusType.SUBAGENT_SPAWNING: 0xF39C12,
+    StatusType.SUBAGENT_COMPLETED: 0x2ECC71,
+    StatusType.SUBAGENT_FAILED: 0xE74C3C,
+    StatusType.TOOL_STARTED: 0x9B59B6,
+    StatusType.TOOL_COMPLETED: 0x2ECC71,
+    StatusType.TOOL_FAILED: 0xE74C3C,
 }
-
 
 async def send_status(
     status_type: StatusType,
@@ -45,17 +42,17 @@ async def send_status(
     description: str = "",
     fields: Optional[Dict[str, str]] = None,
 ) -> None:
-    """Send a status embed to the Discord channel (if platform context is Discord).
 
-    Silently no-ops for non-Discord platforms or when no platform context is set.
-    Never blocks the pipeline — all errors are caught and logged.
 
-    Args:
-        status_type: Type of status event (determines embed color)
-        title: Short status label
-        description: Brief details
-        fields: Optional key-value pairs to display as embed fields
-    """
+
+
+
+
+
+
+
+
+
     from channels.context import get_platform_context
 
     ctx = get_platform_context()
@@ -89,7 +86,6 @@ async def send_status(
 
         if discord_loop.is_running():
             future = asyncio.run_coroutine_threadsafe(coro, discord_loop)
-            # Don't await — fire and forget to avoid blocking the pipeline
             future.add_done_callback(lambda f: None)
         else:
             await coro

@@ -11,7 +11,6 @@ from typing import Any
 
 import yaml
 
-
 TOOL_CATEGORIES = {
     "health": ["health"],
     "finance": ["finance"],
@@ -30,7 +29,6 @@ TOOL_CATEGORIES = {
     "tarot": ["tarot"],
 }
 
-
 class Plugin:
     def __init__(self, slug: str, path: Path, module: Any, schemas: dict[str, dict[str, Any]]):
         self.slug = slug
@@ -38,14 +36,11 @@ class Plugin:
         self.module = module
         self.schemas = schemas
 
-
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
-
 def _tools_root() -> Path:
     return Path(os.environ.get("IF_TOOLS_ROOT") or Path(__file__).resolve().parent)
-
 
 def _category_slugs(category: str) -> list[str]:
     slugs = TOOL_CATEGORIES.get(category)
@@ -58,22 +53,17 @@ def _category_slugs(category: str) -> list[str]:
 
     raise ValueError(f"Unknown tool category: {category}")
 
-
 def _allowed_tools() -> set[str]:
     raw = os.environ.get("IF_MCP_ALLOWED_TOOLS", "")
     return {item.strip() for item in raw.split(",") if item.strip()}
 
-
 def _app_src() -> Path:
     root = _repo_root()
-    # Repository layout
     if (root / "app" / "src").exists():
         return root / "app" / "src"
-    # Container layout
     if (root / "src").exists():
         return root / "src"
     return root / "app" / "src"
-
 
 def _schema_from_tool_meta(path: Path) -> dict[str, dict[str, Any]]:
     meta_path = path / "tool_meta.yaml"
@@ -92,7 +82,6 @@ def _schema_from_tool_meta(path: Path) -> dict[str, dict[str, Any]]:
             },
         }
     return schemas
-
 
 def _load_plugin(slug: str) -> Plugin:
     tools_root = _tools_root()
@@ -119,7 +108,6 @@ def _load_plugin(slug: str) -> Plugin:
         schemas = _schema_from_tool_meta(plugin_dir)
     return Plugin(slug=slug, path=plugin_dir, module=module, schemas=schemas)
 
-
 def _normalize_schema(schema: dict[str, Any], fallback_name: str) -> dict[str, Any]:
     parameters = schema.get("parameters") or schema.get("inputSchema") or {
         "type": "object",
@@ -131,7 +119,6 @@ def _normalize_schema(schema: dict[str, Any], fallback_name: str) -> dict[str, A
         "description": schema.get("description") or fallback_name,
         "inputSchema": parameters,
     }
-
 
 async def main(category: str) -> None:
     try:
@@ -180,7 +167,6 @@ async def main(category: str) -> None:
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

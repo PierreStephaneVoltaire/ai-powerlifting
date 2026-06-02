@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Copy the current operator health program and sessions to pk=test.
 
 This is meant for the private test environment. It copies:
@@ -43,7 +42,6 @@ TEMPLATE_SK_PREFIX = "template#"
 DEFAULT_BLOCK = "current"
 SEED_MARKER = "operator-health-current-to-test"
 
-
 def to_dynamo(value: Any) -> Any:
     """Recursively convert Python floats for DynamoDB writes."""
     if isinstance(value, float):
@@ -53,7 +51,6 @@ def to_dynamo(value: Any) -> Any:
     if isinstance(value, list):
         return [to_dynamo(child) for child in value]
     return value
-
 
 def int_value(value: Any, default: int = 0) -> int:
     if isinstance(value, Decimal):
@@ -67,7 +64,6 @@ def int_value(value: Any, default: int = 0) -> int:
             return default
     return default
 
-
 def version_number(program_sk: str) -> int | None:
     if not program_sk.startswith(PROGRAM_SK_PREFIX):
         return None
@@ -76,14 +72,11 @@ def version_number(program_sk: str) -> int | None:
     except ValueError:
         return None
 
-
 def version_label(program_sk: str) -> str:
     return program_sk.removeprefix("program#") if program_sk.startswith("program#") else program_sk
 
-
 def session_prefix(program_sk: str) -> str:
     return f"{SESSION_SK_PREFIX}{program_sk}#"
-
 
 def parse_week_number(session: dict[str, Any]) -> int:
     raw_week_number = session.get("week_number")
@@ -98,10 +91,8 @@ def parse_week_number(session: dict[str, Any]) -> int:
             return int(match.group(1))
     return int_value(week)
 
-
 def phase_block(phase: dict[str, Any]) -> str:
     return str(phase.get("block") or DEFAULT_BLOCK)
-
 
 def resolve_phase(session: dict[str, Any], phases: list[dict[str, Any]]) -> dict[str, Any]:
     week_number = parse_week_number(session)
@@ -135,12 +126,10 @@ def resolve_phase(session: dict[str, Any], phases: list[dict[str, Any]]) -> dict
         "block": block,
     }
 
-
 def phase_ref(phase: dict[str, Any]) -> str:
     block = str(phase.get("block") or DEFAULT_BLOCK)
     name = str(phase.get("name") or "Unscheduled").replace("#", "-")
     return f"phase#{block}#W{phase.get('start_week', 0)}-{phase.get('end_week', 0)}#{name}"
-
 
 def seed_tags(source_pk: str, target_pk: str, copied_at: str, source_sk: str | None = None) -> dict[str, Any]:
     tags = {
@@ -152,7 +141,6 @@ def seed_tags(source_pk: str, target_pk: str, copied_at: str, source_sk: str | N
     if source_sk:
         tags["test_seed_source_sk"] = source_sk
     return tags
-
 
 def query_by_prefix(table: Any, pk: str, sk_prefix: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
@@ -168,15 +156,12 @@ def query_by_prefix(table: Any, pk: str, sk_prefix: str) -> list[dict[str, Any]]
         kwargs["ExclusiveStartKey"] = last_key
     return items
 
-
 def get_item(table: Any, pk: str, sk: str) -> dict[str, Any] | None:
     return table.get_item(Key={"pk": pk, "sk": sk}).get("Item")
-
 
 def list_programs(table: Any, pk: str) -> list[dict[str, Any]]:
     programs = query_by_prefix(table, pk, PROGRAM_SK_PREFIX)
     return sorted(programs, key=lambda item: version_number(str(item.get("sk", ""))) or 0)
-
 
 def resolve_current_program(table: Any, pk: str) -> tuple[dict[str, Any], dict[str, Any]]:
     pointer = get_item(table, pk, POINTER_SK)
@@ -203,7 +188,6 @@ def resolve_current_program(table: Any, pk: str) -> tuple[dict[str, Any], dict[s
     }
     return pointer, program
 
-
 def sort_session_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         items,
@@ -215,10 +199,8 @@ def sort_session_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ),
     )
 
-
 def list_session_items(table: Any, pk: str, program_sk: str) -> list[dict[str, Any]]:
     return sort_session_items(query_by_prefix(table, pk, session_prefix(program_sk)))
-
 
 def stable_session_id(source_pk: str, program_sk: str, source_index: int, session: dict[str, Any]) -> str:
     existing = session.get("id") or session.get("session_id")
@@ -226,7 +208,6 @@ def stable_session_id(source_pk: str, program_sk: str, source_index: int, sessio
         return str(existing)
     seed = f"{source_pk}:{program_sk}:{source_index}:{session.get('date', '')}"
     return str(uuid.uuid5(uuid.NAMESPACE_URL, seed))
-
 
 def build_session_from_embedded(
     *,
@@ -283,7 +264,6 @@ def build_session_from_embedded(
         **seed_tags(source_pk, target_pk, copied_at, sk),
     }
 
-
 def copy_program_item(program: dict[str, Any], source_pk: str, target_pk: str, copied_at: str) -> dict[str, Any]:
     item = copy.deepcopy(program)
     source_sk = str(item.get("sk") or "")
@@ -291,14 +271,12 @@ def copy_program_item(program: dict[str, Any], source_pk: str, target_pk: str, c
     item.update(seed_tags(source_pk, target_pk, copied_at, source_sk))
     return item
 
-
 def copy_pointer_item(pointer: dict[str, Any], source_pk: str, target_pk: str, copied_at: str) -> dict[str, Any]:
     item = copy.deepcopy(pointer)
     item["pk"] = target_pk
     item["sk"] = POINTER_SK
     item.update(seed_tags(source_pk, target_pk, copied_at, POINTER_SK))
     return item
-
 
 def copy_session_item(item: dict[str, Any], source_pk: str, target_pk: str, copied_at: str) -> dict[str, Any]:
     copied = copy.deepcopy(item)
@@ -308,14 +286,12 @@ def copy_session_item(item: dict[str, Any], source_pk: str, target_pk: str, copi
     copied.update(seed_tags(source_pk, target_pk, copied_at, source_sk))
     return copied
 
-
 def copy_template_item(item: dict[str, Any], source_pk: str, target_pk: str, copied_at: str) -> dict[str, Any]:
     copied = copy.deepcopy(item)
     source_sk = str(copied.get("sk") or "")
     copied["pk"] = target_pk
     copied.update(seed_tags(source_pk, target_pk, copied_at, source_sk))
     return copied
-
 
 def build_user_settings_item(args: argparse.Namespace, copied_at: str) -> dict[str, Any]:
     display_name = args.target_user_display_name or "Powerlifting Test"
@@ -337,14 +313,11 @@ def build_user_settings_item(args: argparse.Namespace, copied_at: str) -> dict[s
         **seed_tags(args.source_user_pk, args.target_user_pk, copied_at, args.source_user_pk),
     }
 
-
 def get_user_item(table: Any, pk: str) -> dict[str, Any] | None:
     return table.get_item(Key={"pk": pk}).get("Item")
 
-
 def put_user_item(table: Any, item: dict[str, Any]) -> None:
     table.put_item(Item=to_dynamo(item))
-
 
 def delete_user_items(table: Any, items: list[dict[str, Any]], dry_run: bool) -> int:
     if dry_run:
@@ -352,7 +325,6 @@ def delete_user_items(table: Any, items: list[dict[str, Any]], dry_run: bool) ->
     for item in items:
         table.delete_item(Key={"pk": item["pk"]})
     return len(items)
-
 
 def existing_keys(table: Any, items: list[dict[str, Any]]) -> list[tuple[str, str]]:
     conflicts: list[tuple[str, str]] = []
@@ -363,12 +335,10 @@ def existing_keys(table: Any, items: list[dict[str, Any]]) -> list[tuple[str, st
             conflicts.append((pk, sk))
     return conflicts
 
-
 def put_items(table: Any, items: list[dict[str, Any]]) -> None:
     with table.batch_writer() as batch:
         for item in items:
             batch.put_item(Item=to_dynamo(item))
-
 
 def delete_items(table: Any, items: list[dict[str, Any]], dry_run: bool) -> int:
     if dry_run:
@@ -378,14 +348,12 @@ def delete_items(table: Any, items: list[dict[str, Any]], dry_run: bool) -> int:
             batch.delete_item(Key={"pk": item["pk"], "sk": item["sk"]})
     return len(items)
 
-
 def is_seeded(item: dict[str, Any], source_pk: str, target_pk: str) -> bool:
     return (
         item.get("test_seed_marker") == SEED_MARKER
         and item.get("test_seed_source_pk") == source_pk
         and item.get("test_seed_target_pk") == target_pk
     )
-
 
 def collect_cleanup_items(health_table: Any, sessions_table: Any, source_pk: str, target_pk: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     health_items = [
@@ -400,7 +368,6 @@ def collect_cleanup_items(health_table: Any, sessions_table: Any, source_pk: str
     ]
     return health_items, session_items
 
-
 def collect_template_cleanup_items(template_table: Any, source_pk: str, target_pk: str) -> list[dict[str, Any]]:
     return [
         item
@@ -408,11 +375,9 @@ def collect_template_cleanup_items(template_table: Any, source_pk: str, target_p
         if is_seeded(item, source_pk, target_pk)
     ]
 
-
 def collect_user_cleanup_items(user_table: Any, source_pk: str, target_pk: str) -> list[dict[str, Any]]:
     item = get_user_item(user_table, target_pk)
     return [item] if item and is_seeded(item, source_pk, target_pk) else []
-
 
 def copy_current(args: argparse.Namespace) -> int:
     dynamodb = boto3.resource("dynamodb", region_name=args.region)
@@ -544,7 +509,6 @@ def copy_current(args: argparse.Namespace) -> int:
     print("  python scripts/copy_operator_health_to_test.py --cleanup")
     return 0
 
-
 def cleanup(args: argparse.Namespace) -> int:
     dynamodb = boto3.resource("dynamodb", region_name=args.region)
     health_table = dynamodb.Table(args.health_table)
@@ -611,7 +575,6 @@ def cleanup(args: argparse.Namespace) -> int:
     print(f"  {'Would delete' if args.dry_run else 'Deleted'} user items:    {deleted_users}")
     return 0
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Copy the current operator health program and sessions to pk=test, or clean up copied test data.",
@@ -651,7 +614,6 @@ def main() -> int:
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -1,4 +1,4 @@
-"""Async template import endpoints for powerlifting spreadsheet uploads."""
+
 from __future__ import annotations
 
 import asyncio
@@ -25,10 +25,8 @@ router = APIRouter(prefix="/v1/health/template-imports", tags=["template_imports
 ALLOWED_SUFFIXES = {".xlsx", ".xls", ".csv"}
 IMPORT_OPENCODE_TIMEOUT_SECONDS = int(os.getenv("TEMPLATE_IMPORT_OPENCODE_TIMEOUT_SECONDS", "300"))
 
-
 def _health_tools_path() -> Path:
     return PROJECT_ROOT / "tools" / "health"
-
 
 def _get_template_store():
     tools_path = str(_health_tools_path())
@@ -41,7 +39,6 @@ def _get_template_store():
         pk=os.environ.get("IF_TEMPLATES_LIBRARY_PK", "template_library"),
         region=os.environ.get("AWS_REGION", "ca-central-1"),
     )
-
 
 def _public_job(item: dict[str, Any]) -> dict[str, Any]:
     allowed = {
@@ -58,21 +55,17 @@ def _public_job(item: dict[str, Any]) -> dict[str, Any]:
     }
     return {key: item.get(key) for key in allowed if key in item}
 
-
 def _job_workspace(job_id: str) -> Path:
     path = Path(OPENCODE_WORKSPACE_BASE) / "template-imports" / safe_segment(job_id, "job")
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-
 def _safe_filename(filename: str) -> str:
     return safe_segment(Path(filename or "template.xlsx").name, "template.xlsx")
-
 
 async def _mark_job(job_id: str, updates: dict[str, Any]) -> None:
     store = _get_template_store()
     await store.update_import_job(job_id, updates)
-
 
 async def _find_created_template(job_id: str, actor_pk: str) -> str | None:
     store = _get_template_store()
@@ -82,14 +75,12 @@ async def _find_created_template(job_id: str, actor_pk: str) -> str | None:
             return str(template.get("sk"))
     return None
 
-
 def _looks_like_template_payload(payload: Any) -> bool:
     return (
         isinstance(payload, dict)
         and isinstance(payload.get("meta"), dict)
         and isinstance(payload.get("sessions"), list)
     )
-
 
 def _generated_payload_candidates(session_dir: Path) -> list[Path]:
     candidates: list[Path] = []
@@ -98,7 +89,6 @@ def _generated_payload_candidates(session_dir: Path) -> list[Path]:
         if "payload" in lowered or "template" in lowered:
             candidates.append(path)
     return sorted(candidates, key=lambda path: path.stat().st_mtime, reverse=True)
-
 
 async def _create_from_generated_payload(
     session_dir: Path,
@@ -134,7 +124,6 @@ async def _create_from_generated_payload(
             logger.info("Template import job %s saved generated payload from %s", job_id, path.name)
             return str(sk)
     return None
-
 
 def _template_import_prompt(job_id: str, filename: str, actor_pk: str, author: str) -> str:
     payload_hint = {
@@ -199,7 +188,6 @@ Expected template payload shape:
 After the tool call, write response.md with the created template SK and a concise warning summary.
 """
 
-
 async def _run_import_job(job_id: str, filename: str, actor_pk: str, author: str) -> None:
     await _mark_job(job_id, {"status": "running"})
     session_dir = _job_workspace(job_id)
@@ -253,7 +241,6 @@ async def _run_import_job(job_id: str, filename: str, actor_pk: str, author: str
             "error": f"{type(exc).__name__}: {exc}",
         })
 
-
 @router.post("")
 async def create_template_import(
     background_tasks: BackgroundTasks,
@@ -288,7 +275,6 @@ async def create_template_import(
     })
     background_tasks.add_task(_run_import_job, job_id, filename, author_pk, author or author_pk)
     return {"job_id": job_id, "status": "queued"}
-
 
 @router.get("/{job_id}")
 async def get_template_import(job_id: str, actor_pk: str) -> dict[str, Any]:

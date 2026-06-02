@@ -49,10 +49,8 @@ _TOOL_SCHEMA = {
     },
 }
 
-
 def _round_to_nearest(value: float, step: float = 0.05) -> float:
     return round(round(value / step) * step, 2)
-
 
 _BIG_LIFT_KEYS = {
     "squat": "squat",
@@ -63,7 +61,6 @@ _BIG_LIFT_KEYS = {
     "conventional deadlift": "deadlift",
     "sumo deadlift": "deadlift",
 }
-
 
 def _match_lift_profile(
     exercise: dict,
@@ -77,7 +74,6 @@ def _match_lift_profile(
     if not target:
         return None
     return next((p for p in lift_profiles if (p.get("lift") or "").lower() == target), None)
-
 
 def _format_athlete_context(meta: dict | None) -> list[str]:
     if not meta:
@@ -97,7 +93,6 @@ def _format_athlete_context(meta: dict | None) -> list[str]:
         lines.append(f"  {k}: {v}")
     return lines
 
-
 def _format_lift_profile(profile: dict | None) -> list[str]:
     if not profile:
         return []
@@ -107,7 +102,6 @@ def _format_lift_profile(profile: dict | None) -> list[str]:
         if value:
             lines.append(f"  {field}: {value}")
     return lines if len(lines) > 1 else []
-
 
 def _build_user_message(
     exercise: dict,
@@ -120,7 +114,6 @@ def _build_user_message(
         athlete_metrics_lines=_format_athlete_context(program_meta),
         lift_profile_lines=_format_lift_profile(_match_lift_profile(exercise, lift_profiles)),
     )
-
 
 async def estimate_fatigue_profile(
     exercise: dict,
@@ -160,7 +153,6 @@ async def estimate_fatigue_profile(
             resp.raise_for_status()
             data = resp.json()
 
-        # Extract tool call arguments
         choices = data.get("choices", [])
         if not choices:
             logger.warning("[FatigueAI] No choices in response")

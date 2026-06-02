@@ -40,11 +40,9 @@ _TOOL_SCHEMA = {
     },
 }
 
-
 def _compact_text(value: object, limit: int = 900) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     return text[:limit].rstrip()
-
 
 def _extract_json_object(text: str) -> dict:
     text = text.strip()
@@ -65,14 +63,12 @@ def _extract_json_object(text: str) -> dict:
     except json.JSONDecodeError:
         return {}
 
-
 def _normalize_result(payload: dict) -> dict:
     return {
         "description": _compact_text(payload.get("description")),
         "how_to_perform": _compact_text(payload.get("how_to_perform"), 1200),
         "why_do_it": _compact_text(payload.get("why_do_it")),
     }
-
 
 def _build_user_message(
     exercise: dict,
@@ -83,7 +79,6 @@ def _build_user_message(
         exercise=exercise,
         lift_profiles=lift_profiles or [],
     )
-
 
 async def generate_glossary_text(
     exercise: dict,

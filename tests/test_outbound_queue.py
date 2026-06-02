@@ -12,7 +12,6 @@ if APP_SRC not in sys.path:
 from channels.execution_models import DiscordOutboundMessage
 from channels import outbound_queue
 
-
 def _make_outbound(**overrides) -> DiscordOutboundMessage:
     defaults = dict(
         outbound_id="out-1",
@@ -30,7 +29,6 @@ def _make_outbound(**overrides) -> DiscordOutboundMessage:
     defaults.update(overrides)
     return DiscordOutboundMessage(**defaults)
 
-
 def _mock_store():
     store = MagicMock()
     store.acquire_outbound_lock = AsyncMock(return_value=True)
@@ -38,7 +36,6 @@ def _mock_store():
     store.query_outbox = AsyncMock(return_value=[])
     store.update_outbound_message_status = AsyncMock(return_value=True)
     return store
-
 
 @pytest.mark.asyncio
 async def test_drain_channel_reentrancy_guard():
@@ -50,7 +47,6 @@ async def test_drain_channel_reentrancy_guard():
     finally:
         outbound_queue._draining_channels.discard("chan-1")
 
-
 @pytest.mark.asyncio
 async def test_drain_channel_releases_draining_on_exit():
     store = _mock_store()
@@ -59,7 +55,6 @@ async def test_drain_channel_releases_draining_on_exit():
         await outbound_queue._drain_channel("chan-1")
     assert "chan-1" not in outbound_queue._draining_channels
 
-
 @pytest.mark.asyncio
 async def test_drain_channel_exits_if_lock_not_acquired():
     store = _mock_store()
@@ -67,7 +62,6 @@ async def test_drain_channel_exits_if_lock_not_acquired():
     with patch("channels.outbound_queue.get_execution_store", return_value=store):
         await outbound_queue._drain_channel_inner("chan-1")
     store.release_outbound_lock.assert_not_called()
-
 
 @pytest.mark.asyncio
 async def test_send_one_marks_sending_on_success():
@@ -86,7 +80,6 @@ async def test_send_one_marks_sending_on_success():
     assert calls[1].kwargs["to_status"] == "sent"
     assert calls[1].kwargs["discord_message_id"] == "discord-msg-123"
 
-
 @pytest.mark.asyncio
 async def test_send_one_marks_failed_on_handle_failure():
     store = _mock_store()
@@ -96,7 +89,6 @@ async def test_send_one_marks_failed_on_handle_failure():
     assert result is False
     calls = store.update_outbound_message_status.call_args_list
     assert calls[1].kwargs["to_status"] == "failed"
-
 
 @pytest.mark.asyncio
 async def test_send_one_marks_failed_on_delivery_error():
@@ -109,7 +101,6 @@ async def test_send_one_marks_failed_on_delivery_error():
     calls = store.update_outbound_message_status.call_args_list
     assert calls[1].kwargs["to_status"] == "failed"
 
-
 @pytest.mark.asyncio
 async def test_send_one_skips_if_not_queued():
     store = _mock_store()
@@ -118,13 +109,11 @@ async def test_send_one_skips_if_not_queued():
     result = await outbound_queue._send_one("chan-1", msg, store)
     assert result is False
 
-
 @pytest.mark.asyncio
 async def test_resolve_discord_handle_no_clients():
     with patch.dict("sys.modules", {"channels.listeners.discord_listener": None}):
         result = outbound_queue._resolve_discord_handle("12345")
     assert result == (None, None)
-
 
 @pytest.mark.asyncio
 async def test_resolve_discord_handle_finds_channel():
@@ -138,7 +127,6 @@ async def test_resolve_discord_handle_finds_channel():
         result = outbound_queue._resolve_discord_handle("12345")
     assert result == (mock_channel, mock_client.loop)
 
-
 @pytest.mark.asyncio
 async def test_resolve_discord_handle_no_matching_channel():
     mock_client = MagicMock()
@@ -149,7 +137,6 @@ async def test_resolve_discord_handle_no_matching_channel():
         result = outbound_queue._resolve_discord_handle("99999")
     assert result == (None, None)
 
-
 @pytest.mark.asyncio
 async def test_drain_loop_stops_when_empty():
     store = _mock_store()
@@ -157,7 +144,6 @@ async def test_drain_loop_stops_when_empty():
     with patch("channels.outbound_queue.get_execution_store", return_value=store):
         await outbound_queue._drain_loop("chan-1", store, "owner-1", "2099-12-31T23:59:59+00:00")
     store.query_outbox.assert_called_once()
-
 
 @pytest.mark.asyncio
 async def test_drain_loop_respects_lock_expiry():
@@ -167,7 +153,6 @@ async def test_drain_loop_respects_lock_expiry():
     with patch("channels.outbound_queue.get_execution_store", return_value=store):
         await outbound_queue._drain_loop("chan-1", store, "owner-1", "2020-01-01T00:00:00+00:00")
     store.update_outbound_message_status.assert_not_called()
-
 
 @pytest.mark.asyncio
 async def test_drain_reschedules_when_items_remain():
@@ -190,7 +175,6 @@ async def test_drain_reschedules_when_items_remain():
          patch.object(outbound_queue, "_resolve_discord_handle", return_value=(None, None)):
         await outbound_queue._drain_channel_inner("chan-1")
     mock_schedule.assert_called_once_with("chan-1")
-
 
 @pytest.mark.asyncio
 async def test_drain_no_reschedule_when_empty():

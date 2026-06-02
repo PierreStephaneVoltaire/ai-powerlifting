@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = load_system_prompt("multi_block_comparison_system")
 
-
 _INSIGHT_OBJECT = {
     "type": "object",
     "properties": {
@@ -24,7 +23,6 @@ _INSIGHT_OBJECT = {
     },
     "required": ["finding", "evidence", "confidence"],
 }
-
 
 _TOOL_SCHEMA = {
     "type": "function",
@@ -99,7 +97,6 @@ _TOOL_SCHEMA = {
     },
 }
 
-
 def _sanitize(value: Any) -> Any:
     if isinstance(value, float):
         if value != value or value in (float("inf"), float("-inf")):
@@ -110,7 +107,6 @@ def _sanitize(value: Any) -> Any:
     if isinstance(value, list):
         return [_sanitize(v) for v in value]
     return value
-
 
 def _default_report(reason: str) -> dict[str, Any]:
     return {
@@ -134,7 +130,6 @@ def _default_report(reason: str) -> dict[str, Any]:
         "insufficient_data": True,
         "insufficient_data_reason": reason,
     }
-
 
 def _normalize_report(args: dict[str, Any]) -> dict[str, Any]:
     report = _default_report("")
@@ -164,7 +159,6 @@ def _normalize_report(args: dict[str, Any]) -> dict[str, Any]:
         else:
             report[key] = args.get(key, []) if isinstance(args.get(key), list) else []
     return report
-
 
 async def generate_multi_block_comparison_report(payload: dict[str, Any]) -> dict[str, Any]:
     blocks = payload.get("blocks") if isinstance(payload, dict) else None

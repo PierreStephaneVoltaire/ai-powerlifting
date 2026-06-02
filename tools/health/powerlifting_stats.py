@@ -20,18 +20,12 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Optional
 
-# Import configuration from the main app
 try:
     from config import SANDBOX_PATH
 except ImportError:
-    # Fallback for local testing
     SANDBOX_PATH = os.getenv("SANDBOX_PATH", "./sandbox")
 
 logger = logging.getLogger(__name__)
-
-# =============================================================================
-# Cache singleton — parsed DataFrame lives for the lifetime of the process
-# =============================================================================
 
 class DatasetNotReadyError(Exception):
     """Raised when the DataFrame cache has not finished loading yet."""
@@ -40,7 +34,6 @@ _df_cache: Optional[pd.DataFrame] = None
 _df_lock = threading.Lock()
 _df_ready = threading.Event()
 _df_error: Optional[str] = None
-
 
 def _parse_csvs() -> pd.DataFrame:
     """Read and parse all matching CSVs from sandbox. Called only from background thread."""
@@ -97,13 +90,12 @@ def _parse_csvs() -> pd.DataFrame:
 
     return combined_df
 
-
 def _background_load():
     """Background thread: parse CSVs and populate the cache."""
     global _df_cache, _df_error
     with _df_lock:
         if _df_ready.is_set():
-            return  # Already loaded
+            return
     try:
         logger.info("[Powerlifting] Starting background DataFrame load...")
         df = _parse_csvs()
@@ -120,14 +112,12 @@ def _background_load():
             _df_error = str(e)
         logger.error(f"[Powerlifting] Background load failed: {e}", exc_info=True)
 
-
 def warm_cache():
     """Trigger background DataFrame load. Idempotent — safe to call multiple times."""
     if _df_ready.is_set():
         return
     thread = threading.Thread(target=_background_load, daemon=True, name="pl-cache-warm")
     thread.start()
-
 
 def load_data() -> pd.DataFrame:
     """Return the cached DataFrame. Raises if not ready yet or permanently missing."""
@@ -139,16 +129,10 @@ def load_data() -> pd.DataFrame:
         "The dataset is still loading in the background. Try again in a moment."
     )
 
-
-# =============================================================================
-# DOTS formula (mirrors frontend/src/utils/dots.ts)
-# =============================================================================
-
 _DOTS_COEFFS: Dict[str, tuple] = {
     "M": (-307.75076, 24.0900756, -0.1918759221, 0.0007391293, -0.000001093),
     "F": (-57.96288,  13.6175032, -0.1126655495, 0.0005158568, -0.0000010706),
 }
-
 
 def compute_dots(total_kg: float, bw_kg: float, sex_code: str) -> Optional[float]:
     coeffs = _DOTS_COEFFS.get(sex_code)
@@ -159,11 +143,6 @@ def compute_dots(total_kg: float, bw_kg: float, sex_code: str) -> Optional[float
     if denom == 0:
         return None
     return round(500 / denom * total_kg, 2)
-
-
-# =============================================================================
-# Query helpers
-# =============================================================================
 
 def _group_unique(df: pd.DataFrame, group_col: str, value_col: str) -> Dict[str, List[str]]:
     if group_col not in df.columns or value_col not in df.columns:
@@ -177,7 +156,6 @@ def _group_unique(df: pd.DataFrame, group_col: str, value_col: str) -> Dict[str,
         str(k): sorted({str(v) for v in g[value_col].unique()})
         for k, g in sub.groupby(group_col, observed=True)
     }
-
 
 def get_filter_categories(df: pd.DataFrame) -> Dict[str, Any]:
     """Retrieves unique categories and groupby maps to populate UI dropdowns."""
@@ -206,7 +184,6 @@ def get_filter_categories(df: pd.DataFrame) -> Dict[str, Any]:
     options["region_federations"]  = _group_unique(df, "State", "Federation")
 
     return options
-
 
 def filter_dataset(
     df: pd.DataFrame,
@@ -244,7 +221,6 @@ def filter_dataset(
 
     return df[mask].copy()
 
-
 def rank_value(value: float, series: pd.Series) -> dict:
     """Compute statistics for a specific value against a series."""
     if pd.isna(value) or value <= 0:
@@ -270,7 +246,6 @@ def rank_value(value: float, series: pd.Series) -> dict:
         "mean": round(float(arr.mean()), 2),
         "max": round(float(arr.max()), 2),
     }
-
 
 def analyze_stats(
     filtered_df: pd.DataFrame,
@@ -315,21 +290,13 @@ def analyze_stats(
 
     return results
 
-
-
-# =============================================================================
-# IPF weight classes — used to determine nearest 3 classes for percentile card
-# =============================================================================
-
 _IPF_CLASSES: Dict[str, list] = {
     "M": [59.0, 66.0, 74.0, 83.0, 93.0, 105.0, 120.0, float("inf")],
     "F": [47.0, 52.0, 57.0, 63.0, 69.0, 76.0, 84.0, float("inf")],
 }
 
-# Cache: (sex_code, lower_bound) → sliced DataFrame
 _wc_slice_cache: Dict[str, pd.DataFrame] = {}
 _wc_slice_lock = threading.Lock()
-
 
 def _user_class_bounds(bodyweight_kg: float, sex_code: str) -> tuple:
     """Return (lower_exclusive_kg, upper_inclusive_kg) for the user's IPF weight
@@ -345,17 +312,14 @@ def _user_class_bounds(bodyweight_kg: float, sex_code: str) -> tuple:
     if not classes or bodyweight_kg <= 0:
         return (0.0, float("inf"))
 
-    # Find the user's own class index (first class ceiling >= bodyweight)
     idx = next((i for i, c in enumerate(classes) if bodyweight_kg <= c), len(classes) - 1)
 
-    # Span ±1 class around the user's class, clamped to valid range
     start = max(0, idx - 1)
     end   = min(len(classes) - 1, idx + 1)
 
     lower = classes[start - 1] if start > 0 else 0.0
-    upper = classes[end]  # inf for the open/super class
+    upper = classes[end]
     return (lower, upper)
-
 
 def _get_or_build_wc_slice(df: pd.DataFrame, bodyweight_kg: float, sex_code: str) -> pd.DataFrame:
     """Lazily build and cache the ±1-class-neighbourhood slice.
@@ -371,7 +335,6 @@ def _get_or_build_wc_slice(df: pd.DataFrame, bodyweight_kg: float, sex_code: str
             _wc_slice_cache[cache_key] = df[mask].copy()
         return _wc_slice_cache[cache_key]
 
-
 def _three_year_deduplicated(df: pd.DataFrame) -> pd.DataFrame:
     """Keep last 3 calendar years; deduplicate by Name keeping best TotalKg."""
     current_year = date.today().year
@@ -384,7 +347,6 @@ def _three_year_deduplicated(df: pd.DataFrame) -> pd.DataFrame:
     recent = recent.sort_values("TotalKg", ascending=False, na_position="last")
     return recent.drop_duplicates(subset=["Name"], keep="first")
 
-
 def _percentile_for(value: Optional[float], series: "pd.Series") -> Optional[int]:
     """Top-X percentile (0-100) of value within series; None if <10 entries."""
     if value is None or value <= 0:
@@ -393,7 +355,6 @@ def _percentile_for(value: Optional[float], series: "pd.Series") -> Optional[int
     if len(arr) < 10:
         return None
     return int(round(float(np.sum(arr < value) / len(arr) * 100)))
-
 
 def _top10_mean_for(series: "pd.Series") -> Optional[float]:
     """Mean of the top 10% of values in series; None if <10 entries."""
@@ -405,7 +366,6 @@ def _top10_mean_for(series: "pd.Series") -> Optional[float]:
     if len(top10) == 0:
         return None
     return round(float(top10.mean()), 1)
-
 
 def compute_ranking_percentiles(
     df: pd.DataFrame,
@@ -442,12 +402,10 @@ def compute_ranking_percentiles(
     if squat_kg and bench_kg and deadlift_kg:
         total_kg = squat_kg + bench_kg + deadlift_kg
 
-    # 1. Weight-class slice
     base_df = df
     if bodyweight_kg and bodyweight_kg > 0 and sex_code in ("M", "F"):
         base_df = _get_or_build_wc_slice(df, bodyweight_kg, sex_code)
 
-    # 2. Common attribute filters — always enforce SBD (full-power) event
     mask = pd.Series(True, index=base_df.index)
     if "Event" in base_df.columns:
         mask &= base_df["Event"].astype(str).str.strip() == "SBD"
@@ -459,10 +417,8 @@ def compute_ranking_percentiles(
         mask &= base_df["Equipment"].astype(str).str.strip() == equipment
     filtered_base = base_df[mask].copy()
 
-    # 3. Recency + deduplication (shared for all geo scopes)
     global_df = _three_year_deduplicated(filtered_base)
 
-    # 4. Geo sub-frames
     national_df: Optional[pd.DataFrame] = None
     regional_df: Optional[pd.DataFrame] = None
     if country and "MeetCountry" in global_df.columns:
@@ -495,7 +451,6 @@ def compute_ranking_percentiles(
             "top10_mean_total":    _top10_mean_for(t_ser),
         }
 
-    # Resolve human-readable weight class label for the pool
     weight_class_label: Optional[str] = None
     if bodyweight_kg and bodyweight_kg > 0 and sex_code in ("M", "F"):
         classes = _IPF_CLASSES[sex_code]
@@ -515,7 +470,6 @@ def compute_ranking_percentiles(
             "regional_n": len(regional_df) if regional_df is not None else None,
         },
     }
-
 
 if __name__ == "__main__":
     pass

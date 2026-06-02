@@ -1,12 +1,10 @@
-"""Deterministic Discord channel history markdown exports."""
+
 from __future__ import annotations
 
 from typing import Any, Iterable
 
-
 def _event_sort_key(event: dict[str, Any]) -> tuple[str, str]:
     return (str(event.get("created_at") or ""), str(event.get("id") or ""))
-
 
 def _isoformat(value: Any) -> str:
     if not value:
@@ -14,7 +12,6 @@ def _isoformat(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return str(value.isoformat())
     return str(value)
-
 
 def _author_name(message: Any) -> str:
     author = getattr(message, "author", None)
@@ -27,7 +24,6 @@ def _author_name(message: Any) -> str:
         or "unknown"
     )
 
-
 def _attachment_lines(message: Any) -> list[str]:
     lines: list[str] = []
     for attachment in getattr(message, "attachments", []) or []:
@@ -39,13 +35,12 @@ def _attachment_lines(message: Any) -> list[str]:
             lines.append(f"[Attachment: {filename}]")
     return lines
 
-
 def discord_message_to_history_event(
     message: Any,
     *,
     bot_user_id: int | None = None,
 ) -> dict[str, Any] | None:
-    """Convert a discord.py message-like object to a stable export event."""
+
     content = str(
         getattr(message, "clean_content", "")
         or getattr(message, "content", "")
@@ -74,13 +69,12 @@ def discord_message_to_history_event(
         "edited_at": _isoformat(getattr(message, "edited_at", "")),
     }
 
-
 def discord_messages_to_history_events(
     messages: Iterable[Any],
     *,
     bot_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Convert a Discord history iterable to stable export events."""
+
     events: list[dict[str, Any]] = []
     for message in messages:
         event = discord_message_to_history_event(message, bot_user_id=bot_user_id)
@@ -88,14 +82,13 @@ def discord_messages_to_history_events(
             events.append(event)
     return sorted(events, key=_event_sort_key)
 
-
 def render_discord_history_markdown(
     events: Iterable[dict[str, Any]],
     *,
     channel_name: str = "",
     channel_id: str = "",
 ) -> str:
-    """Render Discord history events as markdown without generated timestamps."""
+
     ordered = sorted(events, key=_event_sort_key)
     channel_label = channel_name or channel_id or "unknown"
     lines = [

@@ -1,8 +1,8 @@
-"""Background conversation summarization.
 
-Fire-and-forget task that generates summaries after agent execution.
-Zero impact on response latency.
-"""
+
+
+
+
 from __future__ import annotations
 import logging
 from typing import List, Dict, Any, TYPE_CHECKING
@@ -19,9 +19,7 @@ from .user_facts import (
 if TYPE_CHECKING:
     import httpx
 
-
 logger = logging.getLogger(__name__)
-
 
 async def summarize_and_store(
     cache_key: str,
@@ -30,24 +28,22 @@ async def summarize_and_store(
     http_client: "httpx.AsyncClient",
     context_id: str = "",
 ) -> None:
-    """Generate and store a conversation summary.
 
-    Fire-and-forget via asyncio.create_task().
-    Only summarizes substantive exchanges (>3 messages).
 
-    Args:
-        cache_key: The cache key for this conversation
-        messages: List of message dicts
-        username: The operator's username
-        http_client: Shared HTTP client for LLM calls
-        context_id: The context ID for LanceDB storage (format: openwebui_{id} or discord_{id})
-    """
-    # Only summarize substantive exchanges
+
+
+
+
+
+
+
+
+
+
     if len(messages) < 4:
         return
     
     try:
-        # Format conversation for summary
         conv_lines = []
         for msg in messages:
             role = msg.get("role", "unknown")
@@ -59,7 +55,6 @@ async def summarize_and_store(
                         text_parts.append(part.get("text", ""))
                 content = " ".join(text_parts)
             
-            # Truncate long messages
             if len(content) > 500:
                 content = content[:500] + "..."
             
@@ -68,7 +63,6 @@ async def summarize_and_store(
         conversation = "\n".join(conv_lines)
         prompt = render_template("summary.j2", conversation=conversation)
         
-        # Generate summary using cheap model
         resp = await http_client.post(
             f"{LLM_BASE_URL}/chat/completions",
             headers={
@@ -86,10 +80,8 @@ async def summarize_and_store(
         resp.raise_for_status()
         summary = resp.json()["choices"][0]["message"]["content"].strip()
         
-        # Store as fact
         store = get_user_fact_store()
 
-        # Use context_id if provided, otherwise fall back to cache_key
         ctx_id = context_id or cache_key
 
         store.add(

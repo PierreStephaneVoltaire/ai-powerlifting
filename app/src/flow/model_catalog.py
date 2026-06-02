@@ -1,4 +1,4 @@
-"""Model list and selection-rule loading for planner injection."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -8,7 +8,6 @@ from config import MODELS_PATH
 
 MODEL_IDS_FILENAME = "model_ids.txt"
 MODEL_SELECTION_RULES_FILENAME = "model_selection_rules.md"
-
 
 def load_model_ids(path: str | Path | None = None) -> list[str]:
     models_file = Path(path) if path else Path(MODELS_PATH) / MODEL_IDS_FILENAME
@@ -23,7 +22,6 @@ def load_model_ids(path: str | Path | None = None) -> list[str]:
         model_ids.append(line)
     return model_ids
 
-
 def load_model_selection_rules(path: str | Path | None = None) -> str:
     rules_file = Path(path) if path else Path(MODELS_PATH) / MODEL_SELECTION_RULES_FILENAME
     if not rules_file.exists():
@@ -31,14 +29,12 @@ def load_model_selection_rules(path: str | Path | None = None) -> str:
 
     return rules_file.read_text(encoding="utf-8").strip()
 
-
 def group_model_ids(model_ids: list[str]) -> dict[str, list[str]]:
     grouped: dict[str, list[str]] = defaultdict(list)
     for model_id in model_ids:
         provider = model_id.split("/", 1)[0] if "/" in model_id else "other"
         grouped[provider].append(model_id)
     return dict(sorted(grouped.items()))
-
 
 def format_model_catalog(model_ids: list[str]) -> str:
     grouped = group_model_ids(model_ids)

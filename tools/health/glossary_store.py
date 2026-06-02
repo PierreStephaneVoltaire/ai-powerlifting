@@ -112,9 +112,7 @@ class GlossaryStore:
             
         exercise_id = self._slugify(name)
         
-        # Check for collision
         if any(ex.get("id") == exercise_id for ex in exercises):
-            # Try to make it unique
             i = 1
             while any(ex.get("id") == f"{exercise_id}_{i}" for ex in exercises):
                 i += 1
@@ -205,7 +203,6 @@ class GlossaryStore:
         
         for ex in exercises:
             ex_name = ex.get("name", "")
-            # token_sort_ratio is robust to word reordering
             score = fuzz.token_sort_ratio(name.lower(), ex_name.lower()) / 100.0
             if score > best_score:
                 best_score = score

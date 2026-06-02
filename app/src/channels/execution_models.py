@@ -1,13 +1,13 @@
-"""Execution registry models for Discord channel orchestration.
 
-Dataclasses representing channel classification state, batch decisions,
-implementation tasks, OpenCode run records, and outbound messages.
 
-These models are used by the DynamoDB execution registry and the channel
-coordinator/orchestrator. They are not wired into the live Discord path yet.
 
-Phase 0: Foundations and Invariants — models and helpers only, no behavior change.
-"""
+
+
+
+
+
+
+
 
 from __future__ import annotations
 
@@ -16,21 +16,16 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Literal
 
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
 def floats_to_decimals(obj: Any) -> Any:
-    """Recursively convert float values to Decimal for DynamoDB compatibility.
 
-    DynamoDB boto3 rejects Python float types — all floats must be Decimal.
-    Uses str() conversion to preserve precision and avoid floating-point artifacts.
 
-    Reuses the pattern from ``tools/health/core.py::_floats_to_decimals`` and
-    ``tools/health/program_store.py::ProgramStore._floats_to_decimals``.
-    This is the canonical shared helper for the execution registry modules.
-    """
+
+
+
+
+
+
+
     if isinstance(obj, float):
         return Decimal(str(obj))
     if isinstance(obj, dict):
@@ -39,37 +34,31 @@ def floats_to_decimals(obj: Any) -> Any:
         return [floats_to_decimals(v) for v in obj]
     return obj
 
-
 def get_instance_identity() -> str:
-    """Return a stable per-process identity string for lock ownership.
 
-    Combines the hostname with a per-process UUID so that:
-    - Multiple pods have distinct identities (different hostnames).
-    - Multiple processes on the same pod have distinct identities (different UUIDs).
-    - The identity is stable for the lifetime of one process.
 
-    Used by classifier and outbound locks so lock ownership is meaningful
-    once ``replicas > 1``.
-    """
+
+
+
+
+
+
+
+
     import socket
     return f"{socket.gethostname()}/{uuid.uuid4()}"
 
-
-# ---------------------------------------------------------------------------
-# Channel Classification State
-# ---------------------------------------------------------------------------
-
 @dataclass
 class ChannelClassificationState:
-    """Per-channel classifier/debounce state and pending activity signal.
 
-    Stored in DynamoDB under ``pk=CHANNEL#<channel_id>, sk=STATE#classification``.
-    ``pending=True`` means "there is channel activity to classify"; it does
-    not mean messages are stored in DynamoDB.  ``latest_observed_message_id``
-    and timestamps are cursors/hints only.  On old message edits,
-    ``latest_observed_edit_at`` and ``dirty=True`` are enough to force a
-    fresh history fetch and reclassification pass.
-    """
+
+    
+
+
+
+
+
+
 
     channel_id: str
     status: Literal["idle", "debouncing", "classifying"]
@@ -92,17 +81,11 @@ class ChannelClassificationState:
     version: int
     updated_at: str
 
-
-# ---------------------------------------------------------------------------
-# Classification Batch
-# ---------------------------------------------------------------------------
-
 @dataclass
 class ClassificationBatch:
-    """One execution of the planner/router over freshly fetched Discord history.
 
-    Stored in DynamoDB under ``pk=CHANNEL#<channel_id>, sk=BATCH#<batch_id>``.
-    """
+
+
 
     batch_id: str
     channel_id: str
@@ -123,18 +106,13 @@ class ClassificationBatch:
     version: int = 1
     ttl: int | None = None
 
-
-# ---------------------------------------------------------------------------
-# Classifier Decision
-# ---------------------------------------------------------------------------
-
 @dataclass
 class ClassifierDecision:
-    """A single intent decision produced by the batch classifier.
 
-    The existing planner/router is extended so its output can represent
-    multiple decisions, not just one route.
-    """
+
+
+
+
 
     intent_id: str
     kind: Literal["social", "task", "implementation_control", "clarification", "ignore"]
@@ -162,17 +140,11 @@ class ClassifierDecision:
     topic_update: dict[str, Any] | None = None
     conflict: dict[str, Any] | None = None
 
-
-# ---------------------------------------------------------------------------
-# Intent Record
-# ---------------------------------------------------------------------------
-
 @dataclass
 class IntentRecord:
-    """Persisted record of a single classifier decision being applied.
 
-    Stored in DynamoDB under ``pk=BATCH#<batch_id>, sk=INTENT#<intent_id>``.
-    """
+
+
 
     intent_id: str
     batch_id: str
@@ -189,20 +161,15 @@ class IntentRecord:
     error: str | None = None
     ttl: int | None = None
 
-
-# ---------------------------------------------------------------------------
-# Implementation Task
-# ---------------------------------------------------------------------------
-
 @dataclass
 class ImplementationTask:
-    """Tracked implementation task within a channel.
 
-    Stored in DynamoDB under ``pk=CHANNEL#<channel_id>, sk=TASK#<task_id>``.
-    ``queued_message_refs`` contains message IDs/timestamps/reasons, not
-    full message content.  Workers read the current per-channel
-    ``history.md`` before using those refs.
-    """
+
+
+
+
+
+
 
     task_id: str
     channel_id: str
@@ -231,20 +198,12 @@ class ImplementationTask:
     version: int = 1
     ttl: int | None = None
 
-
-# ---------------------------------------------------------------------------
-# OpenCode Run Record
-# ---------------------------------------------------------------------------
-
 @dataclass
 class OpenCodeRunRecord:
-    """Lifecycle record for one OpenCode subprocess invocation.
 
-    Stored in DynamoDB under ``pk=RUN#<run_id>, sk=META`` and also
-    ``pk=TASK#<task_id>, sk=RUN#<run_id>``.
-    ``config_path`` and ``session_marker_path`` capture the per-run OpenCode
-    config file and continue-marker introduced for concurrent-run safety.
-    """
+
+
+
 
     run_id: str
     channel_id: str | None = None
@@ -274,19 +233,8 @@ class OpenCodeRunRecord:
     error: str | None = None
     ttl: int | None = None
 
-
-# ---------------------------------------------------------------------------
-# Discord Outbound Message
-# ---------------------------------------------------------------------------
-
 @dataclass
 class DiscordOutboundMessage:
-    """Queued outbound Discord message.
-
-    Stored in DynamoDB under
-    ``pk=CHANNEL#<channel_id>,
-     sk=OUTBOX#<priority>#<send_after_or_created_at>#<outbound_id>``.
-    """
 
     outbound_id: str
     channel_id: str

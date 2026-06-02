@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 _draining_channels: Set[str] = set()
 
-
 def schedule_drain(channel_id: str, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
     if loop is None:
         try:
@@ -27,7 +26,6 @@ def schedule_drain(channel_id: str, loop: Optional[asyncio.AbstractEventLoop] = 
             return
     asyncio.ensure_future(_drain_channel(channel_id), loop=loop)
 
-
 async def _drain_channel(channel_id: str) -> None:
     if channel_id in _draining_channels:
         return
@@ -36,7 +34,6 @@ async def _drain_channel(channel_id: str) -> None:
         await _drain_channel_inner(channel_id)
     finally:
         _draining_channels.discard(channel_id)
-
 
 async def _drain_channel_inner(channel_id: str) -> None:
     store = get_execution_store()
@@ -62,10 +59,8 @@ async def _drain_channel_inner(channel_id: str) -> None:
         if queued:
             schedule_drain(channel_id)
 
-
 _DRAIN_SLEEP_SECONDS = 0.1
 _DRAIN_MAX_ITERATIONS = 1000
-
 
 async def _drain_loop(
     channel_id: str,
@@ -115,7 +110,6 @@ async def _drain_loop(
             failed_count,
         )
 
-
 async def _send_one(
     channel_id: str,
     msg: DiscordOutboundMessage,
@@ -163,7 +157,6 @@ async def _send_one(
         )
         return False
 
-
 def _resolve_discord_handle(channel_id: str) -> tuple:
     try:
         from channels.listeners.discord_listener import _active_clients
@@ -181,7 +174,6 @@ def _resolve_discord_handle(channel_id: str) -> tuple:
             continue
     return None, None
 
-
 async def _deliver_outbound(
     msg: DiscordOutboundMessage,
     channel_ref: Any,
@@ -198,7 +190,6 @@ async def _deliver_outbound(
         attachments=msg.attachments,
         discord_loop=discord_loop,
     )
-
 
 def _get_sent_message_id(channel_ref: Any, msg: DiscordOutboundMessage) -> Optional[str]:
     return None

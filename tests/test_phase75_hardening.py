@@ -10,7 +10,6 @@ APP_SRC = str(Path(__file__).resolve().parent.parent / "app" / "src")
 if APP_SRC not in sys.path:
     sys.path.insert(0, APP_SRC)
 
-
 class TestPerRunArtifactExclusion:
     def test_per_run_response_excluded(self, tmp_path):
         from flow.runner import _artifact_refs, _snapshot_files
@@ -64,7 +63,6 @@ class TestPerRunArtifactExclusion:
         assert not _is_per_run_runtime_file("response.md")
         assert not _is_per_run_runtime_file("my_output.py")
         assert not _is_per_run_runtime_file("plan.md")
-
 
 class TestRecurringIdempotencyKeys:
     @pytest.mark.asyncio
@@ -146,9 +144,6 @@ class TestRecurringIdempotencyKeys:
             )
         assert captured[0].idempotency_key == captured[1].idempotency_key == "t1:cancel_confirmation"
 
-
-
-
 class TestDrainLoopBounded:
     @pytest.mark.asyncio
     async def test_drain_loop_terminates_with_empty_queue(self):
@@ -212,7 +207,6 @@ class TestDrainLoopBounded:
             outbound_queue._DRAIN_MAX_ITERATIONS = original_max
         assert store.query_outbox.call_count <= 4
 
-
 class TestDuplicateConditionalBlockRemoved:
     def test_update_outbound_status_sync_no_duplicate_log(self):
         store_path = Path(__file__).resolve().parent.parent / "app" / "src" / "channels" / "execution_store.py"
@@ -222,7 +216,6 @@ class TestDuplicateConditionalBlockRemoved:
         method_src = src[method_start:method_end] if method_end > 0 else src[method_start:]
         count = method_src.count("ConditionalCheckFailedException")
         assert count == 1, f"Expected 1 ConditionalCheckFailedException handler, found {count}"
-
 
 class TestPivotRestartFreshStatus:
     @pytest.mark.asyncio

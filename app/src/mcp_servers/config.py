@@ -17,9 +17,8 @@ def _candidate_mcp_server_paths() -> list[Path]:
         app_src.parent.parent / "specialists" / "mcp_servers.yaml",
     ]
 
-
 def _load_mcp_servers() -> Dict[str, Dict[str, Any]]:
-    """Load MCP server definitions from YAML with env var interpolation."""
+
     for path in _candidate_mcp_server_paths():
         if path.exists():
             return load_yaml(path)
@@ -32,9 +31,7 @@ def _load_mcp_servers() -> Dict[str, Dict[str, Any]]:
         logger.error(f"Failed to load MCP servers config: {e}")
         return {}
 
-
 MCP_SERVERS: Dict[str, Dict[str, Any]] = _load_mcp_servers()
-
 
 PRESET_MCP_MAP: Dict[str, list] = {
     "__all__": ["time"],
@@ -48,8 +45,6 @@ PRESET_MCP_MAP: Dict[str, list] = {
     "pondering": [],
 
 }
-
-
 
 def resolve_mcp_config(preset_slug: str, conversation_id: str = "") -> Dict[str, Any]:
 
@@ -69,18 +64,15 @@ def resolve_mcp_config(preset_slug: str, conversation_id: str = "") -> Dict[str,
         "mcpServers": mcp_servers
     }
 
-
 def get_available_servers() -> Dict[str, Dict[str, Any]]:
 
     return MCP_SERVERS.copy()
-
 
 def get_preset_servers(preset_slug: str) -> list:
 
     all_servers = set(PRESET_MCP_MAP.get("__all__", []))
     preset_servers = set(PRESET_MCP_MAP.get(preset_slug, []))
     return list(all_servers | preset_servers)
-
 
 def validate_mcp_config() -> bool:
 

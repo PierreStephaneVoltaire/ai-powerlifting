@@ -11,14 +11,12 @@ APP_SRC = str(Path(__file__).resolve().parent.parent / "app" / "src")
 if APP_SRC not in sys.path:
     sys.path.insert(0, APP_SRC)
 
-
 @pytest.fixture(autouse=True)
 def clean_registry():
     from channels.cancellable_executor import clear
     clear()
     yield
     clear()
-
 
 class TestRegistry:
     def test_register_and_deregister(self):
@@ -55,7 +53,6 @@ class TestRegistry:
         from channels.cancellable_executor import is_registered
         assert not is_registered("unknown")
 
-
 class TestRequestCancel:
     def test_request_cancel_registered(self):
         from channels.cancellable_executor import register, request_cancel
@@ -71,7 +68,6 @@ class TestRequestCancel:
         result = request_cancel("nonexistent")
         assert result is False
 
-
 class TestGetCancelEvent:
     def test_get_event_for_registered(self):
         from channels.cancellable_executor import register, get_cancel_event
@@ -85,7 +81,6 @@ class TestGetCancelEvent:
         from channels.cancellable_executor import get_cancel_event
         result = get_cancel_event("nonexistent")
         assert result is None
-
 
 class TestTerminateAndKill:
     @pytest.mark.asyncio
@@ -137,13 +132,11 @@ class TestTerminateAndKill:
         result = await terminate_and_kill("nonexistent")
         assert result is False
 
-
 class TestRunCancelledError:
     def test_run_cancelled_error_exists(self):
         from flow.opencode import RunCancelledError
         err = RunCancelledError("test cancel")
         assert str(err) == "test cancel"
-
 
 class TestOpencodeResult:
     def test_cancelled_field(self):
@@ -152,7 +145,6 @@ class TestOpencodeResult:
         assert result.cancelled is True
         result2 = OpencodeResult(returncode=0, stdout="ok", stderr="")
         assert result2.cancelled is False
-
 
 class TestCancelEventThreading:
     def test_cancel_event_threaded_through_execute_route(self):
@@ -179,7 +171,6 @@ class TestCancelEventThreading:
         sig = inspect.signature(run_opencode)
         assert "cancel_event" in sig.parameters
 
-
 class TestConfigValues:
     def test_grace_seconds_config_exists(self):
         from config import OPENCODE_CANCEL_GRACE_SECONDS
@@ -190,7 +181,6 @@ class TestConfigValues:
         from config import OPENCODE_CANCEL_POLL_INTERVAL_SECONDS
         assert isinstance(OPENCODE_CANCEL_POLL_INTERVAL_SECONDS, float)
         assert OPENCODE_CANCEL_POLL_INTERVAL_SECONDS > 0
-
 
 class TestDecisionApplierCancelSignal:
     @pytest.mark.asyncio

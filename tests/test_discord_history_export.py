@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-
 _MODULE_PATH = Path(__file__).resolve().parents[1] / "app/src/channels/history_export.py"
 _SPEC = importlib.util.spec_from_file_location("history_export", _MODULE_PATH)
 history_export = importlib.util.module_from_spec(_SPEC)
@@ -12,7 +11,6 @@ _SPEC.loader.exec_module(history_export)
 
 discord_messages_to_history_events = history_export.discord_messages_to_history_events
 render_discord_history_markdown = history_export.render_discord_history_markdown
-
 
 def _message(
     message_id,
@@ -32,7 +30,6 @@ def _message(
         edited_at=edited_at,
         attachments=attachments or [],
     )
-
 
 def test_discord_history_export_roles_and_attachments():
     created = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
@@ -62,7 +59,6 @@ def test_discord_history_export_roles_and_attachments():
         "[Attachment: notes.md](https://example.test/notes.md)"
         in events[1]["content"]
     )
-
 
 def test_render_discord_history_markdown_is_stable():
     events = [

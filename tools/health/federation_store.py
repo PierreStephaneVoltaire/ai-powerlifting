@@ -7,7 +7,6 @@ from typing import Any
 
 import boto3
 
-
 class FederationStore:
     FEDERATIONS_SK = "federations#v1"
 

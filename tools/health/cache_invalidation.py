@@ -12,17 +12,14 @@ from boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)
 
-
 def _table(table_name: str | None = None, region: str | None = None):
     return boto3.resource(
         "dynamodb",
         region_name=region or os.environ.get("AWS_REGION", "ca-central-1"),
     ).Table(table_name or os.environ.get("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"))
 
-
 def _analysis_pk(pk: str) -> str:
     return pk if pk.startswith("analysis#") else f"analysis#{pk}"
-
 
 def _delete_keys(table, keys: list[dict]) -> None:
     for i in range(0, len(keys), 25):
@@ -32,7 +29,6 @@ def _delete_keys(table, keys: list[dict]) -> None:
         with table.batch_writer() as writer:
             for key in batch:
                 writer.delete_item(Key=key)
-
 
 def invalidate_analysis_caches(
     pk: str,
@@ -77,7 +73,6 @@ def invalidate_analysis_caches(
         _delete_keys(table, keys)
         logger.info("[AnalysisCache] invalidated %s records for %s", len(keys), cache_pk)
 
-
 def mark_markdown_export_dirty(
     pk: str,
     table_name: str | None = None,
@@ -94,7 +89,6 @@ def mark_markdown_export_dirty(
         "updated_at": now,
         "expires_at": int(time.time()) + 7 * 86400,
     })
-
 
 def clear_markdown_export_dirty(
     pk: str,

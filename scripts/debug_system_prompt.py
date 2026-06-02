@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Debug IF system prompt — inspect directive injection without app dependencies.
 
 Only requires: boto3, pyyaml (pip install boto3 pyyaml)
@@ -24,7 +23,6 @@ import boto3
 from boto3.dynamodb.conditions import Key
 import yaml
 
-# ── Paths (relative to repo root) ──────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 APP_DIR = REPO_ROOT / "app"
@@ -35,8 +33,6 @@ TABLE_NAME = "if-core"
 AWS_REGION = "ca-central-1"
 MAIN_AGENT_ONLY_TYPES = {"tool", "memory", "metacognition"}
 
-
-# ── Directive model (from directive_model.py) ──────────────────────────────
 @dataclass
 class Directive:
     alpha: int
@@ -72,8 +68,6 @@ class Directive:
             created_by=item.get("created_by", "operator"),
         )
 
-
-# ── Load directives from DynamoDB (same logic as DirectiveStore.load) ──────
 def load_directives() -> List[Directive]:
     table = boto3.resource("dynamodb", region_name=AWS_REGION).Table(TABLE_NAME)
     resp = table.query(KeyConditionExpression=Key("pk").eq("operator"))
@@ -97,8 +91,6 @@ def load_directives() -> List[Directive]:
     directives.sort(key=lambda d: (d.alpha, d.beta))
     return directives
 
-
-# ── format_for_prompt (main agent — all directives) ────────────────────────
 def format_for_prompt(directives: List[Directive]) -> str:
     lines = []
     for d in directives:
@@ -107,8 +99,6 @@ def format_for_prompt(directives: List[Directive]) -> str:
         lines.append("")
     return "\n".join(lines)
 
-
-# ── get_for_subagent (filtered — same logic as DirectiveStore) ─────────────
 def get_for_subagent(directives: List[Directive], types: List[str]) -> List[Directive]:
     """Tier 0 always + type matches, minus main-agent-only exclusions."""
     type_set = set(types) if types else set()
@@ -128,13 +118,10 @@ def get_for_subagent(directives: List[Directive], types: List[str]) -> List[Dire
     result.sort(key=lambda d: (d.alpha, d.beta))
     return result
 
-
-# ── Specialist discovery (from specialists.py) ─────────────────────────────
 @dataclass
 class SpecialistInfo:
     slug: str
     directive_types: List[str]
-
 
 def discover_specialists() -> Dict[str, SpecialistInfo]:
     specs = {}
@@ -151,13 +138,11 @@ def discover_specialists() -> Dict[str, SpecialistInfo]:
             )
     return specs
 
-
 def num_text(n: int) -> str:
     try:
         from num2words import num2words
         return num2words(n).title()
     except ImportError:
-        # Fallback: just spell out 0-20, otherwise use digits
         words = {
             0: "Zero", 1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five",
             6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten",
@@ -167,25 +152,20 @@ def num_text(n: int) -> str:
         }
         return words.get(n, str(n))
 
-
-# ── Assemble full prompt (from session.py assemble_system_prompt) ──────────
 def assemble_full_prompt(directives: List[Directive]) -> str:
     parts = []
 
-    # 1. Base prompt
     if SYSTEM_PROMPT_PATH.exists():
         parts.append(SYSTEM_PROMPT_PATH.read_text())
     else:
         parts.append("[main_system_prompt.txt not found]")
 
-    # 2. Directives block
     block = format_for_prompt(directives)
     if block:
         parts.append(
             f"\n{'='*40}\nDIRECTIVES\n{'='*40}\n{block}"
         )
 
-    # 3. Memory protocol
     parts.append("""
 MEMORY PROTOCOL:
 You have access to a persistent memory store containing facts
@@ -204,7 +184,6 @@ USE memory_add WHEN:
   - The operator explicitly asks you to remember something.
 """)
 
-    # 4. Media protocol
     parts.append("""
 MEDIA PROTOCOL:
 When the operator sends files or images, they appear as [Attachment: filename — uploads/filename].
@@ -217,8 +196,6 @@ USE read_media WHEN:
 
     return "\n".join(parts)
 
-
-# ── CLI ────────────────────────────────────────────────────────────────────
 def main():
     p = argparse.ArgumentParser(description="Debug IF directive injection")
     p.add_argument("--specialist", help="Show directives for one specialist")
@@ -239,7 +216,6 @@ def main():
         ], indent=2))
         return
 
-    # Summary
     by_alpha: Dict[int, List[Directive]] = defaultdict(list)
     for d in directives:
         by_alpha[d.alpha].append(d)
@@ -249,7 +225,6 @@ def main():
     all_types = sorted({t for d in directives for t in d.types})
     print(f"\nAll types in use: {', '.join(all_types)}\n")
 
-    # Main agent table
     print("=" * 90)
     print(f" MAIN AGENT — gets ALL {len(directives)} directives via format_for_prompt()")
     print("=" * 90)
@@ -260,7 +235,6 @@ def main():
         suffix = "..." if len(d.content) > 100 else ""
         print(f"         {preview}{suffix}\n")
 
-    # Specialist breakdowns
     specs = discover_specialists()
     targets = {}
     if args.specialist:
@@ -289,7 +263,6 @@ def main():
                 print(f"  {d.alpha}-{d.beta}  [{ts}]  {d.label}  ← {reason}")
             print()
 
-    # Full prompt
     if args.full:
         print("\n" + "=" * 90)
         print(" FULL ASSEMBLED SYSTEM PROMPT")
@@ -299,7 +272,6 @@ def main():
         print(f"\n{'='*90}")
         print(f" Total: {len(prompt):,} chars")
         print(f"{'='*90}")
-
 
 if __name__ == "__main__":
     main()

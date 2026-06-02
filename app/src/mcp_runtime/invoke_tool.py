@@ -1,4 +1,4 @@
-"""CLI bridge so opencode can call IF MCP tools from shell."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,7 +6,6 @@ import json
 import sys
 
 from mcp_runtime.manager import MCPToolManager
-
 
 async def _main() -> int:
     if len(sys.argv) < 2:
@@ -33,7 +32,6 @@ async def _main() -> int:
     finally:
         await manager.stop_all()
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(_main()))

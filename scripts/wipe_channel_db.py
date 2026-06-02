@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -6,9 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-
 TABLES = ["webhooks", "routing_cache", "activity_log"]
-
 
 def _find_db_path() -> Path:
     env_path = os.environ.get("STORAGE_DB_PATH", "")
@@ -24,14 +21,12 @@ def _find_db_path() -> Path:
             return c
     return Path("app/src/data/store.db")
 
-
 def _count_rows(conn, table: str) -> int:
     try:
         cur = conn.execute(f"SELECT COUNT(*) FROM {table}")
         return cur.fetchone()[0]
     except Exception:
         return -1
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -113,7 +108,6 @@ def main() -> int:
     print("\nDone. All channel/routing state wiped.")
     print("Restart the IF agent API to re-register channels.")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

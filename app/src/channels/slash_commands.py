@@ -1,9 +1,9 @@
-"""Discord slash command registration and interaction handling.
 
-Registers guild-level slash commands and handles interactions.
-Uses a thread-safe dedup set so the same guild is never synced
-twice across listeners sharing a bot token.
-"""
+
+
+
+
+
 from __future__ import annotations
 
 import logging
@@ -15,17 +15,15 @@ from discord import app_commands
 
 logger = logging.getLogger(__name__)
 
-# Thread-safe dedup: (bot_user_id, guild_id) pairs already synced
 _synced_guilds: set[tuple[int, int]] = set()
 _sync_lock = threading.Lock()
 
-
 def should_sync(bot_user_id: int, guild_id: int) -> bool:
-    """Check-and-mark whether this guild needs command sync.
 
-    Returns True (and marks as synced) if not yet synced, False otherwise.
-    Thread-safe across multiple listener threads.
-    """
+
+
+
+
     with _sync_lock:
         key = (bot_user_id, guild_id)
         if key in _synced_guilds:
@@ -33,24 +31,23 @@ def should_sync(bot_user_id: int, guild_id: int) -> bool:
         _synced_guilds.add(key)
         return True
 
-
 def setup_command_tree(
     tree: app_commands.CommandTree,
     channel_id: int,
     conversation_id: str,
     webhook_id: str,
 ) -> None:
-    """Register all slash commands on the given CommandTree.
 
-    Each command handler routes through the existing command logic
-    (routing cache, CommandHandler) rather than the full dispatcher pipeline.
 
-    Args:
-        tree: The CommandTree to register commands on
-        channel_id: Discord channel ID (used as cache_key)
-        conversation_id: Conversation ID for this webhook
-        webhook_id: Webhook ID for logging
-    """
+
+
+
+
+
+
+
+
+
     cache_key = str(channel_id)
     context_id = f"discord_{channel_id}"
 
@@ -65,7 +62,6 @@ def setup_command_tree(
         }
         clear_session_dir(request_data, None, cache_key)
 
-    # --- /end_convo ---
     @tree.command(
         name="end_convo",
         description="Clear conversation state and force reclassification",
@@ -98,7 +94,6 @@ def setup_command_tree(
                 f"Error: {e}", ephemeral=True
             )
 
-    # --- /pondering ---
     @tree.command(
         name="pondering",
         description="Enter reflective conversation mode (heavy tier)",
@@ -108,7 +103,7 @@ def setup_command_tree(
             from routing.cache import get_cache
 
             cache = get_cache()
-            cache.pin(cache_key, 2)  # Heavy tier
+            cache.pin(cache_key, 2)
 
             try:
                 from storage.factory import get_webhook_store
@@ -129,7 +124,6 @@ def setup_command_tree(
                 f"Error: {e}", ephemeral=True
             )
 
-    # --- /clear ---
     @tree.command(
         name="clear",
         description="Delete recent messages from this channel",
@@ -175,7 +169,6 @@ def setup_command_tree(
                 f"Failed to delete messages: {e}", ephemeral=True
             )
 
-    # --- /chat_history ---
     @tree.command(
         name="chat_history",
         description="Export recent channel history as a Markdown file",
@@ -263,11 +256,10 @@ def setup_command_tree(
                 ephemeral=True,
             )
 
-    # --- Reflection commands ---
     def _make_reflection_handler(
         command_name: str, description: str, args_hint: str = "",
     ):
-        """Factory for reflection command handlers."""
+
 
         @tree.command(name=command_name, description=description)
         @app_commands.describe(
@@ -288,11 +280,9 @@ def setup_command_tree(
 
                 result = cmd_handler.handle(f"/{command_name}", args)
 
-                # Discord followup limit is 2000 chars
                 if len(result) <= 2000:
                     await interaction.followup.send(result)
                 else:
-                    # Chunk the response
                     chunks = [
                         result[i : i + 2000]
                         for i in range(0, len(result), 2000)
@@ -335,7 +325,6 @@ def setup_command_tree(
         "tools", "Show tool suggestions from capability gaps"
     )
 
-    # --- /import ---
     @tree.command(
         name="import",
         description="Import a training program spreadsheet (XLSX/CSV)",
@@ -346,18 +335,13 @@ def setup_command_tree(
     async def import_cmd(interaction: discord.Interaction, file: discord.Attachment):
         await interaction.response.defer()
         try:
-            # The dispatcher already handles download, but for manual /import 
-            # we need to ensure the agent knows about the file.
             prompt = f"Process the uploaded file {file.filename} as a program/template import."
-            # Note: attachment is already in interaction.data['resolved']['attachments']
-            # but _invoke_via_agent will see it via the interaction object if we pass it.
             result = await _invoke_via_agent(prompt, interaction)
             await _send_chunked(interaction, result)
         except Exception as e:
             logger.error(f"[SlashCmd] /import error: {e}")
             await interaction.followup.send(f"Error: {e}")
 
-    # --- /template ---
     @tree.command(
         name="template",
         description="Manage or apply training templates",
@@ -405,7 +389,6 @@ def setup_command_tree(
             logger.warning(f"[Autocomplete] Failed: {e}")
             return []
 
-    # --- /program_archive ---
     @tree.command(
         name="program_archive",
         description="Archive a program version",
@@ -424,9 +407,7 @@ def setup_command_tree(
             logger.error(f"[SlashCmd] /program_archive error: {e}")
             await interaction.followup.send(f"Error: {e}")
 
-    # --- Dynamic commands from tool registry and specialists ---
     _register_dynamic_commands(tree, channel_id, conversation_id)
-
 
 STATIC_COMMAND_NAMES = {
     "end_convo", "pondering", "clear", "chat_history", "reflect", "gaps",
@@ -434,12 +415,10 @@ STATIC_COMMAND_NAMES = {
     "import", "template", "program_archive",
 }
 
-# Discord hard-limits chat input commands per application/guild.
 MAX_DISCORD_CHAT_INPUT_COMMANDS = 100
 
-
 async def _invoke_via_agent(message_content: str, interaction: discord.Interaction):
-    """Route a message through the agent pipeline and return the response text."""
+
     from main import app
     from api.completions import process_chat_completion_internal
     from config import API_MODEL_NAME
@@ -461,18 +440,16 @@ async def _invoke_via_agent(message_content: str, interaction: discord.Interacti
     )
     return response_text
 
-
 async def _send_chunked(interaction: discord.Interaction, text: str):
-    """Send response text, splitting over Discord's 2000-char limit."""
+
     if len(text) <= 2000:
         await interaction.followup.send(text)
     else:
         for i in range(0, len(text), 2000):
             await interaction.followup.send(text[i : i + 2000])
 
-
 def _make_proxy_command_handler(message_command: str, log_command: str):
-    """Build a Discord callback that proxies a command through the agent."""
+
 
     async def proxy_handler(interaction: discord.Interaction, args: str = ""):
         await interaction.response.defer()
@@ -486,16 +463,14 @@ def _make_proxy_command_handler(message_command: str, log_command: str):
 
     return proxy_handler
 
-
 def _register_dynamic_commands(tree, channel_id, conversation_id):
-    """Register tool and specialist slash commands from registries."""
+
     used_names = set(STATIC_COMMAND_NAMES)
     _register_tool_commands(tree, used_names)
     _register_specialist_commands(tree, used_names)
 
-
 def _register_tool_commands(tree, used_names: set[str]):
-    """Register slash commands for each MCP tool."""
+
     try:
         from mcp_runtime import get_mcp_manager
         manager = get_mcp_manager()
@@ -531,9 +506,8 @@ def _register_tool_commands(tree, used_names: set[str]):
             continue
         used_names.add(discord_name)
 
-
 def _register_specialist_commands(tree, used_names: set[str]):
-    """Register slash commands for each specialist."""
+
     try:
         from agent.specialists import (
             SPECIALIST_COMMAND_ALIASES,

@@ -11,7 +11,6 @@ if APP_SRC not in sys.path:
 from channels.execution_models import ClassifierDecision, IntentRecord, ImplementationTask
 from channels.decision_applier import apply_decision, apply_batch_decisions
 
-
 def _make_decision(**overrides) -> ClassifierDecision:
     defaults = dict(
         intent_id="intent-1",
@@ -33,7 +32,6 @@ def _make_decision(**overrides) -> ClassifierDecision:
     defaults.update(overrides)
     return ClassifierDecision(**defaults)
 
-
 def _make_intent(decision: ClassifierDecision, batch_id: str = "batch-1") -> IntentRecord:
     return IntentRecord(
         intent_id=decision.intent_id,
@@ -48,7 +46,6 @@ def _make_intent(decision: ClassifierDecision, batch_id: str = "batch-1") -> Int
         updated_at="2025-01-01T00:00:00+00:00",
     )
 
-
 def _mock_store():
     store = MagicMock()
     store.get_intent_record = AsyncMock(return_value=None)
@@ -59,7 +56,6 @@ def _mock_store():
     store.append_task_queued_refs = AsyncMock(return_value=True)
     store.put_outbound_message = AsyncMock(return_value=True)
     return store
-
 
 @pytest.mark.asyncio
 async def test_apply_decision_skips_non_pending_intent():
@@ -81,7 +77,6 @@ async def test_apply_decision_skips_non_pending_intent():
     assert result is True
     store.update_intent_record_status.assert_not_called()
 
-
 @pytest.mark.asyncio
 async def test_apply_decision_fails_if_intent_not_found():
     decision = _make_decision()
@@ -98,7 +93,6 @@ async def test_apply_decision_fails_if_intent_not_found():
         )
 
     assert result is False
-
 
 @pytest.mark.asyncio
 async def test_apply_decision_fails_if_pending_to_applying_fails():
@@ -118,7 +112,6 @@ async def test_apply_decision_fails_if_pending_to_applying_fails():
         )
 
     assert result is True
-
 
 @pytest.mark.asyncio
 async def test_social_response_with_text():
@@ -145,7 +138,6 @@ async def test_social_response_with_text():
     assert msg.type == "social_response"
     assert msg.content == "Hello there!"
     mock_drain.assert_called()
-
 
 @pytest.mark.asyncio
 async def test_clarifying_question():
@@ -174,7 +166,6 @@ async def test_clarifying_question():
     assert msg.priority == 3
     assert msg.content == "What do you mean?"
 
-
 @pytest.mark.asyncio
 async def test_ignore_action():
     decision = _make_decision(action="ignore", kind="ignore")
@@ -198,7 +189,6 @@ async def test_ignore_action():
         c.kwargs.get("to_status") == "skipped" or (len(c.args) > 2 and c.args[2] == "skipped")
         for c in status_calls
     )
-
 
 @pytest.mark.asyncio
 async def test_start_new_task_creates_task_record():
@@ -243,7 +233,6 @@ async def test_start_new_task_creates_task_record():
     assert task.root_discord_message_id == "msg-1"
     assert task.related_discord_message_ids == ["msg-2"]
 
-
 @pytest.mark.asyncio
 async def test_append_to_active_requires_target_task_id():
     decision = _make_decision(
@@ -265,7 +254,6 @@ async def test_append_to_active_requires_target_task_id():
         )
 
     assert result is False
-
 
 @pytest.mark.asyncio
 async def test_append_to_active_appends_refs():
@@ -305,7 +293,6 @@ async def test_append_to_active_appends_refs():
     assert refs[0]["message_id"] == "msg-a"
     assert refs[1]["message_id"] == "msg-b"
 
-
 @pytest.mark.asyncio
 async def test_queue_on_active():
     decision = _make_decision(
@@ -341,7 +328,6 @@ async def test_queue_on_active():
     assert len(refs) == 1
     assert refs[0]["reason"] == "queued"
     assert refs[0]["message_id"] == "msg-x"
-
 
 @pytest.mark.asyncio
 async def test_await_instruction_sets_awaiting():
@@ -380,7 +366,6 @@ async def test_await_instruction_sets_awaiting():
         "summary": "Two tasks touch same file",
     }
 
-
 @pytest.mark.asyncio
 async def test_cancel_implementation():
     decision = _make_decision(
@@ -412,7 +397,6 @@ async def test_cancel_implementation():
     assert result is True
     update_call = store.update_implementation_task.call_args
     assert update_call.kwargs["to_status"] == "cancel_requested"
-
 
 @pytest.mark.asyncio
 async def test_pivot_implementation_merges_topic():
@@ -451,7 +435,6 @@ async def test_pivot_implementation_merges_topic():
     assert merged["existing_key"] == "existing_value"
     assert merged["new_key"] == "new_value"
 
-
 @pytest.mark.asyncio
 async def test_apply_batch_decisions():
     d1 = _make_decision(intent_id="int-a", action="social_response", social_response_text="Hi")
@@ -482,7 +465,6 @@ async def test_apply_batch_decisions():
     assert results[0] is True
     assert results[1] is True
 
-
 @pytest.mark.asyncio
 async def test_enqueue_message_idempotency():
     decision = _make_decision(
@@ -511,7 +493,6 @@ async def test_enqueue_message_idempotency():
     assert parts[2] == "social_response"
     assert len(parts) == 3
 
-
 @pytest.mark.asyncio
 async def test_decision_failure_updates_intent_to_failed():
     decision = _make_decision(
@@ -538,7 +519,6 @@ async def test_decision_failure_updates_intent_to_failed():
     last_call = status_calls[-1]
     assert last_call.kwargs.get("to_status") == "failed" or last_call[1].get("to_status") == "failed"
 
-
 @pytest.mark.asyncio
 async def test_enqueue_triggers_drain():
     """schedule_drain is called when outbound message is stored."""
@@ -561,7 +541,6 @@ async def test_enqueue_triggers_drain():
 
     assert result is True
     mock_drain.assert_called_once_with("chan-1")
-
 
 @pytest.mark.asyncio
 async def test_enqueue_no_drain_on_store_failure():

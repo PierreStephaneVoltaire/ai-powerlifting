@@ -1,4 +1,4 @@
-"""Direct OpenRouter chat loop with MCP-backed tool calls."""
+
 from __future__ import annotations
 
 import json
@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 ToolDispatcher = Callable[[str, dict[str, Any]], Awaitable[str]]
 
-
 def _normalize_tool_call(tool_call: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
     call_id = str(tool_call.get("id") or "")
     fn = tool_call.get("function") or {}
@@ -28,7 +27,6 @@ def _normalize_tool_call(tool_call: dict[str, Any]) -> tuple[str, str, dict[str,
         except json.JSONDecodeError:
             args = {"_raw_arguments": raw_args}
     return call_id, name, args
-
 
 async def call_openrouter_chat(
     *,

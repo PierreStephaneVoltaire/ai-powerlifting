@@ -1,18 +1,9 @@
-#!/usr/bin/env python3
-"""Migrate all directive items in if-core from pk='DIR' to pk='operator'.
 
-DynamoDB does not support updating the partition key in-place, so each item
-must be written with the new pk and then the old item deleted.
-
-Usage:
-    python scripts/migrate_directives_pk_dir_to_operator.py [--dry-run] [--region ca-central-1]
-"""
 import argparse
 import sys
 
 import boto3
 from boto3.dynamodb.conditions import Key
-
 
 def migrate(table_name: str, region: str, dry_run: bool) -> None:
     dynamodb = boto3.resource("dynamodb", region_name=region)
@@ -66,7 +57,6 @@ def migrate(table_name: str, region: str, dry_run: bool) -> None:
 
     if errors > 0:
         sys.exit(1)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Migrate directive pk from DIR to operator")

@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, json, sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
 
 def _load_config(path: str) -> List[Dict[str, Any]]:
     p = Path(path)
@@ -13,7 +11,7 @@ def _load_config(path: str) -> List[Dict[str, Any]]:
     text = p.read_text()
     if p.suffix in (".yaml", ".yml"):
         try:
-            import yaml  # type: ignore
+            import yaml
             data = yaml.safe_load(text)
         except ImportError:
             print("ERROR: PyYAML not installed. Run: pip install pyyaml", file=sys.stderr)
@@ -25,7 +23,6 @@ def _load_config(path: str) -> List[Dict[str, Any]]:
         print("ERROR: Config must have a top-level 'channels' list.", file=sys.stderr)
         sys.exit(1)
     return channels
-
 
 def _register(
     api_url: str,
@@ -56,7 +53,6 @@ def _register(
         body = e.read().decode(errors="replace")
         raise RuntimeError(f"HTTP {e.code}: {body}") from e
 
-
 def _list_active(api_url: str) -> None:
     import urllib.request
     url = api_url.rstrip("/") + "/v1/webhooks/active"
@@ -79,7 +75,6 @@ def _list_active(api_url: str) -> None:
         conv_id = wh.get("conversation_id", "")
         print(f"{label:<25} {conv_id:<25} {specialist:<25} {webhook_id}")
     print()
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -151,7 +146,6 @@ def main() -> int:
         return 1
     print(f"\nAll {len(channels)} channel(s) registered successfully.")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

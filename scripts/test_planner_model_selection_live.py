@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Live planner model-selection integration test for if-portals-test.
 
 This test targets the private Kubernetes test namespace, not a local FastAPI
@@ -21,7 +20,6 @@ import urllib.request
 import uuid
 from dataclasses import dataclass
 
-
 NAMESPACE = os.getenv("IF_TEST_NAMESPACE", "if-portals-test")
 SERVICE = os.getenv("IF_TEST_API_SERVICE", "if-agent-api")
 MODEL = os.getenv("IF_TEST_MODEL", "deepseek/deepseek-v4-flash")
@@ -30,12 +28,10 @@ API_URL_ENV = os.getenv("IF_TEST_API_URL", "").rstrip("/")
 KUBECTL = os.getenv("KUBECTL", "kubectl")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("IF_TEST_REQUEST_TIMEOUT_SECONDS", "240"))
 
-
 @dataclass
 class CommandResult:
     stdout: str
     stderr: str
-
 
 def run_kubectl(*args: str, check: bool = True) -> CommandResult:
     result = subprocess.run(
@@ -49,7 +45,6 @@ def run_kubectl(*args: str, check: bool = True) -> CommandResult:
         )
     return CommandResult(result.stdout, result.stderr)
 
-
 def wait_for_http(url: str, timeout_seconds: int = 60) -> None:
     deadline = time.time() + timeout_seconds
     last_error = ""
@@ -59,11 +54,10 @@ def wait_for_http(url: str, timeout_seconds: int = 60) -> None:
                 if response.status == 200:
                     return
                 last_error = f"HTTP {response.status}"
-        except Exception as exc:  # noqa: BLE001 - report the last readiness error
+        except Exception as exc:
             last_error = str(exc)
         time.sleep(1)
     raise TimeoutError(f"Timed out waiting for {url}: {last_error}")
-
 
 def start_port_forward() -> tuple[subprocess.Popen[str] | None, str]:
     if API_URL_ENV:
@@ -96,7 +90,6 @@ def start_port_forward() -> tuple[subprocess.Popen[str] | None, str]:
         raise RuntimeError(f"port-forward failed before API became healthy:\n{stderr.strip()}")
     return proc, api_url
 
-
 def post_chat(api_url: str, chat_id: str) -> dict:
     payload = {
         "model": MODEL,
@@ -124,7 +117,6 @@ def post_chat(api_url: str, chat_id: str) -> dict:
         body = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"chat completion failed with HTTP {exc.code}:\n{body}") from exc
 
-
 def get_api_pod() -> str:
     result = run_kubectl(
         "-n",
@@ -146,17 +138,14 @@ def get_api_pod() -> str:
             return pod["metadata"]["name"]
     raise RuntimeError(f"No ready pod found for app={SERVICE} in namespace {NAMESPACE}")
 
-
 def exec_in_pod(pod: str, command: str) -> str:
     return run_kubectl("-n", NAMESPACE, "exec", pod, "--", "sh", "-lc", command).stdout
-
 
 def selected_model_from_plan(plan_text: str) -> str:
     match = re.search(r"(?m)^selected_model:\s*['\"]?([^'\"\n]+)['\"]?\s*$", plan_text)
     if not match:
         raise AssertionError(f"plan.md did not contain selected_model:\n{plan_text}")
     return match.group(1).strip()
-
 
 def main() -> int:
     print(f"[config] namespace={NAMESPACE} service={SERVICE} model={MODEL}")
@@ -231,10 +220,9 @@ def main() -> int:
                 port_forward.kill()
                 port_forward.wait(timeout=5)
 
-
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except Exception as exc:  # noqa: BLE001 - integration script should print actionable failures
+    except Exception as exc:
         print(f"[fail] {exc}", file=sys.stderr)
         raise SystemExit(1)

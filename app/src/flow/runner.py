@@ -43,11 +43,10 @@ from .plan import (
 from .session_dirs import resolve_session_dir
 from .context import build_runtime_context, uploaded_file_paths
 
-if False:  # pragma: no cover
+if False:
     from storage.models import WebhookRecord
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class FlowResult:
@@ -56,19 +55,16 @@ class FlowResult:
     attachments: list[dict[str, Any]] = field(default_factory=list)
     plan: Optional[IFPlan] = None
 
-
 class PlannerFailure(RuntimeError):
-    """Raised when the planner cannot produce a trustworthy route."""
+
 
     def __init__(self, exc: BaseException):
         self.detail = _exception_detail(exc)
         super().__init__(self.detail)
 
-
 def _exception_detail(exc: BaseException) -> str:
     message = str(exc).strip() or repr(exc)
     return f"{type(exc).__name__}: {message}"
-
 
 def _planner_failure_response(failure: PlannerFailure) -> str:
     detail = failure.detail
@@ -80,10 +76,8 @@ def _planner_failure_response(failure: PlannerFailure) -> str:
         f"Planner error: `{detail}`"
     )
 
-
 def _project_root() -> Path:
     return PROJECT_ROOT
-
 
 def _main_system_prompt() -> str:
     path = PROJECT_ROOT / "main_system_prompt.txt"
@@ -92,7 +86,6 @@ def _main_system_prompt() -> str:
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
     return "You are IF, a direct, pragmatic assistant."
-
 
 def _latest_user_prompt(messages: list[dict[str, Any]]) -> str:
     for msg in reversed(messages):
@@ -104,7 +97,6 @@ def _latest_user_prompt(messages: list[dict[str, Any]]) -> str:
         if isinstance(content, list):
             return "\n".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
     return ""
-
 
 def _directive_block(types: list[str] | None = None) -> str:
     try:
@@ -119,7 +111,6 @@ def _directive_block(types: list[str] | None = None) -> str:
     except Exception as exc:
         logger.debug("Directive injection unavailable: %s", exc)
         return ""
-
 
 def _specialist_catalog() -> tuple[set[str], str]:
     try:
@@ -136,7 +127,6 @@ def _specialist_catalog() -> tuple[set[str], str]:
         lines.append(f"- {spec.slug}: {spec.description}")
     return slugs, "\n".join(lines)
 
-
 def _get_specialist(slug: str):
     try:
         from agent.specialists import get_specialist
@@ -144,7 +134,6 @@ def _get_specialist(slug: str):
         return get_specialist(slug)
     except Exception:
         return None
-
 
 def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str], list[str]]:
     spec = _get_specialist(specialist_slug)
@@ -164,7 +153,6 @@ def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str],
         logger.warning("Specialist prompt render failed for %s: %s", specialist_slug, exc)
         prompt = f"{spec.description}\n\nTask:\n{task}\n\nDirectives:\n{directives}"
     return prompt, list(spec.tools), list(spec.mcp_servers)
-
 
 def _planner_prompt(
     history_path: Path,
@@ -236,7 +224,6 @@ Classification guide:
 Select the model yourself from the eligible list. Do not use preset aliases or @preset names.
 """
 
-
 async def _run_planner(
     session_dir: Path,
     messages: list[dict[str, Any]],
@@ -281,13 +268,11 @@ async def _run_planner(
         logger.warning("Planner failed; refusing fallback response: %s", exc)
         raise PlannerFailure(exc) from exc
 
-
 def _messages_for_direct(system_prompt: str, user_prompt: str) -> list[dict[str, Any]]:
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-
 
 async def _run_social(plan: IFPlan, http_client: httpx.AsyncClient, runtime_context: str) -> str:
     system = "\n\n".join(
@@ -307,7 +292,6 @@ async def _run_social(plan: IFPlan, http_client: httpx.AsyncClient, runtime_cont
         max_tool_rounds=0,
     )
 
-
 def _status_file(session_dir: Path, filename: str | None = None) -> Path:
     status_dir = session_dir / ".if"
     status_dir.mkdir(parents=True, exist_ok=True)
@@ -315,10 +299,8 @@ def _status_file(session_dir: Path, filename: str | None = None) -> Path:
     path.write_text("", encoding="utf-8")
     return path
 
-
 async def _opencode_status(line: str) -> None:
     await send_status(StatusType.TOOL_STARTED, "opencode", line)
-
 
 def _tool_protocol_block(tool_names: list[str]) -> str:
     pythonpath = os.pathsep.join([str(APP_SRC), str(PROJECT_ROOT)])
@@ -350,7 +332,6 @@ def _tool_protocol_block(tool_names: list[str]) -> str:
         lines.append(f"  parameters: {params}")
     return "\n".join(lines)
 
-
 def _extract_json_object(text: str) -> dict[str, Any]:
     try:
         value = json.loads(text)
@@ -365,9 +346,8 @@ def _extract_json_object(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             return {}
 
-
 async def _prepare_powerlifting_workspace(session_dir: Path) -> str:
-    """Materialize the cached program analysis markdown for coach runs."""
+
     target = session_dir / "program_analysis.md"
     try:
         manager = get_mcp_manager()
@@ -398,7 +378,6 @@ async def _prepare_powerlifting_workspace(session_dir: Path) -> str:
             "Call `get_analysis_markdown` only if needed for the answer."
         )
 
-
 def _domain_prompt(plan: IFPlan, runtime_context: str, workspace_context: str = "", response_filename: str = "response.md") -> str:
     specialist_block, specialist_tools, _ = _specialist_prompt(plan.specialist, plan.prompt)
     return "\n\n".join(
@@ -424,7 +403,6 @@ def _domain_prompt(plan: IFPlan, runtime_context: str, workspace_context: str = 
         )
         if part
     )
-
 
 def _parse_handoffs(content: str) -> tuple[str, list[dict[str, str]]]:
     if "HANDOFF_REQUIRED" not in content:
@@ -460,7 +438,6 @@ def _parse_handoffs(content: str) -> tuple[str, list[dict[str, str]]]:
                 current["task"] = current["intended_change"]
             handoffs.append(current)
     return primary.strip(), handoffs
-
 
 async def _synthesize_handoffs(
     plan: IFPlan,
@@ -522,7 +499,6 @@ async def _synthesize_handoffs(
     if response_path.exists():
         return response_path.read_text(encoding="utf-8", errors="replace").strip()
     return (result.stdout or "").strip() or "\n\n".join(part for part in [primary, *child_outputs] if part).strip()
-
 
 async def _run_domain(
     plan: IFPlan,
@@ -631,12 +607,10 @@ async def _run_domain(
     response_path.write_text(content, encoding="utf-8")
     return content, refs
 
-
 def _snapshot_files(session_dir: Path) -> set[Path]:
     if not session_dir.exists():
         return set()
     return {p.resolve() for p in session_dir.rglob("*") if p.is_file()}
-
 
 _PER_RUN_ARTIFACT_PREFIXES = (
     "plan.task.",
@@ -645,10 +619,8 @@ _PER_RUN_ARTIFACT_PREFIXES = (
     "status.task.",
 )
 
-
 def _is_per_run_runtime_file(name: str) -> bool:
     return any(name.startswith(prefix) for prefix in _PER_RUN_ARTIFACT_PREFIXES)
-
 
 def _artifact_refs(session_dir: Path, before: set[Path]) -> list[FileRef]:
     refs: list[FileRef] = []
@@ -666,7 +638,6 @@ def _artifact_refs(session_dir: Path, before: set[Path]) -> list[FileRef]:
         rel = path.relative_to(session_dir)
         refs.append(FileRef(path=str(path), description=f"Generated artifact: {rel}"))
     return refs
-
 
 async def _run_technical(
     plan: IFPlan,
@@ -790,7 +761,6 @@ Reviewer requested one retry. Review context:
 
     return content, _artifact_refs(session_dir, before)
 
-
 async def run_if_flow(
     *,
     request_data: dict[str, Any],
@@ -869,7 +839,6 @@ async def run_if_flow(
     refs.extend(inline_refs)
     return FlowResult(content=cleaned, file_refs=refs, plan=plan)
 
-
 async def execute_route(
     plan: IFPlan,
     session_dir: Path,
@@ -883,11 +852,11 @@ async def execute_route(
     status_filename: str | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> FlowResult:
-    """Execute a pre-computed plan through the appropriate route.
 
-    Used by the batch classification path to execute classifier decisions
-    without re-running the planner.
-    """
+
+
+
+
     await send_status(
         StatusType.MODEL_SELECTED,
         "Route Selected",
@@ -925,8 +894,6 @@ async def execute_route(
     refs.extend(inline_refs)
     return FlowResult(content=cleaned, file_refs=refs, plan=plan)
 
-
-
 async def run_specialist_flow(
     *,
     specialist_slug: str,
@@ -938,7 +905,7 @@ async def run_specialist_flow(
     selected_model: str | None = None,
     opencode_timeout: int | None = None,
 ) -> tuple[str, list[FileRef]]:
-    del http_client  # specialist slash commands now run through opencode
+    del http_client
     write_history(session_dir, [{"role": "user", "content": task, "source": "direct_specialist"}])
     runtime_context = build_runtime_context(
         messages=[{"role": "user", "content": task}],
@@ -957,13 +924,11 @@ async def run_specialist_flow(
     )
     return await _run_domain(plan, session_dir, runtime_context, opencode_timeout=opencode_timeout)
 
-
 def materialize_file_ref(ref: FileRef, cache_key: str) -> dict[str, Any] | None:
     path = Path(ref.path)
     if not path.exists() or not path.is_file():
         return None
 
-    # Keep a temp copy for Discord upload compatibility.
     import tempfile
 
     temp_dir = Path(tempfile.gettempdir()) / "if-attachments" / cache_key

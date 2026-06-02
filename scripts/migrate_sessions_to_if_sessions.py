@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Copy embedded health sessions into the if-sessions DynamoDB table.
 
 This is intentionally additive. By default it reads the program version pointed
@@ -35,7 +34,6 @@ PROGRAM_SK_PREFIX = "program#v"
 SESSION_SK_PREFIX = "session#"
 DEFAULT_BLOCK = "current"
 
-
 def to_dynamo(obj: Any) -> Any:
     """Recursively convert floats to Decimal for DynamoDB writes."""
     if isinstance(obj, float):
@@ -45,7 +43,6 @@ def to_dynamo(obj: Any) -> Any:
     if isinstance(obj, list):
         return [to_dynamo(v) for v in obj]
     return obj
-
 
 def parse_week_number(session: dict[str, Any]) -> int:
     """Return the best available integer week number for a session."""
@@ -76,10 +73,8 @@ def parse_week_number(session: dict[str, Any]) -> int:
 
     return 0
 
-
 def phase_block(phase: dict[str, Any]) -> str:
     return str(phase.get("block") or DEFAULT_BLOCK)
-
 
 def resolve_phase(session: dict[str, Any], phases: list[dict[str, Any]]) -> dict[str, Any]:
     """Resolve a full phase object for a session using block-scoped week ranges."""
@@ -119,7 +114,6 @@ def resolve_phase(session: dict[str, Any], phases: list[dict[str, Any]]) -> dict
         "block": block,
     }
 
-
 def phase_ref(phase: dict[str, Any]) -> str:
     block = str(phase.get("block") or DEFAULT_BLOCK)
     start_week = phase.get("start_week", 0)
@@ -127,12 +121,10 @@ def phase_ref(phase: dict[str, Any]) -> str:
     name = str(phase.get("name") or "Unscheduled").replace("#", "-")
     return f"phase#{block}#W{start_week}-W{end_week}#{name}"
 
-
 def version_label(program_sk: str) -> str:
     if program_sk.startswith("program#"):
         return program_sk.removeprefix("program#")
     return program_sk
-
 
 def version_number(program_sk: str) -> int | None:
     if not program_sk.startswith(PROGRAM_SK_PREFIX):
@@ -141,7 +133,6 @@ def version_number(program_sk: str) -> int | None:
         return int(program_sk.removeprefix(PROGRAM_SK_PREFIX))
     except ValueError:
         return None
-
 
 def normalize_version_arg(version: str) -> str:
     if version in {"all", "current"}:
@@ -152,14 +143,12 @@ def normalize_version_arg(version: str) -> str:
         return f"program#{version}"
     raise ValueError("--version must be all, current, program#vNNN, or vNNN")
 
-
 def stable_session_id(pk: str, program_sk: str, source_index: int, session: dict[str, Any]) -> str:
     existing = session.get("id")
     if existing:
         return str(existing)
     seed = f"{pk}:{program_sk}:{source_index}:{session.get('date', '')}"
     return str(uuid.uuid5(uuid.NAMESPACE_URL, seed))
-
 
 def build_session_item(
     *,
@@ -221,7 +210,6 @@ def build_session_item(
     }
     return item
 
-
 def query_all_programs(table: Any, pk: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     kwargs = {
@@ -242,13 +230,11 @@ def query_all_programs(table: Any, pk: str) -> list[dict[str, Any]]:
         key=lambda item: version_number(str(item.get("sk", ""))) or 0,
     )
 
-
 def load_program(table: Any, pk: str, sk: str) -> dict[str, Any]:
     response = table.get_item(Key={"pk": pk, "sk": sk})
     if "Item" not in response:
         raise RuntimeError(f"Program item not found: pk={pk!r}, sk={sk!r}")
     return response["Item"]
-
 
 def resolve_current_program(table: Any, pk: str) -> dict[str, Any]:
     pointer_response = table.get_item(Key={"pk": pk, "sk": POINTER_SK})
@@ -262,7 +248,6 @@ def resolve_current_program(table: Any, pk: str) -> dict[str, Any]:
         raise RuntimeError(f"No program versions found for pk={pk!r}")
     return programs[-1]
 
-
 def selected_programs(table: Any, pk: str, version: str) -> list[dict[str, Any]]:
     normalized = normalize_version_arg(version)
     if normalized == "all":
@@ -273,7 +258,6 @@ def selected_programs(table: Any, pk: str, version: str) -> list[dict[str, Any]]
     if normalized == "current":
         return [resolve_current_program(table, pk)]
     return [load_program(table, pk, normalized)]
-
 
 def put_session_item(table: Any, item: dict[str, Any], replace: bool) -> str:
     try:
@@ -289,7 +273,6 @@ def put_session_item(table: Any, item: dict[str, Any], replace: bool) -> str:
         if code == "ConditionalCheckFailedException":
             return "skipped_existing"
         raise
-
 
 def migrate(args: argparse.Namespace) -> int:
     dynamodb = boto3.resource("dynamodb", region_name=args.region)
@@ -412,7 +395,6 @@ def migrate(args: argparse.Namespace) -> int:
 
     return 0
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Copy if-health sessions into if-sessions")
     parser.add_argument("--source-table", default=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"))
@@ -438,7 +420,6 @@ def main() -> int:
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

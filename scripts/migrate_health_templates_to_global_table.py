@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Migrate legacy health templates into the global template table.
 
 Legacy templates lived in the health table under a user/program partition:
@@ -29,7 +28,6 @@ LEGACY_INDEX_SK = "template#current_list"
 NEW_INDEX_SK = "template#index"
 TEMPLATE_SK_PREFIX = "template#"
 
-
 def to_dynamo(value: Any) -> Any:
     if isinstance(value, float):
         return Decimal(str(value))
@@ -38,7 +36,6 @@ def to_dynamo(value: Any) -> Any:
     if isinstance(value, list):
         return [to_dynamo(child) for child in value]
     return value
-
 
 def query_by_prefix(table: Any, pk: str, sk_prefix: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
@@ -54,7 +51,6 @@ def query_by_prefix(table: Any, pk: str, sk_prefix: str) -> list[dict[str, Any]]
         kwargs["ExclusiveStartKey"] = last_key
     return items
 
-
 def template_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for item in items:
@@ -65,7 +61,6 @@ def template_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         result.append(item)
     return sorted(result, key=lambda row: str(row.get("sk") or ""))
-
 
 def summary(item: dict[str, Any]) -> dict[str, Any]:
     meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
@@ -85,7 +80,6 @@ def summary(item: dict[str, Any]) -> dict[str, Any]:
         "published_at": meta.get("published_at"),
         "import_job_id": meta.get("import_job_id"),
     }
-
 
 def migrate_item(
     item: dict[str, Any],
@@ -114,18 +108,15 @@ def migrate_item(
     copied["sk"] = source_sk
     return copied
 
-
 def put_items(table: Any, items: list[dict[str, Any]]) -> None:
     with table.batch_writer() as batch:
         for item in items:
             batch.put_item(Item=to_dynamo(item))
 
-
 def delete_items(table: Any, items: list[dict[str, Any]]) -> None:
     with table.batch_writer() as batch:
         for item in items:
             batch.delete_item(Key={"pk": item["pk"], "sk": item["sk"]})
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Move legacy health templates into the global template table.")
@@ -201,7 +192,6 @@ def main() -> int:
     print(f"  Wrote template items: {len(migrated)}")
     print("  Wrote index item:     1")
     return 0
-
 
 if __name__ == "__main__":
     try:

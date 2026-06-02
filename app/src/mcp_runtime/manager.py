@@ -1,4 +1,4 @@
-"""App-side MCP subprocess manager and tool dispatcher."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 _manager: Optional["MCPToolManager"] = None
 
-
 @dataclass
 class ManagedServer:
     category: str
@@ -26,7 +25,6 @@ class ManagedServer:
     session_cm: Any = None
     tools: dict[str, dict[str, Any]] = field(default_factory=dict)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-
 
 def _tool_to_openai_schema(tool: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -41,7 +39,6 @@ def _tool_to_openai_schema(tool: dict[str, Any]) -> dict[str, Any]:
             },
         },
     }
-
 
 def _text_from_mcp_result(result: Any) -> str:
     if isinstance(result, str):
@@ -60,7 +57,6 @@ def _text_from_mcp_result(result: Any) -> str:
             parts.append(str(text))
     return "\n".join(parts)
 
-
 def _builtin_tools() -> dict[str, dict[str, Any]]:
     return {
         "get_current_date": {
@@ -70,7 +66,6 @@ def _builtin_tools() -> dict[str, dict[str, Any]]:
             "_category": "__builtin__",
         }
     }
-
 
 class MCPToolManager:
     def __init__(
@@ -225,19 +220,16 @@ class MCPToolManager:
             result = await managed.session.call_tool(name, args)
         return _text_from_mcp_result(result)
 
-
 def init_mcp_manager() -> MCPToolManager:
     global _manager
     _manager = MCPToolManager()
     return _manager
-
 
 def get_mcp_manager() -> MCPToolManager:
     global _manager
     if _manager is None:
         _manager = MCPToolManager()
     return _manager
-
 
 async def shutdown_mcp_manager() -> None:
     global _manager

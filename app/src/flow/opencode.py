@@ -1,4 +1,4 @@
-"""Async opencode subprocess runner."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,10 +14,8 @@ from config import OPENCODE_BIN, OPENCODE_TIMEOUT_SECONDS, OPENCODE_CANCEL_GRACE
 
 logger = logging.getLogger(__name__)
 
-
 class RunCancelledError(Exception):
     pass
-
 
 @dataclass
 class OpencodeResult:
@@ -25,7 +23,6 @@ class OpencodeResult:
     stdout: str
     stderr: str
     cancelled: bool = False
-
 
 def resolve_opencode_bin() -> str:
     configured = OPENCODE_BIN.strip()
@@ -39,13 +36,11 @@ def resolve_opencode_bin() -> str:
         return str(common)
     return "opencode"
 
-
 def _opencode_model_id(model: str) -> str:
     cleaned = model.strip()
     if cleaned.count("/") == 1:
         return f"openrouter/{cleaned}"
     return cleaned
-
 
 def _prepare_opencode_project(session_dir: Path) -> None:
     source = PROJECT_ROOT / ".opencode" / "agent"
@@ -66,7 +61,6 @@ def _prepare_opencode_project(session_dir: Path) -> None:
     except OSError:
         shutil.copytree(source, target, dirs_exist_ok=True)
 
-
 async def _record_run_lifecycle(run_id: str, event: str, **kwargs: Any) -> None:
     try:
         from channels.execution_store import get_execution_store
@@ -74,8 +68,6 @@ async def _record_run_lifecycle(run_id: str, event: str, **kwargs: Any) -> None:
         await store.update_run_record_status(run_id=run_id, event=event, **kwargs)
     except Exception as exc:
         logger.debug("Run record lifecycle update failed for %s: %s", run_id, exc)
-
-
 
 async def run_opencode(
     *,
@@ -207,7 +199,6 @@ async def run_opencode(
 
     return result
 
-
 async def _wait_for_process(
     proc: asyncio.subprocess.Process,
     timeout: int,
@@ -286,7 +277,6 @@ async def _wait_for_process(
                 await cancel_wait_task
             except asyncio.CancelledError:
                 pass
-
 
 async def _monitor_status_file(
     status_file: Path,

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Seed the if-models DynamoDB table from the OpenRouter API.
 
 Usage:
@@ -14,7 +13,6 @@ from pathlib import Path
 
 import boto3
 
-
 def main():
     models_file = sys.argv[1] if len(sys.argv) > 1 else "models/model_ids.txt"
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
@@ -24,7 +22,6 @@ def main():
     if not api_key:
         sys.exit("OPENROUTER_API_KEY env var required")
 
-    # Read wanted model IDs
     models_path = Path(models_file)
     if not models_path.exists():
         sys.exit(f"File not found: {models_path}")
@@ -35,7 +32,6 @@ def main():
         if line.strip() and not line.strip().startswith("#")
     }
 
-    # Fetch all models from OpenRouter
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/models",
         headers={"Authorization": f"Bearer {api_key}"},
@@ -43,7 +39,6 @@ def main():
     with urllib.request.urlopen(req) as resp:
         all_models = json.loads(resp.read()).get("data", [])
 
-    # Build DynamoDB items for matching models
     table = boto3.resource("dynamodb", region_name=region).Table(table_name)
     now = datetime.now(timezone.utc).isoformat()
     count = 0
@@ -66,7 +61,6 @@ def main():
         else:
             in_price = out_price = "0"
 
-        # Skip models without tool support
         if "tools" not in params and "tool_choice" not in params:
             print(f"  SKIP {mid}: no tool support")
             wanted.discard(mid)
@@ -77,9 +71,6 @@ def main():
 
         context_length = m.get("context_length", 4096)
 
-        # Fetch per-provider latency/throughput/max_completion_tokens from endpoints API.
-        # Use the minimum max_completion_tokens that is strictly less than context_length —
-        # endpoints reporting max_completion_tokens == context_length are bad data.
         best_latency = None
         best_throughput = None
         max_out = None
@@ -142,7 +133,6 @@ def main():
         print(f"WARNING: not found on OpenRouter: {wanted}")
 
     print(f"Done: {count} models upserted to {table_name}")
-
 
 if __name__ == "__main__":
     main()
