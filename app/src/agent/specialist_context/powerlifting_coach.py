@@ -1,8 +1,8 @@
-"""Pre-fetch and structure the athlete's training state for the powerlifting_coach specialist.
 
-All health imports are lazy (inside build_context) to avoid import errors when
-the health plugin has not been loaded yet.
-"""
+
+
+
+
 from __future__ import annotations
 
 import json
@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 _SEP = "══════════════════════════════════════════════════"
 
-
 def _parse_date(s: str | None) -> date | None:
     if not s:
         return None
@@ -24,7 +23,6 @@ def _parse_date(s: str | None) -> date | None:
         return datetime.strptime(s, "%Y-%m-%d").date()
     except (ValueError, TypeError):
         return None
-
 
 def _num(v: Any) -> float:
     if v is None:
@@ -36,14 +34,8 @@ def _num(v: Any) -> float:
     except (ValueError, TypeError):
         return 0.0
 
-
 def _j(obj: Any) -> str:
     return json.dumps(obj, indent=2, default=str)
-
-
-# ---------------------------------------------------------------------------
-# Section builders — each returns a string or None on failure
-# ---------------------------------------------------------------------------
 
 def _section_current_state(
     program: dict,
@@ -58,7 +50,6 @@ def _section_current_state(
         phases = program.get("phases", [])
         program_start = meta.get("program_start", "")
 
-        # Current week: first non-completed/skipped/missed session's week_number
         sorted_sessions = sorted(sessions, key=lambda s: s.get("date", ""))
         current_week = None
         current_phase_name = None
@@ -81,25 +72,21 @@ def _section_current_state(
         if current_week is None:
             current_week = _calculate_current_week(program_start)
 
-        # Phase name from program phases if not found from session
         if not current_phase_name:
             cp = _find_current_phase(phases, current_week)
             current_phase_name = cp.get("name", "Unknown") if cp else "Unknown"
 
-        # Phase week range
         phase_start = phase_end = None
         cp = _find_current_phase(phases, current_week)
         if cp:
             phase_start = cp.get("start_week")
             phase_end = cp.get("end_week")
 
-        # Days to competition
         days_to_comp_str = ""
         comp_date_str = meta.get("comp_date", "")
         comp_date = _parse_date(comp_date_str)
         if comp_date and comp_date > today:
             days_left = (comp_date - today).days
-            # Find comp name from competitions list
             comps = sorted(program.get("competitions", []), key=lambda c: c.get("date", ""))
             comp_name = next(
                 (c.get("name", comp_date_str) for c in comps
@@ -124,7 +111,6 @@ def _section_current_state(
         if days_to_comp_str:
             lines.append(days_to_comp_str.strip())
 
-        # Last completed session
         completed_sessions = sorted(
             [s for s in sessions if s.get("status") in ("completed",) or s.get("completed") is True],
             key=lambda s: s.get("date", ""),
@@ -151,7 +137,6 @@ def _section_current_state(
                     rpe_part = f" (RPE {ex_rpe})" if ex_rpe else ""
                     lines.append(f"    - {name}: {sets}×{reps} @ {kg}kg{rpe_part}")
 
-        # Upcoming sessions (next 3)
         upcoming = summarize_planned_sessions(sessions, limit=3)
         if upcoming:
             lines.append("")
@@ -169,7 +154,6 @@ def _section_current_state(
     except Exception as e:
         logger.debug(f"[SpecialistContext] current_state section failed: {e}")
         return None
-
 
 def _section_athlete_profile(
     program: dict,
@@ -271,7 +255,6 @@ def _section_athlete_profile(
         logger.debug(f"[SpecialistContext] athlete_profile section failed: {e}")
         return None
 
-
 def _section_competitions(program: dict, summarize_competitions) -> str | None:
     try:
         result = summarize_competitions(program)
@@ -307,7 +290,6 @@ def _section_competitions(program: dict, summarize_competitions) -> str | None:
         logger.debug(f"[SpecialistContext] competitions section failed: {e}")
         return None
 
-
 def _section_trends(
     program: dict,
     sessions: list[dict],
@@ -321,7 +303,6 @@ def _section_trends(
 
         lines = [_SEP, "TRENDS (last 8 weeks)", _SEP, ""]
 
-        # e1RM progression
         e1rm_lines = []
         for lift_name in ("squat", "bench", "deadlift"):
             result = progression_rate(sessions, lift_name, program_start)
@@ -340,7 +321,6 @@ def _section_trends(
             lines.extend(e1rm_lines)
             lines.append("")
 
-        # Bodyweight trend
         bw_trend = summarize_bodyweight_trend(sessions)
         entries = bw_trend.get("entries", 0)
         if entries:
@@ -355,7 +335,6 @@ def _section_trends(
                 lines.append(f"  History: {history_str}")
             lines.append("")
 
-        # Diet/sleep trend
         diet = summarize_diet_context(program, bodyweight_trend=bw_trend)
         status = diet.get("status", "unclear")
         reasoning = diet.get("reasoning", "")
@@ -385,7 +364,6 @@ def _section_trends(
         logger.debug(f"[SpecialistContext] trends section failed: {e}")
         return None
 
-
 def _section_fatigue_readiness(
     pk: str,
     program: dict,
@@ -403,7 +381,6 @@ def _section_fatigue_readiness(
         phases = program.get("phases", [])
         current_week = _calculate_current_week(program_start, sessions)
 
-        # Try to read cached weekly_analysis from DynamoDB
         cached = None
         fatigue_data = inol_data = acwr_data = readiness_data = None
 
@@ -418,7 +395,6 @@ def _section_fatigue_readiness(
             item = table.get_item(Key={"pk": pk, "sk": cache_sk}).get("Item")
             if item and item.get("generated_at"):
                 generated_at = item["generated_at"]
-                # Check if within 24 hours
                 try:
                     gen_dt = datetime.fromisoformat(str(generated_at))
                     if (datetime.now(gen_dt.tzinfo) - gen_dt).total_seconds() < 86400:
@@ -434,7 +410,6 @@ def _section_fatigue_readiness(
             acwr_data = cached.get("acwr")
             readiness_data = cached.get("readiness_score")
 
-        # Fall through to fresh compute if cache missed any component
         completed = [s for s in sessions if s.get("status") in ("completed",) or s.get("completed") is True]
 
         if fatigue_data is None:
@@ -533,7 +508,6 @@ def _section_fatigue_readiness(
         logger.debug(f"[SpecialistContext] fatigue_readiness section failed: {e}")
         return None
 
-
 def _section_per_lift_breakdown(program: dict, sessions: list[dict], glossary: list[dict]) -> str | None:
     try:
         from datetime import date, timedelta as _td
@@ -570,7 +544,6 @@ def _section_per_lift_breakdown(program: dict, sessions: list[dict], glossary: l
             "deadlift": {"deadlift"},
         }
 
-        # Per-lift breakdown
         lift_stats: dict[str, dict] = {
             "squat": {"sessions": 0, "raw_sets": 0, "accessories": defaultdict(lambda: {"sets": 0, "volume": 0.0})},
             "bench": {"sessions": 0, "raw_sets": 0, "accessories": defaultdict(lambda: {"sets": 0, "volume": 0.0})},
@@ -582,9 +555,8 @@ def _section_per_lift_breakdown(program: dict, sessions: list[dict], glossary: l
             ex_names_lower = {normalize(ex.get("name", "")) for ex in exercises if ex.get("name")}
 
             for lift_key, lift_set in main_lift_names.items():
-                category_str = lift_key  # category matches lift_key
+                category_str = lift_key
 
-                # Did this session contain the lift or any exercise in the same category?
                 has_lift = any(n in lift_set for n in ex_names_lower)
                 has_category = has_lift or any(
                     category_lookup.get(n, "") == category_str for n in ex_names_lower
@@ -603,15 +575,12 @@ def _section_per_lift_breakdown(program: dict, sessions: list[dict], glossary: l
                         continue
 
                     if n in lift_set:
-                        # Main lift raw sets
                         lift_stats[lift_key]["raw_sets"] += sets
                     elif category_lookup.get(n, "") == category_str:
-                        # Accessory
                         acc = lift_stats[lift_key]["accessories"][ex.get("name", n)]
                         acc["sets"] += sets
                         acc["volume"] += sets * _num(ex.get("reps", 0)) * kg
 
-        # Muscle group sets
         muscle_sets: dict[str, float] = defaultdict(float)
         for s in completed:
             for ex in s.get("exercises", []):
@@ -652,7 +621,6 @@ def _section_per_lift_breakdown(program: dict, sessions: list[dict], glossary: l
         logger.debug(f"[SpecialistContext] per_lift_breakdown section failed: {e}")
         return None
 
-
 def _section_cached_deep_analyses(pk: str) -> str | None:
     try:
         import boto3
@@ -666,7 +634,6 @@ def _section_cached_deep_analyses(pk: str) -> str | None:
         lines = [_SEP, "CACHED DEEP ANALYSES", _SEP, ""]
         has_content = False
 
-        # Program evaluation
         try:
             eval_sk = f"program_eval#{week_start.isoformat()}"
             eval_item = table.get_item(Key={"pk": pk, "sk": eval_sk}).get("Item")
@@ -681,7 +648,6 @@ def _section_cached_deep_analyses(pk: str) -> str | None:
         except Exception as e:
             logger.debug(f"[SpecialistContext] program_eval read failed: {e}")
 
-        # Exercise ROI correlation
         try:
             weeks = 4
             raw_cutoff = today - timedelta(weeks=weeks)
@@ -707,19 +673,14 @@ def _section_cached_deep_analyses(pk: str) -> str | None:
         logger.debug(f"[SpecialistContext] cached_deep_analyses section failed: {e}")
         return None
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
 async def build_context(pk: str, task: str) -> str | None:
-    """Pre-fetch athlete training state and return a structured plain-text block.
 
-    All health imports are lazy to avoid circular imports and startup-order issues.
-    Returns None if data cannot be fetched (health plugin not loaded, DynamoDB unavailable, etc.).
-    """
+
+
+
+
     try:
-        from core import _get_store, _get_glossary_store  # lazy
+        from core import _get_store, _get_glossary_store
         from analytics import (
             fatigue_index,
             compute_acwr,
@@ -758,7 +719,6 @@ async def build_context(pk: str, task: str) -> str | None:
 
     sessions: list[dict] = program.get("sessions", [])
 
-    # Build all sections — each section is individually guarded
     sections: list[str] = []
 
     s1 = _section_current_state(program, sessions, _calculate_current_week, _find_current_phase, summarize_planned_sessions)
@@ -781,7 +741,6 @@ async def build_context(pk: str, task: str) -> str | None:
     if s5:
         sections.append(s5)
 
-    # Per-lift breakdown requires glossary
     s6: str | None = None
     try:
         glossary_store = _get_glossary_store()
@@ -796,7 +755,6 @@ async def build_context(pk: str, task: str) -> str | None:
     if s7:
         sections.append(s7)
 
-    # Formula reference — always append if we have any content
     if sections:
         sections.append(FORMULA_REFERENCE)
 
@@ -805,7 +763,6 @@ async def build_context(pk: str, task: str) -> str | None:
 
     result = "\n\n".join(sections)
 
-    # Budget cap: > 12000 chars → truncate CACHED DEEP ANALYSES first
     BUDGET = 12000
     if len(result) > BUDGET and s7:
         truncated_s7 = s7[:3000] + "...[truncated]"
@@ -815,14 +772,11 @@ async def build_context(pk: str, task: str) -> str | None:
         ]
         result = "\n\n".join(sections_trimmed)
 
-    # If still over budget, drop the TRENDS history points (keep only latest)
     if len(result) > BUDGET and s4:
-        # Replace all history lines in s4 with just the latest point
         import re
         def trim_history(match: re.Match) -> str:
             full = match.group(0)
             lines_in = full.split("\n")
-            # Keep only first history entry
             out = []
             for line in lines_in:
                 if line.strip().startswith("History:"):

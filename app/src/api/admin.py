@@ -1,4 +1,4 @@
-"""Admin API endpoints for runtime management."""
+
 from __future__ import annotations
 
 import logging
@@ -10,10 +10,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-
 @router.post("/reload-tools")
 async def reload_tools(category: Optional[str] = Query(default=None)) -> Dict[str, str]:
-    """Restart MCP tool server subprocesses and refresh the app-side index."""
+
     try:
         from mcp_runtime import get_mcp_manager
 

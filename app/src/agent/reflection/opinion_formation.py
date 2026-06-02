@@ -1,10 +1,10 @@
-"""Opinion formation for reflection engine.
 
-Implements Part4 of plan.md - Opinion Formation.
 
-Reviews user opinions without agent responses and forms
-agent positions with reasoning, storing as opinion_pairs.
-"""
+
+
+
+
+
 from __future__ import annotations
 import logging
 from datetime import datetime, timezone
@@ -22,19 +22,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 class OpinionFormer:
-    """Forms agent opinions on user-stated positions.
-    
-    Reviews opinions logged in the fact store and generates
-    agent responses with reasoning.
-    
-    Example:
-        >>> former = OpinionFormer(store, http_client, model)
-        >>> opinions = await former.form_opinions()
-        >>> for op in opinions:
-        ...     print(f"{op['topic']}: {op['agent_position']}")
-    """
+
+
+
+
+
+
+
+
+
+
+
     
     def __init__(
         self,
@@ -42,14 +41,13 @@ class OpinionFormer:
         http_client: "httpx.AsyncClient",
         llm_model: str = None,
     ):
-        """Initialize opinion former.
-        
-        Args:
-            store: UserFactStore for reading/writing facts
-            http_client: HTTP client for LLM calls
-            llm_model: Model to use for opinion formation (default: from REFLECTION_MODEL env var)
-        """
-        # Use config default if no model specified
+
+
+
+
+
+
+
         if llm_model is None:
             from flow.model_catalog import load_model_ids
 
@@ -62,36 +60,30 @@ class OpinionFormer:
         self.llm_model = llm_model
     
     async def form_opinions(self) -> List[Dict[str, Any]]:
-        """Form agent opinions on user-stated positions.
-        
-        Finds opinions without agent responses and generates
-        positions with reasoning.
-        
-        Returns:
-            List of formed opinions with topic, position, reasoning
-        """
+
+
+
+
+
+
+
+
         from memory.user_facts import FactCategory, FactSource, UserFact, OpinionPair
         
         formed_opinions = []
         
         try:
             ctx = REFLECTION_CONTEXT_ID
-            # Get all opinions
             opinions = self.store.list_by_category(ctx, FactCategory.OPINION)
 
-            # Also check opinion_pairs that might need evolution
             pairs = self.store.list_by_category(ctx, FactCategory.OPINION_PAIR)
             
-            # Find opinions without agent responses
             for opinion in opinions:
-                # Check if we already have an opinion_pair for this
                 existing_pair = self._find_opinion_pair(opinion.content, pairs)
                 
                 if existing_pair:
-                    # Check if opinion needs evolution (new evidence)
                     continue
                 
-                # Form new opinion
                 try:
                     formed = await self._form_single_opinion(
                         topic=opinion.content,
@@ -116,20 +108,19 @@ class OpinionFormer:
         topic: str,
         user_position: str,
     ) -> Dict[str, Any] | None:
-        """Form an agent opinion on a single topic.
-        
-        Args:
-            topic: The topic/subject
-            user_position: What the operator believes/said
-            
-        Returns:
-            Formed opinion dict or None if formation failed
-        """
+
+
+
+
+
+
+
+
+
         from memory.user_facts import FactCategory, FactSource, UserFact, OpinionPair
         from config import LLM_BASE_URL, LLM_API_KEY
         
         try:
-            # Call LLM to form opinion
             prompt = render_template(
                 "opinion_formation.j2",
                 topic=topic,
@@ -161,10 +152,8 @@ class OpinionFormer:
             
             content = data["choices"][0]["message"]["content"]
             
-            # Parse JSON response
             import json
             try:
-                # Try to extract JSON from response
                 json_start = content.find("{")
                 json_end = content.rfind("}") + 1
                 if json_start >= 0 and json_end > json_start:
@@ -173,7 +162,6 @@ class OpinionFormer:
                 else:
                     result = json.loads(content)
             except json.JSONDecodeError:
-                # Use defaults if parsing fails
                 result = {
                     "agreement_level": "insufficient_data",
                     "agent_position": "Unable to form a clear position",
@@ -183,7 +171,6 @@ class OpinionFormer:
             
             now = datetime.now(timezone.utc).isoformat()
             
-            # Create opinion pair
             pair = OpinionPair(
                 topic=topic,
                 user_position=user_position,
@@ -195,7 +182,6 @@ class OpinionFormer:
                 updated_at=now,
             )
             
-            # Store as fact
             fact_id = self.store.add(
                 context_id=REFLECTION_CONTEXT_ID,
                 content=f"Opinion: {topic}",
@@ -224,15 +210,15 @@ class OpinionFormer:
         topic: str,
         existing_pairs: List[Any],
     ) -> Any | None:
-        """Find an existing opinion pair for a topic.
-        
-        Args:
-            topic: Topic to search for
-            existing_pairs: List of existing opinion_pair facts
-            
-        Returns:
-            Existing fact or None
-        """
+
+
+
+
+
+
+
+
+
         topic_lower = topic.lower()
         
         for pair in existing_pairs:
@@ -245,13 +231,13 @@ class OpinionFormer:
         return None
     
     async def review_opinion_evolution(self) -> List[Dict[str, Any]]:
-        """Review existing opinions for potential evolution.
-        
-        Checks if new evidence or context should update existing opinions.
-        
-        Returns:
-            List of evolved opinions
-        """
+
+
+
+
+
+
+
         from memory.user_facts import FactCategory
         
         evolved = []
@@ -263,7 +249,6 @@ class OpinionFormer:
                 metadata = pair.metadata or {}
                 evolution = metadata.get("evolution", [])
                 
-                # If opinion is old (>30 days) and hasn't evolved, consider review
                 created = metadata.get("created_at", "")
                 if created:
                     try:
@@ -271,7 +256,6 @@ class OpinionFormer:
                         age_days = (datetime.now(timezone.utc) - created_dt).days
                         
                         if age_days > 30 and len(evolution) == 0:
-                            # Mark for potential review
                             evolved.append({
                                 "topic": metadata.get("topic", ""),
                                 "fact_id": pair.id,

@@ -1,16 +1,16 @@
-#!/usr/bin/env python3
-"""
-Analytics audit script — calls the live API and dumps every section
-with formula descriptions and computed outputs.
 
-Usage: python3 scripts/audit_analytics.py [--base-url URL]
 
-Outputs:
-  analytics_audit_1w.txt
-  analytics_audit_2w.txt
-  analytics_audit_4w.txt
-  analytics_audit_8w.txt
-"""
+
+
+
+
+
+
+
+
+
+
+
 
 import argparse
 import json
@@ -19,17 +19,14 @@ import urllib.request
 import urllib.error
 from datetime import date
 
-
 def fetch_analysis(base_url: str, weeks: int) -> dict:
     url = f"{base_url}/v1/health/analysis/weekly?weeks={weeks}"
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read())
 
-
 def pp(obj, indent=2):
     return json.dumps(obj, indent=indent, ensure_ascii=False, default=str)
-
 
 def build_audit(data: dict, weeks: int) -> str:
     out: list[str] = []
@@ -40,7 +37,6 @@ def build_audit(data: dict, weeks: int) -> str:
     w(f"Generated: {date.today().isoformat()}")
     w(f"{'='*80}")
 
-    # ── CURRENT WEEK & PHASE ──
     w()
     w("─" * 60)
     w("SECTION: Current Week & Phase")
@@ -49,14 +45,12 @@ def build_audit(data: dict, weeks: int) -> str:
     w(f"  current_week: {data.get('week')}")
     w(f"  phase/block: {data.get('block')}")
 
-    # ── SESSIONS ANALYZED ──
     w()
     w("─" * 60)
     w("SECTION: Sessions Analyzed")
     w("─" * 60)
     w(f"  sessions_in_window: {data.get('sessions_analyzed')}")
 
-    # ── DELOAD DETECTION ──
     w()
     w("─" * 60)
     w("SECTION: Deload Detection")
@@ -77,7 +71,6 @@ def build_audit(data: dict, weeks: int) -> str:
     w(f"  Break weeks ({len(break_wks)}): {break_wks}")
     w(f"  Effective training weeks: {eff_wks}")
 
-    # ── PER-LIFT BREAKDOWN ──
     w()
     w("─" * 60)
     w("SECTION: Per-Lift Breakdown")
@@ -86,7 +79,6 @@ def build_audit(data: dict, weeks: int) -> str:
     for name, ld in lifts.items():
         w(f"\n  === {name.upper()} ===")
 
-        # Progression rate
         w(f"  Progression Rate:")
         w(f"    Formula: Theil-Sen regression on best e1RM per effective training week")
         w(f"    Lookback: 90 days | Excludes: deload weeks, failed sets")
@@ -100,7 +92,6 @@ def build_audit(data: dict, weeks: int) -> str:
         else:
             w(f"    INSUFFICIENT DATA")
 
-        # Volume/Intensity change
         vol_chg = ld.get('volume_change_pct')
         int_chg = ld.get('intensity_change_pct')
         w(f"  Volume/Intensity Change:")
@@ -109,17 +100,14 @@ def build_audit(data: dict, weeks: int) -> str:
             w(f"    volume_change_pct: {vol_chg}")
             w(f"    intensity_change_pct: {int_chg}")
 
-        # RPE drift
         w(f"  RPE Drift:")
         w(f"    Formula: Theil-Sen regression on RPE over time")
         w(f"    Residual mode: y = actual_rpe - phase_target_midpoint (if phase targets)")
         w(f"    Fit quality uses normalized MAD; Kendall tau is reported alongside slope.")
         w(f"    drift: {ld.get('rpe_trend', 'unknown')}")
 
-        # Failed sets
         w(f"  Failed Sets: {ld.get('failed_sets', 0)}")
 
-    # ── COMPLIANCE ──
     w()
     w("─" * 60)
     w("SECTION: Compliance")
@@ -134,7 +122,6 @@ def build_audit(data: dict, weeks: int) -> str:
     w(f"  Completed sessions: {comp.get('completed')}")
     w(f"  Compliance %: {comp.get('pct')}")
 
-    # ── CURRENT MAXES ──
     w()
     w("─" * 60)
     w("SECTION: Current Maxes (Estimated from Sessions)")
@@ -149,7 +136,6 @@ def build_audit(data: dict, weeks: int) -> str:
         w(f"  {lift}: {maxes.get(lift)} kg")
     w(f"  Method: {maxes.get('method')}")
 
-    # ── ESTIMATED DOTS ──
     w()
     w("─" * 60)
     w("SECTION: Estimated DOTS")
@@ -159,7 +145,6 @@ def build_audit(data: dict, weeks: int) -> str:
     w("─" * 60)
     w(f"  DOTS score: {data.get('estimated_dots')}")
 
-    # ── FATIGUE INDEX ──
     w()
     w("─" * 60)
     w("SECTION: Fatigue Index")
@@ -177,7 +162,6 @@ def build_audit(data: dict, weeks: int) -> str:
     w(f"    composite_spike: {fc.get('composite_spike')}")
     w(f"    rpe_stress: {fc.get('rpe_stress')}")
 
-    # ── MEET PROJECTIONS ──
     w()
     w("─" * 60)
     w("SECTION: Meet Projections")
@@ -205,7 +189,6 @@ def build_audit(data: dict, weeks: int) -> str:
                   f"slope={ld.get('slope_kg_per_week')} conf={ld.get('confidence')} "
                   f"clamped={ld.get('ceiling_clamped')}")
 
-    # ── ATTEMPT SELECTION ──
     attempts = data.get('attempt_selection')
     if attempts:
         w()
@@ -219,7 +202,6 @@ def build_audit(data: dict, weeks: int) -> str:
             w(f"  {lift}: opener={la.get('opener')} second={la.get('second')} third={la.get('third')}")
         w(f"  Total: {attempts.get('total')}kg")
 
-    # ── INOL ──
     w()
     w("─" * 60)
     w("SECTION: INOL (Intensity Number of Lifts)")
@@ -235,7 +217,6 @@ def build_audit(data: dict, weeks: int) -> str:
     else:
         w(f"  INSUFFICIENT DATA")
 
-    # ── ACWR ──
     w()
     w("─" * 60)
     w("SECTION: ACWR (EWMA Daily Load Ratio)")
@@ -254,7 +235,6 @@ def build_audit(data: dict, weeks: int) -> str:
         for dim, info in acwr.get('dimensions', {}).items():
             w(f"    {dim}: value={info.get('value')} label={info.get('label', info.get('zone'))}")
 
-    # ── FATIGUE DIMENSIONS ──
     w()
     w("─" * 60)
     w("SECTION: Fatigue Dimensions (Weekly)")
@@ -270,7 +250,6 @@ def build_audit(data: dict, weeks: int) -> str:
     fd = data.get('fatigue_dimensions')
     if fd:
         weekly = fd.get('weekly', {})
-        # Show last 8 weeks by integer week number
         sorted_wk_keys = sorted(weekly.keys(), key=lambda x: int(x) if str(x).lstrip('-').isdigit() else float(x))
         for wk_key in sorted_wk_keys[-8:]:
             dims = weekly[wk_key]
@@ -287,7 +266,6 @@ def build_audit(data: dict, weeks: int) -> str:
     else:
         w("  No glossary data available")
 
-    # ── RI DISTRIBUTION ──
     w()
     w("─" * 60)
     w("SECTION: Relative Intensity Distribution")
@@ -302,7 +280,6 @@ def build_audit(data: dict, weeks: int) -> str:
     else:
         w(f"  INSUFFICIENT DATA")
 
-    # ── SPECIFICITY RATIO ──
     w()
     w("─" * 60)
     w("SECTION: Specificity Ratio")
@@ -318,7 +295,6 @@ def build_audit(data: dict, weeks: int) -> str:
     else:
         w(f"  INSUFFICIENT DATA")
 
-    # ── READINESS SCORE ──
     w()
     w("─" * 60)
     w("SECTION: Readiness Score")
@@ -341,7 +317,6 @@ def build_audit(data: dict, weeks: int) -> str:
     w(f"    performance_trend: {rc.get('performance_trend', 0)}")
     w(f"    bw_deviation: {rc.get('bw_deviation', 0)}")
 
-    # ── EXERCISE STATS ──
     w()
     w("─" * 60)
     w("SECTION: Exercise Stats (completed sessions only)")
@@ -355,7 +330,6 @@ def build_audit(data: dict, weeks: int) -> str:
     for name, stats in sorted(ex_stats.items(), key=lambda x: -x[1].get('total_volume', 0)):
         w(f"  {name}: sets={stats.get('total_sets')} volume={stats.get('total_volume', 0):.0f} max={stats.get('max_kg', 0):.1f}kg")
 
-    # ── FLAGS ──
     w()
     w("─" * 60)
     w("SECTION: Flags")
@@ -367,7 +341,6 @@ def build_audit(data: dict, weeks: int) -> str:
     else:
         w("  (none)")
 
-    # ── RAW JSON ──
     w()
     w("─" * 60)
     w(f"SECTION: Raw API Response (JSON)")
@@ -375,7 +348,6 @@ def build_audit(data: dict, weeks: int) -> str:
     w(pp(data))
 
     return '\n'.join(out)
-
 
 def main():
     parser = argparse.ArgumentParser(description='Analytics audit via API')
@@ -399,7 +371,6 @@ def main():
         print(f"  -> {fname} ({size_kb:.1f} KB)")
 
     print("\nDone. Files written to current directory.")
-
 
 if __name__ == '__main__':
     main()

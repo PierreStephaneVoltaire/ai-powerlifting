@@ -44,7 +44,6 @@ sandbox_manager = None
 
 _stats_refresh_task = None
 
-
 async def _deliver_heartbeat(webhook, content: str, attachments: list) -> None:
 
     from channels.delivery import deliver_to_channel
@@ -88,7 +87,6 @@ async def _deliver_heartbeat(webhook, content: str, attachments: list) -> None:
         return
     
     logger.warning(f"Unknown platform for heartbeat: {platform}")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -185,7 +183,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Legacy memory store initialization failed: {e}")
 
-    # MCP tool server initialization
     try:
         from mcp_runtime import init_mcp_manager
 
@@ -222,10 +219,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"CRITICAL: Directive store initialization failed: {e}")
         logger.error("The server will continue but directives will NOT be available in system prompts")
-        # Optionally raise here if directives are critical:
-        # raise
 
-    # Model registry initialization + OpenRouter refresh
     try:
         from storage.factory import init_model_registry, get_model_registry
         init_model_registry()
@@ -249,7 +243,6 @@ async def lifespan(app: FastAPI):
                 )
                 if _result.returncode == 0:
                     logger.info(f"[ModelRegistry] Seed complete:\n{_result.stdout.strip()}")
-                    # Reload registry cache with newly seeded data
                     try:
                         from storage.factory import get_model_registry, init_model_registry
                         try:
@@ -270,7 +263,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[ModelRegistry] Startup refresh failed: {e}")
 
-    # Periodic endpoint stats refresh (latency/throughput)
     global _stats_refresh_task
 
     async def _periodic_stats_refresh():
@@ -311,7 +303,6 @@ async def lifespan(app: FastAPI):
         from storage.factory import get_model_registry
         registry = get_model_registry()
         if registry:
-            # Run initial refresh in background (don't block startup)
             asyncio.create_task(_periodic_stats_refresh())
             asyncio.create_task(_periodic_model_seed())
             logger.info(f"Model stats refresh started (interval={MODEL_STATS_REFRESH_INTERVAL}s)")
@@ -441,7 +432,6 @@ async def lifespan(app: FastAPI):
         await http_client.aclose()
         logger.info("HTTP client closed")
 
-
 app = FastAPI(
     title="IF Prototype A1 - Agent API",
     description="OpenAI-compatible API with intelligent routing to OpenRouter presets",
@@ -451,8 +441,6 @@ app = FastAPI(
 
 app.add_middleware(RequestLoggingMiddleware)
 
-
-
 app.include_router(models_router)
 app.include_router(completions_router)
 app.include_router(files_router)
@@ -460,8 +448,6 @@ app.include_router(webhooks_router)
 app.include_router(directives_router)
 app.include_router(admin_router)
 app.include_router(template_imports_router)
-
-
 
 @app.get("/health")
 async def health_check():
@@ -524,7 +510,6 @@ async def health_check():
         }
     }
 
-
 @app.get("/")
 async def root():
 
@@ -540,8 +525,6 @@ async def root():
             "webhooks": "/v1/webhooks/",
         }
     }
-
-
 
 if __name__ == "__main__":
     import uvicorn

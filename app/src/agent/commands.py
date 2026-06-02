@@ -1,16 +1,16 @@
-"""Command handlers for reflection engine and memory system.
 
-Implements Part8 of plan.md - New Commands:
 
-Commands:
-- /reflect - Trigger manual reflection cycle, output summary
-- /gaps - List capability gaps ranked by priority
-- /patterns - Show detected patterns
-- /opinions - Show opinion pairs (agent vs operator positions)
-- /growth - Show operator growth report
-- /meta - Show store health metrics and category suggestions
-- /tools - Show tool suggestions derived from capability gaps
-"""
+
+
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -21,15 +21,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 class CommandHandler:
-    """Handles slash commands for the reflection and memory system.
 
-    Example:
-        >>> handler = CommandHandler(store, reflection_engine, context_id="openwebui_chat123")
-        >>> result = handler.handle("/gaps")
-        >>> print(result)
-    """
+
+
+
+
+
+
 
     def __init__(
         self,
@@ -37,18 +36,17 @@ class CommandHandler:
         reflection_engine: Optional["ReflectionEngine"] = None,
         context_id: str = "",
     ):
-        """Initialize command handler.
 
-        Args:
-            store: UserFactStore for reading facts
-            reflection_engine: Optional ReflectionEngine for /reflect command
-            context_id: The context ID for LanceDB storage
-        """
+
+
+
+
+
+
         self.store = store
         self.reflection_engine = reflection_engine
         self.context_id = context_id
         
-        # Register command handlers
         self._handlers = {
             "/reflect": self._handle_reflect,
             "/gaps": self._handle_gaps,
@@ -60,16 +58,15 @@ class CommandHandler:
         }
     
     def handle(self, command: str, args: str = "") -> str:
-        """Handle a slash command.
-        
-        Args:
-            command: The command string (e.g., "/gaps")
-            args: Optional arguments after the command
-            
-        Returns:
-            Command result as formatted string
-        """
-        # Normalize command
+
+
+
+
+
+
+
+
+
         command = command.lower().strip()
         
         handler = self._handlers.get(command)
@@ -83,26 +80,22 @@ class CommandHandler:
         return f"Unknown command: {command}. Available: {', '.join(self._handlers.keys())}"
     
     def _handle_reflect(self, args: str) -> str:
-        """Handle /reflect command.
-        
-        Triggers a manual reflection cycle.
-        """
+
+
+
+
         if not self.reflection_engine:
             return "Reflection engine not available."
         
         import asyncio
         
-        # Run reflection cycle
         try:
-            # Try to run in existing event loop
             loop = asyncio.get_running_loop()
             task = loop.create_task(
                 self.reflection_engine.run_reflection_cycle(reason="on_demand")
             )
-            # We can't await here, so return status
             return "Reflection cycle initiated. Check logs for results."
         except RuntimeError:
-            # No running loop, try to run in new loop
             try:
                 result = asyncio.run(
                     self.reflection_engine.run_reflection_cycle(reason="on_demand")
@@ -112,7 +105,7 @@ class CommandHandler:
                 return f"Failed to run reflection: {e}"
     
     def _format_reflection_result(self, result: Dict[str, Any]) -> str:
-        """Format reflection result for display."""
+
         lines = [
             "# Reflection Cycle Complete",
             "",
@@ -134,16 +127,15 @@ class CommandHandler:
         return "\n".join(lines)
     
     def _handle_gaps(self, args: str) -> str:
-        """Handle /gaps command.
 
-        Lists capability gaps ranked by priority.
-        """
+
+
+
         from memory.user_facts import FactCategory
 
         if not self.context_id:
             return "Error: No context ID set for this session."
 
-        # Parse min_triggers from args
         min_triggers = 1
         if args.strip().isdigit():
             min_triggers = int(args.strip())
@@ -163,7 +155,7 @@ class CommandHandler:
             "|----------|--------|----------|-------------|",
         ]
         
-        for gap in gaps[:20]:  # Limit to top20
+        for gap in gaps[:20]:
             lines.append(
                 f"| {gap.priority_score:.2f} | {gap.status} | {gap.trigger_count} | {gap.content[:60]}... |"
             )
@@ -178,16 +170,15 @@ class CommandHandler:
         return "\n".join(lines)
     
     def _handle_patterns(self, args: str) -> str:
-        """Handle /patterns command.
 
-        Shows detected patterns.
-        """
+
+
+
         from memory.user_facts import FactCategory
 
         if not self.context_id:
             return "Error: No context ID set for this session."
 
-        # Get patterns from session reflections
         reflections = self.store.list_by_category(
             context_id=self.context_id,
             category=FactCategory.SESSION_REFLECTION
@@ -228,10 +219,10 @@ class CommandHandler:
         return "\n".join(lines)
     
     def _handle_opinions(self, args: str) -> str:
-        """Handle /opinions command.
 
-        Shows opinion pairs (user position vs agent response).
-        """
+
+
+
         from memory.user_facts import FactCategory
 
         if not self.context_id:
@@ -269,16 +260,15 @@ class CommandHandler:
         return "\n".join(lines)
     
     def _handle_growth(self, args: str) -> str:
-        """Handle /growth command.
 
-        Shows operator growth report.
-        """
+
+
+
         from agent.reflection.growth_tracker import GrowthTracker
 
         if not self.context_id:
             return "Error: No context ID set for this session."
 
-        # Parse days from args
         days = 30
         if args.strip().isdigit():
             days = int(args.strip())
@@ -289,10 +279,10 @@ class CommandHandler:
         return report.get("summary", "No growth report generated.")
     
     def _handle_meta(self, args: str) -> str:
-        """Handle /meta command.
 
-        Shows store health metrics and category suggestions.
-        """
+
+
+
         from agent.reflection.meta_analysis import MetaAnalyzer
 
         if not self.context_id:
@@ -302,10 +292,10 @@ class CommandHandler:
         return analyzer.get_category_report()
     
     def _handle_tools(self, args: str) -> str:
-        """Handle /tools command.
 
-        Shows tool suggestions derived from capability gaps.
-        """
+
+
+
         from memory.user_facts import FactCategory
 
         if not self.context_id:
@@ -348,22 +338,21 @@ class CommandHandler:
         
         return "\n".join(lines)
 
-
 def get_command_handler(
     store: Optional["UserFactStore"] = None,
     reflection_engine: Optional["ReflectionEngine"] = None,
     context_id: str = "",
 ) -> CommandHandler:
-    """Get a CommandHandler instance.
 
-    Args:
-        store: Optional UserFactStore (will get global if not provided)
-        reflection_engine: Optional ReflectionEngine
-        context_id: The context ID for LanceDB storage
 
-    Returns:
-        CommandHandler instance
-    """
+
+
+
+
+
+
+
+
     if store is None:
         from memory.user_facts import get_user_fact_store
         store = get_user_fact_store()
