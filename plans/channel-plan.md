@@ -1157,6 +1157,82 @@ Definition of done:
 - A test directive with `global_directive=True` appears in the planner/router classifier prompt.
 - It also appears in specialist/domain prompt where applicable.
 - Existing type-filtered specialist directives still work.
+- all the code involving prompts should never have inline prompt templates. all all prompts text/templates shoiuld be writtent in the app/src/agent/prompts folder
+
+## Phase 8.5 — Correctness Hardening of the Phase 8 Base
+
+Review-driven course correction. The Phase 8 implementation is on the right path:
+`get_for_subagent()` now includes `global_directive=True` directives before the
+`MAIN_AGENT_ONLY_TYPES` exclusion, all orchestration prompts route directive
+injection through `_directive_block`/`get_for_subagent` (so globals reach the
+planner, batch classifier, domain, social, technical, and specialist prompts), and
+every inline prompt f-string/`join` block in `flow/runner.py`, `flow/batch_classifier.py`,
+and `flow/context.py` was faithfully extracted into `app/src/agent/prompts/`
+(`.j2`/`.md`) with the `batch_classifier` JSON protected by `{% raw %}`. The Phase 6.5
+technical review/RETRY filename fix survived the extraction, all templates render,
+and the prior suite plus the new Phase 8 tests pass. This phase only fixes the
+items that are wrong or that fail to actually prove the Phase 8 DoD. No new product
+behavior. Complete before Phase 9.
+
+### Findings being corrected
+
+A. Global directives are duplicated in the domain prompt:
+
+1. `_domain_prompt` injects both `core_directives` (`_directive_block(["core"])`)
+   and `specialist_block`, where `_specialist_prompt` separately renders
+   `_directive_block(spec.directive_types)`. Both calls now route through
+   `get_for_subagent`, which unconditionally includes every `global_directive`.
+   A directive flagged global therefore appears twice in the same domain prompt
+   (once in the core block, once in the specialist block). It is not wrong output,
+   but it wastes context and can look like a contradiction to the model. The
+   classifier/planner/social/technical prompts are unaffected because they only
+   inject one directive block.
+
+B. The Phase 8 tests do not prove the Phase 8 DoD:
+
+2. `tests/test_phase8_global_directives.py` is entirely source-text grep
+   (`assert 'd.global_directive' in source`, `assert '"planner_prompt"' in content`,
+   etc.). The DoD explicitly requires "a test directive with `global_directive=True`
+   appears in the planner/router classifier prompt" and "also appears in the
+   specialist/domain prompt." Nothing in the current test constructs a global
+   directive and renders a prompt, so a future refactor that drops the global
+   directive from a real rendered prompt would still pass. The grep tests are
+   acceptable as supporting checks but cannot be the proof of this phase.
+
+C. Lower severity, confirm only (do not change behavior unless wrong):
+
+3. `technical_prompt.j2` and `synthesis_prompt.j2` now inject `core_directives`,
+   which the original inline strings did not. This is intentional and aligned with
+   the Phase 8 goal (directives in worker prompts); keep it. Just confirm the
+   technical/synthesis runs still parse and that adding the core block did not break
+   any downstream expectation (e.g. RETRY first-line detection, handoff parsing).
+4. `runtime_memory_tools.j2` renders `context_id={{ context_id }}` /
+   `cache_key={{ cache_key }}` without the `repr()` quotes the original
+   `{context_id!r}` produced. Cosmetic; only fix if a downstream consumer parses
+   those values.
+
+### Implementation
+
+1. De-duplicate global directives across the two blocks in the domain path:
+   - In `_domain_prompt` (or in the specialist directive assembly), ensure a
+     directive is not emitted in both the core block and the specialist block.
+     Prefer the simplest correct option: render the specialist block with the
+     specialist's filtered directives minus those already present in the core
+     `["core"]`/global block, or de-duplicate by `(alpha, beta)` before formatting.
+   - Keep ordering and priority metadata intact (still sorted by `alpha, beta`).
+   - Do not change `get_for_subagent` semantics for the single-block consumers
+     (planner, classifier, social, technical); they still get globals exactly once.
+
+### Definition of done
+
+- A directive with `global_directive=True` is rendered exactly once in the
+  domain/specialist prompt and still appears in the planner and batch classifier
+  prompts.
+- Existing type-filtered specialist directives still render; main-agent-only,
+  non-global directives stay excluded from the specialist path.
+- Technical and synthesis runs still parse correctly with the added core-directive
+  block (RETRY detection and handoff parsing unaffected).
+- The full existing suite plus the updated Phase 8 tests pass.
 
 ## Phase 9 — Tests and Pod Verification
 
@@ -1221,5 +1297,6 @@ Each phase must be independently functional:
    6.5. Correctness hardening of the Phase 5–6 base: wire the per-run OpenCode config (`config_path`/`OPENCODE_CONFIG`) and per-run session marker into orchestrated runs, remove the `run_if_flow` thinking-mode `NameError` regression, fix the technical review prompt/RETRY filename, and make outbound enqueue idempotency-key dedupe stable.
 7. Cancel/pivot/await-instruction control active tasks via the cancellable executor registry.
    7.5. Correctness hardening of the Phase 7 base: exclude per-run runtime files from Discord attachments, make pivot/await restart reliable when no run is live, fix idempotency keys for recurring task_update/await_instruction messages, and harden/repair the outbound drainer busy-spin and its tests.
-8. Global directives are guaranteed in prompts using the existing directive system.
+8. Global directives are guaranteed in prompts using the existing directive system, and all orchestration prompts are externalized to `app/src/agent/prompts/`.
+   8.5. Correctness hardening of the Phase 8 base: de-duplicate global directives across the core/specialist blocks in the domain prompt, and replace the source-grep Phase 8 tests with a behavioral test that renders a real global directive into the planner, classifier, and domain prompts.
 9. Tests + Terraform validation + deployed pod verification.

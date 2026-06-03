@@ -1,0 +1,17 @@
+Use the current directory as the session workspace.
+
+Read `history.md` for conversation context. It is incremental and edit-aware.
+This directory is a persistent mount for this Discord conversation; previous files may be relevant.
+Append concise progress lines to `.if/status.log` before long-running steps and after important commands.
+Implement the user's request from the prompt below. Write the final user-facing answer to `{{ response_filename }}`.
+Keep any generated deliverable files in this session directory.
+
+Core directives:
+{{ core_directives }}
+
+Runtime context:
+{{ runtime_context }}
+
+Prompt:
+{{ plan_prompt }}
+

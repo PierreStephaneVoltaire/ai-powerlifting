@@ -79,89 +79,26 @@ def batch_classifier_prompt(
     active_tasks_summary: str,
     bot_id: str | None = None,
 ) -> str:
+    from agent.prompts.loader import render_template
+
     classification_file = f"classification.batch.{batch_id}.json"
     candidate_ids_text = "\n".join(f"- {mid}" for mid in candidate_source_message_ids) if candidate_source_message_ids else "(none)"
     active_tasks_block = f"\nActive implementation tasks in this channel:\n{active_tasks_summary}\n" if active_tasks_summary else "\nNo active implementation tasks in this channel.\n"
     bot_id_note = f"\nBot user ID (exclude this bot's own messages): {bot_id}\n" if bot_id else ""
-    return f"""You are IF's batch classification stage for a Discord channel.
-
-Read `{history_path.name}` in the current directory as the source of truth.
-You are classifying a debounced batch of Discord channel activity.
-You are not classifying a single message.
-
-Candidate new messages for this batch (Discord message IDs):
-{candidate_ids_text}
-{active_tasks_block}{bot_id_note}
-Write your classification output to `{classification_file}` with this exact JSON structure:
-
-```json
-{{
-  "batchSummary": "short summary of the batch",
-  "decisions": [
-    {{
-      "intentId": "unique id for this intent",
-      "kind": "social|task|implementation_control|clarification|ignore",
-      "action": "social_response|start_new_task|append_to_active_implementation|pivot_active_implementation|cancel_active_implementation|queue_on_active_implementation|await_instruction_for_active_implementation|ask_clarifying_target|ignore",
-      "sourceMessageIds": ["discord message ids"],
-      "targetTaskId": "optional existing task id",
-      "confidence": 0.0,
-      "reason": "why this decision was made",
-      "needsPlanning": true,
-      "selectedSpecialist": "optional specialist slug",
-      "selectedModel": "optional model from eligible models",
-      "socialResponseText": "optional immediate social text",
-      "responseText": "optional immediate text",
-      "plannerIntent": {{
-        "title": "string", "intent": "string", "summary": "string", "currentGoal": "string",
-        "acceptanceCriteria": [], "constraints": [], "keywords": [], "entities": [],
-        "likelyFiles": [], "nonGoals": []
-      }},
-      "topicUpdate": null,
-      "conflict": null
-    }}
-  ]
-}}
-```
-
-Write ONLY the JSON file. Do not write plan.md.
-
-IF personality and core posture:
-{_main_system_prompt()}
-
-Core directives:
-{_directive_block(["core"])}
-
-Runtime compatibility and available context:
-{runtime_context}
-
-Specialists:
-{specialist_catalog}
-
-Eligible models:
-{format_model_catalog(model_ids)}
-
-Model selection policy from `models/model_selection_rules.md`:
-{model_selection_rules or "No model selection rules file was found."}
-
-Classification rules:
-- You are classifying a debounced batch of Discord channel activity.
-- You are not classifying a single message.
-- Read history.md as the source of truth. Return batch decisions for the new unclassified messages only.
-- You may return multiple decisions when the batch contains independent intents.
-- Group related new messages into the same decision.
-- Split unrelated conversations into separate decisions.
-- If several people are brainstorming or disagreeing about one active task, resolve the batch-level intent; do not treat each message as a separate command.
-- Operator/admin instructions take precedence over conflicting non-operator opinions.
-- If non-operators conflict and there is no clear operator direction, return await_instruction_for_active_implementation.
-- Only stop/pivot/wait active implementation tasks, not classifier/router runs.
-- Social responses do not interrupt active implementations.
-- If a social/simple question appears alongside a task update, return separate decisions.
-- If unrelated code tasks appear in the same batch, return multiple start_new_task decisions.
-- If two decisions would conflict on the same target task, merge them or return await_instruction_for_active_implementation.
-- `selectedModel` must be exactly one ID from the eligible model list.
-- `selectedSpecialist` must be one of the listed specialist slugs or omitted.
-- Every decision must have a unique `intentId`.
-"""
+    return render_template(
+        "batch_classifier_prompt",
+        history_path_name=history_path.name,
+        classification_file=classification_file,
+        candidate_ids_text=candidate_ids_text,
+        active_tasks_block=active_tasks_block,
+        bot_id_note=bot_id_note,
+        main_system_prompt=_main_system_prompt(),
+        core_directives=_directive_block(["core"]),
+        runtime_context=runtime_context,
+        specialist_catalog=specialist_catalog,
+        model_catalog=format_model_catalog(model_ids),
+        model_selection_rules=model_selection_rules or "No model selection rules file was found.",
+    )
 
 class BatchClassificationError(RuntimeError):
     pass

@@ -112,6 +112,29 @@ def _directive_block(types: list[str] | None = None) -> str:
         logger.debug("Directive injection unavailable: %s", exc)
         return ""
 
+def _directive_block_deduped(types: list[str], exclude_keys: set[tuple[int, int]]) -> str:
+    try:
+        from storage.factory import get_directive_store
+
+        store = get_directive_store()
+        directives = store.get_for_subagent(types)
+        filtered = [d for d in directives if (d.alpha, d.beta) not in exclude_keys]
+        return store.format_directives(filtered)
+    except Exception as exc:
+        logger.debug("Directive injection unavailable: %s", exc)
+        return ""
+
+def _core_directive_keys() -> set[tuple[int, int]]:
+    try:
+        from storage.factory import get_directive_store
+
+        store = get_directive_store()
+        directives = store.get_for_subagent(["core"])
+        return {(d.alpha, d.beta) for d in directives}
+    except Exception as exc:
+        logger.debug("Directive key fetch unavailable: %s", exc)
+        return set()
+
 def _specialist_catalog() -> tuple[set[str], str]:
     try:
         from agent.specialists import list_specialists
@@ -135,12 +158,19 @@ def _get_specialist(slug: str):
     except Exception:
         return None
 
-def _specialist_prompt(specialist_slug: str, task: str) -> tuple[str, list[str], list[str]]:
+def _specialist_prompt(
+    specialist_slug: str,
+    task: str,
+    exclude_directive_keys: set[tuple[int, int]] | None = None,
+) -> tuple[str, list[str], list[str]]:
     spec = _get_specialist(specialist_slug)
     if spec is None:
         return "", [], []
 
-    directives = _directive_block(spec.directive_types)
+    if exclude_directive_keys is not None:
+        directives = _directive_block_deduped(spec.directive_types, exclude_directive_keys)
+    else:
+        directives = _directive_block(spec.directive_types)
     try:
         from agent.specialists import render_specialist_prompt
 
@@ -163,66 +193,25 @@ def _planner_prompt(
     *,
     thinking_mode_requested: bool = False,
 ) -> str:
+    from agent.prompts.loader import render_template
+
     thinking_hint = (
         "\nPondering mode is active for this conversation. Set thinking_mode: true unless the"
         " latest user message is purely administrative.\n"
         if thinking_mode_requested
         else ""
     )
-    return f"""You are IF's planning stage.
-
-Read `{history_path.name}` in the current directory. Write `plan.md` in the same directory.
-`history.md` is incremental and edit-aware: Discord message edits update existing entries instead of creating a second message.
-This directory is a persistent mounted conversation workspace. Previous files may still be present after a restart; use the newest `history.md` as the source of truth.
-
-The file must contain YAML front matter with exactly these fields:
-- intent_summary: short string
-- interaction_type: one of social, domain, technical
-- specialist: one of the listed specialist slugs, or general for social
-- thinking_mode: boolean
-- selected_model: one model ID from the eligible model list
-
-After the front matter, write the full self-contained prompt to pass to the next stage.
-
-IF personality and core posture:
-{_main_system_prompt()}
-
-Core directives:
-{_directive_block(["core"])}
-{thinking_hint}
-
-Runtime compatibility and available context:
-{runtime_context}
-
-Specialists:
-{specialist_catalog}
-
-Eligible models:
-{format_model_catalog(model_ids)}
-
-Model selection policy from `models/model_selection_rules.md`:
-{model_selection_rules or "No model selection rules file was found. Use the eligible model list and the request complexity to choose the smallest model that can answer well."}
-
-Model selection requirements:
-- `selected_model` must be exactly one ID from the eligible model list.
-- Treat `model_ids.txt` as the hard allowlist and the model selection policy as preference guidance.
-- If a policy rule references a model that is not in the eligible list, ignore that model and choose the closest eligible fit.
-- Consider interaction type, specialist, task risk, current conversation flow, attached files, runtime context, and `history.md` size.
-- Prefer cheaper models for small, simple, low-risk tasks. Prefer quality for powerlifting, technical, architectural, security, debugging, and multi-step tool work.
-- Do not default to the cheapest or most expensive model. Move up when the task becomes harder, failures repeat, history grows, or long-context capacity matters; move down only when the latest turn is clearly simple and low-risk.
-
-Classification guide:
-- social: ordinary conversation, emotional support, general answer, no domain tools.
-- domain: needs a domain specialist or IF MCP tools, especially health, finance, diary, proposals, temporal, supplement research.
-- technical: code, repository edits, shell work, generated files, debugging, build/test work.
-- media/file: domain with specialist `media_reader` unless it is clearly a spreadsheet import or code/data task.
-- memory: if the operator asks IF to remember, update, supersede, or use stored facts, choose domain. Use specialist `general` unless another domain specialist is required.
-- health routing: choose `powerlifting_coach` for health/training reads, coaching, and explicit health mutations such as "log", "update", "apply", "save", "record", or confirmed imports.
-- finance read-write split: choose finance read specialists for analysis/advice. Choose write specialists only for explicit mutations such as "log", "update", "apply", "save", or "record". Read specialists may emit HANDOFF_REQUIRED blocks for writes.
-- thinking_mode: if the operator asks for deep, adversarial, sequential, or multi-perspective reasoning, set true and choose the specialist/skill shape that best fits. The next stage can use the injected thinking skills and handoff blocks.
-
-Select the model yourself from the eligible list. Do not use preset aliases or @preset names.
-"""
+    return render_template(
+        "planner_prompt",
+        history_path_name=history_path.name,
+        main_system_prompt=_main_system_prompt(),
+        core_directives=_directive_block(["core"]),
+        thinking_hint=thinking_hint,
+        runtime_context=runtime_context,
+        specialist_catalog=specialist_catalog,
+        model_catalog=format_model_catalog(model_ids),
+        model_selection_rules=model_selection_rules or "No model selection rules file was found. Use the eligible model list and the request complexity to choose the smallest model that can answer well.",
+    )
 
 async def _run_planner(
     session_dir: Path,
@@ -275,15 +264,13 @@ def _messages_for_direct(system_prompt: str, user_prompt: str) -> list[dict[str,
     ]
 
 async def _run_social(plan: IFPlan, http_client: httpx.AsyncClient, runtime_context: str) -> str:
-    system = "\n\n".join(
-        part
-        for part in (
-            _main_system_prompt(),
-            "Core directives:",
-            _directive_block(["core"]),
-            runtime_context,
-        )
-        if part
+    from agent.prompts.loader import render_template
+
+    system = render_template(
+        "social_system_prompt",
+        main_system_prompt=_main_system_prompt(),
+        core_directives=_directive_block(["core"]),
+        runtime_context=runtime_context,
     )
     return await call_openrouter_chat(
         http_client=http_client,
@@ -303,34 +290,25 @@ async def _opencode_status(line: str) -> None:
     await send_status(StatusType.TOOL_STARTED, "opencode", line)
 
 def _tool_protocol_block(tool_names: list[str]) -> str:
+    from agent.prompts.loader import render_template
+
     pythonpath = os.pathsep.join([str(APP_SRC), str(PROJECT_ROOT)])
     invoke = f"PYTHONPATH={pythonpath!r} {sys.executable} -m mcp_runtime.invoke_tool"
     manager = get_mcp_manager()
     schemas = manager.tools_for_names(set(tool_names) | {"get_current_date"})
-    lines = [
-        "MCP tool protocol:",
-        "- Native MCP tools are attached to this OpenCode run when available.",
-        "- IF local MCP servers are filtered so they only list this specialist's declared tools.",
-        "- Native OpenCode MCP tool names are server-prefixed, e.g. `if_health_health_get_session`.",
-        "- If native MCP tools are unavailable, use this shell bridge fallback:",
-        f"  `{invoke} <tool_name> '<json_args>'`",
-        "- Example:",
-        f"  `{invoke} get_current_date '{{}}'`",
-        "- Call only the tools exposed in this run or listed below. Keep generated files in this session directory.",
-        "- Before long operations and after tool calls, append a concise progress line to `.if/status.log`.",
-        "",
-        "Available tool schemas for this specialist:",
-    ]
-    if not schemas:
-        lines.append("- No specialist MCP tools declared; `get_current_date` remains available.")
-        return "\n".join(lines)
-
+    schema_list = []
     for schema in schemas:
         fn = schema.get("function", {})
-        params = fn.get("parameters") or {}
-        lines.append(f"- {fn.get('name')}: {fn.get('description') or ''}")
-        lines.append(f"  parameters: {params}")
-    return "\n".join(lines)
+        schema_list.append({
+            "name": fn.get("name", ""),
+            "description": fn.get("description") or "",
+            "parameters": fn.get("parameters") or {},
+        })
+    return render_template(
+        "tool_protocol",
+        invoke_command=invoke,
+        schemas=schema_list,
+    )
 
 def _extract_json_object(text: str) -> dict[str, Any]:
     try:
@@ -379,29 +357,21 @@ async def _prepare_powerlifting_workspace(session_dir: Path) -> str:
         )
 
 def _domain_prompt(plan: IFPlan, runtime_context: str, workspace_context: str = "", response_filename: str = "response.md") -> str:
-    specialist_block, specialist_tools, _ = _specialist_prompt(plan.specialist, plan.prompt)
-    return "\n\n".join(
-        part
-        for part in (
-            "You are running as IF inside a persistent mounted conversation workspace.",
-            "Read `history.md` for conversation context. It is incremental and edit-aware.",
-            f"Write the final user-facing answer to `{response_filename}`.",
-            "Keep any generated deliverable files in this session directory.",
-            "Use the IF personality and current directives below; do not rely on hardcoded generated agent files for personality.",
-            _main_system_prompt(),
-            "Core directives:",
-            _directive_block(["core"]),
-            f"Specialist directives for `{plan.specialist}`:",
-            specialist_block,
-            workspace_context,
-            "Runtime compatibility, Discord contract, memory/media rules, and thinking skills:",
-            runtime_context,
-            _tool_protocol_block(specialist_tools),
-            "If this task needs another specialist, write one or more HANDOFF_REQUIRED blocks with target, task or intended_change, and context. IF will execute them in order.",
-            "Task prompt:",
-            plan.prompt,
-        )
-        if part
+    from agent.prompts.loader import render_template
+
+    core_keys = _core_directive_keys()
+    specialist_block, specialist_tools, _ = _specialist_prompt(plan.specialist, plan.prompt, exclude_directive_keys=core_keys)
+    return render_template(
+        "domain_prompt",
+        response_filename=response_filename,
+        main_system_prompt=_main_system_prompt(),
+        core_directives=_directive_block(["core"]),
+        specialist_slug=plan.specialist,
+        specialist_block=specialist_block,
+        workspace_context=workspace_context,
+        runtime_context=runtime_context,
+        tool_protocol=_tool_protocol_block(specialist_tools),
+        plan_prompt=plan.prompt,
     )
 
 def _parse_handoffs(content: str) -> tuple[str, list[dict[str, str]]]:
@@ -458,21 +428,16 @@ async def _synthesize_handoffs(
     response_path = session_dir / _response_filename
     response_path.unlink(missing_ok=True)
     config_path = write_opencode_config(session_dir, tool_names=[], mcp_servers=[], run_id=run_id)
+    from agent.prompts.loader import render_template
+
     agent = plan.specialist if (_project_root() / ".opencode" / "agent" / f"{plan.specialist}.md").exists() else "build"
-    synthesis_prompt = "\n\n".join(
-        [
-            "You are IF integrating completed specialist handoffs.",
-            "Read `history.md` only if needed for context.",
-            f"Write the final user-facing answer to `{_response_filename}`.",
-            "Do not emit HANDOFF_REQUIRED unless a genuinely new blocking dependency remains.",
-            "Preserve the IF personality, core directives, and domain caveats.",
-            "Runtime context:",
-            runtime_context,
-            "Original specialist output before handoffs:",
-            primary or "(none)",
-            "Completed handoff outputs:",
-            "\n\n---\n\n".join(child_outputs),
-        ]
+    synthesis_prompt = render_template(
+        "synthesis_prompt",
+        response_filename=_response_filename,
+        core_directives=_directive_block(["core"]),
+        runtime_context=runtime_context,
+        primary_output=primary or "(none)",
+        child_outputs="\n\n---\n\n".join(child_outputs),
     )
     session_marker_path: Path | None = None
     if run_id:
@@ -664,20 +629,15 @@ async def _run_technical(
         state_dir = session_dir / ".if"
         state_dir.mkdir(parents=True, exist_ok=True)
         session_marker_path = state_dir / f"opencode-build.run.{run_id}.session"
-    technical_prompt = f"""Use the current directory as the session workspace.
+    from agent.prompts.loader import render_template
 
-Read `history.md` for conversation context. It is incremental and edit-aware.
-This directory is a persistent mount for this Discord conversation; previous files may be relevant.
-Append concise progress lines to `.if/status.log` before long-running steps and after important commands.
-Implement the user's request from the prompt below. Write the final user-facing answer to `{_response_filename}`.
-Keep any generated deliverable files in this session directory.
-
-Runtime context:
-{runtime_context}
-
-Prompt:
-{plan.prompt}
-"""
+    technical_prompt = render_template(
+        "technical_prompt",
+        response_filename=_response_filename,
+        core_directives=_directive_block(["core"]),
+        runtime_context=runtime_context,
+        plan_prompt=plan.prompt,
+    )
     await send_status(StatusType.SUBAGENT_SPAWNING, "Technical Build Started", plan.selected_model)
     result = await run_opencode(
         agent="build",
@@ -698,12 +658,10 @@ Prompt:
         raise RuntimeError(result.stderr or result.stdout)
     await send_status(StatusType.SUBAGENT_COMPLETED, "Technical Build Completed", plan.selected_model)
 
-    review_prompt = f"""Review the build output in this directory.
-
-Write `{_review_filename}`.
-If the build must be retried, write `RETRY` on line 1 and then explain the required changes.
-Otherwise write `OK` on line 1 and a concise review summary after it.
-"""
+    review_prompt = render_template(
+        "technical_review_prompt",
+        review_filename=_review_filename,
+    )
     review_session_marker: Path | None = None
     if run_id:
         state_dir = session_dir / ".if"
@@ -726,11 +684,11 @@ Otherwise write `OK` on line 1 and a concise review summary after it.
     if review_path.exists():
         first_line = review_path.read_text(encoding="utf-8", errors="replace").splitlines()[:1]
         if first_line and first_line[0].strip() == "RETRY":
-            retry_prompt = f"""{technical_prompt}
-
-Reviewer requested one retry. Review context:
-{review_path.read_text(encoding="utf-8", errors="replace")}
-"""
+            retry_prompt = render_template(
+                "technical_retry_prompt",
+                technical_prompt=technical_prompt,
+                review_content=review_path.read_text(encoding="utf-8", errors="replace"),
+            )
             response_path.unlink(missing_ok=True)
             retry_session_marker: Path | None = None
             if run_id:

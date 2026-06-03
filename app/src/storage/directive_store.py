@@ -485,6 +485,10 @@ class DirectiveStore:
                 result_by_key[(d.alpha, d.beta)] = d
                 continue
 
+            if d.global_directive:
+                result_by_key[(d.alpha, d.beta)] = d
+                continue
+
             if d_types.issubset(self.MAIN_AGENT_ONLY_TYPES):
                 continue
 
