@@ -41,12 +41,21 @@ build {
   name    = "if-agent-api"
   sources = ["source.docker.if_agent"]
 
-  # Install system dependencies
+  # Install system dependencies 
   provisioner "shell" {
     inline = [
-      "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y curl unzip ca-certificates git vim iputils-ping dnsutils netcat-openbsd iproute2 procps default-jre-headless nodejs npm",
+      "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y curl unzip ca-certificates git iputils-ping dnsutils netcat-openbsd iproute2 procps default-jre-headless nodejs npm",
       "rm -rf /var/lib/apt/lists/*",
       "mkdir -p /app/src"
+    ]
+  }
+provisioner "shell" {
+    inline = [
+      "export DEBIAN_FRONTEND=noninteractive",
+      "apt-get update",
+      "apt-get upgrade -y perl libhttp-daemon-perl libexpat1 curl libxml2",
+      "apt-get install -y libexpat1-dev || true",
+      "rm -rf /var/lib/apt/lists/*"
     ]
   }
 
