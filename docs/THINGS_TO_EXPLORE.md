@@ -13,40 +13,12 @@ These fill the biggest gap in the project: showing that things work quantitative
 Two RAG pipelines (LanceDB user facts, ChromaDB health docs) with no retrieval quality measurement.
 
 **Plan**: Build a simple eval harness with 50-100 test queries from real usage. Measure precision@k, recall@k, MRR. Use this to:
+
 - Compare embedding models (current: all-MiniLM-L6-v2 — is it the right choice?)
 - Validate chunking strategy (500 tokens, 50 overlap)
 - Identify retrieval failure modes
 
 **Concepts covered**: Information retrieval metrics, embedding model comparison, quantitative evaluation.
-
-### Intent Classification Tracking
-
-The orchestrator implicitly classifies intent when selecting a specialist. Make this explicit:
-- Log every routing decision: user message → classified intent → selected specialist
-- Build a confusion matrix for misroutes
-- Track routing accuracy over time
-
-**Concepts covered**: Text classification, confusion matrices, evaluation methodology.
-
-### A/B Model Testing
-
-The model router selects from candidate pools. Build systematic comparison:
-- For a given specialist + task type, randomly assign model variants
-- Log result + satisfaction signal (thumbs up/down in Discord)
-- Track which model performs better per task type over time
-
-**Concepts covered**: Experiment design, statistical comparison, model evaluation.
-
-### Cost Analysis Dashboard
-
-Token usage is tracked but not analyzed. Build:
-- Cost per conversation, per specialist, per tier
-- Token waste analysis (context sent but never referenced)
-- Cost vs quality tradeoffs by model
-
-**Concepts covered**: Inference optimization, cost-quality tradeoffs.
-
----
 
 ## High Priority — Security & Safety
 
@@ -55,6 +27,7 @@ Token usage is tracked but not analyzed. Build:
 **Current state**: None. Any user in a registered Discord channel can trigger agent execution.
 
 **Needed**:
+
 - Per-user allowlist
 - Per-channel permissions
 - Request-level identity propagation (who said what)
@@ -64,6 +37,7 @@ Token usage is tracked but not analyzed. Build:
 Multi-user channels are a textbook prompt injection surface — User A's input becomes context for User B's request.
 
 **Needed**:
+
 - Input sanitization layer
 - System/user message boundary enforcement
 - Injection attempt detection and logging
@@ -74,6 +48,7 @@ Multi-user channels are a textbook prompt injection surface — User A's input b
 No pre-/post-execution hooks. No content policy enforcement beyond LLM-level refusals.
 
 **Needed for safe multi-user deployment**:
+
 - Pre-execution validation (input guard)
 - Post-execution output checks
 - Tool use boundaries (what stops the agent from destructive commands?)
@@ -97,32 +72,6 @@ Slack and Teams planned. Study Hermes's unified messaging gateway design first �
 LanceDB (vector) excels at semantic similarity. FTS5 (full-text) excels at exact keyword recall. They're complementary. A hybrid query layer would cover both — "find facts about my squat PR" (keyword) and "what are my fitness goals" (semantic) from the same store.
 
 **Concepts covered**: Hybrid retrieval, keyword vs semantic search tradeoffs.
-
-### Per-User Context in Multi-User Channels
-
-IF's channel model is architecturally unusual. The missing layer:
-- Identify speaking user per message
-- Load personal facts and directives dynamically
-- Define collision policy for conflicting concurrent requests
-
-### Structured Output Schemas
-
-Some specialists (data_analyst, decision_analyst, code_reviewer) would benefit from structured output:
-
-```python
-schema = {
-    "criteria": [{"name": str, "weight": float}],
-    "options": [{"name": str, "scores": dict}],
-    "recommendation": str,
-    "confidence": float
-}
-```
-
-OpenRouter supports `response_format` / JSON mode. Adding this to select specialists demonstrates constrained generation.
-
-**Concepts covered**: Structured generation, output parsing, schema validation.
-
----
 
 ## Lower Priority — Capability Expansion
 
@@ -153,18 +102,3 @@ Capture outputs from expensive models (Opus, GPT-5.4) and use them as few-shot e
 ### AgentSkills Marketplace
 
 IF's skills are already SKILL.md compliant. Publishing to agentskills.io enables sharing skills with 30+ compliant agents (GitHub Copilot, Claude Code, Cursor, Goose, Spring AI, etc.).
-
----
-
-## Specialist Candidates
-
-Agents that would fill real concept gaps rather than add coverage:
-
-| Agent | Concept | Purpose |
-|-------|---------|---------|
-| `eval_runner` | Evaluation methodology | Runs retrieval eval suites, tracks specialist routing accuracy |
-| `ab_tracker` | Experiment design | Manages A/B model assignments, logs outcomes, computes win rates |
-| `input_guard` | Adversarial ML / safety | Pre-execution input validation — injection detection, sanitization |
-| `token_auditor` | Inference optimization | Analyzes token usage per specialist, identifies context waste |
-| `routing_analyst` | Classification evaluation | Logs and analyzes orchestrator routing decisions |
-```
