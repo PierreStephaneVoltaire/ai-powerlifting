@@ -82,6 +82,7 @@ async def run_opencode(
     files: list[Path] | None = None,
     run_id: str | None = None,
     config_path: Path | None = None,
+    config_content: str | None = None,
     session_marker_path: Path | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> OpencodeResult:
@@ -115,6 +116,8 @@ async def run_opencode(
         env = os.environ.copy()
         if config_path is not None:
             env["OPENCODE_CONFIG"] = str(config_path)
+        if config_content is not None:
+            env["OPENCODE_CONFIG_CONTENT"] = config_content
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(session_dir),
@@ -177,6 +180,10 @@ async def run_opencode(
         )
         if result.returncode != 0:
             logger.warning("[opencode] agent=%s failed rc=%s stderr=%s", agent, result.returncode, result.stderr[:1000])
+        else:
+            out = (result.stdout or "").strip()
+            if out:
+                logger.info("[opencode] agent=%s output (last 2000 chars): %s", agent, out[-2000:])
         return result
 
     if run_id:

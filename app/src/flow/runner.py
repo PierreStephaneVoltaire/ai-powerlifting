@@ -287,6 +287,7 @@ def _status_file(session_dir: Path, filename: str | None = None) -> Path:
     return path
 
 async def _opencode_status(line: str) -> None:
+    logger.info("[opencode] %s", line)
     await send_status(StatusType.TOOL_STARTED, "opencode", line)
 
 def _tool_protocol_block(tool_names: list[str]) -> str:

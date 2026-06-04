@@ -6,6 +6,7 @@
 
 
 
+
 from __future__ import annotations
 
 import logging
@@ -63,6 +64,18 @@ async def apply_decision(
     )
     if not transitioned:
         return True
+    from channels.status import StatusType, send_status_direct
+    await send_status_direct(
+        StatusType.INTENT_DECIDED,
+        f"\U0001F4CB Intent: {decision.action}",
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
+        fields={
+            "kind": decision.kind,
+            "intent": decision.intent_id[:8],
+            "confidence": f"{decision.confidence:.0%}" if decision.confidence else "—",
+        },
+    )
     method_name = _ACTION_DISPATCH.get(decision.action)
     if method_name is None:
         logger.error(
@@ -105,11 +118,12 @@ async def apply_decision(
             channel_ref=channel_ref,
             discord_loop=discord_loop,
         )
-    except Exception:
+    except Exception as _apply_exc:
         logger.exception(
-            "Decision apply failed for intent %s action %s",
+            "Decision apply failed for intent %s action %s: %s",
             decision.intent_id,
             decision.action,
+            _apply_exc,
         )
         await store.update_intent_record_status(
             batch_id=batch_id,
@@ -169,6 +183,8 @@ async def _enqueue_message(
     batch_id: Optional[str] = None,
     reply_to_message_id: Optional[str] = None,
     attachments: Optional[list] = None,
+    channel_ref: Any = None,
+    discord_loop: Any = None,
     **_extra: Any,
 ) -> bool:
     outbound_id = str(uuid.uuid4())
@@ -203,6 +219,16 @@ async def _enqueue_message(
     if stored:
         from channels.outbound_queue import schedule_drain
         schedule_drain(channel_id)
+    else:
+        if channel_ref is not None and discord_loop is not None:
+            from channels.status import StatusType, send_status_direct
+            await send_status_direct(
+                StatusType.ENQUEUE_FAILED,
+                "\u26A0\uFE0F Outbox enqueue skipped",
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
+                fields={"type": msg_type, "key": idempotency_key[:60]},
+            )
     return stored
 
 async def _apply_social_response(
@@ -212,6 +238,14 @@ async def _apply_social_response(
     **kwargs: Any,
 ) -> bool:
     content = decision.social_response_text or decision.response_text
+    channel_ref = kwargs.get("channel_ref")
+    discord_loop = kwargs.get("discord_loop")
+    logger.info(
+        "social_response handler: intent=%s has_inline_text=%s batch=%s",
+        decision.intent_id[:8],
+        bool(content),
+        intent.batch_id[:8] if intent.batch_id else "none",
+    )
     if content:
         text = content
     else:
@@ -222,7 +256,6 @@ async def _apply_social_response(
 
         channel_id = kwargs["channel_id"]
         conversation_id = kwargs["conversation_id"]
-        channel_ref = kwargs.get("channel_ref")
         plan = decision_to_ifplan(decision)
         guild_id = str(channel_ref.guild.id) if channel_ref and hasattr(channel_ref, "guild") else "unknown"
         session_dir = _resolve_session_dir(channel_id, guild_id)
@@ -255,6 +288,8 @@ async def _apply_social_response(
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
         reply_to_message_id=reply_to,
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
     )
 
 async def _apply_clarifying_question(
@@ -275,6 +310,8 @@ async def _apply_clarifying_question(
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
         reply_to_message_id=reply_to,
+        channel_ref=kwargs.get("channel_ref"),
+        discord_loop=kwargs.get("discord_loop"),
     )
 
 async def _apply_ignore(
@@ -333,7 +370,7 @@ async def _apply_start_new_task(
         to_status="running",
         target_task_id=task_id,
     )
-    await _enqueue_message(
+    enqueued = await _enqueue_message(
         store=store,
         channel_id=channel_id,
         conversation_id=conversation_id,
@@ -344,7 +381,15 @@ async def _apply_start_new_task(
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
         reply_to_message_id=root_msg_id or None,
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
     )
+    if not enqueued:
+        logger.warning(
+            "task_started outbox enqueue failed for task %s (idempotency collision); "
+            "still launching worker",
+            task_id,
+        )
     import asyncio as _asyncio
     from channels.task_worker import run_task_worker
     _asyncio.ensure_future(run_task_worker(
@@ -408,6 +453,11 @@ async def _apply_append_to_active(
                     channel_ref=channel_ref,
                     discord_loop=discord_loop,
                 ))
+    elif task.status == "implementing":
+        logger.info(
+            "Task %s is already implementing; context appended to queue, no restart needed",
+            decision.target_task_id,
+        )
     return True
 
 async def _apply_queue_on_active(
@@ -443,6 +493,8 @@ async def _apply_await_instruction(
 ) -> bool:
     channel_id = kwargs["channel_id"]
     conversation_id = kwargs["conversation_id"]
+    channel_ref = kwargs.get("channel_ref")
+    discord_loop = kwargs.get("discord_loop")
     if not decision.target_task_id:
         logger.error("await_instruction requires target_task_id for intent %s", decision.intent_id)
         return False
@@ -488,6 +540,8 @@ async def _apply_await_instruction(
         task_id=decision.target_task_id,
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
     )
 
 async def _apply_cancel_implementation(
@@ -498,6 +552,8 @@ async def _apply_cancel_implementation(
 ) -> bool:
     channel_id = kwargs["channel_id"]
     conversation_id = kwargs["conversation_id"]
+    channel_ref = kwargs.get("channel_ref")
+    discord_loop = kwargs.get("discord_loop")
     if not decision.target_task_id:
         logger.error("cancel_implementation requires target_task_id for intent %s", decision.intent_id)
         return False
@@ -536,6 +592,8 @@ async def _apply_cancel_implementation(
         task_id=decision.target_task_id,
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
     )
 
 async def _apply_pivot_implementation(
@@ -546,6 +604,8 @@ async def _apply_pivot_implementation(
 ) -> bool:
     channel_id = kwargs["channel_id"]
     conversation_id = kwargs["conversation_id"]
+    channel_ref = kwargs.get("channel_ref")
+    discord_loop = kwargs.get("discord_loop")
     if not decision.target_task_id:
         logger.error("pivot_implementation requires target_task_id for intent %s", decision.intent_id)
         return False
@@ -588,8 +648,8 @@ async def _apply_pivot_implementation(
                 decision=decision,
                 batch_id=intent.batch_id,
                 intent_id=intent.intent_id,
-                channel_ref=kwargs.get("channel_ref"),
-                discord_loop=kwargs.get("discord_loop"),
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
             ))
     return await _enqueue_message(
         store=store,
@@ -601,4 +661,6 @@ async def _apply_pivot_implementation(
         task_id=decision.target_task_id,
         intent_id=decision.intent_id,
         batch_id=intent.batch_id,
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
     )

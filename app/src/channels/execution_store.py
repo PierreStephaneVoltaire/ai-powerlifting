@@ -22,6 +22,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import boto3
+from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 from channels.execution_models import (
@@ -34,7 +35,20 @@ from channels.execution_models import (
     ImplementationTask,
     OpenCodeRunRecord,
 )
-from config import IF_EXECUTION_REGISTRY_TABLE_NAME, AWS_REGION
+from config import (
+    IF_EXECUTION_REGISTRY_TABLE_NAME,
+    AWS_REGION,
+    EXECUTION_REGISTRY_TTL_STATE_SECONDS,
+    EXECUTION_REGISTRY_TTL_OUTBOX_SECONDS,
+    EXECUTION_REGISTRY_TTL_BATCH_SECONDS,
+    EXECUTION_REGISTRY_TTL_TASK_SECONDS,
+    EXECUTION_REGISTRY_TTL_RUN_SECONDS,
+    ACTIVE_TASK_STALE_HOURS,
+)
+
+
+def _ttl_epoch(seconds: int) -> int:
+    return int((datetime.now(timezone.utc).timestamp()) + seconds)
 
 logger = logging.getLogger(__name__)
 
@@ -223,8 +237,9 @@ class ExecutionStore:
             "max_wait_until = :max_wait_until",
             "version = if_not_exists(version, :one_init)",
             "updated_at = :now",
+            "#ttl = :ttl",
         ]
-        attr_names = {"#st": "status"}
+        attr_names = {"#st": "status", "#ttl": "ttl"}
         values: Dict[str, Any] = {
             ":channel_id": channel_id,
             ":true_val": True,
@@ -238,6 +253,7 @@ class ExecutionStore:
             ":batch_first_event_at": batch_first_event_at,
             ":max_wait_until": max_wait_until,
             ":now": now_iso,
+            ":ttl": _ttl_epoch(EXECUTION_REGISTRY_TTL_STATE_SECONDS),
         }
         if is_edit:
             updates.append("dirty = :true_val")
@@ -281,19 +297,21 @@ class ExecutionStore:
                     " classifier_lock_expires_at = :expires,"
                     " #st = :classifying,"
                     " last_classifier_started_at = :now,"
-                    " updated_at = :now"
+                    " updated_at = :now,"
+                    " #ttl = :ttl"
                 ),
                 ConditionExpression=(
                     "attribute_not_exists(classifier_lock_owner)"
                     " OR classifier_lock_expires_at < :now_str"
                 ),
-                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeNames={"#st": "status", "#ttl": "ttl"},
                 ExpressionAttributeValues={
                     ":owner": owner,
                     ":expires": expires_at,
                     ":classifying": "classifying",
                     ":now": now,
                     ":now_str": now,
+                    ":ttl": _ttl_epoch(EXECUTION_REGISTRY_TTL_STATE_SECONDS),
                 },
             )
             return True
@@ -371,6 +389,94 @@ class ExecutionStore:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
                 logger.info(
                     "Lock release failed for channel %s (owner mismatch)", channel_id
+                )
+                return False
+            raise
+
+    async def finish_classifier_pass(
+        self,
+        channel_id: str,
+        owner: str,
+        processed_event_at: str | None,
+        debounce_seconds: float = 45.0,
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._finish_classifier_pass_sync,
+            channel_id,
+            owner,
+            processed_event_at,
+            debounce_seconds,
+        )
+
+    def _finish_classifier_pass_sync(
+        self,
+        channel_id: str,
+        owner: str,
+        processed_event_at: str | None,
+        debounce_seconds: float = 45.0,
+    ) -> bool:
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        pk = f"CHANNEL#{channel_id}"
+        sk = "STATE#classification"
+        try:
+            resp = self.table.get_item(Key={"pk": pk, "sk": sk})
+            item = resp.get("Item")
+            if not item:
+                return False
+            latest_event_at = item.get("latest_observed_event_at") or ""
+            newest_activity_arrived = bool(
+                processed_event_at and latest_event_at and latest_event_at != processed_event_at
+            )
+            target_status = "debouncing" if newest_activity_arrived else "idle"
+            update_parts = [
+                "#st = :target",
+                "last_classifier_finished_at = :now",
+                "updated_at = :now",
+            ]
+            attr_values: Dict[str, Any] = {
+                ":target": target_status,
+                ":owner": owner,
+                ":now": now_iso,
+            }
+            if target_status == "idle":
+                update_parts.extend([
+                    "pending = :false_val",
+                    "dirty = :false_val",
+                    "pending_event_count = :zero",
+                    "batch_first_event_at = :empty",
+                    "max_wait_until = :empty",
+                    "debounce_until = :empty",
+                ])
+                attr_values[":false_val"] = False
+                attr_values[":zero"] = 0
+                attr_values[":empty"] = ""
+            else:
+                update_parts.extend([
+                    "pending = :true_val",
+                    "dirty = :true_val",
+                    "debounce_until = :debounce_until",
+                ])
+                attr_values[":true_val"] = True
+                attr_values[":debounce_until"] = (
+                    now + timedelta(seconds=debounce_seconds)
+                ).isoformat()
+            self.table.update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression=(
+                    "SET " + ", ".join(update_parts)
+                    + " REMOVE classifier_lock_owner, classifier_lock_expires_at, active_classifier_run_id"
+                ),
+                ConditionExpression="classifier_lock_owner = :owner",
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues=floats_to_decimals(attr_values),
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                logger.info(
+                    "Classifier finish failed for channel %s (owner mismatch)",
+                    channel_id,
                 )
                 return False
             raise
@@ -454,8 +560,7 @@ class ExecutionStore:
             "error": batch.error or "",
             "version": batch.version,
         }
-        if batch.ttl is not None:
-            item["ttl"] = batch.ttl
+        item["ttl"] = batch.ttl if batch.ttl is not None else _ttl_epoch(EXECUTION_REGISTRY_TTL_BATCH_SECONDS)
         self.table.put_item(Item=floats_to_decimals(item))
 
     async def put_intent_record(self, intent: IntentRecord) -> None:
@@ -477,8 +582,7 @@ class ExecutionStore:
             "updated_at": intent.updated_at,
             "error": intent.error or "",
         }
-        if intent.ttl is not None:
-            item["ttl"] = intent.ttl
+        item["ttl"] = intent.ttl if intent.ttl is not None else _ttl_epoch(EXECUTION_REGISTRY_TTL_BATCH_SECONDS)
         self.table.put_item(Item=floats_to_decimals(item))
 
     async def get_active_tasks_for_channel(
@@ -490,6 +594,9 @@ class ExecutionStore:
         pk = f"CHANNEL#{channel_id}"
         tasks: List[ImplementationTask] = []
         last_key = None
+        stale_cutoff = (
+            datetime.now(timezone.utc) - timedelta(hours=ACTIVE_TASK_STALE_HOURS)
+        ).isoformat()
         while True:
             kwargs: Dict[str, Any] = {
                 "KeyConditionExpression": "pk = :pk AND begins_with(sk, :prefix)",
@@ -500,13 +607,23 @@ class ExecutionStore:
             resp = self.table.query(**kwargs)
             for item in resp.get("Items", []):
                 task = self._item_to_implementation_task(item)
-                if task.status in (
+                if task.status not in (
                     "implementing",
                     "awaiting_instruction",
                     "cancel_requested",
                     "pivot_requested",
                 ):
-                    tasks.append(task)
+                    continue
+                updated_at = task.updated_at or ""
+                if updated_at and updated_at < stale_cutoff:
+                    logger.info(
+                        "Skipping stale active task %s (updated_at=%s, cutoff=%s)",
+                        task.task_id,
+                        updated_at,
+                        stale_cutoff,
+                    )
+                    continue
+                tasks.append(task)
             last_key = resp.get("LastEvaluatedKey")
             if not last_key:
                 break
@@ -561,8 +678,7 @@ class ExecutionStore:
         }
         if task.pending_conflict is not None:
             item["pending_conflict"] = task.pending_conflict
-        if task.ttl is not None:
-            item["ttl"] = task.ttl
+        item["ttl"] = task.ttl if task.ttl is not None else _ttl_epoch(EXECUTION_REGISTRY_TTL_TASK_SECONDS)
         try:
             self.table.put_item(
                 Item=floats_to_decimals(item),
@@ -725,6 +841,7 @@ class ExecutionStore:
         priority_padded = f"{msg.priority:02d}"
         send_after = msg.send_after or msg.created_at or datetime.now(timezone.utc).isoformat()
         sk = f"OUTBOX#{priority_padded}#{send_after}#{msg.outbound_id}"
+        idem_sk = f"OUTBOX_IDEMPOTENCY#{msg.idempotency_key}"
         item: Dict[str, Any] = {
             "pk": pk,
             "sk": sk,
@@ -748,28 +865,70 @@ class ExecutionStore:
         }
         if msg.allowed_mentions is not None:
             item["allowed_mentions"] = msg.allowed_mentions
-        if msg.ttl is not None:
-            item["ttl"] = msg.ttl
+        outbox_ttl = msg.ttl if msg.ttl is not None else _ttl_epoch(EXECUTION_REGISTRY_TTL_OUTBOX_SECONDS)
+        item["ttl"] = outbox_ttl
         try:
-            self.table.put_item(
-                Item=floats_to_decimals(item),
-                ConditionExpression=(
-                    "attribute_not_exists(idempotency_key)"
-                    " OR idempotency_key = :idem_key"
-                ),
-                ExpressionAttributeValues={
-                    ":idem_key": msg.idempotency_key,
-                },
+            idem_item: Dict[str, Any] = {
+                "pk": pk,
+                "sk": idem_sk,
+                "idempotency_key": msg.idempotency_key,
+                "outbound_id": msg.outbound_id,
+                "created_at": msg.created_at,
+                "updated_at": msg.updated_at,
+                "ttl": outbox_ttl,
+            }
+            self._transact_put_items(
+                [
+                    (idem_item, "attribute_not_exists(pk)"),
+                    (item, "attribute_not_exists(pk)"),
+                ]
             )
             return True
         except ClientError as e:
-            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                logger.info(
-                    "Outbound message %s already exists (idempotency)",
+            if e.response["Error"]["Code"] in (
+                "ConditionalCheckFailedException",
+                "TransactionCanceledException",
+            ):
+                logger.warning(
+                    "Outbound enqueue blocked: outbound_id=%s idempotency_key=%s msg_type=%s",
                     msg.outbound_id,
+                    msg.idempotency_key,
+                    msg.type,
                 )
                 return False
+            logger.error(
+                "Outbound transaction error (non-idempotency): %s %s outbound_id=%s key=%s",
+                e.response.get("Error", {}).get("Code", "?"),
+                e.response.get("Error", {}).get("Message", "")[:200],
+                msg.outbound_id,
+                msg.idempotency_key,
+            )
             raise
+
+    @staticmethod
+    def _serialize_item(item: Dict[str, Any]) -> Dict[str, Any]:
+        serializer = TypeSerializer()
+        return {
+            key: serializer.serialize(value)
+            for key, value in floats_to_decimals(item).items()
+        }
+
+    def _transact_put_items(
+        self, items: List[tuple[Dict[str, Any], str]]
+    ) -> None:
+        transact_items = []
+        for item, condition in items:
+            transact_items.append(
+                {
+                    "Put": {
+                        "TableName": self.table_name,
+                        "Item": floats_to_decimals(item),
+                        "ConditionExpression": condition,
+                    }
+                }
+            )
+        dynamodb = boto3.resource("dynamodb", region_name=self._region)
+        dynamodb.meta.client.transact_write_items(TransactItems=transact_items)
 
     async def update_intent_record_status(
         self,
@@ -896,6 +1055,7 @@ class ExecutionStore:
             discord_message_id=item.get("discord_message_id") or None,
             idempotency_key=item.get("idempotency_key", ""),
             ttl=item.get("ttl"),
+            registry_sk=item.get("sk"),
         )
 
     async def acquire_outbound_lock(
@@ -989,15 +1149,43 @@ class ExecutionStore:
         self, channel_id: str, limit: int
     ) -> List[DiscordOutboundMessage]:
         pk = f"CHANNEL#{channel_id}"
+        messages: List[DiscordOutboundMessage] = []
+        last_key = None
+        pages = 0
+        now = datetime.now(timezone.utc)
         try:
-            resp = self.table.query(
-                KeyConditionExpression="pk = :pk AND begins_with(sk, :prefix)",
-                ExpressionAttributeValues={":pk": pk, ":prefix": "OUTBOX#"},
-                Limit=limit,
-                ScanIndexForward=True,
-            )
-            items = resp.get("Items", [])
-            return [self._item_to_outbound_message(item) for item in items]
+            while len(messages) < limit and pages < 100:
+                pages += 1
+                kwargs: Dict[str, Any] = {
+                    "KeyConditionExpression": "pk = :pk AND begins_with(sk, :prefix)",
+                    "ExpressionAttributeValues": {
+                        ":pk": pk,
+                        ":prefix": "OUTBOX#",
+                    },
+                    "Limit": max(limit * 4, 25),
+                    "ScanIndexForward": True,
+                }
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                resp = self.table.query(**kwargs)
+                for item in resp.get("Items", []):
+                    if item.get("status") != "queued":
+                        continue
+                    send_after = item.get("send_after") or ""
+                    if send_after:
+                        try:
+                            send_after_dt = datetime.fromisoformat(send_after)
+                            if send_after_dt > now:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                    messages.append(self._item_to_outbound_message(item))
+                    if len(messages) >= limit:
+                        break
+                last_key = resp.get("LastEvaluatedKey")
+                if not last_key:
+                    break
+            return messages
         except ClientError:
             logger.exception("Failed to query outbox for channel %s", channel_id)
             return []
@@ -1008,6 +1196,7 @@ class ExecutionStore:
         outbound_id: str,
         from_status: str,
         to_status: str,
+        registry_sk: str | None = None,
         **extra_updates: Any,
     ) -> bool:
         return await asyncio.to_thread(
@@ -1016,6 +1205,7 @@ class ExecutionStore:
             outbound_id,
             from_status,
             to_status,
+            registry_sk,
             **extra_updates,
         )
 
@@ -1025,6 +1215,7 @@ class ExecutionStore:
         outbound_id: str,
         from_status: str,
         to_status: str,
+        registry_sk: str | None = None,
         **extra_updates: Any,
     ) -> bool:
         now = datetime.now(timezone.utc).isoformat()
@@ -1040,23 +1231,12 @@ class ExecutionStore:
             update_parts.append(f"{k} = :eu_{k}")
             attr_values[f":eu_{k}"] = floats_to_decimals(v)
         try:
-            resp = self.table.query(
-                KeyConditionExpression="pk = :pk AND begins_with(sk, :prefix)",
-                FilterExpression="outbound_id = :oid",
-                ExpressionAttributeValues={
-                    ":pk": pk,
-                    ":prefix": "OUTBOX#",
-                    ":oid": outbound_id,
-                },
-                Limit=1,
-            )
-            items = resp.get("Items", [])
-            if not items:
+            sk = registry_sk or self._find_outbound_sk(pk, outbound_id)
+            if not sk:
                 logger.warning(
                     "Outbound message %s not found for status update", outbound_id
                 )
                 return False
-            sk = items[0]["sk"]
             self.table.update_item(
                 Key={"pk": pk, "sk": sk},
                 UpdateExpression="SET " + ", ".join(update_parts),
@@ -1075,6 +1255,32 @@ class ExecutionStore:
                 )
                 return False
             raise
+
+    def _find_outbound_sk(self, pk: str, outbound_id: str) -> Optional[str]:
+        last_key = None
+        pages = 0
+        while pages < 100:
+            pages += 1
+            kwargs: Dict[str, Any] = {
+                "KeyConditionExpression": "pk = :pk AND begins_with(sk, :prefix)",
+                "ExpressionAttributeValues": {
+                    ":pk": pk,
+                    ":prefix": "OUTBOX#",
+                },
+                "ProjectionExpression": "sk, outbound_id",
+                "Limit": 100,
+                "ScanIndexForward": True,
+            }
+            if last_key:
+                kwargs["ExclusiveStartKey"] = last_key
+            resp = self.table.query(**kwargs)
+            for item in resp.get("Items", []):
+                if item.get("outbound_id") == outbound_id:
+                    return item.get("sk")
+            last_key = resp.get("LastEvaluatedKey")
+            if not last_key:
+                return None
+        return None
 
     async def put_run_record(self, record: OpenCodeRunRecord) -> None:
         await asyncio.to_thread(self._put_run_record_sync, record)
@@ -1115,8 +1321,7 @@ class ExecutionStore:
             item["returncode"] = record.returncode
         if record.error is not None:
             item["error"] = record.error[:2000]
-        if record.ttl is not None:
-            item["ttl"] = record.ttl
+        item["ttl"] = record.ttl if record.ttl is not None else _ttl_epoch(EXECUTION_REGISTRY_TTL_RUN_SECONDS)
         if record.task_id:
             task_item = dict(item)
             task_item["pk"] = f"TASK#{record.task_id}"

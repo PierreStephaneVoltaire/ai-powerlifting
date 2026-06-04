@@ -78,4 +78,7 @@ Classification rules:
 - `selectedModel` must be exactly one ID from the eligible model list.
 - `selectedSpecialist` must be one of the listed specialist slugs or omitted.
 - Every decision must have a unique `intentId`.
+- Greetings, short social exchanges ("hi", "hello", "hey", "thanks", "ok", "lol"), and casual one-liners that contain no task work MUST be classified as `social_response` with `kind=social` and `socialResponseText` set to your response text inline. Do NOT classify these as `start_new_task` or `append_to_active_implementation` even when active tasks exist.
+- When a social message appears alongside an active implementation task, return a `social_response` decision for the social message separately. Social responses do not interrupt, append to, or affect active tasks.
+- Only classify as `start_new_task` when the message explicitly requests work, a deliverable, or execution of something new.
 

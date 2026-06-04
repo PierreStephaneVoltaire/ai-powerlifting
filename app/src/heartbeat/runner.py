@@ -104,10 +104,6 @@ class HeartbeatRunner:
 
 
 
-        >>>
-
-
-    
     def __init__(
         self,
         activity_tracker: "ActivityTracker",

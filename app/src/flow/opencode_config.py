@@ -64,6 +64,50 @@ def _external_mcp_servers(server_names: set[str]) -> dict[str, dict[str, Any]]:
         }
     return result
 
+
+
+def build_opencode_config_content(
+    *,
+    tool_names: list[str] | set[str] | None = None,
+    mcp_servers: list[str] | set[str] | None = None,
+) -> str:
+    tool_set = {
+        name
+        for name in (tool_names or [])
+        if name and not name.startswith(("read_", "write_", "search_", "terminal_"))
+    }
+    explicit_servers = {name for name in (mcp_servers or []) if name}
+
+    local_categories: set[str] = set()
+    by_category: dict[str, list[str]] = {}
+    try:
+        local_categories = set(get_mcp_manager().categories)
+    except Exception:
+        local_categories = set()
+    if tool_set:
+        try:
+            manager = get_mcp_manager()
+            local_categories = set(manager.categories)
+            categories = manager.categories_for_names(tool_set)
+        except Exception as exc:
+            logger.warning("Could not resolve MCP categories for config content: %s", exc)
+            categories = {}
+        for tool_name, category in categories.items():
+            by_category.setdefault(category, []).append(tool_name)
+
+    mcp: dict[str, dict[str, Any]] = {}
+    for category, names in sorted(by_category.items()):
+        mcp[f"if_{category}"] = _if_mcp_server(category, names)
+
+    external_names = explicit_servers - set(by_category) - local_categories
+    mcp.update(_external_mcp_servers(external_names))
+
+    config = {
+        "$schema": "https://opencode.ai/config.json",
+        "mcp": mcp,
+    }
+    return json.dumps(config, indent=2, sort_keys=True)
+
 def write_opencode_config(
     session_dir: Path,
     *,

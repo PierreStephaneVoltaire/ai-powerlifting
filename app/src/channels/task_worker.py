@@ -68,6 +68,7 @@ async def run_task_worker(
     discord_loop: Any,
 ) -> None:
     from channels.context import set_platform_context, clear_platform_context
+    from channels.status import StatusType, send_status
     from channels.decision_applier import _enqueue_message
     from flow.batch_classifier import decision_to_ifplan
     from flow.context import build_runtime_context
@@ -127,6 +128,18 @@ async def run_task_worker(
             ttl=None,
         )
         await store.put_run_record(run_record)
+
+        agent_display = task.selected_specialist or "general"
+        model_display = task.selected_model or ""
+        await send_status(
+            StatusType.TASK_STARTED,
+            f"🟠 Task worker spawning",
+            fields={
+                "task": task_id[:8],
+                "specialist": agent_display,
+                "model": model_display[:40] if model_display else "—",
+            },
+        )
 
         await store.update_implementation_task(
             channel_id=channel_id,
@@ -188,6 +201,12 @@ async def run_task_worker(
             task_id=task_id,
             from_status="implementing",
             to_status="completed",
+        )
+
+        await send_status(
+            StatusType.TASK_COMPLETED,
+            f"✅ Task completed",
+            fields={"task": task_id[:8], "specialist": task.selected_specialist or "general"},
         )
 
         result_attachments = []
@@ -252,6 +271,11 @@ async def run_task_worker(
                 task_id=task_id,
                 from_status=from_status,
                 to_status="failed",
+            )
+            await send_status(
+                StatusType.TASK_FAILED,
+                f"❌ Task failed",
+                fields={"task": task_id[:8], "specialist": task.selected_specialist or "general"},
             )
             await _enqueue_message(
                 store=store,

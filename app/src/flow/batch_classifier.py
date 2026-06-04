@@ -19,7 +19,7 @@ from config import IF_DEFAULT_DIRECT_MODEL, OPENCODE_PLANNER_MODEL, PROJECT_ROOT
 from .context import build_runtime_context
 from .model_catalog import format_model_catalog, load_model_ids, load_model_selection_rules
 from .opencode import run_opencode
-from .opencode_config import write_opencode_config
+from .opencode_config import build_opencode_config_content
 from .plan import (
     ClassificationParseError,
     ClassificationResult,
@@ -66,6 +66,7 @@ def _specialist_catalog() -> tuple[set[str], str]:
     return slugs, "\n".join(lines)
 
 async def _opencode_status(line: str) -> None:
+    logger.info("[opencode/classifier] %s", line)
     await send_status(StatusType.TOOL_STARTED, "opencode", line)
 
 def batch_classifier_prompt(
@@ -155,7 +156,7 @@ async def run_batch_classification(
     model_ids = load_model_ids()
     model_selection_rules = load_model_selection_rules()
     known_specialists, catalog = _specialist_catalog()
-    write_opencode_config(session_dir, tool_names=[], mcp_servers=[])
+    config_content = build_opencode_config_content(tool_names=[], mcp_servers=[])
     status_dir = session_dir / ".if"
     status_dir.mkdir(parents=True, exist_ok=True)
     status_path = status_dir / f"status.classifier.{run_id}.log"
@@ -201,6 +202,8 @@ async def run_batch_classification(
             ),
             status_file=status_path,
             status_callback=_opencode_status,
+            config_content=config_content,
+            run_id=run_id,
         )
         if result.returncode != 0:
             raise BatchClassificationError(result.stderr or result.stdout or "Batch classifier non-zero exit")
@@ -226,6 +229,16 @@ async def run_batch_classification(
     batch.status = "completed"
     batch.completed_at = completed_at
     batch.batch_summary = classification.batch_summary
+    logger.info(
+        "[Classifier] batch=%s summary=%s decisions=%d: %s",
+        batch_id[:8],
+        (classification.batch_summary or "")[:120],
+        len(classification.decisions),
+        "; ".join(
+            f"{d.action}/{d.kind} reason={d.reason[:60]!r} inline_text={bool(d.social_response_text or d.response_text)}"
+            for d in classification.decisions
+        ),
+    )
     batch.decisions = [
         {"intent_id": d.intent_id, "kind": d.kind, "action": d.action,
          "source_message_ids": d.source_message_ids, "target_task_id": d.target_task_id,

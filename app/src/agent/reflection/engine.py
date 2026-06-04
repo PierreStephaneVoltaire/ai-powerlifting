@@ -58,10 +58,6 @@ class ReflectionEngine:
 
 
 
-        >>>
-
-
-    
     def __init__(
         self,
         store: "UserFactStore",

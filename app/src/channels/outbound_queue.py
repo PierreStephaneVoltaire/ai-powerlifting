@@ -120,6 +120,7 @@ async def _send_one(
         outbound_id=msg.outbound_id,
         from_status="queued",
         to_status="sending",
+        registry_sk=msg.registry_sk,
     )
     if not marked:
         logger.info("Outbound %s no longer queued, skipping", msg.outbound_id)
@@ -133,6 +134,7 @@ async def _send_one(
             outbound_id=msg.outbound_id,
             from_status="sending",
             to_status="failed",
+            registry_sk=msg.registry_sk,
         )
         return False
 
@@ -144,6 +146,7 @@ async def _send_one(
             outbound_id=msg.outbound_id,
             from_status="sending",
             to_status="sent",
+            registry_sk=msg.registry_sk,
             discord_message_id=discord_msg_id or "",
         )
         return True
@@ -154,6 +157,7 @@ async def _send_one(
             outbound_id=msg.outbound_id,
             from_status="sending",
             to_status="failed",
+            registry_sk=msg.registry_sk,
         )
         return False
 

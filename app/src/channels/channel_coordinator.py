@@ -80,12 +80,16 @@ def _schedule_state_update(channel_id: str, message: Dict[str, Any]) -> None:
 
 async def _update_state_and_schedule(channel_id: str, message: Dict[str, Any]) -> None:
     store = get_execution_store()
-    event_at = message.get("timestamp", datetime.now(timezone.utc).isoformat())
-    message_id = message.get("message_id", "")
     is_edit = (
         message.get("is_edit", False)
         or message.get("event_type") == "message_edit"
     )
+    event_at = (
+        message.get("edited_at")
+        if is_edit and message.get("edited_at")
+        else message.get("timestamp")
+    ) or datetime.now(timezone.utc).isoformat()
+    message_id = message.get("message_id", "")
 
     try:
         await store.update_channel_state_on_event(
@@ -206,20 +210,24 @@ async def _process_channel_batch(channel_id: str, force: bool = False) -> None:
 
     _active_classifier_owners[channel_id] = owner
     batch_dispatch_args: Optional[Dict[str, Any]] = None
+    processed_event_at: Optional[str] = None
     try:
+        locked_state = await store.get_channel_state(channel_id)
+        processed_event_at = locked_state.latest_observed_event_at if locked_state else None
         batch_dispatch_args = await _collect_batch_dispatch(channel_id)
     except Exception as e:
         logger.error(f"Batch collection failed for channel {channel_id}: {e}")
     finally:
         _active_classifier_owners.pop(channel_id, None)
         try:
-            await store.release_classifier_lock(
+            await store.finish_classifier_pass(
                 channel_id,
                 owner,
+                processed_event_at=processed_event_at,
                 debounce_seconds=CHANNEL_CLASSIFIER_DEBOUNCE_SECONDS,
             )
         except Exception as e:
-            logger.warning(f"Failed to release classifier lock for {channel_id}: {e}")
+            logger.warning(f"Failed to finish classifier pass for {channel_id}: {e}")
 
         try:
             state = await store.get_channel_state(channel_id)
@@ -235,6 +243,7 @@ async def _process_channel_batch(channel_id: str, force: bool = False) -> None:
 
 async def _collect_batch_dispatch(channel_id: str) -> Optional[Dict[str, Any]]:
     from channels.listeners.discord_listener import _active_clients
+    from channels.status import StatusType, send_status_direct
     store = get_execution_store()
     state = await store.get_channel_state(channel_id)
     meta = _channel_meta.get(channel_id, {})
@@ -278,6 +287,13 @@ async def _collect_batch_dispatch(channel_id: str) -> Optional[Dict[str, Any]]:
             f"- task_id={t.task_id} status={t.status} specialist={t.selected_specialist or 'unknown'}"
             for t in active_tasks
         )
+    await send_status_direct(
+        StatusType.CLASSIFICATION_STARTED,
+        "🧠 Classifying",
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
+        fields={"messages": str(len(new_messages)), "active tasks": str(len(active_tasks))},
+    )
     from flow.context import build_runtime_context
     runtime_context = build_runtime_context(
         messages=[{"role": "user", "content": f"Batch classification for {len(new_messages)} new messages"}],
@@ -293,6 +309,13 @@ async def _collect_batch_dispatch(channel_id: str) -> Optional[Dict[str, Any]]:
         )
     except (BatchClassificationError, Exception) as e:
         logger.error(f"Batch classification failed for channel {channel_id}: {e}, will fallback after lock release")
+        await send_status_direct(
+            StatusType.CLASSIFICATION_FAILED,
+            "❌ Classification failed",
+            channel_ref=channel_ref,
+            discord_loop=discord_loop,
+            description=str(e)[:200],
+        )
         return {
             "channel_id": channel_id, "conversation_id": conversation_id,
             "webhook_id": webhook_id, "channel_ref": channel_ref,
@@ -301,6 +324,27 @@ async def _collect_batch_dispatch(channel_id: str) -> Optional[Dict[str, Any]]:
             "newest_user_id": _newest_user_message_id(history_messages, bot_id=bot_id),
         }
     logger.info(f"Batch classification completed for channel {channel_id}: {len(classification.decisions)} decisions")
+    decision_lines = []
+    for d in classification.decisions:
+        line = f"{d.action}/{d.kind}"
+        inline = d.social_response_text or d.response_text
+        if inline:
+            line += f": {str(inline)[:80]}"
+        elif d.reason:
+            line += f" ({d.reason[:80]})"
+        decision_lines.append(line)
+    decision_summary = chr(10).join(decision_lines) or "none"
+    fields: dict[str, str] = {"decisions": str(len(classification.decisions))}
+    if classification.batch_summary:
+        fields["summary"] = classification.batch_summary[:200]
+    fields["actions"] = decision_summary[:800]
+    await send_status_direct(
+        StatusType.CLASSIFICATION_COMPLETED,
+        "✅ Classified",
+        channel_ref=channel_ref,
+        discord_loop=discord_loop,
+        fields=fields,
+    )
     return {
         "channel_id": channel_id, "conversation_id": conversation_id,
         "webhook_id": webhook_id, "channel_ref": channel_ref,
@@ -321,19 +365,32 @@ async def _dispatch_batch_decisions(args: Dict[str, Any]) -> None:
     newest_user_id = args["newest_user_id"]
 
     if classification is None:
-        logger.error(f"Batch classification produced no result for {channel_id}, falling back")
-        from channels.dispatcher import dispatch_channel_batch
+        logger.error(f"Batch classification produced no result for {channel_id}, routing through outbox fallback")
+        from channels.decision_applier import _enqueue_message
+        from channels.outbound_queue import schedule_drain
         message_dicts = [
             _discord_message_to_dict(msg, conversation_id, webhook_id, discord_loop)
             for msg in new_messages
         ]
         try:
-            await dispatch_channel_batch(
-                messages=message_dicts, conversation_id=conversation_id,
-                platform="discord", channel_ref=channel_ref, discord_loop=discord_loop,
+            response_text = await _run_fallback_batch(
+                message_dicts=message_dicts,
+                conversation_id=conversation_id,
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
             )
+            if response_text:
+                await _enqueue_message(
+                    store=store,
+                    channel_id=channel_id,
+                    conversation_id=conversation_id,
+                    msg_type="social_response",
+                    content=response_text,
+                    priority=5,
+                )
+                schedule_drain(channel_id)
         except Exception as e:
-            logger.error(f"Fallback dispatch failed for channel {channel_id}: {e}")
+            logger.error(f"Fallback routing failed for channel {channel_id}: {e}")
     else:
         from channels.context import set_platform_context, clear_platform_context
         from channels.decision_applier import apply_batch_decisions
@@ -361,6 +418,47 @@ async def _dispatch_batch_decisions(args: Dict[str, Any]) -> None:
             await store.update_cursors(channel_id, newest_user_id)
         except Exception as e:
             logger.warning(f"Cursor update failed for channel {channel_id}: {e}")
+
+
+
+async def _run_fallback_batch(
+    message_dicts: List[Any],
+    conversation_id: str,
+    channel_ref: Any,
+    discord_loop: Any,
+) -> Optional[str]:
+    from channels.translators.discord_translator import translate_discord_batch
+    from channels.dispatcher import _fetch_discord_history
+    history_messages = await _fetch_discord_history(channel_ref, discord_loop)
+    request_data = translate_discord_batch(
+        message_dicts,
+        conversation_id,
+        history_messages=history_messages,
+    )
+    request_data.pop("_pending_uploads", None)
+    try:
+        from main import app
+        from api.completions import process_chat_completion_internal
+        from storage.factory import get_webhook_store
+        http_client = app.state.http_client
+        webhook = None
+        try:
+            store = get_webhook_store()
+            for r in store.list_active():
+                if r.conversation_id == conversation_id:
+                    webhook = r
+                    break
+        except Exception:
+            pass
+        response_text, _attachments = await process_chat_completion_internal(
+            request_data=request_data,
+            http_client=http_client,
+            webhook=webhook,
+        )
+        return response_text
+    except Exception as exc:
+        logger.error("Fallback pipeline failed for %s: %s", conversation_id, exc)
+        return None
 
 async def _reconcile_history(
     channel_id: str, guild_id: str, history_messages: List[Any]

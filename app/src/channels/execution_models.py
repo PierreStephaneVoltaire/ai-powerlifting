@@ -264,3 +264,4 @@ class DiscordOutboundMessage:
     discord_message_id: str | None = None
     idempotency_key: str = ""
     ttl: int | None = None
+    registry_sk: str | None = None
