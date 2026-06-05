@@ -39,6 +39,7 @@ resource "kubernetes_secret" "if_agent_api_secrets" {
   data = {
     OPENROUTER_API_KEY = var.openrouter_api_key
     DISCORD_TOKEN      = var.discord_token
+    GITHUB_TOKEN       = var.github_token
   }
 
   type = "Opaque"

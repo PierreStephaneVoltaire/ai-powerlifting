@@ -41,6 +41,13 @@ variable "alphavantage_api_key" {
   sensitive   = true
 }
 
+variable "github_token" {
+  description = "GitHub PAT for agent git operations (repo scope minimum)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "dynamodb_core_table" {
   description = "DynamoDB table for core directives"
   type        = string

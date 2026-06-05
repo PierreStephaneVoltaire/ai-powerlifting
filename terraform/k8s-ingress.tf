@@ -1,6 +1,5 @@
 resource "kubectl_manifest" "snippets_gateway_global" {
   depends_on = [
-    null_resource.ngf_snippets_enable,
     kubernetes_deployment.tinyauth,
   ]
 
@@ -64,7 +63,6 @@ spec:
 }
 
 resource "kubectl_manifest" "snippets_security_only" {
-  depends_on = [null_resource.ngf_snippets_enable]
 
   yaml_body = <<-YAML
 apiVersion: gateway.nginx.org/v1alpha1
@@ -88,7 +86,6 @@ spec:
 }
 
 resource "kubectl_manifest" "snippets_terminal" {
-  depends_on = [null_resource.ngf_snippets_enable]
 
   yaml_body = <<-YAML
 apiVersion: gateway.nginx.org/v1alpha1

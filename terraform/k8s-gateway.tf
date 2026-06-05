@@ -6,6 +6,18 @@ resource "null_resource" "gateway_api_crds" {
   }
 }
 
+resource "null_resource" "nginx_gateway_fabric_crds" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      helm pull oci://ghcr.io/nginx/charts/nginx-gateway-fabric --version 2.6.3 --untar --untardir /tmp/ngf-crd-install && \
+      kubectl apply --server-side --force-conflicts -R -f /tmp/ngf-crd-install/nginx-gateway-fabric/crds/ && \
+      rm -rf /tmp/ngf-crd-install
+    EOT
+  }
+
+  depends_on = [null_resource.gateway_api_crds]
+}
+
 resource "kubernetes_namespace" "nginx_gateway" {
   metadata {
     name = "nginx-gateway"
@@ -21,7 +33,7 @@ resource "helm_release" "nginx_gateway_fabric" {
   namespace  = kubernetes_namespace.nginx_gateway.metadata[0].name
   repository = "oci://ghcr.io/nginx/charts"
   chart      = "nginx-gateway-fabric"
-  version    = "2.0.0"
+  version    = "2.6.3"
 
   set {
     name  = "nginx.service.type"
@@ -30,27 +42,29 @@ resource "helm_release" "nginx_gateway_fabric" {
 
   set {
     name  = "nginxGateway.replicas"
-    value = "1"
+    value = "2"
+  }
+  set {
+    name  = "nginxGateway.snippets.enable"
+    value = "true"
+  }
+  set {
+    name  = "nginxGateway.resources.requests.memory"
+    value = "128Mi"
+  }
+  set {
+    name  = "nginxGateway.resources.limits.memory"
+    value = "512Mi"
+  }
+  set {
+    name  = "nginxGateway.resources.requests.cpu"
+    value = "100m"
   }
 
-  depends_on = [null_resource.gateway_api_crds]
+  depends_on = [null_resource.gateway_api_crds, null_resource.nginx_gateway_fabric_crds]
 }
 
-resource "null_resource" "ngf_snippets_enable" {
-  depends_on = [helm_release.nginx_gateway_fabric]
 
-  provisioner "local-exec" {
-    command = <<-EOT
-      kubectl patch clusterrole ngf-nginx-gateway-fabric --type='json' -p='[
-        {"op": "add", "path": "/rules/-", "value": {"apiGroups": ["gateway.nginx.org"], "resources": ["snippetsfilters", "snippetspolicies", "ratelimitpolicies", "proxysettingspolicies", "authenticationfilters"], "verbs": ["get", "list", "watch"]}},
-        {"op": "add", "path": "/rules/-", "value": {"apiGroups": ["gateway.nginx.org"], "resources": ["snippetsfilters/status", "snippetspolicies/status", "ratelimitpolicies/status", "proxysettingspolicies/status", "authenticationfilters/status"], "verbs": ["update"]}}
-      ]' && \
-      kubectl patch deployment ngf-nginx-gateway-fabric -n ${kubernetes_namespace.nginx_gateway.metadata[0].name} --type='json' \
-        -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--snippets-filters"}]' && \
-      kubectl rollout status deployment ngf-nginx-gateway-fabric -n ${kubernetes_namespace.nginx_gateway.metadata[0].name} --timeout=120s
-    EOT
-  }
-}
 
 resource "kubectl_manifest" "gateway" {
   depends_on = [helm_release.nginx_gateway_fabric]
