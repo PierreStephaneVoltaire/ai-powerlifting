@@ -355,16 +355,13 @@ spec:
 }
 
 resource "kubectl_manifest" "route_grafana" {
-  depends_on = [
-    kubectl_manifest.snippets_auth_and_security,
-    kubectl_manifest.monitoring_reference_grant,
-  ]
+  depends_on = [kubectl_manifest.snippets_gateway_global]
 
   yaml_body = <<-YAML
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: grafana
+  name: grafana-redirect
   namespace: ${kubernetes_namespace.if_portals.metadata[0].name}
 spec:
   parentRefs:
@@ -376,16 +373,44 @@ spec:
             type: PathPrefix
             value: /grafana
       filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            hostname: ${local.logs_domain}
+            statusCode: 301
+  YAML
+}
+
+
+resource "kubectl_manifest" "route_logs" {
+  depends_on = [
+    kubectl_manifest.snippets_security_only,
+    kubectl_manifest.monitoring_reference_grant,
+  ]
+
+  yaml_body = <<-YAML
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: logs
+  namespace: ${kubernetes_namespace.if_portals.metadata[0].name}
+spec:
+  parentRefs:
+    - name: ${var.gateway_name}
+      namespace: ${var.gateway_namespace}
+  hostnames:
+    - ${local.logs_domain}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
         - type: ExtensionRef
           extensionRef:
             group: gateway.nginx.org
             kind: SnippetsFilter
-            name: auth-and-security
-        - type: URLRewrite
-          urlRewrite:
-            path:
-              type: ReplacePrefixMatch
-              replacePrefixMatch: /
+            name: security-only
       backendRefs:
         - name: grafana
           namespace: ${kubernetes_namespace.monitoring.metadata[0].name}

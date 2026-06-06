@@ -520,7 +520,13 @@ async def _run_domain(
     else:
         content = (result.stdout or "").strip() or "Domain task completed, but response.md was not written."
 
+    # Strip FILES: metadata from response content so it doesn't appear in Discord messages
+    content, files_line_refs = strip_files_line(content)
+
     refs = _artifact_refs(session_dir, before)
+    # Also include file refs the agent explicitly declared in FILES: lines
+    if files_line_refs:
+        refs.extend(files_line_refs)
     primary, handoffs = _parse_handoffs(content)
     if handoffs and handoff_depth < 3:
         known_specialists, _ = _specialist_catalog()
@@ -718,7 +724,13 @@ async def _run_technical(
     else:
         content = (result.stdout or "").strip() or "Technical task completed, but response.md was not written."
 
-    return content, _artifact_refs(session_dir, before)
+    # Strip FILES: metadata from response content so it doesn't appear in Discord messages
+    content, files_line_refs = strip_files_line(content)
+
+    refs = _artifact_refs(session_dir, before)
+    if files_line_refs:
+        refs.extend(files_line_refs)
+    return content, refs
 
 async def run_if_flow(
     *,
@@ -737,6 +749,7 @@ async def run_if_flow(
     uploaded_files = request_data.get("_uploaded_files")
     if not isinstance(uploaded_files, list):
         uploaded_files = None
+    self_aware = bool(getattr(webhook, "self_aware", False))
     runtime_context = build_runtime_context(
         messages=messages,
         context_id=context_id,
@@ -744,6 +757,7 @@ async def run_if_flow(
         session_dir=session_dir,
         uploaded_files=uploaded_files,
         thinking_mode_requested=thinking_mode_requested,
+        self_aware=self_aware,
     )
     try:
         plan = await _run_planner(
@@ -765,6 +779,7 @@ async def run_if_flow(
             session_dir=session_dir,
             uploaded_files=uploaded_files,
             thinking_mode_requested=True,
+            self_aware=self_aware,
         )
 
     await send_status(

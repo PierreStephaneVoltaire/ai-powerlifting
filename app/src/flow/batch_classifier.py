@@ -102,7 +102,20 @@ def batch_classifier_prompt(
     )
 
 class BatchClassificationError(RuntimeError):
-    pass
+    """Raised when batch classification fails.
+
+    category indicates the failure type:
+      - "parse_error": The classifier LLM produced invalid JSON or
+        incompatible kind/action combos. Retrying may succeed because
+        the LLM just made a formatting mistake.
+      - "subprocess_error": The OpenCode subprocess failed (non-zero exit,
+        didn't write the classification file, etc.). Retrying may succeed
+        because this is likely an infrastructure issue.
+      - "unknown": Unclassified failure.
+    """
+    def __init__(self, message: str, category: str = "unknown"):
+        super().__init__(message)
+        self.category = category
 
 def decision_to_ifplan(decision: ClassifierDecision) -> IFPlan:
     specialist = decision.selected_specialist or "general"
@@ -206,17 +219,17 @@ async def run_batch_classification(
             run_id=run_id,
         )
         if result.returncode != 0:
-            raise BatchClassificationError(result.stderr or result.stdout or "Batch classifier non-zero exit")
+            raise BatchClassificationError(result.stderr or result.stdout or "Batch classifier non-zero exit", category="subprocess_error")
     except Exception as exc:
         if not isinstance(exc, BatchClassificationError):
-            exc = BatchClassificationError(str(exc))
+            exc = BatchClassificationError(str(exc), category="subprocess_error")
         batch.status = "failed"
         batch.error = str(exc)[:2000]
         batch.completed_at = datetime.now(timezone.utc).isoformat()
         await store.put_classification_batch(batch)
         raise
     if not classification_file.exists():
-        raise BatchClassificationError(f"Batch classifier did not write {classification_file.name}")
+        raise BatchClassificationError(f"Batch classifier did not write {classification_file.name}", category="subprocess_error")
     try:
         classification = parse_classification_file(classification_file, model_ids, known_specialists, batch_id=batch_id)
     except ClassificationParseError as exc:
@@ -224,7 +237,7 @@ async def run_batch_classification(
         batch.error = str(exc)[:2000]
         batch.completed_at = datetime.now(timezone.utc).isoformat()
         await store.put_classification_batch(batch)
-        raise BatchClassificationError(str(exc)) from exc
+        raise BatchClassificationError(str(exc), category="parse_error") from exc
     completed_at = datetime.now(timezone.utc).isoformat()
     batch.status = "completed"
     batch.completed_at = completed_at

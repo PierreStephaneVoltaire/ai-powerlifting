@@ -60,6 +60,15 @@ Eligible models:
 Model selection policy from `models/model_selection_rules.md`:
 {{ model_selection_rules }}
 
+Kind-action compatibility (STRICT — invalid combinations will be rejected):
+- kind=social → action must be social_response or ignore
+- kind=task → action must be start_new_task or ignore
+- kind=implementation_control → action must be append_to_active_implementation, pivot_active_implementation, cancel_active_implementation, queue_on_active_implementation, await_instruction_for_active_implementation, or ignore
+- kind=clarification → action must be ask_clarifying_target or ignore
+- kind=ignore → action must be ignore
+- CRITICAL: append_to_active_implementation, pivot_active_implementation, cancel_active_implementation, queue_on_active_implementation, and await_instruction_for_active_implementation are ONLY valid with kind=implementation_control. Never use them with kind=task or kind=social.
+- If you want to add work to an active implementation task, use kind=implementation_control + action=append_to_active_implementation. Do NOT use kind=task + action=append_to_active_implementation.
+
 Classification rules:
 - You are classifying a debounced batch of Discord channel activity.
 - You are not classifying a single message.

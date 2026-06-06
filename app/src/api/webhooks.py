@@ -22,6 +22,10 @@ class DiscordConfig(BaseModel):
         None,
         description="Specialist slug to lock this channel to. Leave blank for normal planner-based routing.",
     )
+    self_aware: bool = Field(
+        default=False,
+        description="Mark this channel as an IF self-aware meta channel. Injects IF codebase context into every conversation in this channel.",
+    )
 
 class OpenWebUIConfig(BaseModel):
 
@@ -52,6 +56,7 @@ class WebhookResponse(BaseModel):
     label: str
     status: str
     pinned_specialist: str = ""
+    self_aware: bool = False
 
 class WebhookListResponse(BaseModel):
 
@@ -91,10 +96,13 @@ async def register_webhook(req: RegisterWebhookRequest):
         except Exception:
             pass 
 
+    self_aware = bool(req.discord.self_aware) if req.platform == "discord" and req.discord else False
+
     record = WebhookRecord(
         platform=req.platform,
         label=req.label,
         pinned_specialist=pinned_specialist,
+        self_aware=self_aware,
     )
     record.set_config(config)
 
@@ -119,6 +127,7 @@ async def register_webhook(req: RegisterWebhookRequest):
         label=record.label,
         status="listening" if record.status == "active" else record.status,
         pinned_specialist=record.pinned_specialist,
+        self_aware=bool(record.self_aware),
     )
 
 @router.get("/", response_model=WebhookListResponse)
@@ -135,6 +144,7 @@ async def list_all_webhooks():
             label=r.label,
             status=r.status,
             pinned_specialist=r.pinned_specialist or "",
+            self_aware=bool(r.self_aware),
         )
         for r in records
     ]
@@ -158,6 +168,7 @@ async def list_active_webhooks():
             label=r.label,
             status=r.status,
             pinned_specialist=r.pinned_specialist or "",
+            self_aware=bool(r.self_aware),
         )
         for r in records
     ]
@@ -186,6 +197,7 @@ async def get_webhook(webhook_id: str):
         label=record.label,
         status=record.status,
         pinned_specialist=record.pinned_specialist or "",
+        self_aware=bool(record.self_aware),
     )
 
 @router.delete("/{webhook_id}")

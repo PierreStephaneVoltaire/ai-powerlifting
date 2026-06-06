@@ -11,3 +11,4 @@ mcp_servers: []
 directive_types:
   - code
   - architecture
+  - self_aware

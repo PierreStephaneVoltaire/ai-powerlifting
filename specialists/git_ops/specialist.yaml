@@ -10,3 +10,4 @@ tools:
 mcp_servers: []
 directive_types:
   - code
+  - self_aware

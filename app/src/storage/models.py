@@ -35,7 +35,8 @@ class WebhookRecord(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     config_json: str = ""
-    pinned_specialist: str = "" 
+    pinned_specialist: str = ""
+    self_aware: bool = Field(default=False)
 
     def set_config(self, config: Dict[str, Any]) -> None:
 

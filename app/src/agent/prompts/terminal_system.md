@@ -14,3 +14,8 @@ After completing work that creates or modifies files, emit a single `FILES:` lin
 FILES: output.csv (cleaned sales data), chart.png (revenue by quarter)
 ```
 This line will be automatically processed and removed before display. When you emit a `FILES:` line, do **not** repeat the file contents in your response — the file attachment handles delivery. Describe what you built in one sentence instead.
+
+**Code delivery rules:**
+- Code ≤10 lines → inline code block in your response.
+- Code >10 lines → write to a file with `write_file`, list in `FILES:` line. Do NOT paste long code inline.
+- When the user asks for a file → write/copy it to the workspace, list in `FILES:`. Do NOT dump file contents inline.

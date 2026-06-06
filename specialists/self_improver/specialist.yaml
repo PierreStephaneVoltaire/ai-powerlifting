@@ -7,3 +7,4 @@ tools:
 mcp_servers: []
 directive_types:
   - core
+  - self_aware

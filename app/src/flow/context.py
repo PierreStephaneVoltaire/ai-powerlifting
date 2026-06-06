@@ -14,6 +14,7 @@ from config import (
     IF_USER_PK,
     IF_DIARY_SIGNALS_TABLE_NAME,
     IF_HEALTH_TABLE_NAME,
+    IF_SELF_REPO_URL,
     SKILLS_PATH,
     PROJECT_ROOT,
     APP_SRC,
@@ -171,6 +172,46 @@ def _upload_manifest(session_dir: Path, uploaded_files: list[dict[str, Any]] | N
     lines.append("Use text/CSV/spreadsheet files directly. For images or media, use the attached file context or choose `media_reader`.")
     return "\n".join(lines)
 
+def _self_aware_context_block() -> str:
+    """Inject IF self-aware context when the channel is flagged as self_aware."""
+    repo_url = IF_SELF_REPO_URL.strip()
+    lines = [
+        "═══ IF SELF-AWARE CONTEXT ═══",
+        "This channel is designated as the IF meta channel.",
+        "You are operating on IF itself — treat all questions in this conversation as being about the IF codebase unless explicitly stated otherwise.",
+        "",
+        "REPO ACCESS:",
+    ]
+    if repo_url:
+        lines.append(f"  IF_SELF_REPO_URL={repo_url}")
+        lines.append("  Clone into the current session workspace directory if not already present:")
+        lines.append("    git clone --no-checkout \"$IF_SELF_REPO_URL\" ./if-repo")
+        lines.append("    cd ./if-repo")
+        lines.append("    git sparse-checkout init --cone")
+        lines.append("    git sparse-checkout set app specialists skills tools models scripts")
+        lines.append("    git checkout main")
+        lines.append("  If already cloned in this session, fetch and fast-forward before reading:")
+        lines.append("    cd ./if-repo && git fetch --quiet && git pull --ff-only")
+        lines.append("")
+        lines.append("BRANCH WORK:")
+        lines.append("  Before any write, create a feature branch (never commit to main):")
+        lines.append("    git checkout main && git pull --ff-only")
+        lines.append("    git checkout -b if/YYYYMMDD-short-slug")
+        lines.append("  Before pushing a branch, merge latest main and resolve all conflicts:")
+        lines.append("    git fetch origin && git merge origin/main")
+        lines.append("    # resolve conflicts, then: git add . && git commit")
+        lines.append("  Before opening a PR, verify no merge conflicts exist:")
+        lines.append("    git diff --check && git merge --no-commit --no-ff origin/main")
+        lines.append("    # clean merge required before gh pr create")
+    else:
+        lines.append("  IF_SELF_REPO_URL is not configured. Set it in the pod config map to enable repo access.")
+    lines.append("")
+    lines.append("Read AGENTS.md at the repo root first for any unfamiliar subsystem.")
+    lines.append("All self-aware directives (self_aware dtype) apply to this conversation.")
+    lines.append("═════════════════════════════════")
+    return "\n".join(lines)
+
+
 def build_runtime_context(
     *,
     messages: list[dict[str, Any]],
@@ -179,6 +220,7 @@ def build_runtime_context(
     session_dir: Path,
     uploaded_files: list[dict[str, Any]] | None = None,
     thinking_mode_requested: bool = False,
+    self_aware: bool = False,
 ) -> str:
 
     blocks: list[str] = []
@@ -214,6 +256,9 @@ def build_runtime_context(
     media_protocol = _load_prompt_text("media_protocol.j2")
     if media_protocol:
         blocks.append(media_protocol)
+
+    if self_aware:
+        blocks.append(_self_aware_context_block())
 
     if thinking_mode_requested:
         pondering = _load_prompt_text("pondering_addendum.md")

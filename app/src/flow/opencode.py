@@ -104,6 +104,7 @@ async def run_opencode(
             "--model",
             _opencode_model_id(model),
             "--dangerously-skip-permissions",
+            "--thinking",
             "--dir",
             str(session_dir),
         ]
@@ -118,6 +119,12 @@ async def run_opencode(
             env["OPENCODE_CONFIG"] = str(config_path)
         if config_content is not None:
             env["OPENCODE_CONFIG_CONTENT"] = config_content
+        # Experimental feature flags — always on, no external configuration
+        env["OPENCODE_EXPERIMENTAL"] = "1"
+        env["OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS"] = "1"
+        env["OPENCODE_EXPERIMENTAL_PARALLEL"] = "1"
+        env["OPENCODE_EXPERIMENTAL_LSP_TOOL"] = "1"
+        env["OPENCODE_EXPERIMENTAL_LSP_TY"] = "1"
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(session_dir),
@@ -173,17 +180,24 @@ async def run_opencode(
                 from channels.cancellable_executor import deregister as _deregister_run
                 _deregister_run(run_id)
 
+        stdout_text = stdout_b.decode("utf-8", errors="replace")
+        stderr_text = stderr_b.decode("utf-8", errors="replace")
+
+        # Stream full stdout and stderr to pod logs so they appear in kubectl logs
+        for line in stdout_text.splitlines():
+            if line.strip():
+                logger.info("[opencode|%s|stdout] %s", agent, line)
+        for line in stderr_text.splitlines():
+            if line.strip():
+                logger.info("[opencode|%s|stderr] %s", agent, line)
+
         result = OpencodeResult(
             returncode=proc.returncode,
-            stdout=stdout_b.decode("utf-8", errors="replace"),
-            stderr=stderr_b.decode("utf-8", errors="replace"),
+            stdout=stdout_text,
+            stderr=stderr_text,
         )
         if result.returncode != 0:
-            logger.warning("[opencode] agent=%s failed rc=%s stderr=%s", agent, result.returncode, result.stderr[:1000])
-        else:
-            out = (result.stdout or "").strip()
-            if out:
-                logger.info("[opencode] agent=%s output (last 2000 chars): %s", agent, out[-2000:])
+            logger.warning("[opencode] agent=%s failed rc=%s", agent, result.returncode)
         return result
 
     if run_id:

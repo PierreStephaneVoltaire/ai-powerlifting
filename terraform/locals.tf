@@ -22,6 +22,9 @@ locals {
   # Unique apex zones across all public apps — used for cloudflare_zone.managed and namecheap_domain_records.
   unique_zones = toset([for app, cfg in local.public_apps : cfg.zone])
 
+  # Monitoring subdomain (Grafana log viewer exposed via tunnel).
+  logs_domain = "${var.monitoring_subdomain}.${var.monitoring_zone}"
+
   # Backend ports matching the for_each in k8s-deployments.tf.
   portal_backend_ports = {
     "main-portal"       = 3000

@@ -64,6 +64,7 @@ resource "kubernetes_config_map" "if_agent_api_config" {
     IF_PROPOSALS_TABLE_NAME          = var.dynamodb_proposals_table
     IF_MODELS_TABLE_NAME             = var.dynamodb_models_table
     IF_EXECUTION_REGISTRY_TABLE_NAME = var.dynamodb_execution_registry_table
+    IF_WEBHOOKS_TABLE_NAME           = var.dynamodb_webhooks_table
     POWERLIFTING_S3_BUCKET           = aws_s3_bucket.powerlifting_data.id
     SPECIALISTS_PATH                 = var.specialists_path
     EXTERNAL_TOOLS_PATH              = var.tools_path
@@ -100,6 +101,9 @@ resource "kubernetes_config_map" "if_agent_api_config" {
     AWS_REGION = var.region
 
     LOG_LEVEL = var.log_level
+
+    IF_SELF_REPO_URL = var.if_self_repo_url
+    IF_SELF_REPO_URL = var.if_self_repo_url
   }
 }
 

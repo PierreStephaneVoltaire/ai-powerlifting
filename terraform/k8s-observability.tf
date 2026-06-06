@@ -738,12 +738,12 @@ resource "kubernetes_deployment" "grafana" {
 
           env {
             name  = "GF_SERVER_ROOT_URL"
-            value = "http://${var.domain}/grafana/"
+            value = "https://${local.logs_domain}/"
           }
 
           env {
             name  = "GF_SERVER_SERVE_FROM_SUB_PATH"
-            value = "true"
+            value = "false"
           }
 
           volume_mount {
@@ -824,4 +824,169 @@ spec:
     - group: ""
       kind: Service
   YAML
+}
+
+# ─── Kubernetes Event Exporter ────────────────────────────────────────────────
+# Watches Kubernetes events and forwards them to Loki so they appear in Grafana
+# alongside pod logs. Uses resmoio/kubernetes-event-exporter (v1.7).
+
+resource "kubernetes_service_account" "event_exporter" {
+  metadata {
+    name      = "event-exporter"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+}
+
+resource "kubernetes_cluster_role" "event_exporter" {
+  metadata {
+    name = "event-exporter"
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["events"]
+    verbs      = ["get", "watch", "list"]
+  }
+
+  rule {
+    api_groups = ["coordination.k8s.io"]
+    resources  = ["leases"]
+    verbs      = ["get", "create", "update", "patch", "delete"]
+  }
+}
+
+resource "kubernetes_cluster_role_binding" "event_exporter" {
+  metadata {
+    name = "event-exporter"
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account.event_exporter.metadata[0].name
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+
+  role_ref {
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.event_exporter.metadata[0].name
+    api_group = "rbac.authorization.k8s.io"
+  }
+}
+
+resource "kubernetes_config_map" "event_exporter_config" {
+  metadata {
+    name      = "event-exporter-cfg"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+
+  data = {
+    "config.yaml" = <<-EOT
+logLevel: info
+logFormat: json
+maxEventAgeSeconds: 5
+route:
+  routes:
+    - match:
+        - receiver: "loki"
+receivers:
+  - name: "loki"
+    loki:
+      url: http://loki.${kubernetes_namespace.monitoring.metadata[0].name}.svc.cluster.local:3100/loki/api/v1/push
+      streamLabels:
+        job: kubernetes-events
+        namespace: '{{ .Namespace }}'
+        type: '{{ .Type }}'
+        reason: '{{ .Reason }}'
+    EOT
+  }
+}
+
+resource "kubernetes_deployment" "event_exporter" {
+  metadata {
+    name      = "event-exporter"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels    = { app = "event-exporter" }
+  }
+
+  spec {
+    replicas = 1
+    selector { match_labels = { app = "event-exporter" } }
+
+    template {
+      metadata {
+        labels = { app = "event-exporter" }
+        annotations = {
+          "prometheus.io/scrape" = "true"
+          "prometheus.io/port"   = "2112"
+          "prometheus.io/path"   = "/metrics"
+        }
+      }
+
+      spec {
+        service_account_name = kubernetes_service_account.event_exporter.metadata[0].name
+
+        security_context {
+          run_as_non_root = true
+          seccomp_profile {
+            type = "RuntimeDefault"
+          }
+        }
+
+        volume {
+          name = "cfg"
+          config_map {
+            name = kubernetes_config_map.event_exporter_config.metadata[0].name
+          }
+        }
+
+        container {
+          name  = "event-exporter"
+          image = "ghcr.io/resmoio/kubernetes-event-exporter:v1.7"
+          args  = ["-conf=/data/config.yaml"]
+
+          security_context {
+            allow_privilege_escalation = false
+            capabilities {
+              drop = ["ALL"]
+            }
+          }
+
+          volume_mount {
+            name       = "cfg"
+            mount_path = "/data"
+            read_only  = true
+          }
+
+          resources {
+            limits = {
+              memory = "128Mi"
+              cpu    = "200m"
+            }
+            requests = {
+              memory = "64Mi"
+              cpu    = "50m"
+            }
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/metrics"
+              port = 2112
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 10
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/metrics"
+              port = 2112
+            }
+            initial_delay_seconds = 15
+            period_seconds        = 10
+          }
+        }
+      }
+    }
+  }
 }

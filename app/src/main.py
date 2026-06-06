@@ -12,7 +12,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, PlainTextResponse
 
-from config import HOST, PORT, SANDBOX_PATH, MEMORY_DB_PATH, PERSISTENCE_DIR, STORAGE_DB_PATH
+from config import HOST, PORT, SANDBOX_PATH, MEMORY_DB_PATH, PERSISTENCE_DIR
 from config import HEARTBEAT_ENABLED, HEARTBEAT_IDLE_HOURS, HEARTBEAT_COOLDOWN_HOURS
 from config import REFLECTION_ENABLED
 from config import MODEL_STATS_REFRESH_INTERVAL, MODEL_SEED_INTERVAL
@@ -205,14 +205,12 @@ async def lifespan(app: FastAPI):
         logger.warning("nltk not installed, topic shift heuristic will use basic filtering")
     
     try:
-        storage_db_path = Path(STORAGE_DB_PATH)
-        storage_db_path.parent.mkdir(parents=True, exist_ok=True)
         init_store()
-        logger.info(f"Storage backend initialized at {STORAGE_DB_PATH}")
+        logger.info("Storage backend initialized")
     except Exception as e:
         logger.error(f"Storage initialization failed: {e}")
         raise
-    
+
     try:
         init_directive_store()
         logger.info("Directive store initialized successfully")

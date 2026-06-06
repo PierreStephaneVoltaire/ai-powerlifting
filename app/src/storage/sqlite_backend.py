@@ -60,6 +60,7 @@ def init_sqlite() -> None:
 
         webhook_migrations = [
             ("pinned_specialist", "TEXT NOT NULL DEFAULT ''"),
+            ("self_aware", "INTEGER NOT NULL DEFAULT 0"),
         ]
 
         for col_name, col_def in webhook_migrations:

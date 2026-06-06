@@ -13,7 +13,7 @@
     "@mantine/core": "^9.0.1",
     "@mantine/hooks": "^9.0.1",
     "@mantine/notifications": "^9.0.1",
-    "lucide-react": "^0.300.0",
+    "lucide-react": "^1.17.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^6.23.1",

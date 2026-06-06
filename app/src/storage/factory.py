@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from config import STORE_BACKEND
+from config import IF_WEBHOOKS_TABLE_NAME, AWS_REGION
 from storage.protocol import WebhookStore
 
 logger = logging.getLogger(__name__)
@@ -14,19 +14,12 @@ def init_store() -> None:
 
     global _store
 
-    if STORE_BACKEND == "sqlite":
-        from storage.sqlite_backend import init_sqlite, SQLiteWebhookStore
-        init_sqlite()
-        _store = SQLiteWebhookStore()
-        logger.info("Storage backend initialized: SQLite")
-
-    elif STORE_BACKEND == "dynamodb":
-        raise NotImplementedError(
-            "DynamoDB backend not yet implemented. Set STORE_BACKEND=sqlite."
-        )
-
-    else:
-        raise ValueError(f"Unknown STORE_BACKEND: {STORE_BACKEND}")
+    from storage.dynamodb_backend import DynamoDBWebhookStore
+    _store = DynamoDBWebhookStore(
+        table_name=IF_WEBHOOKS_TABLE_NAME,
+        region=AWS_REGION,
+    )
+    logger.info(f"Storage backend initialized: DynamoDB ({IF_WEBHOOKS_TABLE_NAME})")
 
 def get_webhook_store() -> WebhookStore:
 
@@ -37,9 +30,6 @@ def get_webhook_store() -> WebhookStore:
 def close_store() -> None:
 
     global _store
-    if STORE_BACKEND == "sqlite" and _store is not None:
-        from storage.sqlite_backend import close_sqlite
-        close_sqlite()
     _store = None
     logger.info("Storage backend closed")
 

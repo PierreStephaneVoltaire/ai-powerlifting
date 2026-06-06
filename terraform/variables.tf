@@ -48,6 +48,12 @@ variable "github_token" {
   sensitive   = true
 }
 
+variable "if_self_repo_url" {
+  description = "Git URL (SSH or HTTPS) for the IF codebase. Injected into the agent pod as IF_SELF_REPO_URL for self-aware channel operations."
+  type        = string
+  default     = ""
+}
+
 variable "dynamodb_core_table" {
   description = "DynamoDB table for core directives"
   type        = string
@@ -112,6 +118,12 @@ variable "dynamodb_execution_registry_table" {
   description = "DynamoDB table for channel execution registry"
   type        = string
   default     = "if-agent-execution-registry"
+}
+
+variable "dynamodb_webhooks_table" {
+  description = "DynamoDB table for webhook/channel registration"
+  type        = string
+  default     = "if-webhooks"
 }
 
 variable "dynamodb_powerlifting_table" {
@@ -701,6 +713,18 @@ variable "grafana_admin_password" {
   type        = string
   sensitive   = true
   default     = "admin"
+}
+
+variable "monitoring_zone" {
+  description = "Cloudflare zone (apex domain) where the monitoring subdomain lives (e.g. if-prototype.xyz)"
+  type        = string
+  default     = "if-prototype.xyz"
+}
+
+variable "monitoring_subdomain" {
+  description = "Subdomain prefix for the Grafana log viewer (e.g. logs → logs.if-prototype.xyz)"
+  type        = string
+  default     = "logs"
 }
 
 variable "discord_client_id" {

@@ -40,6 +40,16 @@ resource "cloudflare_record" "tunnel_cname" {
   comment = "Managed by Terraform — tunnel for ${each.key}"
 }
 
+resource "cloudflare_record" "logs_cname" {
+  zone_id = cloudflare_zone.managed[var.monitoring_zone].id
+  name    = local.logs_domain
+  type    = "CNAME"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.this.id}.cfargotunnel.com"
+  proxied = true
+  comment = "Managed by Terraform — tunnel for Grafana log viewer"
+}
+
+
 # ─── Tunnel ingress config ────────────────────────────────────────────────────
 
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
@@ -57,6 +67,14 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
         origin_request {
           http_host_header = ingress_rule.value.domain
         }
+      }
+    }
+    # Monitoring / Grafana log viewer
+    ingress_rule {
+      hostname = local.logs_domain
+      service  = "http://nginx-gateway-nginx.default.svc.cluster.local:80"
+      origin_request {
+        http_host_header = local.logs_domain
       }
     }
     # Required catch-all — must be last.
