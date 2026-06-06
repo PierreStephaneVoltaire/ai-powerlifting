@@ -26,13 +26,33 @@ variable "opencode_version" {
   default = "1.14.48"
 }
 
+variable "gh_version" {
+  type    = string
+  default = "2.67.0"
+}
+
+variable "terraform_version" {
+  type    = string
+  default = "1.9.8"
+}
+
+variable "kubectl_version" {
+  type    = string
+  default = "1.31.4"
+}
+
+variable "yq_version" {
+  type    = string
+  default = "4.44.5"
+}
+
 source "docker" "if_agent" {
   image    = "public.ecr.aws/docker/library/python:3.12-slim"
   commit   = true
   platform = "linux/amd64"
   changes = [
     "WORKDIR /app/src",
-    "ENV PATH=/root/.local/bin:/usr/local/bin:$PATH",
+    "ENV PATH=/root/.local/bin:/root/.cargo/bin:/usr/local/bin:$PATH",
     "CMD [\"python\", \"-m\", \"uvicorn\", \"main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]"
   ]
 }
@@ -41,21 +61,58 @@ build {
   name    = "if-agent-api"
   sources = ["source.docker.if_agent"]
 
-  # Install system dependencies 
+  # Install system dependencies
   provisioner "shell" {
     inline = [
-      "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y curl unzip ca-certificates git iputils-ping dnsutils netcat-openbsd iproute2 procps default-jre-headless nodejs npm",
+      "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y curl unzip ca-certificates git iputils-ping dnsutils netcat-openbsd iproute2 procps default-jre-headless nodejs npm golang-go jq nmap tcpdump traceroute wget",
       "rm -rf /var/lib/apt/lists/*",
       "mkdir -p /app/src"
     ]
   }
-provisioner "shell" {
+  provisioner "shell" {
     inline = [
       "export DEBIAN_FRONTEND=noninteractive",
       "apt-get update",
       "apt-get upgrade -y perl libhttp-daemon-perl libexpat1 curl libxml2",
       "apt-get install -y libexpat1-dev || true",
       "rm -rf /var/lib/apt/lists/*"
+    ]
+  }
+
+  provisioner "shell" {
+    inline = [
+      "curl -fsSL https://github.com/cli/cli/releases/download/v${var.gh_version}/gh_${var.gh_version}_linux_amd64.tar.gz -o /tmp/gh.tar.gz",
+      "tar -xzf /tmp/gh.tar.gz -C /tmp",
+      "cp /tmp/gh_${var.gh_version}_linux_amd64/bin/gh /usr/local/bin/gh",
+      "gh --version",
+      "rm -rf /tmp/gh*"
+    ]
+  }
+
+  provisioner "shell" {
+    inline = [
+      "curl -fsSL https://releases.hashicorp.com/terraform/${var.terraform_version}/terraform_${var.terraform_version}_linux_amd64.zip -o /tmp/terraform.zip",
+      "unzip -o /tmp/terraform.zip -d /usr/local/bin",
+      "terraform version",
+      "rm -f /tmp/terraform.zip"
+    ]
+  }
+
+  provisioner "shell" {
+    inline = [
+      "curl -fsSL https://dl.k8s.io/release/v${var.kubectl_version}/bin/linux/amd64/kubectl -o /usr/local/bin/kubectl",
+      "chmod +x /usr/local/bin/kubectl",
+      "kubectl version --client"
+    ]
+  }
+
+
+  provisioner "shell" {
+    inline = [
+      "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
+      "export PATH=\"/root/.cargo/bin:$PATH\"",
+      "rustc --version",
+      "cargo --version"
     ]
   }
 
@@ -98,7 +155,7 @@ provisioner "shell" {
     ]
   }
 
-  # Copy source code — Packer uploads the directory itself into /app/,
+  # Copy source code - Packer uploads the directory itself into /app/,
   # producing /app/src/ with all contents (data/, sandbox/, logs/, etc.)
   provisioner "file" {
     source      = "../app/src"
@@ -117,7 +174,7 @@ provisioner "shell" {
     destination = "/app/"
   }
 
-  # Copy main system prompt to /app/ (code resolves via Path(__file__).parent…parent…parent)
+  # Copy main system prompt to /app/
   provisioner "file" {
     source      = "../app/main_system_prompt.txt"
     destination = "/app/main_system_prompt.txt"

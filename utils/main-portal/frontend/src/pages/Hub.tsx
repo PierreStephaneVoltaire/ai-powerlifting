@@ -74,25 +74,22 @@ export function Hub() {
 
   return (
     <Stack gap="xl">
-      {/* Signal Strip */}
       <section>
         <Text size="sm" fw={500} c="var(--text-secondary)" mb={8}>Current Signals</Text>
         <SignalStrip signals={data?.signals ?? null} loading={loading} />
       </section>
 
-      {/* Snapshot Bar */}
       <section>
         <SnapshotBar finance={data?.finance ?? null} health={data?.health ?? null} loading={loading} />
       </section>
 
-      {/* Portal Cards Grid */}
       <section>
         <Text size="sm" fw={500} c="var(--text-secondary)" mb={12}>Portals</Text>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <PortalCard
             name="Health"
             icon="💪"
-            href="http://localhost:3001"
+            href="https://dev.nolift.training"
             status={portalStatus.health}
             lines={healthLines}
           />
@@ -113,7 +110,7 @@ export function Hub() {
           <PortalCard
             name="Proposals"
             icon="💡"
-            href="http://localhost:3004"
+            href="https://proposals.if-prototype.xyz"
             status={portalStatus.proposals}
             pendingCount={data?.proposals?.pending_count}
             lines={proposalsLines}
@@ -133,7 +130,6 @@ export function Hub() {
         <AlertsList alerts={data?.alerts ?? []} loading={loading} />
       </section>
 
-      {/* Last Updated */}
       {data?.computed_at && (
         <Text size="xs" c="var(--text-muted)" ta="right">
           Updated {formatRelativeTime(data.computed_at)}

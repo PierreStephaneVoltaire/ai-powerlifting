@@ -65,7 +65,7 @@ build {
   # Supports npm workspace portals with or without packages/types, plus standalone backends
   provisioner "shell" {
     inline = [
-      "if [ -f /workspace/package.json ] && grep -q '\"workspaces\"' /workspace/package.json; then cd /workspace && npm ci && if [ -f /workspace/packages/types/package.json ]; then npm run build --workspace=packages/types; fi && npm run build --workspace=backend; else cd /workspace/backend && npm ci && npm run build; fi"
+      "if [ -f /workspace/package.json ] && grep -q '\"workspaces\"' /workspace/package.json; then cd /workspace && npm install && if [ -f /workspace/packages/types/package.json ]; then npm run build --workspace=packages/types; fi && npm run build --workspace=backend; else cd /workspace/backend && npm install && npm run build; fi"
     ]
   }
 

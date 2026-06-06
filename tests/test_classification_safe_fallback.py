@@ -70,7 +70,7 @@ def test_differentiated_fallback_by_category():
     source = (Path(APP_SRC) / "channels" / "channel_coordinator.py").read_text()
     assert 'failure_category == "parse_error"' in source
     assert 'failure_category == "subprocess_error"' in source
-    assert "tried again automatically" in source.lower() or "already tried" in source.lower()
+    assert "after retry" in source.lower()
 
 
 def test_retry_logic_in_collect_batch():

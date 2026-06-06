@@ -30,6 +30,8 @@ from channels.execution_store import get_execution_store
 from config import (
     CHANNEL_CLASSIFIER_DEBOUNCE_SECONDS,
     CHANNEL_CLASSIFIER_MAX_WAIT_SECONDS,
+    CLASSIFICATION_CONFIDENCE_THRESHOLD,
+    CLASSIFICATION_RETRY_MAX,
     OPENCODE_WORKSPACE_BASE,
 )
 
@@ -300,27 +302,78 @@ async def _collect_batch_dispatch(channel_id: str) -> Optional[Dict[str, Any]]:
         context_id=channel_id, cache_key=conversation_id, session_dir=session_dir,
     )
     from flow.batch_classifier import run_batch_classification, BatchClassificationError
-    try:
-        classification = await run_batch_classification(
-            session_dir=session_dir, channel_id=channel_id,
-            candidate_source_message_ids=candidate_ids,
-            runtime_context=runtime_context, active_tasks_summary=tasks_summary,
-            bot_id=str(bot_id) if bot_id else None,
-        )
-    except (BatchClassificationError, Exception) as e:
-        logger.error(f"Batch classification failed for channel {channel_id}: {e}, will fallback after lock release")
-        await send_status_direct(
-            StatusType.CLASSIFICATION_FAILED,
-            "❌ Classification failed",
-            channel_ref=channel_ref,
-            discord_loop=discord_loop,
-            description=str(e)[:200],
-        )
+    classification_failure_category: Optional[str] = None
+    classification_failure_detail: Optional[str] = None
+    attempt = 0
+    max_attempts = 1 + CLASSIFICATION_RETRY_MAX
+    while attempt < max_attempts:
+        try:
+            classification = await run_batch_classification(
+                session_dir=session_dir, channel_id=channel_id,
+                candidate_source_message_ids=candidate_ids,
+                runtime_context=runtime_context, active_tasks_summary=tasks_summary,
+                bot_id=str(bot_id) if bot_id else None,
+            )
+            classification_failure_category = None
+            classification_failure_detail = None
+            break
+        except BatchClassificationError as e:
+            category = getattr(e, "category", "unknown")
+            attempt += 1
+            logger.error(
+                f"Batch classification failed for channel {channel_id}: "
+                f"category={category} attempt={attempt}/{max_attempts}: {e}"
+            )
+            if category in ("parse_error", "subprocess_error") and attempt < max_attempts:
+                logger.info(f"Retrying classification for channel {channel_id} (attempt {attempt + 1}/{max_attempts})")
+                await send_status_direct(
+                    StatusType.CLASSIFICATION_FAILED,
+                    "Classification failed, retrying",
+                    channel_ref=channel_ref,
+                    discord_loop=discord_loop,
+                    description=f"category={category}, retry {attempt + 1}/{max_attempts}",
+                )
+                continue
+            classification_failure_category = category
+            classification_failure_detail = str(e)[:2000]
+            await send_status_direct(
+                StatusType.CLASSIFICATION_FAILED,
+                "Classification failed",
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
+                description=str(e)[:200],
+            )
+            break
+        except Exception as e:
+            attempt += 1
+            logger.error(
+                f"Batch classification unexpected error for channel {channel_id}: "
+                f"attempt={attempt}/{max_attempts}: {e}"
+            )
+            if attempt < max_attempts:
+                continue
+            classification_failure_category = "subprocess_error"
+            classification_failure_detail = str(e)[:2000]
+            await send_status_direct(
+                StatusType.CLASSIFICATION_FAILED,
+                "Classification failed",
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
+                description=str(e)[:200],
+            )
+            break
+    else:
+        classification_failure_category = classification_failure_category or "unknown"
+        classification_failure_detail = classification_failure_detail or "All classification attempts exhausted"
+
+    if classification_failure_category:
         return {
             "channel_id": channel_id, "conversation_id": conversation_id,
             "webhook_id": webhook_id, "channel_ref": channel_ref,
             "discord_loop": discord_loop, "new_messages": new_messages,
             "classification": None,
+            "classification_failure_category": classification_failure_category,
+            "classification_failure_detail": classification_failure_detail,
             "newest_user_id": _newest_user_message_id(history_messages, bot_id=bot_id),
         }
     logger.info(f"Batch classification completed for channel {channel_id}: {len(classification.decisions)} decisions")
@@ -365,53 +418,191 @@ async def _dispatch_batch_decisions(args: Dict[str, Any]) -> None:
     newest_user_id = args["newest_user_id"]
 
     if classification is None:
-        logger.error(f"Batch classification produced no result for {channel_id}, routing through outbox fallback")
+        failure_category = args.get("classification_failure_category", "unknown")
+        failure_detail = args.get("classification_failure_detail", "")
+        logger.error(
+            f"Batch classification produced no result for {channel_id}: "
+            f"category={failure_category} detail={failure_detail[:200]}"
+        )
+        # SAFETY: Do NOT fall back to the general completions pipeline when
+        # classification fails. The general pipeline may route health/medical/
+        # safety-critical messages as social responses without specialist tools
+        # or disclaimers, which is dangerous. Send differentiated messages
+        # based on why classification failed.
         from channels.decision_applier import _enqueue_message
         from channels.outbound_queue import schedule_drain
-        message_dicts = [
-            _discord_message_to_dict(msg, conversation_id, webhook_id, discord_loop)
-            for msg in new_messages
-        ]
-        try:
-            response_text = await _run_fallback_batch(
-                message_dicts=message_dicts,
-                conversation_id=conversation_id,
+        from channels.status import StatusType, send_status_direct
+
+        if failure_category == "parse_error":
+            fallback_text = (
+                "Classification failed. Parse error after retry. "
+                "Resend your message. "
+                "If this is a health or medical query, state that explicitly."
+            )
+            await send_status_direct(
+                StatusType.CLASSIFICATION_FAILED,
+                "Classification parse error (retries exhausted)",
                 channel_ref=channel_ref,
                 discord_loop=discord_loop,
+                description=failure_detail[:200],
             )
-            if response_text:
+        elif failure_category == "subprocess_error":
+            fallback_text = (
+                "Classification failed. Subprocess error after retry. "
+                "Try again shortly. "
+                "If this is a health or medical query, state that explicitly."
+            )
+            await send_status_direct(
+                StatusType.CLASSIFICATION_FAILED,
+                "Classification subprocess error (retries exhausted)",
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
+                description=failure_detail[:200],
+            )
+        else:
+            fallback_text = (
+                "Classification failed. Reason unknown. "
+                "Resend or rephrase. "
+                "If this is a health or medical query, state that explicitly."
+            )
+            await send_status_direct(
+                StatusType.CLASSIFICATION_FAILED,
+                "Classification failed",
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
+                description=failure_detail[:200] or "Blocked unsafe fallback to general pipeline",
+            )
+        try:
+            await _enqueue_message(
+                store=store,
+                channel_id=channel_id,
+                conversation_id=conversation_id,
+                msg_type="social_response",
+                content=fallback_text,
+                priority=5,
+            )
+            schedule_drain(channel_id)
+        except Exception as e:
+            logger.error(f"Fallback enqueue failed for channel {channel_id}: {e}")
+    else:
+        from channels.context import set_platform_context, clear_platform_context
+        from channels.decision_applier import apply_batch_decisions
+
+        low_confidence_decisions = [
+            d for d in classification.decisions
+            if d.confidence < CLASSIFICATION_CONFIDENCE_THRESHOLD
+        ]
+        if low_confidence_decisions and len(low_confidence_decisions) == len(classification.decisions):
+            logger.warning(
+                f"All classification decisions below confidence threshold "
+                f"for channel {channel_id}: "
+                f"confidences={[d.confidence for d in classification.decisions]}"
+            )
+            from channels.decision_applier import _enqueue_message
+            from channels.outbound_queue import schedule_drain
+            from channels.status import StatusType, send_status_direct
+            guess_lines = []
+            for d in classification.decisions:
+                line = "- " + d.action.replace("_", " ")
+                if d.reason:
+                    line += ": " + d.reason[:120]
+                guess_lines.append(line)
+            guesses = "\n".join(guess_lines)
+            fallback_text = (
+                "Clarification required. Classification confidence below threshold.\\n"
+                "Considered:\n" + guesses + "\n\n"
+                "Specify your intent. "
+                "If this is a health or medical query, state that explicitly."
+            )
+            await send_status_direct(
+                StatusType.CLASSIFICATION_FAILED,
+                "Low confidence - clarification required",
+                channel_ref=channel_ref,
+                discord_loop=discord_loop,
+                description="max_confidence=" + f"{max(d.confidence for d in classification.decisions):.2f}",
+            )
+            try:
                 await _enqueue_message(
                     store=store,
                     channel_id=channel_id,
                     conversation_id=conversation_id,
                     msg_type="social_response",
-                    content=response_text,
+                    content=fallback_text,
                     priority=5,
                 )
                 schedule_drain(channel_id)
-        except Exception as e:
-            logger.error(f"Fallback routing failed for channel {channel_id}: {e}")
-    else:
-        from channels.context import set_platform_context, clear_platform_context
-        from channels.decision_applier import apply_batch_decisions
-        set_platform_context("discord", channel_ref, discord_loop)
-        try:
-            results = await apply_batch_decisions(
-                decisions=classification.decisions,
-                batch_id=classification.batch_id,
-                channel_id=channel_id,
-                conversation_id=conversation_id,
-                channel_ref=channel_ref,
-                discord_loop=discord_loop,
+            except Exception as e:
+                logger.error(f"Low-confidence enqueue failed for {channel_id}: {e}")
+        elif low_confidence_decisions:
+            high_conf = [d for d in classification.decisions if d.confidence >= CLASSIFICATION_CONFIDENCE_THRESHOLD]
+            logger.warning(
+                f"Mixed confidence for channel {channel_id}: "
+                f"{len(high_conf)} above, {len(low_confidence_decisions)} below threshold"
             )
-            logger.info(
-                f"Decision applier results for channel {channel_id}: "
-                f"{sum(1 for r in results if r)}/{len(results)} succeeded"
+            from channels.decision_applier import _enqueue_message
+            from channels.outbound_queue import schedule_drain
+            from channels.status import StatusType, send_status_direct
+            unclear_lines = []
+            for d in low_confidence_decisions:
+                line = "- " + d.action.replace("_", " ")
+                if d.reason:
+                    line += ": " + d.reason[:120]
+                unclear_lines.append(line)
+            unclear = "\n".join(unclear_lines)
+            clarification_text = (
+                "Partial clarification required. Low confidence on:\n" + unclear + "\n\n"
+                "Clarify intent for the above. "
+                "If this is a health or medical query, state that explicitly."
             )
-        except Exception as e:
-            logger.error(f"Decision applier failed for channel {channel_id}: {e}")
-        finally:
-            clear_platform_context()
+            set_platform_context("discord", channel_ref, discord_loop)
+            try:
+                results = await apply_batch_decisions(
+                    decisions=high_conf,
+                    batch_id=classification.batch_id,
+                    channel_id=channel_id,
+                    conversation_id=conversation_id,
+                    channel_ref=channel_ref,
+                    discord_loop=discord_loop,
+                )
+                logger.info(
+                    f"High-confidence decision results for channel {channel_id}: "
+                    f"{sum(1 for r in results if r)}/{len(results)} succeeded"
+                )
+            except Exception as e:
+                logger.error(f"Decision applier failed for channel {channel_id}: {e}")
+            finally:
+                clear_platform_context()
+            try:
+                await _enqueue_message(
+                    store=store,
+                    channel_id=channel_id,
+                    conversation_id=conversation_id,
+                    msg_type="social_response",
+                    content=clarification_text,
+                    priority=5,
+                )
+                schedule_drain(channel_id)
+            except Exception as e:
+                logger.error(f"Clarification enqueue failed for {channel_id}: {e}")
+        else:
+            set_platform_context("discord", channel_ref, discord_loop)
+            try:
+                results = await apply_batch_decisions(
+                    decisions=classification.decisions,
+                    batch_id=classification.batch_id,
+                    channel_id=channel_id,
+                    conversation_id=conversation_id,
+                    channel_ref=channel_ref,
+                    discord_loop=discord_loop,
+                )
+                logger.info(
+                    f"Decision applier results for channel {channel_id}: "
+                    f"{sum(1 for r in results if r)}/{len(results)} succeeded"
+                )
+            except Exception as e:
+                logger.error(f"Decision applier failed for channel {channel_id}: {e}")
+            finally:
+                clear_platform_context()
 
     if newest_user_id:
         try:
@@ -421,44 +612,9 @@ async def _dispatch_batch_decisions(args: Dict[str, Any]) -> None:
 
 
 
-async def _run_fallback_batch(
-    message_dicts: List[Any],
-    conversation_id: str,
-    channel_ref: Any,
-    discord_loop: Any,
-) -> Optional[str]:
-    from channels.translators.discord_translator import translate_discord_batch
-    from channels.dispatcher import _fetch_discord_history
-    history_messages = await _fetch_discord_history(channel_ref, discord_loop)
-    request_data = translate_discord_batch(
-        message_dicts,
-        conversation_id,
-        history_messages=history_messages,
-    )
-    request_data.pop("_pending_uploads", None)
-    try:
-        from main import app
-        from api.completions import process_chat_completion_internal
-        from storage.factory import get_webhook_store
-        http_client = app.state.http_client
-        webhook = None
-        try:
-            store = get_webhook_store()
-            for r in store.list_active():
-                if r.conversation_id == conversation_id:
-                    webhook = r
-                    break
-        except Exception:
-            pass
-        response_text, _attachments = await process_chat_completion_internal(
-            request_data=request_data,
-            http_client=http_client,
-            webhook=webhook,
-        )
-        return response_text
-    except Exception as exc:
-        logger.error("Fallback pipeline failed for %s: %s", conversation_id, exc)
-        return None
+# _run_fallback_batch removed as a safety fix. Routing failed classifications
+# through the general completions pipeline could produce unguarded responses
+# to health/medical/safety-critical queries.
 
 async def _reconcile_history(
     channel_id: str, guild_id: str, history_messages: List[Any]

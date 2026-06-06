@@ -65,7 +65,7 @@ build {
   # Sets both VITE_API_URL and VITE_API_BASE_URL since different portals use different var names
   provisioner "shell" {
     inline = [
-      "if [ -f /workspace/package.json ] && grep -q '\"workspaces\"' /workspace/package.json; then cd /workspace && npm ci && if [ -f /workspace/packages/types/package.json ]; then npm run build --workspace=packages/types; fi && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} npm run build --workspace=frontend && cp -r /workspace/frontend/dist /app/dist; else cd /workspace/frontend && npm ci && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} npm run build && cp -r /workspace/frontend/dist /app/dist; fi",
+      "if [ -f /workspace/package.json ] && grep -q '\"workspaces\"' /workspace/package.json; then cd /workspace && npm install && if [ -f /workspace/packages/types/package.json ]; then npm run build --workspace=packages/types; fi && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} npm run build --workspace=frontend && cp -r /workspace/frontend/dist /app/dist; else cd /workspace/frontend && npm install && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} npm run build && cp -r /workspace/frontend/dist /app/dist; fi",
       "npm install -g serve"
     ]
   }

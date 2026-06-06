@@ -89,6 +89,7 @@ locals {
     for name, config in local.portals : name => sha1(join("", [
       for f in fileset("${path.module}/../utils/${name}/frontend", "**/*") :
       filesha1("${path.module}/../utils/${name}/frontend/${f}")
+      if !startswith(f, "node_modules/") && !startswith(f, "dist/")
     ]))
   }
 
