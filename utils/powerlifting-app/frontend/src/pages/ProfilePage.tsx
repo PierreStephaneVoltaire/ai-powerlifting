@@ -547,7 +547,6 @@ export default function ProfilePage() {
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
             <TextInput
               label="Nickname"
-              description="Lowercase letters, numbers, hyphens, and underscores."
               value={nickname}
               onChange={(event) => setNickname(event.currentTarget.value)}
               disabled={readOnly || loading || !settings}
