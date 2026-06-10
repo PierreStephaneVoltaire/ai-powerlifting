@@ -65,7 +65,7 @@ export function DirectivesPage() {
   const { user, loading: authLoading, signOut, isOperator } = useAuth()
   const {
     directives, loading, error, history, historyLoading,
-    fetchAll, create, revise, bulkReorder, remove,
+    fetchAll, create, revise, bulkReorder, setGlobal, remove,
     fetchHistory, clearHistory,
   } = useDirectivesStore()
 
@@ -79,6 +79,8 @@ export function DirectivesPage() {
   const [reorderedDirectives, setReorderedDirectives] = useState<ReorderDirective[]>([])
   const [savingReorder, setSavingReorder] = useState(false)
   const [draggedDirective, setDraggedDirective] = useState<ReorderDirective | null>(null)
+
+  const [globalPendingKey, setGlobalPendingKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && !user) navigate('/login')
@@ -121,6 +123,30 @@ export function DirectivesPage() {
     } catch (err) {
       notifications.show({ title: 'Save failed', message: err instanceof Error ? err.message : 'Unknown error', color: 'red' })
       throw err
+    }
+  }
+
+  const handleSetGlobal = async (alpha: number, beta: number, next: boolean) => {
+    if (!isOperator) return
+    const key = `${alpha}-${beta}`
+    setGlobalPendingKey(key)
+    try {
+      await setGlobal(alpha, beta, next)
+      notifications.show({
+        title: next ? 'Made global' : 'Made local',
+        message: `Directive ${key} is now ${next ? 'global (applies to all users)' : 'local'}.`,
+        color: 'orange',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Toggle failed',
+        message: err instanceof Error ? err.message : 'Unknown error',
+        color: 'red',
+      })
+      // Re-fetch to restore truth from the server (in case optimistic state diverged).
+      await fetchAll()
+    } finally {
+      setGlobalPendingKey(null)
     }
   }
 
@@ -407,6 +433,7 @@ export function DirectivesPage() {
                           const rd = d as ReorderDirective
                           const stableId = `${rd._origAlpha ?? rd.alpha}-${rd._origBeta ?? rd.beta}`
                           const canMove = !d.global_directive || isOperator
+                          const cardKey = `${rd._origAlpha ?? rd.alpha}-${rd._origBeta ?? rd.beta}`
                           return (
                             <SortableDirectiveCard
                               key={stableId}
@@ -420,6 +447,8 @@ export function DirectivesPage() {
                               canMove={canMove}
                               onMoveTier={handleMoveTier}
                               currentAlpha={d.alpha}
+                              onToggleGlobal={(dir, next) => handleSetGlobal(dir.alpha, dir.beta, next)}
+                              globalTogglePending={globalPendingKey === cardKey}
                             />
                           )
                         })}
@@ -442,6 +471,8 @@ export function DirectivesPage() {
                   canMove={!draggedDirective.global_directive || isOperator}
                   onMoveTier={handleMoveTier}
                   currentAlpha={draggedDirective.alpha}
+                  onToggleGlobal={(dir, next) => handleSetGlobal(dir.alpha, dir.beta, next)}
+                  globalTogglePending={globalPendingKey === `${draggedDirective._origAlpha}-${draggedDirective._origBeta}`}
                 />
               )}
             </DragOverlay>
@@ -461,7 +492,15 @@ export function DirectivesPage() {
                   </Group>
                   <Stack gap={isMobile ? 6 : 8} pb="md">
                     {tierDirs.map(d => (
-                      <DirectiveCard key={`${d.alpha}-${d.beta}`} directive={d} onEdit={handleEdit} onDelete={handleDelete} isOperator={isOperator} />
+                      <DirectiveCard
+                        key={`${d.alpha}-${d.beta}`}
+                        directive={d}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        isOperator={isOperator}
+                        onToggleGlobal={(dir, next) => handleSetGlobal(dir.alpha, dir.beta, next)}
+                        globalTogglePending={globalPendingKey === `${d.alpha}-${d.beta}`}
+                      />
                     ))}
                   </Stack>
                 </Box>
@@ -481,6 +520,12 @@ export function DirectivesPage() {
         onFetchHistory={fetchHistory}
         onClearHistory={clearHistory}
         isOperator={isOperator}
+        onSetGlobal={handleSetGlobal}
+        globalTogglePending={
+          selectedDirective
+            ? globalPendingKey === `${selectedDirective.alpha}-${selectedDirective.beta}`
+            : false
+        }
       />
 
       <NewDirectiveModal opened={showNewModal} onClose={() => setShowNewModal(false)} onCreate={handleCreate} isOperator={isOperator} />

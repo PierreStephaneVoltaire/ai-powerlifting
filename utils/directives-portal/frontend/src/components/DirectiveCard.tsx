@@ -1,5 +1,5 @@
-import { Box, Text, Group, Stack, Badge, ActionIcon, Tooltip } from '@mantine/core'
-import { Globe, Lock, Edit, Trash2, GripVertical, ArrowRightLeft, ChevronUp, ChevronDown } from 'lucide-react'
+import { Box, Text, Group, Stack, Badge, ActionIcon, Tooltip, Switch } from '@mantine/core'
+import { Globe, Lock, Edit, Trash2, GripVertical, ArrowRightLeft, ChevronUp, ChevronDown, User } from 'lucide-react'
 import { Directive } from '../api/client'
 import { TypeBadge } from './TypeBadge'
 
@@ -24,6 +24,8 @@ interface DirectiveCardProps {
   canMove?: boolean
   onMoveTier?: (origAlpha: number, origBeta: number, direction: 'up' | 'down') => void
   currentAlpha?: number
+  onToggleGlobal?: (d: Directive, next: boolean) => Promise<void> | void
+  globalTogglePending?: boolean
 }
 
 export function DirectiveCard({
@@ -38,11 +40,21 @@ export function DirectiveCard({
   canMove = true,
   onMoveTier,
   currentAlpha,
+  onToggleGlobal,
+  globalTogglePending = false,
 }: DirectiveCardProps) {
   const tierColor = TIER_COLORS[directive.alpha] ?? '#6b7280'
   const isReadOnly = directive.read_only
   const canModify = !isReadOnly || isOperator
   const isProtected = directive.alpha === 0 && directive.beta === 1
+  const isTier0Locked = directive.alpha === 0
+  const isGlobal = directive.global_directive || isTier0Locked
+  const canEditGlobal = !!onToggleGlobal && isOperator && !reorderMode
+  const globalTooltip = !isOperator
+    ? (isGlobal ? 'Global directive — read-only for non-operators' : 'Local directive — read-only for non-operators')
+    : isTier0Locked
+      ? 'Tier 0 directives are always global'
+      : (isGlobal ? 'Click to make local (operator only)' : 'Click to make global (operator only)')
 
   // Effective alpha for tier move buttons (use currentAlpha if in reorder mode, else directive.alpha)
   const effectiveAlpha = currentAlpha ?? directive.alpha
@@ -118,32 +130,6 @@ export function DirectiveCard({
                 </Text>
               </>
             )}
-            {directive.global_directive && (
-              <Tooltip label={isReadOnly ? 'Global directive (read-only)' : 'Global directive'}>
-                <Badge
-                  size="xs"
-                  variant="light"
-                  color="orange"
-                  leftSection={<Globe size={10} />}
-                  style={{ textTransform: 'lowercase' }}
-                >
-                  global
-                </Badge>
-              </Tooltip>
-            )}
-            {isReadOnly && (
-              <Tooltip label="This directive is enforced globally and cannot be modified">
-                <Badge
-                  size="xs"
-                  variant="light"
-                  color="gray"
-                  leftSection={<Lock size={10} />}
-                  style={{ textTransform: 'lowercase' }}
-                >
-                  read-only
-                </Badge>
-              </Tooltip>
-            )}
           </Group>
           <Group gap={4}>
             {/* Tier move arrows (upgrade/downgrade) in reorder mode */}
@@ -197,6 +183,68 @@ export function DirectiveCard({
               </Tooltip>
             )}
           </Group>
+        </Group>
+
+        <Group
+          gap={6}
+          wrap="nowrap"
+          align="center"
+          style={{
+            background: isGlobal
+              ? 'rgba(249, 115, 22, 0.12)'
+              : 'rgba(107, 114, 128, 0.10)',
+            border: isGlobal
+              ? '0.5px solid rgba(249, 115, 22, 0.45)'
+              : '0.5px solid var(--border-subtle)',
+            borderRadius: 6,
+            padding: '4px 8px',
+          }}
+        >
+          {isGlobal ? (
+            <Globe size={12} color="#ea580c" style={{ flexShrink: 0 }} />
+          ) : (
+            <User size={12} color="#6b7280" style={{ flexShrink: 0 }} />
+          )}
+          <Text
+            size="xs"
+            fw={700}
+            c={isGlobal ? '#ea580c' : 'var(--text-secondary)'}
+            style={{ textTransform: 'uppercase', letterSpacing: 0.4, flex: 1 }}
+          >
+            {isGlobal ? 'Global' : 'Local'}
+          </Text>
+          {isReadOnly && isGlobal && (
+            <Tooltip label="Enforced globally — read-only for non-operators">
+              <Badge
+                size="xs"
+                variant="light"
+                color="gray"
+                leftSection={<Lock size={9} />}
+                style={{ textTransform: 'lowercase' }}
+              >
+                read-only
+              </Badge>
+            </Tooltip>
+          )}
+          {canEditGlobal ? (
+            <Tooltip label={globalTooltip} position="top" withArrow>
+              <Switch
+                size="xs"
+                color="orange"
+                checked={isGlobal}
+                disabled={isTier0Locked || globalTogglePending}
+                onChange={e => onToggleGlobal?.(directive, e.currentTarget.checked)}
+                aria-label={isGlobal ? 'Toggle to local' : 'Toggle to global'}
+                styles={{ track: { cursor: isTier0Locked ? 'not-allowed' : 'pointer' } }}
+              />
+            </Tooltip>
+          ) : (
+            !isOperator && isGlobal && (
+              <Tooltip label={globalTooltip} position="top" withArrow>
+                <Lock size={11} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+              </Tooltip>
+            )
+          )}
         </Group>
 
         {/* Label */}

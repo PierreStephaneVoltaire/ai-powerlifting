@@ -264,6 +264,58 @@ class DirectiveStore:
         )
         return directive
     
+    def set_global(
+        self,
+        alpha: int,
+        beta: int,
+        global_directive: bool,
+        created_by: str = "operator",
+    ) -> Optional[Directive]:
+
+        existing = self._get_latest_version(alpha, beta)
+        if not existing:
+            return None
+
+        if existing.global_directive == global_directive:
+            return existing
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        self.table.update_item(
+            Key={"pk": self._pk, "sk": existing.sort_key},
+            UpdateExpression=(
+                "SET active = :inactive, superseded_at = :superseded"
+            ),
+            ExpressionAttributeValues={
+                ":inactive": False,
+                ":superseded": now,
+            },
+        )
+
+        new_directive = Directive(
+            alpha=alpha,
+            beta=beta,
+            version=existing.version + 1,
+            label=existing.label,
+            content=existing.content,
+            types=existing.types,
+            created_by=created_by,
+            active=True,
+            created_at=now,
+            superseded_at=None,
+            pk=self._pk,
+            global_directive=global_directive,
+        )
+
+        self.table.put_item(Item=new_directive.to_dynamodb_item())
+        self.load()
+
+        logger.info(
+            f"[DirectiveStore] Toggled global on directive {alpha}-{beta} "
+            f"v{new_directive.version} -> global={global_directive}"
+        )
+        return new_directive
+
     def revise(
         self,
         alpha: int,

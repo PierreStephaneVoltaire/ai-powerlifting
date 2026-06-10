@@ -20,7 +20,18 @@ export function NewDirectiveModal({ opened, onClose, onCreate, isOperator }: New
   const [label, setLabel] = useState('')
   const [content, setContent] = useState('')
   const [types, setTypes] = useState<string[]>(['core'])
-  const [globalDirective, setGlobalDirective] = useState(false)
+  const [globalDirective, setGlobalDirective] = useState(true)
+
+  const isTier0 = alpha === '0'
+  const effectiveGlobal = isTier0 ? true : (isOperator ? globalDirective : false)
+
+  const handleAlphaChange = (next: string | null) => {
+    const value = next ?? '0'
+    setAlpha(value)
+    if (value === '0') {
+      setGlobalDirective(true)
+    }
+  }
 
   const handleSubmit = async () => {
     if (!alpha || !label.trim() || !content.trim()) return
@@ -31,13 +42,13 @@ export function NewDirectiveModal({ opened, onClose, onCreate, isOperator }: New
         label: label.trim(),
         content: content.trim(),
         types,
-        global_directive: isOperator ? globalDirective : false,
+        global_directive: effectiveGlobal,
       })
       setAlpha('0')
       setLabel('')
       setContent('')
       setTypes(['core'])
-      setGlobalDirective(false)
+      setGlobalDirective(true)
       onClose()
     } finally {
       setSubmitting(false)
@@ -74,7 +85,7 @@ export function NewDirectiveModal({ opened, onClose, onCreate, isOperator }: New
           data={TIER_OPTIONS}
           required
           value={alpha}
-          onChange={v => setAlpha(v ?? '0')}
+          onChange={handleAlphaChange}
         />
         <Textarea
           label="Label"
@@ -105,9 +116,14 @@ export function NewDirectiveModal({ opened, onClose, onCreate, isOperator }: New
         {isOperator && (
           <Switch
             label="Global directive"
-            description="Global directives apply to ALL users and are enforced as safety guardrails. Only operator can modify them."
-            checked={globalDirective}
-            onChange={e => setGlobalDirective(e.currentTarget.checked)}
+            description={
+              isTier0
+                ? 'Tier 0 directives are always global by rule — this is locked on.'
+                : 'Global directives apply to ALL users and are enforced as safety guardrails. Only operator can modify them.'
+            }
+            checked={effectiveGlobal}
+            onChange={e => !isTier0 && setGlobalDirective(e.currentTarget.checked)}
+            disabled={isTier0}
             color="orange"
           />
         )}

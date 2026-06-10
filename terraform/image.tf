@@ -7,6 +7,16 @@ resource "aws_ecr_repository" "if_agent_api" {
   }
 }
 
+
+resource "aws_ecr_repository" "if_opencode_runner" {
+  name                 = "${var.ecr_repository_prefix}-opencode-runner"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
 resource "aws_ecr_repository" "portal_backends" {
   for_each = toset([
     "main-portal-backend",
@@ -46,6 +56,7 @@ resource "aws_ecr_repository" "portal_frontends" {
 resource "aws_ecr_lifecycle_policy" "keep_5" {
   for_each = merge(
     { "if-agent-api" = aws_ecr_repository.if_agent_api.name },
+    { "if-opencode-runner" = aws_ecr_repository.if_opencode_runner.name },
     { for k, v in aws_ecr_repository.portal_backends : k => v.name },
     { for k, v in aws_ecr_repository.portal_frontends : k => v.name }
   )
@@ -101,6 +112,13 @@ locals {
     "powerlifting-app"  = "/api"
     "directives-portal" = "/api"
   }
+
+  opencode_runner_hash = sha1(join("", [
+    filesha1("${path.module}/../docker/opencode-runner.pkr.hcl"),
+    filesha1("${path.module}/../utils/opencode-runner/Cargo.toml"),
+    filesha1("${path.module}/../utils/opencode-runner/src/main.rs"),
+    fileexists("${path.module}/../utils/opencode-runner/Cargo.lock") ? filesha1("${path.module}/../utils/opencode-runner/Cargo.lock") : "no-lock",
+  ]))
 }
 
 resource "null_resource" "packer_build_main_api" {
@@ -218,4 +236,23 @@ resource "null_resource" "rollout_restart_portal_frontends" {
     null_resource.packer_build_portal_frontends,
     kubernetes_deployment.portal_frontends,
   ]
+}
+
+resource "null_resource" "packer_build_opencode_runner" {
+  triggers = {
+    source_sha1 = local.opencode_runner_hash
+    repo_url    = aws_ecr_repository.if_opencode_runner.repository_url
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/../docker"
+    command     = <<-EOT
+      aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin $(echo ${aws_ecr_repository.if_opencode_runner.repository_url} | cut -d'/' -f1)
+      packer init opencode-runner.pkr.hcl
+      packer build -var "image_repository=${aws_ecr_repository.if_opencode_runner.repository_url}" -var "image_tag=latest" opencode-runner.pkr.hcl
+    EOT
+  }
+
+  depends_on = [aws_ecr_repository.if_opencode_runner]
 }

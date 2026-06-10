@@ -105,6 +105,19 @@ export async function reorderDirective(
   return res.data
 }
 
+export async function setGlobalDirective(
+  alpha: number,
+  beta: number,
+  globalDirective: boolean,
+  createdBy: string = 'operator'
+): Promise<Directive> {
+  const res = await api.put<Directive>(`/directives/${alpha}/${beta}/global`, {
+    global_directive: globalDirective,
+    created_by: createdBy,
+  })
+  return res.data
+}
+
 export async function deleteDirective(alpha: number, beta: number): Promise<void> {
   await api.delete(`/directives/${alpha}/${beta}`)
 }

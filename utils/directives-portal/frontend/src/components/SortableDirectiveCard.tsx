@@ -14,6 +14,8 @@ interface SortableDirectiveCardProps {
   canMove: boolean
   onMoveTier: (origAlpha: number, origBeta: number, direction: 'up' | 'down') => void
   currentAlpha: number
+  onToggleGlobal?: (d: Directive, next: boolean) => Promise<void> | void
+  globalTogglePending?: boolean
 }
 
 export function SortableDirectiveCard({
@@ -27,6 +29,8 @@ export function SortableDirectiveCard({
   canMove,
   onMoveTier,
   currentAlpha,
+  onToggleGlobal,
+  globalTogglePending = false,
 }: SortableDirectiveCardProps) {
   const stableId = `${originalAlpha}-${originalBeta}`
 
@@ -61,6 +65,8 @@ export function SortableDirectiveCard({
         canMove={canMove}
         onMoveTier={onMoveTier}
         currentAlpha={currentAlpha}
+        onToggleGlobal={onToggleGlobal}
+        globalTogglePending={globalTogglePending}
       />
     </div>
   )

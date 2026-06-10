@@ -10,7 +10,7 @@ An architectural exercise and personal learning project — not a product. The g
 
 It is deployed on a personal Kubernetes (k3s) cluster and used personally, which means real bugs surface and architectural decisions have real consequences.
 
-**Current:** OpenRouter (LLM provider), OpenCode (planner and execution runtime), Discord + OpenWebUI + OpenAI-compatible HTTP (interaction layers), DynamoDB + LanceDB + SQLite (state), Prometheus + Loki + Grafana (observability), Rancher (cluster management).
+**Current:** OpenRouter (LLM provider), OpenCode (planner and execution runtime), Discord + OpenWebUI + OpenAI-compatible HTTP (interaction layers), DynamoDB + LanceDB + SQLite (state), Prometheus + Loki + Grafana (observability), Kubernetes (k3s) (cluster runtime).
 
 ---
 
@@ -191,7 +191,7 @@ Domain experts are discovered from `specialists/*/specialist.yaml`. Each is a YA
 </details>
 
 <details>
-<summary><strong>Domain-Specific &amp; Meta (9 specialists)</strong></summary>
+<summary><strong>Domain-Specific &amp; Meta (10 specialists)</strong></summary>
 
 | Specialist | Purpose | Key Integration |
 | --- | --- | --- |
@@ -204,6 +204,7 @@ Domain experts are discovered from `specialists/*/specialist.yaml`. Each is a YA
 | `career_advisor` | Career strategy, skill gaps, and market positioning | user facts |
 | `consensus_builder` | Multi-source synthesis across specialist outputs | handoff/synthesis flow |
 | `self_improver` | Analyzes agent performance and proposes improvements | reflection/proposal tools |
+| `tarot_reader` | Tarot card readings, meaning lookups, and spread information | tarot tools |
 
 </details>
 
@@ -232,6 +233,7 @@ Local tool plugins live under `tools/` and expose schemas plus async executors. 
 | `diary` | Diary entries and current signal computation |
 | `proposals` | Directive proposals and implementation plans |
 | `supplement_research` | Local supplement research corpus search |
+| `tarot` | Tarot card draw, meaning lookup, and spread information |
 | `temporal_*` | Date parsing, timezone conversion, duration calculation, age, city time, Unix timestamps |
 
 Native OpenCode MCP tool names are server-prefixed, for example `if_health_health_get_session`. Prompts also expose a fallback shell bridge:
@@ -279,7 +281,8 @@ Human collaboration layer — TypeScript/Node.js apps that provide visual interf
 | **Finance Portal** | 3002 | Net worth, investments, accounts, goals, and cashflow |
 | **Diary Portal** | 3003 | Journal entries and life-load signals injected into runtime context |
 | **Proposals Portal** | 3004 | Kanban board for reviewing agent-proposed directives before they take effect |
-| **Powerlifting App** | 3005 | Training sessions, program state, analytics, imports, and templates
+| **Powerlifting App** | 3005 | Training sessions, program state, analytics, imports, and templates |
+| **Directives Portal** | 3006 | Review, edit, and version the active directive set |
 
 ---
 

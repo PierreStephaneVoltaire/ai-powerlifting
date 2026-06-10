@@ -53,6 +53,10 @@ class BulkReorderItem(BaseModel):
 class BulkReorderRequest(BaseModel):
     items: List[BulkReorderItem] = Field(..., min_length=1, description="List of directives to reorder")
 
+class SetGlobalDirectiveRequest(BaseModel):
+    global_directive: bool = Field(..., description="New global flag value")
+    created_by: str = Field(default="operator", description="Who is making this change")
+
 def _directive_to_dict(d, read_only: bool = False) -> dict:
     return {
         "alpha": d.alpha,
@@ -66,6 +70,13 @@ def _directive_to_dict(d, read_only: bool = False) -> dict:
         "global_directive": d.global_directive,
         "read_only": read_only,
     }
+
+
+def _is_directive_read_only(directive, is_operator: bool) -> bool:
+
+    if is_operator:
+        return False
+    return bool(directive.global_directive) or directive.alpha == 0
 
 @router.post("/reload")
 async def reload_directives():
@@ -105,7 +116,7 @@ async def list_directives(alpha: int = None, pk: str = "operator", include_globa
 
         directives.sort(key=lambda d: (d.alpha, d.beta))
 
-        return {"directives": [_directive_to_dict(d, read_only=(d.global_directive and not is_operator)) for d in directives]}
+        return {"directives": [_directive_to_dict(d, read_only=_is_directive_read_only(d, is_operator)) for d in directives]}
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=f"Directive store not available: {str(e)}")
 
@@ -113,10 +124,19 @@ async def list_directives(alpha: int = None, pk: str = "operator", include_globa
 async def create_directive(req: CreateDirectiveRequest, pk: str = "operator"):
     if req.global_directive and pk != "operator":
         raise HTTPException(status_code=403, detail="Only operator can create global directives")
+   
+    effective_global = req.global_directive or req.alpha == 0
     try:
-        store_pk = "operator" if req.global_directive else pk
+        store_pk = "operator" if effective_global else pk
         store = get_directive_store(pk=store_pk)
-        directive = store.add(alpha=req.alpha, label=req.label, content=req.content, types=req.types, created_by=req.created_by, global_directive=req.global_directive)
+        directive = store.add(
+            alpha=req.alpha,
+            label=req.label,
+            content=req.content,
+            types=req.types,
+            created_by=req.created_by,
+            global_directive=effective_global,
+        )
         return _directive_to_dict(directive)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -132,9 +152,46 @@ async def get_directive(alpha: int, beta: int, pk: str = "operator"):
         directive = store.get(alpha, beta)
         if not directive:
             raise HTTPException(status_code=404, detail=f"Directive {alpha}-{beta} not found")
-        return _directive_to_dict(directive)
+        is_operator = (pk == "operator")
+        return _directive_to_dict(directive, read_only=_is_directive_read_only(directive, is_operator))
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=f"Directive store not available: {str(e)}")
+
+@router.put("/{alpha}/{beta}/global")
+async def set_directive_global(alpha: int, beta: int, req: SetGlobalDirectiveRequest, pk: str = "operator"):
+
+    if pk != "operator":
+        raise HTTPException(
+            status_code=403,
+            detail="Only operator can set or edit global directives",
+        )
+    if alpha == 0 and req.global_directive is False:
+        raise HTTPException(
+            status_code=400,
+            detail="Tier 0 directives are always global and cannot be un-globalized",
+        )
+    try:
+        store = get_directive_store(pk="operator")
+        existing = store.get(alpha, beta)
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"Directive {alpha}-{beta} not found")
+        # For tier 0, force global_directive=True regardless of input.
+        target_global = True if alpha == 0 else bool(req.global_directive)
+        new_directive = store.set_global(
+            alpha=alpha,
+            beta=beta,
+            global_directive=target_global,
+            created_by=req.created_by,
+        )
+        if not new_directive:
+            raise HTTPException(status_code=500, detail=f"Failed to toggle global on directive {alpha}-{beta}")
+        return _directive_to_dict(new_directive, read_only=False)
+    except HTTPException:
+        raise
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"Directive store not available: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set global flag: {str(e)}")
 
 @router.put("/{alpha}/{beta}")
 async def revise_directive(alpha: int, beta: int, req: ReviseDirectiveRequest, pk: str = "operator"):

@@ -179,6 +179,7 @@ Current important routing rules:
 - `financial_analyst` handles market/financial analysis with Yahoo Finance and Alpha Vantage MCPs.
 - `research_assistant` can use supplement research and research-model behavior.
 - `media_reader` handles image/file analysis when an attachment requires vision.
+- `tarot_reader` handles tarot card readings, meaning lookups, and spread information through scoped tarot tools.
 
 Specialists do not call SDK delegation tools in the OpenCode path. If another specialist is needed, they write `HANDOFF_REQUIRED`.
 
@@ -217,9 +218,16 @@ These are intentionally narrow. They let OpenCode runs interact with durable ope
 | --- | --- |
 | LanceDB | User facts, semantic search, context-scoped memory |
 | ChromaDB | Legacy memory store and health-document RAG |
-| DynamoDB `if-core` | Directives, proposals, model registry data |
-| DynamoDB health/finance/diary tables | Domain state |
-| SQLite | Webhook/channel registration and activity |
+| DynamoDB `if-core` | Directives (proposals and model registry live in their own tables — see below) |
+| DynamoDB `if-proposals` | Agent-proposed directives and implementation plans |
+| DynamoDB `if-models` | OpenRouter model metadata registry |
+| DynamoDB `if-webhooks` | Channel registration and configuration (set up by `storage/factory.py::init_store`) |
+| DynamoDB `if-health`, `if-health-templates`, `if-sessions` | Training programs, templates, session state |
+| DynamoDB `if-finance` | Financial snapshots |
+| DynamoDB `if-diary-entries`, `if-diary-signals` | Journaling + distilled signals |
+| DynamoDB `if-agent-execution-registry` | Channel/batch/intent/task/run/outbox state for the Discord classifier flow |
+| DynamoDB `if-powerlifting-analysis-cache` | Cached powerlifting weekly analyses |
+| SQLite (WAL, SQLModel) | Routing cache and activity log (under `STORAGE_DB_PATH`) |
 | Local workspace | Per-conversation history, plans, outputs, files |
 
 DynamoDB writes must convert Python floats to `Decimal(str(value))`. Reuse existing conversion helpers in health/finance/model stores rather than writing raw floats.
@@ -247,17 +255,17 @@ Proposals are reviewed in the proposals portal before changing runtime behavior.
 
 | Platform | Current role |
 | --- | --- |
-| Discord | Main interactive channel, slash commands, status embeds |
+| Discord | Main interactive channel, slash commands, status embeds, batch classifier flow |
 | OpenWebUI | Polling integration |
 | HTTP | OpenAI-compatible API |
 
-Dispatcher flow:
+Flow:
 
-```text
-listener -> debounce -> translator -> completions pipeline -> chunker -> delivery
-```
+- **Discord**: listener → `channel_coordinator` (45s classifier debounce + 300s max-wait) → `batch_classifier` (planner-style LLM run that writes `classification.batch.<uuid>.json`) → `decision_applier` (per-decision handler) → if `social_response` it routes to `dispatcher` → translator → `completions` → `run_if_flow` → `chunker` → `deliver_to_channel`; if `start_new_task` / task mutation actions it routes to `task_worker` → `execute_route` → `outbound_queue` → delivery.
+- **OpenWebUI**: listener → `debounce` (5s) → `dispatcher` → translator → `completions` → `run_if_flow` → `chunker` → `delivery`.
+- **HTTP** (`/v1/chat/completions`): goes directly through `process_chat_completion_internal` (slash commands, pinned-specialist bypass, interceptor, planner) → `run_if_flow` → `chunker` → `delivery`.
 
-Discord status embeds are emitted for model selection, domain/technical starts and completions, planner/domain failures, and tool progress lines from `.if/status.log`.
+Discord status embeds are emitted for model selection, classification start/complete/fail, intent decision, task start/complete/fail/transition, domain/technical start/complete/fail, planner/domain failures, tool progress lines from `.if/status.log`, and outbound enqueue failures.
 
 Messages are chunked to 1500 characters for Discord. Attachments are materialized from generated file references.
 
@@ -286,6 +294,7 @@ Common plugins:
 | `diary` | Diary entries and signal computation |
 | `proposals` | Directive proposal CRUD and implementation plans |
 | `supplement_research` | Supplement corpus search |
+| `tarot` | Tarot card draw, meaning lookup, and spread information |
 | `temporal_*` | Dates, durations, timezones, city time, ages, Unix timestamps |
 
 Plugins can still expose schemas for direct app-side dispatch. The current OpenCode specialist path reaches them through scoped MCP servers or the shell bridge fallback.

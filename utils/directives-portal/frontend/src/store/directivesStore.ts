@@ -8,6 +8,7 @@ import {
   deleteDirective,
   bulkReorderDirectives,
   fetchDirectiveHistory,
+  setGlobalDirective,
   DirectiveHistoryResponse,
   CreateDirectiveInput,
   ReviseDirectiveInput,
@@ -26,6 +27,7 @@ interface DirectivesStore {
   revise: (alpha: number, beta: number, input: ReviseDirectiveInput) => Promise<Directive>
   reorder: (alpha: number, beta: number, newAlpha: number, newBeta: number) => Promise<Directive>
   bulkReorder: (items: BulkReorderItem[]) => Promise<Directive[]>
+  setGlobal: (alpha: number, beta: number, globalDirective: boolean) => Promise<Directive>
   remove: (alpha: number, beta: number) => Promise<void>
   fetchHistory: (alpha: number, beta: number) => Promise<void>
   clearHistory: () => void
@@ -72,6 +74,16 @@ export const useDirectivesStore = create<DirectivesStore>((set, get) => ({
     const directives = await bulkReorderDirectives(items)
     set({ directives })
     return directives
+  },
+
+  setGlobal: async (alpha: number, beta: number, globalDirective: boolean) => {
+    const directive = await setGlobalDirective(alpha, beta, globalDirective)
+    set(state => ({
+      directives: state.directives.map(d =>
+        d.alpha === alpha && d.beta === beta ? { ...d, global_directive: directive.global_directive, version: directive.version } : d
+      ),
+    }))
+    return directive
   },
 
   remove: async (alpha: number, beta: number) => {

@@ -74,6 +74,7 @@ app/
 │   │   ├── context.py       # Runtime context assembly
 │   │   ├── history.py       # history.md/history.json management
 │   │   ├── direct_llm.py    # Social/direct OpenRouter response path
+│   │   ├── batch_classifier.py # Discord batch classifier (planner-style LLM run)
 │   │   ├── model_catalog.py # Planner eligible-model catalog
 │   │   ├── runtime_tool.py  # Runtime memory CLI for OpenCode runs
 │   │   └── session_dirs.py  # Per-conversation workspace resolution
@@ -97,7 +98,16 @@ app/
 │   │   ├── dispatcher.py    # Message flow bridge (translate → agent → chunk → deliver)
 │   │   ├── delivery.py      # Send responses back to platforms
 │   │   ├── chunker.py       # Split responses into 1500-char chunks
-│   │   ├── debounce.py      # 5-second message batching window
+│   │   ├── debounce.py      # OpenWebUI 5s message batching window
+│   │   ├── channel_coordinator.py # Discord classifier debounce + max-wait coordinator
+│   │   ├── decision_applier.py    # Per-decision handler for batch classifier output
+│   │   ├── task_worker.py    # Per-task OpenCode run coordinator
+│   │   ├── outbound_queue.py # Per-channel outbox drain
+│   │   ├── execution_store.py # DynamoDB state for the new channel/batch/intent/task flow
+│   │   ├── execution_models.py # Dataclasses for the execution registry
+│   │   ├── cancellable_executor.py # In-process run registry + cross-pod cancel propagation
+│   │   ├── attachments.py    # Discord attachment download + allowed types
+│   │   ├── history_export.py # Discord chat history export to Markdown
 │   │   ├── manager.py       # Listener lifecycle management
 │   │   ├── context.py       # Platform context var for status embed threading
 │   │   ├── status.py        # Discord status embed system
@@ -112,8 +122,11 @@ app/
 │   │   └── summarizer.py    # Conversation summarization (fire-and-forget)
 │   ├── storage/             # Storage abstraction
 │   │   ├── factory.py       # Backend factory (webhooks, directives, model registry)
-│   │   ├── sqlite_backend.py    # SQLite (WAL mode) for webhooks
-│   │   ├── dynamodb_backend.py  # DynamoDB stub
+│   │   ├── dynamodb_backend.py  # DynamoDB webhook store (active; created by init_store)
+│   │   ├── sqlite_backend.py    # SQLite (WAL mode) for routing cache + activity log
+│   │   ├── models.py        # SQLModel records (WebhookRecord, RoutingCacheEntry, ActivityLogEntry)
+│   │   ├── protocol.py      # WebhookStore protocol
+│   │   ├── directive_model.py # Directive dataclass
 │   │   ├── directive_store.py   # DynamoDB directive storage + cache
 │   │   └── model_registry.py    # DynamoDB model metadata registry + cache
 │   ├── routing/             # Request routing
@@ -161,6 +174,8 @@ utils/                       # TypeScript/Node.js utility apps
 ├── diary-portal/            # Mental health journaling (port 3003)
 ├── proposals-portal/        # Directive proposal kanban (port 3004)
 ├── powerlifting-app/        # Training tracking (port 3005)
+├── directives-portal/       # Directive review/edit/version UI (port 3006)
+├── opencode-runner/         # Rust one-shot OpenCode runner pod (fission newdeploy)
 └── video-lambda/            # Lambda function for video processing
 ```
 
@@ -168,38 +183,56 @@ utils/                       # TypeScript/Node.js utility apps
 
 ```
 Client (Discord / OpenWebUI / HTTP)
-  → Channel Listener / POST /v1/chat/completions
-    → Completions Pipeline
-      → Command parsing (/reset, /pondering, /reflect, etc.)
-      → Interceptor (bypass routing)
-      → Runtime context assembly (signals, memories, uploads, compatibility notes)
-      → Session workspace resolution
-      → history.md/history.json write
-      → OpenCode planner (plan.md)
-        → route:
-            social    → direct OpenRouter chat
-            domain    → specialist OpenCode run with scoped MCP tools
-            technical → OpenCode build run + review
-        → optional HANDOFF_REQUIRED child specialist runs
-      → Response extraction (FILES: metadata stripping)
-    → Chunker (1500 char chunks)
+  → Channel Listener or POST /v1/chat/completions
+    Discord path:
+      → channel_coordinator (45s classifier debounce + 300s max-wait)
+        → batch_classifier (planner-style LLM run, writes classification.batch.<uuid>.json)
+          → decision_applier (per-decision handler)
+            social_response    → dispatcher → translator → completions → run_if_flow → chunker → delivery
+            start_new_task     → task_worker → execute_route → outbound_queue → delivery
+            task mutations     → task_worker (append / queue / cancel / pivot / await)
+    OpenWebUI path:
+      → debounce (5s) → dispatcher → translator → completions → run_if_flow → chunker → delivery
+    HTTP /v1/chat/completions path:
+      → process_chat_completion_internal
+        → slash commands (no-op | reset | pin | tool | specialist | reflection command)
+        → pinned-specialist bypass (run_specialist_flow) for channels with locked_specialist
+        → interceptor (OpenWebUI title/tag/follow-up pattern short-circuit)
+        → run_if_flow
+          → Runtime context assembly (signals, memories, uploads, compatibility notes, self-aware block)
+          → Session workspace resolution
+          → history.md/history.json write
+          → OpenCode planner (plan.md)
+            → route:
+                social    → direct OpenRouter chat (flow/direct_llm.py, max_tool_rounds=0)
+                domain    → specialist OpenCode run with scoped MCP tools
+                technical → OpenCode build run + review
+            → optional HANDOFF_REQUIRED child specialist runs (depth cap 3)
+          → Response extraction (FILES: metadata stripping)
+        → Chunker (1500 char chunks)
   → Delivery (back to platform)
 ```
 
 ### Request Processing (completions.py)
 
-`process_chat_completion_internal()` is the core pipeline:
+`process_chat_completion_internal()` is the core pipeline (used by HTTP and the OpenWebUI/dispatcher path; the Discord `channel_coordinator` runs the classifier first, then falls through here for `social_response` decisions):
 1. Resolve `cache_key` (from webhook channel_id, chat_id, or content hash) and `context_id`
-2. Parse slash commands (`/reset`, `/pondering`, `/reflect`, `/gaps`, `/patterns`, `/opinions`, `/growth`, `/meta`, `/tools`)
-3. Run interceptor for bypass routing
-4. Persist cache/conversation state
-5. Call `flow.runner.run_if_flow()`
-6. Build runtime context via `flow/context.py`
-7. Write `history.md` and `history.json`
-8. Run OpenCode planner and validate `plan.md`
-9. Execute the selected route (`social`, `domain`, or `technical`)
-10. Extract file attachments from `FILES:` metadata
-11. Trigger async conversation summarization
+2. Handle the `X-Direct-Tool-Invoke` header (direct tool invocation for portal backends)
+3. Record activity
+4. Build the available tool / specialist command map
+5. Parse slash commands (`/end_convo`, `/clear`, `/pondering`, `/chat_history`, `/reflect`, `/gaps`, `/patterns`, `/opinions`, `/growth`, `/meta`, `/tools`, `/import`, `/template`, `/program_archive`)
+6. Branch on command action (RESET_CACHE, PIN_PRESET, NOOP, INVOKE_TOOL, INVOKE_SPECIALIST, REFLECT/GAPS/PATTERNS/OPINIONS/GROWTH/META/TOOLS)
+7. **Pinned-specialist bypass**: if the webhook has `pinned_specialist` set, call `run_specialist_flow(specialist_slug=locked_specialist, ...)` directly and skip the planner/interceptor
+8. Run `intercept_request` — narrow OpenWebUI title/tag/follow-up pattern short-circuit (not the planner bypass)
+9. Persist cache/conversation state and set `_thinking_mode_requested` if `/pondering` is active
+10. Call `flow.runner.run_if_flow()` which runs the planner and the selected route (`social`, `domain`, or `technical`)
+11. Build runtime context via `flow/context.py`
+12. Write `history.md` and `history.json`
+13. Run OpenCode planner and validate `plan.md` (fail-closed on `PlannerFailure`)
+14. Execute the selected route (`social`, `domain`, or `technical`)
+15. Extract file attachments from `FILES:` metadata
+16. Materialize file references into attachments
+17. Trigger async `summarize_and_store` and `reflection_engine.run_post_session`
 
 Planner failures are fail-closed. If `plan.md` is missing, malformed, names an unknown specialist, or selects a model outside `models/model_ids.txt`, return an explicit planner failure. Do not reintroduce guessed fallback routing.
 
@@ -459,7 +492,11 @@ Reuse helpers such as `health.program_store.ProgramStore._floats_to_decimals`, `
 | OpenWebUI | Polling | Chat interface integration (5s poll interval) |
 | HTTP API | REST | Direct OpenAI-compatible API access |
 
-Flow: listener → debounce (5s) → dispatcher (set platform context) → translator → completions pipeline → OpenCode planner/runtime → chunker (1500 chars) → delivery.
+Flow:
+
+- **Discord**: listener → `channel_coordinator` (45s classifier debounce + 300s max-wait) → `batch_classifier` (planner-style LLM run writes `classification.batch.<uuid>.json`) → `decision_applier` (per-decision handler) → if `social_response` it routes to `dispatcher` → translator → `completions` → `run_if_flow` → `chunker` → `deliver_to_channel`; if `start_new_task` / task mutation actions it routes to `task_worker` → `execute_route` → `outbound_queue` → delivery.
+- **OpenWebUI**: listener → `debounce` (5s) → `dispatcher` → translator → `completions` → `run_if_flow` → `chunker` → `delivery`.
+- **HTTP API** (`/v1/chat/completions`): goes directly through `process_chat_completion_internal` (slash commands, pinned-specialist bypass, interceptor, planner) → `run_if_flow` → `chunker` → `delivery`.
 
 ### Discord Status Embeds
 
@@ -470,12 +507,21 @@ Lightweight, color-coded embeds sent to Discord channels for operational visibil
 |--------|-------|------|
 | Message Received | Blue | Dispatcher receives batch |
 | Model Selected | Green | Planner/model routing selects a concrete model |
+| Classification Started | Blue | Discord batch classifier begins |
+| Classification Completed | Green | Discord batch classifier finishes |
+| Classification Failed | Red | Discord batch classifier errors |
+| Intent Decided | Teal | Decision applier resolves a batch into an intent/action |
+| Task Started | Yellow | Task worker starts a new implementation task |
+| Task Completed | Green | Task worker finishes a task |
+| Task Failed | Red | Task worker errors on a task |
+| Task Transition | Gray | Task moves between states (cancel/pivot/await) |
 | Subagent Spawning | Yellow | Specialist/domain run starts with model info |
 | Subagent Completed | Green | Specialist/domain run finishes |
 | Subagent Failed | Red | Specialist/domain run errors |
 | Tool Started | Purple | Tool call/status line detected |
 | Tool Completed | Green | Tool execution succeeds |
 | Tool Failed | Red | Tool execution errors |
+| Enqueue Failed | Red | Outbound queue could not enqueue a delivery |
 
 **Implementation**: `channels/context.py` stores platform context (channel_ref, discord_loop) in a `contextvars.ContextVar`. `channels/status.py` reads this context to send embeds via `asyncio.run_coroutine_threadsafe()`. Context is propagated through `ThreadPoolExecutor` paths via `contextvars.copy_context()`.
 
@@ -493,7 +539,7 @@ The dispatcher fetches up to 100 historical messages from Discord for context en
 
 `UserFact` dataclass with: id, context_id, username, content, category, source, confidence, cache_key, timestamps, metadata.
 
-**Categories** (22): personal, preference, opinion, skill, life_event, future_direction, project_direction, mental_state, interest_area, conversation_summary, topic_log, model_assessment, agent_identity, agent_opinion, agent_principle, capability_gap, tool_suggestion, opinion_pair, misconception, session_reflection, health, finance.
+**Categories** (20): personal, preference, opinion, skill, life_event, future_direction, project_direction, mental_state, conversation_summary, topic_log, model_assessment, agent_identity, agent_opinion, agent_principle, capability_gap, tool_suggestion, opinion_pair, misconception, interest_area, session_reflection.
 
 **Sources**: user_stated, model_observed, model_assessed, conversation_derived.
 
@@ -532,7 +578,7 @@ Metacognitive layer in `agent/reflection/`. Analyzes interactions for self-impro
 
 **Cycle**: Pattern Detection → Opinion Formation → Capability Gap Analysis → Meta-Analysis → Growth Tracking.
 
-**Capability gaps**: logged with priority score `(frequency * 0.4) + (recency * 0.3) + (impact * 0.3)`. High-frequency gaps are promoted to tool suggestions via `CAPABILITY_GAP_PROMOTION_THRESHOLD` (default 3).
+**Capability gaps**: logged with priority score `min(trigger_count/20, 1) * 0.4 + exp(-0.05 * days_since) * 0.3 + impact * 0.3`, where `impact` is 0.1 (resolved), 0.5 (workaround), or 0.8 (open). High-frequency gaps are promoted to tool suggestions via `CAPABILITY_GAP_PROMOTION_THRESHOLD` (default 3).
 
 ## OpenCode Runner
 
@@ -581,9 +627,11 @@ Local plugin folders under `tools/` can be exposed as MCP categories through `to
 |--------|---------|
 | `if_health` / health category | Health plugin tools filtered by `IF_MCP_ALLOWED_TOOLS` |
 | `if_finance` / finance category | Finance plugin tools filtered by `IF_MCP_ALLOWED_TOOLS` |
+| `time` | Local time retrieval via `mcp-server-time` |
 | `aws_docs` | AWS documentation lookup |
 | `yahoo_finance` | Stock quotes |
 | `alpha_vantage` | Financial indicators |
+| `tarot` | Local tarot plugin served via `tools/mcp_server.py tarot` |
 
 Server assignment per specialist is configured in each `specialist.yaml` under `mcp_servers`. Tool visibility is additionally filtered by the exact tool names in the specialist `tools` list.
 
@@ -592,13 +640,19 @@ Server assignment per specialist is configured in each `specialist.yaml` under `
 | Store | Backend | Purpose |
 |-------|---------|---------|
 | User Facts | LanceDB | Operator context with semantic search |
-| Webhooks | SQLite (WAL) | Channel registration and activity |
+| Webhooks | DynamoDB (`if-webhooks`) | Channel registration and configuration |
+| Routing Cache | SQLite (WAL, SQLModel) | Per-conversation routing/tier/pin state |
+| Activity Log | SQLite (WAL, SQLModel) | Channel activity timestamps |
 | Directives | DynamoDB (`if-core`) | Behavioral rules with versioning |
 | Models | DynamoDB (`if-models`) | OpenRouter model metadata registry |
 | Health | DynamoDB (`if-health`) | Training programs |
+| Health Templates | DynamoDB (`if-health-templates`) | Reusable training program templates |
+| Sessions | DynamoDB (`if-sessions`) | Training session state |
 | Finance | DynamoDB (`if-finance`) | Financial snapshots |
 | Diary | DynamoDB (`if-diary-entries`, `if-diary-signals`) | Journaling + distilled signals |
 | Proposals | DynamoDB (`if-proposals`) | Agent-proposed directives |
+| Execution Registry | DynamoDB (`if-agent-execution-registry`) | Channel/batch/intent/task/run/outbox state for the Discord classifier flow |
+| Analysis Cache | DynamoDB (`if-powerlifting-analysis-cache`) | Cached powerlifting weekly analyses |
 
 ## Utility Applications
 
@@ -621,6 +675,7 @@ Discord guild slash commands (autocomplete) and plain text messages:
 | `/end_convo` | Clear conversation state and force reclassification |
 | `/clear [amount]` | Delete recent messages from channel (default 100, requires Manage Messages) |
 | `/pondering` | Enter reflective conversation mode (heavy tier) |
+| `/chat_history [limit]` | Export recent channel history as a Markdown file (default 100, max 1000) |
 | `/reflect` | Trigger manual reflection cycle |
 | `/gaps [min_triggers]` | List capability gaps ranked by priority |
 | `/patterns` | Show detected behavioral patterns |
@@ -628,6 +683,9 @@ Discord guild slash commands (autocomplete) and plain text messages:
 | `/growth [days]` | Show operator growth report (default 30 days) |
 | `/meta` | Show store health metrics and category suggestions |
 | `/tools` | Show tool suggestions from capability gaps |
+| `/import <file>` | Import a training program spreadsheet (XLSX/CSV) |
+| `/template <action> [name]` | Manage or apply training templates |
+| `/program_archive [version] [confirm]` | Archive a program version |
 
 ## Environment Variables
 

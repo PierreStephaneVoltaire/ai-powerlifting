@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import {
   Modal, Stack, Text, Group, Textarea, TextInput, TagsInput,
-  Button, Badge, Divider, ScrollArea, Loader, Box,
+  Button, Badge, Divider, ScrollArea, Loader, Box, Switch, Tooltip,
   useMantineTheme,
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
-import { Globe, Lock } from 'lucide-react'
+import { Globe, Lock, User } from 'lucide-react'
 import { Directive, DirectiveHistoryResponse, ReviseDirectiveInput } from '../api/client'
 
 interface DirectiveDetailModalProps {
@@ -18,12 +18,14 @@ interface DirectiveDetailModalProps {
   onFetchHistory: (alpha: number, beta: number) => void
   onClearHistory: () => void
   isOperator: boolean
+  onSetGlobal?: (alpha: number, beta: number, next: boolean) => Promise<void> | void
+  globalTogglePending?: boolean
 }
 
 export function DirectiveDetailModal({
   directive, history, historyLoading,
   onClose, onSave, onDelete, onFetchHistory, onClearHistory,
-  isOperator,
+  isOperator, onSetGlobal, globalTogglePending = false,
 }: DirectiveDetailModalProps) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -43,6 +45,14 @@ export function DirectiveDetailModal({
   const isReadOnly = directive.read_only
   const canEdit = !isReadOnly || isOperator
   const isProtected = directive.alpha === 0 && directive.beta === 1
+  const isTier0Locked = directive.alpha === 0
+  const isGlobal = directive.global_directive || isTier0Locked
+  const canToggleGlobal = !!onSetGlobal && isOperator
+  const globalTooltip = !isOperator
+    ? 'Read-only — only the operator can set the global flag'
+    : isTier0Locked
+      ? 'Tier 0 directives are always global by rule'
+      : (isGlobal ? 'Click to make local' : 'Click to make global')
 
   // Sync form when directive changes
   const needsSync = label !== directive.label || content !== directive.content
@@ -125,6 +135,55 @@ export function DirectiveDetailModal({
             </Text>
           </Box>
         )}
+
+        <Group
+          justify="space-between"
+          align="center"
+          p="sm"
+          style={{
+            background: isGlobal
+              ? 'rgba(249, 115, 22, 0.10)'
+              : 'rgba(107, 114, 128, 0.08)',
+            border: isGlobal
+              ? '0.5px solid rgba(249, 115, 22, 0.40)'
+              : '0.5px solid var(--border-subtle)',
+            borderRadius: 8,
+          }}
+        >
+          <Group gap={8} align="center">
+            {isGlobal
+              ? <Globe size={14} color="#ea580c" />
+              : <User size={14} color="#6b7280" />}
+            <Box>
+              <Text size="sm" fw={600} c={isGlobal ? '#ea580c' : 'var(--text-primary)'}>
+                {isGlobal ? 'Global directive' : 'Local directive'}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {isTier0Locked
+                  ? 'Tier 0 — always global by rule.'
+                  : isGlobal
+                    ? 'Applies to ALL users as a safety guardrail.'
+                    : 'Applies only to this user.'}
+              </Text>
+            </Box>
+          </Group>
+          {canToggleGlobal ? (
+            <Tooltip label={globalTooltip} position="top" withArrow>
+              <Switch
+                size="md"
+                color="orange"
+                checked={isGlobal}
+                disabled={isTier0Locked || globalTogglePending}
+                onChange={e => onSetGlobal?.(directive.alpha, directive.beta, e.currentTarget.checked)}
+                aria-label={isGlobal ? 'Toggle to local' : 'Toggle to global'}
+              />
+            </Tooltip>
+          ) : (
+            <Tooltip label={globalTooltip} position="top" withArrow>
+              <Lock size={14} color="var(--text-muted)" />
+            </Tooltip>
+          )}
+        </Group>
 
         <Divider />
 
