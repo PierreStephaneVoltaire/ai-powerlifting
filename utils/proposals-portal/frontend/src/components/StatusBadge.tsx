@@ -1,19 +1,24 @@
-import { ProposalStatus, STATUS_COLORS, STATUS_LABELS } from '../types';
+import { Badge } from '@mantine/core'
+import { STATUS_BADGE_COLORS, STATUS_LABELS, type ProposalStatus } from '../types'
 
 interface StatusBadgeProps {
-  status: ProposalStatus;
-  className?: string;
+  status: ProposalStatus
+  className?: string
 }
 
-export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
-  const colorClass = STATUS_COLORS[status] || 'bg-gray-100 text-gray-800';
-  const label = STATUS_LABELS[status] || status;
+export function StatusBadge({ status, className }: StatusBadgeProps) {
+  const color = STATUS_BADGE_COLORS[status] ?? 'gray'
+  const label = STATUS_LABELS[status] ?? status
 
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${colorClass} ${className}`}
+    <Badge
+      size="sm"
+      variant="light"
+      color={color}
+      className={className}
+      style={{ textTransform: 'none', fontWeight: 600 }}
     >
       {label}
-    </span>
-  );
+    </Badge>
+  )
 }

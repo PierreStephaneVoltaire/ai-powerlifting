@@ -425,6 +425,15 @@ export interface VideoLibraryResponse {
   exercises: string[]
 }
 
+/**
+ * Available sort orders for the lift video gallery.
+ *
+ * - `newest` / `oldest` : chronological by session date then video upload time.
+ * - `volume`            : total work (sets × reps × kg), heaviest first.
+ * - `weight`            : top set weight (kg), heaviest first.
+ */
+export type VideoSort = 'newest' | 'oldest' | 'volume' | 'weight'
+
 // ─── Full Program ─────────────────────────────────────────────────────────────
 
 export interface Program {

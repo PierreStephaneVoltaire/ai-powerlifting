@@ -1,22 +1,28 @@
-import { ProposalAuthor } from '../types';
+import { Badge } from '@mantine/core'
+import { Bot, User } from 'lucide-react'
+import type { ProposalAuthor } from '../types'
 
 interface AuthorBadgeProps {
-  author: ProposalAuthor;
-  className?: string;
+  author: ProposalAuthor
+  className?: string
 }
 
-export function AuthorBadge({ author, className = '' }: AuthorBadgeProps) {
-  const isAgent = author === 'agent';
+export function AuthorBadge({ author, className }: AuthorBadgeProps) {
+  const isAgent = author === 'agent'
+  const Icon = isAgent ? Bot : User
+  const color = isAgent ? 'violet' : 'gray'
+  const label = isAgent ? 'Agent' : 'You'
 
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-        isAgent
-          ? 'bg-purple-100 text-purple-800'
-          : 'bg-gray-100 text-gray-800'
-      } ${className}`}
+    <Badge
+      size="sm"
+      variant="light"
+      color={color}
+      className={className}
+      leftSection={<Icon size={11} />}
+      style={{ textTransform: 'none', fontWeight: 500 }}
     >
-      {isAgent ? '🤖 Agent' : '👤 You'}
-    </span>
-  );
+      {label}
+    </Badge>
+  )
 }

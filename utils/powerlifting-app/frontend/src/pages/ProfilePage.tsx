@@ -37,6 +37,8 @@ import { calculateDotsFromLifts } from '@/utils/dots'
 import { toDisplayUnit } from '@/utils/units'
 import VideoCard from '@/components/videos/VideoCard'
 import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
+import { sortVideos, VIDEO_SORTS, type VideoSort } from '@/utils/videoSort'
+import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
 import type { Session, VideoLibraryItem } from '@powerlifting/types'
 
 type ProfileVisibility = UserSettings['profile_visibility']
@@ -130,9 +132,22 @@ export default function ProfilePage() {
   const [videos, setVideos] = useState<VideoLibraryItem[]>([])
   const [videosLoading, setVideosLoading] = useState(false)
   const [videoFilter, setVideoFilter] = useState<LiftFilter>('all')
-  const [selectedVideo, setSelectedVideo] = useState<VideoLibraryItem | null>(null)
+  const [videoSort, setVideoSort] = useState<VideoSort>('newest')
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarProgress, setAvatarProgress] = useState(0)
+
+  // The page renders one of two video grids (own-videos when signed in,
+  // public-videos when reading someone else's profile). Both grids feed
+  // the same VideoPlayerModal, so the URL hook reads from whichever
+  // source is currently active.
+  const effectiveVideos = user ? videos : (publicProfile?.lift_videos ?? [])
+  const effectiveVideosReady = user
+    ? !videosLoading
+    : !publicProfileLoading && !!publicProfile
+  const { selectedVideo, openVideo, closeVideo } = useVideoModalFromUrl(
+    effectiveVideos,
+    effectiveVideosReady,
+  )
 
   useEffect(() => {
     if (authLoading || !user) return
@@ -234,13 +249,11 @@ export default function ProfilePage() {
   }, [program, sex, unit])
 
   const filteredVideos = useMemo(
-    () => videos
-      .filter((item) => liftMatches(item, videoFilter))
-      .sort((a, b) => (
-        b.session_date.localeCompare(a.session_date)
-        || b.video.uploaded_at.localeCompare(a.video.uploaded_at)
-      )),
-    [videoFilter, videos],
+    () => sortVideos(
+      videos.filter((item) => liftMatches(item, videoFilter)),
+      videoSort,
+    ),
+    [videoFilter, videos, videoSort],
   )
 
   const publicProfileMetrics = useMemo(() => {
@@ -262,13 +275,11 @@ export default function ProfilePage() {
   }, [publicProfile, unit])
 
   const readonlyFilteredVideos = useMemo(
-    () => (publicProfile?.lift_videos ?? [])
-      .filter((item) => liftMatches(item, videoFilter))
-      .sort((a, b) => (
-        b.session_date.localeCompare(a.session_date)
-        || b.video.uploaded_at.localeCompare(a.video.uploaded_at)
-      )),
-    [publicProfile?.lift_videos, videoFilter],
+    () => sortVideos(
+      (publicProfile?.lift_videos ?? []).filter((item) => liftMatches(item, videoFilter)),
+      videoSort,
+    ),
+    [publicProfile?.lift_videos, videoFilter, videoSort],
   )
 
   async function handleAvatarUpload(file: File | null) {
@@ -406,25 +417,44 @@ export default function ProfilePage() {
                     {(publicProfile.lift_videos ?? []).length} video{(publicProfile.lift_videos ?? []).length === 1 ? '' : 's'}
                   </Text>
                 </Group>
-                <div className="if-tab-group">
-                  {LIFT_FILTERS.map((filter) => (
-                    <button
-                      key={filter.value}
-                      type="button"
-                      className="if-tab-button"
-                      data-active={videoFilter === filter.value}
-                      onClick={() => setVideoFilter(filter.value)}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
+                <Group gap="xs" wrap="wrap" justify="flex-end">
+                  <div className="if-tab-group" role="group" aria-label="Filter videos by lift" data-testid="profile-video-filter">
+                    {LIFT_FILTERS.map((filter) => (
+                      <button
+                        key={filter.value}
+                        type="button"
+                        className="if-tab-button"
+                        data-active={videoFilter === filter.value}
+                        onClick={() => setVideoFilter(filter.value)}
+                      >
+                        {filter.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="if-tab-group" role="group" aria-label="Sort videos" data-testid="profile-video-sort">
+                    {VIDEO_SORTS.map((sort) => (
+                      <button
+                        key={sort.value}
+                        type="button"
+                        className="if-tab-button"
+                        data-active={videoSort === sort.value}
+                        onClick={() => setVideoSort(sort.value)}
+                      >
+                        {sort.label}
+                      </button>
+                    ))}
+                  </div>
+                </Group>
               </div>
 
               {readonlyFilteredVideos.length > 0 ? (
                 <div className="if-video-grid">
                   {readonlyFilteredVideos.map((item) => (
-                    <VideoCard key={item.video.video_id} item={item} onClick={() => setSelectedVideo(item)} />
+                    <VideoCard
+                      key={item.video.video_id}
+                      item={item}
+                      onClick={() => openVideo(item.video.video_id)}
+                    />
                   ))}
                 </div>
               ) : (
@@ -442,7 +472,7 @@ export default function ProfilePage() {
 
           <VideoPlayerModal
             item={selectedVideo}
-            onClose={() => setSelectedVideo(null)}
+            onClose={closeVideo}
             onDeleted={() => undefined}
             readOnly
           />
@@ -611,7 +641,7 @@ export default function ProfilePage() {
               </Text>
             </Group>
             <Group gap="xs" wrap="wrap">
-              <div className="if-tab-group">
+              <div className="if-tab-group" role="group" aria-label="Filter videos by lift" data-testid="profile-video-filter">
                 {LIFT_FILTERS.map((filter) => (
                   <button
                     key={filter.value}
@@ -621,6 +651,19 @@ export default function ProfilePage() {
                     onClick={() => setVideoFilter(filter.value)}
                   >
                     {filter.label}
+                  </button>
+                ))}
+              </div>
+              <div className="if-tab-group" role="group" aria-label="Sort videos" data-testid="profile-video-sort">
+                {VIDEO_SORTS.map((sort) => (
+                  <button
+                    key={sort.value}
+                    type="button"
+                    className="if-tab-button"
+                    data-active={videoSort === sort.value}
+                    onClick={() => setVideoSort(sort.value)}
+                  >
+                    {sort.label}
                   </button>
                 ))}
               </div>
@@ -643,7 +686,11 @@ export default function ProfilePage() {
           ) : filteredVideos.length > 0 ? (
             <div className="if-video-grid">
               {filteredVideos.map((item) => (
-                <VideoCard key={item.video.video_id} item={item} onClick={() => setSelectedVideo(item)} />
+                <VideoCard
+                  key={item.video.video_id}
+                  item={item}
+                  onClick={() => openVideo(item.video.video_id)}
+                />
               ))}
             </div>
           ) : (
@@ -661,7 +708,7 @@ export default function ProfilePage() {
 
       <VideoPlayerModal
         item={selectedVideo}
-        onClose={() => setSelectedVideo(null)}
+        onClose={closeVideo}
         onDeleted={loadVideos}
         readOnly={readOnly}
       />

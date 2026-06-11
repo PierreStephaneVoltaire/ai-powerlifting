@@ -5,7 +5,8 @@ import { Upload } from '@aws-sdk/lib-storage'
 import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
 import { listSessions, patchSessionByDate, transformVideo, getProxyUrl } from '../services/sessionStore'
-import type { Phase, Session, SessionVideo, VideoLibraryItem } from '@powerlifting/types'
+import { sortVideos } from '../utils/videoSort'
+import type { Exercise, Phase, Session, SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
 
 const S3_BUCKET = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
 const S3_REGION = process.env.AWS_REGION || 'ca-central-1'
@@ -271,7 +272,7 @@ export async function getVideoLibrary(
   pk: string,
   version: string,
   exercise?: string,
-  sort: 'newest' | 'oldest' = 'newest'
+  sort: VideoSort = 'newest'
 ): Promise<{ videos: VideoLibraryItem[]; exercises: string[] }> {
   const sk = await resolveVersionSk(pk, version)
   const phases = await loadPhases(pk, sk)
@@ -289,9 +290,42 @@ export async function getVideoLibrary(
     for (const video of session.videos) {
       if (exercise && video.exercise_name !== exercise) continue
 
-      const match = video.exercise_name
-        ? session.exercises.find((e) => e.name === video.exercise_name)
-        : undefined
+      // A session can have multiple exercise entries with the same name.
+      // Straight sets of the same weight are grouped into a single entry
+      // with `sets: N`; a new weight produces a new entry that starts at
+      // `sets: 1`. The video's stored `set_number` is the CUMULATIVE set
+      // number across the same-named block, so 3×175 + 1×455 produces two
+      // Squat entries whose sets occupy [1..3] and [4..4] respectively, and
+      // a video for the 455 single is tagged `set_number: 4`.
+      //
+      // Walk the same-named block in order, tracking the running set
+      // offset, and pick the entry whose [start, start + sets - 1] range
+      // contains the video's set_number. Same-named exercises are stored
+      // consecutively in `session.exercises` (the volume/singles-phase
+      // convention), so the ranges don't overlap. Falls back to the first
+      // match when set_number is missing or out of range, preserving the
+      // old behavior for legacy/edge-case data.
+      let match: Exercise | undefined
+      if (video.exercise_name) {
+        const sameName = session.exercises.filter((e) => e.name === video.exercise_name)
+        const setNumber = typeof video.set_number === 'number' ? video.set_number : null
+        if (setNumber !== null && sameName.length > 0) {
+          let cumulativeSets = 0
+          for (const candidate of sameName) {
+            const setCount = Math.max(0, Math.round(Number(candidate.sets) || 0))
+            const start = cumulativeSets + 1
+            const end = cumulativeSets + setCount
+            if (setNumber >= start && setNumber <= end) {
+              match = candidate
+              break
+            }
+            cumulativeSets = end
+          }
+        }
+        if (!match) {
+          match = sameName[0]
+        }
+      }
 
       if (video.exercise_name) exerciseSet.add(video.exercise_name)
 
@@ -308,14 +342,8 @@ export async function getVideoLibrary(
     }
   }
 
-  items.sort((a, b) => {
-    const cmp = a.session_date.localeCompare(b.session_date)
-      || a.video.uploaded_at.localeCompare(b.video.uploaded_at)
-    return sort === 'newest' ? -cmp : cmp
-  })
-
   return {
-    videos: stripUndefined(items),
+    videos: stripUndefined(sortVideos(items, sort)),
     exercises: Array.from(exerciseSet).sort(),
   }
 }

@@ -1,24 +1,37 @@
-import { useState, useEffect } from 'react';
-import { Proposal, Directive } from '../types';
-import { TypeBadge } from './TypeBadge';
-import { AuthorBadge } from './AuthorBadge';
-import { StatusBadge } from './StatusBadge';
-import { DirectivePreview } from './DirectivePreview';
-import { ImplementationPlan } from './ImplementationPlan';
-import { useProposalsStore } from '../store/proposalsStore';
-import { formatDateTime } from '../utils/formatters';
+import { useState, useEffect } from 'react'
+import {
+  Box,
+  Button,
+  Group,
+  Stack,
+  Text,
+  Textarea,
+  ActionIcon,
+  Tooltip,
+  Divider,
+} from '@mantine/core'
+import { ArrowLeft, Check, Trash2, X } from 'lucide-react'
+import { notifications } from '@mantine/notifications'
+import { useProposalsStore } from '../store/proposalsStore'
+import { TypeBadge } from './TypeBadge'
+import { AuthorBadge } from './AuthorBadge'
+import { StatusBadge } from './StatusBadge'
+import { DirectivePreview } from './DirectivePreview'
+import { ImplementationPlan } from './ImplementationPlan'
+import { formatDateTime } from '../utils/formatters'
+import type { Directive, Proposal } from '../types'
 
 interface ProposalDetailPanelProps {
-  proposal: Proposal;
-  onBack?: () => void;
+  proposal: Proposal
+  onBack?: () => void
 }
 
 export function ProposalDetailPanel({ proposal, onBack }: ProposalDetailPanelProps) {
-  const [showRejectInput, setShowRejectInput] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
-  const [targetDirective, setTargetDirective] = useState<Directive | null>(null);
-  const [loadingDirective, setLoadingDirective] = useState(false);
+  const [showRejectInput, setShowRejectInput] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
+  const [targetDirective, setTargetDirective] = useState<Directive | null>(null)
+  const [loadingDirective, setLoadingDirective] = useState(false)
 
   const {
     approveProposal,
@@ -26,103 +39,140 @@ export function ProposalDetailPanel({ proposal, onBack }: ProposalDetailPanelPro
     deleteProposal,
     loadDirective,
     loading,
-  } = useProposalsStore();
+  } = useProposalsStore()
 
   useEffect(() => {
     if (proposal.target_id) {
-      setLoadingDirective(true);
+      setLoadingDirective(true)
       loadDirective(proposal.target_id)
         .then(() => {
-          const store = useProposalsStore.getState();
-          setTargetDirective(store.selectedDirective);
+          const store = useProposalsStore.getState()
+          setTargetDirective(store.selectedDirective)
         })
-        .finally(() => setLoadingDirective(false));
+        .catch(() => {
+          setTargetDirective(null)
+        })
+        .finally(() => setLoadingDirective(false))
+    } else {
+      setTargetDirective(null)
     }
-  }, [proposal.target_id, loadDirective]);
+  }, [proposal.target_id, loadDirective])
 
   const handleApprove = async () => {
-    if (window.confirm('Approve this proposal? This will trigger plan generation.')) {
-      await approveProposal(proposal.sk);
-      setIsGeneratingPlan(true);
+    if (!window.confirm('Approve this proposal? This will trigger plan generation.')) return
+    try {
+      await approveProposal(proposal.sk)
+      setIsGeneratingPlan(true)
+      notifications.show({ title: 'Approved', message: 'Implementation plan is being generated', color: 'green' })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Approval failed'
+      notifications.show({ title: 'Approve failed', message, color: 'red' })
     }
-  };
+  }
 
   const handleReject = async () => {
     if (!rejectReason.trim()) {
-      setShowRejectInput(true);
-      return;
+      setShowRejectInput(true)
+      return
     }
-    await rejectProposal(proposal.sk, rejectReason);
-    setShowRejectInput(false);
-    setRejectReason('');
-  };
+    try {
+      await rejectProposal(proposal.sk, rejectReason)
+      setShowRejectInput(false)
+      setRejectReason('')
+      notifications.show({ title: 'Rejected', message: 'Proposal has been rejected', color: 'orange' })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Reject failed'
+      notifications.show({ title: 'Reject failed', message, color: 'red' })
+    }
+  }
 
   const handleDelete = async () => {
-    if (window.confirm('Delete this proposal? This cannot be undone.')) {
-      await deleteProposal(proposal.sk);
-      onBack?.();
+    if (!window.confirm('Delete this proposal? This cannot be undone.')) return
+    try {
+      await deleteProposal(proposal.sk)
+      notifications.show({ title: 'Deleted', message: 'Proposal removed', color: 'gray' })
+      onBack?.()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Delete failed'
+      notifications.show({ title: 'Delete failed', message, color: 'red' })
     }
-  };
+  }
 
-  const isPending = proposal.status === 'pending';
-  const isApproved = proposal.status === 'approved';
+  const isPending = proposal.status === 'pending'
+  const isApproved = proposal.status === 'approved'
 
   return (
-    <div className="space-y-6">
+    <Stack gap="md">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
+      <Group justify="space-between" wrap="nowrap" align="flex-start">
+        <Stack gap={6}>
+          <Group gap={6}>
             <TypeBadge type={proposal.type} />
             <AuthorBadge author={proposal.author} />
             <StatusBadge status={proposal.status} />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">{proposal.title}</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          </Group>
+          <Text fw={700} size="xl" c="var(--text-primary)" lh={1.2}>
+            {proposal.title}
+          </Text>
+          <Text size="xs" c="var(--color-text-secondary)">
             Created {formatDateTime(proposal.created_at)}
-          </p>
-        </div>
+          </Text>
+        </Stack>
 
         {onBack && (
-          <button
-            onClick={onBack}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            ← Back to Board
-          </button>
+          <Tooltip label="Back to board">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="lg"
+              onClick={onBack}
+              aria-label="Back to board"
+            >
+              <ArrowLeft size={18} />
+            </ActionIcon>
+          </Tooltip>
         )}
-      </div>
+      </Group>
 
       {/* Rationale */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h3 className="font-semibold text-gray-900 mb-2">Rationale</h3>
-        <p className="text-gray-700 whitespace-pre-wrap">{proposal.rationale}</p>
-      </div>
+      <Box className="if-mock-card">
+        <Text className="if-card-title" mb={8}>Rationale</Text>
+        <Text size="sm" c="var(--text-primary)" style={{ whiteSpace: 'pre-wrap' }}>
+          {proposal.rationale}
+        </Text>
+      </Box>
 
       {/* Proposed Content */}
       {proposal.content && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Proposed Content</h3>
-          <pre className="whitespace-pre-wrap text-sm text-gray-700 bg-gray-50 p-4 rounded border border-gray-200 font-mono">
-            {proposal.content}
-          </pre>
-        </div>
+        <Box className="if-mock-card">
+          <Text className="if-card-title" mb={8}>Proposed Content</Text>
+          <pre className="if-prose-pre">{proposal.content}</pre>
+        </Box>
       )}
 
       {/* Target Directive Context (for rewrite/deprecate) */}
       {proposal.target_id && (
-        <div>
-          <h3 className="font-semibold text-gray-900 mb-2">Current Directive</h3>
+        <Box>
+          <Text className="if-card-title" mb={8}>Current Directive</Text>
           <DirectivePreview directive={targetDirective} loading={loadingDirective} />
-        </div>
+        </Box>
       )}
 
       {/* Rejection Reason */}
       {proposal.status === 'rejected' && proposal.rejection_reason && (
-        <div className="bg-red-50 rounded-lg border border-red-200 p-4">
-          <h3 className="font-semibold text-red-900 mb-2">Rejection Reason</h3>
-          <p className="text-red-700">{proposal.rejection_reason}</p>
-        </div>
+        <Box
+          p="sm"
+          style={{
+            background: 'var(--status-danger-bg)',
+            border: '0.5px solid var(--status-danger-border)',
+            borderRadius: 'var(--border-radius-lg)',
+          }}
+        >
+          <Text className="if-card-title" mb={6} c="var(--status-danger-text)">
+            Rejection Reason
+          </Text>
+          <Text size="sm" c="var(--status-danger-text)">{proposal.rejection_reason}</Text>
+        </Box>
       )}
 
       {/* Implementation Plan */}
@@ -135,71 +185,85 @@ export function ProposalDetailPanel({ proposal, onBack }: ProposalDetailPanelPro
 
       {/* Actions */}
       {isPending && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-semibold text-gray-900 mb-3">Actions</h3>
+        <Box className="if-mock-card">
+          <Text className="if-card-title" mb={10}>Actions</Text>
 
           {!showRejectInput ? (
-            <div className="flex gap-3">
-              <button
+            <Group gap="xs">
+              <Button
+                color="green"
+                variant="gradient"
+                gradient={{ from: 'green.6', to: 'green.4' }}
+                leftSection={<Check size={14} />}
                 onClick={handleApprove}
                 disabled={loading}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
               >
-                {loading ? 'Processing...' : 'Approve'}
-              </button>
-              <button
+                Approve
+              </Button>
+              <Button
+                color="red"
+                variant="light"
+                leftSection={<X size={14} />}
                 onClick={() => setShowRejectInput(true)}
                 disabled={loading}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
               >
                 Reject
-              </button>
-              <button
+              </Button>
+              <Button
+                color="gray"
+                variant="subtle"
+                leftSection={<Trash2 size={14} />}
                 onClick={handleDelete}
                 disabled={loading}
-                className="px-4 py-2 text-gray-600 hover:text-red-600"
               >
                 Delete
-              </button>
-            </div>
+              </Button>
+            </Group>
           ) : (
-            <div className="space-y-3">
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
+            <Stack gap="xs">
+              <Textarea
                 placeholder="Enter rejection reason..."
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
-                rows={2}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.currentTarget.value)}
+                autosize
+                minRows={2}
+                autoFocus
               />
-              <div className="flex gap-3">
-                <button
-                  onClick={handleReject}
-                  disabled={loading || !rejectReason.trim()}
-                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                >
-                  Confirm Rejection
-                </button>
-                <button
+              <Group gap="xs" justify="flex-end">
+                <Button
+                  variant="subtle"
+                  color="gray"
                   onClick={() => {
-                    setShowRejectInput(false);
-                    setRejectReason('');
+                    setShowRejectInput(false)
+                    setRejectReason('')
                   }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900"
                 >
                   Cancel
-                </button>
-              </div>
-            </div>
+                </Button>
+                <Button
+                  color="red"
+                  variant="gradient"
+                  gradient={{ from: 'red.6', to: 'red.4' }}
+                  onClick={handleReject}
+                  disabled={loading || !rejectReason.trim()}
+                >
+                  Confirm Rejection
+                </Button>
+              </Group>
+            </Stack>
           )}
-        </div>
+        </Box>
       )}
 
       {/* Resolution Info */}
       {proposal.resolved_at && (
-        <div className="text-sm text-gray-500">
-          Resolved {formatDateTime(proposal.resolved_at)} by {proposal.resolved_by}
-        </div>
+        <>
+          <Divider color="var(--color-border-tertiary)" />
+          <Text size="xs" c="var(--color-text-secondary)">
+            Resolved {formatDateTime(proposal.resolved_at)} by {proposal.resolved_by}
+          </Text>
+        </>
       )}
-    </div>
-  );
+    </Stack>
+  )
 }

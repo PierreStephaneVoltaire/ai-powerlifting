@@ -1,19 +1,24 @@
-import { ProposalType, TYPE_BADGE_COLORS, TYPE_LABELS } from '../types';
+import { Badge } from '@mantine/core'
+import { TYPE_BADGE_COLORS, TYPE_LABELS, type ProposalType } from '../types'
 
 interface TypeBadgeProps {
-  type: ProposalType;
-  className?: string;
+  type: ProposalType
+  className?: string
 }
 
-export function TypeBadge({ type, className = '' }: TypeBadgeProps) {
-  const colorClass = TYPE_BADGE_COLORS[type] || 'bg-gray-500';
-  const label = TYPE_LABELS[type] || type;
+export function TypeBadge({ type, className }: TypeBadgeProps) {
+  const color = TYPE_BADGE_COLORS[type] ?? 'gray'
+  const label = TYPE_LABELS[type] ?? type
 
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-white ${colorClass} ${className}`}
+    <Badge
+      size="sm"
+      variant="filled"
+      color={color}
+      className={className}
+      style={{ textTransform: 'none', fontWeight: 600 }}
     >
       {label}
-    </span>
-  );
+    </Badge>
+  )
 }

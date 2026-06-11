@@ -8,7 +8,8 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { toDisplayUnit } from '@/utils/units'
 import VideoCard from '@/components/videos/VideoCard'
 import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
-import type { VideoLibraryItem } from '@powerlifting/types'
+import { sortVideos, VIDEO_SORTS, type VideoSort } from '@/utils/videoSort'
+import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -131,7 +132,11 @@ export function PublicProfilePage() {
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedVideo, setSelectedVideo] = useState<VideoLibraryItem | null>(null)
+  const [videoSort, setVideoSort] = useState<VideoSort>('newest')
+
+  const liftVideos = useMemo(() => profile?.lift_videos ?? [], [profile?.lift_videos])
+  const sortedVideos = useMemo(() => sortVideos(liftVideos, videoSort), [liftVideos, videoSort])
+  const { selectedVideo, openVideo, closeVideo } = useVideoModalFromUrl(liftVideos, !loading && !!profile)
 
   useEffect(() => {
     let cancelled = false
@@ -170,14 +175,6 @@ export function PublicProfilePage() {
       { label: 'Class', value: profile?.weight_class_kg ? String(profile.weight_class_kg) : '--', sub: 'kg' },
     ]
   }, [profile, unit])
-
-  const sortedVideos = useMemo(
-    () => (profile?.lift_videos ?? []).slice().sort((a, b) => (
-      b.session_date.localeCompare(a.session_date)
-      || b.video.uploaded_at.localeCompare(a.video.uploaded_at)
-    )),
-    [profile?.lift_videos],
-  )
 
   if (loading) {
     return (
@@ -262,11 +259,28 @@ export function PublicProfilePage() {
                 {sortedVideos.length} video{sortedVideos.length === 1 ? '' : 's'}
               </Text>
             </Group>
+            <div className="if-tab-group" role="group" aria-label="Sort videos" data-testid="profile-video-sort">
+              {VIDEO_SORTS.map((sort) => (
+                <button
+                  key={sort.value}
+                  type="button"
+                  className="if-tab-button"
+                  data-active={videoSort === sort.value}
+                  onClick={() => setVideoSort(sort.value)}
+                >
+                  {sort.label}
+                </button>
+              ))}
+            </div>
           </div>
           {sortedVideos.length > 0 ? (
             <div className="if-video-grid">
               {sortedVideos.map((item) => (
-                <VideoCard key={item.video.video_id} item={item} onClick={() => setSelectedVideo(item)} />
+                <VideoCard
+                  key={item.video.video_id}
+                  item={item}
+                  onClick={() => openVideo(item.video.video_id)}
+                />
               ))}
             </div>
           ) : (
@@ -284,7 +298,7 @@ export function PublicProfilePage() {
 
       <VideoPlayerModal
         item={selectedVideo}
-        onClose={() => setSelectedVideo(null)}
+        onClose={closeVideo}
         onDeleted={() => undefined}
         readOnly
       />

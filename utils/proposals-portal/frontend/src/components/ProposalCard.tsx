@@ -1,44 +1,48 @@
-import { useNavigate } from 'react-router-dom';
-import { Proposal } from '../types';
-import { TypeBadge } from './TypeBadge';
-import { AuthorBadge } from './AuthorBadge';
-import { formatDate, truncateText } from '../utils/formatters';
+import { useNavigate } from 'react-router-dom'
+import { Group, Stack, Text, Box } from '@mantine/core'
+import { ChevronRight } from 'lucide-react'
+import type { Proposal } from '../types'
+import { TypeBadge } from './TypeBadge'
+import { AuthorBadge } from './AuthorBadge'
+import { formatRelativeTime, truncateText } from '../utils/formatters'
 
 interface ProposalCardProps {
-  proposal: Proposal;
+  proposal: Proposal
 }
 
 export function ProposalCard({ proposal }: ProposalCardProps) {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   const handleClick = () => {
-    navigate(`/proposal/${encodeURIComponent(proposal.sk)}`);
-  };
+    navigate(`/proposal/${encodeURIComponent(proposal.sk)}`)
+  }
 
   return (
-    <div
-      onClick={handleClick}
-      className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-shadow"
-    >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <TypeBadge type={proposal.type} />
-          <AuthorBadge author={proposal.author} />
-        </div>
-        <span className="text-xs text-gray-500">{formatDate(proposal.created_at)}</span>
-      </div>
+    <Box className="if-kanban-card" onClick={handleClick}>
+      <Stack gap={6}>
+        <Group justify="space-between" wrap="nowrap" align="flex-start">
+          <Group gap={6} wrap="nowrap">
+            <TypeBadge type={proposal.type} />
+            <AuthorBadge author={proposal.author} />
+          </Group>
+          <Text size="xs" c="var(--color-text-secondary)" style={{ flexShrink: 0 }}>
+            {formatRelativeTime(proposal.created_at)}
+          </Text>
+        </Group>
 
-      <h3 className="font-semibold text-gray-900 mb-2">{proposal.title}</h3>
+        <Text fw={600} size="sm" c="var(--text-primary)" lineClamp={2}>
+          {proposal.title}
+        </Text>
 
-      <p className="text-sm text-gray-600 mb-3">
-        {truncateText(proposal.rationale, 120)}
-      </p>
+        <Text size="xs" c="var(--color-text-secondary)" lineClamp={3}>
+          {truncateText(proposal.rationale, 140)}
+        </Text>
 
-      <button
-        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-      >
-        View & Decide →
-      </button>
-    </div>
-  );
+        <Group gap={4} mt={2} c="var(--accent-blue)">
+          <Text size="xs" fw={600}>View &amp; decide</Text>
+          <ChevronRight size={12} />
+        </Group>
+      </Stack>
+    </Box>
+  )
 }

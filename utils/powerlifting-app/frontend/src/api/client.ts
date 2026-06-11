@@ -20,6 +20,7 @@ import type {
   LiftResults,
   VideoLibraryItem,
   VideoLibraryResponse,
+  VideoSort,
   FatigueProfile,
   LiftProfile,
   SessionWellness,
@@ -478,7 +479,7 @@ export async function completeCompetition(
 export async function getVideos(
   version: string = 'current',
   exercise?: string,
-  sort: 'newest' | 'oldest' = 'newest'
+  sort: VideoSort = 'newest'
 ): Promise<{ videos: VideoLibraryItem[]; exercises: string[] }> {
   const params = new URLSearchParams()
   if (exercise) params.set('exercise', exercise)

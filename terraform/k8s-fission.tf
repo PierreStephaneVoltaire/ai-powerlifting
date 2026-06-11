@@ -284,11 +284,12 @@ resource "kubectl_manifest" "fission_http_trigger_opencode_job" {
       name: ${var.fission_function_name}
       namespace: ${var.fission_function_namespace}
     spec:
-      functionReference:
-        functionName: ${var.fission_function_name}
+      functionref:
+        type: name
+        name: ${var.fission_function_name}
       methods:
         - POST
-      url: ${var.fission_http_trigger_url}
+      relativeurl: ${var.fission_http_trigger_url}
   YAML
 
   depends_on = [kubectl_manifest.fission_function_opencode_job]

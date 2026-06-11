@@ -1,197 +1,209 @@
-import { useState, useEffect } from 'react';
-import { CreateProposalInput, ProposalType, Directive, TYPE_LABELS } from '../types';
-import { useProposalsStore } from '../store/proposalsStore';
+import { useState, useEffect } from 'react'
+import {
+  Box,
+  Button,
+  Group,
+  Modal,
+  Select,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { useProposalsStore } from '../store/proposalsStore'
+import {
+  TYPE_LABELS,
+  type CreateProposalInput,
+  type Directive,
+  type ProposalType,
+} from '../types'
 
 interface NewProposalModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen: boolean
+  onClose: () => void
 }
 
-export function NewProposalModal({ isOpen, onClose }: NewProposalModalProps) {
-  const [type, setType] = useState<ProposalType>('system_observation');
-  const [title, setTitle] = useState('');
-  const [rationale, setRationale] = useState('');
-  const [content, setContent] = useState('');
-  const [targetId, setTargetId] = useState('');
-  const [error, setError] = useState('');
+const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
 
-  const { createProposal, loadDirectives, directives, loading } = useProposalsStore();
+export function NewProposalModal({ isOpen, onClose }: NewProposalModalProps) {
+  const [type, setType] = useState<ProposalType>('system_observation')
+  const [title, setTitle] = useState('')
+  const [rationale, setRationale] = useState('')
+  const [content, setContent] = useState('')
+  const [targetId, setTargetId] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  const { createProposal, loadDirectives, directives, loading } = useProposalsStore()
 
   useEffect(() => {
     if (isOpen) {
-      loadDirectives();
+      loadDirectives()
     }
-  }, [isOpen, loadDirectives]);
+  }, [isOpen, loadDirectives])
 
-  const showTargetSelect = type === 'rewrite_directive' || type === 'deprecate_directive';
-  const requiresContent = type !== 'system_observation';
+  const showTargetSelect = type === 'rewrite_directive' || type === 'deprecate_directive'
+  const requiresContent = type !== 'system_observation'
 
   const resetForm = () => {
-    setType('system_observation');
-    setTitle('');
-    setRationale('');
-    setContent('');
-    setTargetId('');
-    setError('');
-  };
+    setType('system_observation')
+    setTitle('')
+    setRationale('')
+    setContent('')
+    setTargetId(null)
+    setError('')
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+    e.preventDefault()
+    setError('')
 
     if (!title.trim()) {
-      setError('Title is required');
-      return;
+      setError('Title is required')
+      return
     }
     if (!rationale.trim()) {
-      setError('Rationale is required');
-      return;
+      setError('Rationale is required')
+      return
     }
     if (requiresContent && !content.trim()) {
-      setError('Content is required for this proposal type');
-      return;
+      setError('Content is required for this proposal type')
+      return
     }
     if (showTargetSelect && !targetId) {
-      setError('Target directive is required for this proposal type');
-      return;
+      setError('Target directive is required for this proposal type')
+      return
     }
 
     try {
-      await createProposal({
+      const input: CreateProposalInput = {
         type,
         title: title.trim(),
         rationale: rationale.trim(),
         content: content.trim(),
-        target_id: targetId || undefined,
-      });
-      resetForm();
-      onClose();
+      }
+      if (targetId) input.target_id = targetId
+      await createProposal(input)
+      resetForm()
+      onClose()
+      notifications.show({
+        title: 'Proposal created',
+        message: `${title.trim()} is now in the pending column`,
+        color: 'blue',
+      })
     } catch (err) {
-      setError((err as Error).message);
+      const message = err instanceof Error ? err.message : 'Could not create proposal'
+      setError(message)
+      notifications.show({ title: 'Create failed', message, color: 'red' })
     }
-  };
+  }
 
   const handleClose = () => {
-    resetForm();
-    onClose();
-  };
+    resetForm()
+    onClose()
+  }
 
-  if (!isOpen) return null;
+  const directiveOptions = (directives as Directive[]).map((d) => ({
+    value: d.sk,
+    label: `${d.label} (v${d.version})`,
+  }))
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">New Proposal</h2>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal
+      opened={isOpen}
+      onClose={handleClose}
+      title={<Text fw={700}>New Proposal</Text>}
+      size="lg"
+      centered
+    >
+      <form onSubmit={handleSubmit}>
+        <Stack gap="sm">
           {error && (
-            <div className="bg-red-50 text-red-800 px-4 py-2 rounded-md text-sm">
-              {error}
-            </div>
+            <Box
+              p="xs"
+              style={{
+                background: 'var(--status-danger-bg)',
+                border: '0.5px solid var(--status-danger-border)',
+                borderRadius: 'var(--border-radius-md)',
+              }}
+            >
+              <Text size="sm" c="var(--status-danger-text)">{error}</Text>
+            </Box>
           )}
 
-          {/* Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Type
-            </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as ProposalType)}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              {Object.entries(TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Type"
+            data={TYPE_OPTIONS}
+            value={type}
+            onChange={(value) => setType((value as ProposalType) ?? 'system_observation')}
+            allowDeselect={false}
+            required
+          />
 
-          {/* Target (for rewrite/deprecate) */}
           {showTargetSelect && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target Directive
-              </label>
-              <select
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="">Select a directive...</option>
-                {directives.map((d) => (
-                  <option key={d.sk} value={d.sk}>
-                    {d.label} (v{d.version})
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Target Directive"
+              placeholder="Select a directive..."
+              data={directiveOptions}
+              value={targetId}
+              onChange={setTargetId}
+              searchable
+              required
+            />
           )}
 
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., CONTEXT_WINDOW_DISCIPLINE"
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-          </div>
+          <TextInput
+            label="Title"
+            placeholder="e.g., CONTEXT_WINDOW_DISCIPLINE"
+            value={title}
+            onChange={(e) => setTitle(e.currentTarget.value)}
+            required
+          />
 
-          {/* Rationale */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rationale
-            </label>
-            <textarea
-              value={rationale}
-              onChange={(e) => setRationale(e.target.value)}
-              rows={3}
-              placeholder="Why should this proposal be implemented?"
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-          </div>
+          <Textarea
+            label="Rationale"
+            placeholder="Why should this proposal be implemented?"
+            value={rationale}
+            onChange={(e) => setRationale(e.currentTarget.value)}
+            autosize
+            minRows={3}
+            required
+          />
 
-          {/* Content */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Proposed Content {requiresContent && <span className="text-red-500">*</span>}
-            </label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={6}
-              placeholder="The actual proposed text (directive content, tool spec, etc.)"
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
-            />
-          </div>
+          <Textarea
+            label={
+              <Group gap={4}>
+                <Text size="sm" fw={500}>Proposed Content</Text>
+                {requiresContent && <Text size="sm" c="red">*</Text>}
+              </Group>
+            }
+            placeholder="The actual proposed text (directive content, tool spec, etc.)"
+            value={content}
+            onChange={(e) => setContent(e.currentTarget.value)}
+            autosize
+            minRows={6}
+            styles={{ input: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 13 } }}
+            required={requiresContent}
+          />
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-4 py-2 text-gray-700 hover:text-gray-900"
-            >
+          <Group justify="flex-end" mt="sm">
+            <Button variant="subtle" color="gray" onClick={handleClose}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              variant="gradient"
+              gradient={{ from: 'blue.6', to: 'blue.4' }}
+              loading={loading}
             >
-              {loading ? 'Creating...' : 'Create Proposal'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+              Create Proposal
+            </Button>
+          </Group>
+        </Stack>
+      </form>
+    </Modal>
+  )
 }

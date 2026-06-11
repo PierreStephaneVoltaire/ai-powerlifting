@@ -2,10 +2,12 @@
 
 Full-stack web application for reviewing, approving, and submitting system improvement proposals.
 
+Frontend is built on the same Mantine v9 + CSS token design system used by the powerlifting app, directives portal, and main portal.
+
 ## Quick Start
 
 ```bash
-# Install dependencies
+# Install dependencies (root + all workspaces)
 npm install
 
 # Copy environment files
@@ -25,7 +27,6 @@ npm run dev
 
 - **Backend**: http://localhost:3004
 - **Frontend**: http://localhost:5173
-- **WebSocket**: ws://localhost:3004/ws
 
 ## API Endpoints
 
@@ -33,10 +34,10 @@ npm run dev
 - `GET /api/proposals` - List all proposals
 - `GET /api/proposals/:sk` - Get single proposal
 - `POST /api/proposals` - Create proposal
-- `PATCH /api/proposals/:sk/approve` - Approve proposal
+- `PATCH /api/proposals/:sk/approve` - Approve proposal (synchronously generates the implementation plan; the plan is returned in the response)
 - `PATCH /api/proposals/:sk/reject` - Reject proposal
 - `DELETE /api/proposals/:sk` - Delete pending proposal
-- `POST /api/proposals/:sk/generate-plan` - Generate implementation plan
+- `POST /api/proposals/:sk/generate-plan` - Regenerate the implementation plan for an approved proposal
 - `GET /api/proposals/:sk/plan` - Get implementation plan
 
 ### Directives
@@ -45,7 +46,9 @@ npm run dev
 
 ## Tech Stack
 
-- **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS
+- **Frontend**: React 19 + Vite 5 + TypeScript + Mantine v9 + Tailwind CSS (utility-residual)
 - **Backend**: Node.js 20 + Express 5 + TypeScript
 - **Database**: DynamoDB (table: `if-proposals`)
 - **State Management**: Zustand
+
+Plan generation is part of the approve response — no WebSocket subscription is needed on the client.

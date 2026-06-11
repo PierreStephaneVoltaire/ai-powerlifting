@@ -5,15 +5,11 @@ import {
   createProposal,
   updateProposalStatus,
   deleteProposal,
+  getDirectives,
   OPERATOR_PK,
 } from '../db/dynamodb';
 import { generateImplementationPlan } from '../services/planGenerator';
-import { getDirectives } from '../db/dynamodb';
 import { createError } from '../middleware/errorHandler';
-import { WebSocket } from 'ws';
-
-// Store connected WebSocket clients
-export const wsClients = new Set<WebSocket>();
 
 export async function listProposals(
   req: Request,
@@ -126,20 +122,33 @@ export async function approveProposal(
     const { sk } = req.params;
     const now = new Date().toISOString();
 
-    const proposal = await updateProposalStatus(OPERATOR_PK, decodeURIComponent(sk), {
+    // Mark as approved first so the user gets immediate feedback
+    const updated = await updateProposalStatus(OPERATOR_PK, decodeURIComponent(sk), {
       status: 'approved',
       resolved_at: now,
       resolved_by: 'user',
     });
 
-    if (!proposal) {
+    if (!updated) {
       throw createError('Proposal not found', 404);
     }
 
-    // Trigger plan generation asynchronously
-    generatePlanAsync(proposal);
-
-    res.json({ proposal });
+    // Generate the implementation plan synchronously and persist it.
+    // If generation fails we still keep the approval — the user can retry via
+    // POST /:sk/generate-plan.
+    try {
+      const directives = await getDirectives(OPERATOR_PK);
+      const plan = await generateImplementationPlan(updated, directives);
+      const withPlan = await updateProposalStatus(OPERATOR_PK, decodeURIComponent(sk), {
+        implementation_plan: plan,
+      });
+      res.json({ proposal: withPlan ?? { ...updated, implementation_plan: plan } });
+      return;
+    } catch (planErr) {
+      console.error('Plan generation failed during approve:', planErr);
+      res.json({ proposal: updated });
+      return;
+    }
   } catch (error) {
     next(error);
   }
@@ -211,10 +220,13 @@ export async function generatePlan(
       throw createError('Can only generate plans for approved proposals', 400);
     }
 
-    // Generate plan asynchronously
-    generatePlanAsync(proposal);
+    const directives = await getDirectives(OPERATOR_PK);
+    const plan = await generateImplementationPlan(proposal, directives);
+    const updated = await updateProposalStatus(OPERATOR_PK, decodeURIComponent(sk), {
+      implementation_plan: plan,
+    });
 
-    res.json({ success: true, message: 'Plan generation started' });
+    res.json({ proposal: updated ?? { ...proposal, implementation_plan: plan }, plan });
   } catch (error) {
     next(error);
   }
@@ -237,38 +249,4 @@ export async function getPlan(
   } catch (error) {
     next(error);
   }
-}
-
-// Helper function to generate plan asynchronously and notify WebSocket clients
-async function generatePlanAsync(proposal: any): Promise<void> {
-  const sk = proposal.sk;
-
-  // Notify clients that plan is generating
-  broadcast({ type: 'plan_generating', sk });
-
-  try {
-    const directives = await getDirectives(OPERATOR_PK);
-    const plan = await generateImplementationPlan(proposal, directives);
-
-    // Update proposal with plan
-    await updateProposalStatus(OPERATOR_PK, sk, { implementation_plan: plan });
-
-    // Notify clients that plan is ready
-    broadcast({ type: 'plan_ready', sk, plan });
-  } catch (error: any) {
-    console.error('Plan generation failed:', error);
-
-    // Notify clients of failure
-    broadcast({ type: 'plan_failed', sk, error: error.message });
-  }
-}
-
-// Broadcast to all connected WebSocket clients
-function broadcast(message: any): void {
-  const data = JSON.stringify(message);
-  wsClients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  });
 }

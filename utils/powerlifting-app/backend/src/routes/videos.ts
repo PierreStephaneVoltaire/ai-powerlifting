@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import multer from 'multer'
 import * as videoController from '../controllers/videoController'
+import { isVideoSort } from '../utils/videoSort'
+import type { VideoSort } from '@powerlifting/types'
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -24,7 +26,7 @@ videosRouter.get('/', async (req, res, next) => {
   try {
     const version = (req.query.version as string) || 'current'
     const exercise = req.query.exercise as string | undefined
-    const sort = (req.query.sort as 'newest' | 'oldest') || 'newest'
+    const sort: VideoSort = isVideoSort(req.query.sort) ? req.query.sort : 'newest'
 
     const result = await videoController.getVideoLibrary(req.mapped_pk!, version, exercise, sort)
     res.json({ data: result, error: null })

@@ -6,6 +6,8 @@ import { useProgramStore } from '@/store/programStore'
 import * as api from '@/api/client'
 import VideoCard from '@/components/videos/VideoCard'
 import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
+import { VIDEO_SORTS, type VideoSort } from '@/utils/videoSort'
+import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
 import type { VideoLibraryItem } from '@powerlifting/types'
 
 export default function VideosPage() {
@@ -13,9 +15,10 @@ export default function VideosPage() {
   const [videos, setVideos] = useState<VideoLibraryItem[]>([])
   const [exercises, setExercises] = useState<string[]>([])
   const [exerciseFilter, setExerciseFilter] = useState<string | null>(null)
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+  const [sortOrder, setSortOrder] = useState<VideoSort>('newest')
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedItem, setSelectedItem] = useState<VideoLibraryItem | null>(null)
+
+  const { selectedVideo, openVideo, closeVideo } = useVideoModalFromUrl(videos, !isLoading)
 
   const loadVideos = useCallback(async () => {
     setIsLoading(true)
@@ -48,7 +51,7 @@ export default function VideosPage() {
           <Text className="if-page-subtitle">Review lift videos uploaded from sessions.</Text>
         </Stack>
         {exercises.length > 0 && (
-          <Group gap="xs" className="if-toolbar">
+          <Group gap="xs" className="if-toolbar" wrap="wrap" justify="flex-end">
             <Select
               value={exerciseFilter}
               onChange={setExerciseFilter}
@@ -60,14 +63,19 @@ export default function VideosPage() {
               w={220}
               size="sm"
             />
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
-              title={sortOrder === 'newest' ? 'Show oldest first' : 'Show newest first'}
-            >
-              {sortOrder === 'newest' ? 'Newest' : 'Oldest'}
-            </Button>
+            <div className="if-tab-group" role="group" aria-label="Sort videos" data-testid="videos-page-sort">
+              {VIDEO_SORTS.map((sort) => (
+                <button
+                  key={sort.value}
+                  type="button"
+                  className="if-tab-button"
+                  data-active={sortOrder === sort.value}
+                  onClick={() => setSortOrder(sort.value)}
+                >
+                  {sort.label}
+                </button>
+              ))}
+            </div>
           </Group>
         )}
       </div>
@@ -98,15 +106,15 @@ export default function VideosPage() {
             <VideoCard
               key={item.video.video_id}
               item={item}
-              onClick={() => setSelectedItem(item)}
+              onClick={() => openVideo(item.video.video_id)}
             />
           ))}
         </Box>
       )}
 
       <VideoPlayerModal
-        item={selectedItem}
-        onClose={() => setSelectedItem(null)}
+        item={selectedVideo}
+        onClose={closeVideo}
         onDeleted={loadVideos}
       />
     </Stack>

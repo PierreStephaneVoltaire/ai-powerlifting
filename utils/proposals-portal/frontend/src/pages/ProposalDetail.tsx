@@ -1,64 +1,74 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { ProposalDetailPanel } from '../components/ProposalDetailPanel';
-import { useProposalsStore } from '../store/proposalsStore';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useParams, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Box, Button, Center, Loader, Stack, Text } from '@mantine/core'
+import { ArrowLeft } from 'lucide-react'
+import { ProposalDetailPanel } from '../components/ProposalDetailPanel'
+import { useProposalsStore } from '../store/proposalsStore'
 
 export default function ProposalDetail() {
-  const { sk } = useParams<{ sk: string }>();
-  const navigate = useNavigate();
-  const { selectedProposal, loading, error, loadProposal } = useProposalsStore();
-
-  // Connect to WebSocket for real-time plan updates
-  useWebSocket();
+  const { sk } = useParams<{ sk: string }>()
+  const navigate = useNavigate()
+  const { selectedProposal, loading, error, loadProposal } = useProposalsStore()
 
   useEffect(() => {
     if (sk) {
-      loadProposal(decodeURIComponent(sk));
+      loadProposal(decodeURIComponent(sk))
     }
-  }, [sk, loadProposal]);
+  }, [sk, loadProposal])
 
   if (loading && !selectedProposal) {
     return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="text-gray-500 mt-3">Loading proposal...</p>
-      </div>
-    );
+      <Center py="xl">
+        <Stack align="center" gap="xs">
+          <Loader size="md" color="blue" />
+          <Text size="sm" c="var(--color-text-secondary)">Loading proposal...</Text>
+        </Stack>
+      </Center>
+    )
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-600">{error}</p>
-        <button
-          onClick={() => navigate('/')}
-          className="mt-4 text-blue-600 hover:text-blue-800"
-        >
-          ← Back to Board
-        </button>
-      </div>
-    );
+      <Center py="xl">
+        <Stack align="center" gap="sm" className="if-mock-card" style={{ minWidth: 320 }}>
+          <Text size="sm" c="var(--status-danger-text)">{error}</Text>
+          <Button
+            variant="light"
+            color="gray"
+            leftSection={<ArrowLeft size={14} />}
+            onClick={() => navigate('/')}
+          >
+            Back to Board
+          </Button>
+        </Stack>
+      </Center>
+    )
   }
 
   if (!selectedProposal) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">Proposal not found</p>
-        <button
-          onClick={() => navigate('/')}
-          className="mt-4 text-blue-600 hover:text-blue-800"
-        >
-          ← Back to Board
-        </button>
-      </div>
-    );
+      <Center py="xl">
+        <Stack align="center" gap="sm" className="if-mock-card" style={{ minWidth: 320 }}>
+          <Text size="sm" c="var(--color-text-secondary)">Proposal not found</Text>
+          <Button
+            variant="light"
+            color="gray"
+            leftSection={<ArrowLeft size={14} />}
+            onClick={() => navigate('/')}
+          >
+            Back to Board
+          </Button>
+        </Stack>
+      </Center>
+    )
   }
 
   return (
-    <ProposalDetailPanel
-      proposal={selectedProposal}
-      onBack={() => navigate('/')}
-    />
-  );
+    <Box>
+      <ProposalDetailPanel
+        proposal={selectedProposal}
+        onBack={() => navigate('/')}
+      />
+    </Box>
+  )
 }
