@@ -111,6 +111,15 @@ MCP_SERVER_CATEGORIES = [
     if item.strip()
 ]
 
+IF_MCP_NAMESPACE = os.getenv("IF_MCP_NAMESPACE", "if-portals")
+IF_MCP_HTTP_PORT = int(os.getenv("IF_MCP_HTTP_PORT", "8000"))
+IF_MCP_HTTP_PATH = os.getenv("IF_MCP_HTTP_PATH", "/mcp")
+IF_MCP_URL_TEMPLATE = os.getenv(
+    "IF_MCP_URL_TEMPLATE",
+    "http://if-mcp-{category}.{namespace}.svc.cluster.local:{port}{path}",
+)
+IF_MCP_HTTP_TIMEOUT_MS = int(os.getenv("IF_MCP_HTTP_TIMEOUT_MS", "60000"))
+
 SPECIALIST_PRESET = os.getenv("SPECIALIST_PRESET", "general")
 
 SPECIALIST_MAX_TURNS = int(os.getenv("SPECIALIST_MAX_TURNS", "15"))

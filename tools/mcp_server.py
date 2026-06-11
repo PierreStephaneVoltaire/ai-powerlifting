@@ -1,15 +1,20 @@
 """MCP server wrapper for IF tool plugins."""
 from __future__ import annotations
 
+import argparse
 import asyncio
+import contextlib
 import importlib.util
 import json
+import logging
 import os
 import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger("if_mcp_server")
 
 TOOL_CATEGORIES = {
     "health": ["health"],
@@ -120,10 +125,9 @@ def _normalize_schema(schema: dict[str, Any], fallback_name: str) -> dict[str, A
         "inputSchema": parameters,
     }
 
-async def main(category: str) -> None:
+def _build_server(category: str) -> tuple[Any, dict[str, Plugin], list[dict[str, Any]]]:
     try:
         from mcp.server import Server
-        from mcp.server.stdio import stdio_server
         from mcp.types import TextContent, Tool
     except ImportError as exc:
         raise RuntimeError("Python package 'mcp' is required to run IF MCP servers") from exc
@@ -165,10 +169,93 @@ async def main(category: str) -> None:
             result = json.dumps(result, indent=2, default=str)
         return [TextContent(type="text", text=result)]
 
+    return server, tool_to_plugin, normalized_tools
+
+
+async def _run_stdio(server: Any) -> None:
+    from mcp.server.stdio import stdio_server
+
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
+
+async def _run_http(server: Any, host: str, port: int, mount_path: str) -> None:
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+    import uvicorn
+
+    session_manager = StreamableHTTPSessionManager(
+        app=server,
+        json_response=True,
+        stateless=True,
+    )
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: Any) -> Any:
+        async with session_manager.run():
+            yield
+
+    starlette_app = Starlette(
+        routes=[Mount(mount_path, app=session_manager.handle_request)],
+        lifespan=lifespan,
+    )
+
+    config = uvicorn.Config(
+        starlette_app,
+        host=host,
+        port=port,
+        log_level=os.environ.get("IF_MCP_LOG_LEVEL", "info"),
+        access_log=False,
+    )
+    http_server = uvicorn.Server(config)
+    logger.info("MCP HTTP server listening on %s:%s%s", host, port, mount_path)
+    await http_server.serve()
+
+
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="mcp_server",
+        description="Run an IF MCP tool category over stdio or streamable HTTP.",
+    )
+    parser.add_argument("category", help="Tool category (e.g. health, finance, tarot, temporal_age).")
+    parser.add_argument(
+        "--transport",
+        choices=("stdio", "http"),
+        default=os.environ.get("IF_MCP_TRANSPORT", "stdio"),
+        help="Transport to expose. Default stdio. Per-category MCP pods use http.",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("IF_MCP_HOST", "0.0.0.0"),
+        help="HTTP bind host (only used with --transport http).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("IF_MCP_PORT", "8000")),
+        help="HTTP bind port (only used with --transport http).",
+    )
+    parser.add_argument(
+        "--mount-path",
+        default=os.environ.get("IF_MCP_MOUNT_PATH", "/mcp"),
+        help="Path the HTTP handler is mounted at (default /mcp).",
+    )
+    return parser.parse_args(argv)
+
+
+async def main() -> None:
+    args = _parse_args(sys.argv[1:])
+    server, _tool_to_plugin, _tools = _build_server(args.category)
+    if args.transport == "http":
+        await _run_http(server, args.host, args.port, args.mount_path)
+    else:
+        await _run_stdio(server)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        raise SystemExit("Usage: python tools/mcp_server.py <category>")
-    asyncio.run(main(sys.argv[1]))
+    logging.basicConfig(
+        level=os.environ.get("IF_MCP_LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    asyncio.run(main())

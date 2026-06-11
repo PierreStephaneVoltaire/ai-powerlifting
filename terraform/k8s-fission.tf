@@ -106,6 +106,9 @@ resource "helm_release" "fission" {
 resource "kubectl_manifest" "fission_environment_opencode_runner" {
   count = var.fission_enabled ? 1 : 0
 
+  server_side_apply = true
+  force_conflicts   = true
+
   yaml_body = <<-YAML
     apiVersion: fission.io/v1
     kind: Environment
@@ -114,19 +117,50 @@ resource "kubectl_manifest" "fission_environment_opencode_runner" {
       namespace: ${var.fission_namespace}
     spec:
       runtime:
-        name: newdeploy
-      image: ${aws_ecr_repository.if_opencode_runner.repository_url}:latest
-      imagePullPolicy: IfNotPresent
-      # keeparchive is left at its default (false): the runner is a baked
-      # image, not a build-from-source environment.
+        image: ${aws_ecr_repository.if_opencode_runner.repository_url}:latest
+      version: 1
+      keeparchive: false
   YAML
 
   depends_on = [helm_release.fission]
 }
 
 
+resource "kubernetes_service_account" "opencode_runner" {
+  count = var.fission_enabled ? 1 : 0
+
+  metadata {
+    name      = "opencode-runner"
+    namespace = var.fission_function_namespace
+    labels = {
+      app        = "opencode-runner"
+      managed-by = "terraform"
+    }
+  }
+}
+
+resource "kubernetes_secret" "opencode_runner_netrc" {
+  count = var.fission_enabled ? 1 : 0
+
+  metadata {
+    name      = "opencode-runner-netrc"
+    namespace = var.fission_function_namespace
+  }
+
+  # .netrc lets the opencode-runner binary authenticate git over HTTPS
+  # using the same GitHub PAT that the agent API pod has.
+  data = {
+    ".netrc" = "machine github.com login x-access-token password ${var.github_token}\n"
+  }
+
+  type = "Opaque"
+}
+
 resource "kubectl_manifest" "fission_function_opencode_job" {
   count = var.fission_enabled ? 1 : 0
+
+  server_side_apply = true
+  force_conflicts   = true
 
   yaml_body = <<-YAML
     apiVersion: fission.io/v1
@@ -135,18 +169,35 @@ resource "kubectl_manifest" "fission_function_opencode_job" {
       name: ${var.fission_function_name}
       namespace: ${var.fission_function_namespace}
     spec:
-      environment: ${var.fission_environment_name}
-      # The function's podspec is what the newdeploy executor uses to spin
-      # up the function Deployment. Mounts mirror the IF agent deployment
-      # so the opencode subprocess sees the same workspace and credentials.
+      InvokeStrategy:
+        ExecutionStrategy:
+          ExecutorType: container
+          MaxScale: ${var.opencode_runner_max_concurrent}
+          MinScale: 0
+          SpecializationTimeout: 120
+        StrategyType: execution
+      environment:
+        name: ${var.fission_environment_name}
+        namespace: ${var.fission_namespace}
+      package:
+        packageref:
+          name: ${var.fission_function_name}-pkg
+          namespace: ${var.fission_function_namespace}
       podspec:
+        serviceAccountName: opencode-runner
+        terminationGracePeriodSeconds: 360
+        imagePullSecrets:
+          - name: ${kubernetes_secret.ecr_registry.metadata[0].name}
         containers:
-          - name: opencode-runner
+          - name: ${var.fission_function_name}
             image: ${aws_ecr_repository.if_opencode_runner.repository_url}:latest
             imagePullPolicy: IfNotPresent
-            command: ["node", "/app/server.js"]
+            command: ["/app/opencode-runner"]
             ports:
               - containerPort: 8000
+            securityContext:
+              privileged: true
+              runAsUser: 0
             env:
               - name: PORT
                 value: "8000"
@@ -180,12 +231,10 @@ resource "kubectl_manifest" "fission_function_opencode_job" {
               - name: aws-credentials
                 mountPath: /root/.aws
                 readOnly: true
-        imagePullSecrets:
-          - name: ${kubernetes_secret.ecr_registry.metadata[0].name}
-        # No nodeSelector: this is a single-node k3s cluster so every pod
-        # lands on the same node as the IF agent anyway, which means the
-        # local-path PVCs and the aws-credentials host path both resolve
-        # without explicit scheduling hints.
+              - name: netrc
+                mountPath: /root/.netrc
+                subPath: .netrc
+                readOnly: true
         volumes:
           - name: data-storage
             persistentVolumeClaim:
@@ -203,10 +252,15 @@ resource "kubectl_manifest" "fission_function_opencode_job" {
             hostPath:
               path: ${var.aws_credentials_host_path}
               type: Directory
+          - name: netrc
+            secret:
+              secretName: opencode-runner-netrc
   YAML
 
   depends_on = [
     kubectl_manifest.fission_environment_opencode_runner,
+    kubernetes_service_account.opencode_runner,
+    kubernetes_secret.opencode_runner_netrc,
     kubernetes_persistent_volume_claim.if_agent_data,
     kubernetes_persistent_volume_claim.if_agent_sandbox,
     kubernetes_persistent_volume_claim.if_agent_conversations,

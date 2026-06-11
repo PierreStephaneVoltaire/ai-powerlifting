@@ -3,35 +3,32 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import sys
 from pathlib import Path
 from typing import Any
 
-from config import APP_SRC, EXTERNAL_TOOLS_FALLBACK, EXTERNAL_TOOLS_PATH, PROJECT_ROOT
+from config import (
+    IF_MCP_HTTP_PATH,
+    IF_MCP_HTTP_PORT,
+    IF_MCP_HTTP_TIMEOUT_MS,
+    IF_MCP_NAMESPACE,
+    IF_MCP_URL_TEMPLATE,
+)
 from mcp_runtime import get_mcp_manager
 
 logger = logging.getLogger(__name__)
 
-def _pythonpath() -> str:
-    return os.pathsep.join([str(APP_SRC), str(PROJECT_ROOT)])
-
-def _tools_root() -> Path:
-    return Path(EXTERNAL_TOOLS_PATH or EXTERNAL_TOOLS_FALLBACK)
-
 def _if_mcp_server(category: str, allowed_tools: list[str]) -> dict[str, Any]:
-    tools_root = _tools_root()
+    url = IF_MCP_URL_TEMPLATE.format(
+        category=category.replace("_", "-"),
+        namespace=IF_MCP_NAMESPACE,
+        port=IF_MCP_HTTP_PORT,
+        path=IF_MCP_HTTP_PATH,
+    )
     return {
-        "type": "local",
-        "command": [sys.executable, str(tools_root / "mcp_server.py"), category],
-        "environment": {
-            "IF_TOOLS_ROOT": str(tools_root),
-            "IF_MCP_ALLOWED_TOOLS": ",".join(sorted(set(allowed_tools))),
-            "IF_DISABLE_POWERLIFTING_DATASET_SYNC": "1",
-            "PYTHONPATH": _pythonpath(),
-        },
+        "type": "remote",
+        "url": url,
         "enabled": True,
-        "timeout": 60000,
+        "timeout": IF_MCP_HTTP_TIMEOUT_MS,
     }
 
 def _external_mcp_servers(server_names: set[str]) -> dict[str, dict[str, Any]]:

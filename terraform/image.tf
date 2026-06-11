@@ -53,12 +53,22 @@ resource "aws_ecr_repository" "portal_frontends" {
   }
 }
 
+resource "aws_ecr_repository" "if_mcp_base" {
+  name                 = "${var.ecr_repository_prefix}-mcp-base"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
 resource "aws_ecr_lifecycle_policy" "keep_5" {
   for_each = merge(
     { "if-agent-api" = aws_ecr_repository.if_agent_api.name },
     { "if-opencode-runner" = aws_ecr_repository.if_opencode_runner.name },
     { for k, v in aws_ecr_repository.portal_backends : k => v.name },
-    { for k, v in aws_ecr_repository.portal_frontends : k => v.name }
+    { for k, v in aws_ecr_repository.portal_frontends : k => v.name },
+    { "if-mcp-base" = aws_ecr_repository.if_mcp_base.name }
   )
 
   repository = each.value
@@ -119,6 +129,33 @@ locals {
     filesha1("${path.module}/../utils/opencode-runner/src/main.rs"),
     fileexists("${path.module}/../utils/opencode-runner/Cargo.lock") ? filesha1("${path.module}/../utils/opencode-runner/Cargo.lock") : "no-lock",
   ]))
+
+  mcp_base_image_hash = sha1(join("", [
+    filesha1("${path.module}/../docker/mcp-server.pkr.hcl"),
+    filesha1("${path.module}/../docker/mcp-server-entrypoint.sh"),
+    filesha1("${path.module}/../tools/mcp_server.py"),
+    filesha1("${path.module}/../tools/sdk_compat.py"),
+    join("", [
+      for f in fileset("${path.module}/../app/src", "**/*") :
+      filesha1("${path.module}/../app/src/${f}")
+    ]),
+  ]))
+
+  mcp_server_categories = toset([
+    "health",
+    "finance",
+    "diary",
+    "proposals",
+    "supplement_research",
+    "temporal_age",
+    "temporal_city_time",
+    "temporal_duration",
+    "temporal_from_unix",
+    "temporal_resolve",
+    "temporal_timezone",
+    "temporal_to_unix",
+    "tarot",
+  ])
 }
 
 resource "null_resource" "packer_build_main_api" {
@@ -255,4 +292,27 @@ resource "null_resource" "packer_build_opencode_runner" {
   }
 
   depends_on = [aws_ecr_repository.if_opencode_runner]
+}
+
+
+resource "null_resource" "packer_build_mcp_base" {
+  triggers = {
+    source_sha1 = local.mcp_base_image_hash
+    repo_url    = aws_ecr_repository.if_mcp_base.repository_url
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/../docker"
+    command     = <<-EOT
+      aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin $(echo ${aws_ecr_repository.if_mcp_base.repository_url} | cut -d'/' -f1)
+      packer init mcp-server.pkr.hcl
+      packer build \
+        -var "image_repository=${aws_ecr_repository.if_mcp_base.repository_url}" \
+        -var "image_tag=latest" \
+        mcp-server.pkr.hcl
+    EOT
+  }
+
+  depends_on = [aws_ecr_repository.if_mcp_base]
 }

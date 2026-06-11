@@ -68,7 +68,8 @@ build {
     inline = [
       "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y curl unzip ca-certificates git jq wget",
       "rm -rf /var/lib/apt/lists/*",
-      "mkdir -p /app"
+      "mkdir -p /app",
+      "mkdir -p /build"
     ]
   }
 

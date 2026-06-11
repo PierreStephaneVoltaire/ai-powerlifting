@@ -61,6 +61,59 @@ def test_build_opencode_config_content_does_not_write_files(tmp_path):
     assert files_written == []
 
 
+def test_build_opencode_config_content_uses_remote_mcp_urls():
+    """MCP entries are type:remote URLs. Category underscores are
+    sanitised to hyphens so the host matches the k8s Service name."""
+    from config import IF_MCP_URL_TEMPLATE, IF_MCP_HTTP_PORT, IF_MCP_HTTP_PATH, IF_MCP_NAMESPACE
+    expected_template = IF_MCP_URL_TEMPLATE
+    with patch("flow.opencode_config.get_mcp_manager") as mock_mgr:
+        mock_mgr.return_value.categories = ["health", "tarot", "temporal_age", "supplement_research"]
+        mock_mgr.return_value.categories_for_names.return_value = {
+            "health_get_session": "health",
+            "tarot_draw_cards": "tarot",
+            "temporal_resolve_date": "temporal_age",
+            "supp_research_query": "supplement_research",
+        }
+        from flow.opencode_config import build_opencode_config_content
+        result = build_opencode_config_content(
+            tool_names=[
+                "health_get_session",
+                "tarot_draw_cards",
+                "temporal_resolve_date",
+                "supp_research_query",
+            ]
+        )
+    parsed = json.loads(result)
+    assert set(parsed["mcp"].keys()) == {
+        "if_health", "if_tarot", "if_temporal_age", "if_supplement_research",
+    }
+    for entry in parsed["mcp"].values():
+        assert entry["type"] == "remote"
+        assert "command" not in entry  # no stdio subprocess
+        assert "environment" not in entry
+        assert entry["enabled"] is True
+        assert entry["timeout"] > 0
+    # URLs must be the per-category service URL the entrypoint exposes.
+    # The k8s Service/Deployment names sanitise underscores to hyphens,
+    # so the URL has to match that (RFC 1123).
+    expected_health = expected_template.format(
+        category="health", namespace=IF_MCP_NAMESPACE,
+        port=IF_MCP_HTTP_PORT, path=IF_MCP_HTTP_PATH,
+    )
+    assert parsed["mcp"]["if_health"]["url"] == expected_health
+    expected_temporal = expected_template.format(
+        category="temporal-age", namespace=IF_MCP_NAMESPACE,
+        port=IF_MCP_HTTP_PORT, path=IF_MCP_HTTP_PATH,
+    )
+    assert parsed["mcp"]["if_temporal_age"]["url"] == expected_temporal
+    assert "_" not in parsed["mcp"]["if_temporal_age"]["url"].split("/")[2].split(":")[0]
+    expected_supp = expected_template.format(
+        category="supplement-research", namespace=IF_MCP_NAMESPACE,
+        port=IF_MCP_HTTP_PORT, path=IF_MCP_HTTP_PATH,
+    )
+    assert parsed["mcp"]["if_supplement_research"]["url"] == expected_supp
+
+
 @pytest.mark.asyncio
 async def test_batch_classifier_passes_config_content_not_root_opencode_json(tmp_path):
     """run_batch_classification must pass config_content to run_opencode
