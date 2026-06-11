@@ -65,8 +65,11 @@ interaction_type: "social|domain|technical"
 specialist: "powerlifting_coach"
 thinking_mode: false
 selected_model: "provider/model-id"
+planning_mode: "simple|sequential|branch|backcasting|adversarial|delphi|dialectic|chain_of_verification"
 ---
 ```
+
+The `planning_mode` field declares the reasoning shape the next stage should use. Valid values: `simple` (default for short factual or single-step tasks), `sequential` (ordered multi-step procedures), `branch` (brainstorming / alternative exploration), `backcasting` (temporal backward planning from a future state), `adversarial` (moral decisions / option picking / devil's advocate), `delphi` (uncertain-quantity estimation), `dialectic` (thesis/antithesis/synthesis), `chain_of_verification` (claim-by-claim fact-checking). Missing or empty values default to `simple`. This field is parsed and stored on `IFPlan`; downstream route wiring is not yet enabled.
 
 Validation happens in `flow/plan.py`. The selected model must be present in the eligible model list and the specialist must be known.
 

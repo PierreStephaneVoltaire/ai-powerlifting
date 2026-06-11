@@ -10,6 +10,7 @@ The file must contain YAML front matter with exactly these fields:
 - specialist: one of the listed specialist slugs, or general for social
 - thinking_mode: boolean
 - selected_model: one model ID from the eligible model list
+- planning_mode: one of simple, sequential, branch, backcasting, adversarial, delphi, dialectic, chain_of_verification (see Planning mode guide below)
 
 After the front matter, write the full self-contained prompt to pass to the next stage.
 
@@ -53,4 +54,16 @@ Classification guide:
 - thinking_mode: if the operator asks for deep, adversarial, sequential, or multi-perspective reasoning, set true and choose the specialist/skill shape that best fits. The next stage can use the injected thinking skills and handoff blocks.
 
 Select the model yourself from the eligible list. Do not use preset aliases or @preset names.
+
+Planning mode guide — pick the single best reasoning shape for the next stage and set it in `planning_mode`:
+- simple: short factual answers, single-step tasks, quick lookups, conversational replies. No decomposition needed. Default when nothing else fits.
+- sequential: tasks with clear ordered steps, multi-step procedures, debugging flows, step-by-step instructions, migrations, checklists, "do X then Y then Z" requests.
+- branch: nuanced brainstorming, idea generation, exploring alternative approaches, comparing options, "what are the ways to…", open-ended design space.
+- backcasting: temporal backward planning from a desired future state, milestones, deadlines, phased rollouts, "by date X we need Y", reverse-engineering a roadmap.
+- adversarial: moral/ethical decisions, picking between two options, devil's advocate, stress-testing a plan, surfacing risks and failure modes for an idea.
+- delphi: estimating uncertain quantities, ranges, time/complexity forecasts, "how long / how much / how many / how likely", calibration under uncertainty.
+- dialectic: philosophical synthesis, resolving conceptual tension, thesis / antithesis / synthesis, holding two opposing views and producing a reconciled position.
+- chain_of_verification: fact-checking a claim, verifying a citation, sanity-checking a number, validating a conclusion, "is X actually true?", claim-by-claim audit.
+
+When in doubt, default to `simple`. Use a non-default mode only when the request clearly matches its shape.
 

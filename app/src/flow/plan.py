@@ -13,6 +13,18 @@ from channels.execution_models import ClassifierDecision
 
 INTERACTION_TYPES = {"social", "domain", "technical"}
 
+PLANNING_MODES = {
+    "simple",
+    "sequential",
+    "branch",
+    "backcasting",
+    "adversarial",
+    "delphi",
+    "dialectic",
+    "chain_of_verification",
+}
+DEFAULT_PLANNING_MODE = "simple"
+
 VALID_CLASSIFIER_KINDS = {"social", "task", "implementation_control", "clarification", "ignore"}
 
 VALID_CLASSIFIER_ACTIONS = {
@@ -57,6 +69,7 @@ class IFPlan:
     selected_model: str
     prompt: str
     raw: str
+    planning_mode: str = DEFAULT_PLANNING_MODE
 
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 
@@ -94,6 +107,17 @@ def parse_plan_text(
     if selected_model not in set(eligible_models):
         raise PlanParseError(f"selected_model is not in models/model_ids.txt: {selected_model}")
 
+    raw_planning_mode = metadata.get("planning_mode")
+    if raw_planning_mode is None or str(raw_planning_mode).strip() == "":
+        planning_mode = DEFAULT_PLANNING_MODE
+    else:
+        planning_mode = str(raw_planning_mode).strip().lower()
+        if planning_mode not in PLANNING_MODES:
+            raise PlanParseError(
+                f"invalid planning_mode: {planning_mode!r}; "
+                f"must be one of {sorted(PLANNING_MODES)}"
+            )
+
     if not prompt:
         raise PlanParseError("plan.md prompt body is empty")
 
@@ -105,6 +129,7 @@ def parse_plan_text(
         selected_model=selected_model,
         prompt=prompt,
         raw=text,
+        planning_mode=planning_mode,
     )
 
 def parse_plan_file(
@@ -120,7 +145,9 @@ def fallback_plan(
     specialist: str = "general",
     interaction_type: str = "social",
     reason: str = "Planner fallback",
+    planning_mode: str = DEFAULT_PLANNING_MODE,
 ) -> IFPlan:
+    resolved_mode = planning_mode if planning_mode in PLANNING_MODES else DEFAULT_PLANNING_MODE
     raw = (
         "---\n"
         f"intent_summary: {reason!r}\n"
@@ -128,6 +155,7 @@ def fallback_plan(
         f"specialist: {specialist!r}\n"
         "thinking_mode: false\n"
         f"selected_model: {selected_model!r}\n"
+        f"planning_mode: {resolved_mode!r}\n"
         "---\n\n"
         f"{prompt.strip()}\n"
     )
@@ -139,6 +167,7 @@ def fallback_plan(
         selected_model=selected_model,
         prompt=prompt.strip(),
         raw=raw,
+        planning_mode=resolved_mode,
     )
 
 @dataclass(frozen=True)

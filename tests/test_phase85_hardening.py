@@ -290,3 +290,176 @@ class TestTechnicalSynthesisPromptsStillParse:
         )
         assert "Build the thing." in result
         assert result.strip().splitlines()[0].strip() != "RETRY"
+
+
+_PLANNING_MODES = {
+    "simple",
+    "sequential",
+    "branch",
+    "backcasting",
+    "adversarial",
+    "delphi",
+    "dialectic",
+    "chain_of_verification",
+}
+
+
+def _plan_text(planning_mode=None, *, specialist="general"):
+    """Build a minimal valid plan.md body, optionally with a planning_mode line."""
+    planning_line = (
+        f"planning_mode: {planning_mode}\n" if planning_mode is not None else ""
+    )
+    return (
+        "---\n"
+        "intent_summary: test\n"
+        "interaction_type: social\n"
+        f"specialist: {specialist}\n"
+        "thinking_mode: false\n"
+        "selected_model: deepseek/deepseek-v4-flash\n"
+        f"{planning_line}"
+        "---\n\n"
+        "Do the thing\n"
+    )
+
+
+class TestPlanningModeParsing:
+    def test_all_eight_modes_parse(self):
+        from flow.plan import parse_plan_text
+        for mode in _PLANNING_MODES:
+            text = _plan_text(planning_mode=mode)
+            plan = parse_plan_text(
+                text,
+                eligible_models=["deepseek/deepseek-v4-flash"],
+                known_specialists={"general"},
+            )
+            assert plan.planning_mode == mode, f"mode {mode} not preserved"
+
+    def test_missing_planning_mode_defaults_to_simple(self):
+        from flow.plan import parse_plan_text
+        text = _plan_text()  # no planning_mode line at all
+        plan = parse_plan_text(
+            text,
+            eligible_models=["deepseek/deepseek-v4-flash"],
+            known_specialists={"general"},
+        )
+        assert plan.planning_mode == "simple"
+
+    def test_empty_planning_mode_defaults_to_simple(self):
+        from flow.plan import parse_plan_text
+        text = _plan_text(planning_mode="")
+        plan = parse_plan_text(
+            text,
+            eligible_models=["deepseek/deepseek-v4-flash"],
+            known_specialists={"general"},
+        )
+        assert plan.planning_mode == "simple"
+
+    def test_whitespace_planning_mode_defaults_to_simple(self):
+        from flow.plan import parse_plan_text
+        text = _plan_text(planning_mode="   ")
+        plan = parse_plan_text(
+            text,
+            eligible_models=["deepseek/deepseek-v4-flash"],
+            known_specialists={"general"},
+        )
+        assert plan.planning_mode == "simple"
+
+    def test_uppercase_planning_mode_is_normalized(self):
+        from flow.plan import parse_plan_text
+        text = _plan_text(planning_mode="DIALECTIC")
+        plan = parse_plan_text(
+            text,
+            eligible_models=["deepseek/deepseek-v4-flash"],
+            known_specialists={"general"},
+        )
+        assert plan.planning_mode == "dialectic"
+
+    def test_invalid_planning_mode_raises(self):
+        from flow.plan import PlanParseError, parse_plan_text
+        text = _plan_text(planning_mode="guesswork")
+        try:
+            parse_plan_text(
+                text,
+                eligible_models=["deepseek/deepseek-v4-flash"],
+                known_specialists={"general"},
+            )
+        except PlanParseError as exc:
+            assert "planning_mode" in str(exc)
+            assert "guesswork" in str(exc)
+        else:
+            raise AssertionError("expected PlanParseError for invalid planning_mode")
+
+    def test_fallback_plan_default_planning_mode_is_simple(self):
+        from flow.plan import fallback_plan
+        plan = fallback_plan(
+            prompt="hi",
+            selected_model="deepseek/deepseek-v4-flash",
+            specialist="general",
+            interaction_type="social",
+        )
+        assert plan.planning_mode == "simple"
+        assert "planning_mode: 'simple'" in plan.raw
+
+    def test_fallback_plan_explicit_planning_mode(self):
+        from flow.plan import fallback_plan
+        plan = fallback_plan(
+            prompt="hi",
+            selected_model="deepseek/deepseek-v4-flash",
+            specialist="general",
+            interaction_type="social",
+            planning_mode="adversarial",
+        )
+        assert plan.planning_mode == "adversarial"
+        assert "planning_mode: 'adversarial'" in plan.raw
+
+    def test_fallback_plan_invalid_planning_mode_falls_back_to_simple(self):
+        from flow.plan import fallback_plan
+        plan = fallback_plan(
+            prompt="hi",
+            selected_model="deepseek/deepseek-v4-flash",
+            specialist="general",
+            interaction_type="social",
+            planning_mode="not_a_real_mode",
+        )
+        assert plan.planning_mode == "simple"
+
+    def test_ifplan_default_planning_mode_is_simple(self):
+        from flow.plan import DEFAULT_PLANNING_MODE, IFPlan
+        plan = IFPlan(
+            intent_summary="t",
+            interaction_type="social",
+            specialist="general",
+            thinking_mode=False,
+            selected_model="deepseek/deepseek-v4-flash",
+            prompt="p",
+            raw="---\n---\np",
+        )
+        assert plan.planning_mode == DEFAULT_PLANNING_MODE
+        assert plan.planning_mode == "simple"
+
+    def test_planning_modes_constant_matches_eight_modes(self):
+        from flow.plan import PLANNING_MODES
+        assert PLANNING_MODES == _PLANNING_MODES
+        assert len(PLANNING_MODES) == 8
+        assert "simple" in PLANNING_MODES
+        assert "chain_of_verification" in PLANNING_MODES
+
+    def test_planner_prompt_lists_planning_mode_field(self, tmp_path):
+        from agent.prompts.loader import render_template
+        history_path = tmp_path / "history.md"
+        history_path.write_text("## User\nhi\n")
+        prompt = render_template(
+            "planner_prompt",
+            history_path_name=history_path.name,
+            main_system_prompt="MAIN",
+            core_directives="",
+            thinking_hint="",
+            runtime_context="ctx",
+            specialist_catalog="- coder: coding",
+            model_catalog="- m1",
+            model_selection_rules="",
+        )
+        assert "planning_mode" in prompt
+        assert "Planning mode guide" in prompt
+        for mode in _PLANNING_MODES:
+            assert mode in prompt, f"planner prompt missing mode {mode}"
