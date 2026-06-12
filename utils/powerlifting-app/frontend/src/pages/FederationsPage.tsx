@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Archive, Plus, Save, Shield } from 'lucide-react'
+import { Save, Shield } from 'lucide-react'
 import {
   Accordion,
   Badge,
@@ -11,511 +11,168 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  TextInput,
   Textarea,
   Title,
+  TextInput,
 } from '@mantine/core'
-import { DatePickerInput } from '@mantine/dates'
-import type {
-  FederationLibrary,
-  FederationRecord,
-  QualificationStandard,
-} from '@powerlifting/types'
-import { useFederationStore } from '@/store/federationStore'
-import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
-
-const SEX_OPTIONS = [
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-]
-
-const EQUIPMENT_OPTIONS = [
-  { value: 'raw', label: 'Raw' },
-  { value: 'wraps', label: 'Wraps' },
-  { value: 'single-ply', label: 'Single-ply' },
-  { value: 'multi-ply', label: 'Multi-ply' },
-]
-
-const EVENT_OPTIONS = [
-  { value: 'sbd', label: 'SBD' },
-  { value: 'bench-only', label: 'Bench Only' },
-  { value: 'deadlift-only', label: 'Deadlift Only' },
-]
+import { fetchUserFederations, patchUserFederation } from '@/api/client'
+import type { UserFederation } from '@powerlifting/types'
 
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'archived', label: 'Archived' },
 ]
 
-function cloneLibrary(library: FederationLibrary | null): FederationLibrary | null {
-  if (!library) return null
-  return JSON.parse(JSON.stringify(library)) as FederationLibrary
-}
-
-function makeFederation(): FederationRecord {
-  const now = new Date().toISOString()
-  return {
-    id: crypto.randomUUID(),
-    name: 'New Federation',
-    abbreviation: '',
-    region: '',
-    notes: '',
-    status: 'active',
-    created_at: now,
-    updated_at: now,
-  }
-}
-
-function makeStandard(): QualificationStandard {
-  return {
-    id: crypto.randomUUID(),
-    federation_id: '',
-    season_year: new Date().getFullYear(),
-    sex: 'male',
-    equipment: 'raw',
-    event: 'sbd',
-    weight_class_kg: 83,
-    required_total_kg: 0,
-    source_type: 'user_entered',
-    status: 'active',
-    updated_at: new Date().toISOString(),
-  }
-}
-
-function federationStatusColor(status: FederationRecord['status']): string {
+function federationStatusColor(status: UserFederation['user_status']): string {
   return status === 'active' ? 'blue' : 'gray'
-}
-
-function standardStatusColor(status: QualificationStandard['status']): string {
-  return status === 'active' ? 'green' : 'gray'
 }
 
 export default function FederationsPage() {
   const { readOnly } = useAuth()
-  const { library, loadLibrary, saveLibrary } = useFederationStore()
-  const { program } = useProgramStore()
   const { pushToast } = useUiStore()
-  const [draft, setDraft] = useState<FederationLibrary | null>(null)
+  const [federations, setFederations] = useState<UserFederation[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [hasChanges, setHasChanges] = useState(false)
+  const [pendingPatches, setPendingPatches] = useState<Map<string, { user_status?: 'active' | 'archived'; notes?: string }>>(new Map())
 
   useEffect(() => {
-    loadLibrary().catch(console.error)
-  }, [loadLibrary])
+    fetchUserFederations()
+      .then((feds) => { setFederations(feds); setIsLoading(false) })
+      .catch(() => { setIsLoading(false) })
+  }, [])
 
-  useEffect(() => {
-    if (!library) return
-    setDraft(cloneLibrary(library))
-    setHasChanges(false)
-  }, [library])
-
-  const referencedFederationIds = useMemo(() => {
-    const ids = new Set<string>()
-    const standardsById = new Map((library?.qualification_standards ?? []).map(item => [item.id, item.federation_id]))
-    for (const goal of program?.goals ?? []) {
-      if (goal.target_federation_id) ids.add(goal.target_federation_id)
-      if (goal.target_standard_id && standardsById.has(goal.target_standard_id)) {
-        ids.add(standardsById.get(goal.target_standard_id) as string)
-      }
-      for (const standardId of goal.target_standard_ids ?? []) {
-        if (standardsById.has(standardId)) ids.add(standardsById.get(standardId) as string)
-      }
-    }
-    for (const competition of program?.competitions ?? []) {
-      if (competition.federation_id) ids.add(competition.federation_id)
-      for (const federationId of competition.counts_toward_federation_ids ?? []) {
-        ids.add(federationId)
-      }
-    }
-    return ids
-  }, [library?.qualification_standards, program?.competitions, program?.goals])
-
-  const referencedStandardIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const goal of program?.goals ?? []) {
-      if (goal.target_standard_id) ids.add(goal.target_standard_id)
-      for (const standardId of goal.target_standard_ids ?? []) {
-        ids.add(standardId)
-      }
-    }
-    return ids
-  }, [program?.goals])
-
-  function updateDraft(patch: Partial<FederationLibrary>) {
-    setDraft(current => (current ? { ...current, ...patch } : current))
+  function updatePending(masterId: string, patch: { user_status?: 'active' | 'archived'; notes?: string }) {
+    setPendingPatches((prev) => {
+      const next = new Map(prev)
+      const existing = next.get(masterId) || {}
+      next.set(masterId, { ...existing, ...patch })
+      return next
+    })
     setHasChanges(true)
   }
 
-  function updateFederation(federationId: string, patch: Partial<FederationRecord>) {
-    if (!draft) return
-    updateDraft({
-      federations: draft.federations.map(item => (
-        item.id === federationId
-          ? { ...item, ...patch, updated_at: new Date().toISOString() }
-          : item
-      )),
-    })
+  function getEffectiveStatus(masterId: string): 'active' | 'archived' {
+    const fed = federations.find((f) => f.master_id === masterId)
+    const pending = pendingPatches.get(masterId)
+    return pending?.user_status ?? fed?.user_status ?? 'active'
   }
 
-  function updateStandard(standardId: string, patch: Partial<QualificationStandard>) {
-    if (!draft) return
-    updateDraft({
-      qualification_standards: draft.qualification_standards.map(item => (
-        item.id === standardId
-          ? { ...item, ...patch, updated_at: new Date().toISOString() }
-          : item
-      )),
-    })
-  }
-
-  function addFederation() {
-    if (!draft) return
-    updateDraft({
-      federations: [...draft.federations, makeFederation()],
-    })
-  }
-
-  function addStandard() {
-    if (!draft) return
-    if (draft.federations.length === 0) {
-      pushToast({ message: 'Add a federation before adding standards', type: 'error' })
-      return
-    }
-    const standard = makeStandard()
-    standard.federation_id = draft.federations[0].id
-    updateDraft({
-      qualification_standards: [...draft.qualification_standards, standard],
-    })
+  function getEffectiveNotes(masterId: string): string {
+    const fed = federations.find((f) => f.master_id === masterId)
+    const pending = pendingPatches.get(masterId)
+    return pending?.notes ?? fed?.notes ?? ''
   }
 
   async function handleSave() {
-    if (!draft) return
     try {
-      await saveLibrary(draft)
+      for (const [masterId, patch] of pendingPatches) {
+        await patchUserFederation(masterId, patch)
+      }
+      // Refresh from server
+      const feds = await fetchUserFederations()
+      setFederations(feds)
+      setPendingPatches(new Map())
       setHasChanges(false)
-      pushToast({ message: 'Federation library saved', type: 'success' })
-    } catch (error) {
-      pushToast({ message: 'Failed to save federation library', type: 'error' })
+      pushToast({ message: 'Federation changes saved', type: 'success' })
+    } catch {
+      pushToast({ message: 'Failed to save federation changes', type: 'error' })
     }
   }
-
-  const federationOptions = (draft?.federations ?? []).map(item => ({
-    value: item.id,
-    label: item.abbreviation ? `${item.abbreviation} • ${item.name}` : item.name,
-  }))
 
   return (
     <Stack gap="md">
       <Group justify="space-between">
         <Stack gap={0}>
           <Group gap="xs">
-            <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
-              Designer
-            </Text>
+            <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>Designer</Text>
             <Text c="dimmed">/</Text>
             <Title order={2}>Federations</Title>
           </Group>
           <Text c="dimmed" size="sm" mt={4}>
-            Reusable athlete-wide library of federations and manually maintained qualification standards.
+            Federation details are read-only. You can update your status and notes.
           </Text>
         </Stack>
-        <Group gap="sm">
-          {hasChanges && (
-            <Button leftSection={<Save size={16} />} onClick={handleSave} disabled={readOnly}>
-              Save
-            </Button>
-          )}
-          <Button variant="default" leftSection={<Plus size={16} />} onClick={addFederation} disabled={readOnly}>
-            Add Federation
+        {hasChanges && (
+          <Button leftSection={<Save size={16} />} onClick={handleSave} disabled={readOnly}>
+            Save
           </Button>
-          <Button variant="default" leftSection={<Plus size={16} />} onClick={addStandard} disabled={readOnly}>
-            Add Standard
-          </Button>
-        </Group>
+        )}
       </Group>
 
-      {!draft ? (
+      {isLoading ? (
         <Paper withBorder p="xl">
           <Group justify="center">
-            <Text c="dimmed">Loading federation library...</Text>
+            <Text c="dimmed">Loading federations...</Text>
           </Group>
         </Paper>
+      ) : federations.length === 0 ? (
+        <Paper withBorder p="lg">
+          <Text size="sm" c="dimmed">No federations found.</Text>
+        </Paper>
       ) : (
-        <>
-          <Paper withBorder p="md">
-            <Text size="sm" c="dimmed">
-              These records are shared across your programs. Archive old standards instead of deleting them so linked goals and competitions keep historical context.
-            </Text>
-          </Paper>
+        <Accordion variant="separated">
+          {federations.map((fed) => {
+            const effectiveStatus = getEffectiveStatus(fed.master_id)
+            const effectiveNotes = getEffectiveNotes(fed.master_id)
 
-          <Stack gap="sm">
-            <Group gap="xs">
-              <Shield size={18} />
-              <Text fw={600}>Federations</Text>
-            </Group>
-            {draft.federations.length === 0 ? (
-              <Paper withBorder p="lg">
-                <Text size="sm" c="dimmed">No federations yet. Add one to start building standards.</Text>
-              </Paper>
-            ) : (
-              <Accordion variant="separated">
-                {draft.federations.map(item => (
-                  <Accordion.Item key={item.id} value={item.id}>
-                    <Accordion.Control>
-                      <Group gap="sm" wrap="nowrap">
-                        <Badge variant="light" color={federationStatusColor(item.status)}>
-                          {item.status}
-                        </Badge>
-                        <Stack gap={0}>
-                          <Text fw={500}>{item.abbreviation || item.name}</Text>
-                          <Text size="xs" c="dimmed">{item.name}</Text>
-                        </Stack>
-                      </Group>
-                    </Accordion.Control>
-                    <Accordion.Panel>
-                      <Stack gap="md">
-                        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                          <TextInput
-                            label="Name"
-                            value={item.name}
-                            onChange={(event) => updateFederation(item.id, { name: event.currentTarget.value })}
-                            disabled={readOnly}
-                          />
-                          <TextInput
-                            label="Abbreviation"
-                            value={item.abbreviation || ''}
-                            onChange={(event) => updateFederation(item.id, { abbreviation: event.currentTarget.value })}
-                            disabled={readOnly}
-                          />
-                          <TextInput
-                            label="Region"
-                            value={item.region || ''}
-                            onChange={(event) => updateFederation(item.id, { region: event.currentTarget.value })}
-                            disabled={readOnly}
-                          />
-                          <Select
-                            label="Status"
-                            data={STATUS_OPTIONS}
-                            value={item.status}
-                            onChange={(value) => value && updateFederation(item.id, { status: value as FederationRecord['status'] })}
-                            disabled={readOnly}
-                          />
-                        </SimpleGrid>
-                        <Textarea
-                          label="Notes"
-                          autosize
-                          minRows={2}
-                          value={item.notes || ''}
-                          onChange={(event) => updateFederation(item.id, { notes: event.currentTarget.value })}
-                          disabled={readOnly}
+            return (
+              <Accordion.Item key={fed.master_id} value={fed.master_id}>
+                <Accordion.Control>
+                  <Group gap="sm" wrap="nowrap">
+                    <Badge variant="light" color={federationStatusColor(effectiveStatus)}>
+                      {effectiveStatus}
+                    </Badge>
+                    <Stack gap={0}>
+                      <Text fw={500}>{fed.abbreviation || fed.name}</Text>
+                      <Text size="xs" c="dimmed">{fed.name}</Text>
+                    </Stack>
+                  </Group>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <Stack gap="md">
+                    {/* Master fields (read-only) */}
+                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+                      <TextInput label="Name" value={fed.name} readOnly />
+                      <TextInput label="Abbreviation" value={fed.abbreviation || ''} readOnly />
+                      <TextInput label="Region" value={fed.region || ''} readOnly />
+                      {fed.website_url && (
+                        <TextInput
+                          label="Website"
+                          value={fed.website_url}
+                          readOnly
+                          rightSection={
+                            <Text component="a" href={fed.website_url} target="_blank" size="xs" c="blue" style={{ textDecoration: 'none' }}>Open</Text>
+                          }
                         />
-                        <Group justify="space-between">
-                          <Text size="xs" c="dimmed">
-                            {referencedFederationIds.has(item.id) ? 'Referenced by the current program.' : 'Not referenced by the current program.'}
-                          </Text>
-                          <Button
-                            variant="light"
-                            color={item.status === 'active' ? 'gray' : 'blue'}
-                            leftSection={<Archive size={14} />}
-                            onClick={() => updateFederation(item.id, {
-                              status: item.status === 'active' ? 'archived' : 'active',
-                            })}
-                            disabled={readOnly}
-                          >
-                            {item.status === 'active' ? 'Archive' : 'Restore'}
-                          </Button>
-                        </Group>
-                      </Stack>
-                    </Accordion.Panel>
-                  </Accordion.Item>
-                ))}
-              </Accordion>
-            )}
-          </Stack>
+                      )}
+                    </SimpleGrid>
 
-          <Stack gap="sm">
-            <Group gap="xs">
-              <Shield size={18} />
-              <Text fw={600}>Qualification Standards</Text>
-            </Group>
-            {draft.qualification_standards.length === 0 ? (
-              <Paper withBorder p="lg">
-                <Text size="sm" c="dimmed">No standards yet. Add the totals you care about and link them from goals or competitions.</Text>
-              </Paper>
-            ) : (
-              <Accordion variant="separated">
-                {draft.qualification_standards
-                  .slice()
-                  .sort((a, b) => {
-                    if (a.season_year !== b.season_year) return b.season_year - a.season_year
-                    return a.weight_class_kg - b.weight_class_kg
-                  })
-                  .map(item => {
-                    const federation = draft.federations.find(fed => fed.id === item.federation_id)
-                    return (
-                      <Accordion.Item key={item.id} value={item.id}>
-                        <Accordion.Control>
-                          <Group gap="sm" wrap="nowrap">
-                            <Badge variant="light" color={standardStatusColor(item.status)}>
-                              {item.status}
-                            </Badge>
-                            <Stack gap={0}>
-                              <Text fw={500}>
-                                {federation?.abbreviation || federation?.name || 'Unassigned'} • {item.season_year} • {item.weight_class_kg}kg
-                              </Text>
-                              <Text size="xs" c="dimmed">
-                                {item.sex} • {item.equipment} • {item.event} • {item.required_total_kg}kg total
-                              </Text>
-                            </Stack>
-                          </Group>
-                        </Accordion.Control>
-                        <Accordion.Panel>
-                          <Stack gap="md">
-                            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                              <Select
-                                searchable
-                                label="Federation"
-                                data={federationOptions}
-                                value={item.federation_id}
-                                onChange={(value) => updateStandard(item.id, { federation_id: value || '' })}
-                                disabled={readOnly}
-                              />
-                              <TextInput
-                                type="number"
-                                label="Season Year"
-                                value={item.season_year}
-                                onChange={(e) => updateStandard(item.id, {
-                                  season_year: Number(e.currentTarget.value) || item.season_year,
-                                })}
-                                disabled={readOnly}
-                              />
-                              <Select
-                                label="Sex"
-                                data={SEX_OPTIONS}
-                                value={item.sex}
-                                onChange={(value) => value && updateStandard(item.id, { sex: value as QualificationStandard['sex'] })}
-                                disabled={readOnly}
-                              />
-                              <Select
-                                label="Status"
-                                data={STATUS_OPTIONS}
-                                value={item.status}
-                                onChange={(value) => value && updateStandard(item.id, { status: value as QualificationStandard['status'] })}
-                                disabled={readOnly}
-                              />
-                            </SimpleGrid>
-
-                            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                              <Select
-                                label="Equipment"
-                                data={EQUIPMENT_OPTIONS}
-                                value={item.equipment}
-                                onChange={(value) => value && updateStandard(item.id, { equipment: value as QualificationStandard['equipment'] })}
-                                disabled={readOnly}
-                              />
-                              <Select
-                                label="Event"
-                                data={EVENT_OPTIONS}
-                                value={item.event}
-                                onChange={(value) => value && updateStandard(item.id, { event: value as QualificationStandard['event'] })}
-                                disabled={readOnly}
-                              />
-                              <TextInput
-                                label="Age Class"
-                                value={item.age_class || ''}
-                                onChange={(event) => updateStandard(item.id, { age_class: event.currentTarget.value || undefined })}
-                                disabled={readOnly}
-                              />
-                              <TextInput
-                                label="Division"
-                                value={item.division || ''}
-                                onChange={(event) => updateStandard(item.id, { division: event.currentTarget.value || undefined })}
-                                disabled={readOnly}
-                              />
-                            </SimpleGrid>
-
-                            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                              <TextInput
-                                type="number"
-                                label="Weight Class (kg)"
-                                value={item.weight_class_kg}
-                                onChange={(e) => updateStandard(item.id, {
-                                  weight_class_kg: Number(e.currentTarget.value) || item.weight_class_kg,
-                                })}
-                                disabled={readOnly}
-                              />
-                              <TextInput
-                                type="number"
-                                label="Required Total (kg)"
-                                value={item.required_total_kg}
-                                onChange={(e) => updateStandard(item.id, {
-                                  required_total_kg: Number(e.currentTarget.value) || item.required_total_kg,
-                                })}
-                                disabled={readOnly}
-                              />
-                              <DatePickerInput
-                                clearable
-                                label="Qualifying Start"
-                                value={item.qualifying_start_date || null}
-                                onChange={(value) => updateStandard(item.id, { qualifying_start_date: value || undefined })}
-                                disabled={readOnly}
-                              />
-                              <DatePickerInput
-                                clearable
-                                label="Qualifying End"
-                                value={item.qualifying_end_date || null}
-                                onChange={(value) => updateStandard(item.id, { qualifying_end_date: value || undefined })}
-                                disabled={readOnly}
-                              />
-                            </SimpleGrid>
-
-                            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-                              <TextInput
-                                label="Competition Name"
-                                value={item.competition_name || ''}
-                                onChange={(event) => updateStandard(item.id, { competition_name: event.currentTarget.value || undefined })}
-                                disabled={readOnly}
-                              />
-                              <TextInput
-                                label="Source Label"
-                                value={item.source_label || ''}
-                                onChange={(event) => updateStandard(item.id, { source_label: event.currentTarget.value || undefined })}
-                                disabled={readOnly}
-                              />
-                              <TextInput
-                                label="Source URL"
-                                value={item.source_url || ''}
-                                onChange={(event) => updateStandard(item.id, { source_url: event.currentTarget.value || undefined })}
-                                disabled={readOnly}
-                              />
-                            </SimpleGrid>
-
-                            <Group justify="space-between">
-                              <Text size="xs" c="dimmed">
-                                {referencedStandardIds.has(item.id) ? 'Referenced by the current program.' : 'Not referenced by the current program.'}
-                              </Text>
-                              <Button
-                                variant="light"
-                                color={item.status === 'active' ? 'gray' : 'blue'}
-                                leftSection={<Archive size={14} />}
-                                onClick={() => updateStandard(item.id, {
-                                  status: item.status === 'active' ? 'archived' : 'active',
-                                })}
-                                disabled={readOnly}
-                              >
-                                {item.status === 'active' ? 'Archive' : 'Restore'}
-                              </Button>
-                            </Group>
-                          </Stack>
-                        </Accordion.Panel>
-                      </Accordion.Item>
-                    )
-                  })}
-              </Accordion>
-            )}
-          </Stack>
-        </>
+                    {/* User-owned fields (editable) */}
+                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+                      <Select
+                        label="Your Status"
+                        data={STATUS_OPTIONS}
+                        value={effectiveStatus}
+                        onChange={(value) => value && updatePending(fed.master_id, { user_status: value as 'active' | 'archived' })}
+                        disabled={readOnly}
+                      />
+                    </SimpleGrid>
+                    <Textarea
+                      label="Notes"
+                      autosize
+                      minRows={2}
+                      value={effectiveNotes}
+                      onChange={(event) => updatePending(fed.master_id, { notes: event.currentTarget.value })}
+                      disabled={readOnly}
+                    />
+                  </Stack>
+                </Accordion.Panel>
+              </Accordion.Item>
+            )
+          })}
+        </Accordion>
       )}
     </Stack>
   )

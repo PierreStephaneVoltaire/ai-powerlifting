@@ -87,7 +87,10 @@ def _section_current_state(
         comp_date = _parse_date(comp_date_str)
         if comp_date and comp_date > today:
             days_left = (comp_date - today).days
-            comps = sorted(program.get("competitions", []), key=lambda c: c.get("date", ""))
+            comps = sorted(
+                (c for c in program.get("competitions", []) if c.get("status") != "available"),
+                key=lambda c: c.get("date", ""),
+            )
             comp_name = next(
                 (c.get("name", comp_date_str) for c in comps
                  if c.get("date", "") == comp_date_str),
@@ -258,7 +261,7 @@ def _section_athlete_profile(
 def _section_competitions(program: dict, summarize_competitions) -> str | None:
     try:
         result = summarize_competitions(program)
-        comps = result.get("competitions", [])
+        comps = [c for c in result.get("competitions", []) if c.get("status") != "available"]
         if not comps:
             return None
 

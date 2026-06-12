@@ -850,3 +850,156 @@ export interface ReadinessAnalyticsFields {
   training_readiness_confidence?: number
   external_readiness_confidence?: number
 }
+
+// ─── New master/user competition catalog (additive, original Competition type preserved) ───
+
+export type CompEventType = 'full_power' | 'bench_only' | 'deadlift_only' | 'unknown' | null
+export type CompTestingStatus = 'tested' | 'untested' | 'unknown'
+export type CompRegistrationStatus = 'open' | 'closed' | 'unknown'
+export type CompConfidenceStatus = 'high' | 'medium' | 'low' | null
+
+export interface AttemptSelectionAttempt {
+  lift: CompetitionLift
+  attempt_1: number | null
+  attempt_2: number | null
+  attempt_3: number | null
+}
+
+export type AttemptSelection = AttemptSelectionAttempt[]
+
+export interface MasterCompetition {
+  id: string
+  name: string
+  start_date: string
+  end_date: string | null
+  federation_id: string | null
+  federation_label: string | null
+  federation_slug: string | null
+  federation_website_url: string | null
+  venue_name: string | null
+  venue_address: string | null
+  venue_city: string | null
+  venue_state: string | null
+  venue_country: string | null
+  venue_postal_code: string | null
+  venue_latitude: number | null
+  venue_longitude: number | null
+  venue_coordinate_quality: string | null
+  website_url: string | null
+  testing_status: CompTestingStatus
+  registration_status: CompRegistrationStatus
+  registration_url: string | null
+  registration_end_date: string | null
+  source_url: string | null
+  source_name: string | null
+  last_verified_at: string | null
+  confidence_status: CompConfidenceStatus
+  slug: string | null
+  cancelled: boolean
+  is_sample_data: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UserCompetition {
+  master_id: string
+  name: string
+  start_date: string
+  end_date: string | null
+  federation_id: string
+  federation_label: string
+  federation_slug: string | null
+  federation_website_url: string | null
+  venue_name: string | null
+  venue_address: string | null
+  venue_city: string | null
+  venue_state: string | null
+  venue_country: string | null
+  venue_postal_code: string | null
+  venue_latitude: number | null
+  venue_longitude: number | null
+  venue_coordinate_quality: string | null
+  website_url: string | null
+  testing_status: CompTestingStatus
+  registration_status: CompRegistrationStatus
+  registration_url: string | null
+  registration_end_date: string | null
+  source_url: string | null
+  source_name: string | null
+  last_verified_at: string | null
+  confidence_status: CompConfidenceStatus | null
+  event_type: CompEventType
+  cancelled: boolean
+  user_status: 'available' | 'optional' | 'confirmed' | 'completed' | 'skipped'
+  weight_class_kg: number | null
+  body_weight_kg: number | null
+  targets: LiftResults | null
+  results: CompetitionResults | null
+  post_meet_report: PostMeetReport | null
+  hotel_required: boolean
+  counts_toward_federation_ids: string[]
+  between_comp_plan: BetweenCompPlan | null
+  comp_day_protocol: CompDayProtocol | null
+  decision_date: string | null
+  attempt_selection: AttemptSelection | null
+  attempt_strategy_mode: AttemptStrategyMode | null
+  qualifying_standard_id: string | null
+  qualifying_total_kg: number | null
+  projected_at_t_minus_1w: LiftResults | null
+  projection_snapshot_date: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MasterFederation {
+  id: string
+  name: string
+  abbreviation: string | null
+  region: string | null
+  website_url: string | null
+  status: 'active' | 'archived'
+  source_slug: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UserFederation {
+  master_id: string
+  name: string
+  abbreviation: string | null
+  region: string | null
+  website_url: string | null
+  user_status: 'active' | 'archived'
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export interface StoredGoal extends AthleteGoal {
+  id: string
+  target_competition_ids?: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface UserCompetitionUpdate {
+  user_status?: 'available' | 'optional' | 'confirmed' | 'completed' | 'skipped'
+  weight_class_kg?: number | null
+  body_weight_kg?: number | null
+  targets?: LiftResults | null
+  results?: CompetitionResults | null
+  post_meet_report?: PostMeetReport | null
+  hotel_required?: boolean
+  counts_toward_federation_ids?: string[]
+  between_comp_plan?: BetweenCompPlan | null
+  comp_day_protocol?: CompDayProtocol | null
+  decision_date?: string | null
+  attempt_selection?: AttemptSelection | null
+  attempt_strategy_mode?: AttemptStrategyMode | null
+  qualifying_standard_id?: string | null
+  qualifying_total_kg?: number | null
+  projected_at_t_minus_1w?: LiftResults | null
+  projection_snapshot_date?: string | null
+  notes?: string
+}

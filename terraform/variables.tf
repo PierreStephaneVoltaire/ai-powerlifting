@@ -138,6 +138,36 @@ variable "dynamodb_user_table" {
   default     = "if-user"
 }
 
+variable "dynamodb_powerlifting_master_competitions_table" {
+  description = "DynamoDB table for the master powerlifting competition catalog (admin-owned, stream-enabled). Comps here are the source of truth that the master-sync Lambda fans out to per-user copies."
+  type        = string
+  default     = "if-powerlifting-master-competitions"
+}
+
+variable "dynamodb_powerlifting_user_competitions_table" {
+  description = "DynamoDB table for per-user powerlifting competition copies (denormalized, Lambda-synced)."
+  type        = string
+  default     = "if-powerlifting-user-competitions"
+}
+
+variable "dynamodb_powerlifting_master_federations_table" {
+  description = "DynamoDB table for the master powerlifting federation catalog (admin-owned, stream-enabled)."
+  type        = string
+  default     = "if-powerlifting-master-federations"
+}
+
+variable "dynamodb_powerlifting_user_federations_table" {
+  description = "DynamoDB table for per-user powerlifting federation copies (denormalized, Lambda-synced)."
+  type        = string
+  default     = "if-powerlifting-user-federations"
+}
+
+variable "dynamodb_powerlifting_goals_table" {
+  description = "DynamoDB table for per-user powerlifting goals (one row per goal, no program version)."
+  type        = string
+  default     = "if-powerlifting-goals"
+}
+
 variable "tier_upgrade_threshold" {
   description = "Fraction of context limit before tier upgrade"
   type        = number

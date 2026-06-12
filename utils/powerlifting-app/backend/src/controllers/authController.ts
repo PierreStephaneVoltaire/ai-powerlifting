@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { signToken, signState, verifyState } from '../middleware/auth'
+import { getSettings } from '../services/userSettings'
 
 const DISCORD_API = 'https://discord.com/api/v10'
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID || ''
@@ -109,11 +110,23 @@ export async function discordCallback(req: Request, res: Response): Promise<void
   }
 }
 
-export function getMe(req: Request, res: Response): void {
+export async function getMe(req: Request, res: Response): Promise<void> {
+  let ranking_country: string | null = null
+  let ranking_region: string | null = null
+  try {
+    const username = req.user?.username || req.mapped_pk || 'operator'
+    const settings = await getSettings(username)
+    if (settings) {
+      ranking_country = settings.ranking_country
+      ranking_region = settings.ranking_region
+    }
+  } catch {}
   res.json({
     user: req.user ?? null,
     mapped_pk: req.mapped_pk ?? 'operator',
     readOnly: req.readOnly ?? true,
+    ranking_country,
+    ranking_region,
   })
 }
 

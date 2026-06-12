@@ -1,36 +1,38 @@
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import { docClient, TABLE } from '../db/dynamo'
+import { GetCommand, QueryCommand, UpdateCommand, DeleteCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
+import { docClient, POWERLIFTING_GOALS_TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
-import type { AthleteGoal } from '@powerlifting/types'
+import type { AthleteGoal, StoredGoal } from '@powerlifting/types'
+import { randomUUID } from 'crypto'
 
-async function resolveVersionSk(pk: string, version: string): Promise<string> {
-  if (version === 'current') {
-    const pointerCommand = new GetCommand({
-      TableName: TABLE,
-      Key: { pk, sk: 'program#current' },
-    })
-    const pointerResult = await docClient.send(pointerCommand)
-    if (!pointerResult.Item) return 'program#v001'
-    return (pointerResult.Item as any).ref_sk || 'program#v001'
-  }
-  return `program#${version}`
+function stripStoredFields(g: StoredGoal): AthleteGoal {
+  const { id: _id, target_competition_ids, created_at, updated_at, ...rest } = g
+  return rest as AthleteGoal
+}
+
+function addStoredFields(g: AthleteGoal, id: string): StoredGoal {
+  const now = new Date().toISOString()
+  return { ...g, id, target_competition_ids: [], created_at: now, updated_at: now }
+}
+
+async function queryGoals(pk: string): Promise<StoredGoal[]> {
+  const items: StoredGoal[] = []
+  let lastKey: Record<string, unknown> | undefined
+  do {
+    const resp = await docClient.send(new QueryCommand({
+      TableName: POWERLIFTING_GOALS_TABLE,
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: { ':pk': pk, ':prefix': 'GOAL#' },
+      ExclusiveStartKey: lastKey,
+    }))
+    for (const it of resp.Items ?? []) items.push(it as StoredGoal)
+    lastKey = resp.LastEvaluatedKey
+  } while (lastKey)
+  return items
 }
 
 export async function getGoals(pk: string, version: string): Promise<AthleteGoal[]> {
-  const sk = await resolveVersionSk(pk, version)
-
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'goals',
-  })
-
-  const result = await docClient.send(getCommand)
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
-  }
-
-  return (result.Item.goals ?? []) as AthleteGoal[]
+  const items = await queryGoals(pk)
+  return items.map(stripStoredFields)
 }
 
 export async function updateGoals(
@@ -38,18 +40,46 @@ export async function updateGoals(
   version: string,
   goals: AthleteGoal[],
 ): Promise<void> {
-  const sk = await resolveVersionSk(pk, version)
+  const userPk = pk
+  const existing = await queryGoals(userPk)
+  const byId = new Map<string, StoredGoal>()
+  for (const sg of existing) byId.set(sg.id, sg)
+  const incomingIds = new Set<string>()
 
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET goals = :goals, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':goals': goals,
-      ':now': new Date().toISOString(),
-    },
-  })
+  for (const g of goals) {
+    const id = (g as { id?: string }).id
+    if (id && byId.has(id)) {
+      incomingIds.add(id)
+      const cur = byId.get(id)!
+      const merged: StoredGoal = {
+        ...cur,
+        ...g,
+        id,
+        target_competition_ids: cur.target_competition_ids ?? [],
+        created_at: cur.created_at,
+        updated_at: new Date().toISOString(),
+      }
+      await docClient.send(new PutCommand({
+        TableName: POWERLIFTING_GOALS_TABLE,
+        Item: merged,
+      }))
+    } else {
+      const newId = (g as { id?: string }).id || randomUUID()
+      incomingIds.add(newId)
+      const fresh = addStoredFields(g, newId)
+      await docClient.send(new PutCommand({
+        TableName: POWERLIFTING_GOALS_TABLE,
+        Item: fresh,
+      }))
+    }
+  }
 
-  await docClient.send(updateCommand)
+  for (const sg of existing) {
+    if (!incomingIds.has(sg.id)) {
+      await docClient.send(new DeleteCommand({
+        TableName: POWERLIFTING_GOALS_TABLE,
+        Key: { pk: userPk, sk: `GOAL#${sg.id}` },
+      }))
+    }
+  }
 }

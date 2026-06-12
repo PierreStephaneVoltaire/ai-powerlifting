@@ -344,3 +344,138 @@ resource "aws_dynamodb_table" "if_health_templates" {
     Service = "health-templates"
   }
 }
+
+# ─── Powerlifting master competitions ────────────────────────────────────────
+# Admin/import-owned. Source of truth for every competition in the catalog.
+# Streams NEW_AND_OLD_IMAGES so the master-sync Lambda can fan updates out
+# to per-user copies in if-powerlifting-user-competitions.
+resource "aws_dynamodb_table" "if_powerlifting_master_competitions" {
+  name             = var.dynamodb_powerlifting_master_competitions_table
+  billing_mode     = "PAY_PER_REQUEST"
+  hash_key         = "pk"
+  stream_enabled   = true
+  stream_view_type = "NEW_AND_OLD_IMAGES"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "powerlifting-master-competitions"
+  }
+}
+
+# ─── Powerlifting user competitions ──────────────────────────────────────────
+# Per-user denormalized copies. The Lambda writes master fields here; users
+# write the user-owned fields. No streams.
+resource "aws_dynamodb_table" "if_powerlifting_user_competitions" {
+  name         = var.dynamodb_powerlifting_user_competitions_table
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "powerlifting-user-competitions"
+  }
+}
+
+# ─── Powerlifting master federations ─────────────────────────────────────────
+# Admin/import-owned catalog. Streams NEW_AND_OLD_IMAGES.
+resource "aws_dynamodb_table" "if_powerlifting_master_federations" {
+  name             = var.dynamodb_powerlifting_master_federations_table
+  billing_mode     = "PAY_PER_REQUEST"
+  hash_key         = "pk"
+  stream_enabled   = true
+  stream_view_type = "NEW_AND_OLD_IMAGES"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "powerlifting-master-federations"
+  }
+}
+
+# ─── Powerlifting user federations ───────────────────────────────────────────
+# Per-user denormalized copies. No streams.
+resource "aws_dynamodb_table" "if_powerlifting_user_federations" {
+  name         = var.dynamodb_powerlifting_user_federations_table
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "powerlifting-user-federations"
+  }
+}
+
+# ─── Powerlifting goals ──────────────────────────────────────────────────────
+# Per-user goals, one row per goal. No program version. No streams.
+resource "aws_dynamodb_table" "if_powerlifting_goals" {
+  name         = var.dynamodb_powerlifting_goals_table
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "powerlifting-goals"
+  }
+}

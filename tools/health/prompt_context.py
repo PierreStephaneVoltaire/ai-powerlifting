@@ -603,7 +603,10 @@ def summarize_competitions(
     competition_goal_priorities: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     meta = program.get("meta", {})
-    competitions = sorted(program.get("competitions", []), key=lambda c: c.get("date", ""))
+    competitions = sorted(
+        (c for c in program.get("competitions", []) if c.get("status") != "available"),
+        key=lambda c: c.get("date", ""),
+    )
     reference_date = reference_date or date.today()
     sex = str(meta.get("sex", "male")).lower()
     fallback_bw = _num(meta.get("current_body_weight_kg", meta.get("bodyweight_kg", 0)))

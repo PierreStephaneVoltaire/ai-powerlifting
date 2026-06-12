@@ -220,20 +220,25 @@ resource "kubernetes_config_map" "powerlifting_app_config" {
   }
 
   data = {
-    AWS_REGION                = var.region
-    DYNAMODB_TABLE            = var.dynamodb_powerlifting_table
-    IF_USER_TABLE             = var.dynamodb_user_table
-    IF_SESSIONS_TABLE_NAME    = var.dynamodb_sessions_table
-    ANALYSIS_CACHE_TABLE_NAME = var.dynamodb_analysis_cache_table
-    NODE_ENV                  = "production"
-    PORT                      = "3005"
-    FRONTEND_URL              = "https://${local.app_domains["powerlifting-app"].domain}"
-    DISCORD_CLIENT_ID         = var.discord_client_id
-    DISCORD_CLIENT_SECRET     = var.discord_client_secret
-    DISCORD_REDIRECT_URI      = var.discord_redirect_uri
-    JWT_SECRET                = var.jwt_secret
-    COOKIE_DOMAIN             = var.cookie_domain
-    COOKIE_SECURE             = var.cookie_secure
+    AWS_REGION                             = var.region
+    DYNAMODB_TABLE                         = var.dynamodb_powerlifting_table
+    IF_USER_TABLE                          = var.dynamodb_user_table
+    IF_SESSIONS_TABLE_NAME                 = var.dynamodb_sessions_table
+    ANALYSIS_CACHE_TABLE_NAME              = var.dynamodb_analysis_cache_table
+    POWERLIFTING_MASTER_COMPETITIONS_TABLE = var.dynamodb_powerlifting_master_competitions_table
+    POWERLIFTING_USER_COMPETITIONS_TABLE   = var.dynamodb_powerlifting_user_competitions_table
+    POWERLIFTING_MASTER_FEDERATIONS_TABLE  = var.dynamodb_powerlifting_master_federations_table
+    POWERLIFTING_USER_FEDERATIONS_TABLE    = var.dynamodb_powerlifting_user_federations_table
+    POWERLIFTING_GOALS_TABLE               = var.dynamodb_powerlifting_goals_table
+    NODE_ENV                               = "production"
+    PORT                                   = "3005"
+    FRONTEND_URL                           = "https://${local.app_domains["powerlifting-app"].domain}"
+    DISCORD_CLIENT_ID                      = var.discord_client_id
+    DISCORD_CLIENT_SECRET                  = var.discord_client_secret
+    DISCORD_REDIRECT_URI                   = var.discord_redirect_uri
+    JWT_SECRET                             = var.jwt_secret
+    COOKIE_DOMAIN                          = var.cookie_domain
+    COOKIE_SECURE                          = var.cookie_secure
   }
 }
 

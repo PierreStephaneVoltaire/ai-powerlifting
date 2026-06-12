@@ -1,5 +1,6 @@
 import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, USER_TABLE } from '../db/dynamo'
+import { seedMasterCopiesForNewUser } from './masterCopy'
 
 export type ProfileVisibility = 'private' | 'public'
 
@@ -183,6 +184,12 @@ export async function getOrCreateSettings(
   }
 
   cache.set(usernameKey(discordUsername), { settings, expires: Date.now() + CACHE_TTL_MS })
+
+  // Fire-and-forget: seed master comp + fed copies for the new user
+  seedMasterCopiesForNewUser(mappedPkForSettings(settings)).catch((err) => {
+    console.error('[userSettings] Failed to seed master copies for new user', username, err)
+  })
+
   return settings
 }
 

@@ -34,6 +34,9 @@ import type {
   ConflictResolution,
   PostMeetReport,
   WeekStartDay,
+  UserCompetition,
+  UserCompetitionUpdate,
+  UserFederation,
 } from '@powerlifting/types'
 
 const api = axios.create({
@@ -448,6 +451,31 @@ export async function fetchCompetitions(version: string): Promise<Competition[]>
   return res.data.data
 }
 
+export async function fetchUserCompetitions(filters?: { country?: string; state?: string }): Promise<UserCompetition[]> {
+  const params = new URLSearchParams()
+  if (filters?.country) params.set('country', filters.country)
+  if (filters?.state) params.set('state', filters.state)
+  const qs = params.toString()
+  const res = await api.get<ApiResponse<UserCompetition[]>>(`/competitions${qs ? `?${qs}` : ''}`)
+  return res.data.data
+}
+
+export async function patchUserCompetition(
+  masterId: string,
+  updates: UserCompetitionUpdate,
+): Promise<void> {
+  await api.patch(`/competitions/${masterId}`, updates)
+}
+
+export async function completeUserCompetition(
+  masterId: string,
+  results: LiftResults,
+  bodyWeightKg: number,
+  postMeetReport?: PostMeetReport,
+): Promise<void> {
+  await api.post(`/competitions/${masterId}/complete`, { results, bodyWeightKg, postMeetReport })
+}
+
 export async function updateCompetitions(
   version: string,
   competitions: Competition[]
@@ -472,6 +500,20 @@ export async function completeCompetition(
     { results, bodyWeightKg, postMeetReport }
   )
   return res.data.data
+}
+
+// ─── Federations (new) ──────────────────────────────────────────────────────
+
+export async function fetchUserFederations(): Promise<UserFederation[]> {
+  const res = await api.get<ApiResponse<UserFederation[]>>('/federations')
+  return res.data.data
+}
+
+export async function patchUserFederation(
+  masterId: string,
+  updates: { user_status?: 'active' | 'archived'; notes?: string },
+): Promise<void> {
+  await api.patch(`/federations/${masterId}`, updates)
 }
 
 // ─── Videos ───────────────────────────────────────────────────────────────────
