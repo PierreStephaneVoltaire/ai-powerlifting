@@ -4,6 +4,7 @@ import { differenceInCalendarDays, format, parse } from 'date-fns'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
+import { useCompetitionsStore } from '@/store/competitionsStore'
 import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, fetchRankingPercentile, type LiftProfileReview, type RankingPercentileResult } from '@/api/client'
 import {
   fetchAnalysisManifest,
@@ -443,6 +444,12 @@ export default function Dashboard() {
     return () => { cancelled = true }
   }, [needsSetup])
 
+  const { competitions: userCompetitions, loadAll: loadUserCompetitions } = useCompetitionsStore()
+
+  useEffect(() => {
+    loadUserCompetitions({ country: rankingCountry ?? undefined, state: rankingRegion ?? undefined })
+  }, [rankingCountry, rankingRegion, loadUserCompetitions])
+
   // Load ranking percentile once we have actual maxes + bodyweight + settings
   // Uses actualMaxes (computed after program loads below) — but since this effect
   // depends on program we re-derive them inline here to avoid ordering issues.
@@ -497,7 +504,7 @@ export default function Dashboard() {
     )
   }
 
-  const { meta, sessions, phases, competitions } = program
+  const { meta, sessions, phases } = program
   const currentBlockPhases = phasesForBlock(phases)
   const todayStr = format(new Date(), 'yyyy-MM-dd')
   const currentBlockWeekStartDay = weekStartForBlock(program, 'current')
@@ -512,9 +519,9 @@ export default function Dashboard() {
   const profileWeightClass = profileSnippet?.weight_class_kg ?? meta.weight_class_kg
   const profileBio = profileSnippet?.bio?.trim()
 
-  const upcomingComps = competitions
-    .filter((c) => c.status !== 'skipped' && new Date(c.date) >= new Date())
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const upcomingComps = userCompetitions
+    .filter((c) => c.user_status !== 'skipped' && c.user_status !== 'completed' && new Date(c.start_date) >= new Date())
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
 
   const latestWeightKg = weightLog.length > 0 ? weightLog[0].kg : meta.current_body_weight_kg
   const weightClassProgress = meta.weight_class_kg > 0
@@ -895,20 +902,20 @@ export default function Dashboard() {
         <section className="if-mock-card">
           <div className="if-mock-card-label"><Trophy size={12} /> Upcoming competitions</div>
           {upcomingComps.length > 0 ? upcomingComps.map((comp) => (
-            <div className="if-compact-row" key={comp.date}>
+            <div className="if-compact-row" key={comp.master_id}>
               <span
                 className="if-mock-badge"
                 style={{
-                  background: comp.status === 'confirmed' ? 'var(--color-background-success)' : 'var(--color-background-secondary)',
-                  color: comp.status === 'confirmed' ? 'var(--color-text-success)' : 'var(--color-text-secondary)',
+                  background: comp.user_status === 'confirmed' ? 'var(--color-background-success)' : 'var(--color-background-secondary)',
+                  color: comp.user_status === 'confirmed' ? 'var(--color-text-success)' : 'var(--color-text-secondary)',
                 }}
               >
-                {comp.status}
+                {comp.user_status}
               </span>
               <span style={{ color: 'var(--color-text-primary)', flex: 1, fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {comp.name}
               </span>
-              <span className="if-mock-num if-mock-muted" style={{ fontSize: 12 }}>{daysUntil(comp.date)}d</span>
+              <span className="if-mock-num if-mock-muted" style={{ fontSize: 12 }}>{daysUntil(comp.start_date)}d</span>
             </div>
           )) : (
             <Text size="sm" c="dimmed">No upcoming competitions.</Text>

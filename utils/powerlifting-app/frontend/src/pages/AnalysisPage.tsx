@@ -16,6 +16,7 @@ import {
 } from '@/api/analytics'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
+import { useCompetitionsStore } from '@/store/competitionsStore'
 import { fetchWeightLog, fetchGlossary } from '@/api/client'
 import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -24,6 +25,7 @@ import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl
 import { toDisplayUnit, displayWeight } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { programWeekEndDate, programWeekStartDate, resolveTrainingWeekForDate, trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
+import { userCompToCompetition } from '@/utils/competitions'
 import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
 import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session, WeekStartDay } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
@@ -350,7 +352,12 @@ function mergeWeeklySections(
 export default function AnalysisPage() {
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
-  const { readOnly } = useAuth()
+  const { readOnly, ranking_country, ranking_region } = useAuth()
+  const { competitions: userCompetitions, loadAll: loadUserCompetitions } = useCompetitionsStore()
+
+  useEffect(() => {
+    loadUserCompetitions({ country: ranking_country ?? undefined, state: ranking_region ?? undefined })
+  }, [ranking_country, ranking_region, loadUserCompetitions])
   const [searchParams, setSearchParams] = useSearchParams()
 
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
@@ -419,8 +426,10 @@ export default function AnalysisPage() {
   )
 
   const competitions = useMemo(() => {
-    return (program?.competitions || []).sort((a, b) => a.date.localeCompare(b.date))
-  }, [program?.competitions])
+    return userCompetitions
+      .map(userCompToCompetition)
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [userCompetitions])
 
   const upcomingCompetition = useMemo(() => {
     return competitions.find(c => (c.status === 'confirmed' || c.status === 'optional') && c.date >= asOfDate) || null

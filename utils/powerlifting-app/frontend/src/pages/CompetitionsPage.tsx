@@ -172,9 +172,7 @@ export default function CompetitionsPage() {
   }, [])
 
   useEffect(() => {
-    if (rankingCountry) {
-      loadAll({ country: rankingCountry, state: selectedState ?? undefined })
-    }
+    loadAll({ country: rankingCountry ?? undefined, state: selectedState ?? undefined })
   }, [rankingCountry, selectedState, loadAll])
 
   const stateOptions = useMemo(() => {

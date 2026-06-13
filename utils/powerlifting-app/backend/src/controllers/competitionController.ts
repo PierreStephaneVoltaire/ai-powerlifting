@@ -1,6 +1,7 @@
 import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, POWERLIFTING_USER_COMPETITIONS_TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
+import { resolveCountryIso2 } from '../utils/countries'
 import type { UserCompetition, UserCompetitionUpdate, Competition, LiftResults, PostMeetReport } from '@powerlifting/types'
 
 // ─── User-owned fields (only these can be written by the user) ──────────────
@@ -71,9 +72,14 @@ export async function listUserCompetitions(
   filters?: CompetitionFilters,
 ): Promise<UserCompetition[]> {
   let items = await queryUserComps(pk)
-  console.log(items)
   if (filters?.country) {
-    items = items.filter((uc) => uc.venue_country === filters.country)
+    const filterCode = resolveCountryIso2(filters.country)
+    if (filterCode) {
+      items = items.filter((uc) => (uc.venue_country ?? '').toUpperCase() === filterCode)
+    } else {
+      const needle = filters.country.trim().toLowerCase()
+      items = items.filter((uc) => (uc.venue_country ?? '').toLowerCase() === needle)
+    }
   }
   if (filters?.state) {
     if (filters.state !== '__all__') {
