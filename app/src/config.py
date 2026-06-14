@@ -82,6 +82,13 @@ OPENCODE_BIN = os.getenv("OPENCODE_BIN", "")
 OPENCODE_PLANNER_MODEL = os.getenv("OPENCODE_PLANNER_MODEL", "deepseek/deepseek-v4-flash")
 OPENCODE_TIMEOUT_SECONDS = int(os.getenv("OPENCODE_TIMEOUT_SECONDS", "900"))
 
+# Fission router URL the IF agent API forwards every opencode job to.
+# The runner binary in utils/opencode-runner/ is the server side; the
+# Fission function pod and the API pod share the workspace PVCs.
+OPENCODE_FISSION_URL: str = os.getenv("OPENCODE_FISSION_URL", "").rstrip("/")
+if not OPENCODE_FISSION_URL:
+    raise ValueError("OPENCODE_FISSION_URL environment variable is required")
+
 # IF self-aware repo URL (used when self_aware channel context is active)
 IF_SELF_REPO_URL: str = os.getenv("IF_SELF_REPO_URL", "")
 OPENCODE_WORKSPACE_BASE = os.getenv(

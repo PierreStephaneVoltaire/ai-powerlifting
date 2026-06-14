@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import SettingsDrawer from './SettingsDrawer'
 import ReadOnlyBanner from '@/components/shared/ReadOnlyBanner'
+import RestTimerManager from '@/components/sessions/RestTimerManager'
 
 interface AppShellProps {
   children: ReactNode
@@ -109,6 +110,7 @@ export default function AppShell({ children }: AppShellProps) {
       </MantineAppShell.Footer>
 
       <SettingsDrawer />
+      <RestTimerManager />
     </MantineAppShell>
   )
 }

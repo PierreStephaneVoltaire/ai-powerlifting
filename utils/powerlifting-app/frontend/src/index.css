@@ -1239,6 +1239,44 @@
   }
 }
 
+.if-rest-timer-bar {
+  align-items: center;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  bottom: 16px;
+  box-shadow: 0 10px 32px color-mix(in srgb, #000 36%, transparent),
+    0 2px 8px color-mix(in srgb, #000 18%, transparent);
+  cursor: pointer;
+  display: flex;
+  left: 50%;
+  max-width: 560px;
+  padding: 8px 12px;
+  position: fixed;
+  transform: translateX(-50%);
+  transition: bottom 0.15s ease, box-shadow 0.2s ease;
+  user-select: none;
+  width: calc(100% - 24px);
+  z-index: 150;
+}
+
+.if-rest-timer-bar:hover {
+  box-shadow: 0 14px 40px color-mix(in srgb, #000 42%, transparent),
+    0 2px 8px color-mix(in srgb, #000 22%, transparent);
+}
+
+@media (max-width: 639px) {
+  .if-rest-timer-bar {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px) + 12px);
+    border-radius: 12px;
+    max-width: calc(100% - 16px);
+    padding: 6px 10px;
+    width: calc(100% - 16px);
+  }
+}
+
 /* react-big-calendar mobile overrides */
 @media (max-width: 639px) {
   .rbc-toolbar {

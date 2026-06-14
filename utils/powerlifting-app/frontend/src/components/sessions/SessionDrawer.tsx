@@ -4,11 +4,12 @@ import { DatePickerInput } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
+import { useRestTimerStore } from '@/store/restTimerStore'
 import { getDayOfWeek } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
-import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal, AlertTriangle } from 'lucide-react'
+import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal, AlertTriangle, Timer } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -32,6 +33,7 @@ import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
 import SessionNotesHelperModal from './SessionNotesHelperModal'
 import AutoRegulationModal from './AutoRegulationModal'
+import RestTimerHeaderButton from './RestTimerHeaderButton'
 import { normalizeExerciseName } from '@/utils/volume'
 import { useAuth } from '@/auth/AuthProvider'
 import Num from '@/components/shared/Num'
@@ -1167,6 +1169,7 @@ export default function SessionDrawer({
             )}
           </Group>
         </Box>
+        <RestTimerHeaderButton />
       </Box>
 
       <Paper withBorder p={0} radius={10} className="if-card">
