@@ -1,5 +1,0 @@
-name: tarot
-description: Tarot card draw, meaning lookup, and spread information for the tarot_reader specialist.
-version: 1.0.0
-scope: specialist
-execution: in_process

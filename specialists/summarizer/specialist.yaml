@@ -1,8 +1,0 @@
-description: "Condensing long content into structured summaries — key points, decisions, action items, open questions"
-preset: "general"
-tools:
-  - read_file
-  - write_file
-mcp_servers: []
-directive_types:
-  - core

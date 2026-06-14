@@ -1,5 +1,0 @@
-name: temporal_to_unix
-description: Convert datetime string to Unix timestamp
-version: 1.0.0
-scope: specialist
-execution: subprocess

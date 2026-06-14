@@ -1,9 +1,0 @@
-description: "Database query specialist — query writing, optimization, schema analysis, explain plans, DynamoDB patterns"
-preset: "code"
-tools:
-  - terminal_execute
-  - read_file
-  - write_file
-mcp_servers: []
-directive_types:
-  - code

@@ -1,7 +1,0 @@
-description: On-demand file and image analysis
-preset: "general"
-tools: []
-mcp_servers: []
-directive_types:
-  - core
-max_turns: 1

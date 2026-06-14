@@ -1,7 +1,0 @@
-description: "Jira ticket writing specialist. Use when the operator needs a well-structured issue with summary, description, acceptance criteria, subtasks, and metadata."
-preset: "general"
-tools: []
-mcp_servers: []
-directive_types:
-  - writing
-  - code

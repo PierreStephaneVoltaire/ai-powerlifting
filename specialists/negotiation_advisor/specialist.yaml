@@ -1,8 +1,0 @@
-description: "Negotiation strategy and preparation — BATNA analysis, opening positions, concession planning"
-preset: "general"
-tools:
-  - UserFactsSearchTool
-  - UserFactsListTool
-mcp_servers: []
-directive_types:
-  - core

@@ -1,6 +1,0 @@
-description: "Character-limited content specialist. Use for tweets (280), YouTube superchats (200), Discord messages, SMS, Bluesky (300), or any content with a hard character limit. Always include character count in output."
-preset: "general"
-tools: []
-mcp_servers: []
-directive_types:
-  - writing

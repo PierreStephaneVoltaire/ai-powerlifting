@@ -1,5 +1,0 @@
-name: temporal_age
-description: Calculate age and birthday information from a birth date
-version: 1.0.0
-scope: specialist
-execution: subprocess

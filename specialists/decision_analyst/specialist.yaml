@@ -1,7 +1,0 @@
-description: "Multi-criteria decision analysis with weighted scoring, tradeoff matrices, and risk-adjusted comparisons"
-preset: "general"
-tools:
-  - write_file
-mcp_servers: []
-directive_types:
-  - core

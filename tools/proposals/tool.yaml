@@ -1,5 +1,0 @@
-name: proposals
-description: Agent-proposed directives and implementation proposals
-version: 1.0.0
-scope: specialist
-execution: in_process

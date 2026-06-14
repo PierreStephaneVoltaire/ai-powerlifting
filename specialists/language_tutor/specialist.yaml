@@ -1,7 +1,0 @@
-description: "Language learning — Japanese, Spanish, French. Vocabulary, grammar, reading, conversation practice"
-preset: "general"
-tools:
-  - write_file
-mcp_servers: []
-directive_types:
-  - core

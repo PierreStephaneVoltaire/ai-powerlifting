@@ -1,5 +1,0 @@
-name: diary
-description: Write-only diary entries and mental health signal computation
-version: 1.0.0
-scope: specialist
-execution: in_process

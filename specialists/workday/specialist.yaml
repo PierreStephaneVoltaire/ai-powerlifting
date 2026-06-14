@@ -1,8 +1,0 @@
-description: "Workday/ATS application form input generation — copy-paste-ready text blocks for common application fields"
-preset: "general"
-tools:
-  - read_file
-  - write_file
-mcp_servers: []
-directive_types:
-  - writing

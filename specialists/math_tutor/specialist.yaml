@@ -1,7 +1,0 @@
-description: "Mathematics instruction — algebra, calculus, linear algebra, probability, ML/AI math foundations"
-preset: "general"
-tools:
-  - write_file
-mcp_servers: []
-directive_types:
-  - core

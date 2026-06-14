@@ -1,7 +1,0 @@
-description: "Contract, ToS, and policy analysis — extracts obligations, risks, unusual clauses, deadlines. NOT legal advice."
-preset: "general"
-tools:
-  - read_file
-mcp_servers: []
-directive_types:
-  - core

@@ -1,7 +1,0 @@
-[project]
-name = "if-plugin-temporal-to-unix"
-version = "0.0.1"
-requires-python = ">=3.12"
-dependencies = [
-    "dateparser>=1.1.0",
-]

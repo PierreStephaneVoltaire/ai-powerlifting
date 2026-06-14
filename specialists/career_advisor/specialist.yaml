@@ -1,9 +1,0 @@
-description: "Career strategy and planning — trajectory analysis, skill gaps, market positioning, role evaluation"
-preset: "general"
-tools:
-  - write_file
-  - UserFactsSearchTool
-  - UserFactsListTool
-mcp_servers: []
-directive_types:
-  - core

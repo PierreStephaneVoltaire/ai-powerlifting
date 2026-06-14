@@ -1,8 +1,0 @@
-description: "Extracts actionable task lists from conversations, documents, meeting notes — prioritized, dependency-aware"
-preset: "general"
-tools:
-  - read_file
-  - write_file
-mcp_servers: []
-directive_types:
-  - core

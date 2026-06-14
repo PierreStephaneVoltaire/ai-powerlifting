@@ -1,5 +1,0 @@
-[project]
-name = "if-plugin-temporal-city-time"
-version = "0.0.1"
-requires-python = ">=3.12"
-dependencies = []

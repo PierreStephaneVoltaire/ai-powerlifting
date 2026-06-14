@@ -1,5 +1,0 @@
-name: temporal_duration
-description: Calculate duration between two dates
-version: 1.0.0
-scope: specialist
-execution: subprocess

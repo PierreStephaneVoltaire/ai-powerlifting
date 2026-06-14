@@ -1,9 +1,0 @@
-description: "Product management — product/app ideation, user personas, competitive framing, go-to-market thinking, success metrics, roadmap direction. Non-technical strategic layer. Use for: 'ideas for an X app', 'what features should we build', 'who is this for', 'how does this compete with Y', 'what metrics matter'. NOT for: breaking a known product direction into user stories or backlog → product_owner. NOT for: system architecture or implementation → architect / coder. NOT for: sequencing already-decided steps → planner."
-preset: "architecture"
-tools:
-  - read_file
-  - write_file
-mcp_servers: []
-directive_types:
-  - core
-  - writing

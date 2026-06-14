@@ -1,9 +1,0 @@
-description: "Agile product ownership — breaks a known product direction into user stories with acceptance criteria, prioritizes a backlog, flags scope trade-offs and cross-story dependencies. Non-technical tactical layer. Use for: 'turn this into a backlog', 'write user stories for X', 'prioritize these features', 'what should we cut from scope'. NOT for: generating the product concept or picking the problem to solve → product_manager. NOT for: technical design or implementation → architect / coder. NOT for: dependency-sequencing an already-scoped plan → planner."
-preset: "architecture"
-tools:
-  - read_file
-  - write_file
-mcp_servers: []
-directive_types:
-  - core
-  - writing
