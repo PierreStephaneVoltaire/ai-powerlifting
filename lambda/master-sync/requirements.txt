@@ -1,2 +1,0 @@
-# boto3 is in the Lambda runtime, but pin a known-good version.
-boto3>=1.34.0,<2.0.0
