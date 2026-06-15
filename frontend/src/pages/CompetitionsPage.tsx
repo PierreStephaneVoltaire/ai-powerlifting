@@ -132,12 +132,12 @@ function venueDisplay(comp: UserCompetition): string {
 
 const EMPTY_COMP: UserCompetition = {
   master_id: '', name: '', start_date: '', end_date: null,
-  federation_id: '', federation_label: '', federation_slug: null, federation_website_url: null,
+  federation_label: '', federation_slug: null, federation_website_url: null,
   venue_name: null, venue_address: null, venue_city: null, venue_state: null, venue_country: '',
-  venue_postal_code: null, venue_latitude: null, venue_longitude: null, venue_coordinate_quality: null,
+  venue_postal_code: null,
   website_url: null, testing_status: 'unknown', registration_status: 'unknown',
   registration_url: null, registration_end_date: null, source_url: null, source_name: null,
-  last_verified_at: null, confidence_status: null, event_type: null, cancelled: false,
+  last_verified_at: null, event_type: null, cancelled: false,
   user_status: 'available', weight_class_kg: null, body_weight_kg: null,
   targets: null, results: null, post_meet_report: null, hotel_required: false,
   counts_toward_federation_ids: [], between_comp_plan: null, comp_day_protocol: null,
@@ -148,7 +148,7 @@ const EMPTY_COMP: UserCompetition = {
 }
 
 export default function CompetitionsPage() {
-  const { readOnly, ranking_country, ranking_region } = useAuth()
+  const { readOnly, ranking_country, ranking_region, loading: authLoading } = useAuth()
   const { competitions, isLoading, loadAll, patch, complete } = useCompetitionsStore()
   const { pushToast } = useUiStore()
   const { sex } = useSettingsStore()
@@ -172,8 +172,9 @@ export default function CompetitionsPage() {
   }, [])
 
   useEffect(() => {
+    if (authLoading) return
     loadAll({ country: rankingCountry ?? undefined, state: selectedState ?? undefined })
-  }, [rankingCountry, selectedState, loadAll])
+  }, [authLoading, rankingCountry, selectedState, loadAll])
 
   const stateOptions = useMemo(() => {
     if (!rankingCountry || !categories) return []

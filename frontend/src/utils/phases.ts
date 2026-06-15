@@ -17,17 +17,10 @@ function phaseBlock(p: Phase): string {
   return p.block ?? DEFAULT_BLOCK
 }
 
-/**
- * Filter phases to a single block (default "current").
- */
 export function phasesForBlock(phases: Phase[], block: string = DEFAULT_BLOCK): Phase[] {
   return phases.filter(p => phaseBlock(p) === block)
 }
 
-/**
- * Color is indexed within the phase's own block so adding/removing phases
- * in one block does not shift colors in another.
- */
 export function phaseColor(phase: Phase, allPhases: Phase[]): string {
   const block = phaseBlock(phase)
   const blockPhases = allPhases.filter(p => phaseBlock(p) === block)
@@ -35,9 +28,6 @@ export function phaseColor(phase: Phase, allPhases: Phase[]): string {
   return PHASE_PALETTE[index >= 0 ? index % PHASE_PALETTE.length : 0]
 }
 
-/**
- * Build a map from week number to Phase for O(1) lookup within a single block.
- */
 export function buildPhaseMap(phases: Phase[], block: string = DEFAULT_BLOCK): Map<number, Phase> {
   const map = new Map<number, Phase>()
   for (const phase of phases) {
@@ -49,9 +39,6 @@ export function buildPhaseMap(phases: Phase[], block: string = DEFAULT_BLOCK): M
   return map
 }
 
-/**
- * Filter sessions by phase name, optionally scoped to a block.
- */
 export function sessionsByPhase(sessions: Session[], phaseName: string, block?: string): Session[] {
   return sessions.filter(s => {
     if (s.phase.name !== phaseName) return false
@@ -60,9 +47,6 @@ export function sessionsByPhase(sessions: Session[], phaseName: string, block?: 
   })
 }
 
-/**
- * Get unique phase names from sessions, optionally scoped to a block.
- */
 export function uniquePhaseNames(sessions: Session[], block?: string): string[] {
   const names = new Set<string>()
   for (const s of sessions) {

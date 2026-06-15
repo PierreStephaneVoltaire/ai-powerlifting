@@ -13,10 +13,6 @@ function safeNumber(value: number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-/**
- * Total session-set volume in kg. Falls back to `sets × reps` (no load) when
- * the lift has no recorded weight so accessories still rank sensibly.
- */
 export function videoVolumeKg(item: VideoLibraryItem): number {
   const sets = safeNumber(item.exercise_sets)
   const reps = safeNumber(item.exercise_reps)

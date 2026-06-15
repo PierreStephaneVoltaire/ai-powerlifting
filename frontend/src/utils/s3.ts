@@ -15,9 +15,6 @@ export interface VideoUploadResult {
   video: SessionVideo
 }
 
-/**
- * Upload a video via the backend API (server proxy)
- */
 export async function uploadVideo(
   version: string,
   options: VideoUploadOptions
@@ -69,17 +66,11 @@ export async function uploadVideo(
   })
 }
 
-/**
- * Check if file is a valid video type
- */
 export function isValidVideoType(file: File): boolean {
   const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo']
   return validTypes.includes(file.type)
 }
 
-/**
- * Format file size for display
- */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -87,7 +78,4 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
-/**
- * Max video file size (500MB)
- */
 export const MAX_VIDEO_SIZE = 500 * 1024 * 1024

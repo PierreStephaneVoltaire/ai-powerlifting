@@ -9,8 +9,6 @@ dynamodb_client = boto3.client("dynamodb")
 
 COMP_MASTER_TABLE = os.environ["COMP_MASTER_TABLE"]
 COMP_USER_TABLE = os.environ["COMP_USER_TABLE"]
-FED_MASTER_TABLE = os.environ["FED_MASTER_TABLE"]
-FED_USER_TABLE = os.environ["FED_USER_TABLE"]
 USER_INDEX_TABLE = os.environ["USER_INDEX_TABLE"]
 
 # Master-controlled fields that the master-sync Lambda owns on per-user copies.
@@ -19,7 +17,6 @@ COMP_MASTER_FIELDS = {
     "name",
     "start_date",
     "end_date",
-    "federation_id",
     "federation_label",
     "federation_slug",
     "federation_website_url",
@@ -29,9 +26,6 @@ COMP_MASTER_FIELDS = {
     "venue_state",
     "venue_country",
     "venue_postal_code",
-    "venue_latitude",
-    "venue_longitude",
-    "venue_coordinate_quality",
     "website_url",
     "testing_status",
     "registration_status",
@@ -41,22 +35,8 @@ COMP_MASTER_FIELDS = {
     "source_name",
     "event_type",
     "last_verified_at",
-    "confidence_status",
     "cancelled",
     "master_id",
-}
-
-FED_MASTER_FIELDS = {
-    "name",
-    "abbreviation",
-    "region",
-    "website_url",
-    "master_id",
-}
-
-USER_STATUS_DEFAULTS = {
-    "COMP#": "available",
-    "FED#": "active",
 }
 
 _deserializer = TypeDeserializer()
@@ -93,57 +73,44 @@ def _build_merged(user_pk, user_sk, master_record, master_fields, is_insert):
     Read the existing user copy (if any), then merge:
       - master-controlled fields: overwritten from master record
       - user-owned fields: preserved as-is
-      - user_status: default ('available' for comps, 'active' for federations)
-        ONLY when the user copy is being created for the first time.
+      - user_status: default 'available' ONLY when the user copy is being created
+        for the first time.
     """
-    table = dynamodb.Table(_user_table_for_sk(user_sk))
+    table = dynamodb.Table(COMP_USER_TABLE)
     existing = table.get_item(Key={"pk": user_pk, "sk": user_sk}).get("Item") or {}
 
-    merged = dict(existing)  # start with whatever the user already has
+    merged = dict(existing)
 
-    # Overwrite master-controlled fields from the new master record
     for field in master_fields:
         if field in master_record:
             merged[field] = master_record[field]
 
-    # user_status default only applies on first insert
     if is_insert and "user_status" not in merged:
-        for prefix, default in USER_STATUS_DEFAULTS.items():
-            if user_sk.startswith(prefix):
-                merged["user_status"] = default
-                break
+        merged["user_status"] = "available"
 
     return merged
 
 
-def _user_table_for_sk(sk):
-    if sk.startswith("COMP#"):
-        return COMP_USER_TABLE
-    if sk.startswith("FED#"):
-        return FED_USER_TABLE
-    raise ValueError(f"Unknown user-copy sk prefix: {sk}")
-
-
-def _handle_master_change(master_record, user_table, master_fields, sk_prefix, master_id):
+def _handle_master_change(master_record, master_id):
     """
-    Fan one master record out to every user's per-user copy.
+    Fan one master competition out to every user's per-user copy.
     master_id is the bare id (no prefix) for the user's sk.
     """
-    user_sk = f"{sk_prefix}{master_id}"
+    user_sk = f"COMP#{master_id}"
 
     for user_pk in _scan_user_pks(USER_INDEX_TABLE):
         is_insert = (
-            dynamodb.Table(user_table)
+            dynamodb.Table(COMP_USER_TABLE)
             .get_item(Key={"pk": user_pk, "sk": user_sk})
             .get("Item")
             is None
         )
-        merged = _build_merged(user_pk, user_sk, master_record, master_fields, is_insert)
-        _put_copy(user_table, user_pk, user_sk, merged)
+        merged = _build_merged(user_pk, user_sk, master_record, COMP_MASTER_FIELDS, is_insert)
+        _put_copy(COMP_USER_TABLE, user_pk, user_sk, merged)
 
 
 def handler(event, context):
-    """DynamoDB stream handler — fan master comp/federation changes to per-user copies."""
+    """DynamoDB stream handler — fan master competition changes to per-user copies."""
     for record in event.get("Records", []):
         event_name = record.get("eventName")
         if event_name not in ("INSERT", "MODIFY"):
@@ -152,25 +119,12 @@ def handler(event, context):
 
         new_image = _from_image(record["dynamodb"].get("NewImage"))
         pk = new_image.get("pk", "")
-        master_id = pk.split("#", 1)[1] if "#" in pk else pk
 
         if pk.startswith("COMP#"):
-            _handle_master_change(
-                master_record=new_image,
-                user_table=COMP_USER_TABLE,
-                master_fields=COMP_MASTER_FIELDS,
-                sk_prefix="COMP#",
-                master_id=master_id,
-            )
-        elif pk.startswith("FED#"):
-            _handle_master_change(
-                master_record=new_image,
-                user_table=FED_USER_TABLE,
-                master_fields=FED_MASTER_FIELDS,
-                sk_prefix="FED#",
-                master_id=master_id,
-            )
+            master_id = pk.split("#", 1)[1] if "#" in pk else pk
+            _handle_master_change(new_image, master_id)
         else:
             print(f"[master-sync] ignoring record with unexpected pk: {pk}")
 
     return {"statusCode": 200}
+

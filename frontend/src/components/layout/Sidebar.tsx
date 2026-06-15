@@ -133,8 +133,8 @@ function MobileMoreMenu() {
             background: isMoreActive ? 'var(--accent-blue-dim)' : 'transparent',
           }}
         >
-          <MoreHorizontal size={22} />
-          <Text fz={10} fw={600} lh={1}>More</Text>
+          <MoreHorizontal size={22} strokeWidth={2} style={{ display: 'block' }} />
+          <Text fz={10} fw={600} lh={1} ta="center" style={{ width: '100%' }}>More</Text>
         </UnstyledButton>
       </Menu.Target>
 
@@ -164,7 +164,7 @@ function MobileSidebar() {
   const location = useLocation()
 
   return (
-    <Group justify="space-around" wrap="nowrap" p={6}>
+    <Group justify="space-around" wrap="nowrap" p={6} style={{ height: '100%' }}>
       {MOBILE_MAIN_ITEMS.map((item) => {
         const { to, icon: Icon, label } = item
         const isActive = isActiveItem(item, location.pathname)
@@ -192,8 +192,8 @@ function MobileSidebar() {
               background: isActive ? 'var(--accent-blue-dim)' : 'transparent',
             }}
           >
-            <Icon size={22} />
-            <Text fz={10} fw={600} lh={1}>{label}</Text>
+            <Icon size={22} strokeWidth={2} style={{ display: 'block' }} />
+            <Text fz={10} fw={600} lh={1} ta="center" style={{ width: '100%' }}>{label}</Text>
           </UnstyledButton>
         )
       })}

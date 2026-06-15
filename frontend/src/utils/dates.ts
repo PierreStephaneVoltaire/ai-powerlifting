@@ -1,11 +1,6 @@
 import { format, differenceInDays, parse, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns'
 import type { Session } from '@powerlifting/types'
 
-/**
- * Parse a date string (yyyy-MM-dd) as local time, not UTC.
- * This avoids the timezone shift issue where parseISO would show
- * the wrong day in certain timezones.
- */
 export const parseLocalDate = (dateStr: string): Date =>
   parse(dateStr, 'yyyy-MM-dd', new Date())
 

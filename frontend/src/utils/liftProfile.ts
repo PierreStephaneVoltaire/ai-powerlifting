@@ -1,11 +1,5 @@
 import { LiftProfile } from '@powerlifting/types'
 
-/**
- * Normalizes a lift profile, ensuring all fields are present and multipliers are clamped.
- * 
- * - missing e1rm_multiplier defaults to 1.00
- * - e1rm_multiplier is clamped to [0.85, 1.10]
- */
 export function normalizeLiftProfile(profile: Partial<LiftProfile> & { lift: 'squat' | 'bench' | 'deadlift' }): LiftProfile {
   const multiplier = profile.e1rm_multiplier ?? 1.00
   const clampedMultiplier = Math.max(0.85, Math.min(1.10, multiplier))
@@ -26,9 +20,6 @@ export function normalizeLiftProfile(profile: Partial<LiftProfile> & { lift: 'sq
   }
 }
 
-/**
- * Normalizes a list of lift profiles for all three big lifts.
- */
 export function normalizeLiftProfiles(profiles: LiftProfile[] = []): LiftProfile[] {
   return (['squat', 'bench', 'deadlift'] as const).map((lift) => {
     const existing = profiles.find((p) => p.lift === lift)

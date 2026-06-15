@@ -36,7 +36,7 @@ import type {
   WeekStartDay,
   UserCompetition,
   UserCompetitionUpdate,
-  UserFederation,
+  MasterFederation,
 } from '@powerlifting/types'
 
 const api = axios.create({
@@ -502,18 +502,28 @@ export async function completeCompetition(
   return res.data.data
 }
 
-// ─── Federations (new) ──────────────────────────────────────────────────────
-
-export async function fetchUserFederations(): Promise<UserFederation[]> {
-  const res = await api.get<ApiResponse<UserFederation[]>>('/federations')
+export async function fetchFederations(): Promise<MasterFederation[]> {
+  const res = await api.get<ApiResponse<MasterFederation[]>>('/federations')
   return res.data.data
 }
 
-export async function patchUserFederation(
+export type FederationUpdatePayload = {
+  name?: string
+  abbreviation?: string | null
+  region?: string | null
+  website_url?: string | null
+  status?: 'active' | 'archived'
+  has_standards?: boolean
+  standard_unit?: 'kg' | 'dots' | null
+  standards?: Record<string, import('@powerlifting/types').FederationStandard>
+  display_options?: import('@powerlifting/types').FederationDisplayOptions | null
+}
+
+export async function updateFederation(
   masterId: string,
-  updates: { user_status?: 'active' | 'archived'; notes?: string },
+  updates: FederationUpdatePayload,
 ): Promise<void> {
-  await api.patch(`/federations/${masterId}`, updates)
+  await api.put(`/federations/${masterId}`, updates)
 }
 
 // ─── Videos ───────────────────────────────────────────────────────────────────

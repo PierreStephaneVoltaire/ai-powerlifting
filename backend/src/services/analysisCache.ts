@@ -296,7 +296,6 @@ function cachePk(userPk: string): string {
   return `analysis#${userPk}`
 }
 
-/** SK for a weekly analysis window on the current block. */
 function windowSk(windowKey: AnalysisWindowKey): string {
   return `weekly_analysis#${windowKey}`
 }
@@ -309,12 +308,10 @@ function analysisJobSk(asOfDate: string, windowKey: AnalysisWindowKey, sectionKe
   return `analysis_job#${SECTION_CACHE_VERSION}#${asOfDate}#${windowKey}#${sectionKey}`
 }
 
-/** SK for a cached markdown export. blockKey defaults to 'current'. */
 function markdownSk(blockKey = 'current'): string {
   return `markdown_export#${blockKey}`
 }
 
-/** SK segment for a shard of a large payload. */
 function shardSk(baseSk: string, index: number): string {
   return `${baseSk}#shard#${String(index).padStart(3, '0')}`
 }
@@ -395,11 +392,6 @@ async function batchDeleteByPrefix(pk: string, prefix: string): Promise<void> {
   }
 }
 
-/**
- * Write a JSON-serialisable value to DynamoDB.
- * Shards the payload if it exceeds MAX_SHARD_CHARS.
- * expiresAt is only set for current-block items (undefined = no TTL = permanent past-block storage).
- */
 async function putJsonItem(
   pk: string,
   sk: string,
@@ -460,7 +452,6 @@ async function putJsonItem(
   }
 }
 
-/** Read a JSON item that may be sharded. Returns null on miss or parse error. */
 async function getJsonItemWithMetadata<T>(
   pk: string,
   sk: string,
@@ -508,10 +499,6 @@ async function getJsonItem<T>(pk: string, sk: string): Promise<{ data: T; genera
 
 // ─── Window analysis cache (current block only) ───────────────────────────────
 
-/**
- * Read a single analysis window from cache.
- * Returns the window result and generatedAt, or null on miss.
- */
 export async function getCachedWindowAnalysis(
   userPk: string,
   windowKey: AnalysisWindowKey,
@@ -519,10 +506,6 @@ export async function getCachedWindowAnalysis(
   return getJsonItem(cachePk(userPk), windowSk(windowKey))
 }
 
-/**
- * Read all 6 window analyses from cache.
- * Returns null if ANY window is missing (treat as full cache miss).
- */
 export async function getCachedAllWindowAnalyses(
   userPk: string,
 ): Promise<{ results: Record<AnalysisWindowKey, unknown>; generatedAt: string } | null> {
@@ -541,10 +524,6 @@ export async function getCachedAllWindowAnalyses(
   return { results, generatedAt }
 }
 
-/**
- * Write all 6 window analyses to cache with 7-day TTL.
- * Past-block caches are handled separately by blockAnalytics.ts.
- */
 export async function putAllCachedWindowAnalyses(
   userPk: string,
   results: Record<AnalysisWindowKey, unknown>,
@@ -920,10 +899,6 @@ export async function getMarkdownExportDirty(userPk: string): Promise<{ dirtyAt:
 
 // ─── Markdown export cache ─────────────────────────────────────────────────────
 
-/**
- * Read the cached markdown export.
- * blockKey defaults to 'current'. Returns null on miss.
- */
 export async function getCachedMarkdownExport(
   userPk: string,
   blockKey = 'current',
@@ -933,10 +908,6 @@ export async function getCachedMarkdownExport(
   return { markdown: result.data.markdown, generatedAt: result.generatedAt }
 }
 
-/**
- * Write the markdown export to cache.
- * Current block uses 7-day TTL; past blocks are permanent.
- */
 export async function putCachedMarkdownExport(
   userPk: string,
   markdown: string,

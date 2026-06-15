@@ -8,11 +8,6 @@ interface MuscleContribution {
   tertiary?: MuscleGroup[]
 }
 
-/**
- * Map of exercise names to their muscle contributions.
- * Primary muscles receive full volume credit, secondary receive 50%,
- * and tertiary receive 25%.
- */
 export const MUSCLE_MAP: Record<string, MuscleContribution> = {
   // ─── Squat variants ─────────────────────────────────────────────
   'Back Squat': { primary: ['quads', 'glutes'], secondary: ['hamstrings', 'erectors', 'core'] },
@@ -95,10 +90,6 @@ export const MUSCLE_MAP: Record<string, MuscleContribution> = {
   'Pallof Press': { primary: ['core', 'obliques'], secondary: ['front_delts'] },
 }
 
-/**
- * Calculate muscle volume from sessions.
- * Primary muscles get full volume, secondary get 50%, tertiary get 25%.
- */
 export function muscleVolumeFromSessions(
   sessions: Session[]
 ): Partial<Record<MuscleGroup, number>> {
@@ -126,9 +117,6 @@ export function muscleVolumeFromSessions(
   return volumes
 }
 
-/**
- * Normalize muscle volumes to 0-1 scale.
- */
 export function normalizeMuscleVolumes(
   volumes: Partial<Record<MuscleGroup, number>>
 ): Partial<Record<MuscleGroup, number>> {
@@ -143,9 +131,6 @@ export function normalizeMuscleVolumes(
   return normalized
 }
 
-/**
- * Get color for heatmap based on normalized value.
- */
 export function heatmapColor(value: number): string {
   if (value < 0.01) return '#f8fafc' // nearly white
   if (value < 0.25) return '#bfdbfe' // light blue
@@ -154,9 +139,6 @@ export function heatmapColor(value: number): string {
   return '#dc2626'                    // red
 }
 
-/**
- * Display names for muscle groups.
- */
 export const MUSCLE_DISPLAY_NAMES: Record<MuscleGroup, string> = {
   quads: 'Quadriceps',
   hamstrings: 'Hamstrings',

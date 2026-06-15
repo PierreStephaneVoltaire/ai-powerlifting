@@ -318,6 +318,7 @@ export default function Dashboard() {
   const [rankingPercentileLoading, setRankingPercentileLoading] = useState(false)
   const [rankingCountry, setRankingCountry] = useState<string | null>(null)
   const [rankingRegion, setRankingRegion] = useState<string | null>(null)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
   const dashboardAsOfDate = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
 
   useEffect(() => {
@@ -435,20 +436,26 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false
     if (needsSetup) return
-    getSettings().then((s) => {
-      if (!cancelled) {
-        setRankingCountry(s.ranking_country)
-        setRankingRegion(s.ranking_region)
-      }
-    }).catch(() => {})
+    getSettings()
+      .then((s) => {
+        if (!cancelled) {
+          setRankingCountry(s.ranking_country)
+          setRankingRegion(s.ranking_region)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setSettingsLoaded(true)
+      })
     return () => { cancelled = true }
   }, [needsSetup])
 
   const { competitions: userCompetitions, loadAll: loadUserCompetitions } = useCompetitionsStore()
 
   useEffect(() => {
+    if (!settingsLoaded) return
     loadUserCompetitions({ country: rankingCountry ?? undefined, state: rankingRegion ?? undefined })
-  }, [rankingCountry, rankingRegion, loadUserCompetitions])
+  }, [settingsLoaded, rankingCountry, rankingRegion, loadUserCompetitions])
 
   // Load ranking percentile once we have actual maxes + bodyweight + settings
   // Uses actualMaxes (computed after program loads below) — but since this effect

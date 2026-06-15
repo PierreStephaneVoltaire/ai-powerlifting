@@ -31,11 +31,6 @@ export interface StreamMediaResult {
   statusCode: number
 }
 
-/**
- * Fetch media from S3 and return as a stream.
- * Supports HTTP Range requests so browsers can seek in videos without
- * downloading the entire file.
- */
 export async function streamMedia(key: string, range?: string): Promise<StreamMediaResult> {
   try {
     const command = new GetObjectCommand({
@@ -71,9 +66,6 @@ function stripUndefined(obj: any): any {
   return cleaned
 }
 
-/**
- * Resolve a version string to the actual SK.
- */
 async function resolveVersionSk(pk: string, version: string): Promise<string> {
   if (version === 'current') {
     const pointerCommand = new GetCommand({
@@ -97,9 +89,6 @@ async function loadPhases(pk: string, sk: string): Promise<Phase[] | null> {
   return (result.Item.phases ?? []) as Phase[]
 }
 
-/**
- * Upload a video to S3 and add metadata to session
- */
 export async function uploadSessionVideo(
   pk: string,
   version: string,
@@ -175,9 +164,6 @@ export async function uploadSessionVideo(
   return transformVideo(video)
 }
 
-/**
- * Remove a video from a session
- */
 export async function removeSessionVideo(
   pk: string,
   version: string,
@@ -223,9 +209,6 @@ export async function removeSessionVideo(
   } as Partial<Session>, phases)
 }
 
-/**
- * Update video thumbnail URL (called by Lambda)
- */
 export async function updateVideoThumbnail(
   pk: string,
   version: string,

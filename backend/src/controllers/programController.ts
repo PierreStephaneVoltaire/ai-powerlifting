@@ -11,10 +11,6 @@ import {
 } from '../services/sessionStore'
 import type { Program, ProgramListItem, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
 
-/**
- * Resolve a version string to the actual SK.
- * If version is "current", look up the pointer to get the real version.
- */
 async function resolveVersionSk(pk: string, version: string): Promise<string> {
   if (version === 'current') {
     // Look up the pointer
@@ -40,9 +36,6 @@ async function resolveVersionSk(pk: string, version: string): Promise<string> {
   return `program#${version}`
 }
 
-/**
- * Get a specific program version
- */
 export async function getProgram(pk: string, version: string): Promise<Program> {
   const sk = await resolveVersionSk(pk, version)
 
@@ -65,9 +58,6 @@ export async function getProgram(pk: string, version: string): Promise<Program> 
   return program
 }
 
-/**
- * List all program versions
- */
 export async function listPrograms(pk: string): Promise<ProgramListItem[]> {
   const command = new QueryCommand({
     TableName: TABLE,
@@ -112,9 +102,6 @@ export async function listPrograms(pk: string): Promise<ProgramListItem[]> {
   return programs
 }
 
-/**
- * Fork a program to a new version
- */
 export async function forkProgram(
   pk: string,
   currentVersion: string,
@@ -160,9 +147,6 @@ export async function forkProgram(
   return newVersion
 }
 
-/**
- * Update a single meta field
- */
 export async function updateMetaField(
   pk: string,
   version: string,
@@ -204,9 +188,6 @@ export async function updateMetaField(
   await docClient.send(command)
 }
 
-/**
- * Update body weight
- */
 export async function updateBodyWeight(
   pk: string,
   version: string,
@@ -235,12 +216,6 @@ export async function updateBodyWeight(
   await docClient.send(command)
 }
 
-/**
- * Update phases.
- * If `block` is provided: replaces only the phases scoped to that block, leaving
- * other blocks' phases untouched. Incoming phases without a block are tagged with `block`.
- * If `block` is omitted: full replace of the phases array; each phase keeps its own `block` field.
- */
 export async function updatePhases(
   pk: string,
   version: string,
@@ -287,10 +262,6 @@ export async function updatePhases(
   await docClient.send(command)
 }
 
-/**
- * Batch create planned sessions for a week.
- * Creates one session per day entry, all with status "planned" and the same planned_exercises.
- */
 export async function batchCreateWeek(
   pk: string,
   version: string,
@@ -352,9 +323,6 @@ export async function batchCreateWeek(
   }
 }
 
-/**
- * Update lift profiles (squat/bench/deadlift style, sticking points, muscle dominance, volume tolerance).
- */
 export async function updateLiftProfiles(
   pk: string,
   version: string,
@@ -381,9 +349,6 @@ export async function updateLiftProfiles(
   await docClient.send(command)
 }
 
-/**
- * Update planned exercises on a session.
- */
 export async function updatePlannedExercises(
   pk: string,
   version: string,
@@ -442,9 +407,6 @@ export async function updatePlannedExercises(
   )
 }
 
-/**
- * Archive a program version
- */
 export async function archiveProgram(pk: string, version: string): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
   const now = new Date().toISOString()
@@ -499,9 +461,6 @@ export async function archiveProgram(pk: string, version: string): Promise<void>
   }
 }
 
-/**
- * Unarchive a program version
- */
 export async function unarchiveProgram(pk: string, version: string): Promise<void> {
   const sk = await resolveVersionSk(pk, version)
 

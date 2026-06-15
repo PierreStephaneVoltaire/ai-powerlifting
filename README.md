@@ -394,7 +394,6 @@ strategy recommendations.
 
 `Competition` has been extended with:
 
-- `federation_id`: the host federation
 - `counts_toward_federation_ids[]`: additional federations the meet counts toward
   (used for goal eligibility determination)
 - `projected_at_t_minus_1w` / `projection_snapshot_date`: for PRR calibration

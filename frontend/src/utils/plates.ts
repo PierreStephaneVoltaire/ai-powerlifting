@@ -6,10 +6,6 @@ function kgToLbExact(kg: number): number {
   return parseFloat((kg * 2.20462).toFixed(2))
 }
 
-/**
- * Calculate the plate loadout for a target weight using a greedy algorithm.
- * All weights are in kg internally.
- */
 export function getPlateLoadout(
   targetKg: number,
   barKg: number = 20,
@@ -42,10 +38,6 @@ export function getPlateLoadout(
   }
 }
 
-/**
- * Find the closest achievable weight using lb plates.
- * Returns both kg and lb values.
- */
 export function closestLbLoadout(
   targetKg: number,
   barKg: number = 20,
@@ -71,9 +63,6 @@ export function closestLbLoadout(
   }
 }
 
-/**
- * Get the color for a plate by denomination.
- */
 export function getPlateColor(plateKg: number, unit: 'kg' | 'lb' = 'kg'): string {
   if (unit === 'lb') {
     const lbPlate = kgToLbExact(plateKg)
@@ -89,9 +78,6 @@ export function formatPlateDenomination(plateKg: number, unit: 'kg' | 'lb' = 'kg
   return plateKg.toString()
 }
 
-/**
- * Calculate competition attempt suggestions.
- */
 export function compAttempts(targetKg: number): {
   opener: number
   second: number
@@ -104,9 +90,6 @@ export function compAttempts(targetKg: number): {
   }
 }
 
-/**
- * Round to nearest increment (default 2.5kg).
- */
 function roundToNearest(value: number, increment: number = 2.5): number {
   return Math.round(value / increment) * increment
 }

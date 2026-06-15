@@ -22,7 +22,6 @@ function userCompToLegacy(uc: UserCompetition): Competition {
     name: uc.name,
     date: uc.start_date,
     federation: uc.federation_label || '',
-    federation_id: uc.federation_id || undefined,
     counts_toward_federation_ids: uc.counts_toward_federation_ids?.length ? uc.counts_toward_federation_ids : undefined,
     location,
     hotel_required: uc.hotel_required,

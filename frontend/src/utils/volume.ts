@@ -8,9 +8,6 @@ function zeroCategoryRecord(): Record<LiftCategory, number> {
   return { squat: 0, bench: 0, deadlift: 0, back: 0, chest: 0, arm: 0, legs: 0, core: 0, lower_back: 0 }
 }
 
-/**
- * Calculate volume (sets * reps * kg) for a single exercise.
- */
 export function executedSets(ex: Pick<Exercise, 'sets' | 'set_statuses'>): number {
   if (ex.set_statuses?.length) {
     return ex.set_statuses.filter((status) => status === 'completed' || status === 'failed').length
@@ -24,16 +21,10 @@ export function exerciseVolume(ex: Exercise): number {
   return sets * ex.reps * ex.kg
 }
 
-/**
- * Calculate total volume for a session.
- */
 export function sessionVolume(session: Session): number {
   return session.exercises.reduce((sum, ex) => sum + exerciseVolume(ex), 0)
 }
 
-/**
- * Map exercise names to lift categories (8-category system).
- */
 const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   // ─── Squat ──────────────────────────────────────────────────────
   'Squat': 'squat',
@@ -148,18 +139,11 @@ function singularize(word: string): string {
   return word
 }
 
-/**
- * Normalize an exercise name for matching: strip parenthetical suffixes
- * like (heavy), (light), (backout), trim whitespace, lowercase, singularize.
- */
 export function normalizeExerciseName(name: string): string {
   const stripped = name.replace(/\s*\(.*?\)\s*/g, ' ').trim().toLowerCase()
   return stripped.split(/\s+/).map(singularize).join(' ')
 }
 
-/**
- * Build a lookup from normalized exercise name to its category (from glossary).
- */
 function buildCategoryLookup(glossary: GlossaryExercise[]): Map<string, LiftCategory> {
   const lookup = new Map<string, LiftCategory>()
   for (const ex of glossary) {
@@ -168,10 +152,6 @@ function buildCategoryLookup(glossary: GlossaryExercise[]): Map<string, LiftCate
   return lookup
 }
 
-/**
- * Categorize an exercise by name. Uses glossary when available, falls back to
- * hardcoded map. Defaults to 'arm'.
- */
 export function categorizeExercise(name: string, glossaryLookup?: Map<string, LiftCategory>): LiftCategory {
   if (glossaryLookup) {
     const norm = normalizeExerciseName(name)
@@ -181,10 +161,6 @@ export function categorizeExercise(name: string, glossaryLookup?: Map<string, Li
   return LIFT_CATEGORY_MAP[name] ?? LIFT_CATEGORY_MAP[normalizeExerciseName(name)] ?? 'arm'
 }
 
-/**
- * Calculate volume by category system for a list of sessions.
- * Uses glossary categories when available, falls back to hardcoded map.
- */
 export function volumeByCategory6(sessions: Session[], block?: string, glossary?: GlossaryExercise[]): Record<LiftCategory, number> {
   const result = zeroCategoryRecord()
   const lookup = glossary ? buildCategoryLookup(glossary) : undefined
@@ -199,9 +175,6 @@ export function volumeByCategory6(sessions: Session[], block?: string, glossary?
   return result
 }
 
-/**
- * Calculate volume by legacy 4-category system (backward compat).
- */
 export function volumeByCategory(sessions: Session[], block?: string): Record<string, number> {
   const result = { squat: 0, bench: 0, deadlift: 0, accessory: 0 }
 
@@ -220,10 +193,6 @@ export function volumeByCategory(sessions: Session[], block?: string): Record<st
   return result
 }
 
-/**
- * Get weekly volume data for charting.
- * Uses glossary categories when available, falls back to hardcoded map.
- */
 export function weeklyVolumeByCategory6(
   sessions: Session[],
   block?: string,
@@ -250,9 +219,6 @@ export function weeklyVolumeByCategory6(
     .sort((a, b) => a.week - b.week)
 }
 
-/**
- * Get weekly volume data for charting (legacy 4-category, backward compat).
- */
 export function weeklyVolumeByCategory(
   sessions: Session[],
   block?: string
@@ -284,11 +250,6 @@ export function weeklyVolumeByCategory(
 
 // ─── Muscle Group Utilities ──────────────────────────────────────────────────
 
-/**
- * Build a lookup from exercise name to its muscle contributions.
- * Keys are normalized (lowered, parenthetical suffixes stripped, trimmed)
- * so that session exercise names with extra annotations still match.
- */
 function buildGlossaryLookup(
   glossary: GlossaryExercise[]
 ): Map<string, { primary: MuscleGroup[]; secondary: MuscleGroup[]; tertiary: MuscleGroup[] }> {
@@ -304,12 +265,6 @@ function buildGlossaryLookup(
   return lookup
 }
 
-/**
- * Calculate total volume (sets * reps * kg) per muscle group.
- * Primary muscles get full weight, secondary muscles get half weight,
- * and tertiary muscles get quarter weight.
- * Exercises not found in the glossary are skipped.
- */
 export function volumeByMuscleGroup(
   sessions: Session[],
   glossary: GlossaryExercise[],
@@ -340,12 +295,6 @@ export function volumeByMuscleGroup(
   return volumes
 }
 
-/**
- * Calculate weekly sets per muscle group.
- * Primary muscles get full set credit, secondary muscles get half set credit,
- * and tertiary muscles get quarter set credit.
- * Exercises not found in the glossary are skipped.
- */
 export function weeklySetsByMuscleGroup(
   sessions: Session[],
   glossary: GlossaryExercise[],
@@ -391,10 +340,6 @@ export function weeklySetsByMuscleGroup(
     .sort((a, b) => (a.week as number) - (b.week as number))
 }
 
-/**
- * Filter sessions by training block. Default: "current".
- * Pass "*" to include all blocks.
- */
 function filterByBlock(sessions: Session[], block?: string): Session[] {
   if (!block || block === '*') return sessions
   return sessions.filter((s) => (s.block || 'current') === block)
@@ -402,10 +347,6 @@ function filterByBlock(sessions: Session[], block?: string): Session[] {
 
 // ─── Max Tracking ───────────────────────────────────────────────────────────────
 
-/**
- * Find the heaviest weight lifted per unique exercise across all completed sessions.
- * Returns a Map keyed by normalized name, with { kg, displayName } values.
- */
 export function allTimeMaxByExercise(
   sessions: Session[],
   block?: string
@@ -427,10 +368,6 @@ export function allTimeMaxByExercise(
   return maxes
 }
 
-/**
- * Find the heaviest weight per lift category within a date window.
- * Only considers completed sessions.
- */
 export function maxByCategoryInWindow(
   sessions: Session[],
   startDate: string,
@@ -456,12 +393,6 @@ export function maxByCategoryInWindow(
   return result
 }
 
-/**
- * Calculate weekly volume per muscle group.
- * Primary muscles get full volume, secondary muscles get half volume,
- * and tertiary muscles get quarter volume.
- * Exercises not found in the glossary are skipped.
- */
 export function weeklyVolumeByMuscleGroup(
   sessions: Session[],
   glossary: GlossaryExercise[],

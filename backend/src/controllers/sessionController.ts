@@ -10,9 +10,6 @@ import {
   replaceSessionAt,
 } from '../services/sessionStore'
 
-/**
- * Resolve a version string to the actual SK.
- */
 async function resolveVersionSk(pk: string, version: string): Promise<string> {
   if (version === 'current') {
     const pointerCommand = new GetCommand({
@@ -38,9 +35,6 @@ async function loadPhases(pk: string, sk: string, version: string): Promise<Phas
   return (result.Item.phases ?? []) as Phase[]
 }
 
-/**
- * Create a new session
- */
 export async function createSession(
   pk: string,
   version: string,
@@ -75,9 +69,6 @@ export async function createSession(
   await createStoredSession(pk, sk, newSession, phases)
 }
 
-/**
- * Delete a session by index
- */
 export async function deleteSession(
   pk: string,
   version: string,
@@ -94,9 +85,6 @@ export async function getSession(pk: string, version: string, date: string, inde
   return getStoredSession(pk, sk, date, index, phases)
 }
 
-/**
- * Update an entire session at a specific index
- */
 export async function updateSession(
   pk: string,
   version: string,
@@ -109,9 +97,6 @@ export async function updateSession(
   await replaceSessionAt(pk, sk, date, index, session, phases)
 }
 
-/**
- * Reschedule a session to a new date
- */
 export async function rescheduleSession(
   pk: string,
   version: string,
@@ -125,9 +110,6 @@ export async function rescheduleSession(
   await patchSessionAt(pk, sk, date, index, { date: newDate, day: newDay }, phases)
 }
 
-/**
- * Mark a session as complete with optional RPE and body weight
- */
 export async function completeSession(
   pk: string,
   version: string,
@@ -148,9 +130,6 @@ export async function completeSession(
   }, phases)
 }
 
-/**
- * Update only the status field on a session
- */
 export async function updateSessionStatus(
   pk: string,
   version: string,
@@ -167,9 +146,6 @@ export async function updateSessionStatus(
   }, phases)
 }
 
-/**
- * Add an exercise to a session
- */
 export async function addExercise(
   pk: string,
   version: string,
@@ -185,9 +161,6 @@ export async function addExercise(
   }, phases)
 }
 
-/**
- * Remove an exercise from a session
- */
 export async function removeExercise(
   pk: string,
   version: string,
@@ -207,9 +180,6 @@ export async function removeExercise(
   await patchSessionAt(pk, sk, date, index, { exercises }, phases)
 }
 
-/**
- * Update a single field on an exercise
- */
 export async function updateExerciseField(
   pk: string,
   version: string,

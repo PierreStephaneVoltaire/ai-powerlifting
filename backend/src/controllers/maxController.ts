@@ -18,9 +18,6 @@ async function resolveVersionSk(pk: string, version: string): Promise<string> {
   return (pointerResult.Item as any)?.ref_sk || 'program#v001'
 }
 
-/**
- * Get max history for a program version
- */
 export async function getMaxHistory(pk: string, version: string): Promise<MaxHistoryStore> {
   const command = new GetCommand({
     TableName: TABLE,
@@ -45,9 +42,6 @@ export async function getMaxHistory(pk: string, version: string): Promise<MaxHis
   return result.Item as MaxHistoryStore
 }
 
-/**
- * Add a new max entry to history
- */
 export async function addMaxEntry(pk: string, version: string, entry: MaxEntry): Promise<void> {
   const history = await getMaxHistory(pk, version)
 
@@ -63,9 +57,6 @@ export async function addMaxEntry(pk: string, version: string, entry: MaxEntry):
   await docClient.send(command)
 }
 
-/**
- * Update target maxes in program meta
- */
 export async function updateTargetMaxes(
   pk: string,
   version: string,
@@ -99,9 +90,6 @@ export async function updateTargetMaxes(
   await docClient.send(command)
 }
 
-/**
- * Get current target maxes from program meta
- */
 export async function getTargetMaxes(pk: string, version: string): Promise<{
   squat_kg: number
   bench_kg: number

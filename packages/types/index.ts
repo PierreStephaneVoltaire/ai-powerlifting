@@ -225,7 +225,6 @@ export interface Competition {
   name: string
   date: string
   federation: string
-  federation_id?: string  // Host federation for the meet itself
   counts_toward_federation_ids?: string[]  // Extra federations that accept this meet for goal eligibility
   location?: string
   hotel_required?: boolean
@@ -425,13 +424,6 @@ export interface VideoLibraryResponse {
   exercises: string[]
 }
 
-/**
- * Available sort orders for the lift video gallery.
- *
- * - `newest` / `oldest` : chronological by session date then video upload time.
- * - `volume`            : total work (sets × reps × kg), heaviest first.
- * - `weight`            : top set weight (kg), heaviest first.
- */
 export type VideoSort = 'newest' | 'oldest' | 'volume' | 'weight'
 
 // ─── Full Program ─────────────────────────────────────────────────────────────
@@ -856,7 +848,6 @@ export interface ReadinessAnalyticsFields {
 export type CompEventType = 'full_power' | 'bench_only' | 'deadlift_only' | 'unknown' | null
 export type CompTestingStatus = 'tested' | 'untested' | 'unknown'
 export type CompRegistrationStatus = 'open' | 'closed' | 'unknown'
-export type CompConfidenceStatus = 'high' | 'medium' | 'low' | null
 
 export interface AttemptSelectionAttempt {
   lift: CompetitionLift
@@ -868,11 +859,9 @@ export interface AttemptSelectionAttempt {
 export type AttemptSelection = AttemptSelectionAttempt[]
 
 export interface MasterCompetition {
-  id: string
   name: string
   start_date: string
   end_date: string | null
-  federation_id: string | null
   federation_label: string | null
   federation_slug: string | null
   federation_website_url: string | null
@@ -882,9 +871,6 @@ export interface MasterCompetition {
   venue_state: string | null
   venue_country: string | null
   venue_postal_code: string | null
-  venue_latitude: number | null
-  venue_longitude: number | null
-  venue_coordinate_quality: string | null
   website_url: string | null
   testing_status: CompTestingStatus
   registration_status: CompRegistrationStatus
@@ -893,7 +879,6 @@ export interface MasterCompetition {
   source_url: string | null
   source_name: string | null
   last_verified_at: string | null
-  confidence_status: CompConfidenceStatus
   slug: string | null
   cancelled: boolean
   is_sample_data: boolean
@@ -906,7 +891,6 @@ export interface UserCompetition {
   name: string
   start_date: string
   end_date: string | null
-  federation_id: string
   federation_label: string
   federation_slug: string | null
   federation_website_url: string | null
@@ -916,9 +900,6 @@ export interface UserCompetition {
   venue_state: string | null
   venue_country: string | null
   venue_postal_code: string | null
-  venue_latitude: number | null
-  venue_longitude: number | null
-  venue_coordinate_quality: string | null
   website_url: string | null
   testing_status: CompTestingStatus
   registration_status: CompRegistrationStatus
@@ -927,7 +908,6 @@ export interface UserCompetition {
   source_url: string | null
   source_name: string | null
   last_verified_at: string | null
-  confidence_status: CompConfidenceStatus | null
   event_type: CompEventType
   cancelled: boolean
   user_status: 'available' | 'optional' | 'confirmed' | 'completed' | 'skipped'
@@ -952,26 +932,103 @@ export interface UserCompetition {
   updated_at: string
 }
 
-export interface MasterFederation {
+export type AgeCategory =
+  | 'open'
+  | 'subjunior'
+  | 'junior'
+  | 'master1'
+  | 'master2'
+  | 'master3'
+  | 'master4'
+
+export const AGE_CATEGORY_OPTIONS: ReadonlyArray<{ value: AgeCategory; label: string }> = [
+  { value: 'open', label: 'Open' },
+  { value: 'subjunior', label: 'Sub-Junior' },
+  { value: 'junior', label: 'Junior' },
+  { value: 'master1', label: 'Master 1' },
+  { value: 'master2', label: 'Master 2' },
+  { value: 'master3', label: 'Master 3' },
+  { value: 'master4', label: 'Master 4' },
+]
+
+export const AGE_CATEGORY_ORDER: Record<AgeCategory, number> = {
+  subjunior: 0,
+  junior: 1,
+  open: 2,
+  master1: 3,
+  master2: 4,
+  master3: 5,
+  master4: 6,
+}
+
+export const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
+  'open',
+  'subjunior',
+  'junior',
+  'master1',
+  'master2',
+  'master3',
+  'master4',
+]
+
+export type FederationSex = 'male' | 'female'
+
+export const FEDERATION_SEX_VALUES: ReadonlyArray<FederationSex> = ['male', 'female']
+
+export type FederationLevel = 'national' | 'regional'
+
+export const FEDERATION_LEVEL_OPTIONS: ReadonlyArray<{ value: FederationLevel; label: string }> = [
+  { value: 'national', label: 'National' },
+  { value: 'regional', label: 'Regional' },
+]
+
+export const FEDERATION_LEVEL_VALUES: ReadonlyArray<FederationLevel> = ['national', 'regional']
+
+export interface FederationStandardEntry {
   id: string
+  sex?: FederationSex
+  age_class?: AgeCategory
+  weight_class?: string
+  level?: FederationLevel
+  category?: string
+  qualifying_total: number
+}
+
+export interface FederationStandard {
+  start_date: string
+  end_date: string
+  entries: FederationStandardEntry[]
+}
+
+export type FederationStandardUnit = 'kg' | 'dots'
+
+export interface FederationDisplayOptions {
+  show_sex: boolean
+  show_age_class: boolean
+  show_weight_class: boolean
+  show_category: boolean
+}
+
+export const DEFAULT_FEDERATION_DISPLAY_OPTIONS: FederationDisplayOptions = {
+  show_sex: true,
+  show_age_class: true,
+  show_weight_class: true,
+  show_category: true,
+}
+
+export interface MasterFederation {
+  pk: string
+  sk: string
   name: string
   abbreviation: string | null
   region: string | null
   website_url: string | null
   status: 'active' | 'archived'
   source_slug: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface UserFederation {
-  master_id: string
-  name: string
-  abbreviation: string | null
-  region: string | null
-  website_url: string | null
-  user_status: 'active' | 'archived'
-  notes: string
+  has_standards: boolean
+  standard_unit: FederationStandardUnit | null
+  standards: Record<string, FederationStandard>
+  display_options?: FederationDisplayOptions
   created_at: string
   updated_at: string
 }

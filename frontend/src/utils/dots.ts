@@ -20,11 +20,6 @@ const DOTS_COEFFICIENTS: Record<Sex, {
   },
 }
 
-/**
- * Calculate DOTS score.
- * Formula: DOTS = (500 / denominator) * total
- * denominator = a + b*bw + c*bw^2 + d*bw^3 + e*bw^4
- */
 export function calculateDots(
   totalKg: number,
   bodyweightKg: number,
@@ -36,9 +31,6 @@ export function calculateDots(
   return parseFloat(((500 / denominator) * totalKg).toFixed(2))
 }
 
-/**
- * Convenience wrapper for the three-lift breakdown.
- */
 export function calculateDotsFromLifts(
   squatKg: number,
   benchKg: number,
@@ -55,10 +47,6 @@ export function calculateDotsFromLifts(
   }
 }
 
-/**
- * Reverse: what total is needed to hit a target DOTS at a given bodyweight?
- * Rearrangement: total = (targetDots * denominator) / 500
- */
 export function totalForTargetDots(
   targetDots: number,
   bodyweightKg: number,
@@ -70,10 +58,6 @@ export function totalForTargetDots(
   return parseFloat(((targetDots * denominator) / 500).toFixed(1))
 }
 
-/**
- * Weight class optimizer: compute DOTS score at the current total
- * across a list of bodyweight scenarios.
- */
 export function dotsAcrossWeightClasses(
   total: number,
   bodyweights: number[],
@@ -85,9 +69,6 @@ export function dotsAcrossWeightClasses(
   }))
 }
 
-/**
- * Performance level thresholds for DOTS scores.
- */
 export const DOTS_LEVELS = {
   male: [
     { name: 'Beginner', min: 0, max: 150, context: 'Just starting out' },
@@ -107,9 +88,6 @@ export const DOTS_LEVELS = {
   ],
 } as const
 
-/**
- * Get the performance level for a given DOTS score.
- */
 export function getDotsLevel(dots: number, sex: Sex) {
   const levels = DOTS_LEVELS[sex]
   return levels.find(l => dots >= l.min && dots < l.max) || levels[0]

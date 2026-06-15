@@ -2,9 +2,6 @@ import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, TABLE } from '../db/dynamo'
 import type { WeightEntry, WeightLogStore } from '@powerlifting/types'
 
-/**
- * Get weight log for a program version
- */
 export async function getWeightLog(pk: string, version: string): Promise<WeightLogStore> {
   const command = new GetCommand({
     TableName: TABLE,
@@ -29,9 +26,6 @@ export async function getWeightLog(pk: string, version: string): Promise<WeightL
   return result.Item as WeightLogStore
 }
 
-/**
- * Add a weight entry
- */
 export async function addWeightEntry(
   pk: string,
   version: string,
@@ -62,9 +56,6 @@ export async function addWeightEntry(
   await docClient.send(command)
 }
 
-/**
- * Remove a weight entry by date
- */
 export async function removeWeightEntry(
   pk: string,
   version: string,

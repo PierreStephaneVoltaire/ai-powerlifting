@@ -48,7 +48,7 @@ export default function AppShell({ children }: AppShellProps) {
         collapsed: { mobile: true },
       }}
       footer={{
-        height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+        height: 'calc(68px + env(safe-area-inset-bottom, 0px))',
         offset: false,
       }}
       padding="md"
@@ -82,7 +82,7 @@ export default function AppShell({ children }: AppShellProps) {
 
       <MantineAppShell.Main
         pb={{
-          base: 'calc(180px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
+          base: 'calc(188px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
           md: 140
         }}
         style={{ flex: 1 }}
@@ -92,15 +92,15 @@ export default function AppShell({ children }: AppShellProps) {
       </MantineAppShell.Main>
 
       {/* Mobile bottom navigation */}
-      <MantineAppShell.Footer 
-        hiddenFrom="md" 
-        style={{ 
-          position: 'fixed', 
-          bottom: 0, 
-          left: 0, 
-          right: 0, 
-          height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      <MantineAppShell.Footer
+        hiddenFrom="md"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 'calc(68px + env(safe-area-inset-bottom, 0px))',
+          paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
           backgroundColor: 'var(--bg-surface)',
           borderTop: '1px solid var(--border-subtle)',
           zIndex: 100

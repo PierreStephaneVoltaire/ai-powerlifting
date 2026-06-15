@@ -187,7 +187,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
         data-testid="session-list-add-session-mobile"
         style={{
           position: 'fixed',
-          bottom: 'calc(76px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
+          bottom: 'calc(84px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
           right: 16,
           zIndex: 120,
           width: 52,

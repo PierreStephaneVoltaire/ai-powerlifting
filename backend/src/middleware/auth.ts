@@ -131,3 +131,19 @@ export function requireWriteAuth(req: Request, _res: Response, next: NextFunctio
 
   next()
 }
+
+export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
+  if (testMappedPkOverride()) {
+    return next()
+  }
+
+  if (req.readOnly || !req.user) {
+    return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
+  }
+
+  if (req.mapped_pk !== 'operator') {
+    return next(new AppError('Admin access required', 403, 'ADMIN_REQUIRED'))
+  }
+
+  next()
+}

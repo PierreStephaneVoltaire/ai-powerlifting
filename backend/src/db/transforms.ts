@@ -1,9 +1,5 @@
 import type { Program, Session, Phase } from '@powerlifting/types'
 
-/**
- * Parse week number from a week label string.
- * Examples: 'W7 (Intensification)' -> 7, 'W1 (Warmup)' -> 1, 'W10' -> 10, '1' -> 1
- */
 function parseWeekNumber(weekLabel: string | number | undefined): number {
   if (typeof weekLabel === 'number') {
     return weekLabel
@@ -31,11 +27,6 @@ function sessionBlock(s: Session): string {
   return s.block ?? DEFAULT_BLOCK
 }
 
-/**
- * Resolve the correct Phase object for a given week number, scoped to the session's block.
- * Phases match only if they share the same block as the session (default "current").
- * start_week/end_week are block-local (1 = first week of the block).
- */
 function resolvePhase(weekNum: number, block: string, phases: Phase[]): Phase {
   if (weekNum <= 0 || phases.length === 0) {
     return { name: 'Unscheduled', intent: '', start_week: 0, end_week: 0, block }
@@ -46,9 +37,6 @@ function resolvePhase(weekNum: number, block: string, phases: Phase[]): Phase {
   return phase ?? { name: 'Unscheduled', intent: '', start_week: weekNum, end_week: weekNum, block }
 }
 
-/**
- * Transform DynamoDB item into a clean Program object.
- */
 export function transformProgram(item: Record<string, unknown>): Program {
   const program = item as unknown as Program
   const legacyBlockNotes = Array.isArray((item as { block_notes?: unknown }).block_notes)
@@ -103,9 +91,6 @@ export function transformProgram(item: Record<string, unknown>): Program {
   return program
 }
 
-/**
- * Get the current week number based on program start date.
- */
 export function getCurrentWeek(programStart: string): number {
   const start = new Date(programStart)
   const now = new Date()

@@ -3,9 +3,6 @@ import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
 import type { SupplementPhase } from '@powerlifting/types'
 
-/**
- * Resolve a version string to the actual SK.
- */
 async function resolveVersionSk(pk: string, version: string): Promise<string> {
   if (version === 'current') {
     const pointerCommand = new GetCommand({
@@ -19,9 +16,6 @@ async function resolveVersionSk(pk: string, version: string): Promise<string> {
   return `program#${version}`
 }
 
-/**
- * Update all supplement phases
- */
 export async function updateSupplementPhases(
   pk: string,
   version: string,
@@ -43,9 +37,6 @@ export async function updateSupplementPhases(
   await docClient.send(updateCommand)
 }
 
-/**
- * Get supplement phases
- */
 export async function getSupplementPhases(
   pk: string,
   version: string

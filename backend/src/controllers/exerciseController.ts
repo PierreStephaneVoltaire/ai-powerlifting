@@ -58,9 +58,6 @@ function normalizeStoredExercise(raw: GlossaryExercise): GlossaryExercise {
   }
 }
 
-/**
- * Get the exercise glossary
- */
 export async function getGlossary(pk: string): Promise<GlossaryStore> {
   const command = new GetCommand({
     TableName: TABLE,
@@ -89,9 +86,6 @@ export async function getGlossary(pk: string): Promise<GlossaryStore> {
   }
 }
 
-/**
- * Add or update an exercise in the glossary
- */
 export async function upsertExercise(pk: string, exercise: GlossaryExercise): Promise<void> {
   const glossary = await getGlossary(pk)
   exercise = normalizeExercise(exercise)
@@ -151,9 +145,6 @@ export async function upsertExercise(pk: string, exercise: GlossaryExercise): Pr
   }
 }
 
-/**
- * Update only the fatigue profile fields of an exercise in the glossary
- */
 async function updateExerciseProfile(
   pk: string,
   exerciseId: string,
@@ -187,17 +178,11 @@ export async function removeExercise(pk: string, exerciseId: string): Promise<vo
   await docClient.send(command)
 }
 
-/**
- * Get exercise by ID
- */
 export async function getExerciseById(pk: string, exerciseId: string): Promise<GlossaryExercise | null> {
   const glossary = await getGlossary(pk)
   return glossary.exercises.find(e => e.id === exerciseId) || null
 }
 
-/**
- * Search exercises by name
- */
 export async function searchExercises(pk: string, query: string): Promise<GlossaryExercise[]> {
   const glossary = await getGlossary(pk)
   const lowerQuery = query.toLowerCase()
@@ -213,9 +198,6 @@ export async function searchExercises(pk: string, query: string): Promise<Glossa
   )
 }
 
-/**
- * Archive an exercise
- */
 export async function archiveExercise(pk: string, id: string): Promise<void> {
   const glossary = await getGlossary(pk)
   const idx = glossary.exercises.findIndex(e => e.id === id)
@@ -227,9 +209,6 @@ export async function archiveExercise(pk: string, id: string): Promise<void> {
   await docClient.send(new PutCommand({ TableName: TABLE, Item: glossary }))
 }
 
-/**
- * Unarchive an exercise
- */
 export async function unarchiveExercise(pk: string, id: string): Promise<void> {
   const glossary = await getGlossary(pk)
   const idx = glossary.exercises.findIndex(e => e.id === id)
@@ -241,9 +220,6 @@ export async function unarchiveExercise(pk: string, id: string): Promise<void> {
   await docClient.send(new PutCommand({ TableName: TABLE, Item: glossary }))
 }
 
-/**
- * Set e1RM estimate for an exercise
- */
 export async function setE1rmEstimate(
   pk: string,
   id: string,
@@ -267,23 +243,14 @@ export async function setE1rmEstimate(
   await docClient.send(new PutCommand({ TableName: TABLE, Item: glossary }))
 }
 
-/**
- * AI estimate e1RM for an exercise
- */
 export async function estimateExerciseE1rm(pk: string, id: string): Promise<any> {
   return invokeToolDirect('glossary_estimate_e1rm', { id, pk })
 }
 
-/**
- * AI estimate fatigue profile for an exercise
- */
 export async function estimateExerciseFatigue(pk: string, id: string): Promise<any> {
   return invokeToolDirect('glossary_estimate_fatigue', { id, pk })
 }
 
-/**
- * AI estimate muscle groups for an exercise
- */
 export async function estimateExerciseMuscles(pk: string, id: string): Promise<any> {
   return invokeToolDirect('glossary_estimate_muscles', { id, pk })
 }

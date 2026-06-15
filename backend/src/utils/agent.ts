@@ -79,9 +79,6 @@ async function reloadIfTools(): Promise<void> {
   }
 }
 
-/**
- * Invoke a Python tool directly via the Agent API.
- */
 export async function invokeToolDirect(
   toolName: string,
   args: Record<string, unknown>,

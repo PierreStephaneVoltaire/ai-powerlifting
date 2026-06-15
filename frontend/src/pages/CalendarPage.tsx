@@ -394,7 +394,7 @@ export default function CalendarPage() {
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           style={{
             position: 'fixed',
-            bottom: 'calc(76px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px) + 56px)',
+            bottom: 'calc(84px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px) + 56px)',
             right: 16,
             zIndex: 120,
             opacity: 0.7,

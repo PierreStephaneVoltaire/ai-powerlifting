@@ -3,9 +3,6 @@ import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
 import type { DietNote } from '@powerlifting/types'
 
-/**
- * Resolve a version string to the actual SK.
- */
 async function resolveVersionSk(pk: string, version: string): Promise<string> {
   if (version === 'current') {
     const pointerCommand = new GetCommand({
@@ -19,9 +16,6 @@ async function resolveVersionSk(pk: string, version: string): Promise<string> {
   return `program#${version}`
 }
 
-/**
- * Update all diet notes
- */
 export async function updateDietNotes(
   pk: string,
   version: string,
@@ -43,9 +37,6 @@ export async function updateDietNotes(
   await docClient.send(updateCommand)
 }
 
-/**
- * Get diet notes
- */
 export async function getDietNotes(pk: string, version: string): Promise<DietNote[]> {
   const sk = await resolveVersionSk(pk, version)
 
