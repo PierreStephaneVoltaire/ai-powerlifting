@@ -427,6 +427,7 @@ export default function AnalysisPage() {
 
   const competitions = useMemo(() => {
     return userCompetitions
+      .filter((uc) => uc.user_status !== 'available')
       .map(userCompToCompetition)
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [userCompetitions])

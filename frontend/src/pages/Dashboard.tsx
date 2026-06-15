@@ -520,7 +520,7 @@ export default function Dashboard() {
   const profileBio = profileSnippet?.bio?.trim()
 
   const upcomingComps = userCompetitions
-    .filter((c) => c.user_status !== 'skipped' && c.user_status !== 'completed' && new Date(c.start_date) >= new Date())
+    .filter((c) => c.user_status !== 'skipped' && c.user_status !== 'completed' && c.user_status !== 'available' && new Date(c.start_date) >= new Date())
     .sort((a, b) => a.start_date.localeCompare(b.start_date))
 
   const latestWeightKg = weightLog.length > 0 ? weightLog[0].kg : meta.current_body_weight_kg

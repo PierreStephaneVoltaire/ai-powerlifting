@@ -52,12 +52,32 @@ function s3SafeSegment(value: string): string {
 }
 
 export async function getSettingsHandler(req: Request, res: Response): Promise<void> {
-  if (!req.user) {
-    throw new AppError('Not authenticated', 401)
-  }
 
-  const settings = await getSettings(req.user.username)
+  const username = req.user?.username || req.mapped_pk || 'operator'
+  const settings = await getSettings(username)
   if (!settings) {
+
+    if (!req.user) {
+      res.json({
+        data: {
+          pk: 'operator',
+          username: 'operator',
+          discord_id: '',
+          discord_username: 'operator',
+          avatar_url: null,
+          nickname: 'operator',
+          profile_visibility: 'private',
+          display_name: 'operator',
+          bio: '',
+          public_training_summary_enabled: false,
+          ranking_country: null,
+          ranking_region: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      })
+      return
+    }
     throw new AppError('Settings not found', 404)
   }
 
