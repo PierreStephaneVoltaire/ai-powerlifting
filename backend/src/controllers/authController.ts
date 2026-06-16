@@ -113,12 +113,14 @@ export async function discordCallback(req: Request, res: Response): Promise<void
 export async function getMe(req: Request, res: Response): Promise<void> {
   let ranking_country: string | null = null
   let ranking_region: string | null = null
+  let age_class: string = 'open'
   try {
     const username = req.user?.username || req.mapped_pk || 'operator'
     const settings = await getSettings(username)
     if (settings) {
       ranking_country = settings.ranking_country
       ranking_region = settings.ranking_region
+      age_class = settings.age_class
     }
   } catch {}
   res.json({
@@ -127,6 +129,7 @@ export async function getMe(req: Request, res: Response): Promise<void> {
     readOnly: req.readOnly ?? true,
     ranking_country,
     ranking_region,
+    age_class,
   })
 }
 

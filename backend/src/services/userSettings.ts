@@ -1,6 +1,17 @@
 import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, USER_TABLE } from '../db/dynamo'
 import { seedMasterCopiesForNewUser } from './masterCopy'
+import type { AgeCategory } from '@powerlifting/types'
+
+const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
+  'open',
+  'subjunior',
+  'junior',
+  'master1',
+  'master2',
+  'master3',
+  'master4',
+]
 
 export type ProfileVisibility = 'private' | 'public'
 
@@ -18,6 +29,7 @@ export interface UserSettings {
   public_training_summary_enabled: boolean
   ranking_country: string | null
   ranking_region: string | null
+  age_class: AgeCategory
   created_at: string
   updated_at: string
 }
@@ -78,6 +90,12 @@ function normalizeMappedPk(value: unknown): string | undefined {
   return validateMappedPk(mappedPk) ? mappedPk : undefined
 }
 
+function normalizeAgeClass(value: unknown): AgeCategory {
+  return typeof value === 'string' && AGE_CATEGORY_VALUES.includes(value as AgeCategory)
+    ? (value as AgeCategory)
+    : 'open'
+}
+
 function normalizeSettings(raw: Record<string, unknown>): UserSettings {
   const discordUsername = String(raw.discord_username || raw.username || '')
   const username = usernameKey(String(raw.username || discordUsername || raw.nickname || 'user'))
@@ -98,6 +116,7 @@ function normalizeSettings(raw: Record<string, unknown>): UserSettings {
     public_training_summary_enabled: raw.public_training_summary_enabled === true,
     ranking_country: typeof raw.ranking_country === 'string' && raw.ranking_country.trim() ? raw.ranking_country.trim() : null,
     ranking_region: typeof raw.ranking_region === 'string' && raw.ranking_region.trim() ? raw.ranking_region.trim() : null,
+    age_class: normalizeAgeClass(raw.age_class),
     created_at: String(raw.created_at || new Date().toISOString()),
     updated_at: String(raw.updated_at || new Date().toISOString()),
   }
@@ -164,6 +183,7 @@ export async function getOrCreateSettings(
     public_training_summary_enabled: false,
     ranking_country: null,
     ranking_region: null,
+    age_class: 'open',
     created_at: now,
     updated_at: now,
   }
@@ -398,6 +418,35 @@ export async function updateRankingLocation(
     ExpressionAttributeValues: {
       ':country': rankingCountry,
       ':region': rankingRegion,
+      ':now': now,
+    },
+  }))
+
+  cache.delete(usernameKey(discordUsername))
+  return getSettings(discordUsername) as Promise<UserSettings>
+}
+
+export async function updateAgeClass(
+  discordUsername: string,
+  input: { age_class: AgeCategory | null },
+): Promise<UserSettings> {
+  const existing = await getSettings(discordUsername)
+  if (!existing) {
+    throw new Error('Settings not found')
+  }
+
+  const ageClass = typeof input.age_class === 'string' && AGE_CATEGORY_VALUES.includes(input.age_class as AgeCategory)
+    ? (input.age_class as AgeCategory)
+    : 'open'
+  const now = new Date().toISOString()
+
+  await docClient.send(new UpdateCommand({
+    TableName: USER_TABLE,
+    Key: { pk: existing.pk },
+    UpdateExpression: 'SET age_class = :age, updated_at = :now',
+    ConditionExpression: 'attribute_exists(pk)',
+    ExpressionAttributeValues: {
+      ':age': ageClass,
       ':now': now,
     },
   }))

@@ -53,9 +53,6 @@ export function transformProgram(item: Record<string, unknown>): Program {
   if (!program.competitions) {
     program.competitions = []
   }
-  if (!program.goals) {
-    program.goals = []
-  }
   if (!program.diet_notes) {
     program.diet_notes = []
   }

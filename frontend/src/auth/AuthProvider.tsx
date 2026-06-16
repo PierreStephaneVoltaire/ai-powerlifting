@@ -13,6 +13,7 @@ interface AuthContextType {
   readOnly: boolean
   ranking_country: string | null
   ranking_region: string | null
+  age_class: 'open' | 'subjunior' | 'junior' | 'master1' | 'master2' | 'master3' | 'master4'
   signIn: () => void
   signOut: () => Promise<void>
 }
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   readOnly: true,
   ranking_country: null,
   ranking_region: null,
+  age_class: 'open',
   signIn: () => {},
   signOut: async () => {},
 })
@@ -39,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [readOnly, setReadOnly] = useState(true)
   const [ranking_country, setRankingCountry] = useState<string | null>(null)
   const [ranking_region, setRankingRegion] = useState<string | null>(null)
+  const [age_class, setAgeClass] = useState<AuthContextType['age_class']>('open')
 
   useEffect(() => {
     fetch('/api/auth/me', { credentials: 'include' })
@@ -49,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setReadOnly(data.readOnly !== false)
         setRankingCountry(data.ranking_country || null)
         setRankingRegion(data.ranking_region || null)
+        setAgeClass(data.age_class || 'open')
       })
       .catch(() => {
         setUser(null)
@@ -56,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setReadOnly(true)
         setRankingCountry(null)
         setRankingRegion(null)
+        setAgeClass('open')
       })
       .finally(() => setLoading(false))
   }, [])
@@ -71,10 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReadOnly(true)
     setRankingCountry(null)
     setRankingRegion(null)
+    setAgeClass('open')
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, mapped_pk, readOnly, ranking_country, ranking_region, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, mapped_pk, readOnly, ranking_country, ranking_region, age_class, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -528,8 +528,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   updateGoals: async (goals) => {
-    const { version } = get()
-    await api.updateGoals(version, goals)
+    await api.updateGoals(goals)
 
     set((state) => {
       if (!state.program) return state

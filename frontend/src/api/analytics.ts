@@ -539,9 +539,7 @@ export interface BlockComparisonRow {
     targetDots?: number | null
     targetIpfGl?: number | null
     targetDate?: string
-    targetCompetitionDates: string[]
-    strategyMode?: string
-    riskTolerance?: string
+    targetCompetitionIds?: string[]
   }>
 }
 

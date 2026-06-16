@@ -3,204 +3,261 @@ import { Link } from 'react-router-dom'
 import { Plus, Save, Target, Trash2 } from 'lucide-react'
 import {
   Accordion,
+  Alert,
   Badge,
   Button,
   Group,
   MultiSelect,
+  NumberInput,
   Paper,
   Select,
   SimpleGrid,
   Stack,
   Text,
-  TextInput,
   Textarea,
   Title,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
-import type {
-  AthleteGoal,
-  AttemptStrategyMode,
-  FederationLibrary,
-  GoalPriority,
-  GoalType,
-  QualificationStandard,
-  RiskTolerance,
+import * as api from '@/api/client'
+import {
+  AGE_CATEGORY_OPTIONS,
+  GOAL_PRIORITY_OPTIONS,
+  GOAL_TYPE_OPTIONS,
+  TARGET_COMPETITION_STATUSES,
+  type AgeCategory,
+  type AthleteGoal,
+  type FederationStandardEntry,
+  type GoalPriority,
+  type GoalType,
+  type MasterFederation,
+  type UserCompetition,
 } from '@powerlifting/types'
 import { useProgramStore } from '@/store/programStore'
-import { useFederationStore } from '@/store/federationStore'
+import { useCompetitionsStore } from '@/store/competitionsStore'
 import { useUiStore } from '@/store/uiStore'
-import { useSettingsStore } from '@/store/settingsStore'
 import { useAuth } from '@/auth/AuthProvider'
 
-const GOAL_TYPE_OPTIONS: Array<{ value: GoalType; label: string }> = [
-  { value: 'hit_total', label: 'Hit Total' },
-  { value: 'qualify_for_federation', label: 'Qualify for Federation' },
-  { value: 'peak_for_meet', label: 'Peak for Meet' },
-  { value: 'make_podium', label: 'Make Podium' },
-  { value: 'conservative_pr', label: 'Conservative PR' },
-  { value: 'train_through', label: 'Train Through' },
-  { value: 'rank_percentile', label: 'Rank Percentile' },
-  { value: 'improve_dots', label: 'Improve DOTS' },
-  { value: 'maintain_weight_class', label: 'Maintain Weight Class' },
-  { value: 'coach_defined', label: 'Coach Defined' },
+const WEIGHT_CLASS_PRESETS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '53', label: '53 kg (women)' },
+  { value: '57', label: '57 kg' },
+  { value: '59', label: '59 kg' },
+  { value: '63', label: '63 kg' },
+  { value: '66', label: '66 kg' },
+  { value: '69', label: '69 kg' },
+  { value: '72', label: '72 kg' },
+  { value: '74', label: '74 kg' },
+  { value: '76', label: '76 kg' },
+  { value: '83', label: '83 kg' },
+  { value: '84', label: '84 kg' },
+  { value: '93', label: '93 kg' },
+  { value: '105', label: '105 kg' },
+  { value: '120', label: '120 kg' },
+  { value: '120+', label: '120+ kg' },
 ]
 
-const PRIORITY_OPTIONS: Array<{ value: GoalPriority; label: string }> = [
-  { value: 'primary', label: 'Primary' },
-  { value: 'secondary', label: 'Secondary' },
-  { value: 'optional', label: 'Optional' },
-]
-
-const STRATEGY_OPTIONS: Array<{ value: AttemptStrategyMode; label: string }> = [
-  { value: 'max_total', label: 'Max Total' },
-  { value: 'qualify', label: 'Qualify' },
-  { value: 'minimum_total', label: 'Minimum Total' },
-  { value: 'podium', label: 'Podium' },
-  { value: 'train_through', label: 'Train Through' },
-  { value: 'conservative_pr', label: 'Conservative PR' },
-]
-
-const RISK_OPTIONS: Array<{ value: RiskTolerance; label: string }> = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-]
+function newGoalId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `goal-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
+}
 
 function makeGoal(): AthleteGoal {
   return {
-    id: crypto.randomUUID(),
+    id: newGoalId(),
     title: 'New Goal',
     goal_type: 'hit_total',
     priority: 'secondary',
-    strategy_mode: 'max_total',
-    risk_tolerance: 'medium',
-    target_competition_dates: [],
-    target_standard_ids: [],
-    acceptable_weight_classes_kg: [],
-    notes: '',
   }
 }
 
-function cloneLibrary(library: FederationLibrary | null): FederationLibrary | null {
-  if (!library) return null
-  return JSON.parse(JSON.stringify(library)) as FederationLibrary
+function goalTypeLabel(type: GoalType): string {
+  return GOAL_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
 }
 
-function parseNumberList(value: string): number[] {
-  return value
-    .split(',')
-    .map(item => Number(item.trim()))
-    .filter(item => Number.isFinite(item) && item > 0)
-}
-
-function formatNumberList(value?: number[]): string {
-  return (value ?? []).join(', ')
-}
-
-function normalizeStringList(values?: string[], legacyValue?: string): string[] {
-  const deduped = new Set<string>()
-  for (const value of values ?? []) {
-    const trimmed = value.trim()
-    if (trimmed) deduped.add(trimmed)
-  }
-  if (legacyValue?.trim()) deduped.add(legacyValue.trim())
-  return [...deduped]
-}
-
-function normalizeGoal(goal: AthleteGoal): AthleteGoal {
-  const targetCompetitionDates = normalizeStringList(goal.target_competition_dates, goal.target_competition_date)
-  const targetStandardIds = normalizeStringList(goal.target_standard_ids, goal.target_standard_id)
-  return {
-    ...goal,
-    target_competition_dates: targetCompetitionDates,
-    target_competition_date: targetCompetitionDates[0] || undefined,
-    target_standard_ids: targetStandardIds,
-    target_standard_id: targetStandardIds[0] || undefined,
-    acceptable_weight_classes_kg: goal.acceptable_weight_classes_kg ?? [],
-    notes: goal.notes ?? '',
-  }
-}
-
-function goalBadgeColor(priority: GoalPriority): string {
+function priorityColor(priority: GoalPriority): string {
   if (priority === 'primary') return 'red'
   if (priority === 'secondary') return 'blue'
   return 'gray'
 }
 
-function standardLabel(standard: QualificationStandard, library: FederationLibrary | null): string {
-  const federation = library?.federations.find(item => item.id === standard.federation_id)
-  const federationLabel = federation?.abbreviation || federation?.name || 'Unknown'
-  const detail = [standard.season_year, standard.sex, `${standard.weight_class_kg}kg`, `${standard.required_total_kg}kg`]
-  return `${federationLabel} • ${detail.join(' • ')}`
+function competitionLabel(comp: UserCompetition): string {
+  const venue = [comp.venue_city, comp.venue_state, comp.venue_country].filter(Boolean).join(', ')
+  const dateLabel = comp.start_date || ''
+  return `${comp.name} • ${dateLabel}${venue ? ` • ${venue}` : ''}`
+}
+
+function federationKey(fed: MasterFederation): string {
+  if (typeof fed.sk === 'string' && fed.sk.length > 0) {
+    const suffix = fed.sk.replace(/^FED#/, '')
+    if (suffix) return suffix
+  }
+  return fed.pk || fed.name
+}
+
+function federationsToOptions(federations: MasterFederation[]): Array<{ value: string; label: string }> {
+  return federations
+    .filter((f) => f.status === 'active')
+    .map((f) => ({
+      value: federationKey(f),
+      label: f.abbreviation ? `${f.abbreviation} • ${f.name}` : f.name,
+    }))
+}
+
+function findFederationByKey(federations: MasterFederation[], key: string): MasterFederation | null {
+  return federations.find((f) => federationKey(f) === key) ?? null
+}
+
+function findFederationStandard(
+  fed: MasterFederation | null,
+  weightClassKg: number | null | undefined,
+  ageClass: AgeCategory,
+): FederationStandardEntry | null {
+  if (!fed || !fed.has_standards) return null
+  for (const year of Object.keys(fed.standards)) {
+    const standard = fed.standards[year]
+    const entries = standard.entries ?? []
+    const targetWc = weightClassKg ? String(weightClassKg) : null
+    const matches = entries.find((entry) => {
+      if (entry.age_class && entry.age_class !== ageClass) return false
+      if (targetWc && entry.weight_class !== targetWc) return false
+      return true
+    })
+    if (matches) return matches
+  }
+  return null
+}
+
+function findFederationStandardsForClasses(
+  fed: MasterFederation | null,
+  weightClassesKg: number[],
+  ageClass: AgeCategory,
+): FederationStandardEntry[] {
+  if (!fed || !fed.has_standards) return []
+  const out: FederationStandardEntry[] = []
+  for (const wc of weightClassesKg) {
+    const entry = findFederationStandard(fed, wc, ageClass)
+    if (entry) out.push(entry)
+  }
+  return out
 }
 
 export default function GoalsPage() {
-  const { readOnly } = useAuth()
-  const { program, updateGoals } = useProgramStore()
-  const { library, loadLibrary } = useFederationStore()
+  const { readOnly, age_class: authAgeClass, ranking_country, ranking_region } = useAuth()
+  const { updateGoals } = useProgramStore()
   const { pushToast } = useUiStore()
-  const { sex: settingsSex } = useSettingsStore()
+  const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const [goals, setGoals] = useState<AthleteGoal[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  const [federations, setFederations] = useState<MasterFederation[]>([])
+  const [loadingFederations, setLoadingFederations] = useState(false)
+
+  const effectiveAgeClass: AgeCategory = authAgeClass || 'open'
 
   useEffect(() => {
-    loadLibrary().catch(console.error)
-  }, [loadLibrary])
+    let cancelled = false
+    api.fetchGoals()
+      .then((rows) => {
+        if (cancelled) return
+        setGoals(rows)
+        setHasChanges(false)
+      })
+      .catch(() => {
+        if (!cancelled) setGoals([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
-    if (!program) return
-    setGoals((program.goals ?? []).map(normalizeGoal))
-    setHasChanges(false)
-  }, [program])
+    loadCompetitions({ country: ranking_country ?? undefined, state: ranking_region ?? undefined })
+  }, [loadCompetitions, ranking_country, ranking_region])
 
-  const effectiveSex = program?.meta.sex ?? settingsSex
-  const competitions = useMemo(() => {
-    return [...(program?.competitions ?? [])].sort((a, b) => a.date.localeCompare(b.date))
-  }, [program?.competitions])
+  useEffect(() => {
+    let cancelled = false
+    setLoadingFederations(true)
+    api.fetchFederations({ country: ranking_country ?? undefined })
+      .then((rows) => {
+        if (cancelled) return
+        setFederations(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setFederations([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFederations(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [ranking_country])
 
-  const competitionOptions = useMemo(() => {
-    return competitions.map(comp => ({
-      value: comp.date,
-      label: `${comp.name} • ${comp.date} • ${comp.status}`,
-    }))
+  const targetableCompetitions = useMemo(() => {
+    return [...competitions]
+      .filter((c) => (TARGET_COMPETITION_STATUSES as ReadonlyArray<string>).includes(c.user_status))
+      .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
   }, [competitions])
 
-  const federationOptions = useMemo(() => {
-    return (library?.federations ?? [])
-      .filter(item => item.status === 'active')
-      .map(item => ({
-        value: item.id,
-        label: item.abbreviation ? `${item.abbreviation} • ${item.name}` : item.name,
-      }))
-  }, [library])
+  const competitionOptions = useMemo(() => {
+    return targetableCompetitions.map((c) => ({
+      value: c.master_id,
+      label: competitionLabel(c),
+    }))
+  }, [targetableCompetitions])
+
+  const federationOptions = useMemo(() => federationsToOptions(federations), [federations])
 
   function updateGoal(goalId: string, patch: Partial<AthleteGoal>) {
-    setGoals(current => current.map(goal => (
-      goal.id === goalId
-        ? normalizeGoal({ ...goal, ...patch })
-        : goal
-    )))
+    setGoals((current) => current.map((g) => (g.id === goalId ? { ...g, ...patch } : g)))
     setHasChanges(true)
   }
 
   function addGoal() {
-    setGoals(current => [...current, makeGoal()])
+    setGoals((current) => [...current, makeGoal()])
     setHasChanges(true)
   }
 
   function removeGoal(goalId: string) {
-    setGoals(current => current.filter(goal => goal.id !== goalId))
+    setGoals((current) => current.filter((g) => g.id !== goalId))
     setHasChanges(true)
   }
 
   async function handleSave() {
     try {
-      await updateGoals(goals.map(normalizeGoal))
+      await api.updateGoals(goals)
+      await updateGoals(goals)
       setHasChanges(false)
       pushToast({ message: 'Goals saved', type: 'success' })
-    } catch (error) {
+    } catch {
       pushToast({ message: 'Failed to save goals', type: 'error' })
     }
+  }
+
+  function changeGoalType(goalId: string, nextType: GoalType) {
+    setGoals((current) => current.map((g) => {
+      if (g.id !== goalId) return g
+      const next: AthleteGoal = { id: g.id, title: g.title, goal_type: nextType, priority: g.priority }
+      if (nextType === 'qualify_for_federation') {
+        next.age_class = g.age_class ?? effectiveAgeClass
+        next.target_weight_class_kg = g.target_weight_class_kg
+        next.target_federation_ids = g.target_federation_ids
+      } else if (nextType === 'hit_total' || nextType === 'conservative_pr') {
+        next.target_total_kg = g.target_total_kg
+        next.target_weight_class_kg = g.target_weight_class_kg
+      } else if (nextType === 'peak_for_meet' || nextType === 'competition_exposure') {
+        next.target_competition_ids = g.target_competition_ids
+      } else if (nextType === 'improve_dots') {
+        next.target_dots = g.target_dots
+      } else if (nextType === 'improve_ipf_gl') {
+        next.target_ipf_gl = g.target_ipf_gl
+      } else if (nextType === 'custom') {
+        next.notes = g.notes
+      }
+      next.target_date = g.target_date
+      return next
+    }))
+    setHasChanges(true)
   }
 
   return (
@@ -232,11 +289,11 @@ export default function GoalsPage() {
 
       <Paper withBorder p="md">
         <Text size="sm" c="dimmed">
-          Goals are saved on the current program version. Federation standards are shared across programs and managed on the Federations page.
+          Each goal shows only the fields that matter for its type. Target competitions are limited to ones you have marked as optional, completed, or skipped. Federation lookups use the country and state from your ranking settings and your IPF age class.
         </Text>
-        {!library && (
+        {readOnly && (
           <Text size="sm" mt="xs" c="dimmed">
-            Federation library has not loaded yet. You can still define generic goals now and link standards later.
+            You are browsing as a guest. Fields are read-only.
           </Text>
         )}
       </Paper>
@@ -247,232 +304,271 @@ export default function GoalsPage() {
             <Target size={20} />
             <Text fw={500}>No explicit goals yet</Text>
             <Text size="sm" c="dimmed" ta="center">
-              Add at least one goal if you want block analysis to prioritize meets, qualifying totals, weight-class tradeoffs, and strategy mode.
+              Add a goal to set a target for analysis. Custom goals are just free-form notes.
             </Text>
           </Stack>
         </Paper>
       ) : (
         <Accordion variant="separated">
-          {goals.map(goal => {
-            const standards = (cloneLibrary(library)?.qualification_standards ?? [])
-              .filter(item => item.status === 'active')
-              .filter(item => item.sex === effectiveSex)
-              .map(item => ({
-                value: item.id,
-                label: standardLabel(item, library),
-              }))
-            const selectedStandards = (library?.qualification_standards ?? []).filter(item => (
-              (goal.target_standard_ids ?? []).includes(item.id)
-            ))
-
-            return (
-              <Accordion.Item key={goal.id} value={goal.id}>
-                <Accordion.Control>
-                  <Group gap="sm" wrap="nowrap">
-                    <Badge color={goalBadgeColor(goal.priority)} variant="light">
-                      {goal.priority}
-                    </Badge>
-                    <Stack gap={0}>
-                      <Text fw={500}>{goal.title || 'Untitled goal'}</Text>
-                      <Text size="xs" c="dimmed">
-                        {GOAL_TYPE_OPTIONS.find(item => item.value === goal.goal_type)?.label || goal.goal_type}
-                      </Text>
-                    </Stack>
-                  </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap="md">
-                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                      <TextInput
-                        label="Title"
-                        value={goal.title}
-                        onChange={(event) => updateGoal(goal.id, { title: event.currentTarget.value })}
-                        disabled={readOnly}
-                      />
-                      <Select
-                        label="Goal Type"
-                        data={GOAL_TYPE_OPTIONS}
-                        value={goal.goal_type}
-                        onChange={(value) => value && updateGoal(goal.id, { goal_type: value as GoalType })}
-                        disabled={readOnly}
-                      />
-                      <Select
-                        label="Priority"
-                        data={PRIORITY_OPTIONS}
-                        value={goal.priority}
-                        onChange={(value) => value && updateGoal(goal.id, { priority: value as GoalPriority })}
-                        disabled={readOnly}
-                      />
-                      <Select
-                        label="Strategy Mode"
-                        data={STRATEGY_OPTIONS}
-                        value={goal.strategy_mode}
-                        onChange={(value) => value && updateGoal(goal.id, { strategy_mode: value as AttemptStrategyMode })}
-                        disabled={readOnly}
-                      />
-                    </SimpleGrid>
-
-                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                      <MultiSelect
-                        label="Target Competitions"
-                        data={competitionOptions}
-                        value={goal.target_competition_dates ?? []}
-                        onChange={(value) => updateGoal(goal.id, { target_competition_dates: value })}
-                        disabled={readOnly}
-                      />
-                      <DatePickerInput
-                        clearable
-                        label="Target Date"
-                        value={goal.target_date || null}
-                        onChange={(value) => updateGoal(goal.id, { target_date: value || undefined })}
-                        disabled={readOnly}
-                      />
-                      <Select
-                        clearable
-                        searchable
-                        label="Primary Federation"
-                        data={federationOptions}
-                        value={goal.target_federation_id || null}
-                        onChange={(value) => updateGoal(goal.id, { target_federation_id: value || undefined })}
-                        disabled={readOnly}
-                      />
-                      <MultiSelect
-                        searchable
-                        label="Qualification Standards"
-                        data={standards}
-                        value={goal.target_standard_ids ?? []}
-                        onChange={(value) => {
-                          const matchingStandards = (library?.qualification_standards ?? []).filter(item => value.includes(item.id))
-                          const firstStandard = matchingStandards[0]
-                          const requiredTotals = matchingStandards
-                            .map(item => item.required_total_kg)
-                            .filter(item => Number.isFinite(item) && item > 0)
-                          const weightClasses = [...new Set(matchingStandards.map(item => item.weight_class_kg).filter(item => Number.isFinite(item) && item > 0))]
-                          updateGoal(goal.id, {
-                            target_standard_ids: value,
-                            target_federation_id: goal.target_federation_id ?? firstStandard?.federation_id,
-                            target_total_kg: requiredTotals.length > 0 ? Math.max(...requiredTotals) : undefined,
-                            target_weight_class_kg: weightClasses.length === 1 ? weightClasses[0] : goal.target_weight_class_kg,
-                          })
-                        }}
-                        disabled={readOnly}
-                      />
-                    </SimpleGrid>
-
-                    {selectedStandards.length > 0 && (
-                      <Stack gap="xs">
-                        {selectedStandards.map(standard => (
-                          <Paper key={standard.id} withBorder p="sm">
-                            <Text size="sm" fw={500}>
-                              Linked standard: {standardLabel(standard, library)}
-                            </Text>
-                            <Text size="xs" c="dimmed" mt={4}>
-                              Event {standard.event} • Equipment {standard.equipment}
-                              {standard.age_class ? ` • ${standard.age_class}` : ''}
-                              {standard.division ? ` • ${standard.division}` : ''}
-                            </Text>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    )}
-
-                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                      <TextInput
-                        type="number"
-                        label="Target Total (kg)"
-                        value={goal.target_total_kg ?? ''}
-                        onChange={(e) => updateGoal(goal.id, { target_total_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
-                        disabled={readOnly}
-                      />
-                      <TextInput
-                        type="number"
-                        label="Target DOTS"
-                        value={goal.target_dots ?? ''}
-                        onChange={(e) => updateGoal(goal.id, { target_dots: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
-                        disabled={readOnly}
-                      />
-                      <TextInput
-                        type="number"
-                        label="Target IPF GL"
-                        value={goal.target_ipf_gl ?? ''}
-                        onChange={(e) => updateGoal(goal.id, { target_ipf_gl: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
-                        disabled={readOnly}
-                      />
-                      <TextInput
-                        type="number"
-                        label="Target Weight Class (kg)"
-                        value={goal.target_weight_class_kg ?? ''}
-                        onChange={(e) => updateGoal(goal.id, { target_weight_class_kg: e.currentTarget.value ? Number(e.currentTarget.value) : undefined })}
-                        disabled={readOnly}
-                      />
-                    </SimpleGrid>
-
-                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-                      <TextInput
-                        label="Acceptable Weight Classes"
-                        placeholder="74, 83"
-                        value={formatNumberList(goal.acceptable_weight_classes_kg)}
-                        onChange={(event) => updateGoal(goal.id, {
-                          acceptable_weight_classes_kg: parseNumberList(event.currentTarget.value),
-                        })}
-                        disabled={readOnly}
-                      />
-                      <Select
-                        label="Risk Tolerance"
-                        data={RISK_OPTIONS}
-                        value={goal.risk_tolerance}
-                        onChange={(value) => value && updateGoal(goal.id, { risk_tolerance: value as RiskTolerance })}
-                        disabled={readOnly}
-                      />
-                      <TextInput
-                        type="number"
-                        label="Max Bodyweight Loss %"
-                        value={goal.max_acceptable_bodyweight_loss_pct ?? ''}
-                        onChange={(e) => updateGoal(goal.id, {
-                          max_acceptable_bodyweight_loss_pct: e.currentTarget.value ? Number(e.currentTarget.value) : undefined,
-                        })}
-                        disabled={readOnly}
-                      />
-                      <TextInput
-                        type="number"
-                        label="Max Water Cut %"
-                        value={goal.max_acceptable_water_cut_pct ?? ''}
-                        onChange={(e) => updateGoal(goal.id, {
-                          max_acceptable_water_cut_pct: e.currentTarget.value ? Number(e.currentTarget.value) : undefined,
-                        })}
-                        disabled={readOnly}
-                      />
-                    </SimpleGrid>
-
+          {goals.map((goal) => (
+            <Accordion.Item key={goal.id} value={goal.id}>
+              <Accordion.Control>
+                <Group gap="sm" wrap="nowrap">
+                  <Badge color={priorityColor(goal.priority)} variant="light">
+                    {goal.priority}
+                  </Badge>
+                  <Stack gap={0}>
+                    <Text fw={500}>{goal.title || 'Untitled goal'}</Text>
+                    <Text size="xs" c="dimmed">{goalTypeLabel(goal.goal_type)}</Text>
+                  </Stack>
+                </Group>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="md">
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
                     <Textarea
-                      label="Notes"
+                      label="Title"
+                      value={goal.title}
+                      onChange={(event) => updateGoal(goal.id, { title: event.currentTarget.value })}
+                      disabled={readOnly}
                       autosize
-                      minRows={2}
-                      value={goal.notes || ''}
-                      onChange={(event) => updateGoal(goal.id, { notes: event.currentTarget.value })}
+                      minRows={1}
+                      maxRows={2}
+                    />
+                    <Select
+                      label="Goal Type"
+                      data={GOAL_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                      value={goal.goal_type}
+                      onChange={(value) => value && changeGoalType(goal.id, value as GoalType)}
                       disabled={readOnly}
                     />
+                    <Select
+                      label="Priority"
+                      data={GOAL_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                      value={goal.priority}
+                      onChange={(value) => value && updateGoal(goal.id, { priority: value as GoalPriority })}
+                      disabled={readOnly}
+                    />
+                    <DatePickerInput
+                      clearable
+                      label="Target Date"
+                      value={goal.target_date ? new Date(goal.target_date) : null}
+                      onChange={(value) => {
+                        if (!value) {
+                          updateGoal(goal.id, { target_date: undefined })
+                          return
+                        }
+                        const raw = value as Date | string
+                        const date = typeof raw === 'string' ? new Date(raw) : raw
+                        if (!Number.isNaN(date.getTime())) {
+                          updateGoal(goal.id, { target_date: date.toISOString().slice(0, 10) })
+                        }
+                      }}
+                      disabled={readOnly}
+                    />
+                  </SimpleGrid>
 
-                    <Group justify="space-between">
-                      <Text size="xs" c="dimmed">
-                        Goals can point at multiple competitions and multiple standards. Use Primary Federation only when one federation should take precedence in the analysis.
-                      </Text>
-                      <Button
-                        color="red"
-                        variant="light"
-                        leftSection={<Trash2 size={14} />}
-                        onClick={() => removeGoal(goal.id)}
+                  {(goal.goal_type === 'hit_total' || goal.goal_type === 'conservative_pr') && (
+                    <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                      <NumberInput
+                        label="Target Total (kg)"
+                        value={goal.target_total_kg ?? ''}
+                        onChange={(value) => updateGoal(goal.id, { target_total_kg: typeof value === 'number' ? value : undefined })}
+                        min={0}
+                        step={0.5}
                         disabled={readOnly}
-                      >
-                        Delete
-                      </Button>
-                    </Group>
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            )
-          })}
+                      />
+                      <MultiSelect
+                        label="Target Weight Classes (kg)"
+                        data={WEIGHT_CLASS_PRESETS.map((o) => ({ value: o.value, label: o.label }))}
+                        value={(goal.target_weight_class_kg ?? []).map((w) => String(w))}
+                        onChange={(value) => updateGoal(goal.id, { target_weight_class_kg: value.map(Number).filter((n) => Number.isFinite(n) && n > 0) })}
+                        searchable
+                        clearable
+                        disabled={readOnly}
+                      />
+                    </SimpleGrid>
+                  )}
+
+                  <MultiSelect
+                    label="Target Competitions"
+                    description="Optional, completed, or skipped only. Same country/state filter as the competitions page."
+                    data={competitionOptions}
+                    value={goal.target_competition_ids ?? []}
+                    onChange={(value) => updateGoal(goal.id, { target_competition_ids: value })}
+                    searchable
+                    clearable
+                    disabled={readOnly}
+                    nothingFoundMessage={targetableCompetitions.length === 0 ? 'No competitions match your country and state filter.' : 'No matches'}
+                  />
+
+                  {goal.goal_type === 'improve_dots' && (
+                    <NumberInput
+                      label="Target DOTS"
+                      value={goal.target_dots ?? ''}
+                      onChange={(value) => updateGoal(goal.id, { target_dots: typeof value === 'number' ? value : undefined })}
+                      min={0}
+                      step={0.1}
+                      decimalScale={2}
+                      disabled={readOnly}
+                    />
+                  )}
+
+                  {goal.goal_type === 'improve_ipf_gl' && (
+                    <NumberInput
+                      label="Target IPF GL"
+                      value={goal.target_ipf_gl ?? ''}
+                      onChange={(value) => updateGoal(goal.id, { target_ipf_gl: typeof value === 'number' ? value : undefined })}
+                      min={0}
+                      step={0.1}
+                      decimalScale={2}
+                      disabled={readOnly}
+                    />
+                  )}
+
+                  {goal.goal_type === 'qualify_for_federation' && (
+                    <QualifyForFederationFields
+                      goal={goal}
+                      federations={federations}
+                      ageClass={effectiveAgeClass}
+                      updateGoal={updateGoal}
+                      disabled={readOnly}
+                    />
+                  )}
+
+                  {goal.goal_type === 'custom' ? (
+                    <Textarea
+                      label="Notes"
+                      description="The notes are the whole definition of a custom goal."
+                      value={goal.notes ?? ''}
+                      onChange={(event) => updateGoal(goal.id, { notes: event.currentTarget.value })}
+                      autosize
+                      minRows={3}
+                      disabled={readOnly}
+                    />
+                  ) : (
+                    <Textarea
+                      label="Notes"
+                      value={goal.notes ?? ''}
+                      onChange={(event) => updateGoal(goal.id, { notes: event.currentTarget.value })}
+                      autosize
+                      minRows={2}
+                      disabled={readOnly}
+                    />
+                  )}
+
+                  <Group justify="space-between">
+                    <Text size="xs" c="dimmed">
+                      Saving writes the goal to your user partition so analytics and exports pick it up.
+                    </Text>
+                    <Button
+                      color="red"
+                      variant="light"
+                      leftSection={<Trash2 size={14} />}
+                      onClick={() => removeGoal(goal.id)}
+                      disabled={readOnly}
+                    >
+                      Delete
+                    </Button>
+                  </Group>
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          ))}
         </Accordion>
+      )}
+    </Stack>
+  )
+}
+
+interface QualifyForFederationFieldsProps {
+  goal: AthleteGoal
+  federations: MasterFederation[]
+  ageClass: AgeCategory
+  updateGoal: (goalId: string, patch: Partial<AthleteGoal>) => void
+  disabled: boolean
+}
+
+function QualifyForFederationFields({
+  goal,
+  federations,
+  ageClass,
+  updateGoal,
+  disabled,
+}: QualifyForFederationFieldsProps) {
+  const selectedKeys = goal.target_federation_ids ?? []
+  const wcs = goal.target_weight_class_kg ?? []
+  const selectedFeds = selectedKeys
+    .map((key) => findFederationByKey(federations, key))
+    .filter((f): f is MasterFederation => f !== null)
+
+  const ageClassValue = goal.age_class ?? ageClass
+  const standardsByFed = selectedFeds.map((fed) => ({
+    fed,
+    entries: findFederationStandardsForClasses(fed, wcs, ageClassValue),
+  }))
+
+  return (
+    <Stack gap="sm">
+      <MultiSelect
+        label="Federations"
+        description="Multi-select. Filtered by your ranking country; 'global' federations are always included."
+        data={federationsToOptions(federations)}
+        value={selectedKeys}
+        onChange={(value) => updateGoal(goal.id, { target_federation_ids: value })}
+        searchable
+        clearable
+        disabled={disabled}
+        nothingFoundMessage={federations.length === 0 ? 'No federations match your country filter.' : 'No matches'}
+      />
+      <SimpleGrid cols={{ base: 1, sm: 2 }}>
+        <MultiSelect
+          label="Weight Classes (kg)"
+          data={WEIGHT_CLASS_PRESETS.map((o) => ({ value: o.value, label: o.label }))}
+          value={wcs.map((w) => String(w))}
+          onChange={(value) => updateGoal(goal.id, { target_weight_class_kg: value.map(Number).filter((n) => Number.isFinite(n) && n > 0) })}
+          searchable
+          clearable
+          disabled={disabled}
+        />
+        <Select
+          label="Age Class"
+          data={AGE_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          value={goal.age_class ?? ageClass}
+          onChange={(value) => updateGoal(goal.id, { age_class: (value as AgeCategory) ?? 'open' })}
+          disabled={disabled}
+        />
+      </SimpleGrid>
+      {selectedFeds.length > 0 && wcs.length > 0 && (
+        <Stack gap="xs">
+          {standardsByFed.map(({ fed, entries }) => (
+            <Paper key={federationKey(fed)} withBorder p="sm">
+              <Text size="sm" fw={500}>
+                {fed.abbreviation ? `${fed.abbreviation} • ${fed.name}` : fed.name}
+              </Text>
+              {entries.length > 0 ? (
+                <Stack gap={4} mt={4}>
+                  {entries.map((entry) => (
+                    <Text key={entry.id} size="xs" c="dimmed">
+                      {entry.weight_class ? `${entry.weight_class} kg: ` : ''}
+                      <Text span fw={700}>{entry.qualifying_total} {fed.standard_unit ?? 'kg'}</Text>
+                      {entry.age_class ? ` (${entry.age_class})` : ''}
+                    </Text>
+                  ))}
+                </Stack>
+              ) : (
+                <Text size="xs" c="dimmed" mt={4}>
+                  No matching standard in the library for the chosen weight classes and age class yet.
+                </Text>
+              )}
+            </Paper>
+          ))}
+        </Stack>
+      )}
+      {selectedFeds.length === 0 && (
+        <Alert color="blue" variant="light" p="sm">
+          Pick at least one federation and a weight class to see the qualifying standards pulled from the federation library.
+        </Alert>
       )}
     </Stack>
   )

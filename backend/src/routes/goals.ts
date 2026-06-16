@@ -1,21 +1,20 @@
 import { Router } from 'express'
 import * as goalsController from '../controllers/goalsController'
-import type { AthleteGoal } from '@powerlifting/types'
 
-export const goalsRouter = Router({ mergeParams: true })
+export const goalsRouter = Router()
 
-goalsRouter.get('/:version', async (req, res, next) => {
+goalsRouter.get('/', async (req, res, next) => {
   try {
-    const goals = await goalsController.getGoals(req.mapped_pk!, req.params.version)
+    const goals = await goalsController.getGoals(req.mapped_pk!)
     res.json({ data: goals, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-goalsRouter.put('/:version', async (req, res, next) => {
+goalsRouter.put('/', async (req, res, next) => {
   try {
-    const { goals } = req.body as { goals: AthleteGoal[] }
+    const { goals } = req.body as { goals: unknown[] }
 
     if (!Array.isArray(goals)) {
       return res.status(400).json({
@@ -24,7 +23,7 @@ goalsRouter.put('/:version', async (req, res, next) => {
       })
     }
 
-    await goalsController.updateGoals(req.mapped_pk!, req.params.version, goals)
+    await goalsController.updateGoals(req.mapped_pk!, goals)
     res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)

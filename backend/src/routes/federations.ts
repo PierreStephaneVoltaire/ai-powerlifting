@@ -12,8 +12,10 @@ federationsRouter.get('/', async (req, res, next) => {
       const library = await federationsController.getFederationLibrary(req.mapped_pk!)
       res.json({ data: library, error: null })
     } else {
+      const country = typeof req.query.country === 'string' ? req.query.country : undefined
       const feds = await federationsController.listFederations()
-      res.json({ data: feds, error: null })
+      const filtered = filterFederations(feds, country)
+      res.json({ data: filtered, error: null })
     }
   } catch (err) {
     next(err)
@@ -49,3 +51,18 @@ federationsRouter.put('/', requireAdmin, async (req, res, next) => {
     next(err)
   }
 })
+
+function filterFederations<T extends { region?: string | null; status?: string }>(
+  feds: T[],
+  country?: string,
+): T[] {
+  return feds.filter((fed) => {
+    if (fed.status === 'archived') return false
+    if (country) {
+      const filterCode = country.trim().toLowerCase()
+      const fedRegion = (fed.region ?? '').trim().toLowerCase()
+      if (filterCode !== '__all__' && fedRegion !== filterCode && fedRegion !== 'global') return false
+    }
+    return true
+  })
+}

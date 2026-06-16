@@ -498,6 +498,7 @@ function FederationAccordionItem(props: FederationAccordionItemProps) {
             />
             <TextInput
               label="Region"
+              description="ISO country code (e.g. US, GB, CA) or 'global'"
               value={region || ''}
               onChange={(e) => onPatch({ region: e.currentTarget.value || null })}
               disabled={!canEdit}

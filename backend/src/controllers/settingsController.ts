@@ -8,6 +8,7 @@ import {
   updateAvatarUrl,
   updateProfile,
   updateRankingLocation,
+  updateAgeClass,
   validateNickname,
   invalidateCache,
   type ProfileVisibility,
@@ -72,6 +73,7 @@ export async function getSettingsHandler(req: Request, res: Response): Promise<v
           public_training_summary_enabled: false,
           ranking_country: null,
           ranking_region: null,
+          age_class: 'open',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -198,6 +200,22 @@ export async function updateRankingLocationHandler(req: Request, res: Response):
   const settings = await updateRankingLocation(req.user.username, {
     ranking_country: ranking_country ?? null,
     ranking_region: ranking_region ?? null,
+  })
+  res.json({ data: settings })
+}
+
+export async function updateAgeClassHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user) {
+    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
+  }
+
+  const { age_class } = req.body
+  if (age_class !== undefined && age_class !== null && typeof age_class !== 'string') {
+    throw new AppError('age_class must be a string or null', 400)
+  }
+
+  const settings = await updateAgeClass(req.user.username, {
+    age_class: typeof age_class === 'string' ? (age_class as never) : null,
   })
   res.json({ data: settings })
 }

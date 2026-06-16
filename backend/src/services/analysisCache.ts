@@ -8,8 +8,8 @@ import {
   QueryCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
-import { docClient } from '../db/dynamo'
-import type { Program, Session, WeightEntry } from '@powerlifting/types'
+import { docClient, POWERLIFTING_GOALS_TABLE } from '../db/dynamo'
+import type { AthleteGoal, Program, Session, WeightEntry } from '@powerlifting/types'
 
 export type AnalysisWindowKey =
   | 'current'
@@ -331,10 +331,34 @@ function hashValue(value: unknown): string {
   return crypto.createHash('sha256').update(stableJson(value)).digest('hex')
 }
 
-export function buildAnalysisSourceFingerprint(
+async function fetchGoalsForFingerprint(pk: string): Promise<AthleteGoal[]> {
+  const items: Record<string, unknown>[] = []
+  let lastKey: Record<string, unknown> | undefined
+  do {
+    const resp = await docClient.send(new QueryCommand({
+      TableName: POWERLIFTING_GOALS_TABLE,
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: { ':pk': pk, ':prefix': 'GOAL#' },
+      ProjectionExpression: 'id, title, goal_type, priority, target_date, target_competition_ids, target_total_kg, target_dots, target_ipf_gl, target_federation_ids, target_weight_class_kg, age_class, notes',
+      ExclusiveStartKey: lastKey,
+    }))
+    for (const it of resp.Items ?? []) items.push(it as Record<string, unknown>)
+    lastKey = resp.LastEvaluatedKey
+  } while (lastKey)
+  return items
+    .map((it) => {
+      const { sk: _sk, pk: _pk, created_at: _c, updated_at: _u, ...rest } = it
+      void _sk; void _pk; void _c; void _u
+      return rest as unknown as AthleteGoal
+    })
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+}
+
+export async function buildAnalysisSourceFingerprint(
   program: Program,
   window: AnalysisWindow,
-): string {
+  pk: string,
+): Promise<string> {
   const currentSessions = (program.sessions ?? [])
     .filter((session) => (session.block ?? 'current') === 'current')
     .filter((session) => session.date <= window.end)
@@ -342,6 +366,7 @@ export function buildAnalysisSourceFingerprint(
     .filter((entry) => entry.date <= window.end)
   const currentPhases = (program.phases ?? [])
     .filter((phase) => (phase.block ?? 'current') === 'current')
+  const goals = await fetchGoalsForFingerprint(pk)
   return hashValue({
     schema: SECTION_CACHE_SCHEMA_VERSION,
     asOfWindow: {
@@ -355,7 +380,7 @@ export function buildAnalysisSourceFingerprint(
     phases: currentPhases,
     sessions: currentSessions,
     competitions: program.competitions ?? [],
-    goals: (program as Program & { goals?: unknown[] }).goals ?? [],
+    goals,
     lift_profiles: program.lift_profiles ?? [],
     diet_notes: (program as Program & { diet_notes?: unknown[] }).diet_notes ?? [],
     weight_log: scopedWeightLog,

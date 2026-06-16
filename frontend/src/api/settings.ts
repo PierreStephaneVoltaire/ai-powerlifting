@@ -18,6 +18,7 @@ export interface UserSettings {
   public_training_summary_enabled: boolean
   ranking_country: string | null
   ranking_region: string | null
+  age_class: 'open' | 'subjunior' | 'junior' | 'master1' | 'master2' | 'master3' | 'master4'
   created_at: string
   updated_at: string
 }
@@ -99,5 +100,12 @@ export async function updateRankingLocation(input: {
   ranking_region: string | null
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/ranking-location', input)
+  return res.data.data
+}
+
+export async function updateAgeClass(input: {
+  age_class: UserSettings['age_class'] | null
+}): Promise<UserSettings> {
+  const res = await api.put<{ data: UserSettings }>('/settings/age-class', input)
   return res.data.data
 }

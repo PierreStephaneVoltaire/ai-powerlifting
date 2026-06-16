@@ -17,8 +17,8 @@ import { useAuth } from '@/auth/AuthProvider'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
 import { LogIn, LogOut } from 'lucide-react'
-import type { Sex, WeekStartDay } from '@powerlifting/types'
-import { getSettings, updateRankingLocation } from '@/api/settings'
+import { AGE_CATEGORY_OPTIONS, type Sex, type WeekStartDay } from '@powerlifting/types'
+import { getSettings, updateAgeClass, updateRankingLocation } from '@/api/settings'
 import { fetchStatCategories } from '@/api/client'
 
 const themeOptions: { value: Theme; label: string }[] = [
@@ -48,7 +48,7 @@ export default function SettingsDrawer() {
     defaultSessionsView, setDefaultSessionsView,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
-  const { user, loading, readOnly, signIn, signOut } = useAuth()
+  const { user, loading, readOnly, signIn, signOut, age_class: authAgeClass } = useAuth()
 
   const isOpen = drawerOpen && drawerType === 'settings'
   const effectiveSex = program?.meta?.sex ?? sex
@@ -59,12 +59,21 @@ export default function SettingsDrawer() {
   const [rankingCategories, setRankingCategories] = useState<{ countries: string[]; country_regions: Record<string, string[]> } | null>(null)
   const [rankingSaving, setRankingSaving] = useState(false)
 
+  // Age class state (pulled from /api/settings to get full record)
+  const [ageClass, setAgeClassState] = useState<string>(authAgeClass || 'open')
+  const [ageClassSaving, setAgeClassSaving] = useState(false)
+
+  useEffect(() => {
+    setAgeClassState(authAgeClass || 'open')
+  }, [authAgeClass])
+
   // Load current ranking location from settings
   useEffect(() => {
     if (!isOpen || !user) return
     getSettings().then((s) => {
       setRankingCountry(s.ranking_country)
       setRankingRegion(s.ranking_region)
+      setAgeClassState(s.age_class || 'open')
     }).catch(() => {})
   }, [isOpen, user])
 
@@ -98,6 +107,18 @@ export default function SettingsDrawer() {
       setRankingSaving(false)
     }
   }, [user, rankingCountry, rankingRegion])
+
+  const saveAgeClass = useCallback(async () => {
+    if (!user) return
+    setAgeClassSaving(true)
+    try {
+      await updateAgeClass({ age_class: ageClass as 'open' | 'subjunior' | 'junior' | 'master1' | 'master2' | 'master3' | 'master4' })
+    } catch {
+      // silently ignore
+    } finally {
+      setAgeClassSaving(false)
+    }
+  }, [user, ageClass])
 
   useEffect(() => {
     const programSex = program?.meta?.sex
@@ -297,6 +318,35 @@ export default function SettingsDrawer() {
               </Button>
             </Stack>
           </div>
+
+        {/* Age Class (IPF) */}
+        <div>
+          <SectionLabel>Age Class</SectionLabel>
+          <Text size="xs" c="dimmed" mb="sm">
+            IPF age class used for qualifying standards. Defaults to Open.
+          </Text>
+          <Stack gap="xs">
+            <Select
+              label="Age class"
+              data={AGE_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              value={ageClass}
+              onChange={(v) => v && setAgeClassState(v)}
+              disabled={readOnly}
+              data-testid="settings-age-class"
+            />
+            <Button
+              size="xs"
+              variant="light"
+              loading={ageClassSaving}
+              onClick={saveAgeClass}
+              mt={4}
+              disabled={readOnly}
+              data-testid="settings-save-age-class"
+            >
+              Save Age Class
+            </Button>
+          </Stack>
+        </div>
       </Stack>
     </Drawer>
   )

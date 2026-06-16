@@ -7,8 +7,86 @@ import {
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { createHash } from 'crypto'
-import { docClient } from '../db/dynamo'
-import type { AthleteGoal, Competition, LiftResults, Program, Session, WeightEntry } from '@powerlifting/types'
+import { docClient, POWERLIFTING_GOALS_TABLE } from '../db/dynamo'
+import type { AgeCategory, AthleteGoal, Competition, LiftResults, Program, Session, WeightEntry } from '@powerlifting/types'
+
+const GOAL_TYPE_VALUES: ReadonlyArray<string> = [
+  'hit_total',
+  'qualify_for_federation',
+  'peak_for_meet',
+  'conservative_pr',
+  'competition_exposure',
+  'improve_dots',
+  'improve_ipf_gl',
+  'custom',
+]
+
+const GOAL_PRIORITY_VALUES: ReadonlyArray<string> = ['primary', 'secondary', 'optional']
+
+const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
+  'open',
+  'subjunior',
+  'junior',
+  'master1',
+  'master2',
+  'master3',
+  'master4',
+]
+
+function newGoalId(): string {
+  return `goal-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
+}
+
+function normalizeGoalType(value: unknown): AthleteGoal['goal_type'] {
+  return (GOAL_TYPE_VALUES as ReadonlyArray<string>).includes(String(value))
+    ? (value as AthleteGoal['goal_type'])
+    : 'custom'
+}
+
+function normalizeGoalPriority(value: unknown): AthleteGoal['priority'] {
+  return (GOAL_PRIORITY_VALUES as ReadonlyArray<string>).includes(String(value))
+    ? (value as AthleteGoal['priority'])
+    : 'secondary'
+}
+
+function normalizeGoal(raw: unknown): AthleteGoal | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const id = typeof r.id === 'string' && r.id.length > 0 ? r.id : newGoalId()
+  const title = typeof r.title === 'string' ? r.title : ''
+  const goalType = normalizeGoalType(r.goal_type)
+  const priority = normalizeGoalPriority(r.priority)
+  const out: AthleteGoal = { id, title, goal_type: goalType, priority }
+
+  if (typeof r.target_date === 'string' && r.target_date) out.target_date = r.target_date
+  if (Array.isArray(r.target_competition_ids)) {
+    const ids = r.target_competition_ids.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    if (ids.length) out.target_competition_ids = [...new Set(ids)]
+  }
+  if (typeof r.target_total_kg === 'number' && Number.isFinite(r.target_total_kg) && r.target_total_kg > 0) {
+    out.target_total_kg = r.target_total_kg
+  }
+  if (typeof r.target_dots === 'number' && Number.isFinite(r.target_dots) && r.target_dots > 0) {
+    out.target_dots = r.target_dots
+  }
+  if (typeof r.target_ipf_gl === 'number' && Number.isFinite(r.target_ipf_gl) && r.target_ipf_gl > 0) {
+    out.target_ipf_gl = r.target_ipf_gl
+  }
+  if (Array.isArray(r.target_federation_ids)) {
+    const ids = r.target_federation_ids.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    if (ids.length) out.target_federation_ids = [...new Set(ids)]
+  }
+  if (Array.isArray(r.target_weight_class_kg)) {
+    const wcs = r.target_weight_class_kg.filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0)
+    if (wcs.length) out.target_weight_class_kg = [...new Set(wcs)]
+  }
+  if (typeof r.age_class === 'string' && AGE_CATEGORY_VALUES.includes(r.age_class as AgeCategory)) {
+    out.age_class = r.age_class as AgeCategory
+  }
+  if (typeof r.notes === 'string') out.notes = r.notes
+
+  return out
+}
 
 export type DataQualitySeverity = 'info' | 'warning' | 'critical'
 
@@ -167,9 +245,7 @@ export interface BlockComparisonRow {
     targetDots?: number | null
     targetIpfGl?: number | null
     targetDate?: string
-    targetCompetitionDates: string[]
-    strategyMode?: string
-    riskTolerance?: string
+    targetCompetitionIds?: string[]
   }>
 }
 
@@ -590,17 +666,64 @@ function blockProjectionReferenceDate(entry: ProgramBlockIndexEntry): string {
 
 function goalTargetCompetitionDates(goal: AthleteGoal): string[] {
   const dates = new Set<string>()
-  const add = (value: unknown) => {
-    if (typeof value !== 'string') return
-    const trimmed = value.trim()
-    if (trimmed) dates.add(trimmed)
+  if (Array.isArray(goal.target_competition_ids)) {
+    for (const id of goal.target_competition_ids) {
+      if (typeof id === 'string' && id.trim()) dates.add(id.trim())
+    }
   }
-  if (Array.isArray(goal.target_competition_dates)) {
-    goal.target_competition_dates.forEach(add)
+  if (typeof goal.target_date === 'string' && goal.target_date.trim()) {
+    dates.add(goal.target_date.trim())
   }
-  add(goal.target_competition_date)
-  if (!dates.size) add(goal.target_date)
   return [...dates]
+}
+
+export async function loadGoals(pk: string): Promise<AthleteGoal[]> {
+  const items: Record<string, unknown>[] = []
+  let lastKey: Record<string, unknown> | undefined
+  do {
+    const resp = await docClient.send(new QueryCommand({
+      TableName: POWERLIFTING_GOALS_TABLE,
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: { ':pk': pk, ':prefix': 'GOAL#' },
+      ExclusiveStartKey: lastKey,
+    }))
+    for (const it of resp.Items ?? []) items.push(it as Record<string, unknown>)
+    lastKey = resp.LastEvaluatedKey
+  } while (lastKey)
+  return items
+    .map((it) => {
+      const { sk: _sk, pk: _pk, created_at: _c, updated_at: _u, target_competition_ids: _t, ...rest } = it as Record<string, unknown>
+      return normalizeGoal(rest)
+    })
+    .filter((g): g is AthleteGoal => g !== null)
+}
+
+function goalsForCompetitions(goals: AthleteGoal[], competitions: Competition[]): AthleteGoal[] {
+  const competitionDates = new Set(
+    competitions
+      .map((competition) => competition.date)
+      .filter((date): date is string => typeof date === 'string' && date.trim().length > 0),
+  )
+  const competitionNames = new Set(
+    competitions
+      .map((competition) => competition.name)
+      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0),
+  )
+  if (!competitionDates.size && !competitionNames.size) return goals
+  return goals.filter((goal) => {
+    if (goal.target_competition_ids?.length) {
+      return goal.target_competition_ids.some((id) => {
+        if (typeof id !== 'string') return false
+        return competitionDates.has(id) || competitionNames.has(id)
+      })
+    }
+    const dates = goalTargetCompetitionDates(goal)
+    if (dates.length) {
+      return dates.some((date) => competitionDates.has(date))
+    }
+    if (goal.target_date && competitionDates.has(goal.target_date)) return true
+    return false
+  })
 }
 
 function blockCompetitionWindow(
@@ -626,19 +749,6 @@ function blockCompetitionWindow(
   }
 
   return [...competitionsByKey.values()].sort((a, b) => a.date.localeCompare(b.date))
-}
-
-function blockGoalsForCompetitions(program: Program, competitions: Competition[]): AthleteGoal[] {
-  const competitionDates = new Set(
-    competitions
-      .map((competition) => competition.date)
-      .filter((date): date is string => typeof date === 'string' && date.trim().length > 0),
-  )
-  if (!competitionDates.size) return []
-
-  return (program.goals ?? []).filter((goal) =>
-    goalTargetCompetitionDates(goal).some((date) => competitionDates.has(date)),
-  )
 }
 
 function firstNumericGoalTarget(goals: AthleteGoal[], field: keyof Pick<AthleteGoal, 'target_total_kg' | 'target_dots' | 'target_ipf_gl'>): number | undefined {
@@ -927,9 +1037,10 @@ export async function listBlockProgramEvaluationCacheStatuses(userPk: string): P
   return statuses
 }
 
-export async function buildCurrentProgramBlockIndex(userPk: string, program: Program): Promise<ProgramBlockIndexEntry[]> {
+export async function buildCurrentProgramBlockIndex(userPk: string, program: Program, allGoals?: AthleteGoal[]): Promise<ProgramBlockIndexEntry[]> {
   const cacheStatuses = await listBlockCacheStatuses(userPk)
   const evalCacheStatuses = await listBlockProgramEvaluationCacheStatuses(userPk)
+  const goals = allGoals ?? (userPk ? await loadGoals(userPk) : [])
   const groups = new Map<string, Session[]>()
   for (const session of program.sessions ?? []) {
     const block = normalizeBlock(session.block)
@@ -950,7 +1061,7 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
     const blockKey = blockKeyFor(block)
     const linkedCompetition = linkCompetitionForBlock({ startDate, endDate }, program.competitions ?? [])
     const scopedCompetitions = blockCompetitionWindow(program, startDate, endDate, linkedCompetition)
-    const scopedGoals = blockGoalsForCompetitions(program, scopedCompetitions)
+    const scopedGoals = goalsForCompetitions(goals, scopedCompetitions)
     const sourceFingerprint = blockSourceFingerprint(program, block, sorted, phases, scopedCompetitions, scopedGoals)
     const dataQualityFlags = buildDataQualityFlags(program, sorted, startDate, endDate, linkedCompetition, blockKey)
     const cacheStatus = cacheStatuses.get(blockKey)
@@ -1569,7 +1680,7 @@ function makeHistoricalSummary(program: Program, entry: ProgramBlockIndexEntry, 
   }
 }
 
-export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntry, options?: { normalizeToCurrent?: boolean; includeSyntheticCompetition?: boolean }): Program {
+export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntry, allGoals: AthleteGoal[], options?: { normalizeToCurrent?: boolean; includeSyntheticCompetition?: boolean }): Program {
   const sessions = analysisSessionsForBlock(program, entry, { includeSyntheticCompetition: options?.includeSyntheticCompetition })
   const phases = blockPhases(program, entry.block)
   const normalizeToCurrent = options?.normalizeToCurrent === true
@@ -1581,7 +1692,7 @@ export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntr
     .at(-1) ?? entry.endDate
   const competitionContextEndDate = entry.isCurrent && rawBlockEndDate > entry.endDate ? rawBlockEndDate : entry.endDate
   const competitions = blockCompetitionWindow(program, entry.startDate, competitionContextEndDate, entry.linkedCompetition)
-  const goals = blockGoalsForCompetitions(program, competitions)
+  const goals = goalsForCompetitions(allGoals, competitions)
   const meta = blockScopedMeta(program, entry, analysisEndDate, competitions, goals)
   meta.block_notes = blockProgramNotes(program, entry.startDate, analysisEndDate)
   if (normalizeToCurrent) {
@@ -1608,10 +1719,10 @@ export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntr
   } as Program & { weight_log: WeightEntry[] }
 }
 
-export function buildBlockComparisonContext(program: Program, rawEntry: ProgramBlockIndexEntry): BlockComparisonContext {
+export function buildBlockComparisonContext(program: Program, rawEntry: ProgramBlockIndexEntry, allGoals: AthleteGoal[]): BlockComparisonContext {
   const scopedEntry = analysisScopedBlockEntry(program, rawEntry)
   const competitions = blockCompetitionWindow(program, rawEntry.startDate, rawEntry.endDate, rawEntry.linkedCompetition)
-  const goals = blockGoalsForCompetitions(program, competitions)
+  const goals = goalsForCompetitions(allGoals, competitions)
   const fallbackBodyweight = competitions.find((competition) => typeof competition.body_weight_kg === 'number' && competition.body_weight_kg > 0)?.body_weight_kg
     ?? program.meta?.current_body_weight_kg
     ?? null
@@ -1633,8 +1744,10 @@ export async function getOrCreateBlockAnalysisBundle(
   invokeTool: InvokeTool,
   refresh = false,
   cacheOnly = false,
+  allGoals?: AthleteGoal[],
 ): Promise<BlockAnalysisBundle | null> {
-  const blocks = await buildCurrentProgramBlockIndex(userPk, program)
+  const goals = allGoals ?? await loadGoals(userPk)
+  const blocks = await buildCurrentProgramBlockIndex(userPk, program, goals)
   const rawEntry = blocks.find((block) => block.blockKey === blockKey)
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
@@ -1652,7 +1765,7 @@ export async function getOrCreateBlockAnalysisBundle(
 
   logger.info({ userPk, blockKey, isCurrent: entry.isCurrent, weeks: entry.weekCount }, 'Computing block analysis')
 
-  const programForBlock = buildBlockProgram(program, entry, { includeSyntheticCompetition: false })
+  const programForBlock = buildBlockProgram(program, entry, goals, { includeSyntheticCompetition: false })
   const sessions = programForBlock.sessions ?? []
   const analysisEndDate = blockProjectionReferenceDate(entry)
   const weekly = await invokeTool('weekly_analysis', {
@@ -1692,8 +1805,10 @@ export async function getOrCreateBlockProgramEvaluation(
   invokeTool: InvokeTool,
   refresh = false,
   cacheOnly = false,
+  allGoals?: AthleteGoal[],
 ): Promise<Record<string, unknown> | null> {
-  const blocks = await buildCurrentProgramBlockIndex(userPk, program)
+  const goals = allGoals ?? await loadGoals(userPk)
+  const blocks = await buildCurrentProgramBlockIndex(userPk, program, goals)
   const rawEntry = blocks.find((block) => block.blockKey === blockKey)
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
@@ -1742,7 +1857,7 @@ export async function getOrCreateBlockProgramEvaluation(
   }
 
   const rawReport = recordFromUnknown(await invokeTool('block_program_evaluation', {
-    program: buildBlockProgram(program, entry, { normalizeToCurrent: true, includeSyntheticCompetition: false }),
+    program: buildBlockProgram(program, entry, goals, { normalizeToCurrent: true, includeSyntheticCompetition: false }),
     pk: userPk,
   }))
   const generatedAt = new Date().toISOString()
@@ -1772,8 +1887,10 @@ export async function getOrCreateBlockCorrelationReport(
   invokeTool: InvokeTool,
   refresh = false,
   cacheOnly = false,
+  allGoals?: AthleteGoal[],
 ): Promise<Record<string, unknown> | null> {
-  const blocks = await buildCurrentProgramBlockIndex(userPk, program)
+  const goals = allGoals ?? await loadGoals(userPk)
+  const blocks = await buildCurrentProgramBlockIndex(userPk, program, goals)
   const rawEntry = blocks.find((block) => block.blockKey === blockKey)
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
@@ -1805,7 +1922,7 @@ export async function getOrCreateBlockCorrelationReport(
     }
   }
 
-  const programForBlock = buildBlockProgram(program, entry, {
+  const programForBlock = buildBlockProgram(program, entry, goals, {
     normalizeToCurrent: true,
     includeSyntheticCompetition: false,
   })
@@ -1859,9 +1976,7 @@ function comparisonGoals(context?: BlockComparisonContext): BlockComparisonRow['
     targetDots: typeof goal.target_dots === 'number' ? goal.target_dots : null,
     targetIpfGl: typeof goal.target_ipf_gl === 'number' ? goal.target_ipf_gl : null,
     targetDate: goal.target_date,
-    targetCompetitionDates: goalTargetCompetitionDates(goal),
-    strategyMode: goal.strategy_mode,
-    riskTolerance: goal.risk_tolerance,
+    targetCompetitionIds: goal.target_competition_ids,
   }))
 }
 

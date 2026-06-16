@@ -131,54 +131,6 @@ export interface Phase {
   block?: string   // Training block identifier. Default: "current". Mirrors Session.block.
 }
 
-// ─── Goals & Federations ─────────────────────────────────────────────────────
-
-export type GoalType =
-  | 'qualify_for_federation'
-  | 'hit_total'
-  | 'peak_for_meet'
-  | 'make_podium'
-  | 'conservative_pr'
-  | 'train_through'
-  | 'rank_percentile'
-  | 'improve_dots'
-  | 'maintain_weight_class'
-  | 'coach_defined'
-
-export type GoalPriority = 'primary' | 'secondary' | 'optional'
-export type RiskTolerance = 'low' | 'medium' | 'high'
-
-export type AttemptStrategyMode =
-  | 'max_total'
-  | 'qualify'
-  | 'minimum_total'
-  | 'podium'
-  | 'train_through'
-  | 'conservative_pr'
-
-export interface AthleteGoal {
-  id: string
-  title: string
-  goal_type: GoalType
-  priority: GoalPriority
-  target_competition_dates?: string[]
-  target_competition_date?: string
-  target_date?: string
-  target_federation_id?: string
-  target_standard_ids?: string[]
-  target_standard_id?: string
-  target_total_kg?: number
-  target_dots?: number
-  target_ipf_gl?: number
-  target_weight_class_kg?: number
-  acceptable_weight_classes_kg?: number[]
-  strategy_mode: AttemptStrategyMode
-  risk_tolerance: RiskTolerance
-  max_acceptable_bodyweight_loss_pct?: number
-  max_acceptable_water_cut_pct?: number
-  notes?: string
-}
-
 export interface FederationRecord {
   id: string
   name: string
@@ -434,7 +386,6 @@ export interface Program {
   meta: ProgramMeta
   phases: Phase[]
   sessions: Session[]
-  goals: AthleteGoal[]
   competitions: Competition[]
   diet_notes: DietNote[]
   supplements: Supplement[]
@@ -932,6 +883,14 @@ export interface UserCompetition {
   updated_at: string
 }
 
+export type AttemptStrategyMode =
+  | 'max_total'
+  | 'qualify'
+  | 'minimum_total'
+  | 'podium'
+  | 'train_through'
+  | 'conservative_pr'
+
 export type AgeCategory =
   | 'open'
   | 'subjunior'
@@ -970,6 +929,127 @@ export const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
   'master3',
   'master4',
 ]
+
+// ─── Goals ────────────────────────────────────────────────────────────────────
+
+export type GoalType =
+  | 'hit_total'
+  | 'qualify_for_federation'
+  | 'peak_for_meet'
+  | 'conservative_pr'
+  | 'competition_exposure'
+  | 'improve_dots'
+  | 'improve_ipf_gl'
+  | 'custom'
+
+export const GOAL_TYPE_VALUES: ReadonlyArray<GoalType> = [
+  'hit_total',
+  'qualify_for_federation',
+  'peak_for_meet',
+  'conservative_pr',
+  'competition_exposure',
+  'improve_dots',
+  'improve_ipf_gl',
+  'custom',
+]
+
+export const GOAL_TYPE_OPTIONS: ReadonlyArray<{ value: GoalType; label: string }> = [
+  { value: 'hit_total', label: 'Hit Total' },
+  { value: 'qualify_for_federation', label: 'Qualify for Federation' },
+  { value: 'peak_for_meet', label: 'Peak for Meet' },
+  { value: 'conservative_pr', label: 'Conservative PR' },
+  { value: 'competition_exposure', label: 'Competition Exposure' },
+  { value: 'improve_dots', label: 'Improve DOTS' },
+  { value: 'improve_ipf_gl', label: 'Improve IPF GL' },
+  { value: 'custom', label: 'Custom' },
+]
+
+export type GoalPriority = 'primary' | 'secondary' | 'optional'
+
+export const GOAL_PRIORITY_VALUES: ReadonlyArray<GoalPriority> = ['primary', 'secondary', 'optional']
+
+export const GOAL_PRIORITY_OPTIONS: ReadonlyArray<{ value: GoalPriority; label: string }> = [
+  { value: 'primary', label: 'Primary' },
+  { value: 'secondary', label: 'Secondary' },
+  { value: 'optional', label: 'Optional' },
+]
+
+export const TARGET_COMPETITION_STATUSES: ReadonlyArray<'optional' | 'completed' | 'skipped'> = [
+  'optional',
+  'completed',
+  'skipped',
+]
+
+export interface AthleteGoal {
+  id: string
+  title: string
+  goal_type: GoalType
+  priority: GoalPriority
+  target_date?: string
+  target_competition_ids?: string[]
+  target_total_kg?: number
+  target_dots?: number
+  target_ipf_gl?: number
+  target_federation_ids?: string[]
+  target_weight_class_kg?: number[]
+  age_class?: AgeCategory
+  notes?: string
+}
+
+export function normalizeGoalType(value: unknown): GoalType {
+  return (GOAL_TYPE_VALUES as ReadonlyArray<string>).includes(String(value))
+    ? (value as GoalType)
+    : 'custom'
+}
+
+export function normalizeGoalPriority(value: unknown): GoalPriority {
+  return (GOAL_PRIORITY_VALUES as ReadonlyArray<string>).includes(String(value))
+    ? (value as GoalPriority)
+    : 'secondary'
+}
+
+export function normalizeGoal(raw: unknown): AthleteGoal | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const id = typeof r.id === 'string' && r.id.length > 0 ? r.id : randomId()
+  const title = typeof r.title === 'string' ? r.title : ''
+  const goalType = normalizeGoalType(r.goal_type)
+  const priority = normalizeGoalPriority(r.priority)
+  const out: AthleteGoal = { id, title, goal_type: goalType, priority }
+
+  if (typeof r.target_date === 'string' && r.target_date) out.target_date = r.target_date
+  if (Array.isArray(r.target_competition_ids)) {
+    const ids = r.target_competition_ids.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    if (ids.length) out.target_competition_ids = [...new Set(ids)]
+  }
+  if (typeof r.target_total_kg === 'number' && Number.isFinite(r.target_total_kg) && r.target_total_kg > 0) {
+    out.target_total_kg = r.target_total_kg
+  }
+  if (typeof r.target_dots === 'number' && Number.isFinite(r.target_dots) && r.target_dots > 0) {
+    out.target_dots = r.target_dots
+  }
+  if (typeof r.target_ipf_gl === 'number' && Number.isFinite(r.target_ipf_gl) && r.target_ipf_gl > 0) {
+    out.target_ipf_gl = r.target_ipf_gl
+  }
+  if (Array.isArray(r.target_federation_ids)) {
+    const ids = r.target_federation_ids.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    if (ids.length) out.target_federation_ids = [...new Set(ids)]
+  }
+  if (Array.isArray(r.target_weight_class_kg)) {
+    const wcs = r.target_weight_class_kg.filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0)
+    if (wcs.length) out.target_weight_class_kg = [...new Set(wcs)]
+  }
+  if (typeof r.age_class === 'string' && AGE_CATEGORY_VALUES.includes(r.age_class as AgeCategory)) {
+    out.age_class = r.age_class as AgeCategory
+  }
+  if (typeof r.notes === 'string') out.notes = r.notes
+
+  return out
+}
+
+function randomId(): string {
+  return `goal-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
+}
 
 export type FederationSex = 'male' | 'female'
 

@@ -11,6 +11,7 @@ import {
   Paper,
   Progress,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -22,6 +23,7 @@ import {
   getSettings,
   isValidProfileAvatarType,
   MAX_PROFILE_AVATAR_SIZE,
+  updateAgeClass,
   updateNickname,
   updateProfile,
   uploadProfileAvatar,
@@ -40,6 +42,7 @@ import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
 import { sortVideos, VIDEO_SORTS, type VideoSort } from '@/utils/videoSort'
 import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
 import type { Session, VideoLibraryItem } from '@powerlifting/types'
+import { AGE_CATEGORY_OPTIONS, type AgeCategory } from '@powerlifting/types'
 
 type ProfileVisibility = UserSettings['profile_visibility']
 type LiftFilter = 'all' | 'squat' | 'bench' | 'deadlift'
@@ -135,6 +138,7 @@ export default function ProfilePage() {
   const [videoSort, setVideoSort] = useState<VideoSort>('newest')
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarProgress, setAvatarProgress] = useState(0)
+  const [ageClass, setAgeClass] = useState<AgeCategory>('open')
 
   // The page renders one of two video grids (own-videos when signed in,
   // public-videos when reading someone else's profile). Both grids feed
@@ -163,6 +167,7 @@ export default function ProfilePage() {
         setProfileVisibility(nextSettings.profile_visibility)
         setDisplayName(nextSettings.display_name)
         setBio(nextSettings.bio)
+        setAgeClass(nextSettings.age_class)
       })
       .catch(() => {
         if (!cancelled) setError('Profile settings are unavailable for this account.')
@@ -326,11 +331,16 @@ export default function ProfilePage() {
         bio,
       })
 
+      if (ageClass !== nextSettings.age_class) {
+        nextSettings = await updateAgeClass({ age_class: ageClass })
+      }
+
       setSettings(nextSettings)
       setNickname(nextSettings.nickname)
       setProfileVisibility(nextSettings.profile_visibility)
       setDisplayName(nextSettings.display_name)
       setBio(nextSettings.bio)
+      setAgeClass(nextSettings.age_class)
       pushToast({ message: 'Profile updated', type: 'success' })
     } catch {
       setError('Profile update failed.')
@@ -616,6 +626,16 @@ export default function ProfilePage() {
             maxLength={280}
             minRows={3}
             data-testid="profile-bio"
+          />
+
+          <Select
+            label="Age Class (IPF)"
+            description="Used for qualifying standards. Defaults to Open."
+            data={AGE_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            value={ageClass}
+            onChange={(v) => v && setAgeClass(v as AgeCategory)}
+            disabled={readOnly || loading || !settings}
+            data-testid="profile-age-class"
           />
         </Stack>
       </Paper>

@@ -192,7 +192,7 @@ function normalizeFederation(raw: unknown): MasterFederation {
     sk: typeof f.sk === 'string' ? f.sk : '',
     name: typeof f.name === 'string' ? f.name : '',
     abbreviation: typeof f.abbreviation === 'string' ? f.abbreviation : null,
-    region: typeof f.region === 'string' ? f.region : null,
+    region: typeof f.region === 'string' && f.region.trim() ? f.region.trim() : null,
     website_url: typeof f.website_url === 'string' ? f.website_url : null,
     status: f.status === 'archived' ? 'archived' : 'active',
     source_slug: typeof f.source_slug === 'string' ? f.source_slug : null,

@@ -3,7 +3,7 @@ import { invokeToolDirect } from '../utils/agent'
 import { logger } from '../utils/logger'
 import * as programController from '../controllers/programController'
 import * as weightController from '../controllers/weightController'
-import type { Program, WeightEntry } from '@powerlifting/types'
+import type { AthleteGoal, Program, WeightEntry } from '@powerlifting/types'
 import {
   ALL_WINDOW_KEYS,
   ALL_SECTION_KEYS,
@@ -39,6 +39,7 @@ import {
   getOrCreateBlockAnalysisBundle,
   getOrCreateBlockCorrelationReport,
   getOrCreateBlockProgramEvaluation,
+  loadGoals,
 } from '../services/blockAnalytics'
 import {
   blockAnalysisExportContentType,
@@ -100,7 +101,7 @@ async function buildAnalysisContext(
 ): Promise<AnalysisContext> {
   const program = await getProgramWithWeightLog(pk, 'current')
   const windows = buildAnalysisWindows(program, asOfDate)
-  const sourceFingerprint = buildAnalysisSourceFingerprint(program, windows[windowKey])
+  const sourceFingerprint = await buildAnalysisSourceFingerprint(program, windows[windowKey], pk)
   return { pk, asOfDate, windowKey, program, windows, sourceFingerprint }
 }
 
@@ -876,7 +877,8 @@ analyticsRouter.get('/blocks/:blockKey/export/:format', async (req, res) => {
 analyticsRouter.post('/block-comparison', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program)
+    const allGoals = await loadGoals(req.mapped_pk!)
+    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program, allGoals)
     const requestedKeys = Array.isArray(req.body?.blockKeys)
       ? req.body.blockKeys.filter((key: unknown): key is string => typeof key === 'string')
       : []
@@ -892,13 +894,15 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
     const contexts = new Map()
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
-      contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
+      contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock, allGoals))
       const bundle = await getOrCreateBlockAnalysisBundle(
           req.mapped_pk!,
           program,
           block.blockKey,
           invokeToolDirect,
           block.isCurrent,
+          false,
+          allGoals,
         )
       if (bundle) bundles.push(bundle)
       correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(
@@ -908,6 +912,7 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
         invokeToolDirect,
         false,
         true,
+        allGoals,
       ))
     }
 
@@ -920,7 +925,8 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
 analyticsRouter.post('/block-comparison/ai', async (req, res) => {
   try {
     const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program)
+    const allGoals = await loadGoals(req.mapped_pk!)
+    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program, allGoals)
     const requestedKeys = Array.isArray(req.body?.blockKeys)
       ? req.body.blockKeys.filter((key: unknown): key is string => typeof key === 'string')
       : []
@@ -938,7 +944,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     const refresh = req.readOnly ? false : req.body?.refresh === true
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
-      contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock))
+      contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock, allGoals))
       const bundle = await getCachedBlockAnalysisBundle(req.mapped_pk!, block.blockKey)
       if (bundle) bundles.push(bundle)
       if (bundle) {
@@ -949,6 +955,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
           invokeToolDirect,
           false,
           true,
+          allGoals,
         ))
         programEvaluationReports.set(block.blockKey, await getOrCreateBlockProgramEvaluation(
           req.mapped_pk!,
@@ -957,6 +964,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
           invokeToolDirect,
           false,
           true,
+          allGoals,
         ))
       }
     }

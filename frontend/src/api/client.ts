@@ -418,16 +418,13 @@ export async function updateBlockNotes(
 
 // ─── Goals ───────────────────────────────────────────────────────────────────
 
-export async function fetchGoals(version: string): Promise<AthleteGoal[]> {
-  const res = await api.get<ApiResponse<AthleteGoal[]>>(`/goals/${version}`)
+export async function fetchGoals(): Promise<AthleteGoal[]> {
+  const res = await api.get<ApiResponse<AthleteGoal[]>>(`/goals`)
   return res.data.data
 }
 
-export async function updateGoals(
-  version: string,
-  goals: AthleteGoal[],
-): Promise<void> {
-  await api.put(`/goals/${version}`, { goals })
+export async function updateGoals(goals: AthleteGoal[]): Promise<void> {
+  await api.put(`/goals`, { goals })
 }
 
 // ─── Federations ─────────────────────────────────────────────────────────────
@@ -502,8 +499,11 @@ export async function completeCompetition(
   return res.data.data
 }
 
-export async function fetchFederations(): Promise<MasterFederation[]> {
-  const res = await api.get<ApiResponse<MasterFederation[]>>('/federations')
+export async function fetchFederations(filters?: { country?: string }): Promise<MasterFederation[]> {
+  const params = new URLSearchParams()
+  if (filters?.country) params.set('country', filters.country)
+  const qs = params.toString()
+  const res = await api.get<ApiResponse<MasterFederation[]>>(`/federations${qs ? `?${qs}` : ''}`)
   return res.data.data
 }
 
