@@ -1,0 +1,118 @@
+name: Build & Push Powerlifting Images
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "packages/**"
+      - "lambda/**"
+      - "docker/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/build-images.yml"
+  pull_request:
+    branches: [master, main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "packages/**"
+      - "docker/**"
+      - ".github/workflows/build-images.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Override image tag (default: short git SHA)"
+        required: false
+      backend_only:
+        description: "Build only backend"
+        required: false
+        default: "false"
+      frontend_only:
+        description: "Build only frontend"
+        required: false
+        default: "false"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ca-central-1
+  ECR_REPO_PREFIX: if
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    if: "!inputs.frontend_only || github.event_name == 'pull_request'"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: hashicorp/setup-packer@v3
+        with:
+          version: 1.13.x
+
+      - id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "value=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - working-directory: docker
+        run: packer init powerlifting-backend.pkr.hcl
+
+      - working-directory: docker
+        run: |
+          packer build -color=false \
+            -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-app-backend" \
+            -var "image_tag=${{ steps.tag.outputs.value }}" \
+            powerlifting-backend.pkr.hcl
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    if: "!inputs.backend_only || github.event_name == 'pull_request'"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: hashicorp/setup-packer@v3
+        with:
+          version: 1.13.x
+
+      - id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "value=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - working-directory: docker
+        run: packer init powerlifting-frontend.pkr.hcl
+
+      - working-directory: docker
+        run: |
+          packer build -color=false \
+            -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-app-frontend" \
+            -var "image_tag=${{ steps.tag.outputs.value }}" \
+            -var "api_url=/api" \
+            powerlifting-frontend.pkr.hcl

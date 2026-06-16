@@ -160,6 +160,35 @@ export async function getSettings(discordUsername: string): Promise<UserSettings
   return settings
 }
 
+export async function getSettingsByMappedPk(mappedPk: string): Promise<UserSettings | null> {
+  const cacheKey = `mapped:${mappedPk}`
+  const cached = cache.get(cacheKey)
+  if (cached && cached.expires > Date.now()) return cached.settings
+
+  const direct = await docClient.send(new GetCommand({
+    TableName: USER_TABLE,
+    Key: { pk: mappedPk },
+  }))
+  if (direct.Item) {
+    const settings = normalizeSettings(direct.Item as Record<string, unknown>)
+    cache.set(cacheKey, { settings, expires: Date.now() + CACHE_TTL_MS })
+    return settings
+  }
+
+  const result = await docClient.send(new ScanCommand({
+    TableName: USER_TABLE,
+    FilterExpression: 'mapped_pk = :mpk',
+    ExpressionAttributeValues: { ':mpk': mappedPk },
+    Limit: 1,
+  }))
+  const item = result.Items?.[0]
+  if (!item) return null
+
+  const settings = normalizeSettings(item as Record<string, unknown>)
+  cache.set(cacheKey, { settings, expires: Date.now() + CACHE_TTL_MS })
+  return settings
+}
+
 export async function getOrCreateSettings(
   discordId: string,
   discordUsername: string,

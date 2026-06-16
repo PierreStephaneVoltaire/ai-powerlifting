@@ -55,11 +55,10 @@ def _collect_user_partition_keys(table_name):
     ):
         for item in page.get("Items", []):
             pk = item.get("pk", {}).get("S")
-            if pk:
-                seen.add(pk)
             mapped_pk = item.get("mapped_pk", {}).get("S")
-            if mapped_pk:
-                seen.add(mapped_pk)
+            canonical = mapped_pk or pk
+            if canonical:
+                seen.add(canonical)
     yield from seen
 
 

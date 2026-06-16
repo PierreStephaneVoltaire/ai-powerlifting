@@ -4,6 +4,7 @@ import { Upload } from '@aws-sdk/lib-storage'
 import { v4 as uuidv4 } from 'uuid'
 import {
   getSettings,
+  getSettingsByMappedPk,
   updateNickname,
   updateAvatarUrl,
   updateProfile,
@@ -54,8 +55,13 @@ function s3SafeSegment(value: string): string {
 
 export async function getSettingsHandler(req: Request, res: Response): Promise<void> {
 
-  const username = req.user?.username || req.mapped_pk || 'operator'
-  const settings = await getSettings(username)
+  let settings = null
+  if (req.user?.username) {
+    settings = await getSettings(req.user.username)
+  }
+  if (!settings && req.mapped_pk) {
+    settings = await getSettingsByMappedPk(req.mapped_pk)
+  }
   if (!settings) {
 
     if (!req.user) {

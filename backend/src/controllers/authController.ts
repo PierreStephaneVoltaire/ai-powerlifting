@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { signToken, signState, verifyState } from '../middleware/auth'
-import { getSettings } from '../services/userSettings'
+import { getSettings, getSettingsByMappedPk } from '../services/userSettings'
 
 const DISCORD_API = 'https://discord.com/api/v10'
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID || ''
@@ -115,8 +115,13 @@ export async function getMe(req: Request, res: Response): Promise<void> {
   let ranking_region: string | null = null
   let age_class: string = 'open'
   try {
-    const username = req.user?.username || req.mapped_pk || 'operator'
-    const settings = await getSettings(username)
+    let settings = null
+    if (req.user?.username) {
+      settings = await getSettings(req.user.username)
+    }
+    if (!settings && req.mapped_pk) {
+      settings = await getSettingsByMappedPk(req.mapped_pk)
+    }
     if (settings) {
       ranking_country = settings.ranking_country
       ranking_region = settings.ranking_region

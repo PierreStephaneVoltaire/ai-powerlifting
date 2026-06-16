@@ -257,7 +257,9 @@ export default function CompetitionsPage() {
         <Paper withBorder p="xl"><Group justify="center"><Text c="dimmed">No competitions found for this filter.</Text></Group></Paper>
       ) : (
         <Accordion variant="separated">
-          {sortedCompetitions.map((comp) => {
+          {sortedCompetitions
+            .filter((comp) => Boolean(comp.master_id))
+            .map((comp) => {
             const dotsResult = calculateDotsScore(comp)
             const effRegStatus = effectiveRegistrationStatus(comp)
             const isCancelled = comp.cancelled
