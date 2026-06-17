@@ -9,6 +9,7 @@ on:
       - "packages/**"
       - "lambda/**"
       - "docker/**"
+      - "terraform/**"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"
@@ -21,21 +22,24 @@ on:
       - "frontend/**"
       - "packages/**"
       - "docker/**"
+      - "terraform/**"
       - ".github/workflows/build-images.yml"
 
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Override image tag (default: short git SHA)
+        description: "Override image tag (default: branch name)"
         required: false
-
       backend_only:
         description: Build only backend
         required: false
         default: "false"
-
       frontend_only:
         description: Build only frontend
+        required: false
+        default: "false"
+      apply_terraform:
+        description: Run terraform apply (workflow_dispatch only)
         required: false
         default: "false"
 
@@ -46,13 +50,59 @@ permissions:
 env:
   AWS_REGION: ca-central-1
   ECR_REPO_PREFIX: if
+  TF_VERSION: "1.7.x"
 
 jobs:
-  build-backend:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.result.outputs.backend }}
+      frontend: ${{ steps.result.outputs.frontend }}
+      terraform: ${{ steps.result.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v4
 
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
+      - id: filter
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'packages/**'
+              - 'lambda/**'
+              - 'docker/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+            frontend:
+              - 'frontend/**'
+              - 'packages/**'
+              - 'docker/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+            terraform:
+              - 'terraform/**'
+              - '.github/workflows/build-images.yml'
 
+      - id: result
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "terraform=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=${{ steps.filter.outputs.backend }}" >> "$GITHUB_OUTPUT"
+            echo "frontend=${{ steps.filter.outputs.frontend }}" >> "$GITHUB_OUTPUT"
+            echo "terraform=${{ steps.filter.outputs.terraform }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-backend:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: ${{ needs.changes.outputs.backend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -76,7 +126,6 @@ jobs:
           else
             TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
           fi
-      
           echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
       - working-directory: docker
@@ -86,14 +135,13 @@ jobs:
         run: |
           packer build -color=false \
             -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-app-backend" \
-            -var 'image_tags=${{ steps.tags.outputs.image_tags }}' \
+            -var "image_tag=${{ steps.tag.outputs.value }}" \
             powerlifting-backend.pkr.hcl
 
   build-frontend:
+    needs: changes
     runs-on: ubuntu-latest
-
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
-
+    if: ${{ needs.changes.outputs.frontend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -117,7 +165,6 @@ jobs:
           else
             TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
           fi
-      
           echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
       - working-directory: docker
@@ -127,6 +174,72 @@ jobs:
         run: |
           packer build -color=false \
             -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-app-frontend" \
-            -var 'image_tags=${{ steps.tags.outputs.image_tags }}' \
+            -var "image_tag=${{ steps.tag.outputs.value }}" \
             -var "api_url=/api" \
             powerlifting-frontend.pkr.hcl
+
+  terraform-validate:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: ${{ needs.changes.outputs.terraform == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - working-directory: terraform
+        run: terraform init -input=false
+
+      - working-directory: terraform
+        run: terraform validate
+
+  terraform-plan:
+    needs: terraform-validate
+    runs-on: ubuntu-latest
+    if: ${{ needs.terraform-validate.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - working-directory: terraform
+        run: terraform init -input=false
+
+      - working-directory: terraform
+        run: terraform plan -input=false -no-color -var="region=${{ env.AWS_REGION }}"
+
+  terraform-apply:
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    if: ${{ needs.terraform-plan.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - working-directory: terraform
+        run: terraform init -input=false
+
+      - working-directory: terraform
+        run: terraform apply -input=false -no-color -auto-approve -var="region=${{ env.AWS_REGION }}"
