@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: powerlifting-app-frontend
+  labels:
+    app: powerlifting-app-frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+  selector:
+    app: powerlifting-app-frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: powerlifting-app-frontend
+  labels:
+    app: powerlifting-app-frontend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: powerlifting-app-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app: powerlifting-app-frontend
+    spec:
+      automountServiceAccountToken: true
+      imagePullSecrets:
+        - name: ecr-registry
+      containers:
+        - name: frontend
+          image: 111111111111.dkr.ecr.ca-central-1.amazonaws.com/if-powerlifting-app-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: powerlifting-app-config
+                optional: false
+          resources:
+            limits:
+              cpu: 250m
+              memory: 1Gi
+            requests:
+              cpu: 125m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3001
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3001
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
