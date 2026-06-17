@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckCircle, Search, Target, Trophy } from 'lucide-react'
+import { CheckCircle, ExternalLink, Save, Search, Target, Trophy } from 'lucide-react'
 import {
   Accordion,
   Badge,
@@ -162,13 +162,13 @@ export default function CompetitionsPage() {
     body_weight_kg: 0, report: reportFromComp(EMPTY_COMP),
   })
 
+  const [drafts, setDrafts] = useState<Record<string, UserCompetitionUpdate>>({})
+  const [savingId, setSavingId] = useState<string | null>(null)
+
   useEffect(() => {
     fetchStatCategories().then((data: any) => {
       if (data && !data.error) setCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
     }).catch(() => {})
-  }, [])
-
-  useEffect(() => {
   }, [])
 
   useEffect(() => {
@@ -186,8 +186,42 @@ export default function CompetitionsPage() {
     loadAll({ country: rankingCountry ?? undefined, state: selectedState ?? undefined })
   }, [rankingCountry, selectedState, loadAll])
 
-  async function updateField(masterId: string, updates: UserCompetitionUpdate) {
-    try { await patch(masterId, updates) } catch { pushToast({ message: 'Failed to update competition', type: 'error' }) }
+  function setDraft(masterId: string, updates: UserCompetitionUpdate) {
+    setDrafts((prev) => ({ ...prev, [masterId]: { ...(prev[masterId] || {}), ...updates } }))
+  }
+
+  function clearDraft(masterId: string) {
+    setDrafts((prev) => {
+      const next = { ...prev }
+      delete next[masterId]
+      return next
+    })
+  }
+
+  function effectiveComp(masterId: string, comp: UserCompetition): UserCompetition {
+    const draft = drafts[masterId]
+    if (!draft) return comp
+    return { ...comp, ...draft }
+  }
+
+  function hasDraft(masterId: string): boolean {
+    const draft = drafts[masterId]
+    return Boolean(draft && Object.keys(draft).length > 0)
+  }
+
+  async function saveDraft(masterId: string) {
+    const draft = drafts[masterId]
+    if (!draft || Object.keys(draft).length === 0) return
+    setSavingId(masterId)
+    try {
+      await patch(masterId, draft)
+      clearDraft(masterId)
+      pushToast({ message: 'Competition saved', type: 'success' })
+    } catch {
+      pushToast({ message: 'Failed to save competition', type: 'error' })
+    } finally {
+      setSavingId(null)
+    }
   }
 
   function openCompleteModal(comp: UserCompetition) {
@@ -260,22 +294,28 @@ export default function CompetitionsPage() {
           {sortedCompetitions
             .filter((comp) => Boolean(comp.master_id))
             .map((comp) => {
-            const dotsResult = calculateDotsScore(comp)
+            const view = effectiveComp(comp.master_id, comp)
+            const dotsResult = calculateDotsScore(view)
             const effRegStatus = effectiveRegistrationStatus(comp)
             const isCancelled = comp.cancelled
-            const isAvailable = comp.user_status === 'available'
+            const isAvailable = view.user_status === 'available'
             const isDisabled = isCancelled
+            const isDirty = hasDraft(comp.master_id)
+            const isSaving = savingId === comp.master_id
+            const regLabel = effRegStatus === 'cancelled' ? 'Cancelled' : effRegStatus === 'closed' ? 'Closed' : effRegStatus === 'open' ? 'Open' : 'Unknown'
+            const regTone = effRegStatus === 'cancelled' ? 'red' : effRegStatus === 'closed' ? 'gray' : effRegStatus === 'open' ? 'green' : 'gray'
 
             return (
               <Accordion.Item key={comp.master_id} value={comp.master_id} style={isCancelled ? { opacity: 0.5 } : undefined}>
                 <Accordion.Control>
                   <Group gap="sm" wrap="nowrap">
-                    <Trophy size={20} style={{ color: isCancelled ? 'var(--mantine-color-gray-6)' : comp.user_status === 'completed' ? 'var(--mantine-color-green-6)' : comp.user_status === 'confirmed' ? 'var(--mantine-color-blue-6)' : 'var(--mantine-color-yellow-6)' }} />
+                    <Trophy size={20} style={{ color: isCancelled ? 'var(--mantine-color-gray-6)' : view.user_status === 'completed' ? 'var(--mantine-color-green-6)' : view.user_status === 'confirmed' ? 'var(--mantine-color-blue-6)' : 'var(--mantine-color-yellow-6)' }} />
                     <Stack gap={0}>
                       <Text fw={500}>{comp.name}</Text>
                       <Text size="xs" c="dimmed">{formatDateRange(comp)} {'\u2022'} {comp.federation_label || 'No federation'} {'\u2022'} {venueDisplay(comp)}</Text>
                     </Stack>
-                    <Badge variant="light" color={STATUS_COLORS[comp.user_status] ?? 'gray'}>{STATUS_LABELS[comp.user_status] ?? comp.user_status}</Badge>
+                    <Badge variant="light" color={STATUS_COLORS[view.user_status] ?? 'gray'}>{STATUS_LABELS[view.user_status] ?? view.user_status}</Badge>
+                    {isDirty && <Badge variant="light" color="yellow">Unsaved</Badge>}
                     {isCancelled && <Badge variant="light" color="red">Cancelled</Badge>}
                   </Group>
                 </Accordion.Control>
@@ -285,33 +325,69 @@ export default function CompetitionsPage() {
                       <TextInput label="Name" value={comp.name} readOnly />
                       <TextInput label="Dates" value={formatDateRange(comp)} readOnly />
                       <TextInput label="Federation" value={comp.federation_label || ''} readOnly />
-                      <TextInput label="Registration" value={effRegStatus === 'cancelled' ? 'Cancelled' : effRegStatus === 'closed' ? 'Closed' : effRegStatus === 'open' ? 'Open' : 'Unknown'} readOnly rightSection={effRegStatus === 'open' && comp.registration_url ? <Text component="a" href={comp.registration_url} target="_blank" size="xs" c="blue" style={{ textDecoration: 'none' }}>Register</Text> : null} />
+                      <Stack gap={4}>
+                        <Text size="sm" c="dimmed">Registration</Text>
+                        {comp.registration_url ? (
+                          <Group gap="xs" wrap="nowrap">
+                            <Badge variant="light" color={regTone}>{regLabel}</Badge>
+                            <Button
+                              component="a"
+                              href={comp.registration_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              variant="light"
+                              size="xs"
+                              leftSection={<ExternalLink size={12} />}
+                            >
+                              Register
+                            </Button>
+                          </Group>
+                        ) : (
+                          <Badge variant="light" color={regTone}>{regLabel}</Badge>
+                        )}
+                      </Stack>
                     </SimpleGrid>
                     <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
                       <TextInput label="Venue" value={venueDisplay(comp)} readOnly />
                       <TextInput label="Testing" value={comp.testing_status} readOnly />
                       <TextInput label="Event Type" value={comp.event_type || 'Unknown'} readOnly />
-                      {comp.website_url && <TextInput label="Website" value={comp.website_url} readOnly rightSection={<Text component="a" href={comp.website_url} target="_blank" size="xs" c="blue" style={{ textDecoration: 'none' }}>Open</Text>} />}
+                      {comp.website_url ? (
+                        <Stack gap={4}>
+                          <Text size="sm" c="dimmed">Website</Text>
+                          <Button
+                            component="a"
+                            href={comp.website_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="light"
+                            size="xs"
+                            leftSection={<ExternalLink size={12} />}
+                            style={{ alignSelf: 'flex-start' }}
+                          >
+                            Open Website
+                          </Button>
+                        </Stack>
+                      ) : null}
                     </SimpleGrid>
                     <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-                      <Select label="Your Status" value={comp.user_status} data={STATUS_OPTIONS} onChange={(v) => { if (v && !isDisabled) updateField(comp.master_id, { user_status: v as UserCompetition['user_status'] }) }} disabled={readOnly || isCancelled} />
-                      <TextInput type="number" label="Weight Class (kg)" value={comp.weight_class_kg ?? ''} onChange={(e) => { if (!readOnly && !isCancelled) updateField(comp.master_id, { weight_class_kg: e.currentTarget.value ? Number(e.currentTarget.value) : null }) }} disabled={readOnly || isCancelled} />
-                      {comp.user_status === 'completed' && <TextInput type="number" label="Body Weight (kg)" value={comp.body_weight_kg ?? ''} onChange={(e) => { if (!readOnly && !isCancelled) updateField(comp.master_id, { body_weight_kg: e.currentTarget.value ? Number(e.currentTarget.value) : null }) }} disabled={readOnly || isCancelled} />}
-                      <Checkbox mt={30} label="Hotel required" checked={comp.hotel_required} onChange={(event) => { if (!readOnly && !isCancelled) updateField(comp.master_id, { hotel_required: event.currentTarget.checked }) }} disabled={readOnly || isCancelled} />
+                      <Select label="Your Status" value={view.user_status} data={STATUS_OPTIONS} onChange={(v) => { if (v && !isDisabled) setDraft(comp.master_id, { user_status: v as UserCompetition['user_status'] }) }} disabled={readOnly || isCancelled} />
+                      <TextInput type="number" label="Weight Class (kg)" value={view.weight_class_kg ?? ''} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { weight_class_kg: e.currentTarget.value ? Number(e.currentTarget.value) : null }) }} disabled={readOnly || isCancelled} />
+                      {view.user_status === 'completed' && <TextInput type="number" label="Body Weight (kg)" value={view.body_weight_kg ?? ''} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { body_weight_kg: e.currentTarget.value ? Number(e.currentTarget.value) : null }) }} disabled={readOnly || isCancelled} />}
+                      <Checkbox mt={30} label="Hotel required" checked={view.hotel_required} onChange={(event) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { hotel_required: event.currentTarget.checked }) }} disabled={readOnly || isCancelled} />
                     </SimpleGrid>
                     <Stack gap="xs">
-                      <Text size="xs" c="dimmed">{comp.user_status === 'completed' ? 'Results (kg)' : 'Targets (kg)'}</Text>
+                      <Text size="xs" c="dimmed">{view.user_status === 'completed' ? 'Results (kg)' : 'Targets (kg)'}</Text>
                       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
                         {(['squat_kg', 'bench_kg', 'deadlift_kg', 'total_kg'] as const).map((lift) => (
-                          <TextInput key={lift} type="number" label={lift.replace('_kg', '')} value={comp.user_status === 'completed' ? comp.results?.[lift] || 0 : comp.targets?.[lift] || 0} onChange={(e) => {
+                          <TextInput key={lift} type="number" label={lift.replace('_kg', '')} value={view.user_status === 'completed' ? view.results?.[lift] || 0 : view.targets?.[lift] || 0} onChange={(e) => {
                             if (readOnly || isCancelled) return
                             const v = Number(e.currentTarget.value) || 0
-                            const field = comp.user_status === 'completed' ? 'results' : 'targets'
-                            const currentField = comp[field] || { squat_kg: 0, bench_kg: 0, deadlift_kg: 0, total_kg: 0 }
+                            const field = view.user_status === 'completed' ? 'results' : 'targets'
+                            const currentField = view[field] || { squat_kg: 0, bench_kg: 0, deadlift_kg: 0, total_kg: 0 }
                             const newLifts = { squat_kg: currentField.squat_kg || 0, bench_kg: currentField.bench_kg || 0, deadlift_kg: currentField.deadlift_kg || 0, [lift]: v }
                             const newTotal = newLifts.squat_kg + newLifts.bench_kg + newLifts.deadlift_kg
-                            updateField(comp.master_id, { [field]: { ...currentField, [lift]: v, total_kg: newTotal } })
-                          }} disabled={lift === 'total_kg' || (comp.user_status === 'completed' && Boolean(comp.post_meet_report)) || readOnly || isCancelled} />
+                            setDraft(comp.master_id, { [field]: { ...currentField, [lift]: v, total_kg: newTotal } } as UserCompetitionUpdate)
+                          }} disabled={lift === 'total_kg' || (view.user_status === 'completed' && Boolean(view.post_meet_report)) || readOnly || isCancelled} />
                         ))}
                       </SimpleGrid>
                     </Stack>
@@ -320,22 +396,33 @@ export default function CompetitionsPage() {
                         <Group gap="sm"><Target size={16} style={{ color: 'var(--mantine-color-blue-6)' }} /><Text size="sm"><Text span c="dimmed">{dotsResult.label} DOTS:</Text>{' '}<Text span fw={700} ff="monospace">{dotsResult.dots.toFixed(2)}</Text></Text></Group>
                       </Paper>
                     )}
-                    {comp.post_meet_report && (
+                    {view.post_meet_report && (
                       <Paper bg="var(--mantine-color-default)" p="sm" radius="md">
                         <Stack gap="sm">
-                          <Group justify="space-between" align="center"><Text size="sm" fw={500}>Post-meet report</Text><Badge variant="light" color="green">{formatAttemptSummary(comp.post_meet_report)}</Badge></Group>
-                          <Text size="sm"><Text span c="dimmed">Sleep:</Text> {comp.post_meet_report.sleep_hours ?? ''} h</Text>
+                          <Group justify="space-between" align="center"><Text size="sm" fw={500}>Post-meet report</Text><Badge variant="light" color="green">{formatAttemptSummary(view.post_meet_report)}</Badge></Group>
+                          <Text size="sm"><Text span c="dimmed">Sleep:</Text> {view.post_meet_report.sleep_hours ?? ''} h</Text>
                         </Stack>
                       </Paper>
                     )}
-                    <Textarea label="Notes" value={comp.notes || ''} onChange={(e) => { if (!readOnly && !isCancelled) updateField(comp.master_id, { notes: e.currentTarget.value }) }} rows={2} placeholder="Competition notes..." autosize disabled={readOnly || isCancelled} />
-                    <Group justify="flex-end" pt="sm">
-                      {comp.user_status !== 'completed' && new Date(comp.start_date) < new Date() && !isCancelled && (
-                        <Button variant="light" color="green" size="sm" leftSection={<CheckCircle size={14} />} onClick={() => openCompleteModal(comp)} disabled={readOnly}>Mark as Completed</Button>
-                      )}
-                      {comp.user_status === 'completed' && !isCancelled && (
-                        <Button variant="light" color="green" size="sm" leftSection={<CheckCircle size={14} />} onClick={() => openCompleteModal(comp)} disabled={readOnly}>{comp.post_meet_report ? 'Edit Post-Meet Report' : 'Add Post-Meet Report'}</Button>
-                      )}
+                    <Textarea label="Notes" value={view.notes || ''} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { notes: e.currentTarget.value }) }} rows={2} placeholder="Competition notes..." autosize disabled={readOnly || isCancelled} />
+                    <Group justify="space-between" pt="sm">
+                      <Button
+                        leftSection={<Save size={14} />}
+                        onClick={() => saveDraft(comp.master_id)}
+                        disabled={readOnly || isCancelled || !isDirty || isSaving}
+                        loading={isSaving}
+                        size="sm"
+                      >
+                        {isSaving ? 'Saving...' : 'Save'}
+                      </Button>
+                      <Group gap="sm">
+                        {view.user_status !== 'completed' && new Date(comp.start_date) < new Date() && !isCancelled && (
+                          <Button variant="light" color="green" size="sm" leftSection={<CheckCircle size={14} />} onClick={() => openCompleteModal(comp)} disabled={readOnly}>Mark as Completed</Button>
+                        )}
+                        {view.user_status === 'completed' && !isCancelled && (
+                          <Button variant="light" color="green" size="sm" leftSection={<CheckCircle size={14} />} onClick={() => openCompleteModal(comp)} disabled={readOnly}>{view.post_meet_report ? 'Edit Post-Meet Report' : 'Add Post-Meet Report'}</Button>
+                        )}
+                      </Group>
                     </Group>
                   </Stack>
                 </Accordion.Panel>
