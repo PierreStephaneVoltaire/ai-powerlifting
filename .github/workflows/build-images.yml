@@ -1,5 +1,4 @@
 name: Build & Push Powerlifting Images
-
 on:
   push:
     branches: [master, main]
