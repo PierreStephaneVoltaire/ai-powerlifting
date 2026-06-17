@@ -68,24 +68,16 @@ jobs:
         with:
           version: 1.13.x
 
-      - id: tags
+      - id: tag
         shell: bash
         run: |
           if [ -n "${{ inputs.image_tag }}" ]; then
-            SHA_TAG="${{ inputs.image_tag }}"
+            TAG="${{ inputs.image_tag }}"
           else
-            SHA_TAG="${GITHUB_SHA::7}"
+            TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
           fi
-
-          BRANCH_TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
-
-          if [[ "${GITHUB_REF_NAME}" == "main" || "${GITHUB_REF_NAME}" == "master" ]]; then
-            IMAGE_TAGS="[\"${SHA_TAG}\",\"${BRANCH_TAG}\",\"latest\"]"
-          else
-            IMAGE_TAGS="[\"${SHA_TAG}\",\"${BRANCH_TAG}\"]"
-          fi
-
-          echo "image_tags=${IMAGE_TAGS}" >> "$GITHUB_OUTPUT"
+      
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
       - working-directory: docker
         run: packer init powerlifting-backend.pkr.hcl
@@ -117,24 +109,16 @@ jobs:
         with:
           version: 1.13.x
 
-      - id: tags
+      - id: tag
         shell: bash
         run: |
           if [ -n "${{ inputs.image_tag }}" ]; then
-            SHA_TAG="${{ inputs.image_tag }}"
+            TAG="${{ inputs.image_tag }}"
           else
-            SHA_TAG="${GITHUB_SHA::7}"
+            TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
           fi
-
-          BRANCH_TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
-
-          if [[ "${GITHUB_REF_NAME}" == "main" || "${GITHUB_REF_NAME}" == "master" ]]; then
-            IMAGE_TAGS="[\"${SHA_TAG}\",\"${BRANCH_TAG}\",\"latest\"]"
-          else
-            IMAGE_TAGS="[\"${SHA_TAG}\",\"${BRANCH_TAG}\"]"
-          fi
-
-          echo "image_tags=${IMAGE_TAGS}" >> "$GITHUB_OUTPUT"
+      
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
 
       - working-directory: docker
         run: packer init powerlifting-frontend.pkr.hcl
