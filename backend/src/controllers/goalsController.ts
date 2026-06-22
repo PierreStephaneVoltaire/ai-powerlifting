@@ -150,7 +150,7 @@ export async function updateGoals(
       }
       await docClient.send(new PutCommand({
         TableName: POWERLIFTING_GOALS_TABLE,
-        Item: merged,
+        Item: { ...merged, pk: userPk, sk: `GOAL#${id}` },
       }))
     } else {
       const newId = id || randomUUID()
@@ -159,7 +159,7 @@ export async function updateGoals(
       fresh.updated_at = now
       await docClient.send(new PutCommand({
         TableName: POWERLIFTING_GOALS_TABLE,
-        Item: fresh,
+        Item: { ...fresh, pk: userPk, sk: `GOAL#${newId}` },
       }))
     }
   }

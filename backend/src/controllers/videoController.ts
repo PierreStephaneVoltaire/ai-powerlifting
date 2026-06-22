@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { GetCommand } from '@aws-sdk/lib-dynamodb'
-import { S3Client, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
@@ -21,40 +21,6 @@ const s3Client = new S3Client({
       }
     : undefined,
 })
-
-export interface StreamMediaResult {
-  body: any
-  contentType: string
-  contentLength?: number
-  contentRange?: string
-  acceptRanges?: string
-  statusCode: number
-}
-
-export async function streamMedia(key: string, range?: string): Promise<StreamMediaResult> {
-  try {
-    const command = new GetObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: key,
-      ...(range ? { Range: range } : {}),
-    })
-    const response = await s3Client.send(command)
-    return {
-      body: response.Body,
-      contentType: response.ContentType || 'application/octet-stream',
-      contentLength: response.ContentLength,
-      contentRange: response.ContentRange,
-      acceptRanges: response.AcceptRanges ?? 'bytes',
-      statusCode: range && response.ContentRange ? 206 : 200,
-    }
-  } catch (err: any) {
-    if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) {
-      throw new AppError('Media not found', 404)
-    }
-    console.error(`[VideoController] Failed to fetch media from S3: ${key}`, err)
-    throw new AppError('Media not found', 404)
-  }
-}
 
 function stripUndefined(obj: any): any {
   if (obj === null || typeof obj !== 'object') return obj

@@ -76,7 +76,7 @@ function stripUndefined(value: any): any {
   return out
 }
 
-export const getProxyUrl = (key: string) => `/api/videos/media/${key}`
+export const getProxyUrl = (key: string) => `${process.env.CLOUDFRONT_MEDIA_BASE_URL}/${key}`
 
 export function transformVideo(video: any): any {
   return {
