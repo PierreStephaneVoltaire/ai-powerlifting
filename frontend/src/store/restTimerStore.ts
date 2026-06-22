@@ -89,21 +89,38 @@ export const useRestTimerStore = create<RestTimerState>()((set, get) => ({
   },
 
   addSeconds: (delta) => {
-    const { status, totalSeconds, remainingMs, runningStartedAt, pausedAccumulatedMs } = get()
-    if (status === 'idle') return
-    const capMs = (totalSeconds + 600) * 1000
-    const newRemaining = Math.max(0, Math.min(capMs, remainingMs + delta * 1000))
-    if (status === 'running' && runningStartedAt !== null) {
-      const now = Date.now()
-      const elapsed = now - runningStartedAt - pausedAccumulatedMs
+    const { status, totalSeconds, remainingMs } = get()
+
+    if (status === 'finished') {
+      const newTotal = 15
       set({
-        totalSeconds: Math.max(totalSeconds, Math.ceil((elapsed + newRemaining) / 1000)),
-        remainingMs: newRemaining,
-        runningStartedAt: now - elapsed - delta * 1000,
+        status: 'running',
+        totalSeconds: newTotal,
+        remainingMs: newTotal * 1000,
+        runningStartedAt: Date.now(),
+        pausedAccumulatedMs: 0,
+        pausedAt: null,
+        finishedAt: null,
       })
-    } else {
-      set({ remainingMs: newRemaining })
+      return
     }
+
+    if (status === 'idle') return
+
+    const deltaMs = delta * 1000
+    const capMs = (totalSeconds + 600) * 1000
+    const elapsedMs = Math.max(0, totalSeconds * 1000 - remainingMs)
+    let newRemaining = remainingMs + deltaMs
+
+    if (deltaMs < 0 && newRemaining < 15 * 1000) {
+      newRemaining = 0
+    } else {
+      newRemaining = Math.max(0, Math.min(capMs, newRemaining))
+    }
+
+    const newTotalSeconds = Math.max(0, Math.ceil((newRemaining + elapsedMs) / 1000))
+
+    set({ remainingMs: newRemaining, totalSeconds: newTotalSeconds })
   },
 
   setRemainingMs: (ms) => {

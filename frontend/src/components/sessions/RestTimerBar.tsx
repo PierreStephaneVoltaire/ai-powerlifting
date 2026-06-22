@@ -30,10 +30,6 @@ export default function RestTimerBar() {
   const timeText = isFinished ? '0:00' : formatRestMs(remainingMs)
 
   const handleAdd = (delta: number) => {
-    if (isFinished) {
-      start(totalSeconds + delta)
-      return
-    }
     addSeconds(delta)
   }
 

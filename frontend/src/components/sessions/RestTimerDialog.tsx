@@ -58,8 +58,8 @@ export default function RestTimerDialog() {
 
         <Box
           style={{
-            width: 160,
-            height: 160,
+            width: 125,
+            height: 125,
             borderRadius: '50%',
             border: '2px solid var(--border-default)',
             display: 'flex',
