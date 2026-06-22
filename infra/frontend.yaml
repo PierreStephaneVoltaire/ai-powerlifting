@@ -41,7 +41,7 @@ spec:
         - name: ecr-registry
       containers:
         - name: frontend
-          image: 111111111111.dkr.ecr.ca-central-1.amazonaws.com/if-powerlifting-app-frontend:latest
+          image: 429310424269.dkr.ecr.ca-central-1.amazonaws.com/if-powerlifting-app-frontend:latest
           imagePullPolicy: Always
           ports:
             - name: http
