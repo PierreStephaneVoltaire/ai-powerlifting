@@ -974,8 +974,9 @@ export const GOAL_PRIORITY_OPTIONS: ReadonlyArray<{ value: GoalPriority; label: 
   { value: 'optional', label: 'Optional' },
 ]
 
-export const TARGET_COMPETITION_STATUSES: ReadonlyArray<'optional' | 'completed' | 'skipped'> = [
+export const TARGET_COMPETITION_STATUSES: ReadonlyArray<'optional' | 'confirmed' | 'completed' | 'skipped'> = [
   'optional',
+  'confirmed',
   'completed',
   'skipped',
 ]

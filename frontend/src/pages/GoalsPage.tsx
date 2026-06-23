@@ -289,7 +289,7 @@ export default function GoalsPage() {
 
       <Paper withBorder p="md">
         <Text size="sm" c="dimmed">
-          Each goal shows only the fields that matter for its type. Target competitions are limited to ones you have marked as optional, completed, or skipped. Federation lookups use the country and state from your ranking settings and your IPF age class.
+          Each goal shows only the fields that matter for its type. Target competitions are limited to ones you have marked as optional, confirmed, completed, or skipped. Federation lookups use the country and state from your ranking settings and your IPF age class.
         </Text>
         {readOnly && (
           <Text size="sm" mt="xs" c="dimmed">
