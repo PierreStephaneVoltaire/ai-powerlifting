@@ -23,6 +23,7 @@ import { settingsRouter } from './routes/settings'
 import { profilesRouter } from './routes/profiles'
 import { goalsRouter } from './routes/goals'
 import { federationsRouter } from './routes/federations'
+import { budgetRouter } from './routes/budget'
 import { setupRouter } from './routes/setup'
 import { errorHandler } from './middleware/errorHandler'
 import { requireUserOptional, requireWriteAuth, resolvePk } from './middleware/auth'
@@ -55,6 +56,7 @@ app.use('/api/setup', setupRouter)
 app.use('/api/programs', programsRouter)
 app.use('/api/goals', goalsRouter)
 app.use('/api/federations', federationsRouter)
+app.use('/api/budget', budgetRouter)
 app.use('/api/sessions', sessionsRouter)
 app.use('/api/exercises', exercisesRouter)
 app.use('/api/maxes', maxesRouter)

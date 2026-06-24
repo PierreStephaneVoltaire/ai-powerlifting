@@ -1093,3 +1093,16 @@ analyticsRouter.get('/program-evaluation', async (req, res) => {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
   }
 })
+
+analyticsRouter.post('/budget/timeline', async (req, res) => {
+  try {
+    const body = req.body ?? {}
+    const data = await invokeToolDirect('budget_priority_timeline', {
+      ...body,
+      pk: req.mapped_pk,
+    })
+    res.json({ data, error: null })
+  } catch (err) {
+    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
+  }
+})

@@ -19,10 +19,26 @@ resource "aws_cloudfront_distribution" "session_videos" {
     origin_id                = "powerlifting-session-videos"
     origin_access_control_id = aws_cloudfront_origin_access_control.session_videos.id
   }
+  origin {
+    domain_name              = aws_s3_bucket.budget_media.bucket_regional_domain_name
+    origin_id                = "powerlifting-budget-media"
+    origin_access_control_id = aws_cloudfront_origin_access_control.session_videos.id
+  }
 
   enabled         = true
   is_ipv6_enabled = true
   price_class     = "PriceClass_100"
+
+  ordered_cache_behavior {
+    path_pattern             = "budget/*"
+    target_origin_id         = "powerlifting-budget-media"
+    viewer_protocol_policy   = "https-only"
+    allowed_methods          = ["GET", "HEAD"]
+    cached_methods           = ["GET", "HEAD"]
+    compress                 = true
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+  }
 
   default_cache_behavior {
     target_origin_id         = "powerlifting-session-videos"

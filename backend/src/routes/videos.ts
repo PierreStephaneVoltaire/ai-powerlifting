@@ -86,6 +86,32 @@ videosRouter.delete('/:version/:sessionDate/:videoId', async (req, res, next) =>
   }
 })
 
+// PATCH /api/videos/:version/:sessionDate/:videoId - Update video metadata (exercise, set number, notes)
+videosRouter.patch('/:version/:sessionDate/:videoId', async (req, res, next) => {
+  try {
+    const { exerciseName, setNumber, notes } = req.body as {
+      exerciseName?: string
+      setNumber?: number
+      notes?: string
+    }
+
+    const video = await videoController.updateSessionVideoMetadata(
+      req.mapped_pk!,
+      req.params.version,
+      req.params.sessionDate,
+      req.params.videoId,
+      {
+        exerciseName,
+        setNumber: typeof setNumber === 'number' ? setNumber : undefined,
+        notes,
+      }
+    )
+    res.json({ data: video, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // PATCH /api/videos/:version/:sessionDate/:videoId/thumbnail - Update thumbnail (for Lambda)
 videosRouter.patch('/:version/:sessionDate/:videoId/thumbnail', async (req, res, next) => {
   try {

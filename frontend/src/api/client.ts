@@ -37,6 +37,10 @@ import type {
   UserCompetition,
   UserCompetitionUpdate,
   MasterFederation,
+  BudgetItem,
+  BudgetConfig,
+  BudgetStore,
+  BudgetTimeline,
 } from '@powerlifting/types'
 
 const api = axios.create({
@@ -542,6 +546,20 @@ export async function getVideos(
   return res.data.data
 }
 
+
+export async function updateSessionVideo(
+  version: string,
+  sessionDate: string,
+  videoId: string,
+  updates: { exerciseName?: string; setNumber?: number; notes?: string }
+): Promise<SessionVideo> {
+  const res = await api.patch<ApiResponse<SessionVideo>>(
+    `/videos/${version}/${sessionDate}/${videoId}`,
+    updates
+  )
+  return res.data.data
+}
+
 export async function removeSessionVideo(
   version: string,
   sessionDate: string,
@@ -979,6 +997,39 @@ export async function fetchRankingPercentile(params: RankingPercentileParams): P
   }
   const res = await api.get<RankingPercentileResult>(`/stats/ranking_percentile?${query.toString()}`)
   return res.data
+}
+
+
+// ─── Budget ───────────────────────────────────────────────────────────────────
+
+export async function fetchBudget(): Promise<BudgetStore> {
+  const res = await api.get<ApiResponse<BudgetStore>>('/budget')
+  return res.data.data
+}
+
+export async function putBudget(store: { config: BudgetConfig; items: BudgetItem[] }): Promise<void> {
+  await api.put('/budget', store)
+}
+
+export async function uploadBudgetItemPhoto(itemId: string, file: File): Promise<{ photo_s3_key: string }> {
+  const form = new FormData()
+  form.append('photo', file)
+  const res = await api.post<ApiResponse<{ photo_s3_key: string }>>(`/budget/items/${itemId}/photo`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data.data
+}
+
+export async function deleteBudgetItemPhoto(itemId: string): Promise<void> {
+  await api.delete(`/budget/items/${itemId}/photo`)
+}
+
+export async function fetchBudgetTimeline(payload: {
+  config: BudgetConfig
+  items: BudgetItem[]
+}): Promise<BudgetTimeline> {
+  const res = await api.post<ApiResponse<BudgetTimeline>>('/analytics/budget/timeline', payload)
+  return res.data.data
 }
 
 export default api

@@ -294,3 +294,47 @@ export async function getVideoLibrary(
     exercises: Array.from(exerciseSet).sort(),
   }
 }
+
+export async function updateSessionVideoMetadata(
+  pk: string,
+  version: string,
+  sessionDate: string,
+  videoId: string,
+  updates: { exerciseName?: string; setNumber?: number; notes?: string }
+): Promise<SessionVideo> {
+  const sk = await resolveVersionSk(pk, version)
+  const phases = await loadPhases(pk, sk)
+  if (!phases) {
+    throw new AppError(`Program version ${version} not found`, 404)
+  }
+  const session = (await listSessions(pk, sk, phases)).find(s => s.date === sessionDate)
+  if (!session) {
+    throw new AppError(`Session with date ${sessionDate} not found`, 404)
+  }
+
+  if (!session.videos) {
+    throw new AppError(`Session has no videos`, 404)
+  }
+
+  const videos = [...session.videos]
+  const videoIndex = videos.findIndex(v => v.video_id === videoId)
+
+  if (videoIndex === -1) {
+    throw new AppError(`Video ${videoId} not found`, 404)
+  }
+
+  // Merge the supplied metadata fields onto the existing video. A field is
+  // only touched when the caller explicitly provides it, so partial updates
+  // (e.g. correcting just the set number) leave the rest untouched. Empty
+  // strings clear the stored value while `undefined` preserves it.
+  videos[videoIndex] = {
+    ...videos[videoIndex],
+    ...(updates.exerciseName !== undefined && { exercise_name: updates.exerciseName || undefined }),
+    ...(updates.setNumber !== undefined && { set_number: updates.setNumber || undefined }),
+    ...(updates.notes !== undefined && { notes: updates.notes || undefined }),
+  }
+
+  await patchSessionByDate(pk, sk, sessionDate, { videos } as Partial<Session>, phases)
+
+  return transformVideo(videos[videoIndex])
+}

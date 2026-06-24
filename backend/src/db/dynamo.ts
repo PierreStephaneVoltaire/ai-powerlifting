@@ -21,3 +21,5 @@ export const POWERLIFTING_USER_COMPETITIONS_TABLE = process.env.POWERLIFTING_USE
 export const POWERLIFTING_MASTER_FEDERATIONS_TABLE = process.env.POWERLIFTING_MASTER_FEDERATIONS_TABLE || 'if-powerlifting-master-federations'
 export const POWERLIFTING_USER_FEDERATIONS_TABLE = process.env.POWERLIFTING_USER_FEDERATIONS_TABLE || 'if-powerlifting-user-federations'
 export const POWERLIFTING_GOALS_TABLE = process.env.POWERLIFTING_GOALS_TABLE || 'if-powerlifting-goals'
+export const POWERLIFTING_BUDGET_TABLE = process.env.POWERLIFTING_BUDGET_TABLE || 'if-powerlifting-budget'
+export const BUDGET_MEDIA_BUCKET = process.env.BUDGET_MEDIA_BUCKET || 'powerlifting-budget-media'

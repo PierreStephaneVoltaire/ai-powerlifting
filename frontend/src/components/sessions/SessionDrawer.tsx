@@ -249,6 +249,13 @@ function SortableExerciseItem({
         >
           <GripVertical size={16} />
         </Box>
+        <span
+          className="if-mock-pill"
+          style={{ background: 'var(--color-background-secondary)', borderColor: 'transparent', color: 'var(--color-text-secondary)', fontSize: 11, flexShrink: 0 }}
+          data-testid={`exercise-index-${index}`}
+        >
+          #{index + 1}
+        </span>
         <Autocomplete
           value={exercise.name}
           onChange={(newName) => onUpdate(index, 'name', newName)}

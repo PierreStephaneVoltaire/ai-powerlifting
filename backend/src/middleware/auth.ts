@@ -115,6 +115,7 @@ export function requireWriteAuth(req: Request, _res: Response, next: NextFunctio
   const readOnlySafePost = req.method === 'POST' && [
     '/api/analytics/analysis/sections/queue',
     '/api/analytics/block-comparison/ai',
+    '/api/analytics/budget/timeline',
   ].includes(req.path)
 
   if (readOnlySafePost) {

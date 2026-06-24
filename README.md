@@ -104,6 +104,8 @@ Important backend environment variables:
 - `IF_API_URL`, default Kubernetes service URL for the IF agent API
 - `AGENT_MODEL`, default `if-prototype`
 - `VIDEOS_BUCKET`, default `powerlifting-session-videos`
+- `POWERLIFTING_BUDGET_TABLE`, default `if-powerlifting-budget`
+- `BUDGET_MEDIA_BUCKET`, default `powerlifting-budget-media`
 - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI`
 - `JWT_SECRET`, `COOKIE_DOMAIN`, `COOKIE_SECURE`
 - `FRONTEND_URL`, default `http://localhost:5173`

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Modal,
   Button,
@@ -62,7 +62,34 @@ export default function VideoUploadModal({
 
   if (!isOpen) return null
 
-  const exerciseOptions = Array.from(new Set(session.exercises.map((e) => e.name)))
+  // Build exercise dropdown options that include a 1-based index and the
+  // cumulative set range each entry occupies. The backend treats a video's
+  // `set_number` as cumulative across same-named exercise entries (e.g. 3x175
+  // occupies sets 1-3, then 1x455 occupies set 4), so showing the range here
+  // helps the user pick the correct set number during upload.
+  const exerciseOptions = useMemo(() => {
+    // Group same-named exercises and list each entry's index + cumulative set
+    // range so the user can pick the correct set number. The backend treats a
+    // video's `set_number` as cumulative across same-named entries (e.g. 3x175
+    // occupies sets 1-3, then 1x455 occupies set 4).
+    const byName = new Map<string, string[]>()
+    let cumulative = 0
+    session.exercises.forEach((e, i) => {
+      const setCount = Math.max(0, Math.round(Number(e.sets) || 0))
+      const start = cumulative + 1
+      const end = cumulative + setCount
+      cumulative = end
+      const range = setCount > 1 ? `sets ${start}-${end}` : setCount === 1 ? `set ${start}` : ''
+      const part = range ? `#${i + 1} (${range})` : `#${i + 1}`
+      const arr = byName.get(e.name) || []
+      arr.push(part)
+      byName.set(e.name, arr)
+    })
+    return Array.from(byName.entries()).map(([name, parts]) => ({
+      value: name,
+      label: `${name} — ${parts.join(', ')}`,
+    }))
+  }, [session.exercises])
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0]

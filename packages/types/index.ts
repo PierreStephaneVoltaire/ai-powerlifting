@@ -138,6 +138,9 @@ export interface FederationRecord {
   region?: string
   notes?: string
   status: 'active' | 'archived'
+  membership_paid?: boolean
+  membership_cost?: number | null
+  membership_paid_date?: string | null
   created_at: string
   updated_at: string
 }
@@ -1112,6 +1115,8 @@ export interface MasterFederation {
   standard_unit: FederationStandardUnit | null
   standards: Record<string, FederationStandard>
   display_options?: FederationDisplayOptions
+  parent_federation_abbr?: string | null
+  membership_group?: string[]
   created_at: string
   updated_at: string
 }
@@ -1142,4 +1147,144 @@ export interface UserCompetitionUpdate {
   projected_at_t_minus_1w?: LiftResults | null
   projection_snapshot_date?: string | null
   notes?: string
+}
+
+// ─── Budgeting ───────────────────────────────────────────────────────────────
+
+export type BudgetCategory =
+  | 'equipment'
+  | 'supplement'
+  | 'gym_membership'
+  | 'federation_membership'
+  | 'competition_entry'
+
+export const BUDGET_CATEGORY_VALUES: ReadonlyArray<BudgetCategory> = [
+  'equipment',
+  'supplement',
+  'gym_membership',
+  'federation_membership',
+  'competition_entry',
+]
+
+export const BUDGET_CATEGORY_OPTIONS: ReadonlyArray<{ value: BudgetCategory; label: string }> = [
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'supplement', label: 'Supplement' },
+  { value: 'gym_membership', label: 'Gym membership' },
+  { value: 'federation_membership', label: 'Federation membership' },
+  { value: 'competition_entry', label: 'Competition entry' },
+]
+
+export type BudgetPriority = 'buy_now' | 'buy_later' | 'optional' | 'drop'
+
+export const BUDGET_PRIORITY_VALUES: ReadonlyArray<BudgetPriority> = [
+  'buy_now',
+  'buy_later',
+  'optional',
+  'drop',
+]
+
+export const BUDGET_PRIORITY_OPTIONS: ReadonlyArray<{ value: BudgetPriority; label: string }> = [
+  { value: 'buy_now', label: 'Buy now' },
+  { value: 'buy_later', label: 'Buy later' },
+  { value: 'optional', label: 'Optional' },
+  { value: 'drop', label: 'Drop' },
+]
+
+export type BudgetRecurrence = 'one_time' | 'monthly' | 'multi_month'
+
+export const BUDGET_RECURRENCE_VALUES: ReadonlyArray<BudgetRecurrence> = [
+  'one_time',
+  'monthly',
+  'multi_month',
+]
+
+export const BUDGET_RECURRENCE_OPTIONS: ReadonlyArray<{ value: BudgetRecurrence; label: string }> = [
+  { value: 'one_time', label: 'One-time' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'multi_month', label: 'Multi-month' },
+]
+
+export type EquipmentCondition = 'good' | 'worn' | 'needs_replacement' | 'unknown'
+
+export const EQUIPMENT_CONDITION_VALUES: ReadonlyArray<EquipmentCondition> = [
+  'good',
+  'worn',
+  'needs_replacement',
+  'unknown',
+]
+
+export const EQUIPMENT_CONDITION_OPTIONS: ReadonlyArray<{ value: EquipmentCondition; label: string }> = [
+  { value: 'good', label: 'Good' },
+  { value: 'worn', label: 'Worn' },
+  { value: 'needs_replacement', label: 'Needs replacement' },
+  { value: 'unknown', label: 'Unknown' },
+]
+
+export type TrainingPriority = 'low' | 'medium' | 'high'
+
+export const TRAINING_PRIORITY_VALUES: ReadonlyArray<TrainingPriority> = ['low', 'medium', 'high']
+
+export const TRAINING_PRIORITY_OPTIONS: ReadonlyArray<{ value: TrainingPriority; label: string }> = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+]
+
+export interface BudgetItem {
+  id: string
+  name: string
+  category: BudgetCategory
+  cost: number
+  currency?: string
+  recurrence: BudgetRecurrence
+  months?: number
+  start_month?: string
+  priority: BudgetPriority
+  needed_for_comp_day?: boolean
+  comp_master_id?: string
+  training_priority?: TrainingPriority
+  equipment_condition?: EquipmentCondition
+  equipment_comp_legal?: boolean
+  photo_s3_key?: string | null
+  photo_url?: string | null
+  purchased?: boolean
+  purchased_date?: string | null
+  notes?: string
+  federation_abbreviation?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BudgetConfig {
+  monthly_budget: number
+  currency: string
+  budget_start_month?: string
+}
+
+export interface BudgetStore {
+  config: BudgetConfig
+  items: BudgetItem[]
+}
+
+export interface BudgetTimelineEntry {
+  item_id: string
+  name: string
+  category: BudgetCategory
+  priority: BudgetPriority
+  suggested_month: string
+  cost: number
+  reason: string
+}
+
+export interface BudgetTimelineMonth {
+  month: string
+  due: number
+  budget: number
+  remaining: number
+  entries: BudgetTimelineEntry[]
+}
+
+export interface BudgetTimeline {
+  months: BudgetTimelineMonth[]
+  notes: string[]
 }

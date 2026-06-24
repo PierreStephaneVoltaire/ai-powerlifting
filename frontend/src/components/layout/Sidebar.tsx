@@ -19,6 +19,7 @@ import {
   ClipboardList,
   BookOpen,
   User,
+  Wallet,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -37,6 +38,7 @@ const DESKTOP_NAV_ITEMS: NavItem[] = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/sessions', icon: Calendar, label: 'Sessions' },
   { to: '/designer', icon: ClipboardList, label: 'Designer' },
+  { to: '/budget', icon: Wallet, label: 'Budget' },
   { to: '/analysis', icon: Activity, label: 'Analysis' },
   { to: '/log', icon: BookOpen, label: 'Log', activePaths: ['/log', '/notes', '/supplements', '/biometrics', '/diet'] },
   { to: '/tools', icon: Wrench, label: 'Tools', activePaths: ['/tools', '/rankings'] },
@@ -53,6 +55,7 @@ const MOBILE_MAIN_ITEMS: NavItem[] = [
 
 const MOBILE_MORE_ITEMS: NavItem[] = [
   { to: '/designer', icon: ClipboardList, label: 'Designer' },
+  { to: '/budget', icon: Wallet, label: 'Budget' },
   { to: '/tools', icon: Wrench, label: 'Tools', activePaths: ['/tools', '/rankings'] },
   { to: '/profile', icon: User, label: 'Profile' },
   { to: '/about', icon: Info, label: 'About' },

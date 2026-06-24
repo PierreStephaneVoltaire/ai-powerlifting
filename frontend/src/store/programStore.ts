@@ -77,6 +77,7 @@ interface ProgramState {
 
   // Videos
   removeSessionVideo: (sessionDate: string, videoId: string) => void
+  updateSessionVideo: (sessionDate: string, videoId: string, video: SessionVideo) => void
 }
 
 export const useProgramStore = create<ProgramState>((set, get) => ({
@@ -549,6 +550,18 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         if (s.date !== sessionDate) return s
         const videos = (s.videos || []).filter((v) => v.video_id !== videoId)
         return { ...s, videos: videos.length > 0 ? videos : undefined }
+      })
+      return { program: { ...state.program, sessions } }
+    })
+  },
+
+  updateSessionVideo: (sessionDate, videoId, video) => {
+    set((state) => {
+      if (!state.program) return state
+      const sessions = state.program.sessions.map((s) => {
+        if (s.date !== sessionDate) return s
+        const videos = (s.videos || []).map((v) => v.video_id === videoId ? video : v)
+        return { ...s, videos }
       })
       return { program: { ...state.program, sessions } }
     })

@@ -28,6 +28,12 @@ const LEVEL_VALUES: ReadonlyArray<FederationLevel> = ['national', 'regional']
 
 const SEX_VALUES: ReadonlyArray<FederationSex> = ['male', 'female']
 
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const out = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim())
+  return out.length ? out : undefined
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -200,6 +206,8 @@ function normalizeFederation(raw: unknown): MasterFederation {
     standard_unit: f.standard_unit === 'kg' || f.standard_unit === 'dots' ? f.standard_unit : null,
     standards,
     display_options: normalizeDisplayOptions(f.display_options),
+    parent_federation_abbr: typeof f.parent_federation_abbr === 'string' ? f.parent_federation_abbr : null,
+    membership_group: normalizeStringArray(f.membership_group),
     created_at: typeof f.created_at === 'string' ? f.created_at : new Date().toISOString(),
     updated_at: typeof f.updated_at === 'string' ? f.updated_at : new Date().toISOString(),
   }
@@ -231,6 +239,8 @@ export type FederationUpdate = {
   standard_unit?: 'kg' | 'dots' | null
   standards?: Record<string, FederationStandard>
   display_options?: FederationDisplayOptions | null
+  parent_federation_abbr?: string | null
+  membership_group?: string[]
 }
 
 export async function updateFederation(masterId: string, updates: FederationUpdate): Promise<void> {
