@@ -6,9 +6,8 @@ interface RestTimerState {
   status: RestTimerStatus
   totalSeconds: number
   remainingMs: number
-  runningStartedAt: number | null
-  pausedAccumulatedMs: number
-  pausedAt: number | null
+  deadlineMs: number | null
+  pausedRemainingMs: number | null
   finishedAt: number | null
   dialogOpen: boolean
 
@@ -32,9 +31,8 @@ export const useRestTimerStore = create<RestTimerState>()((set, get) => ({
   status: 'idle',
   totalSeconds: 0,
   remainingMs: 0,
-  runningStartedAt: null,
-  pausedAccumulatedMs: 0,
-  pausedAt: null,
+  deadlineMs: null,
+  pausedRemainingMs: null,
   finishedAt: null,
   dialogOpen: false,
 
@@ -44,35 +42,34 @@ export const useRestTimerStore = create<RestTimerState>()((set, get) => ({
       status: 'running',
       totalSeconds: total,
       remainingMs: total * 1000,
-      runningStartedAt: Date.now(),
-      pausedAccumulatedMs: 0,
-      pausedAt: null,
+      deadlineMs: Date.now() + total * 1000,
+      pausedRemainingMs: null,
       finishedAt: null,
     })
   },
 
   pause: () => {
-    const { status, runningStartedAt, pausedAccumulatedMs, remainingMs } = get()
-    if (status !== 'running' || runningStartedAt === null) return
-    const elapsedSinceRunStart = Date.now() - runningStartedAt
+    const { status, deadlineMs } = get()
+    if (status !== 'running' || deadlineMs === null) return
+    const now = Date.now()
+    const remaining = Math.max(0, deadlineMs - now)
     set({
       status: 'paused',
-      pausedAt: Date.now(),
-      pausedAccumulatedMs: pausedAccumulatedMs + elapsedSinceRunStart,
-      runningStartedAt: null,
-      remainingMs,
+      deadlineMs: null,
+      pausedRemainingMs: remaining,
+      remainingMs: remaining,
     })
   },
 
   resume: () => {
-    const { status, pausedAt, pausedAccumulatedMs, remainingMs } = get()
-    if (status !== 'paused' || pausedAt === null) return
+    const { status, pausedRemainingMs } = get()
+    if (status !== 'paused' || pausedRemainingMs === null) return
+    const now = Date.now()
     set({
       status: 'running',
-      runningStartedAt: Date.now(),
-      pausedAt: null,
-      pausedAccumulatedMs: pausedAccumulatedMs + (Date.now() - pausedAt),
-      remainingMs,
+      deadlineMs: now + pausedRemainingMs,
+      pausedRemainingMs: null,
+      remainingMs: pausedRemainingMs,
     })
   },
 
@@ -81,46 +78,52 @@ export const useRestTimerStore = create<RestTimerState>()((set, get) => ({
       status: 'idle',
       totalSeconds: 0,
       remainingMs: 0,
-      runningStartedAt: null,
-      pausedAccumulatedMs: 0,
-      pausedAt: null,
+      deadlineMs: null,
+      pausedRemainingMs: null,
       finishedAt: null,
     })
   },
 
   addSeconds: (delta) => {
-    const { status, totalSeconds, remainingMs } = get()
+    const { status, deadlineMs, pausedRemainingMs, totalSeconds } = get()
+    const deltaMs = delta * 1000
+    const now = Date.now()
 
-    if (status === 'finished') {
-      const newTotal = 15
+    if (status === 'idle') return
+
+    if (status === 'running' && deadlineMs !== null) {
+      const currentRemaining = Math.max(0, deadlineMs - now)
+      const newRemaining = Math.max(0, currentRemaining + deltaMs)
       set({
-        status: 'running',
-        totalSeconds: newTotal,
-        remainingMs: newTotal * 1000,
-        runningStartedAt: Date.now(),
-        pausedAccumulatedMs: 0,
-        pausedAt: null,
-        finishedAt: null,
+        deadlineMs: now + newRemaining,
+        remainingMs: newRemaining,
+        totalSeconds: Math.max(0, totalSeconds + delta),
       })
       return
     }
 
-    if (status === 'idle') return
-
-    const deltaMs = delta * 1000
-    const capMs = (totalSeconds + 600) * 1000
-    const elapsedMs = Math.max(0, totalSeconds * 1000 - remainingMs)
-    let newRemaining = remainingMs + deltaMs
-
-    if (deltaMs < 0 && newRemaining < 15 * 1000) {
-      newRemaining = 0
-    } else {
-      newRemaining = Math.max(0, Math.min(capMs, newRemaining))
+    if (status === 'paused' && pausedRemainingMs !== null) {
+      const newRemaining = Math.max(0, pausedRemainingMs + deltaMs)
+      set({
+        pausedRemainingMs: newRemaining,
+        remainingMs: newRemaining,
+        totalSeconds: Math.max(0, totalSeconds + delta),
+      })
+      return
     }
 
-    const newTotalSeconds = Math.max(0, Math.ceil((newRemaining + elapsedMs) / 1000))
-
-    set({ remainingMs: newRemaining, totalSeconds: newTotalSeconds })
+    if (status === 'finished') {
+      const newRemaining = Math.max(0, 0 + deltaMs)
+      if (newRemaining <= 0) return
+      set({
+        status: 'running',
+        deadlineMs: now + newRemaining,
+        remainingMs: newRemaining,
+        totalSeconds: Math.ceil(newRemaining / 1000),
+        pausedRemainingMs: null,
+        finishedAt: null,
+      })
+    }
   },
 
   setRemainingMs: (ms) => {
@@ -135,8 +138,8 @@ export const useRestTimerStore = create<RestTimerState>()((set, get) => ({
     set({
       status: 'finished',
       remainingMs: 0,
-      runningStartedAt: null,
-      pausedAt: null,
+      deadlineMs: null,
+      pausedRemainingMs: null,
       finishedAt: Date.now(),
     })
   },
@@ -146,13 +149,14 @@ export const useRestTimerStore = create<RestTimerState>()((set, get) => ({
 }))
 
 export function computeRemainingMs(state: RestTimerState, now: number = Date.now()): number {
-  if (state.status === 'idle' || state.totalSeconds === 0) return 0
+  if (state.status === 'idle') return 0
   if (state.status === 'finished') return 0
-  if (state.status === 'paused') return Math.max(0, state.remainingMs)
-
-  if (state.runningStartedAt === null) return state.remainingMs
-  const elapsed = now - state.runningStartedAt - state.pausedAccumulatedMs
-  return Math.max(0, state.totalSeconds * 1000 - elapsed)
+  if (state.status === 'paused') return Math.max(0, state.pausedRemainingMs ?? 0)
+  if (state.status === 'running') {
+    if (state.deadlineMs === null) return state.remainingMs
+    return Math.max(0, state.deadlineMs - now)
+  }
+  return 0
 }
 
 export function formatRestMs(ms: number): string {

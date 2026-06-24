@@ -5,9 +5,31 @@ import path from 'path'
 
 const devApiProxy = process.env.VITE_DEV_API_PROXY || 'https://dev.nolift.training'
 
+const cloudfrontBaseUrl = process.env.VITE_CLOUDFRONT_MEDIA_BASE_URL || ''
+const cloudfrontOrigin = (() => {
+  if (!cloudfrontBaseUrl) return ''
+  try {
+    const url = new URL(cloudfrontBaseUrl)
+    return url.port ? `${url.hostname}:${url.port}` : url.hostname
+  } catch {
+    return ''
+  }
+})()
+
+function cspPlugin() {
+  return {
+    name: 'csp-cloudfront-inject',
+    transformIndexHtml(html: string): string {
+      if (!cloudfrontOrigin) return html
+      return html.split('%CLOUDFRONT_DOMAIN%').join(cloudfrontOrigin)
+    },
+  }
+}
+
 export default defineConfig({
   base: '/',
   plugins: [
+    cspPlugin(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
