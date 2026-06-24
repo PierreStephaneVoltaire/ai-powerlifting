@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { invokeToolDirect } from '../utils/agent'
 import { logger } from '../utils/logger'
 import * as programController from '../controllers/programController'
+import * as competitionController from '../controllers/competitionController'
+import * as federationsController from '../controllers/federationsController'
 import * as weightController from '../controllers/weightController'
 import type { AthleteGoal, Program, WeightEntry } from '@powerlifting/types'
 import {
@@ -1097,9 +1099,49 @@ analyticsRouter.get('/program-evaluation', async (req, res) => {
 analyticsRouter.post('/budget/timeline', async (req, res) => {
   try {
     const body = req.body ?? {}
+    const pk = req.mapped_pk!
+
+    let competitions: unknown[] = []
+    let federation_memberships: unknown[] = []
+    try {
+      const userComps = await competitionController.listUserCompetitions(pk)
+      competitions = userComps
+        .filter((c) => c.user_status !== 'completed' && c.user_status !== 'skipped')
+        .map((c) => ({
+          master_id: c.master_id,
+          name: c.name,
+          start_date: c.start_date,
+          user_status: c.user_status,
+        }))
+    } catch (compErr) {
+      logger.warn({ err: compErr, pk }, 'Failed to load competitions for budget timeline')
+    }
+    try {
+      const library = await federationsController.getFederationLibrary(pk)
+      const masterFeds = await federationsController.listFederations()
+      const byAbbr = new Map(masterFeds.filter((f) => f.abbreviation).map((f) => [f.abbreviation!, f]))
+      federation_memberships = library.federations
+        .filter((f) => f.membership_paid || f.membership_cost != null)
+        .map((f) => {
+          const master = f.abbreviation ? byAbbr.get(f.abbreviation) : undefined
+          return {
+            abbreviation: f.abbreviation,
+            parent_federation_abbr: master?.parent_federation_abbr ?? null,
+            membership_group: master?.membership_group ?? [],
+            membership_paid: f.membership_paid ?? false,
+            membership_cost: f.membership_cost ?? null,
+            membership_paid_date: f.membership_paid_date ?? null,
+          }
+        })
+    } catch (fedErr) {
+      logger.warn({ err: fedErr, pk }, 'Failed to load federation memberships for budget timeline')
+    }
+
     const data = await invokeToolDirect('budget_priority_timeline', {
       ...body,
-      pk: req.mapped_pk,
+      competitions,
+      federation_memberships,
+      pk,
     })
     res.json({ data, error: null })
   } catch (err) {
