@@ -76,14 +76,11 @@ function stripUndefined(value: any): any {
   return out
 }
 
-export const getProxyUrl = (key: string) => `${process.env.CLOUDFRONT_MEDIA_BASE_URL}/${key}`
-
 export function transformVideo(video: any): any {
-  return {
-    ...video,
-    video_url: video.s3_key ? getProxyUrl(video.s3_key) : video.video_url,
-    thumbnail_url: video.thumbnail_s3_key ? getProxyUrl(video.thumbnail_s3_key) : video.thumbnail_url,
-  }
+  // Videos are served directly from CloudFront by the frontend, which resolves
+  // s3_key / thumbnail_s3_key into full URLs at render time. The backend no
+  // longer transforms S3 keys into proxy URLs.
+  return video
 }
 
 function publicSession(item: RawSessionItem, phases: Phase[]): Session {

@@ -161,6 +161,22 @@ jobs:
       - name: Login to public ECR
         run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
+      # Read the CloudFront media base URL from the terraform remote state so
+      # the frontend build can bake it into the CSP media-src allowlist. The
+      # state already reflects the applied CloudFront distribution from prior
+      # terraform runs, so this does not require a fresh apply in this run.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Read CloudFront media base URL from terraform output
+        id: tfout
+        working-directory: terraform
+        run: |
+          terraform init -input=false
+          MEDIA_URL=$(terraform output -raw cloudfront_media_base_url)
+          echo "cloudfront_media_base_url=$MEDIA_URL" >> "$GITHUB_OUTPUT"
+
       - uses: hashicorp/setup-packer@v3
         with:
           version: 1.13.x
@@ -184,6 +200,7 @@ jobs:
             -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-app-frontend" \
             -var "image_tag=${{ steps.tag.outputs.value }}" \
             -var "api_url=/api" \
+            -var "cloudfront_media_base_url=${{ steps.tfout.outputs.cloudfront_media_base_url }}" \
             powerlifting-frontend.pkr.hcl
 
   terraform-validate:

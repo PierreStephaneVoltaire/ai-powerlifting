@@ -349,7 +349,9 @@ export interface SessionVideo {
   video_id: string
   s3_key: string
   thumbnail_s3_key?: string
-  video_url: string
+  /** @deprecated Frontend now resolves this from s3_key via VITE_CLOUDFRONT_MEDIA_BASE_URL */
+  video_url?: string
+  /** @deprecated Frontend now resolves this from thumbnail_s3_key via VITE_CLOUDFRONT_MEDIA_BASE_URL */
   thumbnail_url?: string
   exercise_name?: string
   set_number?: number

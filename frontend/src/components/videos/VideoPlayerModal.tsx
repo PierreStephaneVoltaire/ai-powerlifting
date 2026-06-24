@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useProgramStore } from '@/store/programStore'
 import * as api from '@/api/client'
+import { getMediaUrl } from '@/utils/media'
 import type { VideoLibraryItem } from '@powerlifting/types'
 
 interface VideoPlayerModalProps {
@@ -57,7 +58,7 @@ export default function VideoPlayerModal({ item, onClose, onDeleted, readOnly = 
       <Box bg="black">
         <Box
           component="video"
-          src={video.video_url}
+          src={getMediaUrl(video.s3_key)}
           controls
           autoPlay
           style={{ width: '100%', maxHeight: '70vh', display: 'block' }}

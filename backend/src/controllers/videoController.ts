@@ -4,7 +4,7 @@ import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { docClient, TABLE } from '../db/dynamo'
 import { AppError } from '../middleware/errorHandler'
-import { listSessions, patchSessionByDate, transformVideo, getProxyUrl } from '../services/sessionStore'
+import { listSessions, patchSessionByDate, transformVideo } from '../services/sessionStore'
 import { sortVideos } from '../utils/videoSort'
 import type { Exercise, Phase, Session, SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
 
@@ -115,7 +115,6 @@ export async function uploadSessionVideo(
   const video: SessionVideo = {
     video_id: videoId,
     s3_key: s3Key,
-    video_url: getProxyUrl(s3Key),
     ...(exerciseName !== undefined && { exercise_name: exerciseName }),
     ...(setNumber !== undefined && { set_number: setNumber }),
     ...(notes !== undefined && { notes }),
@@ -209,7 +208,6 @@ export async function updateVideoThumbnail(
 
   videos[videoIndex] = {
     ...videos[videoIndex],
-    thumbnail_url: getProxyUrl(thumbnailS3Key),
     thumbnail_s3_key: thumbnailS3Key,
     thumbnail_status: status,
   }

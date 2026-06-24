@@ -15,7 +15,6 @@ import {
   type ProfileVisibility,
 } from '../services/userSettings'
 import { AppError } from '../middleware/errorHandler'
-import { getProxyUrl } from '../services/sessionStore'
 
 const S3_BUCKET = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
 const S3_REGION = process.env.AWS_REGION || 'ca-central-1'
@@ -44,9 +43,18 @@ function avatarExtension(file: Express.Multer.File): string {
 
 function profileAvatarKeyFromUrl(value: string | null | undefined): string | null {
   if (!value) return null
-  const prefix = '/api/videos/media/'
-  if (!value.startsWith(`${prefix}profiles/`)) return null
-  return decodeURIComponent(value.slice(prefix.length))
+  // Legacy avatar URLs were full CloudFront URLs like
+  // "https://dXXX.cloudfront.net/profiles/...". Extract the S3 key portion.
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value)
+      return decodeURIComponent(url.pathname.slice(1))
+    } catch {
+      return null
+    }
+  }
+  // New-style avatar URLs are raw S3 keys (e.g. "profiles/..."). Return as-is.
+  return value.startsWith('profiles/') ? value : null
 }
 
 function s3SafeSegment(value: string): string {
@@ -178,7 +186,7 @@ export async function updateAvatarHandler(req: Request, res: Response): Promise<
     throw new AppError('Failed to upload profile picture', 500)
   }
 
-  const avatarUrl = getProxyUrl(s3Key)
+  const avatarUrl = s3Key
   const settings = await updateAvatarUrl(req.user.username, avatarUrl)
   const previousKey = profileAvatarKeyFromUrl(existing.avatar_url)
   if (previousKey && previousKey !== s3Key) {

@@ -21,6 +21,12 @@ variable "api_url" {
   default = "/api"
 }
 
+variable "cloudfront_media_base_url" {
+  type        = string
+  default     = ""
+  description = "CloudFront distribution base URL (https://<domain>) used as VITE_CLOUDFRONT_MEDIA_BASE_URL for CSP media-src injection at build time"
+}
+
 source "docker" "powerlifting_frontend" {
   image    = "public.ecr.aws/docker/library/node:20-alpine"
   commit   = true
@@ -54,10 +60,10 @@ build {
       "if [ -f package.json ] && grep -q '\"workspaces\"' package.json; then",
       "  npm ci || npm install",
       "  if [ -f packages/types/package.json ]; then npm run build --workspace=packages/types || true; fi",
-      "  VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} npm run build --workspace=frontend",
+      "  VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} VITE_CLOUDFRONT_MEDIA_BASE_URL=${var.cloudfront_media_base_url} npm run build --workspace=frontend",
       "  cp -r frontend/dist /app/dist",
       "else",
-      "  cd frontend && npm ci || npm install && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} npm run build && cp -r dist /app/dist",
+      "  cd frontend && npm ci || npm install && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} VITE_CLOUDFRONT_MEDIA_BASE_URL=${var.cloudfront_media_base_url} npm run build && cp -r dist /app/dist",
       "fi",
       "npm install -g serve"
     ]

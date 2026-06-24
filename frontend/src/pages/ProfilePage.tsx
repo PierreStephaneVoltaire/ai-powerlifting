@@ -36,6 +36,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { calculateDotsFromLifts } from '@/utils/dots'
+import { resolveAvatarUrl } from '@/utils/media'
 import { toDisplayUnit } from '@/utils/units'
 import VideoCard from '@/components/videos/VideoCard'
 import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
@@ -379,7 +380,7 @@ export default function ProfilePage() {
           <Paper withBorder p="lg" radius="md" className="if-card">
             <Stack gap="md">
               <Group gap="md" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
-                <Avatar src={publicProfile.avatar_url} alt={publicProfile.display_name} radius="xl" size={60}>
+                <Avatar src={resolveAvatarUrl(publicProfile.avatar_url)} alt={publicProfile.display_name} radius="xl" size={60}>
                   {initials(publicProfile.display_name)}
                 </Avatar>
                 <Stack gap={8} style={{ minWidth: 0 }}>
@@ -539,7 +540,7 @@ export default function ProfilePage() {
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <Group gap="md" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
               <Stack gap={6} align="center" style={{ flexShrink: 0 }}>
-                <Avatar src={settings?.avatar_url ?? user.avatar} alt={resolvedName} radius="xl" size={60}>
+                <Avatar src={resolveAvatarUrl(settings?.avatar_url) || user.avatar} alt={resolvedName} radius="xl" size={60}>
                   {initials(resolvedName)}
                 </Avatar>
                 <FileButton

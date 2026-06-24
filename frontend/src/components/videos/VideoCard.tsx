@@ -2,6 +2,7 @@ import { Box, Text, UnstyledButton } from '@mantine/core'
 import { Play } from 'lucide-react'
 import type { VideoLibraryItem } from '@powerlifting/types'
 import { useSettingsStore } from '@/store/settingsStore'
+import { getMediaUrl } from '@/utils/media'
 import { displayWeight } from '@/utils/units'
 
 interface VideoCardProps {
@@ -12,7 +13,8 @@ interface VideoCardProps {
 export default function VideoCard({ item, onClick }: VideoCardProps) {
   const { unit } = useSettingsStore()
   const { video, session_date, day, week_number, phase_name, exercise_sets, exercise_reps, exercise_kg } = item
-  const hasThumbnail = video.thumbnail_url && video.thumbnail_status === 'ready'
+  const thumbnailUrl = getMediaUrl(video.thumbnail_s3_key)
+  const hasThumbnail = !!thumbnailUrl && video.thumbnail_status === 'ready'
   const load = typeof exercise_kg === 'number' && exercise_kg > 0
     ? `${displayWeight(exercise_kg, unit)} x ${exercise_reps || '--'}`
     : exercise_sets && exercise_reps
@@ -24,7 +26,7 @@ export default function VideoCard({ item, onClick }: VideoCardProps) {
       <Box className="if-video-tile">
         <Box className="if-video-thumb">
           {hasThumbnail ? (
-            <Box component="img" src={video.thumbnail_url} alt={video.exercise_name} />
+            <Box component="img" src={thumbnailUrl} alt={video.exercise_name} />
           ) : (
             <Box style={{ alignItems: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <Play size={28} />

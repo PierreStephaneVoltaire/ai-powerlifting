@@ -11,6 +11,7 @@ import { Play, Trash2, X, Loader2, Film, AlertCircle } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useProgramStore } from '@/store/programStore'
 import * as api from '@/api/client'
+import { getMediaUrl } from '@/utils/media'
 import VideoPlayer from './VideoPlayer'
 import type { Session, SessionVideo } from '@powerlifting/types'
 
@@ -78,10 +79,10 @@ export default function VideoGrid({ session }: VideoGridProps) {
                 >
                   <AlertCircle size={24} color="var(--mantine-color-red-6)" />
                 </Center>
-              ) : video.thumbnail_url ? (
+              ) : getMediaUrl(video.thumbnail_s3_key) ? (
                 <Box
                   component="img"
-                  src={video.thumbnail_url}
+                  src={getMediaUrl(video.thumbnail_s3_key)}
                   alt={video.exercise_name || 'Video thumbnail'}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
@@ -140,8 +141,8 @@ export default function VideoGrid({ session }: VideoGridProps) {
         {playingVideo && (
           <Box>
             <VideoPlayer
-              src={playingVideo.video_url}
-              thumbnailUrl={playingVideo.thumbnail_url}
+              src={getMediaUrl(playingVideo.s3_key)}
+              thumbnailUrl={getMediaUrl(playingVideo.thumbnail_s3_key)}
             />
 
             {/* Video Info */}

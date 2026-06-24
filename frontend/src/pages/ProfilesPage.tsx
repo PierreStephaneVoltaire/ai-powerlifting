@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, Film, Search, User, Users } from 'lucide-react'
 import { fetchProfile, searchProfiles, type PublicProfile } from '@/api/profiles'
 import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { resolveAvatarUrl } from '@/utils/media'
 import { toDisplayUnit } from '@/utils/units'
 import VideoCard from '@/components/videos/VideoCard'
 import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
@@ -22,7 +23,7 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
     <Paper component={Link} to={`/profiles/${profile.nickname}`} p="md" radius="md" withBorder className="if-card" style={{ textDecoration: 'none' }}>
       <Stack gap="sm">
         <Group gap="sm" align="center" wrap="nowrap">
-          <Avatar src={profile.avatar_url} alt={profile.display_name} radius="xl">
+          <Avatar src={resolveAvatarUrl(profile.avatar_url)} alt={profile.display_name} radius="xl">
             {initials(profile.display_name)}
           </Avatar>
           <Stack gap={0} style={{ minWidth: 0 }}>
@@ -207,7 +208,7 @@ export function PublicProfilePage() {
         <Stack gap="md">
           <Group justify="space-between" align="flex-start">
             <Group gap="md" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
-              <Avatar src={profile.avatar_url} alt={profile.display_name} radius="xl" size={60}>
+              <Avatar src={resolveAvatarUrl(profile.avatar_url)} alt={profile.display_name} radius="xl" size={60}>
                 {initials(profile.display_name)}
               </Avatar>
               <Stack gap={6} style={{ minWidth: 0 }}>
