@@ -1131,6 +1131,7 @@ analyticsRouter.post('/budget/timeline', async (req, res) => {
             membership_paid: f.membership_paid ?? false,
             membership_cost: f.membership_cost ?? null,
             membership_paid_date: f.membership_paid_date ?? null,
+            membership_expiry_date: f.membership_expiry_date ?? null,
           }
         })
     } catch (fedErr) {

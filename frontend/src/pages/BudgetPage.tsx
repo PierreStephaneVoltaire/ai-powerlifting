@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { Wallet, Plus, Trash2, Save, Camera, AlertTriangle, CheckCircle2, CalendarClock, Sparkles, Loader2 } from 'lucide-react'
+import { Wallet, Plus, Trash2, Save, Camera, AlertTriangle, CheckCircle2, CalendarClock, Sparkles, Loader2, Info } from 'lucide-react'
 import {
   ActionIcon,
   Badge,
@@ -12,6 +12,7 @@ import {
   FileButton,
   Group,
   Image as MantineImage,
+  MultiSelect,
   NumberInput,
   Paper,
   Progress,
@@ -35,14 +36,13 @@ import { useCompetitionsStore } from '@/store/competitionsStore'
 import { useFederationStore } from '@/store/federationStore'
 import { fetchFederations, putBudget as apiPutBudget, uploadBudgetItemPhoto, deleteBudgetItemPhoto, fetchBudgetTimeline } from '@/api/client'
 import { getMediaUrl } from '@/utils/media'
-import ReadOnlyBanner from '@/components/shared/ReadOnlyBanner'
+import { useProgramStore } from '@/store/programStore'
 import type {
   BudgetItem,
   BudgetCategory,
   BudgetPriority,
   BudgetRecurrence,
   EquipmentCondition,
-  TrainingPriority,
   BudgetTimeline as BudgetTimelineType,
   MasterFederation,
   UserCompetition,
@@ -52,12 +52,17 @@ import {
   BUDGET_CATEGORY_OPTIONS,
   BUDGET_RECURRENCE_OPTIONS,
   EQUIPMENT_CONDITION_OPTIONS,
-  TRAINING_PRIORITY_OPTIONS,
 } from '@powerlifting/types'
 import { DatePickerInput } from '@mantine/dates'
 
 function newItemId(): string {
   return `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
+}
+
+function defaultRecurrence(category: BudgetCategory): BudgetRecurrence {
+  return category === 'gym_membership' || category === 'supplement' || category === 'federation_membership'
+    ? 'recurring'
+    : 'one_time'
 }
 
 function makeBlankItem(category: BudgetCategory): BudgetItem {
@@ -67,11 +72,44 @@ function makeBlankItem(category: BudgetCategory): BudgetItem {
     name: '',
     category,
     cost: 0,
-    recurrence: category === 'gym_membership' || category === 'supplement' ? 'recurring' : 'one_time',
+    recurrence: defaultRecurrence(category),
     purchased: false,
     created_at: now,
     updated_at: now,
   }
+}
+
+function parseDateValue(value?: string | null): string | null {
+  if (typeof value !== 'string' || !value) return null
+  const [y, m, d] = value.slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  const date = new Date(y, m - 1, d)
+  return Number.isNaN(date.getTime()) ? null : value.slice(0, 10)
+}
+
+function toPickerValue(value?: string | null): string | null {
+  return parseDateValue(value)
+}
+
+function fromPickerValue(value: string | null): string | null {
+  if (!value) return null
+  const parsed = parseDateValue(value)
+  return parsed ?? null
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function HelpLabel({ label, help }: { label: string; help: string }) {
+  return (
+    <Group gap={4} align="center" style={{ cursor: 'help' }}>
+      <Text size="xs" c="dimmed">{label}</Text>
+      <Tooltip label={help} position="top-start" multiline w={240} withArrow>
+        <Info size={12} color="var(--mantine-color-gray-6)" />
+      </Tooltip>
+    </Group>
+  )
 }
 
 function monthKey(date: Date): string {
@@ -105,19 +143,38 @@ function monthCostForItem(item: BudgetItem, month: string): number {
   return itemActiveInMonth(item, month) ? item.cost : 0
 }
 
-function buildMonths(items: BudgetItem[], count: number): string[] {
+function buildMonths(items: BudgetItem[], programStart?: string, programEnd?: string): string[] {
   const today = new Date()
-  const months: string[] = []
   const starts = items.map((i) => monthOf(i.start_date)).filter(Boolean).sort()
-  let base = new Date(today.getFullYear(), today.getMonth(), 1)
-  if (starts.length) {
-    const [y, m] = starts[0].split('-').map(Number)
-    const start = new Date(y, m - 1, 1)
-    if (start.getTime() < base.getTime()) base = start
+
+  let base: Date | null = null
+  if (programStart) {
+    const [y, m] = programStart.slice(0, 7).split('-').map(Number)
+    if (y && m) base = new Date(y, m - 1, 1)
   }
-  for (let i = 0; i < count; i++) {
-    months.push(monthKey(base))
-    base = new Date(base.getFullYear(), base.getMonth() + 1, 1)
+  if (!base) {
+    base = new Date(today.getFullYear(), today.getMonth(), 1)
+    if (starts.length) {
+      const [y, m] = starts[0].split('-').map(Number)
+      const start = new Date(y, m - 1, 1)
+      if (start.getTime() < base.getTime()) base = start
+    }
+  }
+
+  const end: Date | null = programEnd
+    ? (() => {
+        const [y, m] = programEnd.slice(0, 7).split('-').map(Number)
+        return y && m ? new Date(y, m - 1, 1) : null
+      })()
+    : null
+
+  const months: string[] = []
+  const MAX_MONTHS = 36
+  let cursor = base
+  for (let i = 0; i < MAX_MONTHS; i++) {
+    months.push(monthKey(cursor))
+    if (end && cursor.getTime() >= end.getTime()) break
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
   }
   return months
 }
@@ -139,6 +196,10 @@ export default function BudgetPage() {
   const { config, items, isLoading, loaded, load, save } = useBudgetStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const { library, loadLibrary, saveLibrary } = useFederationStore()
+  const { program } = useProgramStore()
+
+  const programStart = program?.meta?.program_start
+  const programEnd = program?.meta?.comp_date
 
   const [draftItems, setDraftItems] = useState<BudgetItem[]>([])
   const [draftConfig, setDraftConfig] = useState<BudgetConfig>(config)
@@ -175,7 +236,7 @@ export default function BudgetPage() {
     ...upcomingComps.map((c) => ({ value: c.master_id, label: `${c.name} (${c.start_date})` })),
   ], [upcomingComps])
 
-  const months = useMemo(() => buildMonths(draftItems, 6), [draftItems])
+  const months = useMemo(() => buildMonths(draftItems, programStart, programEnd), [draftItems, programStart, programEnd])
   const spentMap = useMemo(() => spentByMonth(draftItems), [draftItems])
 
   const monthlyRows = useMemo(() => months.map((m) => {
@@ -267,7 +328,6 @@ export default function BudgetPage() {
 
   return (
     <Container size="xl" pb={40}>
-      <ReadOnlyBanner />
       <Stack gap="md">
         <Group justify="space-between" align="flex-end">
           <Stack gap={2}>
@@ -331,7 +391,7 @@ export default function BudgetPage() {
               library={library}
               readOnly={readOnly}
               coverageGroups={fedMembershipCoverage}
-              onPay={(masterFed, paid, cost, paidDate) => {
+              onPay={(masterFed, paid, cost, paidDate, expiryDate) => {
                 if (!library) return
                 const matchKey = masterFed.abbreviation ?? masterFed.name
                 const existingIdx = library.federations.findIndex(
@@ -350,6 +410,7 @@ export default function BudgetPage() {
                   membership_paid: paid,
                   membership_cost: cost,
                   membership_paid_date: paidDate,
+                  membership_expiry_date: expiryDate,
                   updated_at: new Date().toISOString(),
                 }
                 const nextFeds = existingIdx >= 0
@@ -431,7 +492,7 @@ function OverviewTab({ config, monthlyRows, totalRecurring, itemsCount, overdueC
 
       <Paper withBorder p="md" radius="md">
         <Group justify="space-between" mb="sm">
-          <Text fw={600}>Budget vs due — next {months.length} months</Text>
+          <Text fw={600}>Budget vs due — {months.length} months</Text>
           {config.monthly_budget > 0 && (
             <Text size="xs" c="dimmed">cap ${config.monthly_budget.toFixed(2)}/mo</Text>
           )}
@@ -532,9 +593,37 @@ interface ItemCardProps {
   onPhotoDelete: (itemId: string) => void
 }
 
+const RECURRENCE_LOCKED: ReadonlyArray<BudgetCategory> = [
+  'competition_entry',
+  'transportation',
+]
+
 function ItemCard({ item, readOnly, compOptions, onUpdate, onRemove, onPhotoUpload, onPhotoDelete }: ItemCardProps) {
   const photoUrl = getMediaUrl(item.photo_s3_key)
-  const isEquipment = item.category === 'equipment'
+  const recurrenceLocked = RECURRENCE_LOCKED.includes(item.category)
+  const hasCompLink = ['competition_entry', 'transportation', 'equipment', 'supplement'].includes(item.category)
+
+  const onDateChange = (field: 'start_date' | 'end_date' | 'purchased_date') => (value: string | null) => {
+    onUpdate(item.id, { [field]: fromPickerValue(value) ?? undefined } as Partial<BudgetItem>)
+  }
+
+  const onPurchasedToggle = (checked: boolean) => {
+    onUpdate(item.id, {
+      purchased: checked,
+      purchased_date: checked ? (item.purchased_date ?? todayIso()) : null,
+    })
+  }
+
+  const onCategoryChange = (value: string | null) => {
+    const next = (value as BudgetCategory) ?? 'equipment'
+    const patch: Partial<BudgetItem> = { category: next }
+    if (RECURRENCE_LOCKED.includes(next)) patch.recurrence = 'one_time'
+    else if (next === 'gym_membership' || next === 'supplement' || next === 'federation_membership') patch.recurrence = 'recurring'
+    onUpdate(item.id, patch)
+  }
+
+  const dateInputLabel = item.recurrence === 'one_time' ? 'Date needed' : 'Start date'
+
   return (
     <Card withBorder radius="md" padding="md">
       <Group align="flex-start" gap="md" wrap="nowrap">
@@ -561,46 +650,78 @@ function ItemCard({ item, readOnly, compOptions, onUpdate, onRemove, onPhotoUplo
           </Group>
 
           <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
-            <Select label="Category" size="xs" value={item.category} data={BUDGET_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => onUpdate(item.id, { category: (v as BudgetCategory) ?? 'equipment' })} disabled={readOnly} />
-            <Select label="Recurrence" size="xs" value={item.recurrence} data={BUDGET_RECURRENCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => onUpdate(item.id, { recurrence: (v as BudgetRecurrence) ?? 'one_time' })} disabled={readOnly} />
-            <NumberInput label="Cost" size="xs" value={item.cost} onChange={(v) => onUpdate(item.id, { cost: typeof v === 'number' ? v : 0 })} min={0} decimalScale={2} hideControls disabled={readOnly} />
-            <Select label="For competition" size="xs" value={item.comp_master_id ?? ''} data={compOptions} onChange={(v) => onUpdate(item.id, { comp_master_id: v || undefined })} disabled={readOnly} />
+            <Select
+              label="Category"
+              size="xs"
+              value={item.category}
+              data={BUDGET_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={onCategoryChange}
+              disabled={readOnly}
+            />
+            <Select
+              label="Recurrence"
+              description={recurrenceLocked ? 'One-time for this category' : undefined}
+              size="xs"
+              value={item.recurrence}
+              data={BUDGET_RECURRENCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => onUpdate(item.id, { recurrence: (v as BudgetRecurrence) ?? 'one_time' })}
+              disabled={readOnly || recurrenceLocked}
+            />
+            <NumberInput
+              label="Cost"
+              description="Total in your currency"
+              size="xs"
+              value={item.cost}
+              onChange={(v) => onUpdate(item.id, { cost: typeof v === 'number' ? v : 0 })}
+              min={0}
+              decimalScale={2}
+              hideControls
+              disabled={readOnly}
+            />
+            {hasCompLink && (
+              <MultiSelect
+                label={<HelpLabel label="For competitions" help="The meets this cost is tied to. Leave empty if it is general training gear or a recurring cost not tied to a specific meet." />}
+                size="xs"
+                value={item.comp_master_ids ?? []}
+                data={compOptions}
+                onChange={(v) => onUpdate(item.id, { comp_master_ids: v.length ? v : undefined })}
+                disabled={readOnly}
+                clearable
+                searchable
+              />
+            )}
           </SimpleGrid>
 
           <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
             <DatePickerInput
-              label={item.recurrence === 'one_time' ? 'Purchase date' : 'Start date'}
+              label={dateInputLabel}
+              description={item.recurrence === 'one_time' ? 'When the cost is due / planned' : 'First month the recurring cost applies'}
               size="xs"
               valueFormat="YYYY-MM-DD"
-              value={item.start_date ?? null}
-              onChange={(d) => onUpdate(item.id, { start_date: (d as string | null) ?? undefined })}
+              value={toPickerValue(item.start_date)}
+              onChange={onDateChange('start_date')}
               disabled={readOnly}
               clearable
             />
             {item.recurrence === 'recurring' && (
               <DatePickerInput
                 label="End date"
+                description="Last month the recurring cost applies (blank = ongoing)"
                 size="xs"
                 valueFormat="YYYY-MM-DD"
-                value={item.end_date ?? null}
-                onChange={(d) => onUpdate(item.id, { end_date: (d as string | null) ?? undefined })}
+                value={toPickerValue(item.end_date)}
+                onChange={onDateChange('end_date')}
                 disabled={readOnly}
                 clearable
               />
             )}
-            <Select label="Training priority" size="xs" value={item.training_priority ?? ''} data={[{ value: '', label: '—' }, ...TRAINING_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]} onChange={(v) => onUpdate(item.id, { training_priority: (v as TrainingPriority) || undefined })} disabled={readOnly} />
           </SimpleGrid>
 
-          {isEquipment && (
-            <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs">
-              <Select label="Condition" size="xs" value={item.equipment_condition ?? 'unknown'} data={EQUIPMENT_CONDITION_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => onUpdate(item.id, { equipment_condition: (v as EquipmentCondition) ?? 'unknown' })} disabled={readOnly} />
-              <Switch label="Comp-legal" checked={item.equipment_comp_legal ?? false} onChange={(e) => onUpdate(item.id, { equipment_comp_legal: e.currentTarget.checked })} disabled={readOnly} />
-            </SimpleGrid>
-          )}
+          <CategoryFields item={item} readOnly={readOnly} onUpdate={onUpdate} />
 
-          <Group gap="md">
+          <Group gap="md" align="center">
             <Switch
-              label="Needed for comp day"
+              label={<HelpLabel label="Needed for comp day" help="This item must be available on competition day itself (e.g. singlet, meet-day supplements, travel to the venue)." />}
               checked={item.needed_for_comp_day ?? false}
               onChange={(e) => onUpdate(item.id, { needed_for_comp_day: e.currentTarget.checked })}
               disabled={readOnly}
@@ -608,16 +729,60 @@ function ItemCard({ item, readOnly, compOptions, onUpdate, onRemove, onPhotoUplo
             <Switch
               label="Purchased"
               checked={item.purchased ?? false}
-              onChange={(e) => onUpdate(item.id, { purchased: e.currentTarget.checked, purchased_date: e.currentTarget.checked ? new Date().toISOString().slice(0, 10) : null })}
+              onChange={(e) => onPurchasedToggle(e.currentTarget.checked)}
               disabled={readOnly}
             />
           </Group>
+
+          {item.purchased && (
+            <DatePickerInput
+              label="Purchased date"
+              description="When you actually paid. Used for the spent column."
+              size="xs"
+              valueFormat="YYYY-MM-DD"
+              value={toPickerValue(item.purchased_date)}
+              onChange={onDateChange('purchased_date')}
+              disabled={readOnly}
+              clearable
+              w={200}
+            />
+          )}
 
           <Textarea label="Notes" size="xs" value={item.notes ?? ''} onChange={(e) => onUpdate(item.id, { notes: e.currentTarget.value })} disabled={readOnly} autosize minRows={1} />
         </Stack>
       </Group>
     </Card>
   )
+}
+
+interface CategoryFieldsProps {
+  item: BudgetItem
+  readOnly: boolean
+  onUpdate: (id: string, patch: Partial<BudgetItem>) => void
+}
+
+function CategoryFields({ item, readOnly, onUpdate }: CategoryFieldsProps) {
+  if (item.category === 'equipment') {
+    return (
+      <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs">
+        <Select
+          label={<HelpLabel label="Condition" help="Current state of the gear. The AI timeline weighs worn or replacement-needed items higher." />}
+          size="xs"
+          value={item.equipment_condition ?? 'unknown'}
+          data={EQUIPMENT_CONDITION_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          onChange={(v) => onUpdate(item.id, { equipment_condition: (v as EquipmentCondition) ?? 'unknown' })}
+          disabled={readOnly}
+        />
+        <Switch
+          label={<HelpLabel label="Comp-legal" help="Checked if this gear is allowed under your federation's rules on competition day." />}
+          checked={item.equipment_comp_legal ?? false}
+          onChange={(e) => onUpdate(item.id, { equipment_comp_legal: e.currentTarget.checked })}
+          disabled={readOnly}
+        />
+      </SimpleGrid>
+    )
+  }
+  return null
 }
 
 interface PhotoSlotProps {
@@ -673,7 +838,7 @@ interface FederationTabProps {
   library: import('@powerlifting/types').FederationLibrary | null
   readOnly: boolean
   coverageGroups: string[][]
-  onPay: (masterFed: MasterFederation, paid: boolean, cost: number | null, paidDate: string | null) => void
+  onPay: (masterFed: MasterFederation, paid: boolean, cost: number | null, paidDate: string | null, expiryDate: string | null) => void
 }
 
 function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }: FederationTabProps) {
@@ -731,6 +896,7 @@ function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }:
             <Table.Th>Cost</Table.Th>
             <Table.Th>Paid</Table.Th>
             <Table.Th>Paid date</Table.Th>
+            <Table.Th>Expiry</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -746,7 +912,7 @@ function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }:
                   <NumberInput
                     size="xs"
                     value={user?.membership_cost ?? 0}
-                    onChange={(v) => onPay(master, user?.membership_paid ?? false, typeof v === 'number' ? v : 0, user?.membership_paid_date ?? null)}
+                    onChange={(v) => onPay(master, user?.membership_paid ?? false, typeof v === 'number' ? v : 0, user?.membership_paid_date ?? null, user?.membership_expiry_date ?? null)}
                     disabled={readOnly}
                     min={0}
                     decimalScale={2}
@@ -757,11 +923,22 @@ function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }:
                 <Table.Td>
                   <Switch
                     checked={user?.membership_paid ?? false}
-                    onChange={(e) => onPay(master, e.currentTarget.checked, user?.membership_cost ?? 0, e.currentTarget.checked ? new Date().toISOString().slice(0, 10) : null)}
+                    onChange={(e) => onPay(master, e.currentTarget.checked, user?.membership_cost ?? 0, e.currentTarget.checked ? new Date().toISOString().slice(0, 10) : null, user?.membership_expiry_date ?? null)}
                     disabled={readOnly}
                   />
                 </Table.Td>
                 <Table.Td>{user?.membership_paid_date ?? '—'}</Table.Td>
+                <Table.Td>
+                  <DatePickerInput
+                    size="xs"
+                    valueFormat="YYYY-MM-DD"
+                    value={user?.membership_expiry_date ?? null}
+                    onChange={(d) => onPay(master, user?.membership_paid ?? false, user?.membership_cost ?? 0, user?.membership_paid_date ?? null, (d as string | null) ?? null)}
+                    disabled={readOnly}
+                    clearable
+                    w={130}
+                  />
+                </Table.Td>
               </Table.Tr>
             )
           })}

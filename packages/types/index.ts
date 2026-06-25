@@ -141,6 +141,7 @@ export interface FederationRecord {
   membership_paid?: boolean
   membership_cost?: number | null
   membership_paid_date?: string | null
+  membership_expiry_date?: string | null
   created_at: string
   updated_at: string
 }
@@ -1157,6 +1158,7 @@ export type BudgetCategory =
   | 'gym_membership'
   | 'federation_membership'
   | 'competition_entry'
+  | 'transportation'
 
 export const BUDGET_CATEGORY_VALUES: ReadonlyArray<BudgetCategory> = [
   'equipment',
@@ -1164,6 +1166,7 @@ export const BUDGET_CATEGORY_VALUES: ReadonlyArray<BudgetCategory> = [
   'gym_membership',
   'federation_membership',
   'competition_entry',
+  'transportation',
 ]
 
 export const BUDGET_CATEGORY_OPTIONS: ReadonlyArray<{ value: BudgetCategory; label: string }> = [
@@ -1172,6 +1175,7 @@ export const BUDGET_CATEGORY_OPTIONS: ReadonlyArray<{ value: BudgetCategory; lab
   { value: 'gym_membership', label: 'Gym membership' },
   { value: 'federation_membership', label: 'Federation membership' },
   { value: 'competition_entry', label: 'Competition entry' },
+  { value: 'transportation', label: 'Transportation' },
 ]
 
 export type BudgetPriority = 'buy_now' | 'buy_later' | 'optional' | 'drop'
@@ -1218,16 +1222,6 @@ export const EQUIPMENT_CONDITION_OPTIONS: ReadonlyArray<{ value: EquipmentCondit
   { value: 'unknown', label: 'Unknown' },
 ]
 
-export type TrainingPriority = 'low' | 'medium' | 'high'
-
-export const TRAINING_PRIORITY_VALUES: ReadonlyArray<TrainingPriority> = ['low', 'medium', 'high']
-
-export const TRAINING_PRIORITY_OPTIONS: ReadonlyArray<{ value: TrainingPriority; label: string }> = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-]
-
 export interface BudgetItem {
   id: string
   name: string
@@ -1238,8 +1232,7 @@ export interface BudgetItem {
   start_date?: string
   end_date?: string
   needed_for_comp_day?: boolean
-  comp_master_id?: string
-  training_priority?: TrainingPriority
+  comp_master_ids?: string[]
   equipment_condition?: EquipmentCondition
   equipment_comp_legal?: boolean
   photo_s3_key?: string | null

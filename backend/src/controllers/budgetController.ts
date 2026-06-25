@@ -11,7 +11,6 @@ import type {
   BudgetCategory,
   BudgetRecurrence,
   EquipmentCondition,
-  TrainingPriority,
 } from '@powerlifting/types'
 
 const CONFIG_SK = 'CONFIG#budget'
@@ -23,10 +22,10 @@ const CATEGORY_VALUES: ReadonlyArray<BudgetCategory> = [
   'gym_membership',
   'federation_membership',
   'competition_entry',
+  'transportation',
 ]
 const RECURRENCE_VALUES: ReadonlyArray<BudgetRecurrence> = ['one_time', 'recurring']
 const CONDITION_VALUES: ReadonlyArray<EquipmentCondition> = ['good', 'worn', 'needs_replacement', 'unknown']
-const TRAINING_VALUES: ReadonlyArray<TrainingPriority> = ['low', 'medium', 'high']
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'ca-central-1',
@@ -87,8 +86,10 @@ function normalizeItem(raw: unknown, existingCreatedAt?: string): BudgetItem | n
   if (typeof r.start_date === 'string' && r.start_date) out.start_date = r.start_date
   if (typeof r.end_date === 'string' && r.end_date) out.end_date = r.end_date
   if (typeof r.needed_for_comp_day === 'boolean') out.needed_for_comp_day = r.needed_for_comp_day
-  if (typeof r.comp_master_id === 'string' && r.comp_master_id) out.comp_master_id = r.comp_master_id
-  if (typeof r.training_priority === 'string') out.training_priority = pickEnum(r.training_priority, TRAINING_VALUES, 'medium')
+  const compIds = Array.isArray(r.comp_master_ids)
+    ? r.comp_master_ids.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    : (typeof r.comp_master_id === 'string' && r.comp_master_id ? [r.comp_master_id] : [])
+  if (compIds.length > 0) out.comp_master_ids = compIds
   if (typeof r.equipment_condition === 'string') out.equipment_condition = pickEnum(r.equipment_condition, CONDITION_VALUES, 'unknown')
   if (typeof r.equipment_comp_legal === 'boolean') out.equipment_comp_legal = r.equipment_comp_legal
   if (typeof r.photo_s3_key === 'string') out.photo_s3_key = r.photo_s3_key || null
