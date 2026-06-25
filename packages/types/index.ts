@@ -1190,18 +1190,16 @@ export const BUDGET_PRIORITY_OPTIONS: ReadonlyArray<{ value: BudgetPriority; lab
   { value: 'drop', label: 'Drop' },
 ]
 
-export type BudgetRecurrence = 'one_time' | 'monthly' | 'multi_month'
+export type BudgetRecurrence = 'one_time' | 'recurring'
 
 export const BUDGET_RECURRENCE_VALUES: ReadonlyArray<BudgetRecurrence> = [
   'one_time',
-  'monthly',
-  'multi_month',
+  'recurring',
 ]
 
 export const BUDGET_RECURRENCE_OPTIONS: ReadonlyArray<{ value: BudgetRecurrence; label: string }> = [
   { value: 'one_time', label: 'One-time' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'multi_month', label: 'Multi-month' },
+  { value: 'recurring', label: 'Recurring' },
 ]
 
 export type EquipmentCondition = 'good' | 'worn' | 'needs_replacement' | 'unknown'
@@ -1237,9 +1235,8 @@ export interface BudgetItem {
   cost: number
   currency?: string
   recurrence: BudgetRecurrence
-  months?: number
-  start_month?: string
-  priority: BudgetPriority
+  start_date?: string
+  end_date?: string
   needed_for_comp_day?: boolean
   comp_master_id?: string
   training_priority?: TrainingPriority
@@ -1258,7 +1255,6 @@ export interface BudgetItem {
 export interface BudgetConfig {
   monthly_budget: number
   currency: string
-  budget_start_month?: string
 }
 
 export interface BudgetStore {
@@ -1271,7 +1267,7 @@ export interface BudgetTimelineEntry {
   name: string
   category: BudgetCategory
   priority: BudgetPriority
-  suggested_month: string
+  suggested_date: string
   cost: number
   reason: string
 }

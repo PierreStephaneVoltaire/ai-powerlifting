@@ -50,11 +50,11 @@ import type {
 } from '@powerlifting/types'
 import {
   BUDGET_CATEGORY_OPTIONS,
-  BUDGET_PRIORITY_OPTIONS,
   BUDGET_RECURRENCE_OPTIONS,
   EQUIPMENT_CONDITION_OPTIONS,
   TRAINING_PRIORITY_OPTIONS,
 } from '@powerlifting/types'
+import { DatePickerInput } from '@mantine/dates'
 
 function newItemId(): string {
   return `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
@@ -67,8 +67,7 @@ function makeBlankItem(category: BudgetCategory): BudgetItem {
     name: '',
     category,
     cost: 0,
-    recurrence: category === 'gym_membership' || category === 'supplement' ? 'monthly' : 'one_time',
-    priority: 'optional',
+    recurrence: category === 'gym_membership' || category === 'supplement' ? 'recurring' : 'one_time',
     purchased: false,
     created_at: now,
     updated_at: now,
@@ -89,40 +88,30 @@ function priorityColor(p: BudgetPriority): string {
   return p === 'buy_now' ? 'red' : p === 'buy_later' ? 'orange' : p === 'optional' ? 'blue' : 'gray'
 }
 
-function conditionColor(c: EquipmentCondition | undefined): string {
-  return c === 'good' ? 'green' : c === 'worn' ? 'yellow' : c === 'needs_replacement' ? 'red' : 'gray'
+function monthOf(dateStr?: string | null): string {
+  return (dateStr ?? '').slice(0, 7)
+}
+
+function itemActiveInMonth(item: BudgetItem, month: string): boolean {
+  if (item.purchased) return false
+  const startMonth = monthOf(item.start_date)
+  if (!startMonth) return false
+  if (item.recurrence === 'one_time') return startMonth === month
+  const endMonth = monthOf(item.end_date) || '9999-99'
+  return month >= startMonth && month <= endMonth
 }
 
 function monthCostForItem(item: BudgetItem, month: string): number {
-  if (item.purchased) return 0
-  const start = item.start_month
-  if (item.recurrence === 'one_time') {
-    if (!start) return 0
-    return start === month ? item.cost : 0
-  }
-  if (item.recurrence === 'monthly') {
-    if (!start) return item.cost
-    return start <= month ? item.cost : 0
-  }
-  if (item.recurrence === 'multi_month') {
-    if (!start) return item.cost
-    const months = item.months ?? 1
-    const startMs = new Date(start + '-01').getTime()
-    const curMs = new Date(month + '-01').getTime()
-    const endMs = new Date(start + '-01')
-    endMs.setMonth(endMs.getMonth() + months)
-    return curMs >= startMs && curMs < endMs.getTime() ? item.cost : 0
-  }
-  return 0
+  return itemActiveInMonth(item, month) ? item.cost : 0
 }
 
 function buildMonths(items: BudgetItem[], count: number): string[] {
   const today = new Date()
   const months: string[] = []
-  const minStart = items.map((i) => i.start_month).filter(Boolean).sort()[0]
+  const starts = items.map((i) => monthOf(i.start_date)).filter(Boolean).sort()
   let base = new Date(today.getFullYear(), today.getMonth(), 1)
-  if (minStart) {
-    const [y, m] = minStart.split('-').map(Number)
+  if (starts.length) {
+    const [y, m] = starts[0].split('-').map(Number)
     const start = new Date(y, m - 1, 1)
     if (start.getTime() < base.getTime()) base = start
   }
@@ -137,7 +126,7 @@ function spentByMonth(items: BudgetItem[]): Map<string, number> {
   const map = new Map<string, number>()
   for (const it of items) {
     if (!it.purchased) continue
-    const key = (it.purchased_date ?? it.start_month ?? '').slice(0, 7)
+    const key = monthOf(it.purchased_date)
     if (!key) continue
     map.set(key, (map.get(key) ?? 0) + it.cost)
   }
@@ -198,7 +187,7 @@ export default function BudgetPage() {
 
   const totalRecurring = useMemo(() =>
     draftItems
-      .filter((it) => (it.recurrence === 'monthly' || it.recurrence === 'multi_month') && !it.purchased)
+      .filter((it) => it.recurrence === 'recurring' && !it.purchased)
       .reduce((sum, it) => sum + it.cost, 0),
     [draftItems])
 
@@ -342,11 +331,30 @@ export default function BudgetPage() {
               library={library}
               readOnly={readOnly}
               coverageGroups={fedMembershipCoverage}
-              onPay={(fedId, paid, cost, paidDate) => {
+              onPay={(masterFed, paid, cost, paidDate) => {
                 if (!library) return
-                const nextFeds = library.federations.map((f) =>
-                  f.id === fedId ? { ...f, membership_paid: paid, membership_cost: cost, membership_paid_date: paidDate } : f,
+                const matchKey = masterFed.abbreviation ?? masterFed.name
+                const existingIdx = library.federations.findIndex(
+                  (f) => (f.abbreviation ?? f.name) === matchKey,
                 )
+                const baseRec = existingIdx >= 0 ? library.federations[existingIdx] : {
+                  id: `fed-${Date.now().toString(36)}`,
+                  name: masterFed.name,
+                  abbreviation: masterFed.abbreviation ?? undefined,
+                  status: 'active' as const,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }
+                const updatedRec = {
+                  ...baseRec,
+                  membership_paid: paid,
+                  membership_cost: cost,
+                  membership_paid_date: paidDate,
+                  updated_at: new Date().toISOString(),
+                }
+                const nextFeds = existingIdx >= 0
+                  ? library.federations.map((f, i) => (i === existingIdx ? updatedRec : f))
+                  : [...library.federations, updatedRec]
                 saveLibrary({ ...library, federations: nextFeds }).catch(() => pushToast({ message: 'Failed to save federation', type: 'error' }))
               }}
             />
@@ -546,7 +554,6 @@ function ItemCard({ item, readOnly, compOptions, onUpdate, onRemove, onPhotoUplo
               style={{ flex: 1 }}
             />
             <Group gap={6}>
-              <Badge color={priorityColor(item.priority)} variant="light">{item.priority.replace('_', ' ')}</Badge>
               <ActionIcon color="red" variant="subtle" onClick={() => onRemove(item.id)} disabled={readOnly} aria-label="Remove item">
                 <Trash2 size={16} />
               </ActionIcon>
@@ -555,27 +562,32 @@ function ItemCard({ item, readOnly, compOptions, onUpdate, onRemove, onPhotoUplo
 
           <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
             <Select label="Category" size="xs" value={item.category} data={BUDGET_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => onUpdate(item.id, { category: (v as BudgetCategory) ?? 'equipment' })} disabled={readOnly} />
-            <Select label="Priority" size="xs" value={item.priority} data={BUDGET_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => onUpdate(item.id, { priority: (v as BudgetPriority) ?? 'optional' })} disabled={readOnly} />
             <Select label="Recurrence" size="xs" value={item.recurrence} data={BUDGET_RECURRENCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onChange={(v) => onUpdate(item.id, { recurrence: (v as BudgetRecurrence) ?? 'one_time' })} disabled={readOnly} />
             <NumberInput label="Cost" size="xs" value={item.cost} onChange={(v) => onUpdate(item.id, { cost: typeof v === 'number' ? v : 0 })} min={0} decimalScale={2} hideControls disabled={readOnly} />
+            <Select label="For competition" size="xs" value={item.comp_master_id ?? ''} data={compOptions} onChange={(v) => onUpdate(item.id, { comp_master_id: v || undefined })} disabled={readOnly} />
           </SimpleGrid>
 
           <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
-            <TextInput
-              label={item.recurrence === 'one_time' ? 'Purchase month' : 'Start month'}
+            <DatePickerInput
+              label={item.recurrence === 'one_time' ? 'Purchase date' : 'Start date'}
               size="xs"
-              placeholder="YYYY-MM"
-              value={item.start_month ?? ''}
-              onChange={(e) => {
-                const v = e.currentTarget.value.trim()
-                onUpdate(item.id, { start_month: /^\d{4}-\d{2}$/.test(v) ? v : v ? undefined : undefined })
-              }}
+              valueFormat="YYYY-MM-DD"
+              value={item.start_date ?? null}
+              onChange={(d) => onUpdate(item.id, { start_date: (d as string | null) ?? undefined })}
               disabled={readOnly}
+              clearable
             />
-            {item.recurrence === 'multi_month' && (
-              <NumberInput label="Months" size="xs" value={item.months ?? 1} onChange={(v) => onUpdate(item.id, { months: typeof v === 'number' ? v : 1 })} min={1} max={24} disabled={readOnly} />
+            {item.recurrence === 'recurring' && (
+              <DatePickerInput
+                label="End date"
+                size="xs"
+                valueFormat="YYYY-MM-DD"
+                value={item.end_date ?? null}
+                onChange={(d) => onUpdate(item.id, { end_date: (d as string | null) ?? undefined })}
+                disabled={readOnly}
+                clearable
+              />
             )}
-            <Select label="For competition" size="xs" value={item.comp_master_id ?? ''} data={compOptions} onChange={(v) => onUpdate(item.id, { comp_master_id: v || undefined })} disabled={readOnly} />
             <Select label="Training priority" size="xs" value={item.training_priority ?? ''} data={[{ value: '', label: '—' }, ...TRAINING_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]} onChange={(v) => onUpdate(item.id, { training_priority: (v as TrainingPriority) || undefined })} disabled={readOnly} />
           </SimpleGrid>
 
@@ -661,30 +673,31 @@ interface FederationTabProps {
   library: import('@powerlifting/types').FederationLibrary | null
   readOnly: boolean
   coverageGroups: string[][]
-  onPay: (fedId: string, paid: boolean, cost: number | null, paidDate: string | null) => void
+  onPay: (masterFed: MasterFederation, paid: boolean, cost: number | null, paidDate: string | null) => void
 }
 
 function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }: FederationTabProps) {
   const userFeds = library?.federations ?? []
-  const fedsWithMeta = useMemo(() => {
+
+  const rows = useMemo(() => {
     return masterFeds
       .filter((f) => f.status === 'active')
-      .map((f) => {
-        const userCopy = userFeds.find((u) => u.abbreviation === f.abbreviation || u.name === f.name)
-        return { master: f, user: userCopy }
+      .map((master) => {
+        const matchKey = master.abbreviation ?? master.name
+        const userCopy = userFeds.find((u) => (u.abbreviation ?? u.name) === matchKey)
+        return { master, user: userCopy }
       })
-      .filter((x) => x.user)
   }, [masterFeds, userFeds])
 
   if (!library) {
     return <Text c="dimmed">Loading federations…</Text>
   }
 
-  if (fedsWithMeta.length === 0) {
+  if (rows.length === 0) {
     return (
       <Paper withBorder p="xl" radius="md">
         <Stack align="center" gap="xs">
-          <Text c="dimmed">No federations in your library yet.</Text>
+          <Text c="dimmed">No active federations found in the catalog.</Text>
           <Button component={Link} to="/designer/federations" variant="light" size="sm">Manage federations</Button>
         </Stack>
       </Paper>
@@ -721,19 +734,19 @@ function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }:
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {fedsWithMeta.map(({ master, user }) => {
-            if (!user) return null
+          {rows.map(({ master, user }) => {
             const covers = master.membership_group ?? []
+            const key = master.sk ?? (master.abbreviation ?? master.name)
             return (
-              <Table.Tr key={user.id}>
+              <Table.Tr key={key}>
                 <Table.Td>{master.abbreviation ?? master.name}</Table.Td>
                 <Table.Td>{master.parent_federation_abbr ?? '—'}</Table.Td>
                 <Table.Td>{covers.length ? covers.join(', ') : '—'}</Table.Td>
                 <Table.Td>
                   <NumberInput
                     size="xs"
-                    value={user.membership_cost ?? 0}
-                    onChange={(v) => onPay(user.id, user.membership_paid ?? false, typeof v === 'number' ? v : 0, user.membership_paid_date ?? null)}
+                    value={user?.membership_cost ?? 0}
+                    onChange={(v) => onPay(master, user?.membership_paid ?? false, typeof v === 'number' ? v : 0, user?.membership_paid_date ?? null)}
                     disabled={readOnly}
                     min={0}
                     decimalScale={2}
@@ -743,12 +756,12 @@ function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }:
                 </Table.Td>
                 <Table.Td>
                   <Switch
-                    checked={user.membership_paid ?? false}
-                    onChange={(e) => onPay(user.id, e.currentTarget.checked, user.membership_cost ?? 0, e.currentTarget.checked ? new Date().toISOString().slice(0, 10) : null)}
+                    checked={user?.membership_paid ?? false}
+                    onChange={(e) => onPay(master, e.currentTarget.checked, user?.membership_cost ?? 0, e.currentTarget.checked ? new Date().toISOString().slice(0, 10) : null)}
                     disabled={readOnly}
                   />
                 </Table.Td>
-                <Table.Td>{user.membership_paid_date ?? '—'}</Table.Td>
+                <Table.Td>{user?.membership_paid_date ?? '—'}</Table.Td>
               </Table.Tr>
             )
           })}

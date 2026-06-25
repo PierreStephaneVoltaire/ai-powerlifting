@@ -9,7 +9,6 @@ import type {
   BudgetConfig,
   BudgetStore,
   BudgetCategory,
-  BudgetPriority,
   BudgetRecurrence,
   EquipmentCondition,
   TrainingPriority,
@@ -25,8 +24,7 @@ const CATEGORY_VALUES: ReadonlyArray<BudgetCategory> = [
   'federation_membership',
   'competition_entry',
 ]
-const PRIORITY_VALUES: ReadonlyArray<BudgetPriority> = ['buy_now', 'buy_later', 'optional', 'drop']
-const RECURRENCE_VALUES: ReadonlyArray<BudgetRecurrence> = ['one_time', 'monthly', 'multi_month']
+const RECURRENCE_VALUES: ReadonlyArray<BudgetRecurrence> = ['one_time', 'recurring']
 const CONDITION_VALUES: ReadonlyArray<EquipmentCondition> = ['good', 'worn', 'needs_replacement', 'unknown']
 const TRAINING_VALUES: ReadonlyArray<TrainingPriority> = ['low', 'medium', 'high']
 
@@ -62,7 +60,6 @@ function normalizeConfig(raw: unknown): BudgetConfig {
   return {
     monthly_budget: Math.max(0, toFiniteNumber(r.monthly_budget)),
     currency: typeof r.currency === 'string' && r.currency.trim() ? r.currency.trim() : 'CAD',
-    budget_start_month: typeof r.budget_start_month === 'string' && r.budget_start_month ? r.budget_start_month : undefined,
   }
 }
 
@@ -82,14 +79,13 @@ function normalizeItem(raw: unknown, existingCreatedAt?: string): BudgetItem | n
     category: pickEnum(r.category, CATEGORY_VALUES, 'equipment'),
     cost: Math.max(0, toFiniteNumber(r.cost)),
     recurrence: pickEnum(r.recurrence, RECURRENCE_VALUES, 'one_time'),
-    priority: pickEnum(r.priority, PRIORITY_VALUES, 'optional'),
     created_at: existingCreatedAt ?? (typeof r.created_at === 'string' ? r.created_at : now),
     updated_at: now,
   }
 
   if (typeof r.currency === 'string' && r.currency.trim()) out.currency = r.currency.trim()
-  if (typeof r.months === 'number' && Number.isFinite(r.months) && r.months > 0) out.months = Math.round(r.months)
-  if (typeof r.start_month === 'string' && r.start_month) out.start_month = r.start_month
+  if (typeof r.start_date === 'string' && r.start_date) out.start_date = r.start_date
+  if (typeof r.end_date === 'string' && r.end_date) out.end_date = r.end_date
   if (typeof r.needed_for_comp_day === 'boolean') out.needed_for_comp_day = r.needed_for_comp_day
   if (typeof r.comp_master_id === 'string' && r.comp_master_id) out.comp_master_id = r.comp_master_id
   if (typeof r.training_priority === 'string') out.training_priority = pickEnum(r.training_priority, TRAINING_VALUES, 'medium')

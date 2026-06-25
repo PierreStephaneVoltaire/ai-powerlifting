@@ -7,6 +7,23 @@ resource "aws_s3_bucket" "session_videos" {
   }
 }
 
+# Explicit SSE-S3 (AES256) encryption. Pinned to Amazon S3-managed keys so
+# the bucket stays encrypted at rest WITHOUT any KMS API calls per request.
+# This overrides any account-level default-encryption setting that might
+# otherwise attach a customer-managed KMS key and rack up per-PUT/GET KMS fees
+# (the video-thumbnail Lambda does head_object + download_file + 2x put_object
+# + delete_object per upload, so a CMK here would be expensive).
+resource "aws_s3_bucket_server_side_encryption_configuration" "session_videos" {
+  bucket = aws_s3_bucket.session_videos.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+    bucket_key_enabled = false
+  }
+}
+
 resource "aws_s3_bucket_cors_configuration" "session_videos_cors" {
   bucket = aws_s3_bucket.session_videos.id
 
