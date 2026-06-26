@@ -28,7 +28,6 @@ import {
   activeInMonth,
 } from '@/components/budget/budgetShared'
 import { monthOf, datePeriodLabel } from '@/components/budget/dateUtils'
-import { getSettings } from '@/api/settings'
 
 interface TimelineFilters {
   priorities: BudgetPriorityTier[]
@@ -152,7 +151,6 @@ export default function BudgetTimeline({
     compLinkedOnly: false,
   })
   const [filterOpen, setFilterOpen] = useState(false)
-  const [resolvedAthleteName, setResolvedAthleteName] = useState<string | null>(athleteName ?? null)
   const navScrollRef = useRef<HTMLDivElement>(null)
 
   const currency = config.currency
@@ -221,23 +219,6 @@ export default function BudgetTimeline({
   }, [items.length, comps.length])
 
   useEffect(() => {
-    let cancelled = false
-    getSettings()
-      .then((s) => {
-        if (cancelled) return
-        const name = s.display_name || s.nickname || s.discord_username || null
-        if (name) setResolvedAthleteName(name)
-        console.info('[BudgetTimeline] resolved athlete name from settings', { hasName: !!name })
-      })
-      .catch((err) => {
-        console.error('[BudgetTimeline] failed to load settings for athlete name', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
     if (allMonths.length === 0) return
     const t = setTimeout(() => {
       if (allMonths.includes(defaultMonth)) {
@@ -280,9 +261,9 @@ export default function BudgetTimeline({
 
   return (
     <Stack gap="md">
-      {readOnly && resolvedAthleteName && (
+      {readOnly && athleteName && (
         <Text size="xs" c="dimmed">
-          Viewing {resolvedAthleteName}&apos;s budget — read only.
+          Viewing {athleteName}&apos;s budget — read only.
         </Text>
       )}
 

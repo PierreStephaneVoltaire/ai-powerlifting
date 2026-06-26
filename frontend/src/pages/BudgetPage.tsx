@@ -37,6 +37,7 @@ import { fetchFederations, putBudget as apiPutBudget, uploadBudgetItemPhoto, del
 import { getMediaUrl } from '@/utils/media'
 import { useProgramStore } from '@/store/programStore'
 import BudgetTimeline from '@/components/budget/BudgetTimeline'
+import { getSettings } from '@/api/settings'
 import BudgetTable from '@/components/budget/BudgetTable'
 import BudgetStatusBar from '@/components/budget/BudgetStatusBar'
 import BudgetOverview from '@/components/budget/BudgetOverview'
@@ -115,7 +116,7 @@ function priorityColor(p: BudgetPriority): string {
 }
 
 export default function BudgetPage() {
-  const { readOnly, user, loading: authLoading, signIn } = useAuth()
+  const { readOnly, loading: authLoading, signIn } = useAuth()
   const { pushToast } = useUiStore()
   const { config, items, isLoading, loaded, load, save } = useBudgetStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
@@ -133,6 +134,7 @@ export default function BudgetPage() {
   const [timeline, setTimeline] = useState<BudgetTimelineType | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<string | null>('overview')
+  const [athleteName, setAthleteName] = useState<string | null>(null)
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadCompetitions().catch(() => {}) }, [loadCompetitions])
@@ -140,6 +142,21 @@ export default function BudgetPage() {
   useEffect(() => {
     let cancelled = false
     fetchFederations().then((feds) => { if (!cancelled) setMasterFeds(feds) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getSettings()
+      .then((s) => {
+        if (cancelled) return
+        const name = s.display_name || s.nickname || s.discord_username || null
+        if (name) setAthleteName(name)
+        console.info('[BudgetPage] resolved athlete name from settings', { pk: s.pk, mapped_pk: s.mapped_pk, hasName: !!name })
+      })
+      .catch((err) => {
+        console.error('[BudgetPage] failed to load settings for athlete name', err)
+      })
     return () => { cancelled = true }
   }, [])
 
@@ -263,26 +280,24 @@ export default function BudgetPage() {
     )
   }
 
-  if (!user) {
-    return (
-      <Container size="xl" pb={40}>
-        <Stack gap="md" align="center" justify="center" style={{ minHeight: 300 }}>
-          <Wallet size={40} />
-          <Title order={2}>Budget</Title>
-          <Text size="sm" c="dimmed" ta="center" maw={420}>
-            Sign in to view and manage your training budget, track expenses, and plan spending around your competitions.
-          </Text>
-          <Button leftSection={<LogIn size={16} />} onClick={signIn}>
-            Sign in
-          </Button>
-        </Stack>
-      </Container>
-    )
-  }
-
   return (
     <Container size="xl" pb={40}>
       <Stack gap="md">
+        {readOnly && (
+          <Paper withBorder p="sm" radius="md" style={{ borderLeft: '3px solid var(--mantine-color-blue-5)' }}>
+            <Group gap="sm" align="center" justify="space-between" wrap="nowrap">
+              <Group gap="sm" align="center" wrap="nowrap">
+                <Wallet size={18} color="var(--mantine-color-blue-6)" />
+                <Text size="sm" c="dimmed">
+                  Viewing demo data (operator). Sign in to manage your own budget.
+                </Text>
+              </Group>
+              <Button size="xs" variant="light" leftSection={<LogIn size={14} />} onClick={signIn}>
+                Sign in
+              </Button>
+            </Group>
+          </Paper>
+        )}
         <Group justify="space-between" align="flex-end">
           <Stack gap={2}>
             <Group gap="sm">
@@ -310,7 +325,7 @@ export default function BudgetPage() {
           spentThisMonth={monthSummary.spent_this_month}
           recurringMonthlyTotal={monthSummary.recurring_monthly_total}
           readOnly={readOnly}
-          athleteName={readOnly ? user.username : null}
+          athleteName={athleteName}
           onCapChange={handleCapChange}
         />
 
@@ -327,7 +342,7 @@ export default function BudgetPage() {
               items={draftItems}
               config={draftConfig}
               readOnly={readOnly}
-              athleteName={readOnly ? user.username : null}
+              athleteName={athleteName}
               onTierSelect={handleTierSelect}
             />
           </Tabs.Panel>
@@ -388,7 +403,7 @@ export default function BudgetPage() {
               comps={upcomingComps}
               config={draftConfig}
               readOnly={readOnly}
-              athleteName={readOnly ? user.username : null}
+              athleteName={athleteName}
             />
           </Tabs.Panel>
         </Tabs>

@@ -8,6 +8,8 @@ const api = axios.create({
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 export interface UserSettings {
+  pk: string
+  mapped_pk?: string
   discord_id: string
   discord_username: string
   avatar_url: string | null
