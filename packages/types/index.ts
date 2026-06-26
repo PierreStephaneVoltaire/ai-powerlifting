@@ -1151,22 +1151,43 @@ export interface UserCompetitionUpdate {
 }
 
 // ─── Budgeting ───────────────────────────────────────────────────────────────
+//
+// The budget model is anchored to competition day: anything required to walk
+// onto the platform is MANDATORY and never suggested for cuts. Items carry a
+// priority tier, flexible date precision, optional competition linkage, and a
+// recurrence cadence. BudgetConfig holds the per-user monthly cap.
 
 export type BudgetCategory =
   | 'equipment'
   | 'supplement'
   | 'gym_membership'
   | 'federation_membership'
+  | 'coaching'
+  | 'app_subscription'
   | 'competition_entry'
-  | 'transportation'
+  | 'transport'
+  | 'accommodation'
+  | 'food_comp_day'
+  | 'food_weigh_in'
+  | 'food_prep'
+  | 'recovery'
+  | 'other'
 
 export const BUDGET_CATEGORY_VALUES: ReadonlyArray<BudgetCategory> = [
   'equipment',
   'supplement',
   'gym_membership',
   'federation_membership',
+  'coaching',
+  'app_subscription',
   'competition_entry',
-  'transportation',
+  'transport',
+  'accommodation',
+  'food_comp_day',
+  'food_weigh_in',
+  'food_prep',
+  'recovery',
+  'other',
 ]
 
 export const BUDGET_CATEGORY_OPTIONS: ReadonlyArray<{ value: BudgetCategory; label: string }> = [
@@ -1174,9 +1195,109 @@ export const BUDGET_CATEGORY_OPTIONS: ReadonlyArray<{ value: BudgetCategory; lab
   { value: 'supplement', label: 'Supplement' },
   { value: 'gym_membership', label: 'Gym membership' },
   { value: 'federation_membership', label: 'Federation membership' },
+  { value: 'coaching', label: 'Coaching' },
+  { value: 'app_subscription', label: 'App subscription' },
   { value: 'competition_entry', label: 'Competition entry' },
-  { value: 'transportation', label: 'Transportation' },
+  { value: 'transport', label: 'Transport' },
+  { value: 'accommodation', label: 'Accommodation' },
+  { value: 'food_comp_day', label: 'Food — comp day' },
+  { value: 'food_weigh_in', label: 'Food — weigh-in' },
+  { value: 'food_prep', label: 'Food — prep' },
+  { value: 'recovery', label: 'Recovery' },
+  { value: 'other', label: 'Other' },
 ]
+
+export type BudgetPriorityTier = 'MANDATORY' | 'IMPORTANT' | 'OPTIONAL'
+
+export const BUDGET_PRIORITY_TIER_VALUES: ReadonlyArray<BudgetPriorityTier> = [
+  'MANDATORY',
+  'IMPORTANT',
+  'OPTIONAL',
+]
+
+export const BUDGET_PRIORITY_TIER_OPTIONS: ReadonlyArray<{ value: BudgetPriorityTier; label: string }> = [
+  { value: 'MANDATORY', label: 'Mandatory' },
+  { value: 'IMPORTANT', label: 'Important' },
+  { value: 'OPTIONAL', label: 'Optional' },
+]
+
+export type BudgetRecurrence = 'ONE_TIME' | 'MONTHLY' | 'QUARTERLY' | 'ANNUAL'
+
+export const BUDGET_RECURRENCE_VALUES: ReadonlyArray<BudgetRecurrence> = [
+  'ONE_TIME',
+  'MONTHLY',
+  'QUARTERLY',
+  'ANNUAL',
+]
+
+export const BUDGET_RECURRENCE_OPTIONS: ReadonlyArray<{ value: BudgetRecurrence; label: string }> = [
+  { value: 'ONE_TIME', label: 'One-time' },
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'ANNUAL', label: 'Annual' },
+]
+
+export type BudgetDatePrecision = 'exact' | 'month'
+
+export const BUDGET_DATE_PRECISION_VALUES: ReadonlyArray<BudgetDatePrecision> = ['exact', 'month']
+
+export interface BudgetItem {
+  id: string
+  user_pk: string
+  name: string
+  category: BudgetCategory
+  priority_tier: BudgetPriorityTier
+  cost: number
+  currency: string
+  recurrence: BudgetRecurrence
+  date_precision: BudgetDatePrecision
+  start_date: string
+  end_date: string | null
+  comp_linked: boolean
+  competition_id: string | null
+  purchased: boolean
+  purchased_date: string | null
+  notes: string | null
+  photo_s3_key: string | null
+  cut_by_ai: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface BudgetConfig {
+  user_pk: string
+  monthly_cap: number
+  currency: string
+  notes: string | null
+  updated_at: string
+}
+
+export interface BudgetStore {
+  config: BudgetConfig
+  items: BudgetItem[]
+}
+
+export interface BudgetPriorityBreakdown {
+  count: number
+  total: number
+}
+
+export interface BudgetSummary {
+  monthly_cap: number
+  currency: string
+  spent_this_month: number
+  recurring_monthly_total: number
+  items_by_priority: {
+    MANDATORY: BudgetPriorityBreakdown
+    IMPORTANT: BudgetPriorityBreakdown
+    OPTIONAL: BudgetPriorityBreakdown
+  }
+  upcoming_one_time: BudgetItem[]
+}
+
+// ─── Legacy budget AI timeline ───────────────────────────────────────────────
+// Kept for the existing /analytics/budget/timeline specialist tool surface and
+// its frontend client. The new budget tabs (BUD-02..05) do not use these shapes.
 
 export type BudgetPriority = 'buy_now' | 'buy_later' | 'optional' | 'drop'
 
@@ -1194,18 +1315,6 @@ export const BUDGET_PRIORITY_OPTIONS: ReadonlyArray<{ value: BudgetPriority; lab
   { value: 'drop', label: 'Drop' },
 ]
 
-export type BudgetRecurrence = 'one_time' | 'recurring'
-
-export const BUDGET_RECURRENCE_VALUES: ReadonlyArray<BudgetRecurrence> = [
-  'one_time',
-  'recurring',
-]
-
-export const BUDGET_RECURRENCE_OPTIONS: ReadonlyArray<{ value: BudgetRecurrence; label: string }> = [
-  { value: 'one_time', label: 'One-time' },
-  { value: 'recurring', label: 'Recurring' },
-]
-
 export type EquipmentCondition = 'good' | 'worn' | 'needs_replacement' | 'unknown'
 
 export const EQUIPMENT_CONDITION_VALUES: ReadonlyArray<EquipmentCondition> = [
@@ -1221,39 +1330,6 @@ export const EQUIPMENT_CONDITION_OPTIONS: ReadonlyArray<{ value: EquipmentCondit
   { value: 'needs_replacement', label: 'Needs replacement' },
   { value: 'unknown', label: 'Unknown' },
 ]
-
-export interface BudgetItem {
-  id: string
-  name: string
-  category: BudgetCategory
-  cost: number
-  currency?: string
-  recurrence: BudgetRecurrence
-  start_date?: string
-  end_date?: string
-  needed_for_comp_day?: boolean
-  comp_master_ids?: string[]
-  equipment_condition?: EquipmentCondition
-  equipment_comp_legal?: boolean
-  photo_s3_key?: string | null
-  photo_url?: string | null
-  purchased?: boolean
-  purchased_date?: string | null
-  notes?: string
-  federation_abbreviation?: string
-  created_at: string
-  updated_at: string
-}
-
-export interface BudgetConfig {
-  monthly_budget: number
-  currency: string
-}
-
-export interface BudgetStore {
-  config: BudgetConfig
-  items: BudgetItem[]
-}
 
 export interface BudgetTimelineEntry {
   item_id: string
@@ -1276,4 +1352,38 @@ export interface BudgetTimelineMonth {
 export interface BudgetTimeline {
   months: BudgetTimelineMonth[]
   notes: string[]
+}
+
+// ─── Budget AI advisor (BUD-05) ──────────────────────────────────────────────
+
+export interface BudgetAiLockedItem {
+  item_id: string
+  name: string
+  note: string
+  purchased: boolean
+}
+
+export interface BudgetAiCutItem {
+  item_id: string
+  name: string
+  cost: number
+  reason: string
+  rank: number
+}
+
+export interface BudgetAiGap {
+  description: string
+  severity: 'info' | 'warning'
+}
+
+export interface BudgetAiAnalysis {
+  overall_assessment: string
+  locked_in: BudgetAiLockedItem[]
+  suggested_cuts: BudgetAiCutItem[]
+  gaps: BudgetAiGap[]
+  coach_note: string
+  insufficient_data: boolean
+  insufficient_data_reason: string
+  cached: boolean
+  generated_at: string
 }

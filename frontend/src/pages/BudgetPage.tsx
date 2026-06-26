@@ -37,6 +37,7 @@ import { useFederationStore } from '@/store/federationStore'
 import { fetchFederations, putBudget as apiPutBudget, uploadBudgetItemPhoto, deleteBudgetItemPhoto, fetchBudgetTimeline } from '@/api/client'
 import { getMediaUrl } from '@/utils/media'
 import { useProgramStore } from '@/store/programStore'
+import BudgetTable from '@/components/budget/BudgetTable'
 import type {
   BudgetItem,
   BudgetCategory,
@@ -267,6 +268,23 @@ export default function BudgetPage() {
     setDirty(true)
   }, [])
 
+  const handleAddItem = useCallback((item: BudgetItem) => {
+    setDraftItems((prev) => [item, ...prev])
+    setDirty(true)
+  }, [])
+
+  const handleUpdateItem = useCallback((id: string, patch: Partial<BudgetItem>) => {
+    setDraftItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, ...patch, updated_at: new Date().toISOString() } : it)),
+    )
+    setDirty(true)
+  }, [])
+
+  const handleRemoveItem = useCallback((id: string) => {
+    setDraftItems((prev) => prev.filter((it) => it.id !== id))
+    setDirty(true)
+  }, [])
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -373,13 +391,14 @@ export default function BudgetPage() {
           </Tabs.Panel>
 
           <Tabs.Panel value="items" pt="md">
-            <ItemsTab
+            <BudgetTable
               items={draftItems}
               readOnly={readOnly}
-              compOptions={compOptions}
-              onUpdate={updateItem}
-              onAdd={addItem}
-              onRemove={removeItem}
+              currency={draftConfig.currency}
+              compOptions={upcomingComps.map((c) => ({ value: c.master_id, label: `${c.name} (${c.start_date})` }))}
+              onAdd={handleAddItem}
+              onUpdate={handleUpdateItem}
+              onRemove={handleRemoveItem}
               onPhotoUpload={handlePhotoUpload}
               onPhotoDelete={handlePhotoDelete}
             />
@@ -534,302 +553,6 @@ function OverviewTab({ config, monthlyRows, totalRecurring, itemsCount, overdueC
         </Table>
       </Paper>
     </Stack>
-  )
-}
-
-interface ItemsTabProps {
-  items: BudgetItem[]
-  readOnly: boolean
-  compOptions: { value: string; label: string }[]
-  onUpdate: (id: string, patch: Partial<BudgetItem>) => void
-  onAdd: (category: BudgetCategory) => void
-  onRemove: (id: string) => void
-  onPhotoUpload: (itemId: string, file: File) => void
-  onPhotoDelete: (itemId: string) => void
-}
-
-function ItemsTab({ items, readOnly, compOptions, onUpdate, onAdd, onRemove, onPhotoUpload, onPhotoDelete }: ItemsTabProps) {
-  return (
-    <Stack gap="md">
-      <Group>
-        {BUDGET_CATEGORY_OPTIONS.map((c) => (
-          <Button key={c.value} variant="light" size="sm" leftSection={<Plus size={14} />} onClick={() => onAdd(c.value)} disabled={readOnly}>
-            Add {c.label}
-          </Button>
-        ))}
-      </Group>
-
-      {items.length === 0 ? (
-        <Paper withBorder p="xl" radius="md">
-          <Text c="dimmed" ta="center">No budget items yet. Add equipment, supplements, memberships, or competition costs above.</Text>
-        </Paper>
-      ) : (
-        <Stack gap="sm">
-          {items.map((item) => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              readOnly={readOnly}
-              compOptions={compOptions}
-              onUpdate={onUpdate}
-              onRemove={onRemove}
-              onPhotoUpload={onPhotoUpload}
-              onPhotoDelete={onPhotoDelete}
-            />
-          ))}
-        </Stack>
-      )}
-    </Stack>
-  )
-}
-
-interface ItemCardProps {
-  item: BudgetItem
-  readOnly: boolean
-  compOptions: { value: string; label: string }[]
-  onUpdate: (id: string, patch: Partial<BudgetItem>) => void
-  onRemove: (id: string) => void
-  onPhotoUpload: (itemId: string, file: File) => void
-  onPhotoDelete: (itemId: string) => void
-}
-
-const RECURRENCE_LOCKED: ReadonlyArray<BudgetCategory> = [
-  'competition_entry',
-  'transportation',
-]
-
-function ItemCard({ item, readOnly, compOptions, onUpdate, onRemove, onPhotoUpload, onPhotoDelete }: ItemCardProps) {
-  const photoUrl = getMediaUrl(item.photo_s3_key)
-  const recurrenceLocked = RECURRENCE_LOCKED.includes(item.category)
-  const hasCompLink = ['competition_entry', 'transportation', 'equipment', 'supplement'].includes(item.category)
-
-  const onDateChange = (field: 'start_date' | 'end_date' | 'purchased_date') => (value: string | null) => {
-    onUpdate(item.id, { [field]: fromPickerValue(value) ?? undefined } as Partial<BudgetItem>)
-  }
-
-  const onPurchasedToggle = (checked: boolean) => {
-    onUpdate(item.id, {
-      purchased: checked,
-      purchased_date: checked ? (item.purchased_date ?? todayIso()) : null,
-    })
-  }
-
-  const onCategoryChange = (value: string | null) => {
-    const next = (value as BudgetCategory) ?? 'equipment'
-    const patch: Partial<BudgetItem> = { category: next }
-    if (RECURRENCE_LOCKED.includes(next)) patch.recurrence = 'one_time'
-    else if (next === 'gym_membership' || next === 'supplement' || next === 'federation_membership') patch.recurrence = 'recurring'
-    onUpdate(item.id, patch)
-  }
-
-  const dateInputLabel = item.recurrence === 'one_time' ? 'Date needed' : 'Start date'
-
-  return (
-    <Card withBorder radius="md" padding="md">
-      <Group align="flex-start" gap="md" wrap="nowrap">
-        <PhotoSlot
-          photoUrl={photoUrl}
-          readOnly={readOnly}
-          onUpload={(file) => onPhotoUpload(item.id, file)}
-          onDelete={() => onPhotoDelete(item.id)}
-        />
-        <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
-          <Group justify="space-between" gap="sm" wrap="nowrap">
-            <TextInput
-              placeholder="Item name"
-              value={item.name}
-              onChange={(e) => onUpdate(item.id, { name: e.currentTarget.value })}
-              disabled={readOnly}
-              style={{ flex: 1 }}
-            />
-            <Group gap={6}>
-              <ActionIcon color="red" variant="subtle" onClick={() => onRemove(item.id)} disabled={readOnly} aria-label="Remove item">
-                <Trash2 size={16} />
-              </ActionIcon>
-            </Group>
-          </Group>
-
-          <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
-            <Select
-              label="Category"
-              size="xs"
-              value={item.category}
-              data={BUDGET_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-              onChange={onCategoryChange}
-              disabled={readOnly}
-            />
-            <Select
-              label="Recurrence"
-              description={recurrenceLocked ? 'One-time for this category' : undefined}
-              size="xs"
-              value={item.recurrence}
-              data={BUDGET_RECURRENCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-              onChange={(v) => onUpdate(item.id, { recurrence: (v as BudgetRecurrence) ?? 'one_time' })}
-              disabled={readOnly || recurrenceLocked}
-            />
-            <NumberInput
-              label="Cost"
-              description="Total in your currency"
-              size="xs"
-              value={item.cost}
-              onChange={(v) => onUpdate(item.id, { cost: typeof v === 'number' ? v : 0 })}
-              min={0}
-              decimalScale={2}
-              hideControls
-              disabled={readOnly}
-            />
-            {hasCompLink && (
-              <MultiSelect
-                label={<HelpLabel label="For competitions" help="The meets this cost is tied to. Leave empty if it is general training gear or a recurring cost not tied to a specific meet." />}
-                size="xs"
-                value={item.comp_master_ids ?? []}
-                data={compOptions}
-                onChange={(v) => onUpdate(item.id, { comp_master_ids: v.length ? v : undefined })}
-                disabled={readOnly}
-                clearable
-                searchable
-              />
-            )}
-          </SimpleGrid>
-
-          <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
-            <DatePickerInput
-              label={dateInputLabel}
-              description={item.recurrence === 'one_time' ? 'When the cost is due / planned' : 'First month the recurring cost applies'}
-              size="xs"
-              valueFormat="YYYY-MM-DD"
-              value={toPickerValue(item.start_date)}
-              onChange={onDateChange('start_date')}
-              disabled={readOnly}
-              clearable
-            />
-            {item.recurrence === 'recurring' && (
-              <DatePickerInput
-                label="End date"
-                description="Last month the recurring cost applies (blank = ongoing)"
-                size="xs"
-                valueFormat="YYYY-MM-DD"
-                value={toPickerValue(item.end_date)}
-                onChange={onDateChange('end_date')}
-                disabled={readOnly}
-                clearable
-              />
-            )}
-          </SimpleGrid>
-
-          <CategoryFields item={item} readOnly={readOnly} onUpdate={onUpdate} />
-
-          <Group gap="md" align="center">
-            <Switch
-              label={<HelpLabel label="Needed for comp day" help="This item must be available on competition day itself (e.g. singlet, meet-day supplements, travel to the venue)." />}
-              checked={item.needed_for_comp_day ?? false}
-              onChange={(e) => onUpdate(item.id, { needed_for_comp_day: e.currentTarget.checked })}
-              disabled={readOnly}
-            />
-            <Switch
-              label="Purchased"
-              checked={item.purchased ?? false}
-              onChange={(e) => onPurchasedToggle(e.currentTarget.checked)}
-              disabled={readOnly}
-            />
-          </Group>
-
-          {item.purchased && (
-            <DatePickerInput
-              label="Purchased date"
-              description="When you actually paid. Used for the spent column."
-              size="xs"
-              valueFormat="YYYY-MM-DD"
-              value={toPickerValue(item.purchased_date)}
-              onChange={onDateChange('purchased_date')}
-              disabled={readOnly}
-              clearable
-              w={200}
-            />
-          )}
-
-          <Textarea label="Notes" size="xs" value={item.notes ?? ''} onChange={(e) => onUpdate(item.id, { notes: e.currentTarget.value })} disabled={readOnly} autosize minRows={1} />
-        </Stack>
-      </Group>
-    </Card>
-  )
-}
-
-interface CategoryFieldsProps {
-  item: BudgetItem
-  readOnly: boolean
-  onUpdate: (id: string, patch: Partial<BudgetItem>) => void
-}
-
-function CategoryFields({ item, readOnly, onUpdate }: CategoryFieldsProps) {
-  if (item.category === 'equipment') {
-    return (
-      <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs">
-        <Select
-          label={<HelpLabel label="Condition" help="Current state of the gear. The AI timeline weighs worn or replacement-needed items higher." />}
-          size="xs"
-          value={item.equipment_condition ?? 'unknown'}
-          data={EQUIPMENT_CONDITION_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-          onChange={(v) => onUpdate(item.id, { equipment_condition: (v as EquipmentCondition) ?? 'unknown' })}
-          disabled={readOnly}
-        />
-        <Switch
-          label={<HelpLabel label="Comp-legal" help="Checked if this gear is allowed under your federation's rules on competition day." />}
-          checked={item.equipment_comp_legal ?? false}
-          onChange={(e) => onUpdate(item.id, { equipment_comp_legal: e.currentTarget.checked })}
-          disabled={readOnly}
-        />
-      </SimpleGrid>
-    )
-  }
-  return null
-}
-
-interface PhotoSlotProps {
-  photoUrl: string
-  readOnly: boolean
-  onUpload: (file: File) => void
-  onDelete: () => void
-}
-
-function PhotoSlot({ photoUrl, readOnly, onUpload, onDelete }: PhotoSlotProps) {
-  const { getRootProps, getInputProps, open } = useDropzone({
-    multiple: false,
-    accept: { 'image/*': [] },
-    disabled: readOnly,
-    noClick: true,
-    onDrop: (files) => { if (files[0]) onUpload(files[0]) },
-  })
-
-  return (
-    <Box {...getRootProps()} style={{ width: 96, height: 96, flexShrink: 0 }}>
-      <input {...getInputProps()} />
-      {photoUrl ? (
-        <Stack gap={4} align="center">
-          <MantineImage src={photoUrl} w={96} h={96} fit="cover" radius="md" />
-          {!readOnly && (
-            <Group gap={4}>
-              <FileButton onChange={(f) => f && onUpload(f)} accept="image/*">
-                {(props) => (<ActionIcon {...props} variant="subtle" size="sm" aria-label="Replace photo">
-                    <Camera size={14} />
-                  </ActionIcon>
-                )}
-              </FileButton>
-              <ActionIcon variant="subtle" color="red" size="sm" onClick={onDelete} aria-label="Remove photo">
-                <Trash2 size={14} />
-              </ActionIcon>
-            </Group>
-          )}
-        </Stack>
-      ) : (
-        <Paper withBorder radius="md" w={96} h={96} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: readOnly ? 'default' : 'pointer' }} onClick={() => !readOnly && open()}>
-          <Stack align="center" gap={2}>
-            <Camera size={20} />
-            <Text size="xs" c="dimmed">Photo</Text>
-          </Stack>
-        </Paper>
-      )}
-    </Box>
   )
 }
 

@@ -41,6 +41,7 @@ import type {
   BudgetConfig,
   BudgetStore,
   BudgetTimeline,
+  BudgetAiAnalysis,
 } from '@powerlifting/types'
 
 const api = axios.create({
@@ -1029,6 +1030,18 @@ export async function fetchBudgetTimeline(payload: {
   items: BudgetItem[]
 }): Promise<BudgetTimeline> {
   const res = await api.post<ApiResponse<BudgetTimeline>>('/analytics/budget/timeline', payload)
+  return res.data.data
+}
+
+export async function fetchBudgetAiAnalysis(refresh = false): Promise<BudgetAiAnalysis> {
+  const params = new URLSearchParams({ refresh: String(refresh) })
+  const res = await api.post<ApiResponse<BudgetAiAnalysis>>(`/budget/ai-analysis?${params.toString()}`)
+  if (res.data.error) throw new Error(res.data.error)
+  return res.data.data
+}
+
+export async function markBudgetItemCut(id: string, cut: boolean): Promise<BudgetItem> {
+  const res = await api.patch<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}/cut`, { cut })
   return res.data.data
 }
 

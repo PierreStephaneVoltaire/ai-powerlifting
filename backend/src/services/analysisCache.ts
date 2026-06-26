@@ -941,3 +941,30 @@ export async function putCachedMarkdownExport(
   const expiry = blockKey === 'current' ? currentBlockExpiresAt() : undefined
   await putJsonItem(cachePk(userPk), markdownSk(blockKey), { markdown }, expiry)
 }
+
+// ─── Budget AI advisor cache (BUD-05) ─────────────────────────────────────────
+// Budget data changes frequently, so the AI advisor cache uses a shorter 48h TTL
+// than the 7-day window used for program analytics.
+
+const BUDGET_AI_TTL_HOURS = 48
+
+function budgetAiSk(): string {
+  return 'budget_ai_advisor#v1'
+}
+
+function budgetAiExpiresAt(): number {
+  return Math.floor(Date.now() / 1000) + BUDGET_AI_TTL_HOURS * 60 * 60
+}
+
+export async function getCachedBudgetAiAnalysis<T = unknown>(
+  userPk: string,
+): Promise<{ data: T; generatedAt: string } | null> {
+  return getJsonItem<T>(cachePk(userPk), budgetAiSk())
+}
+
+export async function putCachedBudgetAiAnalysis<T = unknown>(
+  userPk: string,
+  data: T,
+): Promise<void> {
+  await putJsonItem(cachePk(userPk), budgetAiSk(), data, budgetAiExpiresAt())
+}

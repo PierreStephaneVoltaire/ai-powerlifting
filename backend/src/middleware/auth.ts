@@ -112,10 +112,13 @@ export function requireWriteAuth(req: Request, _res: Response, next: NextFunctio
     return next()
   }
 
+  // READs and these analytics POSTs are safe for coach/read-only viewers; they
+  // compute projections, they do not mutate user data.
   const readOnlySafePost = req.method === 'POST' && [
     '/api/analytics/analysis/sections/queue',
     '/api/analytics/block-comparison/ai',
     '/api/analytics/budget/timeline',
+    '/api/budget/ai-analysis',
   ].includes(req.path)
 
   if (readOnlySafePost) {
@@ -126,8 +129,14 @@ export function requireWriteAuth(req: Request, _res: Response, next: NextFunctio
     return next()
   }
 
-  if (req.readOnly || !req.user) {
+  // Unauthenticated visitor: require sign-in (401). An authenticated coach who
+  // is viewing an athlete's profile in read-only mode: forbid writes (403) —
+  // the coach can see everything but must not mutate the athlete's data.
+  if (!req.user) {
     return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
+  }
+  if (req.readOnly) {
+    return next(new AppError('Read-only access: writes are not permitted', 403, 'READ_ONLY'))
   }
 
   next()
