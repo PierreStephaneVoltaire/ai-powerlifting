@@ -41,6 +41,7 @@ import { getSettings } from '@/api/settings'
 import BudgetTable from '@/components/budget/BudgetTable'
 import BudgetStatusBar from '@/components/budget/BudgetStatusBar'
 import BudgetOverview from '@/components/budget/BudgetOverview'
+import { AiBudgetAdvisor } from '@/components/budget/AiBudgetAdvisor'
 import {
   buildBudgetSummary,
   currentMonthKey,
@@ -335,6 +336,7 @@ export default function BudgetPage() {
             <Tabs.Tab value="items">Items</Tabs.Tab>
             <Tabs.Tab value="federations">Federation memberships</Tabs.Tab>
             <Tabs.Tab value="timeline">Priority timeline</Tabs.Tab>
+            <Tabs.Tab value="ai-advisor">AI Advisor</Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="overview" pt="md">
@@ -404,6 +406,22 @@ export default function BudgetPage() {
               config={draftConfig}
               readOnly={readOnly}
               athleteName={athleteName}
+            />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="ai-advisor" pt="md">
+            <AiBudgetAdvisor
+              readOnly={readOnly}
+              isCoach={readOnly}
+              monthlyCap={draftConfig.monthly_cap}
+              currency={draftConfig.currency}
+              athleteName={athleteName}
+              onItemCutToggled={(itemId, cut) => {
+                setDraftItems((prev) =>
+                  prev.map((it) => (it.id === itemId ? { ...it, cut_by_ai: cut } : it)),
+                )
+                setDirty(true)
+              }}
             />
           </Tabs.Panel>
         </Tabs>

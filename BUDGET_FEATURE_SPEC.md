@@ -478,6 +478,7 @@ Design rules:
 ### BUD-05 · AI Advisor Tab: Budget Triage & Pre-Comp Priority Analysis
 **Type:** Frontend + Backend AI  
 **Parallel safety:** Owns the AI Advisor tab component and a new AI backend endpoint. Does not touch Overview, Items, or Timeline components. Follows the existing `invokeToolDirect → IF Agent API → specialist tool` pattern used everywhere else in the app.
+**Status:** Implemented. See `docs/ARCHITECTURE.md` → "Budget AI advisor (BUD-05)".
 
 #### User Stories
 - As an athlete over my monthly budget, I want the AI to tell me which optional expenses I can drop without affecting my competition performance.

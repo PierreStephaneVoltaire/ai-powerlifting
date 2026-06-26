@@ -58,9 +58,11 @@ flowchart TB
    `fatigue_readiness`, `peaking`, `workload`, `alerts`.
 2. **Frontend-local derivations** — computed in-browser from program data,
    glossary, and the weight log (e.g. local e1RM/DOTS/IPF GL trend cards).
-3. **Cache-only-by-default AI reports** — correlation analysis and full-block
-   program evaluation load from cache; explicit Generate/Refresh buttons
-   (`refresh=true`, `cacheOnly=false`) produce new AI output.
+3. **Cache-only-by-default AI reports** — correlation analysis, full-block
+   program evaluation, and the budget AI advisor load from cache; explicit
+   Generate/Refresh buttons (`refresh=true`, `cacheOnly=false`) produce new AI
+   output. The budget advisor uses a shorter 48h cache TTL (vs the 7-day window
+   for program analytics) because budget data changes frequently.
 4. **Block / lifetime analytics** — `blockAnalytics.ts` powers the Past Blocks and
    Lifetime Compare tabs.
 
@@ -206,12 +208,37 @@ flowchart LR
 
 | Variable | Used by |
 |----------|---------|
-| `ANALYSIS_MODEL` (+ `..._THINKING_BUDGET`) | correlation, program evaluation, template evaluation, import parsing |
+| `ANALYSIS_MODEL` (+ `..._THINKING_BUDGET`) | correlation, program evaluation, template evaluation, import parsing, budget advisor |
 | `ESTIMATE_MODEL` (+ `..._REASONING_EFFORT`, `..._VERBOSITY`) | fatigue estimation, muscle-group estimation, lift-profile estimate flows, accessory e1RM backfill |
 | `HEALTH_HELPER_MODEL` | session note drafting, auto-regulation, lift-profile rewrite cleanup |
 | `MODEL_ROUTER_MODEL` | lightweight routing |
 | `IMPORT_FAST_MODEL` | import classification + glossary resolution |
 | `GLOSSARY_TEXT_MODEL` | glossary text generation |
+### Budget AI advisor (BUD-05)
+
+The Budget page's AI Advisor tab follows the same `invokeToolDirect → IF Agent
+API → specialist tool` pattern as every other AI surface, so it is reachable
+from both the web UI and the Discord agent (multi-interface by default).
+
+- **Endpoint** — `POST /api/budget/ai-analysis?refresh=true|false`. The Express
+  route fetches the athlete's `BudgetConfig`, all `BudgetItem`s, and their
+  upcoming competitions, assembles a structured context payload, and calls
+  `invokeToolDirect('budget_advisor', payload)`.
+- **Agent tool** — `budget_advisor` (`tools/health/budget_advisor_ai.py` +
+  `prompts/budget_advisor_system.j2`), registered in `tools/health/tool.py`.
+  Stateless: receives the assembled context and returns structured JSON
+  (Section 1–5 schema: overall assessment, locked-in mandatory items, suggested
+  cuts, gaps, coach note). Competition day is the north star — mandatory
+  comp-linked items are never suggested for cuts.
+- **Cache** — results are cached in `if-powerlifting-analysis-cache` under
+  `budget_ai_advisor#v1` with a **48h TTL** (shorter than the 7-day program
+  analytics window, since budget data changes frequently). Cache-only by
+  default; `refresh=true` regenerates and re-caches. A coach (read-only) can
+  read the cache but cannot trigger regeneration.
+- **"Mark as cut"** — toggles a `cut_by_ai` flag on the item
+  (`PATCH /api/budget/items/:id/cut`); the item is not deleted, just shown with
+  a strikethrough in the Items tab.
+
 
 ## Authentication
 
