@@ -232,14 +232,14 @@ export function AiBudgetAdvisor({
             </Group>
             {analysis.locked_in.map((item) => (
               <Group key={item.item_id} gap="sm" align="flex-start" wrap="wrap">
-                <Badge variant="light" color="green" size="xs">Mandatory</Badge>
+                <Badge variant="filled" color="blue" size="xs">Mandatory</Badge>
                 <Text size="sm" fw={500} style={{ flex: '0 1 auto' }}>{item.name}</Text>
                 {item.purchased ? (
-                  <Badge variant="light" color="green" size="xs" leftSection={<CheckCircle2 size={10} />}>
+                  <Badge variant="filled" color="green" size="xs" leftSection={<CheckCircle2 size={10} />}>
                     Purchased
                   </Badge>
                 ) : (
-                  <Badge variant="light" color="yellow" size="xs">Not purchased</Badge>
+                  <Badge variant="filled" color="orange" size="xs">Not purchased</Badge>
                 )}
                 <Text size="xs" c="dimmed" style={{ flex: '1 1 100%' }}>{item.note}</Text>
               </Group>
@@ -288,7 +288,7 @@ export function AiBudgetAdvisor({
             </Group>
             {analysis.gaps.map((gap, i) => (
               <Group key={i} gap="sm" align="flex-start" wrap="wrap">
-                <Badge variant="light" color={gap.severity === 'warning' ? 'yellow' : 'gray'} size="xs">
+                <Badge variant="filled" color={gap.severity === 'warning' ? 'orange' : 'gray'} size="xs">
                   {gap.severity === 'warning' ? '⚠ Warning' : 'Info'}
                 </Badge>
                 <Text size="sm" style={{ flex: '1 1 80%' }}>{gap.description}</Text>

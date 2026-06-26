@@ -11,7 +11,7 @@ import {
   TextInput,
 } from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
-import { defaultBarWeightKgForUnit, useSettingsStore, type Theme } from '@/store/settingsStore'
+import { defaultBarWeightKgForUnit, useSettingsStore, CURRENCY_OPTIONS, type Theme } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
@@ -46,6 +46,7 @@ export default function SettingsDrawer() {
     barWeightKg,
     setBarWeight,
     defaultSessionsView, setDefaultSessionsView,
+    currency, setCurrency,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
   const { user, loading, readOnly, signIn, signOut, age_class: authAgeClass } = useAuth()
@@ -274,6 +275,21 @@ export default function SettingsDrawer() {
           <Text size="xs" c="dimmed" mt={4}>
             Used for plate calculator. Default is 20kg in metric mode and 45lb in imperial mode.
           </Text>
+        {/* Currency */}
+        <div>
+          <SectionLabel>Currency</SectionLabel>
+          <Text size="xs" c="dimmed" mb="sm">
+            Used for budget totals and expense entry. Applies everywhere money is shown.
+          </Text>
+          <Select
+            value={currency}
+            onChange={(v) => v && setCurrency(v)}
+            data={CURRENCY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            searchable
+            disabled={readOnly}
+            data-testid="settings-currency"
+          />
+        </div>
         </div>
 
         {/* Rankings Location */}

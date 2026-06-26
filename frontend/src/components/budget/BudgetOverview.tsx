@@ -50,14 +50,14 @@ const TIER_LABELS: Record<BudgetPriorityTier, string> = {
   OPTIONAL: 'Optional',
 }
 
-function tierBadgeVariant(tier: BudgetPriorityTier): 'outline' | 'light' | 'default' {
-  if (tier === 'MANDATORY') return 'outline'
-  if (tier === 'IMPORTANT') return 'light'
-  return 'default'
+function tierBadgeVariant(tier: BudgetPriorityTier): 'filled' | 'light' | 'outline' {
+  if (tier === 'MANDATORY') return 'filled'
+  if (tier === 'IMPORTANT') return 'filled'
+  return 'outline'
 }
 
 function tierColor(tier: BudgetPriorityTier): string {
-  return tier === 'MANDATORY' ? 'brand' : tier === 'IMPORTANT' ? 'blue' : 'gray'
+  return tier === 'MANDATORY' ? 'blue' : tier === 'IMPORTANT' ? 'indigo' : 'gray'
 }
 
 function categoryIcon(category: string) {

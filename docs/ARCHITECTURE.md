@@ -237,6 +237,20 @@ from both the web UI and the Discord agent (multi-interface by default).
   read the cache but cannot trigger regeneration.
 - **"Mark as cut"** — toggles a `cut_by_ai` flag on the item
   (`PATCH /api/budget/items/:id/cut`); the item is not deleted, just shown with
+### Budget UX conventions
+
+- **Currency** is a profile-level setting (`settingsStore.currency`, default
+  `CAD`), editable from the Settings drawer. It overrides `BudgetConfig.currency`
+  across all budget surfaces so the symbol stays consistent.
+- **Priority badges** use high-contrast Mantine `filled` variants (MANDATORY =
+  blue, IMPORTANT = indigo) and an `outline` gray for OPTIONAL. `light`/`subtle`
+  yellow badge backgrounds are avoided — the text is unreadable. Yellow is
+  reserved for the read-only "viewing athlete's budget" alert.
+- **Mobile navigation** — at ≤560 px the four-tab bar collapses to a single
+  `Select` dropdown so every tab stays reachable without horizontal scroll. The
+  expense form is single-column on mobile and the date-precision control is a
+  dropdown rather than a two-segment control. The collapsed mobile item row hides
+  the cost column (shown on expand instead) to keep rows scannable.
   a strikethrough in the Items tab.
 
 

@@ -109,9 +109,6 @@ export default function ExpenseRow({
             </Stack>
           </UnstyledButton>
           <Group gap={6} align="center" wrap="nowrap">
-            <Text size="sm" fw={600} ta="right" style={{ whiteSpace: 'nowrap' }}>
-              {costLabel.replace(suffix, '')}{suffix && <Text size="xs" c="dimmed" component="span">{suffix}</Text>}
-            </Text>
             <Checkbox
               checked={item.purchased}
               onChange={(e) => onTogglePurchased(e.currentTarget.checked)}

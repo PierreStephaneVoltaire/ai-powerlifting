@@ -65,13 +65,13 @@ export const RECURRENCE_SUFFIX: Record<BudgetRecurrence, string> = {
 export interface PriorityStyle {
   label: string
   color: string
-  variant: 'light' | 'outline' | 'subtle'
+  variant: 'filled' | 'light' | 'outline'
 }
 
 export const PRIORITY_STYLES: Record<BudgetPriorityTier, PriorityStyle> = {
-  MANDATORY: { label: 'Mandatory', color: 'brand', variant: 'outline' },
-  IMPORTANT: { label: 'Important', color: 'blue', variant: 'light' },
-  OPTIONAL: { label: 'Optional', color: 'gray', variant: 'subtle' },
+  MANDATORY: { label: 'Mandatory', color: 'blue', variant: 'filled' },
+  IMPORTANT: { label: 'Important', color: 'indigo', variant: 'filled' },
+  OPTIONAL: { label: 'Optional', color: 'gray', variant: 'outline' },
 }
 
 export const PRIORITY_OPTIONS: { value: BudgetPriorityTier; label: string }[] =

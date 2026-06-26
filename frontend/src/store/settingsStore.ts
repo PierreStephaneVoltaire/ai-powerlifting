@@ -8,6 +8,19 @@ export type Unit = 'kg' | 'lb'
 export type Theme = 'light' | 'dark' | 'system'
 export type SessionsView = 'Month' | 'Agenda' | 'Compact'
 
+export const CURRENCY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'CAD', label: 'CAD — Canadian Dollar' },
+  { value: 'USD', label: 'USD — US Dollar' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'GBP', label: 'GBP — British Pound' },
+  { value: 'AUD', label: 'AUD — Australian Dollar' },
+  { value: 'NZD', label: 'NZD — New Zealand Dollar' },
+  { value: 'JPY', label: 'JPY — Japanese Yen' },
+  { value: 'CNY', label: 'CNY — Chinese Yuan' },
+  { value: 'HKD', label: 'HKD — Hong Kong Dollar' },
+  { value: 'SGD', label: 'SGD — Singapore Dollar' },
+]
+
 interface SettingsState {
   unit: Unit
   barWeightKg: number
@@ -17,6 +30,7 @@ interface SettingsState {
   defaultSessionsView: SessionsView
   plateInventoryKg: number[]
   plateInventoryLb: number[]
+  currency: string
 
   // Actions
   toggleUnit: () => void
@@ -26,6 +40,7 @@ interface SettingsState {
   setDefaultSessionsView: (view: SessionsView) => void
   setPlateInventoryKg: (plates: number[]) => void
   setPlateInventoryLb: (plates: number[]) => void
+  setCurrency: (currency: string) => void
 }
 
 const DEFAULT_BAR_WEIGHT_KG: Record<Unit, number> = {
@@ -83,6 +98,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultSessionsView: 'Agenda',
       plateInventoryKg: [],
       plateInventoryLb: [],
+      currency: 'CAD',
 
       toggleUnit: () =>
         set((s) => {
@@ -113,20 +129,24 @@ export const useSettingsStore = create<SettingsState>()(
       setPlateInventoryKg: (plates) => set({ plateInventoryKg: normalizePlateInventory(plates) }),
 
       setPlateInventoryLb: (plates) => set({ plateInventoryLb: normalizePlateInventory(plates) }),
+
+      setCurrency: (currency) => set({ currency }),
     }),
     {
       name: 'pl-settings',
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as Partial<SettingsState>
         const unit: Unit = state.unit === 'lb' ? 'lb' : 'kg'
         const customized = typeof state.barWeightCustomized === 'boolean'
           ? state.barWeightCustomized
           : inferBarWeightCustomized(state.barWeightKg)
+        const currency = typeof state.currency === 'string' && state.currency ? state.currency : 'CAD'
 
         return {
           ...state,
           unit,
+          currency,
           barWeightCustomized: customized,
           barWeightKg: customized
             ? (typeof state.barWeightKg === 'number' && Number.isFinite(state.barWeightKg)

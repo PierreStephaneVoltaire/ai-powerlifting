@@ -29,6 +29,7 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { useUiStore } from '@/store/uiStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { useBudgetStore } from '@/store/budgetStore'
 import { useCompetitionsStore } from '@/store/competitionsStore'
@@ -42,6 +43,7 @@ import BudgetTable from '@/components/budget/BudgetTable'
 import BudgetStatusBar from '@/components/budget/BudgetStatusBar'
 import BudgetOverview from '@/components/budget/BudgetOverview'
 import { AiBudgetAdvisor } from '@/components/budget/AiBudgetAdvisor'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   buildBudgetSummary,
   currentMonthKey,
@@ -119,6 +121,7 @@ function priorityColor(p: BudgetPriority): string {
 export default function BudgetPage() {
   const { readOnly, loading: authLoading, signIn } = useAuth()
   const { pushToast } = useUiStore()
+  const { currency: profileCurrency } = useSettingsStore()
   const { config, items, isLoading, loaded, load, save } = useBudgetStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const { library, loadLibrary, saveLibrary } = useFederationStore()
@@ -136,6 +139,7 @@ export default function BudgetPage() {
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<string | null>('overview')
   const [athleteName, setAthleteName] = useState<string | null>(null)
+  const isTabsMobile = useMediaQuery('(max-width: 560px)') ?? false
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadCompetitions().catch(() => {}) }, [loadCompetitions])
@@ -166,6 +170,13 @@ export default function BudgetPage() {
     setDraftConfig(config)
     setDirty(false)
   }, [items, config])
+
+  useEffect(() => {
+    if (profileCurrency && draftConfig.currency !== profileCurrency) {
+      setDraftConfig((c) => ({ ...c, currency: profileCurrency }))
+      setDirty(true)
+    }
+  }, [profileCurrency, draftConfig.currency])
 
   const upcomingComps = useMemo<UserCompetition[]>(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -331,13 +342,30 @@ export default function BudgetPage() {
         />
 
         <Tabs value={activeTab} onChange={setActiveTab}>
-          <Tabs.List>
-            <Tabs.Tab value="overview">Overview</Tabs.Tab>
-            <Tabs.Tab value="items">Items</Tabs.Tab>
-            <Tabs.Tab value="federations">Federation memberships</Tabs.Tab>
-            <Tabs.Tab value="timeline">Priority timeline</Tabs.Tab>
-            <Tabs.Tab value="ai-advisor">AI Advisor</Tabs.Tab>
-          </Tabs.List>
+          {isTabsMobile ? (
+            <Select
+              value={activeTab}
+              onChange={(v) => setActiveTab(v ?? 'overview')}
+              data={[
+                { value: 'overview', label: 'Overview' },
+                { value: 'items', label: 'Items' },
+                { value: 'federations', label: 'Federation memberships' },
+                { value: 'timeline', label: 'Priority timeline' },
+                { value: 'ai-advisor', label: 'AI Advisor' },
+              ]}
+              size="sm"
+              aria-label="Budget section"
+              data-testid="budget-tab-select"
+            />
+          ) : (
+            <Tabs.List>
+              <Tabs.Tab value="overview">Overview</Tabs.Tab>
+              <Tabs.Tab value="items">Items</Tabs.Tab>
+              <Tabs.Tab value="federations">Federation memberships</Tabs.Tab>
+              <Tabs.Tab value="timeline">Priority timeline</Tabs.Tab>
+              <Tabs.Tab value="ai-advisor">AI Advisor</Tabs.Tab>
+            </Tabs.List>
+          )}
 
           <Tabs.Panel value="overview" pt="md">
             <BudgetOverview

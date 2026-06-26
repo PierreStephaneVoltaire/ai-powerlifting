@@ -201,7 +201,7 @@ export default function BudgetTable({
           <Table.Thead>
             <Table.Tr>
               <Table.Th style={{ width: 28 }}></Table.Th>
-              <Table.Th style={{ width: 90 }}>Priority</Table.Th>
+              <Table.Th style={{ width: 104 }}>Priority</Table.Th>
               <Table.Th style={{ width: 36 }}>Cat</Table.Th>
               <Table.Th>Name</Table.Th>
               <Table.Th style={{ width: 28 }}>Rec</Table.Th>

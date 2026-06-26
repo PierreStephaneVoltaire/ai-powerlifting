@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, X, Check, Paperclip } from 'lucide-react'
 import {
-  ActionIcon, Badge, FileButton, Group, NumberInput, SegmentedControl, Select,
+  ActionIcon, Badge, FileButton, Group, NumberInput, Select,
   SimpleGrid, Stack, Switch, Text, TextInput, Textarea, Tooltip,
 } from '@mantine/core'
 import { DatePickerInput, MonthPickerInput } from '@mantine/dates'
@@ -160,7 +160,7 @@ export default function ExpenseForm({
         )}
       </Group>
 
-      <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
+      <SimpleGrid cols={{ base: 1, sm: 3, md: 4 }} spacing="xs">
         <Select
           label="Category"
           size="xs"
@@ -189,11 +189,11 @@ export default function ExpenseForm({
           disabled={readOnly}
         />
         {item.recurrence === 'ONE_TIME' && (
-          <SegmentedControl
+          <Select
             size="xs"
-            fullWidth
+            label="Date precision"
             value={item.date_precision}
-            onChange={onPrecisionChange}
+            onChange={(v) => v && onPrecisionChange(v)}
             data={[
               { value: 'exact', label: 'Exact date' },
               { value: 'month', label: 'Month only' },
@@ -203,7 +203,7 @@ export default function ExpenseForm({
         )}
       </SimpleGrid>
 
-      <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
+      <SimpleGrid cols={{ base: 1, sm: 3, md: 4 }} spacing="xs">
         {item.date_precision === 'month' && item.recurrence !== 'ONE_TIME' ? (
           <>
             <MonthPickerInput
