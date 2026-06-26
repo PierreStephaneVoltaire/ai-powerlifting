@@ -13,97 +13,22 @@ import {
 } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { Zap, Repeat, Filter, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
-import type { BudgetItem, BudgetConfig, UserCompetition, BudgetCategory } from '@powerlifting/types'
-import { BUDGET_CATEGORY_OPTIONS } from '@powerlifting/types'
+import type { BudgetItem, BudgetConfig, UserCompetition, BudgetCategory, BudgetPriorityTier } from '@powerlifting/types'
+import { BUDGET_CATEGORY_OPTIONS, BUDGET_PRIORITY_TIER_VALUES } from '@powerlifting/types'
+import {
+  formatCurrency,
+  currencySymbol,
+  monthLabel,
+  monthShortLabel,
+  monthKeyFromDate,
+  currentMonthKey,
+  isRecurring,
+  itemTier,
+  compLinked,
+  activeInMonth,
+} from '@/components/budget/budgetShared'
+import { monthOf, datePeriodLabel } from '@/components/budget/dateUtils'
 import { getSettings } from '@/api/settings'
-
-type BudgetPriorityTier = 'MANDATORY' | 'IMPORTANT' | 'OPTIONAL'
-
-const TIER_VALUES: ReadonlyArray<BudgetPriorityTier> = ['MANDATORY', 'IMPORTANT', 'OPTIONAL']
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  CAD: '$', USD: '$', AUD: '$', NZD: '$', HKD: '$', SGD: '$',
-  EUR: 'EUR', GBP: 'GBP', JPY: 'JPY', CNY: 'CNY',
-}
-
-function currencySymbol(currency?: string | null): string {
-  if (!currency) return ''
-  return CURRENCY_SYMBOLS[currency] ?? ''
-}
-
-function formatCurrency(amount: number, currency?: string | null): string {
-  const sym = currencySymbol(currency)
-  if (!sym) return amount.toFixed(2)
-  return `${sym}${amount.toFixed(2)}`
-}
-
-function currentMonthKey(date = new Date()): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-}
-
-function monthKeyFromDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-}
-
-function monthLabel(key: string): string {
-  const [y, m] = key.split('-').map(Number)
-  if (!y || !m) return key
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-}
-
-function monthShortLabel(key: string): string {
-  const [y, m] = key.split('-').map(Number)
-  if (!y || !m) return key
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short' })
-}
-
-function monthOf(value?: string | null): string {
-  return (value ?? '').slice(0, 7)
-}
-
-function isRecurring(item: BudgetItem): boolean {
-  return item.recurrence !== 'one_time'
-}
-
-function itemTier(item: BudgetItem): BudgetPriorityTier {
-  if (item.needed_for_comp_day) return 'MANDATORY'
-  const mandatoryCats: BudgetCategory[] = ['competition_entry', 'federation_membership', 'transportation']
-  if (mandatoryCats.includes(item.category)) return 'MANDATORY'
-  const importantCats: BudgetCategory[] = ['gym_membership', 'equipment']
-  if (importantCats.includes(item.category)) return 'IMPORTANT'
-  return 'OPTIONAL'
-}
-
-function compLinked(item: BudgetItem): boolean {
-  return (item.comp_master_ids?.length ?? 0) > 0
-}
-
-function activeInMonth(item: BudgetItem, month: string): boolean {
-  if (item.recurrence === 'one_time') {
-    return monthOf(item.start_date) === month
-  }
-  const startMonth = monthOf(item.start_date)
-  if (!startMonth) return false
-  const endMonth = monthOf(item.end_date) || '9999-99'
-  return month >= startMonth && month <= endMonth
-}
-
-function datePeriodLabel(item: BudgetItem): string {
-  const start = monthOf(item.start_date)
-  if (item.recurrence === 'one_time') {
-    if (!item.start_date) return '—'
-    if (start === item.start_date) return monthLabel(start)
-    const [y, m, d] = item.start_date.slice(0, 10).split('-').map(Number)
-    if (!y || !m || !d) return monthLabel(start)
-    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric',
-    })
-  }
-  const end = monthOf(item.end_date)
-  if (start && end) return `${monthLabel(start)} – ${monthLabel(end)}`
-  if (start) return `${monthLabel(start)} – ongoing`
-  return '—'
-}
 
 interface TimelineFilters {
   priorities: BudgetPriorityTier[]
@@ -183,7 +108,7 @@ function formatCompDate(dateStr: string): string {
 }
 
 function recurrenceLabel(rec: string): string {
-  return rec === 'one_time' ? 'one-time' : rec.toLowerCase()
+  return rec === 'ONE_TIME' ? 'one-time' : rec.toLowerCase()
 }
 
 function tierBadgeVariant(tier: BudgetPriorityTier): 'outline' | 'light' | 'default' {
@@ -231,7 +156,7 @@ export default function BudgetTimeline({
   const navScrollRef = useRef<HTMLDivElement>(null)
 
   const currency = config.currency
-  const monthlyCap = config.monthly_budget
+  const monthlyCap = config.monthly_cap
 
   const allMonths = useMemo(() => buildTimelineWindow(items, comps), [items, comps])
   const compMonths = useMemo(
@@ -249,7 +174,7 @@ export default function BudgetTimeline({
   }, [items])
 
   const priorityOptions = useMemo(
-    () => TIER_VALUES.map((t) => ({ value: t, label: TIER_LABELS[t] })),
+    () => BUDGET_PRIORITY_TIER_VALUES.map((t) => ({ value: t, label: TIER_LABELS[t] })),
     [],
   )
 

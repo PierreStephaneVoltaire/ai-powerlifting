@@ -36,6 +36,7 @@ import { useFederationStore } from '@/store/federationStore'
 import { fetchFederations, putBudget as apiPutBudget, uploadBudgetItemPhoto, deleteBudgetItemPhoto, fetchBudgetTimeline } from '@/api/client'
 import { getMediaUrl } from '@/utils/media'
 import { useProgramStore } from '@/store/programStore'
+import BudgetTimeline from '@/components/budget/BudgetTimeline'
 import BudgetTable from '@/components/budget/BudgetTable'
 import BudgetStatusBar from '@/components/budget/BudgetStatusBar'
 import BudgetOverview from '@/components/budget/BudgetOverview'
@@ -382,12 +383,12 @@ export default function BudgetPage() {
           </Tabs.Panel>
 
           <Tabs.Panel value="timeline" pt="md">
-            <TimelineTab
-              timeline={timeline}
-              loading={timelineLoading}
-              readOnly={readOnly}
-              onGenerate={handleTimeline}
+            <BudgetTimeline
+              items={draftItems}
               comps={upcomingComps}
+              config={draftConfig}
+              readOnly={readOnly}
+              athleteName={readOnly ? user.username : null}
             />
           </Tabs.Panel>
         </Tabs>

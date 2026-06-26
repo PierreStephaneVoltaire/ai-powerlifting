@@ -63,8 +63,9 @@ powerlifting-app/
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── index.ts             Program, Session, Exercise, Competition, Glossary, Budget, …
-├── lambda/master-sync/      Master data sync Lambda (handler.py)
-├── video-lambda/            S3-triggered video-thumbnail generator (index.py, Python 3.12 + ffmpeg layer)
+├── lambda/
+│   ├── master-sync/        Master data sync Lambda (handler.py)
+│   └── video-thumbnail/    S3-triggered video-thumbnail generator (index.py, Python 3.12 + ffmpeg layer)
 ├── docker/                  Container build context
 ├── terraform/               Powerlifting-specific AWS resources (see AGENTS.md)
 │   ├── main.tf              ECR repos + lifecycle policy

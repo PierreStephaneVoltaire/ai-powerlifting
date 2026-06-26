@@ -230,8 +230,7 @@ powerlifting-app/
 ├── backend/        Express API (thin transport → IF Agent API)
 ├── frontend/       React 19 + Vite PWA
 ├── packages/types/  Shared TypeScript types
-├── lambda/          master-sync Lambda
-├── video-lambda/    S3-triggered video-thumbnail Lambda (ffmpeg)
+├── lambda/         Lambdas: master-sync, video-thumbnail (ffmpeg)
 ├── docker/         Container build context
 ├── terraform/      Powerlifting-specific AWS resources (ECR, S3, Lambda, budget table)
 └── docs/           Architecture, formulas, and the implementation reference

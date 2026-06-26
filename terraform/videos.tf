@@ -118,8 +118,8 @@ data "aws_caller_identity" "current" {}
 
 data "archive_file" "video_lambda" {
   type        = "zip"
-  output_path = "${path.module}/video-lambda.zip"
-  source_dir  = "${path.module}/../video-lambda"
+  output_path = "${path.module}/video-thumbnail.zip"
+  source_dir  = "${path.module}/../lambda/video-thumbnail"
 }
 
 resource "aws_lambda_layer_version" "ffmpeg" {

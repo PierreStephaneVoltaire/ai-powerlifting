@@ -48,7 +48,7 @@ k3s on bare metal means resources are limited. That is why:
   the Node process; they're delegated to the IF Agent API's health tools.
 - **rolling Lambdas** are the intended path for expensive or bursty calculations
   so the cluster doesn't have to size for peak compute.
-- when you add a compute-heavy feature, prefer a Lambda (see `video-lambda/` and
+- when you add a compute-heavy feature, prefer a Lambda (see `lambda/` and
   `terraform/videos.tf` for the pattern) over a long-running pod.
 
 ### AWS and k3s creds are available for debugging

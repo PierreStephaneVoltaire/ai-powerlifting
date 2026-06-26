@@ -1,13 +1,2 @@
-Uncaught TypeError: Cannot read properties of undefined (reading 'replace')
-    at ItemCard (index-MIzgpAOG.js:95156:137)
-    at renderWithHooks (index-MIzgpAOG.js:4041:21)
-    at updateFunctionComponent (index-MIzgpAOG.js:5670:16)
-    at beginWork (index-MIzgpAOG.js:6281:14)
-    at performUnitOfWork (index-MIzgpAOG.js:9047:14)
-    at workLoopConcurrentByScheduler (index-MIzgpAOG.js:9044:5)
-    at renderRootConcurrent (index-MIzgpAOG.js:9026:7)
-    at performWorkOnRoot (index-MIzgpAOG.js:8579:188)
-    at performWorkOnRootViaSchedulerTask (index-MIzgpAOG.js:9602:3)
-    at MessagePort.performWorkUntilDeadline (index-MIzgpAOG.js:643:46)
 
     
