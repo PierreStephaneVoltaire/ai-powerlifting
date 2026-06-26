@@ -14,7 +14,13 @@ interface BudgetState {
   reset: () => void
 }
 
-const DEFAULT_CONFIG: BudgetConfig = { monthly_budget: 0, currency: 'CAD' }
+const DEFAULT_CONFIG: BudgetConfig = {
+  user_pk: '',
+  monthly_cap: 0,
+  currency: 'CAD',
+  notes: null,
+  updated_at: new Date().toISOString(),
+}
 
 export const useBudgetStore = create<BudgetState>((set, get) => ({
   config: DEFAULT_CONFIG,
@@ -48,7 +54,7 @@ export const useBudgetStore = create<BudgetState>((set, get) => ({
   setItemPhoto: (itemId, photoS3Key) => {
     set((state) => ({
       items: state.items.map((it) =>
-        it.id === itemId ? { ...it, photo_s3_key: photoS3Key, photo_url: null } : it,
+        it.id === itemId ? { ...it, photo_s3_key: photoS3Key } : it,
       ),
     }))
   },

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { Wallet, Plus, Trash2, Save, Camera, AlertTriangle, CheckCircle2, CalendarClock, Sparkles, Loader2, Info } from 'lucide-react'
+import { Wallet, Plus, Trash2, Save, Camera, CalendarClock, Sparkles, Loader2, Info, LogIn } from 'lucide-react'
 import {
   ActionIcon,
   Badge,
@@ -15,7 +15,6 @@ import {
   MultiSelect,
   NumberInput,
   Paper,
-  Progress,
   Select,
   SimpleGrid,
   Stack,
@@ -38,6 +37,13 @@ import { fetchFederations, putBudget as apiPutBudget, uploadBudgetItemPhoto, del
 import { getMediaUrl } from '@/utils/media'
 import { useProgramStore } from '@/store/programStore'
 import BudgetTable from '@/components/budget/BudgetTable'
+import BudgetStatusBar from '@/components/budget/BudgetStatusBar'
+import BudgetOverview from '@/components/budget/BudgetOverview'
+import {
+  buildBudgetSummary,
+  currentMonthKey,
+  type BudgetPriorityTier,
+} from '@/components/budget/budgetShared'
 import type {
   BudgetItem,
   BudgetCategory,
@@ -58,26 +64,6 @@ import { DatePickerInput } from '@mantine/dates'
 
 function newItemId(): string {
   return `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
-}
-
-function defaultRecurrence(category: BudgetCategory): BudgetRecurrence {
-  return category === 'gym_membership' || category === 'supplement' || category === 'federation_membership'
-    ? 'recurring'
-    : 'one_time'
-}
-
-function makeBlankItem(category: BudgetCategory): BudgetItem {
-  const now = new Date().toISOString()
-  return {
-    id: newItemId(),
-    name: '',
-    category,
-    cost: 0,
-    recurrence: defaultRecurrence(category),
-    purchased: false,
-    created_at: now,
-    updated_at: now,
-  }
 }
 
 function parseDateValue(value?: string | null): string | null {
@@ -127,72 +113,8 @@ function priorityColor(p: BudgetPriority): string {
   return p === 'buy_now' ? 'red' : p === 'buy_later' ? 'orange' : p === 'optional' ? 'blue' : 'gray'
 }
 
-function monthOf(dateStr?: string | null): string {
-  return (dateStr ?? '').slice(0, 7)
-}
-
-function itemActiveInMonth(item: BudgetItem, month: string): boolean {
-  if (item.purchased) return false
-  const startMonth = monthOf(item.start_date)
-  if (!startMonth) return false
-  if (item.recurrence === 'one_time') return startMonth === month
-  const endMonth = monthOf(item.end_date) || '9999-99'
-  return month >= startMonth && month <= endMonth
-}
-
-function monthCostForItem(item: BudgetItem, month: string): number {
-  return itemActiveInMonth(item, month) ? item.cost : 0
-}
-
-function buildMonths(items: BudgetItem[], programStart?: string, programEnd?: string): string[] {
-  const today = new Date()
-  const starts = items.map((i) => monthOf(i.start_date)).filter(Boolean).sort()
-
-  let base: Date | null = null
-  if (programStart) {
-    const [y, m] = programStart.slice(0, 7).split('-').map(Number)
-    if (y && m) base = new Date(y, m - 1, 1)
-  }
-  if (!base) {
-    base = new Date(today.getFullYear(), today.getMonth(), 1)
-    if (starts.length) {
-      const [y, m] = starts[0].split('-').map(Number)
-      const start = new Date(y, m - 1, 1)
-      if (start.getTime() < base.getTime()) base = start
-    }
-  }
-
-  const end: Date | null = programEnd
-    ? (() => {
-        const [y, m] = programEnd.slice(0, 7).split('-').map(Number)
-        return y && m ? new Date(y, m - 1, 1) : null
-      })()
-    : null
-
-  const months: string[] = []
-  const MAX_MONTHS = 36
-  let cursor = base
-  for (let i = 0; i < MAX_MONTHS; i++) {
-    months.push(monthKey(cursor))
-    if (end && cursor.getTime() >= end.getTime()) break
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
-  }
-  return months
-}
-
-function spentByMonth(items: BudgetItem[]): Map<string, number> {
-  const map = new Map<string, number>()
-  for (const it of items) {
-    if (!it.purchased) continue
-    const key = monthOf(it.purchased_date)
-    if (!key) continue
-    map.set(key, (map.get(key) ?? 0) + it.cost)
-  }
-  return map
-}
-
 export default function BudgetPage() {
-  const { readOnly } = useAuth()
+  const { readOnly, user, loading: authLoading, signIn } = useAuth()
   const { pushToast } = useUiStore()
   const { config, items, isLoading, loaded, load, save } = useBudgetStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
@@ -209,6 +131,7 @@ export default function BudgetPage() {
   const [masterFeds, setMasterFeds] = useState<MasterFederation[]>([])
   const [timeline, setTimeline] = useState<BudgetTimelineType | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<string | null>('overview')
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadCompetitions().catch(() => {}) }, [loadCompetitions])
@@ -236,37 +159,6 @@ export default function BudgetPage() {
     { value: '', label: 'None' },
     ...upcomingComps.map((c) => ({ value: c.master_id, label: `${c.name} (${c.start_date})` })),
   ], [upcomingComps])
-
-  const months = useMemo(() => buildMonths(draftItems, programStart, programEnd), [draftItems, programStart, programEnd])
-  const spentMap = useMemo(() => spentByMonth(draftItems), [draftItems])
-
-  const monthlyRows = useMemo(() => months.map((m) => {
-    const due = draftItems.reduce((sum, it) => sum + monthCostForItem(it, m), 0)
-    const spent = spentMap.get(m) ?? 0
-    const remaining = config.monthly_budget - due
-    return { month: m, due, spent, remaining }
-  }), [months, draftItems, spentMap, config.monthly_budget])
-
-  const totalRecurring = useMemo(() =>
-    draftItems
-      .filter((it) => it.recurrence === 'recurring' && !it.purchased)
-      .reduce((sum, it) => sum + it.cost, 0),
-    [draftItems])
-
-  const updateItem = useCallback((id: string, patch: Partial<BudgetItem>) => {
-    setDraftItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch, updated_at: new Date().toISOString() } : it)))
-    setDirty(true)
-  }, [])
-
-  const addItem = useCallback((category: BudgetCategory) => {
-    setDraftItems((prev) => [...prev, makeBlankItem(category)])
-    setDirty(true)
-  }, [])
-
-  const removeItem = useCallback((id: string) => {
-    setDraftItems((prev) => prev.filter((it) => it.id !== id))
-    setDirty(true)
-  }, [])
 
   const handleAddItem = useCallback((item: BudgetItem) => {
     setDraftItems((prev) => [item, ...prev])
@@ -302,7 +194,7 @@ export default function BudgetPage() {
     try {
       const { photo_s3_key } = await uploadBudgetItemPhoto(itemId, file)
       useBudgetStore.getState().setItemPhoto(itemId, photo_s3_key)
-      setDraftItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, photo_s3_key, photo_url: null } : it)))
+      setDraftItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, photo_s3_key } : it)))
       pushToast({ message: 'Photo uploaded', type: 'success' })
     } catch {
       pushToast({ message: 'Photo upload failed', type: 'error' })
@@ -313,7 +205,7 @@ export default function BudgetPage() {
     try {
       await deleteBudgetItemPhoto(itemId)
       useBudgetStore.getState().setItemPhoto(itemId, null)
-      setDraftItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, photo_s3_key: null, photo_url: null } : it)))
+      setDraftItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, photo_s3_key: null } : it)))
       pushToast({ message: 'Photo removed', type: 'success' })
     } catch {
       pushToast({ message: 'Failed to remove photo', type: 'error' })
@@ -332,6 +224,21 @@ export default function BudgetPage() {
     }
   }
 
+  const monthSummary = useMemo(
+    () => buildBudgetSummary(draftItems, draftConfig, currentMonthKey()),
+    [draftItems, draftConfig],
+  )
+
+  const handleCapChange = useCallback((cap: number, currency: string) => {
+    setDraftConfig((c) => ({ ...c, monthly_cap: cap, currency }))
+    setDirty(true)
+    pushToast({ message: 'Monthly cap updated. Save to persist.', type: 'success' })
+  }, [pushToast])
+
+  const handleTierSelect = useCallback((_tier: BudgetPriorityTier) => {
+    setActiveTab('items')
+  }, [])
+
   const fedMembershipCoverage = useMemo(() => {
     const map = new Map<string, string[]>()
     for (const fed of masterFeds) {
@@ -343,6 +250,34 @@ export default function BudgetPage() {
     }
     return Array.from(map.values())
   }, [masterFeds])
+
+  if (authLoading) {
+    return (
+      <Container size="xl" pb={40}>
+        <Stack gap="md" align="center" justify="center" style={{ minHeight: 200 }}>
+          <Loader2 size={24} />
+          <Text size="sm" c="dimmed">Loading budget…</Text>
+        </Stack>
+      </Container>
+    )
+  }
+
+  if (!user) {
+    return (
+      <Container size="xl" pb={40}>
+        <Stack gap="md" align="center" justify="center" style={{ minHeight: 300 }}>
+          <Wallet size={40} />
+          <Title order={2}>Budget</Title>
+          <Text size="sm" c="dimmed" ta="center" maw={420}>
+            Sign in to view and manage your training budget, track expenses, and plan spending around your competitions.
+          </Text>
+          <Button leftSection={<LogIn size={16} />} onClick={signIn}>
+            Sign in
+          </Button>
+        </Stack>
+      </Container>
+    )
+  }
 
   return (
     <Container size="xl" pb={40}>
@@ -369,7 +304,16 @@ export default function BudgetPage() {
           </Group>
         </Group>
 
-        <Tabs defaultValue="overview">
+        <BudgetStatusBar
+          config={draftConfig}
+          spentThisMonth={monthSummary.spent_this_month}
+          recurringMonthlyTotal={monthSummary.recurring_monthly_total}
+          readOnly={readOnly}
+          athleteName={readOnly ? user.username : null}
+          onCapChange={handleCapChange}
+        />
+
+        <Tabs value={activeTab} onChange={setActiveTab}>
           <Tabs.List>
             <Tabs.Tab value="overview">Overview</Tabs.Tab>
             <Tabs.Tab value="items">Items</Tabs.Tab>
@@ -378,15 +322,12 @@ export default function BudgetPage() {
           </Tabs.List>
 
           <Tabs.Panel value="overview" pt="md">
-            <OverviewTab
+            <BudgetOverview
+              items={draftItems}
               config={draftConfig}
-              monthlyRows={monthlyRows}
-              totalRecurring={totalRecurring}
-              itemsCount={draftItems.length}
-              overdueCount={monthlyRows.filter((r) => r.due > draftConfig.monthly_budget && draftConfig.monthly_budget > 0).length}
               readOnly={readOnly}
-              onConfigChange={(c) => { setDraftConfig(c); setDirty(true) }}
-              months={months}
+              athleteName={readOnly ? user.username : null}
+              onTierSelect={handleTierSelect}
             />
           </Tabs.Panel>
 
@@ -452,107 +393,6 @@ export default function BudgetPage() {
         </Tabs>
       </Stack>
     </Container>
-  )
-}
-
-interface OverviewTabProps {
-  config: BudgetConfig
-  monthlyRows: { month: string; due: number; spent: number; remaining: number }[]
-  totalRecurring: number
-  itemsCount: number
-  overdueCount: number
-  readOnly: boolean
-  onConfigChange: (c: BudgetConfig) => void
-  months: string[]
-}
-
-function OverviewTab({ config, monthlyRows, totalRecurring, itemsCount, overdueCount, readOnly, onConfigChange, months }: OverviewTabProps) {
-  const overBudget = config.monthly_budget > 0 && totalRecurring > config.monthly_budget
-  return (
-    <Stack gap="md">
-      <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }}>
-        <Paper withBorder p="md" radius="md">
-          <Text size="xs" c="dimmed">Monthly budget</Text>
-          <NumberInput
-            mt={4}
-            value={config.monthly_budget}
-            onChange={(v) => onConfigChange({ ...config, monthly_budget: typeof v === 'number' ? v : 0 })}
-            min={0}
-            disabled={readOnly}
-            leftSection={<Text size="xs" c="dimmed">$</Text>}
-            decimalScale={2}
-            hideControls
-          />
-          <Select
-            mt={6}
-            size="xs"
-            value={config.currency}
-            onChange={(v) => onConfigChange({ ...config, currency: v ?? 'CAD' })}
-            data={['CAD', 'USD', 'EUR', 'GBP', 'AUD']}
-            disabled={readOnly}
-          />
-        </Paper>
-        <Paper withBorder p="md" radius="md">
-          <Text size="xs" c="dimmed">Recurring / month</Text>
-          <Text fw={700} size="xl" mt={4}>${totalRecurring.toFixed(2)}</Text>
-          {overBudget && (
-            <Badge color="red" variant="light" mt={6} leftSection={<AlertTriangle size={12} />}>Over monthly cap</Badge>
-          )}
-        </Paper>
-        <Paper withBorder p="md" radius="md">
-          <Text size="xs" c="dimmed">Items tracked</Text>
-          <Text fw={700} size="xl" mt={4}>{itemsCount}</Text>
-        </Paper>
-        <Paper withBorder p="md" radius="md">
-          <Text size="xs" c="dimmed">Months over cap</Text>
-          <Text fw={700} size="xl" mt={4}>{overdueCount}</Text>
-        </Paper>
-      </SimpleGrid>
-
-      <Paper withBorder p="md" radius="md">
-        <Group justify="space-between" mb="sm">
-          <Text fw={600}>Budget vs due — {months.length} months</Text>
-          {config.monthly_budget > 0 && (
-            <Text size="xs" c="dimmed">cap ${config.monthly_budget.toFixed(2)}/mo</Text>
-          )}
-        </Group>
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Month</Table.Th>
-              <Table.Th ta="right">Due</Table.Th>
-              <Table.Th ta="right">Spent</Table.Th>
-              <Table.Th>Adherence</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {monthlyRows.map((r) => {
-              const pct = config.monthly_budget > 0 ? Math.min(100, (r.due / config.monthly_budget) * 100) : 0
-              const over = config.monthly_budget > 0 && r.due > config.monthly_budget
-              return (
-                <Table.Tr key={r.month}>
-                  <Table.Td>{monthLabel(r.month)}</Table.Td>
-                  <Table.Td ta="right">${r.due.toFixed(2)}</Table.Td>
-                  <Table.Td ta="right">${r.spent.toFixed(2)}</Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Progress value={pct} size="sm" color={over ? 'red' : 'green'} style={{ flex: 1 }} />
-                      {over ? (
-                        <Badge color="red" variant="light" size="xs">Over</Badge>
-                      ) : r.due > 0 ? (
-                        <Badge color="green" variant="light" size="xs" leftSection={<CheckCircle2 size={10} />}>Under</Badge>
-                      ) : (
-                        <Badge color="gray" variant="light" size="xs">—</Badge>
-                      )}
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              )
-            })}
-          </Table.Tbody>
-        </Table>
-      </Paper>
-    </Stack>
   )
 }
 

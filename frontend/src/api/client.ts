@@ -1045,4 +1045,32 @@ export async function markBudgetItemCut(id: string, cut: boolean): Promise<Budge
   return res.data.data
 }
 
+export async function fetchBudgetItems(params?: {
+  comp_id?: string
+  category?: string
+  priority?: string
+}): Promise<BudgetItem[]> {
+  const query = new URLSearchParams()
+  if (params?.comp_id) query.set('comp_id', params.comp_id)
+  if (params?.category) query.set('category', params.category)
+  if (params?.priority) query.set('priority', params.priority)
+  const qs = query.toString()
+  const res = await api.get<ApiResponse<BudgetItem[]>>(`/budget/items${qs ? `?${qs}` : ''}`)
+  return res.data.data
+}
+
+export async function createBudgetItem(item: BudgetItem): Promise<BudgetItem> {
+  const res = await api.post<ApiResponse<BudgetItem>>('/budget/items', item)
+  return res.data.data
+}
+
+export async function updateBudgetItem(id: string, patch: Partial<BudgetItem>): Promise<BudgetItem> {
+  const res = await api.put<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}`, patch)
+  return res.data.data
+}
+
+export async function deleteBudgetItem(id: string): Promise<void> {
+  await api.delete(`/budget/items/${encodeURIComponent(id)}`)
+}
+
 export default api
