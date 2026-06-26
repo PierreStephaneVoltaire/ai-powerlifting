@@ -182,8 +182,7 @@ cloud-native workloads could connect to that and work seamlessly. I also plan to
 lean on **Lambdas for calculations** for that flexibility.
 
 For more on the request flow, data model, caching, and AI execution model, see
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). For the implementation-exact
-reference (the old README), see [`docs/REFERENCE.md`](docs/REFERENCE.md).
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### Target release form
 
