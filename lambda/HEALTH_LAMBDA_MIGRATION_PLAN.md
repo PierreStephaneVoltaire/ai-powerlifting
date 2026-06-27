@@ -39,62 +39,77 @@ These are **NOT** migrated. They remain in `tools/health/` and the portal backen
 
 ---
 
-## Phase 0 — Shared `powerlifting_core` Lambda Layer
+## Phase 0 — Focused shared layers (NO monolithic layer)
 
-Extract the deterministic modules from `tools/health/` into `utils/powerlifting-app/lambda/powerlifting_core/` as a pip-style package. `tools/health/` re-exports the same names so the agent path is unchanged.
+**Architecture: per-lambda self-contained packages + a few small focused layers.** No monolithic `powerlifting_core` layer. Each lambda gets its own folder with ONLY the code it needs (copied verbatim from `tools/health/`, trimmed to that tool's dependency graph). Heavyweight shared deps live in small focused layers so no lambda pays cold-start cost for code/deps it doesn't use.
 
-**Must NOT import:** `httpx`, `openrouter`, `OPENROUTER_API_KEY`, `prompts/loader.py`, `chromadb`, any `*_ai.py` module.
+**Layer assignments:**
+| Layer | Contents | Used by | Size profile |
+|-------|----------|---------|--------------|
+| `pl-boto3` | boto3 + botocore + s3transfer | all 63 DynamoDB lambdas (Streams D,E,F,G,H,I + deterministic analytics that read DynamoDB) | ~60MB |
+| `pl-pandas` | pandas + numpy | ONLY the 3 OpenPowerlifting stats lambdas (Stream B) | ~110MB |
+| (no layer) | stdlib only | the 10 pure-math lambdas (Stream A) — no third-party deps at all | ~KB |
 
-Modules to extract:
-- [ ] `powerlifting_core/__init__.py`
-- [ ] `powerlifting_core/analytics.py` (from `tools/health/analytics.py`)
-- [ ] `powerlifting_core/comparison.py`
-- [ ] `powerlifting_core/powerlifting_stats.py`
-- [ ] `powerlifting_core/training_weeks.py`
-- [ ] `powerlifting_core/template_apply.py`
-- [ ] `powerlifting_core/template_convert.py`
-- [ ] `powerlifting_core/cache_invalidation.py`
-- [ ] `powerlifting_core/export.py`
-- [ ] `powerlifting_core/renderer.py`
-- [ ] `powerlifting_core/core.py` (deterministic CRUD surface only — strip any `*_ai` imports/wrappers)
-- [ ] `powerlifting_core/program_store.py`
-- [ ] `powerlifting_core/session_store.py`
-- [ ] `powerlifting_core/template_store.py`
-- [ ] `powerlifting_core/glossary_store.py`
-- [ ] `powerlifting_core/federation_store.py`
-- [ ] `powerlifting_core/import_store.py`
-- [ ] `powerlifting_core/analysis_cache.py`
-- [ ] `powerlifting_core/health_types.py`
-- [ ] `powerlifting_core/dispatch.py` (exposes `execute(name, args)` + `get_schemas()` for the 73 deterministic tools only)
-- [ ] `powerlifting_core/config.py` (env-only reads — `AWS_REGION`, table names, `SANDBOX_PATH`; no LLM vars)
-- [ ] `tools/health/` re-exports updated to import from `powerlifting_core` (agent path unchanged)
-- [ ] Verify `tools/health/test_*.py` still pass against the re-exported agent path
-- [ ] `powerlifting_core/requirements.txt` (boto3, pandas, numpy — NO httpx/openai)
-- [ ] Terraform `aws_lambda_layer_version` `powerlifting_core` (Timeout N/A — layers have no timeout)
-- [ ] Terraform `aws_lambda_layer_version` `powerlifting_pandas` (pandas/numpy for the 3 stats lambdas)
+**Must NOT appear in any layer or lambda package:** `httpx`, `openrouter`, `OPENROUTER_API_KEY`, `prompts/loader.py`, `chromadb`, any `*_ai.py` module.
+
+### Phase 0a — `pl-boto3` layer
+- [x] `utils/powerlifting-app/lambda/layers/pl-boto3/requirements.txt` (boto3, botocore, s3transfer — pinned)
+- [x] `utils/powerlifting-app/lambda/layers/pl-boto3/build.sh` (pip install into `python/` for the lambda zip layout)
+- [x] `utils/powerlifting-app/lambda/layers/pl-boto3/README.md`
+- [ ] Terraform `aws_lambda_layer_version.pl_boto3` (compatible_runtimes = ["python3.12"])
+
+### Phase 0b — `pl-pandas` layer
+- [x] `utils/powerlifting-app/lambda/layers/pl-pandas/requirements.txt` (pandas, numpy — pinned)
+- [x] `utils/powerlifting-app/lambda/layers/pl-pandas/build.sh`
+- [x] `utils/powerlifting-app/lambda/layers/pl-pandas/README.md`
+- [ ] Terraform `aws_lambda_layer_version.pl_pandas` (compatible_runtimes = ["python3.12"])
+
+### Phase 0c — Shared Terraform IAM role (one execution role, scoped policies)
+- [ ] `terraform/` — `aws_iam_role.lambda_exec` + inline policy for DynamoDB (`if-health`, `if-health-templates`, `if-sessions`, `if-powerlifting-analysis-cache`, `if-proposals`), S3 (`POWERLIFTING_S3_BUCKET` read for stats lambdas), CloudWatch Logs
+- [ ] Terraform `for_each`-template helper for the 73 functions (Timeout: 900 each)
+
+### Phase 0d — `tools/health/` re-export note
+- [ ] Document that `tools/health/` stays AS-IS for the agent path (no re-export refactor needed — lambdas copy only what they need; the agent keeps using the original in-process modules). If a lambda's copied module would diverge, the lambda's copy wins for that lambda only.
 
 ---
 
-## Phase 1 — Lambda handlers (one per tool, timeout = 900s each)
+## Phase 1 — Lambda handlers (one per tool, timeout = 900s each, self-contained)
 
-Every handler lives at `utils/powerlifting-app/lambda/<tool>/handler.py`, imports `powerlifting_core.dispatch`, and is a thin wrapper:
+Every handler lives at `utils/powerlifting-app/lambda/<tool>/` and is **self-contained**:
+```
+utils/powerlifting-app/lambda/<tool>/
+├── handler.py          # thin wrapper: parse event → call local logic → return JSON
+├── <logic>.py          # ONLY the functions this tool needs, copied verbatim from tools/health/
+├── <store>.py          # ONLY the store module(s) this tool touches (if any)
+├── config.py           # env-only reads for THIS tool (table names, AWS_REGION, SANDBOX_PATH)
+└── requirements.txt    # ONLY this tool's direct deps (usually empty — boto3 comes from layer)
+```
+
+**The move is a LOGIC MOVE, not a rewrite.** Copy the exact function(s) from `tools/health/` that the `ROUTES` entry calls, fix intra-package imports to point at the local copies, and wrap in `handler.py`. Do not refactor, "improve", or generalize anything.
+
+`handler.py` shape (each tool substitutes its own name + local logic call):
 ```python
 import json
-from powerlifting_core import dispatch
+import os
+from <local_logic> import <the_exact_function_the_ROUTE_calls>
 
 def handler(event, context):
     args = event.get("args", event)
-    result = dispatch.execute("<TOOL_NAME>", args)
-    # dispatch.execute returns JSON-serializable; if it returns a string, pass through
-    body = result if isinstance(result, (dict, list)) else {"result": result}
-    return {"statusCode": 200, "body": json.dumps(body, default=str)}
+    # call the EXISTING function with the EXACT arg mapping from tools/health/tool.py ROUTES
+    result = <the_exact_function_the_ROUTE_calls>(<args mapping>)
+    if isinstance(result, str):
+        body = result
+    else:
+        body = json.dumps(result, default=str)
+    return {"statusCode": 200, "body": body}
 ```
-Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, shared `powerlifting_core` layer, IAM role scoped to the health DynamoDB tables. Template the 73 functions with a `for_each` over the tool list.
+
+Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached per the Phase 0 table, the self-contained folder zipped as `source_dir`. IAM role from Phase 0c.
 
 ### Stream A — Pure math (no DynamoDB, no pandas)
-- [ ] `lambda/kg_to_lb/handler.py` + Terraform `aws_lambda_function.pl_kg_to_lb` (Timeout: 900)
-- [ ] `lambda/lb_to_kg/handler.py` + Terraform `aws_lambda_function.pl_lb_to_kg` (Timeout: 900)
-- [ ] `lambda/ipf_weight_classes/handler.py` + Terraform `aws_lambda_function.pl_ipf_weight_classes` (Timeout: 900)
+- [x] `lambda/kg_to_lb/handler.py` + Terraform `aws_lambda_function.pl_kg_to_lb` (Timeout: 900)
+- [x] `lambda/lb_to_kg/handler.py` + Terraform `aws_lambda_function.pl_lb_to_kg` (Timeout: 900)
+- [x] `lambda/ipf_weight_classes/handler.py` + Terraform `aws_lambda_function.pl_ipf_weight_classes` (Timeout: 900)
 - [ ] `lambda/pct_of_max/handler.py` + Terraform `aws_lambda_function.pl_pct_of_max` (Timeout: 900)
 - [ ] `lambda/calculate_attempts/handler.py` + Terraform `aws_lambda_function.pl_calculate_attempts` (Timeout: 900)
 - [ ] `lambda/days_until/handler.py` + Terraform `aws_lambda_function.pl_days_until` (Timeout: 900)
