@@ -1,9 +1,11 @@
 # ---------------------------------------------------------------------------
 # Phase 3 — Lambda functions for the 76 health tools.
 #
-# Source of truth: lambda-tools.yaml (one entry per tool: layers, memory, timeout).
-# This file reads that YAML with yamldecode and generates one aws_lambda_function
-# per entry via for_each. Adding a tool = add a YAML line; no Terraform edit needed.
+# Source of truth: each tool folder ships its OWN resources.yaml at
+# lambda/<tool>/resources.yaml (layers, memory, timeout, optional s3_read).
+# This file discovers them via fileset and generates one aws_lambda_function per
+# tool via for_each. Adding a tool = create lambda/<tool>/resources.yaml; no TF
+# edit needed.
 #
 # Each function's source is its self-contained lambda/<tool>/ folder, zipped with
 # data.archive_file. Handler = handler.handler, runtime = python3.12, timeout = 900.
@@ -11,19 +13,30 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  # Parse the tool config YAML once. Each entry is an object with keys:
-  #   layers  (list of layer keys), memory (number), timeout (number), s3_read (bool, optional)
-  lambda_tools = yamldecode(file("${path.module}/lambda-tools.yaml"))
+  # Each tool folder ships its OWN resources.yaml at
+  #   lambda/<tool>/resources.yaml
+  # (layers, memory, timeout, optional s3_read). fileset finds them all; the tool
+  # name is the single directory segment (dirname of "kg_to_lb/resources.yaml").
+  # Adding a tool = create lambda/<tool>/resources.yaml; no Terraform edit needed.
+  tool_resource_paths = fileset("${path.module}/../lambda", "*/resources.yaml")
+
+  # Decode each folder's own resources.yaml once: tool_name -> raw config object.
+  # Each object has keys: layers (list of layer keys), memory (number),
+  # timeout (number), s3_read (bool, optional).
+  lambda_tool_configs = {
+    for rel_path in local.tool_resource_paths :
+    dirname(rel_path) => yamldecode(file("${path.module}/../lambda/${rel_path}"))
+  }
 
   # Build the for_each map: tool_name -> merged config object.
-  # Normalize missing optional fields (s3_read defaults to false).
+  # Normalize missing optional fields (s3_read defaults to false) and resolve
+  # each layer key to its ARN via the local layer_arns map (defined in layers.tf).
   lambda_function_configs = {
-    for name, cfg in local.lambda_tools : name => {
-      layers  = cfg.layers
-      memory  = cfg.memory
-      timeout = cfg.timeout
-      s3_read = lookup(cfg, "s3_read", false)
-      # Resolve each layer key to its ARN via the local layer_arns map (defined in layers.tf).
+    for name, cfg in local.lambda_tool_configs : name => {
+      layers     = cfg.layers
+      memory     = cfg.memory
+      timeout    = cfg.timeout
+      s3_read    = lookup(cfg, "s3_read", false)
       layer_arns = [for key in cfg.layers : local.layer_arns[key]]
     }
   }
@@ -62,7 +75,8 @@ data "archive_file" "lambda_tool" {
 
 # ---------------------------------------------------------------------------
 # One aws_lambda_function per tool. for_each over the config map so the
-# function_name, memory, layers, and env vars all come from the YAML.
+# function_name, memory, layers, and env vars all come from the per-folder
+# resources.yaml. Shared aws_iam_role.lambda_exec (iam.tf).
 # ---------------------------------------------------------------------------
 resource "aws_lambda_function" "health_tool" {
   for_each = local.lambda_function_configs
@@ -77,7 +91,7 @@ resource "aws_lambda_function" "health_tool" {
   filename         = data.archive_file.lambda_tool[each.key].output_path
   source_code_hash = data.archive_file.lambda_tool[each.key].output_base64sha256
 
-  # Attach the layers resolved from the YAML config (empty list for pure-math).
+  # Attach the layers resolved from the per-folder resources.yaml (empty list for pure-math).
   layers = each.value.layer_arns
 
   environment {
@@ -112,13 +126,3 @@ resource "aws_lambda_provisioned_concurrency_config" "stats" {
   provisioned_concurrent_executions = var.stats_provisioned_concurrency
   qualifier                         = "$LATEST"
 }
-
-# ---------------------------------------------------------------------------
-# API Gateway (optional) — SKIPPED per the migration plan ("optional").
-#
-# The portal backend invokes these lambdas directly via the AWS SDK
-# (LambdaClient.InvokeCommand), so an HTTP API is not required for the Phase 2
-# rewiring. If a public/HTTP entrypoint is needed later, add an aws_apigatewayv2_api
-# with a per-tool `/{tool}` proxy route + aws_apigatewayv2_integration per function.
-# That is deliberately left as a TODO to avoid over-engineering the first cut.
-# ---------------------------------------------------------------------------

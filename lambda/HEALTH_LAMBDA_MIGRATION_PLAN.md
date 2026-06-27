@@ -220,6 +220,44 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 
 ## Phase 2 — Portal backend rewiring
 
+- [x] `utils/powerlifting-app/backend/src/utils/lambda.ts` — `invokeLambda(functionName, args)` helper (HTTP `fetch` to the Phase 3 API Gateway endpoint `${POWERLIFTING_LAMBDA_BASE_URL}/${tool}`, parses returned `{"statusCode":200,"body":"<json>"}` body; matches `invokeToolDirect` return shape; no `@aws-sdk/client-lambda` dependency)
+- [x] Add env config: `POWERLIFTING_LAMBDA_BASE_URL` (the API Gateway HTTP endpoint base; no `POWERLIFTING_LAMBDA_REGION`/per-tool prefix — the tool name is the `/{tool}` path segment)
+- [x] ~~`utils/powerlifting-app/backend/src/utils/lambda.ts` — (was AWS SDK LambdaClient; replaced — see corrected line above)~~
+- [x] ~~Add env config: `POWERLIFTING_LAMBDA_REGION`/prefix (replaced by `POWERLIFTING_LAMBDA_BASE_URL`)~~
+- [x] Replace deterministic `invokeToolDirect(...)` calls in backend routes/services with `invokeLambda(...)`:
+  - [x] `routes/sessions.ts` (wired directly; also goes through controllers — see setupController)
+  - [x] `routes/competitions.ts`
+  - [x] `routes/programs.ts`
+  - [x] `routes/maxes.ts` (via controllers — verified deterministic swap)
+  - [x] `routes/goals.ts` (via controllers)
+  - [x] `routes/federations.ts` (via controllers)
+  - [x] `routes/dietNotes.ts` (via controllers)
+  - [x] `routes/supplements.ts` (via controllers)
+  - [x] `routes/template.ts` → `controllers/templateController.ts`
+  - [x] `routes/import.ts` → `controllers/importController.ts`
+  - [x] `routes/analytics.ts` (deterministic sections only; AI sections keep `invokeToolDirect`)
+  - [x] `routes/stats.ts`
+  - [x] `routes/setup.ts` → `controllers/setupController.ts`
+  - [x] `routes/export.ts`
+  - [x] `routes/weight.ts` (deterministic math calls)
+  - [x] `routes/budget.ts` (AI-only — kept on `invokeToolDirect`)
+  - [x] `services/analysisCache.ts`
+  - [x] `services/blockAnalytics.ts`
+  - [x] `services/sessionStore.ts`
+- [x] `routes/analytics.ts` — `analysis_section` branch: deterministic keys → lambda; `ai_correlation`/`program_evaluation` → agent (`invokeToolDirect`)
+- [x] Keep AI tools on `invokeToolDirect`: `program_evaluation`, `correlation_analysis`, `fatigue_profile_estimate`, `muscle_group_estimate`, `lift_profile_*`, `budget_*`, `glossary_generate_text`, `glossary_estimate_muscles/fatigue/e1rm`, `template_evaluate`, `import_parse_file`
+- [x] `npm run build` in `backend/` passes (green — `tsc` clean)
+
+---
+
+## Phase 3 — Terraform + IAM
+
+- [x] `terraform/lambda.tf` — `aws_lambda_function` for each tool via `for_each`, Timeout: 900 each. **Config source: per-folder `lambda/<tool>/resources.yaml`** (NOT a central file). `lambda.tf` loops the lambda dirs + decodes each folder's own `resources.yaml` for layers/memory/timeout.
+- [x] `lambda/<tool>/resources.yaml` — one per tool folder (76 files), each with `layers`, `memory`, `timeout`, optional `s3_read`
+- [x] IAM execution role shared (`terraform/iam.tf` — `aws_iam_role.lambda_exec` + scoped policy: DynamoDB on 5 health tables, S3 read for stats, CloudWatch Logs, lambda:InvokeFunction)
+- [x] `aws_lambda_layer_version` for `pl-boto3`, `pl-pandas`, + 7 domain layers (`pl-program`, `pl-sessions`, `pl-templates`, `pl-glossary`, `pl-imports`, `pl-federation`, `pl-analysis-cache`) — `terraform/layers.tf`
+- [x] **API Gateway** — `terraform/apigateway.tf`: HTTP API (`aws_apigatewayv2_api`) with per-tool `/{tool}` route + `aws_apigatewayv2_integration` (AWS_PROXY) per tool + `aws_lambda_permission` per tool + default stage (auto-deploy). Output `lambda_api_endpoint` exposes the base URL.
+- [x] `terraform fmt` + `terraform validate` only (no `apply`) — **validate: Success!**
 - [ ] `utils/powerlifting-app/backend/src/utils/lambda.ts` — `invokeLambda(functionName, args)` helper (AWS SDK `LambdaClient`/`InvokeCommand`, returns parsed JSON, matches `invokeToolDirect` return shape)
 - [ ] Add env config: `POWERLIFTING_LAMBDA_REGION`, per-tool `POWERLIFTING_LAMBDA_FN_<TOOL>` (or a single prefix `POWERLIFTING_LAMBDA_PREFIX=pl-`)
 - [ ] Replace deterministic `invokeToolDirect(...)` calls in backend routes/services with `invokeLambda(...)`:

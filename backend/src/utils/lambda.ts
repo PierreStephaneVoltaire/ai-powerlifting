@@ -1,58 +1,60 @@
-import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda'
-
-// ─── Lambda configuration ───────────────────────────────────────────────────
-// Deterministic Phase 2 powerlifting tools are deployed as self-contained AWS
-// Lambda functions (Phase 1) and invoked directly here instead of routing through
-// the IF agent pod's X-Direct-Tool-Invoke path. The function name is built from the
-// configurable prefix (default `pl-`) plus the tool name, e.g. `pl-health_get_session`.
+// ─── Lambda invocation (API Gateway HTTP path) ──────────────────────────────
+// Deterministic Phase 2 powerlifting tools are deployed behind an AWS API
+// Gateway HTTP API (Phase 3). Each tool is exposed as a POST `/{tool}` route on
+// the API Gateway endpoint. Instead of calling the Lambda functions directly
+// through the AWS SDK, we POST the tool arguments to the per-tool HTTP route and
+// parse the Lambda response body, returning the same shape the old SDK version
+// returned and the same shape `invokeToolDirect` returns.
 //
-// Region falls back to AWS_REGION (the same default used by the DynamoDB/S3 clients)
-// unless POWERLIFTING_LAMBDA_REGION is set explicitly.
-const LAMBDA_REGION = process.env.POWERLIFTING_LAMBDA_REGION || process.env.AWS_REGION || 'ca-central-1'
-const LAMBDA_PREFIX = process.env.POWERLIFTING_LAMBDA_PREFIX || 'pl-'
-
-const lambdaClient = new LambdaClient({
-  region: LAMBDA_REGION,
-  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-    ? {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      }
-    : undefined,
-})
-
-function decodeBody(payload: Uint8Array | undefined): any {
-  if (!payload || payload.length === 0) return null
-  const text = Buffer.from(payload).toString('utf8')
-  return JSON.parse(text)
-}
+// The base URL is read from `POWERLIFTING_LAMBDA_BASE_URL` (e.g.
+// `https://<id>.execute-api.<region>.amazonaws.com`). There is no default — if it
+// is unset, invocation fails fast with a clear configuration error.
+const LAMBDA_BASE_URL = process.env.POWERLIFTING_LAMBDA_BASE_URL
 
 /**
- * Invoke a Phase 2 powerlifting Lambda function by tool name.
+ * Invoke a Phase 2 powerlifting tool through its API Gateway HTTP route.
  *
- * The Lambda event is `{ "args": args }` and the Lambda returns
- * `{ "statusCode": 200, "body": "<json string>" }`. This helper parses the body
- * JSON and returns the same shape `invokeToolDirect` returns, so callers can be
- * swapped one-for-one without changing how they consume the result.
+ * `functionName` is the exact tool name (e.g. `health_get_session`). The request
+ * is a POST to `${POWERLIFTING_LAMBDA_BASE_URL}/${functionName}` with the tool
+ * arguments JSON-encoded as the request body and a `Content-Type: application/json`
+ * header.
  *
- * `functionName` is the exact tool name (e.g. `health_get_session`). The deployed
- * Lambda is named `${LAMBDA_PREFIX}${functionName}` (default prefix `pl-`).
+ * The Lambda returns `{ "statusCode": 200, "body": "<json string>" }`. This helper
+ * parses the `body` JSON and returns it, matching the shape the previous
+ * SDK-based implementation returned and the shape `invokeToolDirect` returns, so
+ * callers can consume the result unchanged.
  */
 export async function invokeLambda(
   functionName: string,
   args: Record<string, unknown>,
 ): Promise<any> {
-  const command = new InvokeCommand({
-    FunctionName: `${LAMBDA_PREFIX}${functionName}`,
-    Payload: Buffer.from(JSON.stringify({ args })),
+  if (!LAMBDA_BASE_URL) {
+    throw new Error(
+      'POWERLIFTING_LAMBDA_BASE_URL is not set: cannot invoke Lambda tool over API Gateway HTTP endpoint',
+    )
+  }
+
+  const response = await fetch(`${LAMBDA_BASE_URL}/${functionName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(args),
   })
 
-  const response = await lambdaClient.send(command)
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Lambda tool error ${response.status} for ${functionName}: ${text}`)
+  }
 
-  const parsed = decodeBody(response.Payload)
+  const parsed: any = await response.json()
+
+  // API Gateway + Lambda proxy integration wraps the tool payload as
+  // `{ statusCode, body: "<json string>" }`. Unwrap and parse the body JSON so
+  // callers receive the raw tool payload.
   if (parsed && typeof parsed === 'object' && 'body' in parsed) {
     const body = parsed.body
-    if (typeof body === 'string') {
+    if (typeof body === 'string' && body.length > 0) {
       return JSON.parse(body)
     }
     return body

@@ -43,3 +43,17 @@ output "lambda_layer_arns" {
   description = "Map of layer key -> Lambda layer version ARN"
   value       = local.layer_arns
 }
+
+# ---------------------------------------------------------------------------
+# Phase 3 — API Gateway HTTP API outputs.
+# ---------------------------------------------------------------------------
+
+output "api_gateway_id" {
+  description = "ID of the powerlifting health HTTP API (aws_apigatewayv2_api.health_api)"
+  value       = aws_apigatewayv2_api.health_api.id
+}
+
+output "api_gateway_endpoint_base_url" {
+  description = "API Gateway HTTP API base URL; append /{tool} to invoke a specific health lambda (e.g. .../{tool}/kg_to_lb)"
+  value       = "${aws_apigatewayv2_api.health_api.api_endpoint}/{tool}"
+}

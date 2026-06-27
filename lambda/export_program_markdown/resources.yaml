@@ -1,0 +1,8 @@
+# Phase 3 per-tool Lambda configuration (split from the former central
+# lambda-tools.yaml). Read by terraform/lambda.tf via
+# yamldecode(file("${path.module}/../lambda/<tool>/resources.yaml")).
+layers:
+- pl_boto3
+- pl_program
+memory: 512
+timeout: 900
