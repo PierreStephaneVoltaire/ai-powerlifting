@@ -122,25 +122,25 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 - [x] `lambda/calculate_attempts/handler.py` (Terraform pending: `aws_lambda_function.pl_calculate_attempts`, Timeout: 900) — DynamoDB-backed (reads program store), layers: pl-boto3+pl-program
 - [x] `lambda/days_until/handler.py` (Terraform pending: `aws_lambda_function.pl_days_until`, Timeout: 900)
 - [x] `lambda/analyze_progression/handler.py` (Terraform pending: `aws_lambda_function.pl_analyze_progression`, Timeout: 900) — DynamoDB-backed (loads program+sessions), layers: pl-boto3+pl-program+pl-sessions
-- [ ] `lambda/analyze_rpe_drift/handler.py` + Terraform `aws_lambda_function.pl_analyze_rpe_drift` (Timeout: 900) — DynamoDB-backed, layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/analyze_rpe_drift/handler.py` (Terraform pending: `aws_lambda_function.pl_analyze_rpe_drift`, Timeout: 900) — DynamoDB-backed (loads program+sessions), layers: pl-boto3+pl-program+pl-sessions+pl-pandas
 - [x] `lambda/estimate_1rm/handler.py` (Terraform pending: `aws_lambda_function.pl_estimate_1rm`, Timeout: 900)
 - [x] `lambda/calculate_dots/handler.py` (Terraform pending: `aws_lambda_function.pl_calculate_dots`, Timeout: 900)
 
 ### Stream B — OpenPowerlifting stats (pandas/numpy layer + S3 dataset warm-start)
 
-- [ ] `lambda/powerlifting_filter_categories/handler.py` + Terraform `aws_lambda_function.pl_powerlifting_filter_categories` (Timeout: 900)
-- [ ] `lambda/powerlifting_ranking_percentile/handler.py` + Terraform `aws_lambda_function.pl_powerlifting_ranking_percentile` (Timeout: 900)
-- [ ] `lambda/analyze_powerlifting_stats/handler.py` + Terraform `aws_lambda_function.pl_analyze_powerlifting_stats` (Timeout: 900)
+- [x] `lambda/powerlifting_filter_categories/handler.py` (Terraform pending: `aws_lambda_function.pl_powerlifting_filter_categories`, Timeout: 900) — layers: pl-boto3+pl-pandas; reads CSV datasets from SANDBOX_PATH
+- [x] `lambda/powerlifting_ranking_percentile/handler.py` (Terraform pending: `aws_lambda_function.pl_powerlifting_ranking_percentile`, Timeout: 900) — layers: pl-boto3+pl-pandas
+- [x] `lambda/analyze_powerlifting_stats/handler.py` (Terraform pending: `aws_lambda_function.pl_analyze_powerlifting_stats`, Timeout: 900) — layers: pl-boto3+pl-pandas
 - [ ] Warm-start strategy for stats lambdas (provisioned concurrency or `pl_warm` invoke; document in handler README)
 
 ### Stream C — Deterministic analytics (DynamoDB reads + compute)
 
-- [ ] `lambda/weekly_analysis/handler.py` + Terraform `aws_lambda_function.pl_weekly_analysis` (Timeout: 900)
-- [ ] `lambda/analysis_section/handler.py` + Terraform `aws_lambda_function.pl_analysis_section` (Timeout: 900) — **guard: reject AI section keys** (`ai_correlation`, `program_evaluation`); only serve `overview`, `fatigue_readiness`, `peaking`, `workload`, `alerts`
-- [ ] `lambda/regenerate_analysis/handler.py` + Terraform `aws_lambda_function.pl_regenerate_analysis` (Timeout: 900)
-- [ ] `lambda/get_analysis_markdown/handler.py` + Terraform `aws_lambda_function.pl_get_analysis_markdown` (Timeout: 900)
-- [ ] `lambda/export_program_history/handler.py` + Terraform `aws_lambda_function.pl_export_program_history` (Timeout: 900)
-- [ ] `lambda/export_program_markdown/handler.py` + Terraform `aws_lambda_function.pl_export_program_markdown` (Timeout: 900)
+- [x] `lambda/weekly_analysis/handler.py` (Terraform pending: `aws_lambda_function.pl_weekly_analysis`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions+pl-glossary; AI sections (correlation, program_evaluation) omitted
+- [x] `lambda/analysis_section/handler.py` (Terraform pending: `aws_lambda_function.pl_analysis_section`, Timeout: 900) — **guard: reject AI section keys** (`ai_correlation`, `program_evaluation`) at 400; only serve `overview`, `fatigue_readiness`, `peaking`, `workload`, `alerts` — layers: pl-boto3+pl-program+pl-sessions+pl-glossary
+- [x] `lambda/regenerate_analysis/handler.py` (Terraform pending: `aws_lambda_function.pl_regenerate_analysis`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions+pl-analysis-cache+pl-glossary
+- [x] `lambda/get_analysis_markdown/handler.py` (Terraform pending: `aws_lambda_function.pl_get_analysis_markdown`, Timeout: 900) — layers: pl-boto3+pl-program+pl-analysis-cache+pl-glossary
+- [x] `lambda/export_program_history/handler.py` (Terraform pending: `aws_lambda_function.pl_export_program_history`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/export_program_markdown/handler.py` (Terraform pending: `aws_lambda_function.pl_export_program_markdown`, Timeout: 900) — layers: pl-boto3+pl-program
 
 ### Stream D — Glossary CRUD (DynamoDB only)
 
@@ -155,13 +155,13 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 - [x] `lambda/health_get_sessions_range/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_sessions_range`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
 - [x] `lambda/health_update_session/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_session`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
 - [x] `lambda/health_new_version/handler.py` (Terraform pending: `aws_lambda_function.pl_health_new_version`, Timeout: 900) — layers: pl-boto3+pl-program
-- [ ] `lambda/health_create_session/handler.py` + Terraform `aws_lambda_function.pl_health_create_session` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
-- [ ] `lambda/health_delete_session/handler.py` + Terraform `aws_lambda_function.pl_health_delete_session` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
-- [ ] `lambda/health_reschedule_session/handler.py` + Terraform `aws_lambda_function.pl_health_reschedule_session` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
-- [ ] `lambda/health_add_exercise/handler.py` + Terraform `aws_lambda_function.pl_health_add_exercise` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
-- [ ] `lambda/health_remove_exercise/handler.py` + Terraform `aws_lambda_function.pl_health_remove_exercise` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
-- [ ] `lambda/health_setup_status/handler.py` + Terraform `aws_lambda_function.pl_health_setup_status` (Timeout: 900) — layers: pl-boto3+pl-program
-- [ ] `lambda/health_setup_initialize/handler.py` + Terraform `aws_lambda_function.pl_health_setup_initialize` (Timeout: 900) — layers: pl-boto3+pl-program+pl-templates+pl-sessions
+- [x] `lambda/health_create_session/handler.py` (Terraform pending: `aws_lambda_function.pl_health_create_session`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_delete_session/handler.py` (Terraform pending: `aws_lambda_function.pl_health_delete_session`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_reschedule_session/handler.py` (Terraform pending: `aws_lambda_function.pl_health_reschedule_session`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_add_exercise/handler.py` (Terraform pending: `aws_lambda_function.pl_health_add_exercise`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_remove_exercise/handler.py` (Terraform pending: `aws_lambda_function.pl_health_remove_exercise`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_setup_status/handler.py` (Terraform pending: `aws_lambda_function.pl_health_setup_status`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_setup_initialize/handler.py` (Terraform pending: `aws_lambda_function.pl_health_setup_initialize`, Timeout: 900) — layers: pl-boto3+pl-program+pl-templates+pl-sessions
 - [x] `lambda/health_invalidate_program_cache/handler.py` (Terraform pending: `aws_lambda_function.pl_health_invalidate_program_cache`, Timeout: 900) — layers: pl-boto3+pl-program
 
 ### Stream F — Competition / Meta CRUD (DynamoDB only)
@@ -251,9 +251,10 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 ## Phase 3 — Terraform + IAM
 
 - [ ] `terraform/` — `aws_lambda_function` resources templated with `for_each` over the 73 tool names (Timeout: 900 each)
-- [ ] IAM execution role per stream (or one shared role) scoped to: `if-health`, `if-health-templates`, `if-sessions`, `if-powerlifting-analysis-cache`, `if-proposals` (imports), S3 `POWERLIFTING_S3_BUCKET` (stats lambdas)
+      loop throuth the dir and add a config yaml that specifies the appropriuate resources (file read and generation need more resources. math can be minial)
+- [ ] IAM execution role dhared
 - [ ] `aws_lambda_layer_version` `powerlifting_core` + `powerlifting_pandas`
-- [ ] API Gateway (optional, per-tool `/{tool}` mapping) OR direct `Lambda.Invoke` from backend — decide and document
+- [ ] API Gateway (optional, per-tool `/{tool}` mapping) with documentation
 - [ ] `terraform fmt` + `terraform validate` + `terraform plan` only (no `apply`)
 
 ---

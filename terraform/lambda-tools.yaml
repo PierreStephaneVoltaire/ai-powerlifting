@@ -1,0 +1,372 @@
+# Phase 3 Lambda tool configuration — source of truth for the 76 health lambdas.
+#
+# Adding a tool = add one entry here. No Terraform edits required.
+# The Terraform (lambda.tf) reads this file with yamldecode(file("lambda-tools.yaml"))
+# and generates one aws_lambda_function per entry via for_each.
+#
+# Fields per tool:
+#   layers  : list of layer keys (map to aws_lambda_layer_version.*.arn in lambda.tf)
+#             - pl_boto3, pl_pandas, pl_program, pl_sessions, pl_glossary,
+#               pl_templates, pl_imports, pl_federation, pl_analysis_cache
+#             - [] for pure-math lambdas (no layer)
+#   memory  : Lambda memory in MB
+#             128  = pure-math (no deps, stdlib only)
+#             256  = lightweight DynamoDB CRUD (single-table reads/writes)
+#             512  = DynamoDB analytics / multi-table loads / stats (pandas) / export generation
+#   timeout : 900 (AWS max — per the migration plan rule; do not shorten)
+#   s3_read : true if the lambda reads the OpenPowerlifting S3 dataset (stats Stream B)
+#
+# Layer assignments are copied verbatim from HEALTH_LAMBDA_MIGRATION_PLAN.md Phase 1
+# checkboxes (the "layers: pl-boto3+pl-..." notes).
+
+# ---------------------------------------------------------------------------
+# Stream A — Pure math (no DynamoDB, no pandas, NO layer)
+# ---------------------------------------------------------------------------
+kg_to_lb:
+  layers: []
+  memory: 128
+  timeout: 900
+lb_to_kg:
+  layers: []
+  memory: 128
+  timeout: 900
+ipf_weight_classes:
+  layers: []
+  memory: 128
+  timeout: 900
+pct_of_max:
+  layers: []
+  memory: 128
+  timeout: 900
+days_until:
+  layers: []
+  memory: 128
+  timeout: 900
+estimate_1rm:
+  layers: []
+  memory: 128
+  timeout: 900
+calculate_dots:
+  layers: []
+  memory: 128
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream A — DynamoDB-backed math (reads program store)
+# ---------------------------------------------------------------------------
+calculate_attempts:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+analyze_progression:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 512
+  timeout: 900
+analyze_rpe_drift:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions', 'pl_pandas']
+  memory: 512
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream B — OpenPowerlifting stats (pandas/numpy layer + S3 dataset)
+# ---------------------------------------------------------------------------
+powerlifting_filter_categories:
+  layers: ['pl_boto3', 'pl_pandas']
+  memory: 512
+  timeout: 900
+  s3_read: true
+powerlifting_ranking_percentile:
+  layers: ['pl_boto3', 'pl_pandas']
+  memory: 512
+  timeout: 900
+  s3_read: true
+analyze_powerlifting_stats:
+  layers: ['pl_boto3', 'pl_pandas']
+  memory: 512
+  timeout: 900
+  s3_read: true
+
+# ---------------------------------------------------------------------------
+# Stream C — Deterministic analytics (DynamoDB reads + compute)
+# ---------------------------------------------------------------------------
+weekly_analysis:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions', 'pl_glossary']
+  memory: 512
+  timeout: 900
+analysis_section:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions', 'pl_glossary']
+  memory: 512
+  timeout: 900
+regenerate_analysis:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions', 'pl_analysis_cache', 'pl_glossary']
+  memory: 512
+  timeout: 900
+get_analysis_markdown:
+  layers: ['pl_boto3', 'pl_program', 'pl_analysis_cache', 'pl_glossary']
+  memory: 512
+  timeout: 900
+export_program_history:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 512
+  timeout: 900
+export_program_markdown:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 512
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream D — Glossary CRUD (DynamoDB only)
+# ---------------------------------------------------------------------------
+glossary_add:
+  layers: ['pl_boto3', 'pl_glossary']
+  memory: 256
+  timeout: 900
+glossary_update:
+  layers: ['pl_boto3', 'pl_glossary']
+  memory: 256
+  timeout: 900
+glossary_set_e1rm:
+  layers: ['pl_boto3', 'pl_glossary']
+  memory: 256
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream E — Program / Session CRUD (DynamoDB only)
+# ---------------------------------------------------------------------------
+health_get_program:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_session:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_get_sessions_range:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_update_session:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_new_version:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_create_session:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_delete_session:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_reschedule_session:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_add_exercise:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_remove_exercise:
+  layers: ['pl_boto3', 'pl_program', 'pl_sessions']
+  memory: 256
+  timeout: 900
+health_setup_status:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_setup_initialize:
+  layers: ['pl_boto3', 'pl_program', 'pl_templates', 'pl_sessions']
+  memory: 512
+  timeout: 900
+health_invalidate_program_cache:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream F — Competition / Meta / Goals / Maxes / Federation / Diet / Supp CRUD
+# ---------------------------------------------------------------------------
+health_get_competition:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_update_competition:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_create_competition:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_delete_competition:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_snapshot_competition_projection:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 512
+  timeout: 900
+health_complete_competition:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_meta:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_update_meta:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_phases:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_update_phases:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_current_maxes:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_update_current_maxes:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_goals:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_update_goals:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_federation_library:
+  layers: ['pl_boto3', 'pl_federation']
+  memory: 256
+  timeout: 900
+health_update_federation_library:
+  layers: ['pl_boto3', 'pl_federation', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_diet_notes:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_update_diet_note:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_delete_diet_note:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_get_supplements:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+health_update_supplements:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream G — Import staging/apply (DynamoDB only; parse stays in agent)
+# ---------------------------------------------------------------------------
+import_apply:
+  layers: ['pl_boto3', 'pl_imports', 'pl_program', 'pl_templates']
+  memory: 512
+  timeout: 900
+import_reject:
+  layers: ['pl_boto3', 'pl_imports']
+  memory: 256
+  timeout: 900
+import_list_pending:
+  layers: ['pl_boto3', 'pl_imports']
+  memory: 256
+  timeout: 900
+import_get_pending:
+  layers: ['pl_boto3', 'pl_imports']
+  memory: 256
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream H — Template CRUD (DynamoDB only; evaluate stays in agent)
+# ---------------------------------------------------------------------------
+template_list:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_get:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_apply:
+  layers: ['pl_boto3', 'pl_templates', 'pl_program', 'pl_glossary']
+  memory: 512
+  timeout: 900
+template_apply_confirm:
+  layers: ['pl_boto3', 'pl_templates', 'pl_program', 'pl_glossary']
+  memory: 512
+  timeout: 900
+template_copy:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_archive:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_unarchive:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_create_blank:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_create_from_block:
+  layers: ['pl_boto3', 'pl_templates', 'pl_program']
+  memory: 256
+  timeout: 900
+template_create_from_payload:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_update:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_publish:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+template_unpublish:
+  layers: ['pl_boto3', 'pl_templates']
+  memory: 256
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# Stream I — Program archive (DynamoDB only)
+# ---------------------------------------------------------------------------
+program_archive:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+program_unarchive:
+  layers: ['pl_boto3', 'pl_program']
+  memory: 256
+  timeout: 900
+
+# ---------------------------------------------------------------------------
+# master-sync — competition federation sync (DynamoDB scan/put, may chain invokes)
+# ---------------------------------------------------------------------------
+master-sync:
+  layers: ['pl_boto3', 'pl_program', 'pl_federation']
+  memory: 512
+  timeout: 900
+

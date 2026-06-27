@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { invokeToolDirect } from '../utils/agent'
+import { invokeLambda } from '../utils/lambda'
 import { logger } from '../utils/logger'
 import * as programController from '../controllers/programController'
 import * as competitionController from '../controllers/competitionController'
@@ -74,7 +75,7 @@ async function getProgramWithWeightLog(pk: string, version = 'current'): Promise
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
   try {
-    await invokeToolDirect('health_snapshot_competition_projection', {
+    await invokeLambda('health_snapshot_competition_projection', {
       date,
       version: 'current',
       allow_retrospective: false,
@@ -156,7 +157,7 @@ async function computeDeterministicSection(
       await snapshotCompetitionProjection(context.pk, context.asOfDate)
     }
     const window = context.windows[context.windowKey]
-    const payload = await invokeToolDirect('analysis_section', {
+    const payload = await invokeLambda('analysis_section', {
       section: sectionKey,
       weeks: window.weeks,
       block: 'current',
@@ -309,7 +310,7 @@ async function runTargetedRegeneration(
     logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window from sections')
     const merged: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeToolDirect('analysis_section', {
+      const sectionPayload = await invokeLambda('analysis_section', {
         section: sectionKey,
         weeks: window.weeks,
         block: 'current',
@@ -331,7 +332,7 @@ async function runTargetedRegeneration(
   await putAllCachedWindowAnalyses(pk, results)
 
   try {
-    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false)
+    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeLambda, true, false)
   } catch (err) {
     logger.warn({ err, pk }, 'block_analysis#v1#current regeneration failed')
   }
@@ -349,7 +350,7 @@ async function runFullCurrentBlockRegeneration(
   const { generatedAt, windows } = await runTargetedRegeneration(pk, asOfDate)
 
   try {
-    const markdownResult = await invokeToolDirect('export_program_markdown', {
+    const markdownResult = await invokeLambda('export_program_markdown', {
       version: 'current',
       include_analysis: true,
       analysis_weeks: windows.block.weeks,
@@ -573,7 +574,7 @@ analyticsRouter.get('/analysis/markdown', async (req, res) => {
   try {
     const pk = req.mapped_pk!
 
-    const markdownResult = await invokeToolDirect('get_analysis_markdown', {
+    const markdownResult = await invokeLambda('get_analysis_markdown', {
       pk,
     }) as { markdown?: string; generated_at?: string; cached?: boolean } | null
 
@@ -611,7 +612,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
     const data: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeToolDirect('analysis_section', {
+      const sectionPayload = await invokeLambda('analysis_section', {
         section: sectionKey,
         weeks,
         block,
@@ -658,14 +659,14 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
     const refresh = req.query.refresh === 'true'
 
     if (isCurrent) {
-      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, refresh, false)
+      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, refresh, false)
       if (!bundle) {
         return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
       }
       return res.json({ data: bundle, error: null })
     }
 
-    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, refresh, false)
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, refresh, false)
     if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
     }
@@ -687,7 +688,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     let evalReport: Awaited<ReturnType<typeof getOrCreateBlockProgramEvaluation>> = null
 
     try {
-      bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, true, false)
+      bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, true, false)
     } catch (err) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
     }
@@ -709,7 +710,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     }
 
     try {
-      const markdownResult = await invokeToolDirect('export_program_markdown', {
+      const markdownResult = await invokeLambda('export_program_markdown', {
         version: 'current',
         include_analysis: false,
         pk,
@@ -901,7 +902,7 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
           req.mapped_pk!,
           program,
           block.blockKey,
-          invokeToolDirect,
+          invokeLambda,
           block.isCurrent,
           false,
           allGoals,
