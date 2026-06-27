@@ -70,8 +70,8 @@ Treat the resources as **production**. Be careful.
 Do not add comments to the code unless it's an obscure edge case. Comments are a
 failure of being able to convey intent through clean code. Before reaching for a
 comment, ask whether a better name, a smaller function, or a clearer structure
-would make the comment unnecessary. If you must comment, explain *why*, not
-*what*.
+would make the comment unnecessary. If you must comment, explain _why_, not
+_what_.
 
 ### Use libraries and providers — rarely hand-roll
 
@@ -116,6 +116,12 @@ When you encounter code that could have a possible bug, **note it in `bug.md`**
 at the repo root, then continue with the main task. Do not rabbit-hole into
 fixing it unless the bug is the task. One line per bug in `bug.md` is enough:
 file path, short description. The focus stays on the requested change.
+
+### Debugging Approach
+
+- **When stuck on a bug, stop speculating and gather real information first**
+- If a root cause isn't obvious from reading the code, add logging/instrumentation and ask the user to run it — don't keep re-theorising without data
+- Avoid the "wait, actually the real issue is..." loop: form one clear hypothesis, test it, then reassess based on evidence
 
 ### Every feature is multi-interface
 

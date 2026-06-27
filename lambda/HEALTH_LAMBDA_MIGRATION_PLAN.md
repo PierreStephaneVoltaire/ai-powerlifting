@@ -115,16 +115,16 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 
 ### Stream A — Pure math (no DynamoDB, no pandas)
 
-- [x] `lambda/kg_to_lb/handler.py` + Terraform `aws_lambda_function.pl_kg_to_lb` (Timeout: 900)
-- [x] `lambda/lb_to_kg/handler.py` + Terraform `aws_lambda_function.pl_lb_to_kg` (Timeout: 900)
-- [x] `lambda/ipf_weight_classes/handler.py` + Terraform `aws_lambda_function.pl_ipf_weight_classes` (Timeout: 900)
-- [ ] `lambda/pct_of_max/handler.py` + Terraform `aws_lambda_function.pl_pct_of_max` (Timeout: 900)
-- [ ] `lambda/calculate_attempts/handler.py` + Terraform `aws_lambda_function.pl_calculate_attempts` (Timeout: 900)
-- [ ] `lambda/days_until/handler.py` + Terraform `aws_lambda_function.pl_days_until` (Timeout: 900)
-- [ ] `lambda/analyze_progression/handler.py` + Terraform `aws_lambda_function.pl_analyze_progression` (Timeout: 900)
-- [ ] `lambda/analyze_rpe_drift/handler.py` + Terraform `aws_lambda_function.pl_analyze_rpe_drift` (Timeout: 900)
-- [ ] `lambda/estimate_1rm/handler.py` + Terraform `aws_lambda_function.pl_estimate_1rm` (Timeout: 900)
-- [ ] `lambda/calculate_dots/handler.py` + Terraform `aws_lambda_function.pl_calculate_dots` (Timeout: 900)
+- [x] `lambda/kg_to_lb/handler.py` (Terraform pending: `aws_lambda_function.pl_kg_to_lb`, Timeout: 900)
+- [x] `lambda/lb_to_kg/handler.py` (Terraform pending: `aws_lambda_function.pl_lb_to_kg`, Timeout: 900)
+- [x] `lambda/ipf_weight_classes/handler.py` (Terraform pending: `aws_lambda_function.pl_ipf_weight_classes`, Timeout: 900)
+- [x] `lambda/pct_of_max/handler.py` (Terraform pending: `aws_lambda_function.pl_pct_of_max`, Timeout: 900)
+- [x] `lambda/calculate_attempts/handler.py` (Terraform pending: `aws_lambda_function.pl_calculate_attempts`, Timeout: 900) — DynamoDB-backed (reads program store), layers: pl-boto3+pl-program
+- [x] `lambda/days_until/handler.py` (Terraform pending: `aws_lambda_function.pl_days_until`, Timeout: 900)
+- [x] `lambda/analyze_progression/handler.py` (Terraform pending: `aws_lambda_function.pl_analyze_progression`, Timeout: 900) — DynamoDB-backed (loads program+sessions), layers: pl-boto3+pl-program+pl-sessions
+- [ ] `lambda/analyze_rpe_drift/handler.py` + Terraform `aws_lambda_function.pl_analyze_rpe_drift` (Timeout: 900) — DynamoDB-backed, layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/estimate_1rm/handler.py` (Terraform pending: `aws_lambda_function.pl_estimate_1rm`, Timeout: 900)
+- [x] `lambda/calculate_dots/handler.py` (Terraform pending: `aws_lambda_function.pl_calculate_dots`, Timeout: 900)
 
 ### Stream B — OpenPowerlifting stats (pandas/numpy layer + S3 dataset warm-start)
 
@@ -144,77 +144,77 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 
 ### Stream D — Glossary CRUD (DynamoDB only)
 
-- [ ] `lambda/glossary_add/handler.py` + Terraform `aws_lambda_function.pl_glossary_add` (Timeout: 900)
-- [ ] `lambda/glossary_update/handler.py` + Terraform `aws_lambda_function.pl_glossary_update` (Timeout: 900)
-- [ ] `lambda/glossary_set_e1rm/handler.py` + Terraform `aws_lambda_function.pl_glossary_set_e1rm` (Timeout: 900)
+- [x] `lambda/glossary_add/handler.py` (Terraform pending: `aws_lambda_function.pl_glossary_add`, Timeout: 900) — layers: pl-boto3+pl-glossary
+- [x] `lambda/glossary_update/handler.py` (Terraform pending: `aws_lambda_function.pl_glossary_update`, Timeout: 900) — layers: pl-boto3+pl-glossary
+- [x] `lambda/glossary_set_e1rm/handler.py` (Terraform pending: `aws_lambda_function.pl_glossary_set_e1rm`, Timeout: 900) — layers: pl-boto3+pl-glossary
 
 ### Stream E — Program / Session CRUD (DynamoDB only)
 
-- [ ] `lambda/health_get_program/handler.py` + Terraform `aws_lambda_function.pl_health_get_program` (Timeout: 900)
-- [ ] `lambda/health_get_session/handler.py` + Terraform `aws_lambda_function.pl_health_get_session` (Timeout: 900)
-- [ ] `lambda/health_get_sessions_range/handler.py` + Terraform `aws_lambda_function.pl_health_get_sessions_range` (Timeout: 900)
-- [ ] `lambda/health_update_session/handler.py` + Terraform `aws_lambda_function.pl_health_update_session` (Timeout: 900)
-- [ ] `lambda/health_new_version/handler.py` + Terraform `aws_lambda_function.pl_health_new_version` (Timeout: 900)
-- [ ] `lambda/health_create_session/handler.py` + Terraform `aws_lambda_function.pl_health_create_session` (Timeout: 900)
-- [ ] `lambda/health_delete_session/handler.py` + Terraform `aws_lambda_function.pl_health_delete_session` (Timeout: 900)
-- [ ] `lambda/health_reschedule_session/handler.py` + Terraform `aws_lambda_function.pl_health_reschedule_session` (Timeout: 900)
-- [ ] `lambda/health_add_exercise/handler.py` + Terraform `aws_lambda_function.pl_health_add_exercise` (Timeout: 900)
-- [ ] `lambda/health_remove_exercise/handler.py` + Terraform `aws_lambda_function.pl_health_remove_exercise` (Timeout: 900)
-- [ ] `lambda/health_setup_status/handler.py` + Terraform `aws_lambda_function.pl_health_setup_status` (Timeout: 900)
-- [ ] `lambda/health_setup_initialize/handler.py` + Terraform `aws_lambda_function.pl_health_setup_initialize` (Timeout: 900)
-- [ ] `lambda/health_invalidate_program_cache/handler.py` + Terraform `aws_lambda_function.pl_health_invalidate_program_cache` (Timeout: 900)
+- [x] `lambda/health_get_program/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_program`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_get_session/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_session`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_get_sessions_range/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_sessions_range`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_update_session/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_session`, Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [x] `lambda/health_new_version/handler.py` (Terraform pending: `aws_lambda_function.pl_health_new_version`, Timeout: 900) — layers: pl-boto3+pl-program
+- [ ] `lambda/health_create_session/handler.py` + Terraform `aws_lambda_function.pl_health_create_session` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [ ] `lambda/health_delete_session/handler.py` + Terraform `aws_lambda_function.pl_health_delete_session` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [ ] `lambda/health_reschedule_session/handler.py` + Terraform `aws_lambda_function.pl_health_reschedule_session` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [ ] `lambda/health_add_exercise/handler.py` + Terraform `aws_lambda_function.pl_health_add_exercise` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [ ] `lambda/health_remove_exercise/handler.py` + Terraform `aws_lambda_function.pl_health_remove_exercise` (Timeout: 900) — layers: pl-boto3+pl-program+pl-sessions
+- [ ] `lambda/health_setup_status/handler.py` + Terraform `aws_lambda_function.pl_health_setup_status` (Timeout: 900) — layers: pl-boto3+pl-program
+- [ ] `lambda/health_setup_initialize/handler.py` + Terraform `aws_lambda_function.pl_health_setup_initialize` (Timeout: 900) — layers: pl-boto3+pl-program+pl-templates+pl-sessions
+- [x] `lambda/health_invalidate_program_cache/handler.py` (Terraform pending: `aws_lambda_function.pl_health_invalidate_program_cache`, Timeout: 900) — layers: pl-boto3+pl-program
 
 ### Stream F — Competition / Meta CRUD (DynamoDB only)
 
-- [ ] `lambda/health_get_competition/handler.py` + Terraform `aws_lambda_function.pl_health_get_competition` (Timeout: 900)
-- [ ] `lambda/health_update_competition/handler.py` + Terraform `aws_lambda_function.pl_health_update_competition` (Timeout: 900)
-- [ ] `lambda/health_create_competition/handler.py` + Terraform `aws_lambda_function.pl_health_create_competition` (Timeout: 900)
-- [ ] `lambda/health_delete_competition/handler.py` + Terraform `aws_lambda_function.pl_health_delete_competition` (Timeout: 900)
-- [ ] `lambda/health_snapshot_competition_projection/handler.py` + Terraform `aws_lambda_function.pl_health_snapshot_competition_projection` (Timeout: 900)
-- [ ] `lambda/health_complete_competition/handler.py` + Terraform `aws_lambda_function.pl_health_complete_competition` (Timeout: 900)
-- [ ] `lambda/health_get_meta/handler.py` + Terraform `aws_lambda_function.pl_health_get_meta` (Timeout: 900)
-- [ ] `lambda/health_update_meta/handler.py` + Terraform `aws_lambda_function.pl_health_update_meta` (Timeout: 900)
-- [ ] `lambda/health_get_phases/handler.py` + Terraform `aws_lambda_function.pl_health_get_phases` (Timeout: 900)
-- [ ] `lambda/health_update_phases/handler.py` + Terraform `aws_lambda_function.pl_health_update_phases` (Timeout: 900)
-- [ ] `lambda/health_get_current_maxes/handler.py` + Terraform `aws_lambda_function.pl_health_get_current_maxes` (Timeout: 900)
-- [ ] `lambda/health_update_current_maxes/handler.py` + Terraform `aws_lambda_function.pl_health_update_current_maxes` (Timeout: 900)
-- [ ] `lambda/health_get_goals/handler.py` + Terraform `aws_lambda_function.pl_health_get_goals` (Timeout: 900)
-- [ ] `lambda/health_update_goals/handler.py` + Terraform `aws_lambda_function.pl_health_update_goals` (Timeout: 900)
-- [ ] `lambda/health_get_federation_library/handler.py` + Terraform `aws_lambda_function.pl_health_get_federation_library` (Timeout: 900)
-- [ ] `lambda/health_update_federation_library/handler.py` + Terraform `aws_lambda_function.pl_health_update_federation_library` (Timeout: 900)
-- [ ] `lambda/health_get_diet_notes/handler.py` + Terraform `aws_lambda_function.pl_health_get_diet_notes` (Timeout: 900)
-- [ ] `lambda/health_update_diet_note/handler.py` + Terraform `aws_lambda_function.pl_health_update_diet_note` (Timeout: 900)
-- [ ] `lambda/health_delete_diet_note/handler.py` + Terraform `aws_lambda_function.pl_health_delete_diet_note` (Timeout: 900)
-- [ ] `lambda/health_get_supplements/handler.py` + Terraform `aws_lambda_function.pl_health_get_supplements` (Timeout: 900)
-- [ ] `lambda/health_update_supplements/handler.py` + Terraform `aws_lambda_function.pl_health_update_supplements` (Timeout: 900)
+- [x] `lambda/health_get_competition/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_competition`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_update_competition/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_competition`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_create_competition/handler.py` (Terraform pending: `aws_lambda_function.pl_health_create_competition`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_delete_competition/handler.py` (Terraform pending: `aws_lambda_function.pl_health_delete_competition`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_snapshot_competition_projection/handler.py` (Terraform pending: `aws_lambda_function.pl_health_snapshot_competition_projection`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_complete_competition/handler.py` (Terraform pending: `aws_lambda_function.pl_health_complete_competition`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_get_meta/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_meta`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_update_meta/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_meta`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_get_phases/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_phases`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_update_phases/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_phases`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_get_current_maxes/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_current_maxes`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_update_current_maxes/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_current_maxes`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_get_goals/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_goals`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_update_goals/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_goals`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_get_federation_library/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_federation_library`, Timeout: 900) — layers: pl-boto3+pl-federation
+- [x] `lambda/health_update_federation_library/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_federation_library`, Timeout: 900) — layers: pl-boto3+pl-federation+pl-program
+- [x] `lambda/health_get_diet_notes/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_diet_notes`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_update_diet_note/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_diet_note`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_delete_diet_note/handler.py` (Terraform pending: `aws_lambda_function.pl_health_delete_diet_note`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_get_supplements/handler.py` (Terraform pending: `aws_lambda_function.pl_health_get_supplements`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/health_update_supplements/handler.py` (Terraform pending: `aws_lambda_function.pl_health_update_supplements`, Timeout: 900) — layers: pl-boto3+pl-program
 
 ### Stream G — Import staging/apply (DynamoDB only; parse stays in agent)
 
-- [ ] `lambda/import_apply/handler.py` + Terraform `aws_lambda_function.pl_import_apply` (Timeout: 900)
-- [ ] `lambda/import_reject/handler.py` + Terraform `aws_lambda_function.pl_import_reject` (Timeout: 900)
-- [ ] `lambda/import_list_pending/handler.py` + Terraform `aws_lambda_function.pl_import_list_pending` (Timeout: 900)
-- [ ] `lambda/import_get_pending/handler.py` + Terraform `aws_lambda_function.pl_import_get_pending` (Timeout: 900)
+- [x] `lambda/import_apply/handler.py` (Terraform pending: `aws_lambda_function.pl_import_apply`, Timeout: 900) — layers: pl-boto3+pl-imports+pl-program+pl-templates
+- [x] `lambda/import_reject/handler.py` (Terraform pending: `aws_lambda_function.pl_import_reject`, Timeout: 900) — layers: pl-boto3+pl-imports
+- [x] `lambda/import_list_pending/handler.py` (Terraform pending: `aws_lambda_function.pl_import_list_pending`, Timeout: 900) — layers: pl-boto3+pl-imports
+- [x] `lambda/import_get_pending/handler.py` (Terraform pending: `aws_lambda_function.pl_import_get_pending`, Timeout: 900) — layers: pl-boto3+pl-imports
 
 ### Stream H — Template CRUD (DynamoDB only; evaluate stays in agent)
 
-- [ ] `lambda/template_list/handler.py` + Terraform `aws_lambda_function.pl_template_list` (Timeout: 900)
-- [ ] `lambda/template_get/handler.py` + Terraform `aws_lambda_function.pl_template_get` (Timeout: 900)
-- [ ] `lambda/template_apply/handler.py` + Terraform `aws_lambda_function.pl_template_apply` (Timeout: 900)
-- [ ] `lambda/template_apply_confirm/handler.py` + Terraform `aws_lambda_function.pl_template_apply_confirm` (Timeout: 900)
-- [ ] `lambda/template_copy/handler.py` + Terraform `aws_lambda_function.pl_template_copy` (Timeout: 900)
-- [ ] `lambda/template_archive/handler.py` + Terraform `aws_lambda_function.pl_template_archive` (Timeout: 900)
-- [ ] `lambda/template_unarchive/handler.py` + Terraform `aws_lambda_function.pl_template_unarchive` (Timeout: 900)
-- [ ] `lambda/template_create_blank/handler.py` + Terraform `aws_lambda_function.pl_template_create_blank` (Timeout: 900)
-- [ ] `lambda/template_create_from_block/handler.py` + Terraform `aws_lambda_function.pl_template_create_from_block` (Timeout: 900)
-- [ ] `lambda/template_create_from_payload/handler.py` + Terraform `aws_lambda_function.pl_template_create_from_payload` (Timeout: 900)
-- [ ] `lambda/template_update/handler.py` + Terraform `aws_lambda_function.pl_template_update` (Timeout: 900)
-- [ ] `lambda/template_publish/handler.py` + Terraform `aws_lambda_function.pl_template_publish` (Timeout: 900)
-- [ ] `lambda/template_unpublish/handler.py` + Terraform `aws_lambda_function.pl_template_unpublish` (Timeout: 900)
+- [x] `lambda/template_list/handler.py` (Terraform pending: `aws_lambda_function.pl_template_list`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_get/handler.py` (Terraform pending: `aws_lambda_function.pl_template_get`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_apply/handler.py` (Terraform pending: `aws_lambda_function.pl_template_apply`, Timeout: 900) — layers: pl-boto3+pl-templates+pl-program+pl-glossary
+- [x] `lambda/template_apply_confirm/handler.py` (Terraform pending: `aws_lambda_function.pl_template_apply_confirm`, Timeout: 900) — layers: pl-boto3+pl-templates+pl-program+pl-glossary
+- [x] `lambda/template_copy/handler.py` (Terraform pending: `aws_lambda_function.pl_template_copy`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_archive/handler.py` (Terraform pending: `aws_lambda_function.pl_template_archive`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_unarchive/handler.py` (Terraform pending: `aws_lambda_function.pl_template_unarchive`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_create_blank/handler.py` (Terraform pending: `aws_lambda_function.pl_template_create_blank`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_create_from_block/handler.py` (Terraform pending: `aws_lambda_function.pl_template_create_from_block`, Timeout: 900) — layers: pl-boto3+pl-templates+pl-program
+- [x] `lambda/template_create_from_payload/handler.py` (Terraform pending: `aws_lambda_function.pl_template_create_from_payload`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_update/handler.py` (Terraform pending: `aws_lambda_function.pl_template_update`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_publish/handler.py` (Terraform pending: `aws_lambda_function.pl_template_publish`, Timeout: 900) — layers: pl-boto3+pl-templates
+- [x] `lambda/template_unpublish/handler.py` (Terraform pending: `aws_lambda_function.pl_template_unpublish`, Timeout: 900) — layers: pl-boto3+pl-templates
 
 ### Stream I — Program archive (DynamoDB only)
 
-- [ ] `lambda/program_archive/handler.py` + Terraform `aws_lambda_function.pl_program_archive` (Timeout: 900)
-- [ ] `lambda/program_unarchive/handler.py` + Terraform `aws_lambda_function.pl_program_unarchive` (Timeout: 900)
+- [x] `lambda/program_archive/handler.py` (Terraform pending: `aws_lambda_function.pl_program_archive`, Timeout: 900) — layers: pl-boto3+pl-program
+- [x] `lambda/program_unarchive/handler.py` (Terraform pending: `aws_lambda_function.pl_program_unarchive`, Timeout: 900) — layers: pl-boto3+pl-program
 
 ---
 
