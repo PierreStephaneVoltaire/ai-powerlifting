@@ -3,6 +3,7 @@
 **Goal:** Move every non-AI, non-ML, non-RAG health tool from `tools/health/` into its own AWS Lambda function under `utils/powerlifting-app/lambda/`. The portal backend (`utils/powerlifting-app/backend`) will invoke these lambdas directly instead of round-tripping through the IF agent pod. The agent keeps its in-process `tools/health/` copies for OpenCode specialist runs.
 
 **Rules**
+
 - One Lambda per tool. No grouped handlers.
 - **NO RAG, ML, or AI features move.** Anything calling an `*_ai.py` module, OpenRouter, `httpx` LLM calls, `load_system_prompt`, or the ChromaDB/health-doc RAG corpus stays in the agent.
 - **Every Lambda timeout = 900 seconds (15 min)** — the AWS maximum. `Timeout: 900` in Terraform, `timeout=900` in any config. Do not use shorter values.
@@ -53,22 +54,26 @@ These are **NOT** migrated. They remain in `tools/health/` and the portal backen
 **Must NOT appear in any layer or lambda package:** `httpx`, `openrouter`, `OPENROUTER_API_KEY`, `prompts/loader.py`, `chromadb`, any `*_ai.py` module.
 
 ### Phase 0a — `pl-boto3` layer
+
 - [x] `utils/powerlifting-app/lambda/layers/pl-boto3/requirements.txt` (boto3, botocore, s3transfer — pinned)
 - [x] `utils/powerlifting-app/lambda/layers/pl-boto3/build.sh` (pip install into `python/` for the lambda zip layout)
 - [x] `utils/powerlifting-app/lambda/layers/pl-boto3/README.md`
 - [ ] Terraform `aws_lambda_layer_version.pl_boto3` (compatible_runtimes = ["python3.12"])
 
 ### Phase 0b — `pl-pandas` layer
+
 - [x] `utils/powerlifting-app/lambda/layers/pl-pandas/requirements.txt` (pandas, numpy — pinned)
 - [x] `utils/powerlifting-app/lambda/layers/pl-pandas/build.sh`
 - [x] `utils/powerlifting-app/lambda/layers/pl-pandas/README.md`
 - [ ] Terraform `aws_lambda_layer_version.pl_pandas` (compatible_runtimes = ["python3.12"])
 
 ### Phase 0c — Shared Terraform IAM role (one execution role, scoped policies)
+
 - [ ] `terraform/` — `aws_iam_role.lambda_exec` + inline policy for DynamoDB (`if-health`, `if-health-templates`, `if-sessions`, `if-powerlifting-analysis-cache`, `if-proposals`), S3 (`POWERLIFTING_S3_BUCKET` read for stats lambdas), CloudWatch Logs
 - [ ] Terraform `for_each`-template helper for the 73 functions (Timeout: 900 each)
 
 ### Phase 0d — `tools/health/` re-export note
+
 - [ ] Document that `tools/health/` stays AS-IS for the agent path (no re-export refactor needed — lambdas copy only what they need; the agent keeps using the original in-process modules). If a lambda's copied module would diverge, the lambda's copy wins for that lambda only.
 
 ---
@@ -76,6 +81,7 @@ These are **NOT** migrated. They remain in `tools/health/` and the portal backen
 ## Phase 1 — Lambda handlers (one per tool, timeout = 900s each, self-contained)
 
 Every handler lives at `utils/powerlifting-app/lambda/<tool>/` and is **self-contained**:
+
 ```
 utils/powerlifting-app/lambda/<tool>/
 ├── handler.py          # thin wrapper: parse event → call local logic → return JSON
@@ -88,6 +94,7 @@ utils/powerlifting-app/lambda/<tool>/
 **The move is a LOGIC MOVE, not a rewrite.** Copy the exact function(s) from `tools/health/` that the `ROUTES` entry calls, fix intra-package imports to point at the local copies, and wrap in `handler.py`. Do not refactor, "improve", or generalize anything.
 
 `handler.py` shape (each tool substitutes its own name + local logic call):
+
 ```python
 import json
 import os
@@ -107,6 +114,7 @@ def handler(event, context):
 Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached per the Phase 0 table, the self-contained folder zipped as `source_dir`. IAM role from Phase 0c.
 
 ### Stream A — Pure math (no DynamoDB, no pandas)
+
 - [x] `lambda/kg_to_lb/handler.py` + Terraform `aws_lambda_function.pl_kg_to_lb` (Timeout: 900)
 - [x] `lambda/lb_to_kg/handler.py` + Terraform `aws_lambda_function.pl_lb_to_kg` (Timeout: 900)
 - [x] `lambda/ipf_weight_classes/handler.py` + Terraform `aws_lambda_function.pl_ipf_weight_classes` (Timeout: 900)
@@ -119,12 +127,14 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 - [ ] `lambda/calculate_dots/handler.py` + Terraform `aws_lambda_function.pl_calculate_dots` (Timeout: 900)
 
 ### Stream B — OpenPowerlifting stats (pandas/numpy layer + S3 dataset warm-start)
+
 - [ ] `lambda/powerlifting_filter_categories/handler.py` + Terraform `aws_lambda_function.pl_powerlifting_filter_categories` (Timeout: 900)
 - [ ] `lambda/powerlifting_ranking_percentile/handler.py` + Terraform `aws_lambda_function.pl_powerlifting_ranking_percentile` (Timeout: 900)
 - [ ] `lambda/analyze_powerlifting_stats/handler.py` + Terraform `aws_lambda_function.pl_analyze_powerlifting_stats` (Timeout: 900)
 - [ ] Warm-start strategy for stats lambdas (provisioned concurrency or `pl_warm` invoke; document in handler README)
 
 ### Stream C — Deterministic analytics (DynamoDB reads + compute)
+
 - [ ] `lambda/weekly_analysis/handler.py` + Terraform `aws_lambda_function.pl_weekly_analysis` (Timeout: 900)
 - [ ] `lambda/analysis_section/handler.py` + Terraform `aws_lambda_function.pl_analysis_section` (Timeout: 900) — **guard: reject AI section keys** (`ai_correlation`, `program_evaluation`); only serve `overview`, `fatigue_readiness`, `peaking`, `workload`, `alerts`
 - [ ] `lambda/regenerate_analysis/handler.py` + Terraform `aws_lambda_function.pl_regenerate_analysis` (Timeout: 900)
@@ -133,11 +143,13 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 - [ ] `lambda/export_program_markdown/handler.py` + Terraform `aws_lambda_function.pl_export_program_markdown` (Timeout: 900)
 
 ### Stream D — Glossary CRUD (DynamoDB only)
+
 - [ ] `lambda/glossary_add/handler.py` + Terraform `aws_lambda_function.pl_glossary_add` (Timeout: 900)
 - [ ] `lambda/glossary_update/handler.py` + Terraform `aws_lambda_function.pl_glossary_update` (Timeout: 900)
 - [ ] `lambda/glossary_set_e1rm/handler.py` + Terraform `aws_lambda_function.pl_glossary_set_e1rm` (Timeout: 900)
 
 ### Stream E — Program / Session CRUD (DynamoDB only)
+
 - [ ] `lambda/health_get_program/handler.py` + Terraform `aws_lambda_function.pl_health_get_program` (Timeout: 900)
 - [ ] `lambda/health_get_session/handler.py` + Terraform `aws_lambda_function.pl_health_get_session` (Timeout: 900)
 - [ ] `lambda/health_get_sessions_range/handler.py` + Terraform `aws_lambda_function.pl_health_get_sessions_range` (Timeout: 900)
@@ -153,6 +165,7 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 - [ ] `lambda/health_invalidate_program_cache/handler.py` + Terraform `aws_lambda_function.pl_health_invalidate_program_cache` (Timeout: 900)
 
 ### Stream F — Competition / Meta CRUD (DynamoDB only)
+
 - [ ] `lambda/health_get_competition/handler.py` + Terraform `aws_lambda_function.pl_health_get_competition` (Timeout: 900)
 - [ ] `lambda/health_update_competition/handler.py` + Terraform `aws_lambda_function.pl_health_update_competition` (Timeout: 900)
 - [ ] `lambda/health_create_competition/handler.py` + Terraform `aws_lambda_function.pl_health_create_competition` (Timeout: 900)
@@ -176,12 +189,14 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 - [ ] `lambda/health_update_supplements/handler.py` + Terraform `aws_lambda_function.pl_health_update_supplements` (Timeout: 900)
 
 ### Stream G — Import staging/apply (DynamoDB only; parse stays in agent)
+
 - [ ] `lambda/import_apply/handler.py` + Terraform `aws_lambda_function.pl_import_apply` (Timeout: 900)
 - [ ] `lambda/import_reject/handler.py` + Terraform `aws_lambda_function.pl_import_reject` (Timeout: 900)
 - [ ] `lambda/import_list_pending/handler.py` + Terraform `aws_lambda_function.pl_import_list_pending` (Timeout: 900)
 - [ ] `lambda/import_get_pending/handler.py` + Terraform `aws_lambda_function.pl_import_get_pending` (Timeout: 900)
 
 ### Stream H — Template CRUD (DynamoDB only; evaluate stays in agent)
+
 - [ ] `lambda/template_list/handler.py` + Terraform `aws_lambda_function.pl_template_list` (Timeout: 900)
 - [ ] `lambda/template_get/handler.py` + Terraform `aws_lambda_function.pl_template_get` (Timeout: 900)
 - [ ] `lambda/template_apply/handler.py` + Terraform `aws_lambda_function.pl_template_apply` (Timeout: 900)
@@ -197,6 +212,7 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 - [ ] `lambda/template_unpublish/handler.py` + Terraform `aws_lambda_function.pl_template_unpublish` (Timeout: 900)
 
 ### Stream I — Program archive (DynamoDB only)
+
 - [ ] `lambda/program_archive/handler.py` + Terraform `aws_lambda_function.pl_program_archive` (Timeout: 900)
 - [ ] `lambda/program_unarchive/handler.py` + Terraform `aws_lambda_function.pl_program_unarchive` (Timeout: 900)
 
