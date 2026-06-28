@@ -35,7 +35,6 @@ def _get_store():
     return _store
 
 
-# ---- analytics.py verbatim helpers (rpe_drift deps) ----
 
 INSUFFICIENT_DATA = {"status": "insufficient_data"}
 
@@ -221,7 +220,6 @@ def rpe_drift(
     }
 
 
-# ---- dispatcher (replicates tool.py _do_analyze_rpe_drift + _get_program_and_sessions) ----
 
 async def analyze_rpe_drift(args: dict) -> dict:
     """Load program+sessions from store, then call analytics.rpe_drift.

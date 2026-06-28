@@ -35,7 +35,6 @@ def _get_store():
     return _store
 
 
-# ---- analytics.py verbatim helpers (progression_rate deps) ----
 
 _RPE_TABLE_PRIMARY: dict[tuple[int, int], float] = {
     (1, 10): 1.000, (2, 10): 0.960, (3, 10): 0.930, (4, 10): 0.900,

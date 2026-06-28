@@ -239,5 +239,4 @@ def analyze_stats(
 
     return results
 
-# Eagerly warm the cache on cold start.
 warm_cache()

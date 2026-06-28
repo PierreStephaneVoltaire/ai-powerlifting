@@ -279,7 +279,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
     except Exception as e:
         logger.warning("export: correlation cache read failed: %s", e)
 
-    # program_evaluation AI call intentionally omitted in lambda (AI-excluded)
 
     return bundle
 

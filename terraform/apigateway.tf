@@ -1,14 +1,3 @@
-# ---------------------------------------------------------------------------
-# Phase 3 — API Gateway HTTP API (per-tool /{tool} proxy).
-#
-# One HTTP API fronts all 76 health lambdas. For each tool (for_each over the
-# same lambda_function_configs local used by lambda.tf) we create:
-#   - aws_apigatewayv2_integration  (AWS_PROXY -> each lambda's invoke_arn)
-#   - aws_apigatewayv2_route        (ANY /<tool> -> that integration)
-#   - aws_lambda_permission         (allow apigatewayv2 to invoke each lambda)
-# A single default stage ($default, auto_deploy=true) serves them all.
-# Base URL: ${aws_apigatewayv2_api.health_api.api_endpoint}/{tool}
-# ---------------------------------------------------------------------------
 
 resource "aws_apigatewayv2_api" "health_api" {
   name          = "powerlifting-health-http-api"
@@ -26,8 +15,6 @@ resource "aws_apigatewayv2_integration" "tool" {
   api_id           = aws_apigatewayv2_api.health_api.id
   integration_type = "AWS_PROXY"
 
-  # HTTP APIs with AWS_PROXY integrations invoke the function synchronously over
-  # POST; the route's ANY method is mapped to this POST internally.
   integration_method = "POST"
   integration_uri    = aws_lambda_function.health_tool[each.key].invoke_arn
 }
@@ -51,8 +38,6 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 }
 
-# Allow API Gateway (HTTP API) to invoke each health lambda. The source_arn
-# grants every method/route on this API.
 resource "aws_lambda_permission" "apigw" {
   for_each = local.lambda_function_configs
 

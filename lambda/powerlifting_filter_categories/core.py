@@ -159,5 +159,4 @@ def get_filter_categories(df: pd.DataFrame) -> Dict[str, Any]:
 
     return options
 
-# Eagerly warm the cache on cold start.
 warm_cache()

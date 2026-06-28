@@ -1,17 +1,4 @@
-# ---------------------------------------------------------------------------
-# Phase 3 — Lambda layers.
-#
-# Each layer is built by its build.sh (produces a <layer>.zip under
-# lambda/layers/<layer>/). Run the build scripts before `terraform apply`:
-#
-#   for d in utils/powerlifting-app/lambda/layers/*/; do bash "$d/build.sh"; done
-#
-# The zip paths below match the README "Terraform" snippets in each layer dir.
-# compatible_runtimes is pinned to python3.12 (the runtime all handlers use).
-# ---------------------------------------------------------------------------
 
-# Shared AWS SDK layer (boto3 + botocore + s3transfer). Used by all DynamoDB
-# lambdas. ~60MB.
 resource "aws_lambda_layer_version" "pl_boto3" {
   layer_name          = "pl-boto3"
   filename            = "${path.module}/../lambda/layers/pl-boto3/pl-boto3.zip"
@@ -20,8 +7,6 @@ resource "aws_lambda_layer_version" "pl_boto3" {
 
 }
 
-# Shared scientific-compute layer (pandas + numpy). Used ONLY by the 3 stats
-# lambdas (Stream B). ~110MB.
 resource "aws_lambda_layer_version" "pl_pandas" {
   layer_name          = "pl-pandas"
   filename            = "${path.module}/../lambda/layers/pl-pandas/pl-pandas.zip"
@@ -30,10 +15,6 @@ resource "aws_lambda_layer_version" "pl_pandas" {
 
 }
 
-# ---------------------------------------------------------------------------
-# Domain layers — shared deterministic modules copied from tools/health/.
-# Each build.sh produces <layer>.zip under lambda/layers/<layer>/.
-# ---------------------------------------------------------------------------
 
 resource "aws_lambda_layer_version" "pl_program" {
   layer_name          = "pl-program"
@@ -91,12 +72,7 @@ resource "aws_lambda_layer_version" "pl_analysis_cache" {
 
 }
 
-# ---------------------------------------------------------------------------
-# Local map: layer key (as used in lambda-tools.yaml) -> layer ARN.
-# The lambda functions resolve their layers list through this map.
-# ---------------------------------------------------------------------------
 locals {
-  # layer key -> aws_lambda_layer_version ARN
   layer_arns = {
     pl_boto3          = aws_lambda_layer_version.pl_boto3.arn
     pl_pandas         = aws_lambda_layer_version.pl_pandas.arn

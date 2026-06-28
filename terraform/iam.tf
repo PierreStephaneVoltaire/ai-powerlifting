@@ -1,15 +1,4 @@
-# ---------------------------------------------------------------------------
-# Phase 3 — Shared Lambda execution role + scoped IAM policy.
-#
-# One role shared by all 76 health lambdas. The policy grants:
-#   - CloudWatch Logs: create log group + streams + put log events
-#   - DynamoDB: read/write on the 5 health tables (if-health, if-health-templates,
-#               if-sessions, if-powerlifting-analysis-cache, if-proposals)
-#   - S3: read-only on the OpenPowerlifting dataset bucket (stats lambdas)
-#   - Lambda: invoke (master-sync may chain other lambdas)
-# ---------------------------------------------------------------------------
 
-# data.aws_caller_identity.current is declared in videos.tf and reused here.
 
 resource "aws_iam_role" "lambda_exec" {
   name = "powerlifting-lambda-exec-role"
@@ -31,10 +20,6 @@ resource "aws_iam_role" "lambda_exec" {
   }
 }
 
-# Single inline policy scoped to exactly what the health lambdas need.
-# DynamoDB: full item CRUD + query/scan on the 5 health-domain tables.
-# S3:      read-only on the OpenPowerlifting dataset bucket (stats Stream B).
-# Lambda:  invoke so master-sync can fan out to other pl-* functions.
 resource "aws_iam_role_policy" "lambda_exec" {
   name = "powerlifting-lambda-exec-policy"
   role = aws_iam_role.lambda_exec.id
@@ -91,10 +76,9 @@ resource "aws_iam_role_policy" "lambda_exec" {
         ]
       },
       {
-        Sid    = "LambdaInvoke"
-        Effect = "Allow"
-        Action = ["lambda:InvokeFunction"]
-        # master-sync may fan out to other pl-* health lambdas.
+        Sid      = "LambdaInvoke"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
         Resource = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${var.lambda_function_prefix}*"
       },
     ]

@@ -301,5 +301,4 @@ def compute_ranking_percentiles(
         },
     }
 
-# Eagerly warm the cache on cold start.
 warm_cache()

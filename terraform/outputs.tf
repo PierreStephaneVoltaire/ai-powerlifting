@@ -16,9 +16,6 @@ output "cloudfront_media_base_url" {
   value       = "https://${aws_cloudfront_distribution.session_videos.domain_name}"
 }
 
-# ---------------------------------------------------------------------------
-# Phase 3 — Lambda function outputs (for the Phase 2 backend to reference).
-# ---------------------------------------------------------------------------
 
 output "lambda_exec_role_arn" {
   description = "ARN of the shared Lambda execution role for all health lambdas"
@@ -44,9 +41,6 @@ output "lambda_layer_arns" {
   value       = local.layer_arns
 }
 
-# ---------------------------------------------------------------------------
-# Phase 3 — API Gateway HTTP API outputs.
-# ---------------------------------------------------------------------------
 
 output "api_gateway_id" {
   description = "ID of the powerlifting health HTTP API (aws_apigatewayv2_api.health_api)"
