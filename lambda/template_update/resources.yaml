@@ -17,3 +17,5 @@ input_schema:
   required:
   - sk
   - template
+
+reserved_concurrency: null

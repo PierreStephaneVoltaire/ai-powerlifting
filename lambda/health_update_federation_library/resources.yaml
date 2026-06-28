@@ -21,3 +21,5 @@ input_schema:
   required:
   - federations
   - qualification_standards
+
+reserved_concurrency: null

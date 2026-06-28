@@ -12,3 +12,5 @@ input_schema:
       description: '{"supplements": [...]} or {"supplement_phases": [...]}'
   required:
   - patch
+
+reserved_concurrency: null

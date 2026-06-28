@@ -31,3 +31,5 @@ input_schema:
   - date
   - results
   - body_weight_kg
+
+reserved_concurrency: null

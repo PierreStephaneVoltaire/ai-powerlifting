@@ -17,3 +17,5 @@ input_schema:
   required:
   - date
   - exercise
+
+reserved_concurrency: null

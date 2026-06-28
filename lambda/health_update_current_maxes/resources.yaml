@@ -17,3 +17,5 @@ input_schema:
       type: number
       description: New deadlift max in kg
   required: []
+
+reserved_concurrency: null

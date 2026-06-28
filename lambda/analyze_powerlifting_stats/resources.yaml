@@ -38,3 +38,5 @@ input_schema:
     min_dots:
       type: number
   required: []
+
+reserved_concurrency: null

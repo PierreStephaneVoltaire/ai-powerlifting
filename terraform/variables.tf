@@ -52,3 +52,15 @@ variable "lambda_handler" {
   type    = string
   default = "handler.handler"
 }
+
+variable "openrouter_api_key" {
+  type        = string
+  sensitive   = true
+  description = "OpenRouter API key for LLM calls. Stored in SSM."
+}
+
+variable "pl_internal_token" {
+  type        = string
+  sensitive   = true
+  description = "Internal API token for powerlifting-app service auth. Stored in SSM."
+}

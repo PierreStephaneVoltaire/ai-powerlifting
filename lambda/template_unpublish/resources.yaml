@@ -14,3 +14,5 @@ input_schema:
       description: Signed-in user/template author partition
   required:
   - sk
+
+reserved_concurrency: null

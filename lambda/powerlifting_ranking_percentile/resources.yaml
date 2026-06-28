@@ -36,3 +36,5 @@ input_schema:
       type: string
       description: Filter by equipment (e.g. Raw)
   required: []
+
+reserved_concurrency: null

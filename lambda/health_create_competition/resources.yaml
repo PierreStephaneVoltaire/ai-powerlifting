@@ -12,3 +12,5 @@ input_schema:
       description: 'Competition dict: name, date, federation, federation_id, counts_toward_federation_ids, status, weight_class_kg, location, targets, notes'
   required:
   - competition
+
+reserved_concurrency: null

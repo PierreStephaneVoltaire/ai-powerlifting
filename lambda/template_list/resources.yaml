@@ -14,3 +14,5 @@ input_schema:
       type: string
       description: Signed-in user/template author partition for draft visibility
   required: []
+
+reserved_concurrency: null

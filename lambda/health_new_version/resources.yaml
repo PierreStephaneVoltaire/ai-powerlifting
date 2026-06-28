@@ -18,3 +18,5 @@ input_schema:
   required:
   - change_reason
   - patches
+
+reserved_concurrency: null

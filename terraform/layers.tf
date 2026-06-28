@@ -72,6 +72,15 @@ resource "aws_lambda_layer_version" "pl_analysis_cache" {
 
 }
 
+
+resource "aws_lambda_layer_version" "pl_ai" {
+  layer_name          = "pl-ai"
+  filename            = "${path.module}/../lambda/layers/pl-ai/pl-ai.zip"
+  source_code_hash    = filebase64sha256("${path.module}/../lambda/layers/pl-ai/pl-ai.zip")
+  compatible_runtimes = ["python3.12"]
+
+}
+
 locals {
   layer_arns = {
     pl_boto3          = aws_lambda_layer_version.pl_boto3.arn
@@ -83,5 +92,6 @@ locals {
     pl_imports        = aws_lambda_layer_version.pl_imports.arn
     pl_federation     = aws_lambda_layer_version.pl_federation.arn
     pl_analysis_cache = aws_lambda_layer_version.pl_analysis_cache.arn
+    pl_ai             = aws_lambda_layer_version.pl_ai.arn
   }
 }

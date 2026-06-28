@@ -11,3 +11,5 @@ input_schema:
       type: string
   required:
   - sk
+
+reserved_concurrency: null

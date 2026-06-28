@@ -17,3 +17,5 @@ input_schema:
   required:
   - weight_kg
   - reps
+
+reserved_concurrency: null

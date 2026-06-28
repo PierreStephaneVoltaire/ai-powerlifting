@@ -20,3 +20,5 @@ input_schema:
   required:
   - sk
   - new_name
+
+reserved_concurrency: null

@@ -18,3 +18,5 @@ input_schema:
   - total_kg
   - bodyweight_kg
   - sex
+
+reserved_concurrency: null

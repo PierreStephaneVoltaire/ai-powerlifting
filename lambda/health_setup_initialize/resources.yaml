@@ -31,3 +31,5 @@ input_schema:
   - mode
   - start_date
   - week_start_day
+
+reserved_concurrency: null

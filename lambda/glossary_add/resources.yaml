@@ -11,3 +11,5 @@ input_schema:
       type: object
   required:
   - exercise
+
+reserved_concurrency: null

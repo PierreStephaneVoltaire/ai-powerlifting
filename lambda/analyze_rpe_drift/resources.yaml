@@ -18,3 +18,5 @@ input_schema:
       default: 4
   required:
   - exercise_name
+
+reserved_concurrency: null

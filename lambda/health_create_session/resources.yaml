@@ -30,3 +30,5 @@ input_schema:
   - date
   - day
   - week_number
+
+reserved_concurrency: null

@@ -18,3 +18,5 @@ input_schema:
       description: Maximum cache age before regeneration
       default: 72
   required: []
+
+reserved_concurrency: null

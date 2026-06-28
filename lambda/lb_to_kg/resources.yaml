@@ -10,3 +10,5 @@ input_schema:
       description: Weight in pounds
   required:
   - lb
+
+reserved_concurrency: null

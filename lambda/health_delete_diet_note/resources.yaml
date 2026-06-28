@@ -12,3 +12,5 @@ input_schema:
       description: Diet note date to delete (YYYY-MM-DD)
   required:
   - date
+
+reserved_concurrency: null

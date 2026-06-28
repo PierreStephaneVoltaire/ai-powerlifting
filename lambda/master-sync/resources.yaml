@@ -4,3 +4,5 @@ layers:
 - pl_federation
 memory: 512
 timeout: 900
+
+reserved_concurrency: null

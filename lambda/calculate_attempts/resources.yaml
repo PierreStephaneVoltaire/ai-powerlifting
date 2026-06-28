@@ -25,3 +25,5 @@ input_schema:
   required:
   - lift
   - opener_kg
+
+reserved_concurrency: null

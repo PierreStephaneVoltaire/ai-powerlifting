@@ -17,3 +17,5 @@ input_schema:
   required:
   - start_date
   - end_date
+
+reserved_concurrency: null

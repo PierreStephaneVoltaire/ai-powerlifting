@@ -12,3 +12,5 @@ input_schema:
       description: Dict of meta fields to update
   required:
   - updates
+
+reserved_concurrency: null

@@ -14,3 +14,5 @@ input_schema:
       description: 'Complete phases list. Each: {name, start_week, end_week, intent}'
   required:
   - phases
+
+reserved_concurrency: null

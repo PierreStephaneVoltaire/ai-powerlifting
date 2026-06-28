@@ -16,3 +16,5 @@ input_schema:
       description: Number of recent weeks to analyze
   required:
   - exercise_name
+
+reserved_concurrency: null

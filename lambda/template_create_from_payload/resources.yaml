@@ -22,3 +22,5 @@ input_schema:
       type: string
   required:
   - template
+
+reserved_concurrency: null

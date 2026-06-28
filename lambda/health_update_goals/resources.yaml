@@ -14,3 +14,5 @@ input_schema:
       description: Complete goals array to write to the current block
   required:
   - goals
+
+reserved_concurrency: null

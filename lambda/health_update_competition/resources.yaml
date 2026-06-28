@@ -16,3 +16,5 @@ input_schema:
   required:
   - date
   - patch
+
+reserved_concurrency: null

@@ -20,3 +20,5 @@ input_schema:
       default: false
   required:
   - date
+
+reserved_concurrency: null

@@ -12,3 +12,5 @@ input_schema:
       description: Competition date (YYYY-MM-DD)
   required:
   - date
+
+reserved_concurrency: null

@@ -16,3 +16,5 @@ input_schema:
   required:
   - id
   - value_kg
+
+reserved_concurrency: null

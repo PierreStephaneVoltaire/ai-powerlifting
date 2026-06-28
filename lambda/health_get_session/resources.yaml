@@ -13,3 +13,5 @@ input_schema:
       description: Session date (YYYY-MM-DD)
   required:
   - date
+
+reserved_concurrency: null

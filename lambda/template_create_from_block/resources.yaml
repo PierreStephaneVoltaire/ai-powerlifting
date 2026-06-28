@@ -20,3 +20,5 @@ input_schema:
       description: Display author
   required:
   - name
+
+reserved_concurrency: null

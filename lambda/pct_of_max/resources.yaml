@@ -14,3 +14,5 @@ input_schema:
   required:
   - max_kg
   - pct
+
+reserved_concurrency: null

@@ -10,3 +10,5 @@ input_schema:
       description: Weight in kilograms
   required:
   - kg
+
+reserved_concurrency: null

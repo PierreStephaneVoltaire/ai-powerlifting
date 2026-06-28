@@ -17,3 +17,5 @@ input_schema:
   required:
   - old_date
   - new_date
+
+reserved_concurrency: null
