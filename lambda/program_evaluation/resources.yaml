@@ -1,0 +1,23 @@
+layers:
+- pl-ai
+- pl-boto3
+- pl-program
+- pl-sessions
+- pl-federation
+memory: 512
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: Full-block AI program evaluation by a sports scientist. Evaluates the current block against competition goals, identifies what is working and not, and suggests small targeted changes. Requires >= 4 completed weeks. Cached weekly. Use refresh=true to force regeneration.
+input_schema:
+  type: object
+  properties:
+    refresh:
+      type: boolean
+      description: Force regeneration, ignore cache
+      default: false
+    cache_only:
+      type: boolean
+      description: Return only cached results without generating AI output
+      default: false
+  required: []

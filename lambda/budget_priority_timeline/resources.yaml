@@ -1,0 +1,38 @@
+layers:
+- pl-ai
+memory: 512
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: "AI purchase priority timeline for a powerlifting budget. Schedules equipment, supplements, gym/federation memberships, and competition-entry fees across months so the total stays under the monthly cap while ensuring mandatory items are bought before each confirmed/optional competition."
+input_schema:
+  type: object
+  properties:
+    config:
+      type: object
+      description: "Budget config: monthly_budget, currency, budget_start_month."
+      properties:
+        monthly_budget:
+          type: number
+        currency:
+          type: string
+        budget_start_month:
+          type: string
+    items:
+      type: array
+      description: "Budget items (equipment, supplements, memberships, competition entries)."
+      items:
+        type: object
+    competitions:
+      type: array
+      description: "Optional upcoming competitions with master_id, name, start_date, user_status."
+      items:
+        type: object
+    federation_memberships:
+      type: array
+      description: "Optional federation membership state: abbreviation, membership_group, membership_paid, membership_cost."
+      items:
+        type: object
+  required:
+  - config
+  - items

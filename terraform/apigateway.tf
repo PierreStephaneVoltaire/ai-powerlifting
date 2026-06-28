@@ -22,7 +22,7 @@ resource "aws_apigatewayv2_integration" "tool" {
 resource "aws_apigatewayv2_route" "tool" {
   for_each = local.lambda_function_configs
 
-  api_id    = aws_apigatewayv2_api.health_api.id
+  api_id = aws_apigatewayv2_api.health_api.id
   route_key = "ANY /${each.key}"
   target    = "integrations/${aws_apigatewayv2_integration.tool[each.key].id}"
 }

@@ -1,0 +1,21 @@
+layers:
+- pl-ai
+- pl-boto3
+- pl-imports
+- pl-program
+- pl-glossary
+memory: 1024
+timeout: 900
+s3_read: false
+reserved_concurrency: 3
+description: Parse a spreadsheet file and stage it as a pending import.
+input_schema:
+  type: object
+  properties:
+    base64_content:
+      type: string
+    filename:
+      type: string
+  required:
+  - base64_content
+  - filename

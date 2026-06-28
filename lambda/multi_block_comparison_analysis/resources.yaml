@@ -1,0 +1,15 @@
+layers:
+- pl-ai
+memory: 512
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: AI comparison of current and historical block analysis bundles. Identifies similarities, differences, lift-specific outcomes, ROI, volume dose response, bodyweight/training-day relationships, projection accuracy, fatigue patterns, and best-value blocks.
+input_schema:
+  type: object
+  properties:
+    payload:
+      type: object
+      description: Multi-block comparison payload built from block analytics.
+  required:
+  - payload

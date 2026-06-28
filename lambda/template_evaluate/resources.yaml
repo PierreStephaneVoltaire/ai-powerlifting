@@ -1,0 +1,20 @@
+layers:
+- pl-ai
+- pl-boto3
+- pl-templates
+- pl-program
+memory: 512
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: Run AI-powered template evaluation.
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition for draft visibility
+  required:
+  - sk

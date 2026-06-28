@@ -9,31 +9,31 @@ locals {
 
   lambda_function_configs = {
     for name, cfg in local.lambda_tool_configs : name => {
-      layers     = cfg.layers
-      memory     = cfg.memory
-      timeout    = cfg.timeout
-      s3_read             = lookup(cfg, "s3_read", false)
+      layers               = cfg.layers
+      memory               = cfg.memory
+      timeout              = cfg.timeout
+      s3_read              = lookup(cfg, "s3_read", false)
       reserved_concurrency = lookup(cfg, "reserved_concurrency", null)
-      layer_arns          = [for key in cfg.layers : local.layer_arns[key]]
+      layer_arns           = [for key in cfg.layers : local.layer_arns[key]]
     }
   }
 
   lambda_common_env = {
-    SANDBOX_PATH              = "/tmp/sandbox"
-    IF_HEALTH_TABLE_NAME      = var.dynamodb_health_table
-    IF_TEMPLATES_TABLE_NAME   = var.dynamodb_templates_table
-    IF_SESSIONS_TABLE_NAME    = var.dynamodb_sessions_table
-    IF_PROPOSALS_TABLE_NAME   = var.dynamodb_proposals_table
-    ANALYSIS_CACHE_TABLE_NAME = var.dynamodb_analysis_cache_table
-    HEALTH_PROGRAM_PK         = "operator"
-    OPENROUTER_API_KEY               = data.aws_ssm_parameter.openrouter_key.value
-    LLM_BASE_URL                      = "https://openrouter.ai/api/v1"
-    ANALYSIS_MODEL                    = "anthropic/claude-sonnet-4.6"
-    ESTIMATE_MODEL                     = "anthropic/claude-sonnet-4.6"
-    IMPORT_FAST_MODEL                 = "anthropic/claude-haiku-4.5"
-    GLOSSARY_TEXT_MODEL                = "google/gemini-3.1-flash-lite"
-    ESTIMATE_MODEL_REASONING_EFFORT   = "xhigh"
-    ESTIMATE_MODEL_VERBOSITY          = "max"
+    SANDBOX_PATH                    = "/tmp/sandbox"
+    IF_HEALTH_TABLE_NAME            = var.dynamodb_health_table
+    IF_TEMPLATES_TABLE_NAME         = var.dynamodb_templates_table
+    IF_SESSIONS_TABLE_NAME          = var.dynamodb_sessions_table
+    IF_PROPOSALS_TABLE_NAME         = var.dynamodb_proposals_table
+    ANALYSIS_CACHE_TABLE_NAME       = var.dynamodb_analysis_cache_table
+    HEALTH_PROGRAM_PK               = "operator"
+    OPENROUTER_API_KEY              = data.aws_ssm_parameter.openrouter_key.value
+    LLM_BASE_URL                    = "https://openrouter.ai/api/v1"
+    ANALYSIS_MODEL                  = "anthropic/claude-sonnet-4.6"
+    ESTIMATE_MODEL                  = "anthropic/claude-sonnet-4.6"
+    IMPORT_FAST_MODEL               = "anthropic/claude-haiku-4.5"
+    GLOSSARY_TEXT_MODEL             = "google/gemini-3.1-flash-lite"
+    ESTIMATE_MODEL_REASONING_EFFORT = "xhigh"
+    ESTIMATE_MODEL_VERBOSITY        = "max"
   }
 
   lambda_stats_env = {

@@ -1,0 +1,17 @@
+layers:
+- pl-ai
+- pl-boto3
+- pl-federation
+memory: 512
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: AI program evaluation for a supplied historical block snapshot. The caller supplies a normalized program where the target block sessions are scoped to current. Use this for past-block program analysis without loading the live current program.
+input_schema:
+  type: object
+  properties:
+    program:
+      type: object
+      description: Block-scoped program snapshot to evaluate.
+  required:
+  - program

@@ -1,21 +1,21 @@
-# Health Tools → Powerlifting Lambda Migration Plan
+# Health Tools → Powerlifting Lambda Migration Plan (COMPLETE — Phases 1-3)
 
-**Goal:** Move every non-AI, non-ML, non-RAG health tool from `tools/health/` into its own AWS Lambda function under `utils/powerlifting-app/lambda/`. The portal backend (`utils/powerlifting-app/backend`) will invoke these lambdas directly instead of round-tripping through the IF agent pod. The agent keeps its in-process `tools/health/` copies for OpenCode specialist runs.
+**Goal:** Move every health tool from `tools/health/` into its own AWS Lambda function under `utils/powerlifting-app/lambda/`, fronted by one HTTP API API Gateway with a per-tool `POST /{tool}` proxy. The portal backend (`utils/powerlifting-app/backend`) and the IF agent both call these lambdas over HTTP instead of executing the tools in-process on the agent pod. The agent keeps its in-process `tools/health/` copies as the source the lambdas were copied from and as the runtime for the one remaining in-process tool.
 
 **Rules**
 
-- One Lambda per tool. No grouped handlers.
-- **NO RAG, ML, or AI features move.** Anything calling an `*_ai.py` module, OpenRouter, `httpx` LLM calls, `load_system_prompt`, or the ChromaDB/health-doc RAG corpus stays in the agent.
+- One Lambda per tool. No grouped handlers. 94 Lambdas total (75 deterministic + 19 AI); one exception (`health_rag_search`).
+- **AI tools moved WITHOUT refactor.** The 19 AI tools already fetch their own data, call OpenRouter directly via `httpx`, and load their own static `.j2` prompts through `prompts/loader.py`; the agent never injected directives into them, so they moved as-is onto Lambdas behind the same API Gateway, using the new `pl-ai` layer. Only `health_rag_search` stays in-process (it needs the local ChromaDB corpus).
 - **Every Lambda timeout = 900 seconds (15 min)** — the AWS maximum. `Timeout: 900` in Terraform, `timeout=900` in any config. Do not use shorter values.
-- The agent's in-process `tools/health/` path must remain byte-identical in behavior. Deterministic modules get extracted into a shared `powerlifting_core` Lambda Layer; `tools/health/` re-exports them so the agent path is unchanged.
+- The move is a LOGIC MOVE, not a rewrite. Each lambda copies only the code it needs verbatim from `tools/health/` into a self-contained package; the agent's in-process `tools/health/` path stays as-is. If a lambda's copied module would diverge, the lambda's copy wins for that lambda only.
 - Each Lambda's `handler(event, context)` accepts `{"args": {...}}` and returns the exact JSON that the corresponding `ROUTES` entry in `tools/health/tool.py` returns today.
 - Per `AGENTS.md`: never run `terraform apply`/`destroy`, never run `kubectl` mutations, never run git writes, never delete AWS resources. Terraform work is `fmt`/`validate`/`plan` only.
 
 ---
 
-## Excluded — stay in the agent (RAG / ML / AI)
+## The one exception — `health_rag_search` (stays in-process)
 
-These are **NOT** migrated. They remain in `tools/health/` and the portal backend keeps calling them via `invokeToolDirect` against the IF agent pod.
+Only `health_rag_search` did **not** migrate: it depends on the local ChromaDB health-doc RAG corpus (IPF rulebook, anti-doping list, supplement PDFs) that ships with the agent pod. The portal backend and the agent keep calling it in-process via `invokeToolDirect`; in the agent's MCP config it resolves to the `health` category rather than `health_lambda`. The 19 AI tools listed below were migrated (see Stream J).
 
 - `fatigue_profile_estimate` (calls `fatigue_ai.py`)
 - `correlation_analysis` (calls `correlation_ai.py`)
@@ -36,7 +36,7 @@ These are **NOT** migrated. They remain in `tools/health/` and the portal backen
 - `glossary_estimate_e1rm` (calls `e1rm_backfill_ai.py`)
 - `template_evaluate` (calls `template_evaluate_ai.py`)
 - `import_parse_file` (calls `import_parse_ai.py`)
-- `health_rag_search` (ChromaDB RAG — excluded by the no-RAG rule)
+- `health_rag_search` (ChromaDB RAG — the only tool that stays in-process)
 
 ---
 
@@ -44,37 +44,45 @@ These are **NOT** migrated. They remain in `tools/health/` and the portal backen
 
 **Architecture: per-lambda self-contained packages + a few small focused layers.** No monolithic `powerlifting_core` layer. Each lambda gets its own folder with ONLY the code it needs (copied verbatim from `tools/health/`, trimmed to that tool's dependency graph). Heavyweight shared deps live in small focused layers so no lambda pays cold-start cost for code/deps it doesn't use.
 
-**Layer assignments:**
+**Layer assignments (10 layers total):**
 | Layer | Contents | Used by | Size profile |
 |-------|----------|---------|--------------|
-| `pl-boto3` | boto3 + botocore + s3transfer | all 63 DynamoDB lambdas (Streams D,E,F,G,H,I + deterministic analytics that read DynamoDB) | ~60MB |
-| `pl-pandas` | pandas + numpy | ONLY the 3 OpenPowerlifting stats lambdas (Stream B) | ~110MB |
-| (no layer) | stdlib only | the 10 pure-math lambdas (Stream A) — no third-party deps at all | ~KB |
+| `pl-boto3` | boto3 + botocore + s3transfer | every DynamoDB-backed lambda + deterministic analytics that read DynamoDB | ~60MB |
+| `pl-pandas` | pandas + numpy | the OpenPowerlifting stats lambdas (Stream B) | ~110MB |
+| `pl-program` | program store + program logic modules | program/phase/maxes/goals/diet-note/supplement/met CRUD lambdas | shared |
+| `pl-sessions` | session store + session logic | session + competition-analytics lambdas | shared |
+| `pl-templates` | template store + template logic | template CRUD + apply/copy/from-block lambdas (Stream H) | shared |
+| `pl-glossary` | glossary store + glossary helpers | glossary CRUD lambdas + templated backfills | shared |
+| `pl-imports` | import staging store + import apply logic | import staging/apply + `import_parse_file` | shared |
+| `pl-federation` | federation-library store | federation-library CRUD lambdas | shared |
+| `pl-analysis-cache` | analysis-cache store | weekly/block/compare analysis-cache lambdas | shared |
+| `pl-ai` | `httpx` + `jinja2` + `prompts/loader.py` + 24 `.j2` prompt files + a config shim | ONLY the 19 AI tool lambdas (Stream J) | shared |
+| (no layer) | stdlib only | the pure-math lambdas (Stream A) — no third-party deps at all | ~KB |
 
-**Must NOT appear in any layer or lambda package:** `httpx`, `openrouter`, `OPENROUTER_API_KEY`, `prompts/loader.py`, `chromadb`, any `*_ai.py` module.
+`httpx`, `jinja2`, `prompts/loader.py`, the `.j2` prompt files, and `OPENROUTER_API_KEY` (injected from SSM into Lambda env) now legitimately appear — but ONLY in the `pl-ai` layer and the 19 AI tool lambdas. **Still excluded from every layer and lambda package:** `chromadb` and the health-doc RAG corpus (only `health_rag_search` uses them, and it stays in-process on the agent).
 
 ### Phase 0a — `pl-boto3` layer
 
 - [x] `utils/powerlifting-app/lambda/layers/pl-boto3/requirements.txt` (boto3, botocore, s3transfer — pinned)
 - [x] `utils/powerlifting-app/lambda/layers/pl-boto3/build.sh` (pip install into `python/` for the lambda zip layout)
 - [x] `utils/powerlifting-app/lambda/layers/pl-boto3/README.md`
-- [ ] Terraform `aws_lambda_layer_version.pl_boto3` (compatible_runtimes = ["python3.12"])
+- [x] Terraform `aws_lambda_layer_version.pl_boto3` (compatible_runtimes = ["python3.12"]) — `terraform/layers.tf`
 
 ### Phase 0b — `pl-pandas` layer
 
 - [x] `utils/powerlifting-app/lambda/layers/pl-pandas/requirements.txt` (pandas, numpy — pinned)
 - [x] `utils/powerlifting-app/lambda/layers/pl-pandas/build.sh`
 - [x] `utils/powerlifting-app/lambda/layers/pl-pandas/README.md`
-- [ ] Terraform `aws_lambda_layer_version.pl_pandas` (compatible_runtimes = ["python3.12"])
+- [x] Terraform `aws_lambda_layer_version.pl_pandas` (compatible_runtimes = ["python3.12"]) — `terraform/layers.tf`
 
 ### Phase 0c — Shared Terraform IAM role (one execution role, scoped policies)
 
-- [ ] `terraform/` — `aws_iam_role.lambda_exec` + inline policy for DynamoDB (`if-health`, `if-health-templates`, `if-sessions`, `if-powerlifting-analysis-cache`, `if-proposals`), S3 (`POWERLIFTING_S3_BUCKET` read for stats lambdas), CloudWatch Logs
-- [ ] Terraform `for_each`-template helper for the 73 functions (Timeout: 900 each)
+- [x] `terraform/iam.tf` — `aws_iam_role.lambda_exec` + scoped policy for DynamoDB (`if-health`, `if-health-templates`, `if-sessions`, `if-powerlifting-analysis-cache`, `if-proposals`), S3 (`POWERLIFTING_S3_BUCKET` read for stats lambdas), CloudWatch Logs, `lambda:InvokeFunction`
+- [x] Terraform `for_each` helper for all 94 functions (Timeout: 900 each); config source = per-folder `lambda/<tool>/resources.yaml`
 
 ### Phase 0d — `tools/health/` re-export note
 
-- [ ] Document that `tools/health/` stays AS-IS for the agent path (no re-export refactor needed — lambdas copy only what they need; the agent keeps using the original in-process modules). If a lambda's copied module would diverge, the lambda's copy wins for that lambda only.
+- [x] Documented — `tools/health/` stays AS-IS for the agent path (no re-export refactor needed; lambdas copy only what they need, and the agent keeps using the original in-process modules). If a lambda's copied module diverges, the lambda's copy wins for that lambda only.
 
 ---
 

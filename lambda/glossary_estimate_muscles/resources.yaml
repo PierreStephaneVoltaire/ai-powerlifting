@@ -1,0 +1,17 @@
+layers:
+- pl-ai
+- pl-boto3
+- pl-glossary
+- pl-program
+memory: 512
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: AI muscle group estimation for one glossary exercise.
+input_schema:
+  type: object
+  properties:
+    id:
+      type: string
+  required:
+  - id
