@@ -222,11 +222,23 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
 ### Stream I — Program archive (DynamoDB only)
 
 - [x] `lambda/program_archive/handler.py` (Terraform pending: `aws_lambda_function.pl_program_archive`, Timeout: 900) — layers: pl-boto3+pl-program
-- [x] `lambda/program_unarchive/handler.py` (Terraform pending: `aws_lambda_function.pl_program_unarchive`, Timeout: 900) — layers: pl-boto3+pl-program
+      "- [x] `lambda/program_unarchive/handler.py` (Terraform pending: `aws_lambda_function.pl_program_unarchive`, Timeout: 900) — layers: pl-boto3+pl-program
+
+### Stream J — AI health tools (moved WITHOUT refactor)
+
+The 19 AI tools (originally listed under the exception set) were migrated as-is onto their own Lambdas. They already fetch their own DynamoDB/S3 data, call OpenRouter directly via `httpx`, and load their own static `.j2` prompts through `prompts/loader.py`, so no refactor or agent-injected directives were needed. They attach `pl-boto3` + `pl-ai` (plus `pl-templates`/`pl-imports` where they touch those stores) and read `OPENROUTER_API_KEY` from Lambda env (SSM-backed).
+
+- [x] `fatigue_profile_estimate`, `correlation_analysis`, `block_correlation_analysis`, `muscle_group_estimate` — layers: pl-boto3+pl-ai
+- [x] `lift_profile_review`, `lift_profile_rewrite`, `lift_profile_rewrite_and_estimate`, `lift_profile_estimate_stimulus` — layers: pl-boto3+pl-ai
+- [x] `program_evaluation`, `block_program_evaluation`, `multi_block_comparison_analysis` — layers: pl-boto3+pl-ai
+- [x] `budget_priority_timeline`, `budget_advisor` — layers: pl-boto3+pl-ai
+- [x] `glossary_generate_text`, `glossary_estimate_fatigue`, `glossary_estimate_muscles`, `glossary_estimate_e1rm` — layers: pl-boto3+pl-glossary+pl-ai
+- [x] `template_evaluate` — layers: pl-boto3+pl-templates+pl-ai
+- [x] `import_parse_file` — layers: pl-boto3+pl-imports+pl-ai (reserved_concurrency=3)
 
 ---
 
-## Phase 2 — Portal backend rewiring
+## Phase 2 — Portal backend rewiring"
 
 - [x] `utils/powerlifting-app/backend/src/utils/lambda.ts` — `invokeLambda(functionName, args)` helper (HTTP `fetch` to the Phase 3 API Gateway endpoint `${POWERLIFTING_LAMBDA_BASE_URL}/${tool}`, parses returned `{"statusCode":200,"body":"<json>"}` body; matches `invokeToolDirect` return shape; no `@aws-sdk/client-lambda` dependency)
 - [x] Add env config: `POWERLIFTING_LAMBDA_BASE_URL` (the API Gateway HTTP endpoint base; no `POWERLIFTING_LAMBDA_REGION`/per-tool prefix — the tool name is the `/{tool}` path segment)
@@ -243,22 +255,34 @@ Terraform: one `aws_lambda_function` per tool, `Timeout: 900`, layer(s) attached
   - [x] `routes/supplements.ts` (via controllers)
   - [x] `routes/template.ts` → `controllers/templateController.ts`
   - [x] `routes/import.ts` → `controllers/importController.ts`
-  - [x] `routes/analytics.ts` (deterministic sections only; AI sections keep `invokeToolDirect`)
+        " - [x] `routes/analytics.ts` (deterministic sections → lambda first; AI sections later migrated to AI lambdas too)"
   - [x] `routes/stats.ts`
   - [x] `routes/setup.ts` → `controllers/setupController.ts`
   - [x] `routes/export.ts`
   - [x] `routes/weight.ts` (deterministic math calls)
-  - [x] `routes/budget.ts` (AI-only — kept on `invokeToolDirect`)
+        " - [x] `routes/budget.ts` (AI-only — later migrated to AI lambdas)"
   - [x] `services/analysisCache.ts`
   - [x] `services/blockAnalytics.ts`
   - [x] `services/sessionStore.ts`
-- [x] `routes/analytics.ts` — `analysis_section` branch: deterministic keys → lambda; `ai_correlation`/`program_evaluation` → agent (`invokeToolDirect`)
-- [x] Keep AI tools on `invokeToolDirect`: `program_evaluation`, `correlation_analysis`, `fatigue_profile_estimate`, `muscle_group_estimate`, `lift_profile_*`, `budget_*`, `glossary_generate_text`, `glossary_estimate_muscles/fatigue/e1rm`, `template_evaluate`, `import_parse_file`
-- [x] `npm run build` in `backend/` passes (green — `tsc` clean)
+        "- [x] `routes/analytics.ts` — `analysis_section` branch: deterministic keys → lambda; AI keys (`ai_correlation`/`program_evaluation`) → AI lambdas too (they call OpenRouter internally)
+- [x] AI tools also migrated to `invokeLambda` (the 19 AI lambdas call OpenRouter directly via `httpx` from inside the function): `program_evaluation`, `correlation_analysis`, `fatigue_profile_estimate`, `muscle_group_estimate`, `lift_profile_*`, `budget_*`, `glossary_generate_text`, `glossary_estimate_muscles/fatigue/e1rm`, `template_evaluate`, `import_parse_file`"
+      "- [x] `npm run build` in `backend/` passes (green — `tsc` clean)
 
 ---
 
-## Phase 3 — Terraform + IAM
+## Phase 2.5 — Cost controls + access hardening
+
+- [x] **Per-route throttling** on the API Gateway (per-tool `/{tool}` route) to bound request rate.
+- [x] **Reserved concurrency per tool** — AI tools `reserved_concurrency=5`, `import_parse_file` `reserved_concurrency=3`, default deterministic tools unreserved; enforced via `aws_lambda_function.reserved_concurrent_configurations`.
+- [x] **AWS Budget alarm** on the powerlifting AWS scope for Lambda + API Gateway spend, with alert thresholds.
+- [x] **`aws_ssm_parameter` secrets** for `OPENROUTER_API_KEY` and `INTERNAL_API_TOKEN` — plain `type=String` (**no KMS** — avoids decrypt cost). AI Lambdas pull `OPENROUTER_API_KEY` via `data.aws_ssm_parameter` at apply time → Lambda env.
+- [x] **API Gateway custom authorizer** — `pl_authorizer` request-authorizer Lambda (validates the `X-Internal-Token` header against `INTERNAL_API_TOKEN`; `enable_simple_responses`, payload format v2.0). Every per-tool `POST /{tool}` route is registered with `authorization_type=CUSTOM` against `pl_authorizer`. `GET /openapi.json` is left **public** (no authorizer) so discovery works with no token.
+- [x] **Secret distribution** — only `powerlifting-app-backend`, the IF agent API pod, and the `health_lambda_mcp` MCP server pod receive `INTERNAL_API_TOKEN` (mounted as env from SSM). No other consumer may hold it.
+- [x] **Backend response caching** — in-process LRU in `utils/powerlifting-app/backend/src/utils/lambdaCache.ts`, keyed `${pk}:${functionName}:${sha256(args)}`. TTLs: math/read-only 1800s, AI reads 600s, exports 300s, default 120s. **WRITE tools bypass the cache** and invalidate by `(pk, prefix)`.
+
+---
+
+## Phase 3 — Terraform + IAM"
 
 - [x] `terraform/lambda.tf` — `aws_lambda_function` for each tool via `for_each`, Timeout: 900 each. **Config source: per-folder `lambda/<tool>/resources.yaml`** (NOT a central file). `lambda.tf` loops the lambda dirs + decodes each folder's own `resources.yaml` for layers/memory/timeout.
 - [x] `lambda/<tool>/resources.yaml` — one per tool folder (76 files), each with `layers`, `memory`, `timeout`, optional `s3_read`

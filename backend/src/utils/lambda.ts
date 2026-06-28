@@ -10,6 +10,7 @@
 // `https://<id>.execute-api.<region>.amazonaws.com`). There is no default — if it
 // is unset, invocation fails fast with a clear configuration error.
 const LAMBDA_BASE_URL = process.env.POWERLIFTING_LAMBDA_BASE_URL
+const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 /**
  * Invoke a Phase 2 powerlifting tool through its API Gateway HTTP route.
@@ -38,6 +39,7 @@ export async function invokeLambda(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(INTERNAL_API_TOKEN ? { 'X-Internal-Token': INTERNAL_API_TOKEN } : {}),
     },
     body: JSON.stringify(args),
   })

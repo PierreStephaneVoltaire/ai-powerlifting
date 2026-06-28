@@ -1,7 +1,8 @@
 layers:
-- pl-ai
-- pl-boto3
-- pl-federation
+- pl_ai
+- pl_analysis_cache
+- pl_boto3
+- pl_program
 memory: 512
 timeout: 900
 s3_read: false

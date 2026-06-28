@@ -1,7 +1,7 @@
 layers:
-- pl-ai
-- pl-boto3
-- pl-program
+- pl_ai
+- pl_boto3
+- pl_program
 memory: 512
 timeout: 900
 s3_read: false

@@ -26,3 +26,29 @@ resource "aws_lambda_function" "pl_authorizer" {
     Service = "pl-authorizer"
   }
 }
+
+resource "aws_apigatewayv2_integration" "pl_authorizer" {
+  api_id = aws_apigatewayv2_api.health_api.id
+
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri    = aws_lambda_function.pl_authorizer.invoke_arn
+}
+
+resource "aws_apigatewayv2_authorizer" "pl_internal" {
+  name                              = "internal-token"
+  api_id                            = aws_apigatewayv2_api.health_api.id
+  authorizer_type                   = "REQUEST"
+  identity_sources                  = ["$request.header.X-Internal-Token"]
+  enable_simple_responses           = true
+  authorizer_payload_format_version = "2.0"
+  authorizer_uri                    = aws_lambda_function.pl_authorizer.invoke_arn
+}
+
+resource "aws_lambda_permission" "pl_authorizer_invoke" {
+  statement_id  = "AllowAPIGatewayInvokeAuthorizer"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.pl_authorizer.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.health_api.execution_arn}/*/*"
+}
