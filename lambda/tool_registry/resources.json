@@ -1,0 +1,1532 @@
+{
+  "analysis_section": {
+    "description": "Compute one weekly analysis section only. Use this for asynchronous section caches; it does not build the full weekly analysis report.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "section": {
+          "type": "string",
+          "enum": [
+            "overview",
+            "fatigue_readiness",
+            "peaking",
+            "workload",
+            "alerts"
+          ],
+          "description": "The individual analysis section to compute"
+        },
+        "weeks": {
+          "type": "integer",
+          "description": "Number of weeks to analyze",
+          "default": 1
+        },
+        "block": {
+          "type": "string",
+          "description": "Program block filter",
+          "default": "current"
+        },
+        "week_start": {
+          "type": "integer",
+          "description": "Inclusive training week number to start analysis"
+        },
+        "week_end": {
+          "type": "integer",
+          "description": "Inclusive training week number to end analysis"
+        },
+        "window_start": {
+          "type": "string",
+          "description": "Optional date window start (YYYY-MM-DD) for time-series context"
+        },
+        "window_end": {
+          "type": "string",
+          "description": "Optional date window end (YYYY-MM-DD) for time-series context"
+        },
+        "ref_date": {
+          "type": "string",
+          "description": "Optional reference date (YYYY-MM-DD)"
+        },
+        "refresh_program": {
+          "type": "boolean",
+          "description": "Invalidate the program cache before analysis",
+          "default": true
+        },
+        "program": {
+          "type": "object",
+          "description": "Optional program snapshot supplied by the caller"
+        },
+        "sessions": {
+          "type": "array",
+          "description": "Optional session snapshot supplied by the caller",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "section"
+      ]
+    }
+  },
+  "analyze_powerlifting_stats": {
+    "description": "Compares a user's powerlifting stats against the OpenPowerlifting dataset.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "squat_kg": {
+          "type": "number"
+        },
+        "bench_kg": {
+          "type": "number"
+        },
+        "deadlift_kg": {
+          "type": "number"
+        },
+        "bodyweight_kg": {
+          "type": "number"
+        },
+        "sex_code": {
+          "type": "string",
+          "description": "User's sex for DOTS: 'M' or 'F'"
+        },
+        "federation": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "equipment": {
+          "type": "string"
+        },
+        "sex": {
+          "type": "string"
+        },
+        "age_class": {
+          "type": "string"
+        },
+        "year": {
+          "type": "integer"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "min_dots": {
+          "type": "number"
+        }
+      },
+      "required": []
+    }
+  },
+  "analyze_progression": {
+    "description": "Calculate weekly progression rate (kg/week) for a lift via Theil-Sen regression on top sets. Returns slope, Kendall tau, fit quality, and data points.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "exercise_name": {
+          "type": "string",
+          "description": "Name of the exercise"
+        },
+        "weeks": {
+          "type": "integer",
+          "description": "Number of recent weeks to analyze"
+        }
+      },
+      "required": [
+        "exercise_name"
+      ]
+    }
+  },
+  "analyze_rpe_drift": {
+    "description": "Detect RPE drift for a lift \u2014 whether perceived exertion is trending up (fatigue) or down (adaptation).",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "exercise_name": {
+          "type": "string",
+          "description": "Name of the exercise"
+        },
+        "window_weeks": {
+          "type": "integer",
+          "description": "Number of weeks to analyze",
+          "default": 4
+        }
+      },
+      "required": [
+        "exercise_name"
+      ]
+    }
+  },
+  "calculate_attempts": {
+    "description": "Calculate competition attempt weights based on opener.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lift": {
+          "type": "string",
+          "description": "Lift type: squat, bench, or deadlift"
+        },
+        "opener_kg": {
+          "type": "number",
+          "description": "First attempt weight in kg"
+        },
+        "j1_override": {
+          "type": "number",
+          "description": "Override jump 1 from program prefs (kg)"
+        },
+        "j2_override": {
+          "type": "number",
+          "description": "Override jump 2 from program prefs (kg)"
+        },
+        "last_felt": {
+          "type": "string",
+          "description": "If 'hard', halve j2 for conservative third attempt"
+        }
+      },
+      "required": [
+        "lift",
+        "opener_kg"
+      ]
+    }
+  },
+  "calculate_dots": {
+    "description": "Calculate DOTS score from competition total and bodyweight.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "total_kg": {
+          "type": "number",
+          "description": "Combined squat + bench + deadlift total"
+        },
+        "bodyweight_kg": {
+          "type": "number",
+          "description": "Lifter bodyweight in kg"
+        },
+        "sex": {
+          "type": "string",
+          "description": "'male' or 'female'"
+        }
+      },
+      "required": [
+        "total_kg",
+        "bodyweight_kg",
+        "sex"
+      ]
+    }
+  },
+  "days_until": {
+    "description": "Calculate days until a target date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "target_date": {
+          "type": "string",
+          "description": "Target date (YYYY-MM-DD)"
+        },
+        "label": {
+          "type": "string",
+          "description": "Human label for the milestone",
+          "default": "target"
+        }
+      },
+      "required": [
+        "target_date"
+      ]
+    }
+  },
+  "estimate_1rm": {
+    "description": "Estimate one-rep max using Epley, Brzycki, and RPE-based formulas.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "weight_kg": {
+          "type": "number",
+          "description": "Weight lifted in kg"
+        },
+        "reps": {
+          "type": "integer",
+          "description": "Number of repetitions"
+        },
+        "rpe": {
+          "type": "integer",
+          "description": "RPE of the set (6-10)"
+        }
+      },
+      "required": [
+        "weight_kg",
+        "reps"
+      ]
+    }
+  },
+  "export_program_history": {
+    "description": "Export the full training program to an Excel (.xlsx) or Markdown (.md) file. Sheets: Meta, Current Maxes, Phases, Sessions, Exercises, Competitions, Lift Profiles, Weekly Analysis, Per-Lift Metrics, ROI Correlation, Program Evaluation. The three AI-driven sheets use cached values; refresh on the Analysis page first if needed. After calling, emit a FILES: line to deliver the file.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Export format: 'xlsx' or 'markdown'",
+          "default": "xlsx"
+        }
+      },
+      "required": []
+    }
+  },
+  "export_program_markdown": {
+    "description": "Generate the markdown export of the current program and return its content as a string. Used internally by regenerate_analysis.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "get_analysis_markdown": {
+    "description": "Return the cached markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Use the cache unless it is stale, dirty, or refresh is true.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "refresh": {
+          "type": "boolean",
+          "description": "Force regeneration before returning markdown",
+          "default": false
+        },
+        "max_age_hours": {
+          "type": "integer",
+          "description": "Maximum cache age before regeneration",
+          "default": 72
+        }
+      },
+      "required": []
+    }
+  },
+  "glossary_add": {
+    "description": "Add new exercise to glossary.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "exercise": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "exercise"
+      ]
+    }
+  },
+  "glossary_set_e1rm": {
+    "description": "Manually set e1RM for glossary exercise.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "value_kg": {
+          "type": "number"
+        },
+        "method": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "value_kg"
+      ]
+    }
+  },
+  "glossary_update": {
+    "description": "Update exercise in glossary.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "fields"
+      ]
+    }
+  },
+  "health_add_exercise": {
+    "description": "Add an exercise to a training session.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)"
+        },
+        "exercise": {
+          "type": "object",
+          "description": "Exercise dict: {name, sets, reps, kg, rpe, notes}"
+        }
+      },
+      "required": [
+        "date",
+        "exercise"
+      ]
+    }
+  },
+  "health_complete_competition": {
+    "description": "Mark a competition as completed and compute PRR from the stored snapshot.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Competition date to complete (YYYY-MM-DD)"
+        },
+        "results": {
+          "type": "object",
+          "description": "Best successful lift attempts and total"
+        },
+        "body_weight_kg": {
+          "type": "number",
+          "description": "Official weigh-in bodyweight in kg"
+        },
+        "post_meet_report": {
+          "type": "object",
+          "description": "Optional structured post-meet attempt and context report"
+        },
+        "version": {
+          "type": "string",
+          "description": "Program version to update",
+          "default": "current"
+        },
+        "allow_retrospective": {
+          "type": "boolean",
+          "description": "Allow backfilling a missing T-1 snapshot",
+          "default": true
+        }
+      },
+      "required": [
+        "date",
+        "results",
+        "body_weight_kg"
+      ]
+    }
+  },
+  "health_create_competition": {
+    "description": "Create a new competition entry.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "competition": {
+          "type": "object",
+          "description": "Competition dict: name, date, federation, federation_id, counts_toward_federation_ids, status, weight_class_kg, location, targets, notes"
+        }
+      },
+      "required": [
+        "competition"
+      ]
+    }
+  },
+  "health_create_session": {
+    "description": "Create a new training session.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)"
+        },
+        "day": {
+          "type": "string",
+          "description": "Day label e.g. Monday"
+        },
+        "week_number": {
+          "type": "integer",
+          "description": "Training week number"
+        },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Optional list of exercises"
+        },
+        "session_notes": {
+          "type": "string",
+          "description": "Optional session notes",
+          "default": ""
+        }
+      },
+      "required": [
+        "date",
+        "day",
+        "week_number"
+      ]
+    }
+  },
+  "health_delete_competition": {
+    "description": "Delete a competition entry by date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Competition date to delete (YYYY-MM-DD)"
+        }
+      },
+      "required": [
+        "date"
+      ]
+    }
+  },
+  "health_delete_diet_note": {
+    "description": "Delete a diet note by date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Diet note date to delete (YYYY-MM-DD)"
+        }
+      },
+      "required": [
+        "date"
+      ]
+    }
+  },
+  "health_delete_session": {
+    "description": "Delete a training session by date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Session date to delete (YYYY-MM-DD)"
+        }
+      },
+      "required": [
+        "date"
+      ]
+    }
+  },
+  "health_get_competition": {
+    "description": "Get competition details by date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Competition date (YYYY-MM-DD)"
+        }
+      },
+      "required": [
+        "date"
+      ]
+    }
+  },
+  "health_get_current_maxes": {
+    "description": "Get current training maxes (squat, bench, deadlift).",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_get_diet_notes": {
+    "description": "Get diet notes for a date range.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "description": "Start of date range (YYYY-MM-DD)"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End of date range (YYYY-MM-DD)"
+        }
+      },
+      "required": []
+    }
+  },
+  "health_get_federation_library": {
+    "description": "Get the shared federation and qualification-standards library.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_get_goals": {
+    "description": "Get the explicit goals for the current training block.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_get_meta": {
+    "description": "Get program metadata (name, dates, weight class, etc.).",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_get_phases": {
+    "description": "Get the training phases from the program.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_get_program": {
+    "description": "Get the full training program from DynamoDB. Returns the cached program dict with all sessions, phases, meta, and preferences.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_get_session": {
+    "description": "Get a single training session by date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)"
+        }
+      },
+      "required": [
+        "date"
+      ]
+    }
+  },
+  "health_get_sessions_range": {
+    "description": "Get training sessions for a date range.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "description": "Start of date range (YYYY-MM-DD)"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End of date range (YYYY-MM-DD)"
+        }
+      },
+      "required": [
+        "start_date",
+        "end_date"
+      ]
+    }
+  },
+  "health_get_supplements": {
+    "description": "Get the supplement protocol from the program.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_invalidate_program_cache": {
+    "description": "Clear the in-memory cached training program so the next read loads from DynamoDB.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_new_version": {
+    "description": "Create a new program version with the given patches.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "change_reason": {
+          "type": "string",
+          "description": "Human-readable reason for the version change"
+        },
+        "patches": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "List of patches, each with 'path' and 'value' keys"
+        }
+      },
+      "required": [
+        "change_reason",
+        "patches"
+      ]
+    }
+  },
+  "health_remove_exercise": {
+    "description": "Remove an exercise from a training session by index.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)"
+        },
+        "exercise_index": {
+          "type": "integer",
+          "description": "Zero-based index of the exercise to remove"
+        }
+      },
+      "required": [
+        "date",
+        "exercise_index"
+      ]
+    }
+  },
+  "health_reschedule_session": {
+    "description": "Move a training session from one date to another.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "old_date": {
+          "type": "string",
+          "description": "Current session date (YYYY-MM-DD)"
+        },
+        "new_date": {
+          "type": "string",
+          "description": "Target date to move to (YYYY-MM-DD)"
+        }
+      },
+      "required": [
+        "old_date",
+        "new_date"
+      ]
+    }
+  },
+  "health_setup_initialize": {
+    "description": "Initialize the first valid current training block for a no-data user.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "blank, manual_sessions, or template"
+        },
+        "program_name": {
+          "type": "string",
+          "description": "Optional program/block name"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Program start date (YYYY-MM-DD)"
+        },
+        "week_start_day": {
+          "type": "string",
+          "description": "Week start day, e.g. Monday"
+        },
+        "template_sk": {
+          "type": "string",
+          "description": "Required when mode=template"
+        },
+        "maxes": {
+          "type": "object",
+          "description": "Optional maxes/e1RMs keyed by squat, bench, deadlift, or template glossary IDs"
+        }
+      },
+      "required": [
+        "mode",
+        "start_date",
+        "week_start_day"
+      ]
+    }
+  },
+  "health_setup_status": {
+    "description": "Return no-data onboarding setup state for the active training data partition.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "health_snapshot_competition_projection": {
+    "description": "Snapshot projected maxes 7 days before a competition and optionally backfill missed snapshots.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Snapshot date (YYYY-MM-DD)"
+        },
+        "version": {
+          "type": "string",
+          "description": "Program version to update",
+          "default": "current"
+        },
+        "allow_retrospective": {
+          "type": "boolean",
+          "description": "Allow backfilling a missed snapshot",
+          "default": false
+        }
+      },
+      "required": [
+        "date"
+      ]
+    }
+  },
+  "health_update_competition": {
+    "description": "Update competition fields by date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Competition date to update (YYYY-MM-DD)"
+        },
+        "patch": {
+          "type": "object",
+          "description": "Fields to update (targets, status, notes, etc.)"
+        }
+      },
+      "required": [
+        "date",
+        "patch"
+      ]
+    }
+  },
+  "health_update_current_maxes": {
+    "description": "Update current training maxes.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "squat_kg": {
+          "type": "number",
+          "description": "New squat max in kg"
+        },
+        "bench_kg": {
+          "type": "number",
+          "description": "New bench max in kg"
+        },
+        "deadlift_kg": {
+          "type": "number",
+          "description": "New deadlift max in kg"
+        }
+      },
+      "required": []
+    }
+  },
+  "health_update_diet_note": {
+    "description": "Create or replace a diet note for a date.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Date for the diet note (YYYY-MM-DD)"
+        },
+        "notes": {
+          "type": "string",
+          "description": "The diet notes content"
+        }
+      },
+      "required": [
+        "date",
+        "notes"
+      ]
+    }
+  },
+  "health_update_federation_library": {
+    "description": "Replace the shared federation-library document.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Complete federation records array"
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Complete qualification standards array"
+        }
+      },
+      "required": [
+        "federations",
+        "qualification_standards"
+      ]
+    }
+  },
+  "health_update_goals": {
+    "description": "Replace the explicit goals array for the current training block.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "goals": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Complete goals array to write to the current block"
+        }
+      },
+      "required": [
+        "goals"
+      ]
+    }
+  },
+  "health_update_meta": {
+    "description": "Update program metadata fields, including sex for DOTS calculations.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "updates": {
+          "type": "object",
+          "description": "Dict of meta fields to update"
+        }
+      },
+      "required": [
+        "updates"
+      ]
+    }
+  },
+  "health_update_phases": {
+    "description": "Replace the full phases list.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Complete phases list. Each: {name, start_week, end_week, intent}"
+        }
+      },
+      "required": [
+        "phases"
+      ]
+    }
+  },
+  "health_update_session": {
+    "description": "Update fields on an existing training session.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "ISO8601 date string (YYYY-MM-DD) of the session to update"
+        },
+        "patch": {
+          "type": "object",
+          "description": "Dict with session fields to update. Allowed keys: completed, session_rpe, body_weight_kg, session_notes, exercises"
+        }
+      },
+      "required": [
+        "date",
+        "patch"
+      ]
+    }
+  },
+  "health_update_supplements": {
+    "description": "Update the supplement protocol.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "patch": {
+          "type": "object",
+          "description": "{\"supplements\": [...]} or {\"supplement_phases\": [...]}"
+        }
+      },
+      "required": [
+        "patch"
+      ]
+    }
+  },
+  "import_apply": {
+    "description": "Apply a staged import to the program or template library.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "type": "string"
+        },
+        "merge_strategy": {
+          "type": "string",
+          "default": "append"
+        },
+        "conflict_resolutions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "start_date": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "import_id"
+      ]
+    }
+  },
+  "import_get_pending": {
+    "description": "Get a single pending import by ID.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "import_id"
+      ]
+    }
+  },
+  "import_list_pending": {
+    "description": "List all awaiting_review imports.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_type": {
+          "type": "string"
+        }
+      },
+      "required": []
+    }
+  },
+  "import_reject": {
+    "description": "Reject a staged import.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "import_id"
+      ]
+    }
+  },
+  "ipf_weight_classes": {
+    "description": "Get IPF weight classes for a given sex.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sex": {
+          "type": "string",
+          "description": "Sex: 'M' or 'F'"
+        }
+      },
+      "required": [
+        "sex"
+      ]
+    }
+  },
+  "kg_to_lb": {
+    "description": "Convert kilograms to pounds.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "kg": {
+          "type": "number",
+          "description": "Weight in kilograms"
+        }
+      },
+      "required": [
+        "kg"
+      ]
+    }
+  },
+  "lb_to_kg": {
+    "description": "Convert pounds to kilograms.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lb": {
+          "type": "number",
+          "description": "Weight in pounds"
+        }
+      },
+      "required": [
+        "lb"
+      ]
+    }
+  },
+  "pct_of_max": {
+    "description": "Calculate a percentage of a max weight.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "max_kg": {
+          "type": "number",
+          "description": "Maximum weight in kg"
+        },
+        "pct": {
+          "type": "number",
+          "description": "Percentage (0-150, not 0-1)"
+        }
+      },
+      "required": [
+        "max_kg",
+        "pct"
+      ]
+    }
+  },
+  "powerlifting_filter_categories": {
+    "description": "Retrieves the unique options available for filtering the OpenPowerlifting dataset.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "powerlifting_ranking_percentile": {
+    "description": "Returns national/regional/global top-percentile cards for the dashboard. Filters the OpenPowerlifting dataset to the 3 nearest IPF weight classes, last 3 calendar years, deduplicated by lifter (best total per name). Returns percentile (0-100) for Squat/Bench/Deadlift/Total across global, national (country), and regional (country+region) scopes. A value is null when <10 comparison lifters or the lift was not provided.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "squat_kg": {
+          "type": "number",
+          "description": "User's best squat in kg"
+        },
+        "bench_kg": {
+          "type": "number",
+          "description": "User's best bench in kg"
+        },
+        "deadlift_kg": {
+          "type": "number",
+          "description": "User's best deadlift in kg"
+        },
+        "bodyweight_kg": {
+          "type": "number",
+          "description": "User's bodyweight in kg"
+        },
+        "sex_code": {
+          "type": "string",
+          "description": "'M' or 'F'"
+        },
+        "country": {
+          "type": "string",
+          "description": "Filter national scope (MeetCountry value from dataset)"
+        },
+        "region": {
+          "type": "string",
+          "description": "Filter regional scope (State value from dataset)"
+        },
+        "age_class": {
+          "type": "string",
+          "description": "Filter by age class"
+        },
+        "equipment": {
+          "type": "string",
+          "description": "Filter by equipment (e.g. Raw)"
+        }
+      },
+      "required": []
+    }
+  },
+  "program_archive": {
+    "description": "Archive a program version.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "program_unarchive": {
+    "description": "Unarchive a program version.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "regenerate_analysis": {
+    "description": "Regenerate deterministic current-block analysis caches: 6 weekly windows and the markdown export. Call this when the operator asks to refresh or regenerate their training analysis. This intentionally does not regenerate AI correlation reports, AI program evaluation, past-block caches, or the lifetime compare AI cache.",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "template_apply": {
+    "description": "Apply a template to the program block (preview).",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string",
+          "default": "new_block"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "week_start_day": {
+          "type": "string",
+          "default": "Monday"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition for draft visibility"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "template_apply_confirm": {
+    "description": "Confirm and write concretized block from template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "backfilled_maxes": {
+          "type": "object"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "week_start_day": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string",
+          "description": "Apply strategy",
+          "default": "new_block"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition for draft visibility"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "template_archive": {
+    "description": "Archive a template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "template_copy": {
+    "description": "Duplicate a template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "new_name": {
+          "type": "string"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        },
+        "author": {
+          "type": "string",
+          "description": "Display author"
+        }
+      },
+      "required": [
+        "sk",
+        "new_name"
+      ]
+    }
+  },
+  "template_create_blank": {
+    "description": "Create a new blank training template with no sessions.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "default": ""
+        },
+        "estimated_weeks": {
+          "type": "integer",
+          "default": 4
+        },
+        "days_per_week": {
+          "type": "integer",
+          "default": 3
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        },
+        "author": {
+          "type": "string",
+          "description": "Display author"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  "template_create_from_block": {
+    "description": "Convert program block to template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "program_sk": {
+          "type": "string"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        },
+        "author": {
+          "type": "string",
+          "description": "Display author"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  "template_create_from_payload": {
+    "description": "Create a complete reusable training template atomically from a structured payload.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "object"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        },
+        "author": {
+          "type": "string",
+          "description": "Display author"
+        },
+        "published": {
+          "type": "boolean",
+          "default": false
+        },
+        "import_job_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "template"
+      ]
+    }
+  },
+  "template_get": {
+    "description": "Get full training template structure.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition for draft visibility"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "template_list": {
+    "description": "List all training templates.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "include_archived": {
+          "type": "boolean",
+          "default": false
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition for draft visibility"
+        }
+      },
+      "required": []
+    }
+  },
+  "template_publish": {
+    "description": "Publish an authored draft template so everyone can see and apply it.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "template_unarchive": {
+    "description": "Unarchive a template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "template_unpublish": {
+    "description": "Unpublish an authored template so only its author can see it.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        }
+      },
+      "required": [
+        "sk"
+      ]
+    }
+  },
+  "template_update": {
+    "description": "Overwrite an existing training template in place (metadata, phases, sessions).",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "template": {
+          "type": "object"
+        },
+        "actor_pk": {
+          "type": "string",
+          "description": "Signed-in user/template author partition"
+        }
+      },
+      "required": [
+        "sk",
+        "template"
+      ]
+    }
+  },
+  "weekly_analysis": {
+    "description": "Full weekly training analysis \u2014 progression, RPE drift, fatigue index, compliance, meet projection. Returns structured JSON.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "weeks": {
+          "type": "integer",
+          "description": "Number of weeks to analyze",
+          "default": 1
+        },
+        "block": {
+          "type": "string",
+          "description": "Program block filter",
+          "default": "current"
+        },
+        "week_start": {
+          "type": "integer",
+          "description": "Inclusive training week number to start analysis"
+        },
+        "week_end": {
+          "type": "integer",
+          "description": "Inclusive training week number to end analysis"
+        },
+        "window_start": {
+          "type": "string",
+          "description": "Optional date window start (YYYY-MM-DD) for time-series context"
+        },
+        "window_end": {
+          "type": "string",
+          "description": "Optional date window end (YYYY-MM-DD) for time-series context"
+        },
+        "ref_date": {
+          "type": "string",
+          "description": "Optional reference date (YYYY-MM-DD)"
+        },
+        "refresh_program": {
+          "type": "boolean",
+          "description": "Invalidate the program cache before analysis",
+          "default": true
+        },
+        "program": {
+          "type": "object",
+          "description": "Optional program snapshot supplied by the caller"
+        },
+        "sessions": {
+          "type": "array",
+          "description": "Optional session snapshot supplied by the caller",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": []
+    }
+  }
+}

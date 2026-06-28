@@ -3,3 +3,22 @@ layers:
 - pl_templates
 memory: 256
 timeout: 900
+description: Create a complete reusable training template atomically from a structured payload.
+input_schema:
+  type: object
+  properties:
+    template:
+      type: object
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+    author:
+      type: string
+      description: Display author
+    published:
+      type: boolean
+      default: false
+    import_job_id:
+      type: string
+  required:
+  - template

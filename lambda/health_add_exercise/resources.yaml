@@ -4,3 +4,16 @@ layers:
 - pl_sessions
 memory: 256
 timeout: 900
+description: Add an exercise to a training session.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Session date (YYYY-MM-DD)
+    exercise:
+      type: object
+      description: 'Exercise dict: {name, sets, reps, kg, rpe, notes}'
+  required:
+  - date
+  - exercise

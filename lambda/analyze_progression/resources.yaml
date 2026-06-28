@@ -4,3 +4,15 @@ layers:
 - pl_sessions
 memory: 512
 timeout: 900
+description: Calculate weekly progression rate (kg/week) for a lift via Theil-Sen regression on top sets. Returns slope, Kendall tau, fit quality, and data points.
+input_schema:
+  type: object
+  properties:
+    exercise_name:
+      type: string
+      description: Name of the exercise
+    weeks:
+      type: integer
+      description: Number of recent weeks to analyze
+  required:
+  - exercise_name

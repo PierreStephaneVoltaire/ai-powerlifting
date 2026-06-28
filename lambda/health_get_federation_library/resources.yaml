@@ -3,3 +3,8 @@ layers:
 - pl_federation
 memory: 256
 timeout: 900
+description: Get the shared federation and qualification-standards library.
+input_schema:
+  type: object
+  properties: {}
+  required: []

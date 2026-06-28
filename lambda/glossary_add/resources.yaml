@@ -3,3 +3,11 @@ layers:
 - pl_glossary
 memory: 256
 timeout: 900
+description: Add new exercise to glossary.
+input_schema:
+  type: object
+  properties:
+    exercise:
+      type: object
+  required:
+  - exercise

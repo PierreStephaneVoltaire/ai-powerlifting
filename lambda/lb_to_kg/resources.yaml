@@ -1,3 +1,12 @@
 layers: []
 memory: 128
 timeout: 900
+description: Convert pounds to kilograms.
+input_schema:
+  type: object
+  properties:
+    lb:
+      type: number
+      description: Weight in pounds
+  required:
+  - lb

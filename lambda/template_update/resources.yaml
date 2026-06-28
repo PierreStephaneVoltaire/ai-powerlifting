@@ -3,3 +3,17 @@ layers:
 - pl_templates
 memory: 256
 timeout: 900
+description: Overwrite an existing training template in place (metadata, phases, sessions).
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    template:
+      type: object
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+  required:
+  - sk
+  - template

@@ -3,3 +3,20 @@ layers:
 - pl_templates
 memory: 256
 timeout: 900
+description: Duplicate a template.
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    new_name:
+      type: string
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+    author:
+      type: string
+      description: Display author
+  required:
+  - sk
+  - new_name

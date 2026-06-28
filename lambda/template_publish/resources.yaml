@@ -3,3 +3,14 @@ layers:
 - pl_templates
 memory: 256
 timeout: 900
+description: Publish an authored draft template so everyone can see and apply it.
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+  required:
+  - sk

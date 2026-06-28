@@ -4,3 +4,8 @@ layers:
 memory: 512
 timeout: 900
 s3_read: true
+description: Retrieves the unique options available for filtering the OpenPowerlifting dataset.
+input_schema:
+  type: object
+  properties: {}
+  required: []

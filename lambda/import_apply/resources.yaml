@@ -5,3 +5,20 @@ layers:
 - pl_templates
 memory: 512
 timeout: 900
+description: Apply a staged import to the program or template library.
+input_schema:
+  type: object
+  properties:
+    import_id:
+      type: string
+    merge_strategy:
+      type: string
+      default: append
+    conflict_resolutions:
+      type: array
+      items:
+        type: object
+    start_date:
+      type: string
+  required:
+  - import_id

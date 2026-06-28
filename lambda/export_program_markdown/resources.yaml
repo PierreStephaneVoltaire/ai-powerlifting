@@ -3,3 +3,8 @@ layers:
 - pl_program
 memory: 512
 timeout: 900
+description: Generate the markdown export of the current program and return its content as a string. Used internally by regenerate_analysis.
+input_schema:
+  type: object
+  properties: {}
+  required: []

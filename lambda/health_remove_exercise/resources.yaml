@@ -4,3 +4,16 @@ layers:
 - pl_sessions
 memory: 256
 timeout: 900
+description: Remove an exercise from a training session by index.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Session date (YYYY-MM-DD)
+    exercise_index:
+      type: integer
+      description: Zero-based index of the exercise to remove
+  required:
+  - date
+  - exercise_index

@@ -3,3 +3,20 @@ layers:
 - pl_program
 memory: 512
 timeout: 900
+description: Snapshot projected maxes 7 days before a competition and optionally backfill missed snapshots.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Snapshot date (YYYY-MM-DD)
+    version:
+      type: string
+      description: Program version to update
+      default: current
+    allow_retrospective:
+      type: boolean
+      description: Allow backfilling a missed snapshot
+      default: false
+  required:
+  - date

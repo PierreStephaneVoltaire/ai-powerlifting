@@ -1,3 +1,19 @@
 layers: []
 memory: 128
 timeout: 900
+description: Estimate one-rep max using Epley, Brzycki, and RPE-based formulas.
+input_schema:
+  type: object
+  properties:
+    weight_kg:
+      type: number
+      description: Weight lifted in kg
+    reps:
+      type: integer
+      description: Number of repetitions
+    rpe:
+      type: integer
+      description: RPE of the set (6-10)
+  required:
+  - weight_kg
+  - reps

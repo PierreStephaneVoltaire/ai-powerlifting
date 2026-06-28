@@ -3,3 +3,12 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Update the supplement protocol.
+input_schema:
+  type: object
+  properties:
+    patch:
+      type: object
+      description: '{"supplements": [...]} or {"supplement_phases": [...]}'
+  required:
+  - patch

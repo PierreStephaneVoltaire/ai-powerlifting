@@ -5,3 +5,53 @@ layers:
 - pl_glossary
 memory: 512
 timeout: 900
+description: Compute one weekly analysis section only. Use this for asynchronous section caches; it does not build the full weekly analysis report.
+input_schema:
+  type: object
+  properties:
+    section:
+      type: string
+      enum:
+      - overview
+      - fatigue_readiness
+      - peaking
+      - workload
+      - alerts
+      description: The individual analysis section to compute
+    weeks:
+      type: integer
+      description: Number of weeks to analyze
+      default: 1
+    block:
+      type: string
+      description: Program block filter
+      default: current
+    week_start:
+      type: integer
+      description: Inclusive training week number to start analysis
+    week_end:
+      type: integer
+      description: Inclusive training week number to end analysis
+    window_start:
+      type: string
+      description: Optional date window start (YYYY-MM-DD) for time-series context
+    window_end:
+      type: string
+      description: Optional date window end (YYYY-MM-DD) for time-series context
+    ref_date:
+      type: string
+      description: Optional reference date (YYYY-MM-DD)
+    refresh_program:
+      type: boolean
+      description: Invalidate the program cache before analysis
+      default: true
+    program:
+      type: object
+      description: Optional program snapshot supplied by the caller
+    sessions:
+      type: array
+      description: Optional session snapshot supplied by the caller
+      items:
+        type: object
+  required:
+  - section

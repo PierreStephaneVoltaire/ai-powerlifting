@@ -1,3 +1,16 @@
 layers: []
 memory: 128
 timeout: 900
+description: Calculate a percentage of a max weight.
+input_schema:
+  type: object
+  properties:
+    max_kg:
+      type: number
+      description: Maximum weight in kg
+    pct:
+      type: number
+      description: Percentage (0-150, not 0-1)
+  required:
+  - max_kg
+  - pct

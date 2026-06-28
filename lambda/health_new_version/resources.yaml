@@ -3,3 +3,18 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Create a new program version with the given patches.
+input_schema:
+  type: object
+  properties:
+    change_reason:
+      type: string
+      description: Human-readable reason for the version change
+    patches:
+      type: array
+      items:
+        type: object
+      description: List of patches, each with 'path' and 'value' keys
+  required:
+  - change_reason
+  - patches

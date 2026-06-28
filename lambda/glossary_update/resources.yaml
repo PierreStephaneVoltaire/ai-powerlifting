@@ -3,3 +3,14 @@ layers:
 - pl_glossary
 memory: 256
 timeout: 900
+description: Update exercise in glossary.
+input_schema:
+  type: object
+  properties:
+    id:
+      type: string
+    fields:
+      type: object
+  required:
+  - id
+  - fields

@@ -3,3 +3,14 @@ layers:
 - pl_templates
 memory: 256
 timeout: 900
+description: List all training templates.
+input_schema:
+  type: object
+  properties:
+    include_archived:
+      type: boolean
+      default: false
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition for draft visibility
+  required: []

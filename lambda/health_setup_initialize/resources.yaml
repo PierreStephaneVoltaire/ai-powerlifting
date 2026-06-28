@@ -5,3 +5,29 @@ layers:
 - pl_sessions
 memory: 512
 timeout: 900
+description: Initialize the first valid current training block for a no-data user.
+input_schema:
+  type: object
+  properties:
+    mode:
+      type: string
+      description: blank, manual_sessions, or template
+    program_name:
+      type: string
+      description: Optional program/block name
+    start_date:
+      type: string
+      description: Program start date (YYYY-MM-DD)
+    week_start_day:
+      type: string
+      description: Week start day, e.g. Monday
+    template_sk:
+      type: string
+      description: Required when mode=template
+    maxes:
+      type: object
+      description: Optional maxes/e1RMs keyed by squat, bench, deadlift, or template glossary IDs
+  required:
+  - mode
+  - start_date
+  - week_start_day

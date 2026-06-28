@@ -4,3 +4,12 @@ layers:
 - pl_sessions
 memory: 256
 timeout: 900
+description: Get a single training session by date.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Session date (YYYY-MM-DD)
+  required:
+  - date

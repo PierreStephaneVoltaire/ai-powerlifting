@@ -4,3 +4,16 @@ layers:
 - pl_sessions
 memory: 256
 timeout: 900
+description: Get training sessions for a date range.
+input_schema:
+  type: object
+  properties:
+    start_date:
+      type: string
+      description: Start of date range (YYYY-MM-DD)
+    end_date:
+      type: string
+      description: End of date range (YYYY-MM-DD)
+  required:
+  - start_date
+  - end_date

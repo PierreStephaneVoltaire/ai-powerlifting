@@ -4,3 +4,20 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Replace the shared federation-library document.
+input_schema:
+  type: object
+  properties:
+    federations:
+      type: array
+      items:
+        type: object
+      description: Complete federation records array
+    qualification_standards:
+      type: array
+      items:
+        type: object
+      description: Complete qualification standards array
+  required:
+  - federations
+  - qualification_standards

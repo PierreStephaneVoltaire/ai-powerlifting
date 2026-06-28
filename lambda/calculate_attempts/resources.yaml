@@ -3,3 +3,25 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Calculate competition attempt weights based on opener.
+input_schema:
+  type: object
+  properties:
+    lift:
+      type: string
+      description: 'Lift type: squat, bench, or deadlift'
+    opener_kg:
+      type: number
+      description: First attempt weight in kg
+    j1_override:
+      type: number
+      description: Override jump 1 from program prefs (kg)
+    j2_override:
+      type: number
+      description: Override jump 2 from program prefs (kg)
+    last_felt:
+      type: string
+      description: If 'hard', halve j2 for conservative third attempt
+  required:
+  - lift
+  - opener_kg

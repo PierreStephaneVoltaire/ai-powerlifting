@@ -18,7 +18,6 @@ locals {
   }
 
   lambda_common_env = {
-    AWS_REGION                = var.region
     SANDBOX_PATH              = "/tmp/sandbox"
     IF_HEALTH_TABLE_NAME      = var.dynamodb_health_table
     IF_TEMPLATES_TABLE_NAME   = var.dynamodb_templates_table

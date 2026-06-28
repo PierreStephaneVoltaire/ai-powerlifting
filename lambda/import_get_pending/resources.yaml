@@ -3,3 +3,11 @@ layers:
 - pl_imports
 memory: 256
 timeout: 900
+description: Get a single pending import by ID.
+input_schema:
+  type: object
+  properties:
+    import_id:
+      type: string
+  required:
+  - import_id

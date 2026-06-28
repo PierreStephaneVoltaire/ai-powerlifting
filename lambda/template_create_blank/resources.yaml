@@ -3,3 +3,26 @@ layers:
 - pl_templates
 memory: 256
 timeout: 900
+description: Create a new blank training template with no sessions.
+input_schema:
+  type: object
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+      default: ''
+    estimated_weeks:
+      type: integer
+      default: 4
+    days_per_week:
+      type: integer
+      default: 3
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+    author:
+      type: string
+      description: Display author
+  required:
+  - name

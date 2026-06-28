@@ -4,3 +4,19 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Convert program block to template.
+input_schema:
+  type: object
+  properties:
+    name:
+      type: string
+    program_sk:
+      type: string
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+    author:
+      type: string
+      description: Display author
+  required:
+  - name

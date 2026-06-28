@@ -4,3 +4,35 @@ layers:
 memory: 512
 timeout: 900
 s3_read: true
+description: Returns national/regional/global top-percentile cards for the dashboard. Filters the OpenPowerlifting dataset to the 3 nearest IPF weight classes, last 3 calendar years, deduplicated by lifter (best total per name). Returns percentile (0-100) for Squat/Bench/Deadlift/Total across global, national (country), and regional (country+region) scopes. A value is null when <10 comparison lifters or the lift was not provided.
+input_schema:
+  type: object
+  properties:
+    squat_kg:
+      type: number
+      description: User's best squat in kg
+    bench_kg:
+      type: number
+      description: User's best bench in kg
+    deadlift_kg:
+      type: number
+      description: User's best deadlift in kg
+    bodyweight_kg:
+      type: number
+      description: User's bodyweight in kg
+    sex_code:
+      type: string
+      description: '''M'' or ''F'''
+    country:
+      type: string
+      description: Filter national scope (MeetCountry value from dataset)
+    region:
+      type: string
+      description: Filter regional scope (State value from dataset)
+    age_class:
+      type: string
+      description: Filter by age class
+    equipment:
+      type: string
+      description: Filter by equipment (e.g. Raw)
+  required: []

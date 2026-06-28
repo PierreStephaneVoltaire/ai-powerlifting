@@ -1,3 +1,20 @@
 layers: []
 memory: 128
 timeout: 900
+description: Calculate DOTS score from competition total and bodyweight.
+input_schema:
+  type: object
+  properties:
+    total_kg:
+      type: number
+      description: Combined squat + bench + deadlift total
+    bodyweight_kg:
+      type: number
+      description: Lifter bodyweight in kg
+    sex:
+      type: string
+      description: '''male'' or ''female'''
+  required:
+  - total_kg
+  - bodyweight_kg
+  - sex

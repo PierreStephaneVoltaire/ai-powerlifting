@@ -3,3 +3,12 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Update program metadata fields, including sex for DOTS calculations.
+input_schema:
+  type: object
+  properties:
+    updates:
+      type: object
+      description: Dict of meta fields to update
+  required:
+  - updates

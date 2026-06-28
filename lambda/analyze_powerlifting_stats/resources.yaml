@@ -4,3 +4,37 @@ layers:
 memory: 512
 timeout: 900
 s3_read: true
+description: Compares a user's powerlifting stats against the OpenPowerlifting dataset.
+input_schema:
+  type: object
+  properties:
+    squat_kg:
+      type: number
+    bench_kg:
+      type: number
+    deadlift_kg:
+      type: number
+    bodyweight_kg:
+      type: number
+    sex_code:
+      type: string
+      description: 'User''s sex for DOTS: ''M'' or ''F'''
+    federation:
+      type: string
+    country:
+      type: string
+    region:
+      type: string
+    equipment:
+      type: string
+    sex:
+      type: string
+    age_class:
+      type: string
+    year:
+      type: integer
+    event_type:
+      type: string
+    min_dots:
+      type: number
+  required: []

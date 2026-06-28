@@ -6,3 +6,8 @@ layers:
 - pl_glossary
 memory: 512
 timeout: 900
+description: 'Regenerate deterministic current-block analysis caches: 6 weekly windows and the markdown export. Call this when the operator asks to refresh or regenerate their training analysis. This intentionally does not regenerate AI correlation reports, AI program evaluation, past-block caches, or the lifetime compare AI cache.'
+input_schema:
+  type: object
+  properties: {}
+  required: []

@@ -3,3 +3,16 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Update competition fields by date.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Competition date to update (YYYY-MM-DD)
+    patch:
+      type: object
+      description: Fields to update (targets, status, notes, etc.)
+  required:
+  - date
+  - patch

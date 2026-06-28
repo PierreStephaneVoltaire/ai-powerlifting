@@ -3,3 +3,12 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Get competition details by date.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Competition date (YYYY-MM-DD)
+  required:
+  - date

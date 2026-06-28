@@ -5,3 +5,22 @@ layers:
 - pl_glossary
 memory: 512
 timeout: 900
+description: Apply a template to the program block (preview).
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    target:
+      type: string
+      default: new_block
+    start_date:
+      type: string
+    week_start_day:
+      type: string
+      default: Monday
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition for draft visibility
+  required:
+  - sk

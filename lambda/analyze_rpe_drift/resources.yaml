@@ -5,3 +5,16 @@ layers:
 - pl_pandas
 memory: 512
 timeout: 900
+description: Detect RPE drift for a lift — whether perceived exertion is trending up (fatigue) or down (adaptation).
+input_schema:
+  type: object
+  properties:
+    exercise_name:
+      type: string
+      description: Name of the exercise
+    window_weeks:
+      type: integer
+      description: Number of weeks to analyze
+      default: 4
+  required:
+  - exercise_name

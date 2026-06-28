@@ -3,3 +3,10 @@ layers:
 - pl_imports
 memory: 256
 timeout: 900
+description: List all awaiting_review imports.
+input_schema:
+  type: object
+  properties:
+    import_type:
+      type: string
+  required: []

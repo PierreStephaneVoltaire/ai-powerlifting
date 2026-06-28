@@ -3,3 +3,8 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Get current training maxes (squat, bench, deadlift).
+input_schema:
+  type: object
+  properties: {}
+  required: []

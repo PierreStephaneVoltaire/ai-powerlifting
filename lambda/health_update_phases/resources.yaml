@@ -3,3 +3,14 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Replace the full phases list.
+input_schema:
+  type: object
+  properties:
+    phases:
+      type: array
+      items:
+        type: object
+      description: 'Complete phases list. Each: {name, start_week, end_week, intent}'
+  required:
+  - phases

@@ -44,6 +44,30 @@ resource "aws_lambda_permission" "apigw" {
   statement_id  = "AllowAPIGatewayInvoke-${each.key}"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.health_tool[each.key].function_name
-  principal     = "apigatewayv2.amazonaws.com"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.health_api.execution_arn}/*/*"
+}
+
+resource "aws_apigatewayv2_integration" "openapi" {
+  api_id = aws_apigatewayv2_api.health_api.id
+
+  integration_type = "AWS_PROXY"
+
+  integration_method = "POST"
+  integration_uri    = aws_lambda_function.health_tool["tool_registry"].invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "openapi" {
+  api_id = aws_apigatewayv2_api.health_api.id
+
+  route_key = "GET /openapi.json"
+  target    = "integrations/${aws_apigatewayv2_integration.openapi.id}"
+}
+
+resource "aws_lambda_permission" "openapi" {
+  statement_id  = "AllowAPIGatewayInvoke-openapi"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.health_tool["tool_registry"].function_name
+  principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.health_api.execution_arn}/*/*"
 }

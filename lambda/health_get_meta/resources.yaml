@@ -3,3 +3,8 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Get program metadata (name, dates, weight class, etc.).
+input_schema:
+  type: object
+  properties: {}
+  required: []

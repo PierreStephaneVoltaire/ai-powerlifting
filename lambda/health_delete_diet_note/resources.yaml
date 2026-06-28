@@ -3,3 +3,12 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Delete a diet note by date.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Diet note date to delete (YYYY-MM-DD)
+  required:
+  - date

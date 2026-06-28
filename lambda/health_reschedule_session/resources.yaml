@@ -4,3 +4,16 @@ layers:
 - pl_sessions
 memory: 256
 timeout: 900
+description: Move a training session from one date to another.
+input_schema:
+  type: object
+  properties:
+    old_date:
+      type: string
+      description: Current session date (YYYY-MM-DD)
+    new_date:
+      type: string
+      description: Target date to move to (YYYY-MM-DD)
+  required:
+  - old_date
+  - new_date

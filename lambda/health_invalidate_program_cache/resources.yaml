@@ -3,3 +3,8 @@ layers:
 - pl_program
 memory: 256
 timeout: 900
+description: Clear the in-memory cached training program so the next read loads from DynamoDB.
+input_schema:
+  type: object
+  properties: {}
+  required: []
