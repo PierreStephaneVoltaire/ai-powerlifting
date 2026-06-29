@@ -296,23 +296,35 @@ Disk: env image pulled once (~120MB on disk) + read-only layer dir
       via the backend's `invokeLambda` with `POWERLIFTING_LAMBDA_BASE_URL`
       swapped to `http://router.fission.svc.cluster.local`.
 
-### Phase 3 — Auth + routing swap (no Cloudflare changes) [PARTIAL — prefn wired, env swap pending]
+### Phase 3 — Auth + routing swap (no Cloudflare changes) [DONE — env swap wired in root terraform]
 - [x] Register `pl_authorizer/handler.py` as a Fission pre-function attached to
       every function trigger (constant-time check against `INTERNAL_API_TOKEN`
       from the k8s Secret). Keep `GET /openapi.json` unauthed. — DONE in Phase 2:
       `pl_authorizer` deployed as its own Function + `spec.prefns` on every tool
-      HTTPTrigger; `pl-fission-secrets` Secret declared in `fission-secrets.tf`.
-- [ ] Do NOT add tinyauth middleware to the Fission router path — it is
+      HTTPTrigger; `pl_fission_secrets` Secret declared in `k8s-secrets.tf`.
+- [x] Do NOT add tinyauth middleware to the Fission router path — it is
       ClusterIP-only and has no public exposure. Tinyauth stays scoped to the
       existing `cloudflared`-exposed portal UIs in `if-portals`. — confirmed by
       design (no public Service/Ingress/HTTPRoute for Fission); verify post-apply.
-- [ ] Update backend env: `POWERLIFTING_LAMBDA_BASE_URL`
-      `= http://router.fission.svc.cluster.local` (no more execute-api URL).
-- [ ] Update agent API + agent MCP pod envs the same.
-- [ ] Update `app/src/config.py` default for `POWERLIFTING_LAMBDA_BASE_URL`
-      if desired (or leave blank — same as today).
+- [x] Update backend env: `POWERLIFTING_LAMBDA_BASE_URL`
+      `= http://router.fission.svc.cluster.local` — DONE in root `terraform/`:
+      added to `kubernetes_config_map.powerlifting_app_config`, gated by
+      `var.fission_enabled` (empty when Fission off → AWS API Gateway path).
+      `INTERNAL_API_TOKEN` wired via new `kubernetes_secret.powerlifting_app_secrets`
+      + `has_secrets = true` on the powerlifting-app portal so the
+      `dynamic "env_from"` block injects it into the backend pod.
+- [x] Update agent API + agent MCP pod envs the same. — DONE in root
+      `terraform/`: `POWERLIFTING_LAMBDA_BASE_URL` added to
+      `kubernetes_config_map.if_agent_api_config` (gated by `var.fission_enabled`);
+      `INTERNAL_API_TOKEN` already in `kubernetes_secret.if_agent_api_secrets`.
+      The `health_lambda` MCP subprocess (`tools/health_lambda_mcp/server.py`)
+      inherits the agent pod env, so it gets both. The agent's
+      `OPENCODE_FISSION_URL` already pointed at the Fission router.
+- [x] Update `app/src/config.py` default for `POWERLIFTING_LAMBDA_BASE_URL`
+      — left at empty default (the env is the source of truth; the pod env sets
+      it). No code change needed.
 - [ ] Confirm NO new Cloudflare tunnel / HTTPRoute / public Service exists
-      for Fission.
+      for Fission. — verify post-apply (read-only kubectl/grep).
 
 ### Phase 4 — Scale-to-zero tuning + HPA [implemented — see FISSION_PHASE4_HPA.md]
 - [x] Per-function `newdeploy` executor spec per tool class:

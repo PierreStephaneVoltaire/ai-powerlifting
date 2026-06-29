@@ -15,7 +15,7 @@ This runbook covers three things:
 
 Scale profiles are generated from
 `utils/powerlifting-app/lambda/fission_layers.py::SCALE_PROFILE` into
-`utils/powerlifting-app/terraform/fission-functions.tf` by
+`terraform/fission-functions.tf` by
 `utils/powerlifting-app/lambda/fission-deploy.py`. The class assignment lives in
 `fission_layers.py::tool_class` (precedence: ai > warm > stats > det).
 

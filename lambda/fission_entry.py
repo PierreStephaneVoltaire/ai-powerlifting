@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import hmac
 
 _USERFUNC = os.environ.get("USERFUNC", "/userfunc")
 if _USERFUNC not in sys.path:
@@ -9,6 +10,15 @@ if _USERFUNC not in sys.path:
 import importlib
 
 _TOOL_NAME = os.environ.get("IF_TOOL_NAME", "")
+_EXPECTED_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
+
+
+def _check_token(headers):
+    if not _EXPECTED_TOKEN:
+        return
+    received = headers.get("X-Internal-Token", "")
+    if not hmac.compare_digest(received, _EXPECTED_TOKEN):
+        raise PermissionError("invalid or missing X-Internal-Token")
 
 
 def main(*args):
@@ -30,6 +40,10 @@ def main(*args):
                 headers = dict(flask_request.headers)
             except Exception:
                 headers = {}
+        try:
+            _check_token(headers)
+        except PermissionError as auth_err:
+            return {"statusCode": 401, "body": json.dumps({"error": str(auth_err)})}
         tool_id = _TOOL_NAME or os.environ.get("IF_TOOL_ID", "")
         if not tool_id:
             return {"statusCode": 500, "body": json.dumps({"error": "IF_TOOL_NAME not set"})}

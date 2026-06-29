@@ -6,7 +6,7 @@ import yaml
 import fission_layers as fl
 
 LAMBDA_ROOT = fl.LAMBDA_ROOT
-REPO_ROOT = os.path.normpath(os.path.join(LAMBDA_ROOT, "..", "..", ".."))
+REPO_ROOT = os.path.normpath(os.path.join(LAMBDA_ROOT, ".."))
 TERRAFORM_DIR = os.path.join(REPO_ROOT, "terraform")
 BUILD_DIR = os.path.join(TERRAFORM_DIR, "fission-build")
 OUTPUT_TF = os.path.join(TERRAFORM_DIR, "fission-functions.tf")
@@ -42,10 +42,6 @@ STATS_ENV = [
 ]
 
 
-def _tf_safe(name):
-    return name.replace("-", "_").replace(".", "_")
-
-
 def _read_resources(folder):
     with open(os.path.join(folder, "resources.yaml")) as f:
         return yaml.safe_load(f) or {}
@@ -76,156 +72,11 @@ def _build_archive(tool_id, folder, layers):
     return out
 
 
-def _env_block(tool_id, res):
-    envs = list(COMMON_ENV)
-    if fl.tool_class(tool_id) == "ai":
-        envs.extend(AI_ENV)
-    if res.get("s3_read"):
-        envs.extend(STATS_ENV)
-    envs.append(("IF_TOOL_NAME", tool_id))
-    lines = []
-    for name, val in envs:
-        lines.append(f"            - name: {name}")
-        lines.append(f"              value: \"{val}\"")
-    lines.append(f"          envFrom:")
-    lines.append(f"            - secretRef:")
-    lines.append(f"                name: {SECRETS_NAME}")
-    return "\n".join(lines)
+def _manifest_resource(name_prefix, yaml_body):
+    return f'resource "kubectl_manifest" "{name_prefix}" {{\n  server_side_apply = true\n  force_conflicts   = true\n  yaml_body         = <<-YAML\n{yaml_body}\nYAML\n}}\n\n'
 
 
-def _scale_block(tool_id):
-    s = fl.SCALE_PROFILE[fl.tool_class(tool_id)]
-    return f"""        InvokeStrategy:
-          StrategyType: execution
-          ExecutionStrategy:
-            ExecutorType: newdeploy
-            MinScale: {s["minReplicas"]}
-            MaxScale: {s["maxReplicas"]}
-            SpecializationTimeout: {s["timeout"]}
-            TargetCPUPercent: {s["targetCPU"]}"""
-
-
-def _package_yaml(tool_id, archive_path):
-    return f"""apiVersion: fission.io/v1
-kind: Package
-metadata:
-  name: pl-pkg-{tool_id}
-  namespace: {FUNCTION_NAMESPACE}
-spec:
-  environment:
-    name: {ENV_NAME}
-    namespace: {ENV_NAMESPACE}
-  buildcmd: /usr/local/bin/build
-  source:
-    type: literal
-    literal: {os.path.basename(archive_path)}"""
-
-
-def _tool_block(tool_id, res):
-    desc = (res.get("description") or tool_id).replace('"', '\\"')
-    schema = res.get("input_schema") or {"type": "object", "properties": {}}
-    schema_json = yaml.safe_dump(schema, default_flow_style=False, sort_keys=False)
-    indented = "\n".join("      " + l for l in schema_json.rstrip().split("\n"))
-    return f"""  tool:
-    name: {tool_id}
-    description: "{desc}"
-    inputSchema: |
-{indented}"""
-
-
-def _function_yaml(tool_id, res):
-    mem = res.get("memory", 256)
-    timeout = res.get("timeout", 900)
-    return f"""apiVersion: fission.io/v1
-kind: Function
-metadata:
-  name: pl-fn-{tool_id}
-  namespace: {FUNCTION_NAMESPACE}
-spec:
-  environment:
-    name: {ENV_NAME}
-    namespace: {ENV_NAMESPACE}
-  package:
-    packageref:
-      name: pl-pkg-{tool_id}
-      namespace: {FUNCTION_NAMESPACE}
-  functionTimeout: {timeout}
-  concurrency: 500
-{_scale_block(tool_id)}
-{_tool_block(tool_id, res)}
-  podspec:
-    serviceAccountName: default
-    containers:
-      - name: pl-{tool_id}
-        image: {RUNTIME_IMAGE}
-        imagePullPolicy: IfNotPresent
-{_env_block(tool_id, res)}
-        resources:
-          requests:
-            cpu: 100m
-            memory: {max(128, mem // 2)}Mi
-          limits:
-            cpu: 1000m
-            memory: {mem}Mi
-    volumes: []"""
-
-
-def _trigger_yaml(tool_id):
-    if tool_id == REGISTRY_TOOL:
-        return f"""apiVersion: fission.io/v1
-kind: HTTPTrigger
-metadata:
-  name: pl-ht-{tool_id}
-  namespace: {FUNCTION_NAMESPACE}
-spec:
-  functionref:
-    type: name
-    name: pl-fn-{tool_id}
-  methods:
-    - GET
-  relativeurl: /openapi.json"""
-    return f"""apiVersion: fission.io/v1
-kind: HTTPTrigger
-metadata:
-  name: pl-ht-{tool_id}
-  namespace: {FUNCTION_NAMESPACE}
-spec:
-  functionref:
-    type: name
-    name: pl-fn-{tool_id}
-  methods:
-    - POST
-  relativeurl: /{tool_id}
-  prefn:
-    - name: {AUTHORIZER_FN}
-      namespace: {FUNCTION_NAMESPACE}"""
-
-
-def _archive_resource(tool_id, archive_path):
-    return f'''data "archive_file" "pl_{_tf_safe(tool_id)}" {{
-  type        = "zip"
-  output_path = "{archive_path}"
-  source_dir  = "{os.path.dirname(archive_path)}"
-}}
-
-'''
-
-
-def _manifest_resource(tool_id, kind, yaml_body):
-    kind_map = {"package": "pl_pkg", "function": "pl_fn", "trigger": "pl_ht"}
-    res = kind_map[kind] + "_" + _tf_safe(tool_id)
-    return f'''resource "kubectl_manifest" "{res}" {{
-  server_side_apply = true
-  force_conflicts   = true
-  yaml_body         = <<-YAML
-{yaml_body}
-YAML
-}}
-
-'''
-
-
-def _authorizer_block():
+def _build_authorizer():
     folder = os.path.join(LAMBDA_ROOT, "pl_authorizer")
     archive = os.path.join(BUILD_DIR, "pl_authorizer.zip")
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -290,26 +141,25 @@ spec:
             cpu: 200m
             memory: 128Mi
     volumes: []"""
-    out = _manifest_resource("pl_authorizer", "package", pkg)
-    out += _manifest_resource("pl_authorizer", "function", fn)
-    return out
+    return _manifest_resource("pl_authorizer_pkg", pkg) + _manifest_resource("pl_authorizer_fn", fn)
 
 
-def generate_tf():
-    os.makedirs(BUILD_DIR, exist_ok=True)
-    header = "resource \"kubectl_manifest\" \"pl_fission_env\" {\n  server_side_apply = true\n  force_conflicts   = true\n  yaml_body         = <<-YAML\n"
-    header += f"""apiVersion: fission.io/v1
+HEADER = '''resource "kubectl_manifest" "pl_fission_env" {
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body         = <<-YAML
+apiVersion: fission.io/v1
 kind: Environment
 metadata:
-  name: {ENV_NAME}
-  namespace: {ENV_NAMESPACE}
+  name: pl-fission-tools
+  namespace: fission
 spec:
   version: 3
   keeparchive: false
   runtime:
-    image: {RUNTIME_IMAGE}
+    image: ghcr.io/fission/python-env
   builder:
-    image: {BUILDER_IMAGE}
+    image: ghcr.io/fission/python-builder
   terminationGracePeriod: 120
   resources:
     requests:
@@ -319,30 +169,172 @@ spec:
       cpu: 1000m
       memory: 512Mi
 YAML
-}}
+}
 
-"""
-    body = ""
-    counts = {"tool": 0, "pkg": 0, "fn": 0, "ht": 0}
+'''
+
+LOOPS = '''locals {
+  pl_common_env = [
+    { name = "IF_AWS_REGION", value = "ca-central-1" },
+    { name = "IF_HEALTH_TABLE_NAME", value = "if-health" },
+    { name = "IF_TEMPLATES_TABLE_NAME", value = "if-health-templates" },
+    { name = "IF_SESSIONS_TABLE_NAME", value = "if-sessions" },
+    { name = "IF_ANALYSIS_CACHE_TABLE_NAME", value = "if-powerlifting-analysis-cache" },
+    { name = "HEALTH_PROGRAM_PK", value = "operator" },
+    { name = "LLM_BASE_URL", value = "https://openrouter.ai/api/v1" },
+  ]
+
+  pl_ai_env = [
+    { name = "ANALYSIS_MODEL", value = "anthropic/claude-sonnet-4.6" },
+    { name = "ESTIMATE_MODEL", value = "anthropic/claude-sonnet-4.6" },
+    { name = "IMPORT_FAST_MODEL", value = "anthropic/claude-haiku-4.5" },
+    { name = "GLOSSARY_TEXT_MODEL", value = "google/gemini-3.1-flash-lite" },
+  ]
+
+  pl_tools = {
+__TOOLS__
+  }
+}
+
+resource "kubectl_manifest" "pl_packages" {
+  for_each = local.pl_tools
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "fission.io/v1"
+    kind       = "Package"
+    metadata = {
+      name      = "pl-pkg-${each.key}"
+      namespace = "if-portals"
+    }
+    spec = {
+      environment = { name = "pl-fission-tools", namespace = "fission" }
+      buildcmd     = "/usr/local/bin/build"
+      source = { type = "literal", literal = each.value.archive }
+    }
+  })
+}
+
+resource "kubectl_manifest" "pl_functions" {
+  for_each = local.pl_tools
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "fission.io/v1"
+    kind       = "Function"
+    metadata = {
+      name      = "pl-fn-${each.key}"
+      namespace = "if-portals"
+    }
+    spec = {
+      environment = { name = "pl-fission-tools", namespace = "fission" }
+      package = { packageref = { name = "pl-pkg-${each.key}", namespace = "if-portals" } }
+      functionTimeout = each.value.timeout
+      concurrency     = 500
+      InvokeStrategy = {
+        StrategyType = "execution"
+        ExecutionStrategy = {
+          ExecutorType          = "newdeploy"
+          MinScale              = each.value.min_scale
+          MaxScale              = each.value.max_scale
+          SpecializationTimeout = each.value.spec_timeout
+          TargetCPUPercent      = each.value.target_cpu
+        }
+      }
+      podspec = {
+        serviceAccountName = "default"
+        containers = [
+          {
+            name            = "pl-${each.key}"
+            image           = "ghcr.io/fission/python-env"
+            imagePullPolicy = "IfNotPresent"
+            env = concat(
+              local.pl_common_env,
+              [{ name = "IF_TOOL_NAME", value = each.key }],
+              each.value.class == "ai" ? local.pl_ai_env : [],
+              each.value.s3_read ? [{ name = "POWERLIFTING_S3_BUCKET", value = var.powerlifting_s3_bucket }] : [],
+            )
+            envFrom = [{ secretRef = { name = "pl-fission-secrets" } }]
+            resources = {
+              requests = { cpu = "100m", memory = "${max(128, each.value.memory // 2)}Mi" }
+              limits   = { cpu = "1000m", memory = "${each.value.memory}Mi" }
+            }
+          },
+        ]
+        volumes = []
+      }
+    }
+  })
+}
+
+resource "kubectl_manifest" "pl_triggers" {
+  for_each = local.pl_tools
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "fission.io/v1"
+    kind       = "HTTPTrigger"
+    metadata = {
+      name      = "pl-ht-${each.key}"
+      namespace = "if-portals"
+    }
+    spec = {
+      functionref = { type = "name", name = "pl-fn-${each.key}" }
+      methods = each.value.is_registry ? ["GET"] : ["POST"]
+      relativeurl = each.value.is_registry ? "/openapi.json" : "/${each.key}"
+      prefn = each.value.is_registry ? [] : [{ name = "pl-authorizer", namespace = "if-portals" }]
+    }
+  })
+}
+
+'''
+
+
+def generate_tf():
+    os.makedirs(BUILD_DIR, exist_ok=True)
+    tools = {}
     for tool_id in fl.deployable_tools():
         folder = os.path.join(LAMBDA_ROOT, tool_id)
         res = _read_resources(folder)
         layers = res.get("layers") or []
         archive = _build_archive(tool_id, folder, layers)
-        pkg_yaml = _package_yaml(tool_id, archive)
-        fn_yaml = _function_yaml(tool_id, res)
-        ht_yaml = _trigger_yaml(tool_id)
-        body += _manifest_resource(tool_id, "package", pkg_yaml)
-        body += _manifest_resource(tool_id, "function", fn_yaml)
-        body += _manifest_resource(tool_id, "trigger", ht_yaml)
-        counts["tool"] += 1
-        counts["pkg"] += 1
-        counts["fn"] += 1
-        counts["ht"] += 1
-    body += _authorizer_block()
-    counts["pkg"] += 1
-    counts["fn"] += 1
-    return header + body, counts
+        cls = fl.tool_class(tool_id)
+        s = fl.SCALE_PROFILE[cls]
+        tools[tool_id] = {
+            "archive": os.path.basename(archive),
+            "class": cls,
+            "memory": res.get("memory", 256),
+            "timeout": res.get("timeout", 900),
+            "s3_read": bool(res.get("s3_read")),
+            "is_registry": tool_id == REGISTRY_TOOL,
+            "min_scale": s["minReplicas"],
+            "max_scale": s["maxReplicas"],
+            "spec_timeout": s["timeout"],
+            "target_cpu": s["targetCPU"],
+        }
+
+    tools_str = ""
+    for tid in sorted(tools):
+        t = tools[tid]
+        tools_str += f'    "{tid}" = {{\n'
+        tools_str += f'      archive       = "{t["archive"]}"\n'
+        tools_str += f'      class          = "{t["class"]}"\n'
+        tools_str += f'      memory         = {t["memory"]}\n'
+        tools_str += f'      timeout        = {t["timeout"]}\n'
+        tools_str += f'      s3_read        = {str(t["s3_read"]).lower()}\n'
+        tools_str += f'      is_registry    = {str(t["is_registry"]).lower()}\n'
+        tools_str += f'      min_scale      = {t["min_scale"]}\n'
+        tools_str += f'      max_scale      = {t["max_scale"]}\n'
+        tools_str += f'      spec_timeout   = {t["spec_timeout"]}\n'
+        tools_str += f'      target_cpu     = {t["target_cpu"]}\n'
+        tools_str += '    }\n'
+
+    loops = LOOPS.replace("__TOOLS__", tools_str)
+    counts = {"tool": len(tools), "pkg": len(tools) + 1, "fn": len(tools) + 1, "ht": len(tools)}
+    return HEADER + loops + _build_authorizer(), counts
 
 
 def main():
@@ -350,31 +342,26 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     if args.dry_run:
-        counts = {"tool": 0, "pkg": 0, "fn": 0, "ht": 0}
-        for tool_id in fl.deployable_tools():
-            counts["tool"] += 1
-            counts["pkg"] += 1
-            counts["fn"] += 1
-            counts["ht"] += 1
-        counts["pkg"] += 1
-        counts["fn"] += 1
         import json
+        ts = fl.deployable_tools()
         print(json.dumps({
-            "deployable_tools": len(fl.deployable_tools()),
-            "tools": counts["tool"],
-            "packages": counts["pkg"],
-            "functions": counts["fn"],
-            "triggers": counts["ht"],
-            "ai": sum(1 for t in fl.deployable_tools() if fl.tool_class(t) == "ai"),
-            "warm": sum(1 for t in fl.deployable_tools() if fl.tool_class(t) == "warm"),
-            "stats": sum(1 for t in fl.deployable_tools() if fl.tool_class(t) == "stats"),
-            "det": sum(1 for t in fl.deployable_tools() if fl.tool_class(t) == "det"),
+            "deployable_tools": len(ts),
+            "ai": sum(1 for t in ts if fl.tool_class(t) == "ai"),
+            "warm": sum(1 for t in ts if fl.tool_class(t) == "warm"),
+            "stats": sum(1 for t in ts if fl.tool_class(t) == "stats"),
+            "det": sum(1 for t in ts if fl.tool_class(t) == "det"),
         }, indent=2))
         return
-    tf, counts = generate_tf()
-    with open(OUTPUT_TF, "w") as f:
-        f.write(tf)
-    print(f"wrote {OUTPUT_TF} (tools={counts['tool']}, pkgs={counts['pkg']}, fns={counts['fn']}, hts={counts['ht']})")
+    os.makedirs(BUILD_DIR, exist_ok=True)
+    count = 0
+    for tool_id in fl.deployable_tools():
+        folder = os.path.join(LAMBDA_ROOT, tool_id)
+        res = _read_resources(folder)
+        layers = res.get("layers") or []
+        _build_archive(tool_id, folder, layers)
+        count += 1
+    _build_authorizer()
+    print(f"built {count + 1} archives in {BUILD_DIR}")
 
 
 if __name__ == "__main__":
