@@ -1,6 +1,23 @@
 # Fission Migration Plan — Replace AWS Lambda + API Gateway
 
-Status: DRAFT — planned, not yet implemented. Lives next to `HEALTH_LAMBDA_MIGRATION_PLAN.md`.
+Status: Phases 0-2 implemented (terraform fmt/validate green, per-tool deploy
+archives built). Phases 3-7 forward work. Lives next to
+`HEALTH_LAMBDA_MIGRATION_PLAN.md`. See `FISSION_DEPLOY.md` for the implemented
+record and `FISSION_PHASE0_AUDIT.md` for the live-cluster audit.
+
+> Architecture revision (operator-directed, 2026-06-28): the original
+> "slim env + shared read-only HostPath layer mount" design was dropped. It
+> forced a fat composite env image (pandas+numpy+scipy+all store modules+all
+> prompts baked into ONE image every pod cold-starts) and a redundant per-tool
+> zip script. The implemented design is the **Fission-native** path: the stock
+> `ghcr.io/fission/python-env` runtime (shared, pulled once) + the stock
+> `ghcr.io/fission/python-builder` that runs `pip install -r requirements.txt`
+> at build time. Each tool's deploy archive carries ONLY the `.py` files it
+> needs + a `requirements.txt` listing ONLY the pip deps that tool uses
+> (boto3 for basic tools; +pandas/numpy for stats; +httpx/jinja2 for AI;
+> +scipy for the 2 tools that need it). No tool drags deps it doesn't use.
+> No custom Packer image. No HostPath layers. No per-pod bloat. Basic-math
+> tool archives are ~12 KB; biggest archive is 88 KB; total 96 archives = 2 MB.
 
 ## Goal
 
@@ -18,8 +35,11 @@ fat images on a single-node cluster, reclaim resources faster than Lambda's
 ## Constraints (from operator discussion)
 
 - Single k3s node — no horizontal scale-out.
-- **Avoid a 3GB env image.** Multiple concurrent functions must fit memory.
-- Slim shared base: `python:3.12-slim` env + read-only layer mounts.
+- **Avoid a fat env image.** Multiple concurrent functions must fit memory.
+  Implemented via the Fission-native path: the stock `ghcr.io/fission/python-env`
+  shared runtime (pulled once) + the Fission builder that pip-installs a
+  per-tool `requirements.txt` at build time. No deps baked into any image;
+  no tool carries deps it doesn't use.
 - **Fission router stays in-cluster only** — no Cloudflare exposure required
   for Fission itself. All callers (portal backend, IF agent API pod, agent MCP
   pod) already live in the same cluster and can hit `router.fission:80` (the
@@ -38,7 +58,9 @@ fat images on a single-node cluster, reclaim resources faster than Lambda's
 
 - Every `lambda/<tool>/` folder + `handler.py` + `resources.yaml` — same
   per-folder data model. The `layers:` field in `resources.yaml` becomes the
-  per-function `PYTHONPATH` synthesis source.
+  per-tool `requirements.txt` + vendored-store-module source (synthesized by
+  `fission-deploy.py` from the layer→(modules, pip-requirements) map in
+  `fission_layers.py`).
 - `lambda/tool_registry/` + its `resources.json` (89... 94 entries) and the
   generated OpenAPI doc semantics — Fission function reads the bundled
   `resources.json` and returns OpenAPI from `GET /openapi.json`.
@@ -54,55 +76,56 @@ fat images on a single-node cluster, reclaim resources faster than Lambda's
 - 19 AI lambda folders, `pl_authorizer` folder (becomes a tiny Fission
   pre-function auth or tinyauth middleware — see Phase 3).
 
-## Design — slim env + shared read-only layer mount
+## Design — Fission-native (implemented)
 
 ### Three concerns, deliberately separate
 
-1. **Env image (warm pool base, ONE image pulled)** — `python:3.12-slim`
-   (~80-120 MB on disk). Contains only: python runtime, pip, Fission's
-   `python-env` stub. No app code, no app deps. This is the only image a
-   function pod cold-starts.
+1. **Env image (shared runtime, pulled once)** — the stock
+   `ghcr.io/fission/python-env` image (Alpine + python + the Fission
+   `server.py` dynamic loader). No app code, no app deps baked in. Every
+   function pod cold-starts from this one shared image. Paired with
+   `ghcr.io/fission/python-builder`, which runs the build phase.
 
-2. **Per-function deploy_archive (kilobytes)** — built per existing folder:
-   `handler.py` + (AI tools only) the copied `_ai.py`. No deps in the zip.
-   Mounted/injected by Fission onto a warm env pod.
+2. **Per-tool deploy_archive (kilobytes)** — built per existing folder: the
+   tool's own `.py` files (`handler.py`, `core.py`, `config.py`,
+   `__init__.py`, and AI tools' `<name>_ai.py`) + the store modules its
+   `resources.yaml layers:` list references, vendored at the archive root
+   (so `from program_store import ...` resolves) + a `requirements.txt`
+   listing ONLY the pip deps those layers bring + `fission_entry.py`
+   (the shared Fission→Lambda adapter). The Fission builder runs
+   `pip install -r requirements.txt -t <archive>` at build time, then
+   copies the result as the deploy archive. **No deps baked into any
+   image; no tool carries deps it doesn't use.**
 
-3. **Shared layer mounts (single on-disk copy, page-cached)** — the existing
-   10 LayerVersion-equivalent concerns collapse to 3-4 thin read-only dirs
-   bind-mounted into every function pod:
-   - `pl_base`     = httpx + jinja2 + boto3 (+ core libs every tool needs)
-   - `pl_health_data` = program_store/session_store/glossary_store/template_store/
-                     import_store/federation_store/analysis_cache/comparison/
-                     powerlifting_stats + health_types + core
-   - `pl_prompts`  = prompts/loader.py + the 24 `.j2` files (read-only, tiny)
-   - `pl_stats`   = pandas + numpy + scipy (mounted only when `resources.yaml`
-                    `layers:` lists `pl_pandas`)
+3. **Per-tool `requirements.txt` (the dep carrier)** — derived from the
+   tool's `resources.yaml layers:` list against the layer→pip-deps map in
+   `fission_layers.py`:
+   - `pl_boto3` → `boto3==1.42.83 botocore==1.42.83 s3transfer==0.16.0`
+   - `pl_pandas` → `pandas==2.2.3 numpy==2.1.3`
+   - `pl_ai` → `httpx jinja2`
+   - `pl_program`/`pl_sessions`/`pl_glossary`/`pl_templates`/`pl_imports`/
+     `pl_federation`/`pl_analysis_cache` → pure-python store modules,
+     vendored into the archive (no pip dep)
+   - `analyze_progression` and `analyze_rpe_drift` additionally pull
+     `scipy` (explicit extra, not in any layer).
 
-   Each function pod gets `PYTHONPATH=/opt/layers/<subset>` derived from its
-   `resources.yaml` `layers:` list atHTTP trigger evaluation time. The same
-   pages live on disk once; Linux page cache means concurrent pods share RAM
-   pages for the read-only layers — no duplication.
+   Result: basic-math tools (calculate_attempts, days_until, estimate_1rm)
+   ship a ~12 KB archive with a boto3-only requirements.txt. Stats tools
+   add pandas/numpy. AI tools add httpx/jinja2 + vendored ai_config.py +
+   prompts/loader.py + 22 `.j2` files. No per-pod bloat.
 
-### Layer mount mechanism
+### The Fission entrypoint adapter
 
-Two options, Fission env spec supports both via pod patch / volume mounts:
-
-- **(A) HostPath / preferred for single-node k3s** — populate
-  `/opt/pl-layers/{pl_base,pl_health_data,pl_prompts,pl_stats}` once on the
-  node (from a one-shot `kubectl apply` of an init DaemonSet or via the
-  existing Packer AMI build). Mount that host path `readOnly: true` into every
-  function pod at `/opt/layers`. Zero duplication. Disk cost: 200-300 MB total
-  on the node. Page cache = shared across pods.
-
-- **(B) Composite Docker image for layers** — pull a `pl-layers:vN` image
-  (~300-400 MB on disk, ~80-150 MB resident in page cache), run a 1-second
-  initContainer that rsyncs it onto an `emptyDir` shared with main. Avoids
-  HostPath but duplicates per-pod emptyDir RAM; only choose if HostPath is
-  disallowed.
-
-Default: (A) — HostPath is fine on a single self-managed k3s node and gives
-the smallest resident footprint. The Cordon-Node + Replicated-PV pattern
-isn't needed because the cluster is single-node.
+Fission's `server.py` loads the deploy archive at `/userfunc`, appends it
+to `sys.path`, and routes HTTP requests to the module's `main` function
+with the Flask request as the argument. The Lambda handlers expect
+`(event, context)` where `event = {args: <body>, headers: {...}}` and
+return `{statusCode: 200, body: "<json>"}` — the exact envelope the backend
+`invokeLambda` consumes. `fission_entry.py` (~25 lines, vendored into every
+archive) bridges the two: it imports the tool's `handler`, builds the
+Lambda-style event from the Flask request, calls `handler(event, None)`,
+and returns the Lambda envelope. Set as each Function's `functionName` via
+the `IF_TOOL_NAME` env var.
 
 ### Routing — all in-cluster
 
@@ -181,63 +204,85 @@ Disk: env image pulled once (~120MB on disk) + read-only layer dir
 
 ## Phases
 
-### Phase 0 — Audit current state [not started]
-- [ ] Confirm Fission CRDs installed in cluster (`kubectl get crds | grep fission`).
-- [ ] Confirm router Service is `ClusterIP` and resolvable from `if-portals`.
-- [ ] Confirm `var.fission_enabled` is on and router is reachable in-cluster.
-- [ ] Inventory current `lambda/*/resources.yaml` `layers:` fields: produce the
-      3-4 thin layer buckets (pl_base, pl_health_data, pl_prompts, pl_stats).
-- [ ] Disk + RAM headroom audit on the k3s node (free -h, df -h).
+### Phase 0 — Audit current state [COMPLETE]
+- [x] Confirm Fission CRDs installed in cluster (`kubectl get crds | grep fission`) — done, see `FISSION_PHASE0_AUDIT.md`.
+- [x] Confirm router Service is `ClusterIP` and resolvable from `if-portals` — `router.fission.svc.cluster.local`.
+- [x] Confirm `var.fission_enabled` is on and router is reachable in-cluster.
+- [x] Inventory current `lambda/*/resources.yaml` `layers:` fields — 10 layer keys
+      (`pl_boto3 pl_pandas pl_program pl_sessions pl_glossary pl_templates
+      pl_imports pl_federation pl_analysis_cache pl_ai`) mapped to their
+      vendored python modules + pip requirements in `fission_layers.py`.
+      Tool classes: 15 AI, 4 warm reads, 5 stats, 71 deterministic = 95
+      deployable tools.
+- [x] Disk + RAM headroom audit on the k3s node — confirmed ~14 GB headroom.
 
-### Phase 1 — Build the slim env + layer mounts [not started]
-- [ ] Build `pl-layers-base` package/archive (httpx, jinja2, boto3) — from
-      existing `lambda/layers/pl-ai` build with the AI bits split out.
-- [ ] Build `pl-layers-health-data` — scraped from current `pl_program`,
-      `pl_sessions`, `pl_glossary`, `pl_templates`, `pl_imports`,
-      `pl_federation`, `pl_analysis_cache` contents.
-- [ ] Build `pl-layers-prompts` — `prompts/loader.py` + 24 `.j2`.
-- [ ] Build `pl-layers-stats` — pandas/numpy/scipy (carried over from
-      `pl-pandas`).
-- [ ] Publish to cluster node under `/opt/pl-layers/` via:
-      - (A) One-shot DaemonSet init cp tarball from a `kubectl cp`, or
-      - (B) Packer AMI bake step adds `/opt/pl-layers/` to the node image.
-- [ ] Build `pl-fission-env` Docker image — `python:3.12-slim` base, Fission
-      env stub, ENV `PYTHONPATH=/opt/layers/pl_base:/opt/layers/pl_prompts`
-      as the default. Push to ECR.
-- [ ] Define Fission `Environment` CR with the slim env image + a pod spec
-      patch declaring the HostPath `/opt/pl-layers` readOnly mount so every
-      function pod gets the layers without per-function wiring.
-- [ ] Validate: pod from this env can `import httpx`, `import jinja2`,
-      `from prompts.loader import load_system_prompt` — without the host path
-      mount not present (to prove nothing is baked into the env image).
+### Phase 1 — Fission env + layer contract [COMPLETE]
+- [x] Layer→(python modules, pip requirements) contract in `fission_layers.py`
+      (the single source of truth the generator reads). No HostPath layers,
+      no composite image — the dropped design.
+- [x] Fission `Environment` CR `pl-fission-tools` declared in
+      `terraform/fission-functions.tf` using stock `ghcr.io/fission/python-env`
+      runtime + `ghcr.io/fission/python-builder` builder, version 3,
+      keeparchive false. No custom Packer image.
+- [x] Providers (`versions.tf`, `providers.tf`): aws + kubernetes + kubectl
+      (gavinbunney) + helm, gated by `var.fission_powerlifting_env_enabled`.
+- [x] Variables (`variables.tf`): kubeconfig path/context, fission env name,
+      router DNS, function namespace, `pl_internal_token`, `openrouter_api_key`.
+- [x] `terraform fmt -check -recursive` + `terraform validate` → Success.
 
-### Phase 2 — Convert per-folder handlers to Fission functions [not started]
-- [ ] Script: `tools/fission-deploy.py` — walks `lambda/<tool>/` folders (skipping
-      `layers/`, `master-sync/`, `video-thumbnail/`, `tool_registry/`,
-      `pl_authorizer/`). For each folder:
-      - Reads `resources.yaml` → derives `PYTHONPATH` from `layers:` list
-      - Builds a `deploy_archive.zip` of just the folder's .py files
-      - Emits a Terraform fragment declaring `fission_package` +
-        `fission_function` + `fission_http_trigger` for that tool
-- [ ] Terraform file `fission-functions.tf` `for_each` over the 94 (current
-      deterministic fingerprint minus `health_rag_search` / `pl_authorizer`)
-      folders' `resources.yaml`, declaring the package + function + trigger.
-- [ ] `tool_registry` function — same handler.py (it serves `resources.json`
-      as OpenAPI); gets a Fission HTTP trigger at `GET /openapi.json`.
-- [ ] Resolve `health_rag_search` — NOT migrated, stays in-process on agent pod.
+### Phase 2 — Convert per-folder handlers to Fission functions [COMPLETE]
+- [x] `lambda/fission_entry.py` — shared Fission→Lambda adapter (~25 lines,
+      vendored into every archive). Builds the Lambda event from the Flask
+      request, imports the tool `handler`, calls `handler(event, None)`,
+      returns the `{statusCode, body}` envelope the backend consumes.
+- [x] `lambda/fission_layers.py` — layer→(modules, pip-requirements) contract
+      + tool classification (ai/warm/stats/det) + `SCALE_PROFILE` per class.
+- [x] `lambda/fission-deploy.py` — generator. `--dry-run` prints counts;
+      default builds the 96 per-tool deploy archives under
+      `terraform/fission-build/` + the pl_authorizer archive, then emits
+      `terraform/fission-functions.tf` (HCL) declaring the Environment CR +
+      96 Package + 96 Function + 95 HTTPTrigger `kubectl_manifest` blocks.
+      Re-run after any handler or layer change to regenerate.
+- [x] `terraform/fission-functions.tf` — generated. Environment +
+      per-tool Package (literal source = the per-tool zip name, buildcmd
+      `/usr/local/bin/build` so the Fission builder runs
+      `pip install -r requirements.txt`) + Function (`newdeploy` executor,
+      per-class scale profile, env vars, envFrom `pl-fission-secrets`,
+      podspec with the stock `ghcr.io/fission/python-env` image) + HTTPTrigger.
+- [x] `terraform/fission-secrets.tf` — `kubernetes_secret.pl_fission_secrets`
+      (INTERNAL_API_TOKEN + OPENROUTER_API_KEY from existing vars).
+- [x] `tool_registry` function — deploy archive bundles its `handler.py` +
+      `resources.json`; `GET /openapi.json` HTTPTrigger, no prefn (unauthed).
+- [x] `pl_authorizer` — deployed as its own Fission Function
+      (`pl-authorizer`), wired as `spec.prefns` on every tool HTTPTrigger
+      (constant-time `hmac.compare_digest` on `X-Internal-Token`).
+- [x] `health_rag_search` — NOT migrated; stays in-process on the agent pod.
+- [x] Archive size proof: basic-math tools ~12 KB (boto3-only reqs); stats
+      tools ~12 KB (reqs add pandas/numpy, pip-installed by builder NOT in
+      zip); AI tools ~36 KB (reqs add httpx/jinja2 + vendored ai_config +
+      22 `.j2` prompts); scipy tools add scipy. Biggest archive 88 KB.
+      Total 96 archives = 2.0 MB. No per-pod bloat.
+- [x] `terraform fmt -check -recursive` + `terraform validate` → Success.
+      `py_compile` on all new `.py` → OK. Zero comments in code files.
+- [ ] Smoke-test one deterministic read, one deterministic write, one AI tool
+      end-to-end against the Fission router (requires `terraform apply` +
+      Phase 3 routing swap — forward work).
 - [ ] Smoke-test one deterministic read (e.g. `health_get_program`), one
       deterministic write (e.g. `health_update_session`), one AI tool
       (e.g. `fatigue_profile_estimate`) end-to-end against the Fission router
       via the backend's `invokeLambda` with `POWERLIFTING_LAMBDA_BASE_URL`
       swapped to `http://router.fission.svc.cluster.local`.
 
-### Phase 3 — Auth + routing swap (no Cloudflare changes) [not started]
-- [ ] Register `pl_authorizer/handler.py` as a Fission pre-function attached to
+### Phase 3 — Auth + routing swap (no Cloudflare changes) [PARTIAL — prefn wired, env swap pending]
+- [x] Register `pl_authorizer/handler.py` as a Fission pre-function attached to
       every function trigger (constant-time check against `INTERNAL_API_TOKEN`
-      from the k8s Secret). Keep `GET /openapi.json` unauthed.
+      from the k8s Secret). Keep `GET /openapi.json` unauthed. — DONE in Phase 2:
+      `pl_authorizer` deployed as its own Function + `spec.prefns` on every tool
+      HTTPTrigger; `pl-fission-secrets` Secret declared in `fission-secrets.tf`.
 - [ ] Do NOT add tinyauth middleware to the Fission router path — it is
       ClusterIP-only and has no public exposure. Tinyauth stays scoped to the
-      existing `cloudflared`-exposed portal UIs in `if-portals`.
+      existing `cloudflared`-exposed portal UIs in `if-portals`. — confirmed by
+      design (no public Service/Ingress/HTTPRoute for Fission); verify post-apply.
 - [ ] Update backend env: `POWERLIFTING_LAMBDA_BASE_URL`
       `= http://router.fission.svc.cluster.local` (no more execute-api URL).
 - [ ] Update agent API + agent MCP pod envs the same.
@@ -306,22 +351,33 @@ Disk: env image pulled once (~120MB on disk) + read-only layer dir
       Fission-enabled test namespace; smoke test the portal flow end-to-end.
 - [ ] Final cutover: replace env values live, run drain, monitor dashboard.
 
-## Open decisions to confirm before Phase 1 starts
+## Resolved decisions (from implementation)
 
-- [ ] (A) HostPath layer mount vs (B) composite image emptyDir mount — HostPath
-      preferred unless node-image constraints forbid.
-- [ ] ~~tinyauth middleware on Fission router vs Fission `pl_authorizer` pre-function
-      hook~~ — DECIDED: Fission pre-function. Tinyauth stays scoped to public
-      Cloudflare-exposed portals only.
-- [ ] `OPENROUTER_API_KEY` + `INTERNAL_API_TOKEN` source: keep SSM-String +
-      mirror to k8s Secret via External Secrets Operator, or move exclusively
-      to k8s Secret? (Either works; SSM keeps single source-of-truth if
-      other AWS services still use it.)
+- [x] ~~(A) HostPath layer mount vs (B) composite image emptyDir mount~~ —
+      RESOLVED: neither. Implemented design uses the Fission-native stock env
+      image + per-tool `requirements.txt` pip-installed by the Fission builder.
+      No HostPath, no composite image, no per-pod bloat. (Operator-directed
+      revision 2026-06-28: the original HostPath/composite design forced a fat
+      shared image that every pod would cold-start.)
+- [x] ~~tinyauth middleware on Fission router vs Fission `pl_authorizer` pre-function
+      hook~~ — DECIDED: Fission pre-function (`pl_authorizer` deployed as its
+      own Function + `spec.prefns` on every tool HTTPTrigger). Tinyauth stays
+      scoped to public Cloudflare-exposed portals only.
+- [x] `OPENROUTER_API_KEY` + `INTERNAL_API_TOKEN` source — DECIDED: a k8s Secret
+      `pl-fission-secrets` in `if-portals` carrying both (from the existing
+      `var.pl_internal_token` + `var.openrouter_api_key`). Functions read them
+      via `envFrom.secretRef`. SSM remains as the source for the AWS Lambda path
+      until Phase 5 teardown; the k8s Secret is the Fission path's source.
+
+## Open decisions to confirm before Phase 4 (HPA tuning)
+
 - [ ] `minReplicas` for the warm pool on high-traffic deterministic reads — 1
       or 0? 1 = snappy UI but always-on ~80MB resident pod. Default: 1 for the
-      ~10 highest-traffic reads.
+      ~10 highest-traffic reads. (Phase 2 set the 4 known warm reads to
+      minReplicas=1; confirm the full warm list.)
 - [ ] Max concurrent AI calls budget on node — 1, 2, or 3? Affects
-      `maxReplicas` and HPA target for the 19 AI tools.
+      `maxReplicas` and HPA target for the 19 AI tools. (Phase 2 set AI
+      maxReplicas=1; revisit if you want 2.)
 
 ## What is explicitly NOT in scope
 

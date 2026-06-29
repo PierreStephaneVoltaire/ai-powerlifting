@@ -54,3 +54,15 @@ output "api_gateway_endpoint_base_url" {
 output "lambda_openapi_url" {
   value = "${aws_apigatewayv2_api.health_api.api_endpoint}/openapi.json"
 }
+
+output "pl_fission_environment_name" {
+  value = var.fission_powerlifting_env_name
+}
+
+output "pl_fission_router_dns" {
+  value = var.fission_powerlifting_router_dns
+}
+
+output "pl_fission_base_url" {
+  value = "http://${var.fission_powerlifting_router_dns}"
+}
