@@ -9,7 +9,24 @@ if _USERFUNC not in sys.path:
 
 import importlib
 
+# The deploy archive ships a tool_id.txt next to the entry module so the
+# correct handler can be loaded without per-function env vars (Fission
+# newdeploy does not merge function.spec.podspec env into the runtime
+# container, and the router drops the URL path before forwarding).
 _TOOL_NAME = os.environ.get("IF_TOOL_NAME", "")
+if not _TOOL_NAME:
+    for _candidate in (
+        os.path.join("/userfunc/deployarchive", "tool_id.txt"),
+        os.path.join(_USERFUNC, "deployarchive", "tool_id.txt"),
+        os.path.join(os.path.dirname(__file__), "tool_id.txt"),
+    ):
+        try:
+            with open(_candidate) as _f:
+                _TOOL_NAME = _f.read().strip()
+                if _TOOL_NAME:
+                    break
+        except Exception:
+            pass
 _EXPECTED_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
 
 
@@ -23,32 +40,46 @@ def _check_token(headers):
 
 def main(*args):
     try:
-        flask_request = args[0] if args else None
+        # Fission python-env routes /<path:path> into userfunc_call, which
+        # calls this function with the path segment as a positional arg.
+        # The HTTP body/headers live on the flask.request proxy global,
+        # not in *args. Import it lazily so the module still loads in
+        # non-flask contexts (e.g. import-time health checks).
+        from flask import request as flask_request
         body = {}
         headers = {}
-        if flask_request is not None:
+        path = ""
+        try:
+            if args:
+                path = str(args[0]).strip("/")
+            if not path:
+                path = (flask_request.path or "").strip("/")
+        except Exception:
+            path = ""
+        try:
+            raw = flask_request.get_data(as_text=True)
+        except Exception:
+            raw = ""
+        if raw:
             try:
-                raw = flask_request.get_data(as_text=True)
+                body = json.loads(raw)
             except Exception:
-                raw = ""
-            if raw:
-                try:
-                    body = json.loads(raw)
-                except Exception:
-                    body = {}
-            try:
-                headers = dict(flask_request.headers)
-            except Exception:
-                headers = {}
+                body = {}
+        try:
+            headers = dict(flask_request.headers)
+        except Exception:
+            headers = {}
         try:
             _check_token(headers)
         except PermissionError as auth_err:
             return {"statusCode": 401, "body": json.dumps({"error": str(auth_err)})}
-        tool_id = _TOOL_NAME or os.environ.get("IF_TOOL_ID", "")
+        tool_id = _TOOL_NAME or os.environ.get("IF_TOOL_ID", "") or path.split("/")[0]
         if not tool_id:
             return {"statusCode": 500, "body": json.dumps({"error": "IF_TOOL_NAME not set"})}
         mod = importlib.import_module(tool_id + ".handler")
-        event = {"args": body, "headers": headers}
+        event = body if body else {}
+        if headers:
+            event["_headers"] = headers
         result = mod.handler(event, None)
         if isinstance(result, dict) and "statusCode" in result:
             return result

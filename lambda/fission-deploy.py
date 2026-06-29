@@ -19,6 +19,7 @@ SECRETS_NAME = "pl-fission-secrets"
 AUTHORIZER_FN = "pl-authorizer"
 REGISTRY_TOOL = "tool_registry"
 ENTRY_FILE = os.path.join(LAMBDA_ROOT, "fission_entry.py")
+ENTRY_ZIP_NAME = "main.py"  # Fission python-env imports 'main' module by default
 
 COMMON_ENV = [
     ("IF_AWS_REGION", "ca-central-1"),
@@ -51,7 +52,12 @@ def _build_archive(tool_id, folder, layers):
     os.makedirs(BUILD_DIR, exist_ok=True)
     out = os.path.join(BUILD_DIR, tool_id + ".zip")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(ENTRY_FILE, "fission_entry.py")
+        zf.write(ENTRY_FILE, ENTRY_ZIP_NAME)
+        # Bake the tool id into the archive so the entry can load the
+        # correct handler module without relying on per-function env vars
+        # (Fission newdeploy does not merge function.spec.podspec into the
+        # runtime container, and the router drops the URL path).
+        zf.writestr("tool_id.txt", tool_id + "\n")
         for root, _dirs, files in os.walk(folder):
             if "__pycache__" in root:
                 continue
@@ -80,7 +86,7 @@ def _build_authorizer():
     folder = os.path.join(LAMBDA_ROOT, "pl_authorizer")
     archive = os.path.join(BUILD_DIR, "pl_authorizer.zip")
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(ENTRY_FILE, "fission_entry.py")
+        zf.write(ENTRY_FILE, ENTRY_ZIP_NAME)
         for fn in os.listdir(folder):
             if fn.endswith(".py") and fn != "__init__.py":
                 zf.write(os.path.join(folder, fn), os.path.join("pl_authorizer", fn))
