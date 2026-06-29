@@ -1,0 +1,21 @@
+layers:
+- pl_rag
+memory: 512
+timeout: 900
+description: Search health documents (IPF rulebook, anti-doping list, supplement info)
+  using semantic search. Also supports index/rebuild actions.
+input_schema:
+  type: object
+  properties:
+    action:
+      type: string
+      description: 'search (default), index, or rebuild'
+      default: search
+    query:
+      type: string
+      description: Search query (required for action=search)
+    n_results:
+      type: number
+      description: Number of results to return (search only)
+      default: 4
+  required: []

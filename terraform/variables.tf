@@ -38,20 +38,8 @@ variable "powerlifting_s3_bucket" {
   default = "powerlifting-openpowerlifting-dataset"
 }
 
-variable "lambda_function_prefix" {
-  type    = string
-  default = "pl-"
-}
 
-variable "lambda_runtime" {
-  type    = string
-  default = "python3.12"
-}
 
-variable "lambda_handler" {
-  type    = string
-  default = "handler.handler"
-}
 
 
 
