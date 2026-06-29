@@ -18,6 +18,29 @@ record and `FISSION_PHASE0_AUDIT.md` for the live-cluster audit.
 > +scipy for the 2 tools that need it). No tool drags deps it doesn't use.
 > No custom Packer image. No HostPath layers. No per-pod bloat. Basic-math
 > tool archives are ~12 KB; biggest archive is 88 KB; total 96 archives = 2 MB.
+>
+> Terraform topology (operator-directed, 2026-06-28): the generated Fission
+> CRDs (`fission-functions.tf`) + per-tool deploy archives (`fission-build/`)
+> live in the **root `terraform/`** (repo root), NOT in
+> `utils/powerlifting-app/terraform/`. Per the multi-repo `.meta` config + the
+> powerlifting `AGENTS.md`, the root stack is applied **locally** against the
+> private k3s kubeconfig (GitHub Actions can't reach the private cluster);
+> `powerlifting-app/terraform/` is AWS-only (ECR/S3/Lambda/SSM/DynamoDB) and
+> owns NO k8s resources. The generator `lambda/fission-deploy.py` reads source
+> from `utils/powerlifting-app/lambda/` (the powerlifting repo, source of truth)
+> and writes its terraform output to the repo-root `terraform/`. Root vars
+> `powerlifting_s3_bucket`, `pl_internal_token`, `fission_function_namespace`
+> + the root `kubernetes_secret.pl_fission_secrets` + `INTERNAL_API_TOKEN` in
+> `if_agent_api_secrets` are in the root stack.
+>
+> MCP exposure (operator-directed, 2026-06-28): each Function carries
+> `spec.tool` (Fission's `ToolConfig` — `--expose-as-mcp`) with `name`,
+> `description`, and `inputSchema` sourced from the tool's `resources.yaml`.
+> Fission's router exposes an MCP server endpoint, so the IF agent consumes
+> the tools directly via MCP — the `tools/health_lambda_mcp/` HTTP-discovery
+> intermediary is no longer needed for the agent path. The portal backend
+> still hits the Fission router HTTP (`POST /<tool>`) for UI calls via
+> `invokeLambda` (unchanged code, just the env URL flips in Phase 3).
 
 ## Goal
 

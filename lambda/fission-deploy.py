@@ -6,7 +6,8 @@ import yaml
 import fission_layers as fl
 
 LAMBDA_ROOT = fl.LAMBDA_ROOT
-TERRAFORM_DIR = os.path.normpath(os.path.join(LAMBDA_ROOT, "..", "terraform"))
+REPO_ROOT = os.path.normpath(os.path.join(LAMBDA_ROOT, "..", "..", ".."))
+TERRAFORM_DIR = os.path.join(REPO_ROOT, "terraform")
 BUILD_DIR = os.path.join(TERRAFORM_DIR, "fission-build")
 OUTPUT_TF = os.path.join(TERRAFORM_DIR, "fission-functions.tf")
 FUNCTION_NAMESPACE = "if-portals"
@@ -120,6 +121,18 @@ spec:
     literal: {os.path.basename(archive_path)}"""
 
 
+def _tool_block(tool_id, res):
+    desc = (res.get("description") or tool_id).replace('"', '\\"')
+    schema = res.get("input_schema") or {"type": "object", "properties": {}}
+    schema_json = yaml.safe_dump(schema, default_flow_style=False, sort_keys=False)
+    indented = "\n".join("      " + l for l in schema_json.rstrip().split("\n"))
+    return f"""  tool:
+    name: {tool_id}
+    description: "{desc}"
+    inputSchema: |
+{indented}"""
+
+
 def _function_yaml(tool_id, res):
     mem = res.get("memory", 256)
     timeout = res.get("timeout", 900)
@@ -139,6 +152,7 @@ spec:
   functionTimeout: {timeout}
   concurrency: 500
 {_scale_block(tool_id)}
+{_tool_block(tool_id, res)}
   podspec:
     serviceAccountName: default
     containers:

@@ -53,57 +53,15 @@ variable "lambda_handler" {
   default = "handler.handler"
 }
 
-variable "openrouter_api_key" {
-  type        = string
-  sensitive   = true
-  description = "OpenRouter API key for LLM calls. Stored in SSM."
-}
 
-variable "pl_internal_token" {
-  type        = string
-  sensitive   = true
-  description = "Internal API token for powerlifting-app service auth. Stored in SSM."
-}
 
-variable "kubeconfig_path" {
-  type    = string
-  default = "~/.kube/config"
-}
 
-variable "kubeconfig_context" {
-  type    = string
-  default = "default"
-}
 
-variable "fission_powerlifting_env_enabled" {
-  type    = bool
-  default = true
-}
 
-variable "fission_powerlifting_env_name" {
-  type    = string
-  default = "pl-fission-tools"
-}
 
-variable "fission_powerlifting_env_namespace" {
-  type    = string
-  default = "fission"
-}
 
-variable "fission_powerlifting_env_runtime_image" {
-  type    = string
-  default = "fission/python-env:1.20.4"
-}
 
-variable "fission_powerlifting_function_namespace" {
-  type    = string
-  default = "if-portals"
-}
 
-variable "fission_powerlifting_router_dns" {
-  type    = string
-  default = "router.fission.svc.cluster.local"
-}
 
 
 
@@ -112,3 +70,17 @@ variable "node_name" {
   type    = string
   default = "sirsimpalot-g5-5000"
 }
+variable "openrouter_api_key" {
+  description = "OpenRouter API key for AI health tools (SSM plaintext param source)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "pl_internal_token" {
+  description = "Internal API token for powerlifting Lambda authorizer / Fission prefn (SSM plaintext param source)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
