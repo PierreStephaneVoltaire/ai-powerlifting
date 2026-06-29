@@ -291,20 +291,29 @@ Disk: env image pulled once (~120MB on disk) + read-only layer dir
 - [ ] Confirm NO new Cloudflare tunnel / HTTPRoute / public Service exists
       for Fission.
 
-### Phase 4 — Scale-to-zero tuning + HPA [not started]
-- [ ] Per-function `newdeploy` executor spec per tool class:
-      - AI tools (19): `minReplicas=0`, `maxReplicas=1-2`, `targetCPU=70`,
-        `terminationGracePeriodSeconds=120`, timeout 900s.
-      - Stats tools (3): `minReplicas=0`, `maxReplicas=1`, timeout 600s.
-      - High-traffic deterministic reads (8-10): `minReplicas=1`,
-        `maxReplicas=2`, `targetCPU=70`.
-      - Remaining deterministic (~60): `minReplicas=0`, `maxReplicas=2`,
-        `targetCPU=70`, timeout 60s.
-- [ ] HPA `--horizontal-pod-autoscaler-downscale-stabilization=120s` on the
-      controller-manager config to bound churn.
+### Phase 4 — Scale-to-zero tuning + HPA [implemented — see FISSION_PHASE4_HPA.md]
+- [x] Per-function `newdeploy` executor spec per tool class:
+      - AI tools (15 deployed): `minReplicas=0`, `maxReplicas=1`, `targetCPU=70`,
+        `SpecializationTimeout=120`, timeout 900s.
+      - Stats tools (5): `minReplicas=0`, `maxReplicas=2`, `targetCPU=80`,
+        `SpecializationTimeout=120`, timeout 900s.
+      - High-traffic deterministic reads (10): `minReplicas=1`,
+        `maxReplicas=2`, `targetCPU=70`, `SpecializationTimeout=60`.
+      - Remaining deterministic (65): `minReplicas=0`, `maxReplicas=3`,
+        `targetCPU=70`, `SpecializationTimeout=90`, timeout 900s.
+- [x] HPA `--horizontal-pod-autoscaler-downscale-stabilization=120s` flag on the
+      kube-controller-manager. k3s config is node-level (not Terraform-managed);
+      runbook command in `FISSION_PHASE4_HPA.md` for the operator to run.
+- [x] Fission owns the per-function HPA (newdeploy executor auto-creates one per
+      Function; `TargetCPUPercent` in `ExecutionStrategy` is what Fission passes
+      to its HPA). No separate `kubernetes_horizontal_pod_autoscaler` resources
+      declared. Confirmed in `FISSION_PHASE4_HPA.md`.
+- [x] WARM_READS expanded from 4 effective to 10 verified read-only tools
+      (`fission_layers.py::WARM_READS`); `fission-functions.tf` regenerated.
 - [ ] Soak test: invoke 3 tool types, idle 5 min, confirm pods scale to 0
       within 2 min and cold starts rehydrate in < 5s for deterministic / < 10s
-      for AI (OpenRouter stream latency dominates the latter).
+      for AI (OpenRouter stream latency dominates the latter). Checklist in
+      `FISSION_PHASE4_HPA.md` — operator-run.
 - [ ] Document concurrent-AI-call cap (estimate 2 concurrent on node budget).
 
 ### Phase 5 — Cluster replacement of AWS sources [not started]

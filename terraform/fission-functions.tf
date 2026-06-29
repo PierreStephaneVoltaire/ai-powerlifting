@@ -3494,9 +3494,9 @@ spec:
           StrategyType: execution
           ExecutionStrategy:
             ExecutorType: newdeploy
-            MinScale: 0
-            MaxScale: 3
-            SpecializationTimeout: 90
+            MinScale: 1
+            MaxScale: 2
+            SpecializationTimeout: 60
             TargetCPUPercent: 70
   podspec:
     serviceAccountName: default
@@ -3809,9 +3809,9 @@ spec:
           StrategyType: execution
           ExecutionStrategy:
             ExecutorType: newdeploy
-            MinScale: 0
-            MaxScale: 3
-            SpecializationTimeout: 90
+            MinScale: 1
+            MaxScale: 2
+            SpecializationTimeout: 60
             TargetCPUPercent: 70
   podspec:
     serviceAccountName: default
@@ -3914,9 +3914,9 @@ spec:
           StrategyType: execution
           ExecutionStrategy:
             ExecutorType: newdeploy
-            MinScale: 0
-            MaxScale: 3
-            SpecializationTimeout: 90
+            MinScale: 1
+            MaxScale: 2
+            SpecializationTimeout: 60
             TargetCPUPercent: 70
   podspec:
     serviceAccountName: default
@@ -4019,9 +4019,9 @@ spec:
           StrategyType: execution
           ExecutionStrategy:
             ExecutorType: newdeploy
-            MinScale: 0
-            MaxScale: 3
-            SpecializationTimeout: 90
+            MinScale: 1
+            MaxScale: 2
+            SpecializationTimeout: 60
             TargetCPUPercent: 70
   podspec:
     serviceAccountName: default
@@ -4334,9 +4334,9 @@ spec:
           StrategyType: execution
           ExecutionStrategy:
             ExecutorType: newdeploy
-            MinScale: 0
-            MaxScale: 3
-            SpecializationTimeout: 90
+            MinScale: 1
+            MaxScale: 2
+            SpecializationTimeout: 60
             TargetCPUPercent: 70
   podspec:
     serviceAccountName: default
@@ -9434,9 +9434,9 @@ spec:
           StrategyType: execution
           ExecutionStrategy:
             ExecutorType: newdeploy
-            MinScale: 0
-            MaxScale: 3
-            SpecializationTimeout: 90
+            MinScale: 1
+            MaxScale: 2
+            SpecializationTimeout: 60
             TargetCPUPercent: 70
   podspec:
     serviceAccountName: default

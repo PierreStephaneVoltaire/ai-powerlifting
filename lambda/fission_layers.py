@@ -47,9 +47,10 @@ AI_TOOLS = {
 }
 
 WARM_READS = {
-    "health_get_program", "health_get_session", "health_get_sessions",
-    "template_list", "glossary_list_terms", "get_analysis_markdown",
-    "program_list", "session_list", "import_list", "federation_list",
+    "health_get_program", "health_get_session", "health_get_sessions_range",
+    "health_get_current_maxes", "health_get_goals", "health_get_meta",
+    "health_get_phases", "template_list", "template_get",
+    "get_analysis_markdown",
 }
 
 STATS_TOOLS = {
