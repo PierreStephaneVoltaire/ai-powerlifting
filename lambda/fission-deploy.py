@@ -53,6 +53,10 @@ def _build_archive(tool_id, folder, layers):
     out = os.path.join(BUILD_DIR, tool_id + ".zip")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(ENTRY_FILE, ENTRY_ZIP_NAME)
+        # Fission source-archive build script: the python-builder runs this
+        # (spec.buildcmd = "./build.sh") and it pip-installs requirements.txt
+        # into the deploy archive. Lives at archive root as build.sh.
+        zf.write(os.path.join(LAMBDA_ROOT, "fission_build.sh"), "build.sh")
         # Bake the tool id into the archive so the entry can load the
         # correct handler module without relying on per-function env vars
         # (Fission newdeploy does not merge function.spec.podspec into the
