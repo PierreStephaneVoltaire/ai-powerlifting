@@ -1831,7 +1831,7 @@ def _calculate_dots_value(total_kg: Any, bodyweight_kg: Any, sex: str) -> Any:
     if _is_blank(total_kg) or _is_blank(bodyweight_kg):
         return ""
     try:
-        from analytics import calculate_dots
+        from .analytics import calculate_dots
 
         return calculate_dots(float(total_kg), float(bodyweight_kg), sex)
     except Exception:

@@ -111,7 +111,7 @@ def _snapshot_competitions_in_program(
     snapshot_date: date,
     allow_retrospective: bool = False,
 ) -> tuple[dict, list[dict]]:
-    from analytics import meet_projection
+    from .analytics import meet_projection
 
     competitions = program.get("competitions", []) or []
     updated: list[dict] = []

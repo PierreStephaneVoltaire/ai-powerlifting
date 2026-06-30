@@ -22,7 +22,7 @@ def _get_program_store():
 
 
 async def _dispatch(args):
-    from glossary_text_ai import generate_glossary_text
+    from .glossary_text_ai import generate_glossary_text
     exercise = args["exercise"]
     if not exercise.get("name"):
         raise ValueError("Exercise name is required")

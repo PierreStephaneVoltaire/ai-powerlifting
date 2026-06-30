@@ -36,7 +36,7 @@ EXTRA_TOOL_REQS = {
     "analyze_rpe_drift": ["scipy"],
 }
 
-SKIP_TOOLS = {"layers", "pl_authorizer", "tool_registry"}
+SKIP_TOOLS = {"layers", "pl_authorizer"}
 
 AI_TOOLS = {
     "budget_advisor", "block_program_evaluation", "block_comparison_synthesis",
@@ -111,6 +111,18 @@ def requirements_for(tool_id, layers):
     for layer in layers:
         reqs.extend(LAYER_PIP_REQS.get(layer, []))
     reqs.extend(EXTRA_TOOL_REQS.get(tool_id, []))
+    # Merge the tool's own requirements.txt (per-tool deps like scipy that are
+    # not in any layer and not in EXTRA_TOOL_REQS). fission-deploy.py writes the
+    # merged list into the archive's requirements.txt; without this the tool's
+    # own requirements.txt is never copied into the archive (the build filter only
+    # ships .py/.json/.yaml/.j2), so per-tool deps were silently dropped.
+    tool_req_file = os.path.join(LAMBDA_ROOT, tool_id, "requirements.txt")
+    if os.path.isfile(tool_req_file):
+        with open(tool_req_file) as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith("#"):
+                    reqs.append(_line)
     seen = set()
     out = []
     for r in reqs:

@@ -5,7 +5,7 @@ import math
 from datetime import date, timedelta
 from typing import Any, Literal, List
 
-from training_weeks import WEEKDAY_INDEX, normalize_week_start_day, week_start_date
+from .training_weeks import WEEKDAY_INDEX, normalize_week_start_day, week_start_date
 
 def round_to_2_5(kg: float) -> float:
     """Round a weight to the nearest 2.5kg (standard plate increment)."""

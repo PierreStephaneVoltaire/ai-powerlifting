@@ -87,7 +87,7 @@ def _build_sectioned_analysis(
     week_start: int | None = None,
     week_end: int | None = None,
 ) -> dict:
-    from analytics import weekly_analysis_section
+    from .analytics import weekly_analysis_section
 
     result: dict[str, Any] = {}
     for section in _DETERMINISTIC_ANALYSIS_SECTIONS:
@@ -146,9 +146,9 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     import os
     import tempfile
     import boto3
-    from export import build_program_markdown
+    from .export import build_program_markdown
 
-    from config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
+    from .config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
 
     store = _get_store()
     store.invalidate_cache()

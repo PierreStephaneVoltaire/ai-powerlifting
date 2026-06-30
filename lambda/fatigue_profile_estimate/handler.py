@@ -32,7 +32,7 @@ async def _fatigue_context():
 
 
 async def _dispatch(args):
-    from fatigue_ai import estimate_fatigue_profile
+    from .fatigue_ai import estimate_fatigue_profile
     program_meta, lift_profiles = await _fatigue_context()
     return await estimate_fatigue_profile(
         args["exercise"],

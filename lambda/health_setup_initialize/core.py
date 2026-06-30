@@ -199,7 +199,7 @@ def _setup_concretize_template(
     start_date: str,
     week_start_day: str,
 ) -> list[dict]:
-    from template_apply import concretize
+    from .template_apply import concretize
 
     sessions = concretize(
         template,

@@ -215,7 +215,7 @@ async def generate_correlation_report(
 
     exercise_roi: list[dict] | None = None
     try:
-        from prompt_context import (
+        from .prompt_context import (
             summarize_competitions,
             summarize_bodyweight_trend,
             summarize_diet_context,

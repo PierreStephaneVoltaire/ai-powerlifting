@@ -35,7 +35,7 @@ def _get_glossary_store():
 
 
 async def _dispatch(args):
-    from muscle_group_ai import estimate_muscle_groups
+    from .muscle_group_ai import estimate_muscle_groups
     exercise_id = args["id"]
     glossary = await _get_glossary_store().get_glossary()
     ex = next((e for e in glossary if e["id"] == exercise_id), None)

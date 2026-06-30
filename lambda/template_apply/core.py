@@ -26,8 +26,8 @@ def _get_glossary_store():
     return _glossary_store
 
 async def template_apply(sk, target="new_block", start_date=None, week_start_day=None, actor_pk=None):
-    from template_apply import check_max_resolution_gate, concretize
-    from training_weeks import normalize_week_start_day
+    from .template_apply import check_max_resolution_gate, concretize
+    from .training_weeks import normalize_week_start_day
     from datetime import date
     ts=_get_template_store(); template=await ts.get_template(sk, actor_pk=actor_pk)
     if not template: raise ValueError(f"Template not found: {sk}")

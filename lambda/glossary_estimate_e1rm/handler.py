@@ -35,7 +35,7 @@ def _get_glossary_store():
 
 
 async def _dispatch(args):
-    from e1rm_backfill_ai import generate_e1rm_backfill_report
+    from .e1rm_backfill_ai import generate_e1rm_backfill_report
     exercise_id = args["id"]
     glossary = await _get_glossary_store().get_glossary()
     ex = next((e for e in glossary if e["id"] == exercise_id), None)

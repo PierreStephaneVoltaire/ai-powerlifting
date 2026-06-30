@@ -114,7 +114,7 @@ def _build_sectioned_analysis(
     week_start: int | None = None,
     week_end: int | None = None,
 ) -> dict:
-    from analytics import weekly_analysis_section
+    from .analytics import weekly_analysis_section
 
     result: dict[str, Any] = {}
     for section in _DETERMINISTIC_ANALYSIS_SECTIONS:
@@ -136,7 +136,7 @@ def _build_sectioned_analysis(
 
 def weekly_analysis(args: dict) -> dict:
     """Replicates _do_weekly_analysis from tools/health/tool.py."""
-    from config import IF_HEALTH_TABLE_NAME
+    from .config import IF_HEALTH_TABLE_NAME
     program, sessions, program_start = _get_analysis_program_and_sessions(
         args,
         refresh_program=args.get("refresh_program", True),

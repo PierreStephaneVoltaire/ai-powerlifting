@@ -100,8 +100,8 @@ def _get_analysis_program_and_sessions(args: dict, refresh_program: bool = False
 
 def analysis_section(args: dict) -> dict:
     """Replicates _do_analysis_section from tools/health/tool.py."""
-    from analytics import weekly_analysis_section
-    from config import IF_HEALTH_TABLE_NAME
+    from .analytics import weekly_analysis_section
+    from .config import IF_HEALTH_TABLE_NAME
     program, sessions, program_start = _get_analysis_program_and_sessions(
         args,
         refresh_program=args.get("refresh_program", True),

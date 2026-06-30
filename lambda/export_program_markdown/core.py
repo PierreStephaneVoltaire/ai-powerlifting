@@ -97,7 +97,7 @@ def _build_sectioned_analysis(
     week_start: int | None = None,
     week_end: int | None = None,
 ) -> dict:
-    from analytics import weekly_analysis_section
+    from .analytics import weekly_analysis_section
 
     result: dict[str, Any] = {}
     for section in _DETERMINISTIC_ANALYSIS_SECTIONS:
@@ -149,7 +149,7 @@ def _scope_program_to_current_block(program: dict) -> dict:
 def _read_cached_correlation(weeks: int = 4) -> dict | None:
     """Return the cached correlation report for the current window, or None."""
     import boto3
-    from config import IF_HEALTH_TABLE_NAME
+    from .config import IF_HEALTH_TABLE_NAME
 
     today = datetime.utcnow().date()
     raw_cutoff = today - timedelta(weeks=weeks)
@@ -178,8 +178,8 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
 
     NOTE: program_evaluation AI call is omitted in the lambda (AI-excluded).
     """
-    from config import IF_HEALTH_TABLE_NAME
-    from prompt_context import summarize_lift_profiles
+    from .config import IF_HEALTH_TABLE_NAME
+    from .prompt_context import summarize_lift_profiles
 
     store = _get_store()
     active_pk = store.pk
@@ -286,7 +286,7 @@ def export_program_markdown(args: Dict[str, Any]) -> dict:
     """Generate a markdown export of the current program and return its content as a string."""
     import os
     import tempfile
-    from export import build_program_markdown
+    from .export import build_program_markdown
 
     program = _run_async(_get_store().get_program())
     sessions = program.get("sessions", []) if isinstance(program, dict) else []

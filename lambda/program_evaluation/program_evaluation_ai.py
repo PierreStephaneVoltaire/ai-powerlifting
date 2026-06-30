@@ -15,9 +15,9 @@ from typing import Any
 import httpx
 
 from ai_config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
-from analytics import weekly_analysis
+from .analytics import weekly_analysis
 from prompts.loader import load_system_prompt
-from prompt_context import (
+from .prompt_context import (
     FORMULA_REFERENCE,
     summarize_bodyweight_trend,
     summarize_completed_sessions,

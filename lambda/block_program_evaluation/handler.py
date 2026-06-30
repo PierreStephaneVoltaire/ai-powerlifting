@@ -28,7 +28,7 @@ def _get_federation_store():
 
 
 def block_program_evaluation(args):
-    from program_evaluation_ai import generate_program_evaluation_report
+    from .program_evaluation_ai import generate_program_evaluation_report
 
     program = args.get("program")
     if not isinstance(program, dict):

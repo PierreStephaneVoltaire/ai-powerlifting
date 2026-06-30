@@ -112,7 +112,7 @@ def _snapshot_competitions_in_program(
     snapshot_date: date,
     allow_retrospective: bool = False,
 ) -> tuple[dict, list[dict]]:
-    from analytics import meet_projection
+    from .analytics import meet_projection
 
     competitions = program.get("competitions", []) or []
     updated: list[dict] = []
@@ -178,7 +178,7 @@ def _complete_competition_in_program(
                 break
 
     snapshot = target.get("projected_at_t_minus_1w") or {}
-    from analytics import compute_prr
+    from .analytics import compute_prr
     prr = compute_prr(results, snapshot)
 
     completed_results = copy.deepcopy(results)

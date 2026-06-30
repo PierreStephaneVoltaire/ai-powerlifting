@@ -15,7 +15,7 @@ def _run_async(coro):
 
 
 async def _dispatch(args):
-    from budget_advisor_ai import generate_budget_advisor
+    from .budget_advisor_ai import generate_budget_advisor
     payload = {
         "config": args.get("config") if isinstance(args.get("config"), dict) else {},
         "items": args.get("items") if isinstance(args.get("items"), list) else [],

@@ -51,8 +51,8 @@ def _floats_to_decimals(obj):
 
 def program_evaluation(args):
     import boto3
-    from config import AWS_REGION, IF_HEALTH_TABLE_NAME
-    from program_evaluation_ai import generate_program_evaluation_report
+    from .config import AWS_REGION, IF_HEALTH_TABLE_NAME
+    from .program_evaluation_ai import generate_program_evaluation_report
 
     refresh = args.get("refresh", False)
     cache_only = args.get("cache_only", False)

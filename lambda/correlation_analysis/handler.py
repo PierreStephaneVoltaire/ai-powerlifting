@@ -40,8 +40,8 @@ def _floats_to_decimals(obj):
 
 def correlation_analysis(args):
     import boto3
-    from config import AWS_REGION, IF_HEALTH_TABLE_NAME
-    from correlation_ai import generate_correlation_report
+    from .config import AWS_REGION, IF_HEALTH_TABLE_NAME
+    from .correlation_ai import generate_correlation_report
 
     weeks = args.get("weeks", 4)
     refresh = args.get("refresh", False)

@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Optional
 
-from analytics import calculate_dots
+from .analytics import calculate_dots
 
 def _num(value: Any) -> float:
     if value is None:
@@ -1126,7 +1126,7 @@ def summarize_exercise_roi(
     the signal. Accessories only — the three big competition lifts are
     excluded because they're analyzed separately.
     """
-    from analytics import volume_intensity_correlation
+    from .analytics import volume_intensity_correlation
 
     sessions = sessions if sessions is not None else program.get("sessions", [])
     program_start = program.get("meta", {}).get("program_start", "") or ""

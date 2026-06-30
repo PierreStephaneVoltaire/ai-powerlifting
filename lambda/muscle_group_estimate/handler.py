@@ -32,7 +32,7 @@ async def _fatigue_context():
 
 
 async def _dispatch(args):
-    from muscle_group_ai import estimate_muscle_groups
+    from .muscle_group_ai import estimate_muscle_groups
     program_meta, stored_lift_profiles = await _fatigue_context()
     lift_profiles = args.get("lift_profiles")
     if not isinstance(lift_profiles, list) or not lift_profiles:

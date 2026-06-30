@@ -26,8 +26,8 @@ def _get_glossary_store():
     return _glossary_store
 
 async def template_apply_confirm(sk, backfilled_maxes=None, start_date=None, week_start_day=None, target="new_block", actor_pk=None):
-    from template_apply import concretize
-    from training_weeks import normalize_week_start_day
+    from .template_apply import concretize
+    from .training_weeks import normalize_week_start_day
     from datetime import date, datetime, timezone
     import copy
     ts=_get_template_store(); template=await ts.get_template(sk, actor_pk=actor_pk)

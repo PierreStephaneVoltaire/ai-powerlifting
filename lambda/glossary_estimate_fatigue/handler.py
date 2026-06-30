@@ -35,7 +35,7 @@ def _get_glossary_store():
 
 
 async def _dispatch(args):
-    from fatigue_ai import estimate_fatigue_profile
+    from .fatigue_ai import estimate_fatigue_profile
     exercise_id = args["id"]
     glossary = await _get_glossary_store().get_glossary()
     ex = next((e for e in glossary if e["id"] == exercise_id), None)

@@ -16,7 +16,7 @@ def _run_async(coro):
 
 
 def block_correlation_analysis(args):
-    from correlation_ai import generate_correlation_report
+    from .correlation_ai import generate_correlation_report
 
     program = args.get("program")
     sessions = args.get("sessions")
