@@ -8,10 +8,7 @@ def handler(event, context):
     args = event.get("args", event)
     result = asyncio.run(
         health_update_federation_library(
-            {
-                "federations": args["federations"],
-                "qualification_standards": args["qualification_standards"],
-            }
+            args
         )
     )
     body = result if isinstance(result, str) else json.dumps(result, default=str)

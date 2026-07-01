@@ -1,0 +1,17 @@
+layers:
+- pl_boto3
+memory: 256
+timeout: 900
+description: Get the weight log for a program version.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    version:
+      type: string
+      description: Program version key suffix (defaults to "current").
+  required: []
+
+reserved_concurrency: null

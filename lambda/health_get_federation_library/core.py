@@ -21,6 +21,15 @@ def _get_federation_store():
     return _federation_store
 
 
-async def health_get_federation_library() -> dict:
+def _federation_store_for(pk: str | None):
+    """Return the FederationStore singleton, retargeted to pk when provided."""
+    store = _get_federation_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_federation_library(args: dict | None = None) -> dict:
     """Get the shared federation and qualification standards library."""
-    return await _get_federation_store().get_library()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    return await _federation_store_for(pk).get_library()

@@ -19,6 +19,14 @@ def _get_store():
     return _store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _string_ids(values: Any) -> list[str]:
     if not isinstance(values, list):
         return []
@@ -30,7 +38,7 @@ def _string_ids(values: Any) -> list[str]:
     return deduped
 
 
-async def health_create_competition(competition: dict) -> dict:
+async def health_create_competition(args: dict | None = None, competition: dict | None = None) -> dict:
     """Create a new competition entry.
 
     Args:
@@ -46,13 +54,16 @@ async def health_create_competition(competition: dict) -> dict:
         ValueError: If competition already exists on that date or missing required fields
     """
     import copy
+    if competition is None:
+        competition = args.get("competition") if isinstance(args, dict) else None
+    pk = args.get("pk") if isinstance(args, dict) else None
     for field in ("name", "date", "federation"):
         if not competition.get(field):
             raise ValueError(f"competition.{field} is required")
 
     datetime.strptime(competition["date"], "%Y-%m-%d")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     new_program = copy.deepcopy(program)
 

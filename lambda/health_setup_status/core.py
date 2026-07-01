@@ -24,6 +24,14 @@ def _get_store():
     return _store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _setup_current_program_sk(store) -> str | None:
     pointer = store.table.get_item(Key={"pk": store.pk, "sk": store.POINTER_SK}).get("Item")
     if pointer:
@@ -44,9 +52,10 @@ def _setup_current_program_sk(store) -> str | None:
         return "program#v001" if program else None
 
 
-async def health_setup_status() -> dict:
+async def health_setup_status(args: dict | None = None) -> dict:
     """Return first-class setup state for the active health data partition."""
-    store = _get_store()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     current_sk = await asyncio.get_running_loop().run_in_executor(
         None,
         lambda: _setup_current_program_sk(store),

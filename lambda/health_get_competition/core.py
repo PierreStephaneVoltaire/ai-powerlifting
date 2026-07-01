@@ -18,7 +18,15 @@ def _get_store():
     return _store
 
 
-async def health_get_competition(date: str) -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_competition(args: dict | str | None = None, date: str | None = None) -> dict:
     """Load a specific competition by date.
 
     Args:
@@ -31,7 +39,10 @@ async def health_get_competition(date: str) -> dict:
         ValueError: If competition not found
         ProgramNotFoundError: If no program exists
     """
-    store = _get_store()
+    if date is None:
+        date = args.get("date") if isinstance(args, dict) else args
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
 
     competitions = program.get("competitions", [])

@@ -20,6 +20,14 @@ def _get_store():
     return _store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 GOAL_TYPES = {
     "qualify_for_federation",
     "hit_total",
@@ -172,9 +180,13 @@ def _sanitize_goal_record(goal: dict[str, Any]) -> dict[str, Any]:
     return clean_goal
 
 
-async def health_update_goals(goals: list[dict]) -> list[dict]:
+async def health_update_goals(args: dict | None = None, goals: list[dict] | None = None) -> list[dict]:
     """Replace the explicit goals array on the current program block."""
     import copy
+
+    if goals is None:
+        goals = args.get("goals") if isinstance(args, dict) else None
+    pk = args.get("pk") if isinstance(args, dict) else None
 
     if not isinstance(goals, list):
         raise ValueError("goals must be an array")
@@ -185,7 +197,7 @@ async def health_update_goals(goals: list[dict]) -> list[dict]:
     if len(goal_ids) != len(set(goal_ids)):
         raise ValueError("goals must have unique ids")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     new_program = copy.deepcopy(program)
     new_program["goals"] = cleaned_goals

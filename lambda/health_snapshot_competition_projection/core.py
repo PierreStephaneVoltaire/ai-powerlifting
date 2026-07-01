@@ -30,6 +30,13 @@ def _get_table_and_pk():
     store = _get_store()
     return store.table, store.pk, store
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -153,7 +160,8 @@ def _snapshot_competitions_in_program(
     return program, updated
 
 async def health_snapshot_competition_projection(
-    date: str,
+    args: dict | None = None,
+    date: str | None = None,
     version: str = "current",
     allow_retrospective: bool = False,
 ) -> dict:
@@ -167,6 +175,15 @@ async def health_snapshot_competition_projection(
     Returns:
         Summary dict with the updated competitions.
     """
+    if isinstance(args, dict):
+        if date is None:
+            date = args.get("date")
+        if version == "current" and args.get("version"):
+            version = args.get("version")
+        if not allow_retrospective and args.get("allow_retrospective") is not None:
+            allow_retrospective = args.get("allow_retrospective", False)
+    pk = args.get("pk") if isinstance(args, dict) else None
+    _store_for(pk)
     snapshot_date = datetime.strptime(date, "%Y-%m-%d").date()
     program, sk, _store = _load_program_version(version)
     program, updated = _snapshot_competitions_in_program(program, snapshot_date, allow_retrospective=allow_retrospective)

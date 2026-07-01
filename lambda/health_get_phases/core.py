@@ -23,12 +23,21 @@ def _get_store():
     return _store
 
 
-async def health_get_phases() -> list[dict]:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_phases(args: dict | None = None) -> list[dict]:
     """Get training phases (name, weeks, intent).
 
     Returns:
         List of phase dicts sorted by start_week.
     """
-    store = _get_store()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
     return program.get("phases", [])

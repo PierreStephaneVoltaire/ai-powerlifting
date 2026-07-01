@@ -1,0 +1,19 @@
+layers:
+- pl_boto3
+- pl_budget
+memory: 256
+timeout: 900
+description: Create a new budget item.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    item:
+      type: object
+      description: Raw budget item body.
+  required:
+  - item
+
+reserved_concurrency: null

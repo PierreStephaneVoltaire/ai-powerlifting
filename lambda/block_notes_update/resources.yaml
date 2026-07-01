@@ -1,0 +1,21 @@
+layers:
+- pl_boto3
+memory: 256
+timeout: 900
+description: Replace block notes for a program version.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    version:
+      type: string
+      description: Program version key suffix (defaults to "current").
+    block_notes:
+      type: array
+      description: List of block note dicts.
+  required:
+  - block_notes
+
+reserved_concurrency: null

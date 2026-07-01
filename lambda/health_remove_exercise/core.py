@@ -28,6 +28,14 @@ def _get_table_and_pk():
     return store.table, store.pk, store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -56,7 +64,7 @@ def _resolve_phase(session: dict, phases: list[dict]) -> dict:
     return phases[0] if phases else {}
 
 
-async def health_get_session(date: str) -> dict:
+async def health_get_session(date: str, pk: str | None = None) -> dict:
     """Load a single session by date.
 
     Args:
@@ -68,7 +76,7 @@ async def health_get_session(date: str) -> dict:
     Raises:
         ValueError: If session not found
     """
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
 
     phases = program.get("phases", [])
@@ -83,7 +91,7 @@ async def health_get_session(date: str) -> dict:
     raise ValueError(f"Session not found with date={date}")
 
 
-async def health_remove_exercise(date: str, exercise_index: int) -> dict:
+async def health_remove_exercise(args: dict | None = None, date: str | None = None, exercise_index: int | None = None) -> dict:
     """Remove an exercise from a session by index.
 
     Args:
@@ -96,11 +104,17 @@ async def health_remove_exercise(date: str, exercise_index: int) -> dict:
     Raises:
         ValueError: If session not found or index out of range
     """
-    store = _get_store()
+    if isinstance(args, dict):
+        if date is None:
+            date = args.get("date")
+        if exercise_index is None:
+            exercise_index = args.get("exercise_index")
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
     table, active_pk, _ = _get_table_and_pk()
     program_sk = _resolve_program_sk(table, active_pk, "current")
-    session = await health_get_session(date)
+    session = await health_get_session(date, pk)
     exercises = list(session.get("exercises") or [])
     if exercise_index < 0 or exercise_index >= len(exercises):
         raise ValueError(f"Exercise index {exercise_index} out of range (0-{len(exercises)-1})")

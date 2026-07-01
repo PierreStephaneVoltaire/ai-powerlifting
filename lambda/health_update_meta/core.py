@@ -18,7 +18,15 @@ def _get_store():
     return _store
 
 
-async def health_update_meta(updates: dict) -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_update_meta(args: dict | None = None, updates: dict | None = None) -> dict:
     """Update program metadata fields.
 
     Allowed fields: program_name, comp_date, target_squat_kg, target_bench_kg,
@@ -35,6 +43,11 @@ async def health_update_meta(updates: dict) -> dict:
         ValueError: If unknown fields are passed
     """
     import copy
+    if updates is None:
+        updates = args.get("updates") if isinstance(args, dict) else None
+    if updates is None:
+        updates = {}
+    pk = args.get("pk") if isinstance(args, dict) else None
     allowed = {
         "program_name", "comp_date", "target_squat_kg", "target_bench_kg",
         "target_dl_kg", "target_total_kg", "sex", "weight_class_kg",
@@ -44,7 +57,7 @@ async def health_update_meta(updates: dict) -> dict:
     if unknown:
         raise ValueError(f"Unknown meta fields: {unknown}. Allowed: {allowed}")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     new_program = copy.deepcopy(program)
 

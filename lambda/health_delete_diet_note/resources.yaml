@@ -1,6 +1,7 @@
 layers:
 - pl_boto3
 - pl_program
+- pl_sessions
 memory: 256
 timeout: 900
 description: Delete a diet note by date.

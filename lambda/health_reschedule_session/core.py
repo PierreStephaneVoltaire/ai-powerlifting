@@ -29,6 +29,14 @@ def _get_table_and_pk():
     return store.table, store.pk, store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -38,7 +46,7 @@ def _resolve_program_sk(table, pk: str, version: str) -> str:
     return f"program#{version}"
 
 
-async def health_reschedule_session(old_date: str, new_date: str) -> dict:
+async def health_reschedule_session(args: dict | None = None, old_date: str | None = None, new_date: str | None = None) -> dict:
     """Move a session to a different date.
 
     Args:
@@ -51,10 +59,16 @@ async def health_reschedule_session(old_date: str, new_date: str) -> dict:
     Raises:
         ValueError: If old session not found or new date already occupied
     """
+    if isinstance(args, dict):
+        if old_date is None:
+            old_date = args.get("old_date")
+        if new_date is None:
+            new_date = args.get("new_date")
+    pk = args.get("pk") if isinstance(args, dict) else None
     datetime.strptime(old_date, "%Y-%m-%d")
     datetime.strptime(new_date, "%Y-%m-%d")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     table, active_pk, _ = _get_table_and_pk()
     program_sk = _resolve_program_sk(table, active_pk, "current")

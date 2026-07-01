@@ -1,0 +1,40 @@
+layers:
+- pl_boto3
+- pl_sessions
+memory: 512
+timeout: 900
+description: Upload a session video to S3 and attach it to a session.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    version:
+      type: string
+      description: Program version key suffix (defaults to "current").
+    session_date:
+      type: string
+      description: Session date (YYYY-MM-DD).
+    file_b64:
+      type: string
+      description: Base64-encoded video bytes.
+    filename:
+      type: string
+      description: Original filename (used for extension).
+    mimetype:
+      type: string
+      description: MIME type of the video.
+    exercise_name:
+      type: string
+    set_number:
+      type: number
+    notes:
+      type: string
+  required:
+  - session_date
+  - file_b64
+  - filename
+  - mimetype
+
+reserved_concurrency: null

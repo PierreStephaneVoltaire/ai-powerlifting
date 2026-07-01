@@ -42,7 +42,15 @@ def _resolve_phase(session: dict, phases: list[dict]) -> dict:
     return phases[0] if phases else {}
 
 
-async def health_get_sessions_range(start_date: str, end_date: str) -> list[dict]:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_sessions_range(args: dict | None = None, start_date: str | None = None, end_date: str | None = None) -> list[dict]:
     """Load sessions within a date range.
 
     Args:
@@ -52,7 +60,13 @@ async def health_get_sessions_range(start_date: str, end_date: str) -> list[dict
     Returns:
         Array of sessions in date order, each with resolved phase object
     """
-    store = _get_store()
+    if isinstance(args, dict):
+        if start_date is None:
+            start_date = args.get("start_date")
+        if end_date is None:
+            end_date = args.get("end_date")
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
 
     phases = program.get("phases", [])

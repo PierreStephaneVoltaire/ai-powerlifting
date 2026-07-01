@@ -18,7 +18,16 @@ def _get_store():
     return _store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 async def health_update_current_maxes(
+    args: dict | None = None,
     squat_kg: float | None = None,
     bench_kg: float | None = None,
     deadlift_kg: float | None = None,
@@ -37,10 +46,18 @@ async def health_update_current_maxes(
         ValueError: If no fields provided
     """
     import copy
+    if isinstance(args, dict):
+        if squat_kg is None:
+            squat_kg = args.get("squat_kg")
+        if bench_kg is None:
+            bench_kg = args.get("bench_kg")
+        if deadlift_kg is None:
+            deadlift_kg = args.get("deadlift_kg")
+    pk = args.get("pk") if isinstance(args, dict) else None
     if squat_kg is None and bench_kg is None and deadlift_kg is None:
         raise ValueError("At least one max must be provided")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     new_program = copy.deepcopy(program)
 

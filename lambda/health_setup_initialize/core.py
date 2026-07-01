@@ -29,6 +29,14 @@ def _get_store():
     return _store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _get_template_store():
     global _template_store
     if _template_store is None:
@@ -94,9 +102,10 @@ def _setup_current_program_sk(store) -> str | None:
         program = store.table.get_item(Key={"pk": store.pk, "sk": "program#v001"}).get("Item")
         return "program#v001" if program else None
 
-async def health_setup_status() -> dict:
+async def health_setup_status(args: dict | None = None) -> dict:
     """Return first-class setup state for the active health data partition."""
-    store = _get_store()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     current_sk = await asyncio.get_running_loop().run_in_executor(
         None,
         lambda: _setup_current_program_sk(store),
@@ -332,14 +341,29 @@ def _write_initial_program_sync(store, program: dict) -> None:
     store.invalidate_cache()
 
 async def health_setup_initialize(
-    mode: str,
-    start_date: str,
-    week_start_day: str,
+    args: dict | None = None,
+    mode: str | None = None,
+    start_date: str | None = None,
+    week_start_day: str | None = None,
     program_name: str | None = None,
     template_sk: str | None = None,
     maxes: dict | None = None,
 ) -> dict:
     """Initialize a no-data user's first training block for the active partition."""
+    if isinstance(args, dict):
+        if mode is None:
+            mode = args.get("mode")
+        if start_date is None:
+            start_date = args.get("start_date")
+        if week_start_day is None:
+            week_start_day = args.get("week_start_day")
+        if program_name is None:
+            program_name = args.get("program_name")
+        if template_sk is None:
+            template_sk = args.get("template_sk")
+        if maxes is None:
+            maxes = args.get("maxes")
+    pk = args.get("pk") if isinstance(args, dict) else None
     if mode not in {"blank", "manual_sessions", "template"}:
         raise ValueError("INVALID_SETUP_MODE: mode must be blank, manual_sessions, or template")
     if not _valid_iso_date(start_date):
@@ -347,8 +371,8 @@ async def health_setup_initialize(
     if week_start_day not in WEEK_START_DAYS:
         raise ValueError("INVALID_WEEK_START_DAY: week_start_day must be a weekday name")
 
-    store = _get_store()
-    status = await health_setup_status()
+    store = _store_for(pk)
+    status = await health_setup_status(args)
     if status["hasCurrentProgram"]:
         raise ValueError("ALREADY_INITIALIZED: Current program already exists")
 

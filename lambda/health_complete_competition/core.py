@@ -30,6 +30,13 @@ def _get_table_and_pk():
     store = _get_store()
     return store.table, store.pk, store
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -202,9 +209,10 @@ def _complete_competition_in_program(
     return target
 
 async def health_complete_competition(
-    date: str,
-    results: dict,
-    body_weight_kg: float,
+    args: dict | None = None,
+    date: str | None = None,
+    results: dict | None = None,
+    body_weight_kg: float | None = None,
     version: str = "current",
     allow_retrospective: bool = True,
     post_meet_report: Optional[dict] = None,
@@ -222,6 +230,21 @@ async def health_complete_competition(
     Returns:
         Updated competition object.
     """
+    if isinstance(args, dict):
+        if date is None:
+            date = args.get("date")
+        if results is None:
+            results = args.get("results")
+        if body_weight_kg is None:
+            body_weight_kg = args.get("body_weight_kg")
+        if version == "current" and args.get("version"):
+            version = args.get("version")
+        if allow_retrospective is True and args.get("allow_retrospective") is not None:
+            allow_retrospective = args.get("allow_retrospective", True)
+        if post_meet_report is None:
+            post_meet_report = args.get("post_meet_report")
+    pk = args.get("pk") if isinstance(args, dict) else None
+    _store_for(pk)
     program, sk, _store = _load_program_version(version)
     updated_comp = _complete_competition_in_program(
         program,

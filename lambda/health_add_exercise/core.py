@@ -28,6 +28,14 @@ def _get_table_and_pk():
     return store.table, store.pk, store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -56,7 +64,7 @@ def _resolve_phase(session: dict, phases: list[dict]) -> dict:
     return phases[0] if phases else {}
 
 
-async def health_get_session(date: str) -> dict:
+async def health_get_session(date: str, pk: str | None = None) -> dict:
     """Load a single session by date.
 
     Args:
@@ -68,7 +76,7 @@ async def health_get_session(date: str) -> dict:
     Raises:
         ValueError: If session not found
     """
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
 
     phases = program.get("phases", [])
@@ -83,7 +91,7 @@ async def health_get_session(date: str) -> dict:
     raise ValueError(f"Session not found with date={date}")
 
 
-async def health_add_exercise(date: str, exercise: dict) -> dict:
+async def health_add_exercise(args: dict | None = None, date: str | None = None, exercise: dict | None = None) -> dict:
     """Add an exercise to a session.
 
     Args:
@@ -96,14 +104,20 @@ async def health_add_exercise(date: str, exercise: dict) -> dict:
     Raises:
         ValueError: If session not found or exercise missing name
     """
+    if isinstance(args, dict):
+        if date is None:
+            date = args.get("date")
+        if exercise is None:
+            exercise = args.get("exercise")
+    pk = args.get("pk") if isinstance(args, dict) else None
     if not exercise.get("name"):
         raise ValueError("exercise.name is required")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     table, active_pk, _ = _get_table_and_pk()
     program_sk = _resolve_program_sk(table, active_pk, "current")
-    session = await health_get_session(date)
+    session = await health_get_session(date, pk)
     exercises = list(session.get("exercises") or [])
     exercises.append(exercise)
     from session_store import SessionStore

@@ -1,0 +1,23 @@
+layers:
+- pl_boto3
+- pl_budget
+memory: 256
+timeout: 900
+description: Update a budget item by id.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    item_id:
+      type: string
+      description: Budget item id to update.
+    item:
+      type: object
+      description: Raw budget item body (partial update carried over existing).
+  required:
+  - item_id
+  - item
+
+reserved_concurrency: null

@@ -23,12 +23,21 @@ def _get_store():
     return _store
 
 
-async def health_get_current_maxes() -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_current_maxes(args: dict | None = None) -> dict:
     """Get current competition maxes.
 
     Returns:
         {squat: kg, bench: kg, deadlift: kg}
     """
-    store = _get_store()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
     return program.get("current_maxes", {})

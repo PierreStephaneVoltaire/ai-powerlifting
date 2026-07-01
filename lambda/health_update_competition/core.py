@@ -18,7 +18,15 @@ def _get_store():
     return _store
 
 
-async def health_update_competition(date: str, patch: dict) -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_update_competition(args: dict | None = None, date: str | None = None, patch: dict | None = None) -> dict:
     """Update a competition by date.
 
     Creates a new minor version of the program.
@@ -35,7 +43,14 @@ async def health_update_competition(date: str, patch: dict) -> dict:
     """
     import copy
 
-    store = _get_store()
+    if isinstance(args, dict):
+        if date is None:
+            date = args.get("date")
+        if patch is None:
+            patch = args.get("patch")
+    pk = args.get("pk") if isinstance(args, dict) else None
+
+    store = _store_for(pk)
     program = await store.get_program()
     new_program = copy.deepcopy(program)
 

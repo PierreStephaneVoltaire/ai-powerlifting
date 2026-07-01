@@ -1,0 +1,19 @@
+layers:
+- pl_boto3
+- pl_budget
+memory: 256
+timeout: 900
+description: Upsert the budget config for a user.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    config:
+      type: object
+      description: 'Config body: {monthly_cap, currency, notes}'
+  required:
+  - config
+
+reserved_concurrency: null

@@ -23,13 +23,22 @@ def _get_store():
     return _store
 
 
-async def health_get_meta() -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_meta(args: dict | None = None) -> dict:
     """Get program metadata without the full program.
 
     Returns:
         Dict with comp_date, program_start, targets, version, weight_class,
         training_notes, change_log, and other meta fields.
     """
-    store = _get_store()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
     return program.get("meta", {})

@@ -27,6 +27,10 @@ COMMON_ENV = [
     ("IF_TEMPLATES_TABLE_NAME", "if-health-templates"),
     ("IF_SESSIONS_TABLE_NAME", "if-sessions"),
     ("IF_ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"),
+    ("IF_USER_TABLE", "if-user"),
+    ("VIDEOS_BUCKET", "powerlifting-session-videos"),
+    ("POWERLIFTING_BUDGET_TABLE", "if-powerlifting-budget"),
+    ("BUDGET_MEDIA_BUCKET", "powerlifting-budget-media"),
     ("HEALTH_PROGRAM_PK", "operator"),
     ("LLM_BASE_URL", "https://openrouter.ai/api/v1"),
 ]
@@ -190,6 +194,10 @@ LOOPS = '''locals {
     { name = "IF_TEMPLATES_TABLE_NAME", value = "if-health-templates" },
     { name = "IF_SESSIONS_TABLE_NAME", value = "if-sessions" },
     { name = "IF_ANALYSIS_CACHE_TABLE_NAME", value = "if-powerlifting-analysis-cache" },
+    { name = "IF_USER_TABLE", value = "if-user" },
+    { name = "VIDEOS_BUCKET", value = "powerlifting-session-videos" },
+    { name = "POWERLIFTING_BUDGET_TABLE", value = "if-powerlifting-budget" },
+    { name = "BUDGET_MEDIA_BUCKET", value = "powerlifting-budget-media" },
     { name = "HEALTH_PROGRAM_PK", value = "operator" },
     { name = "LLM_BASE_URL", value = "https://openrouter.ai/api/v1" },
   ]

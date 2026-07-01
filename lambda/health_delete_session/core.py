@@ -29,6 +29,14 @@ def _get_table_and_pk():
     return store.table, store.pk, store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -38,7 +46,7 @@ def _resolve_program_sk(table, pk: str, version: str) -> str:
     return f"program#{version}"
 
 
-async def health_delete_session(date: str) -> dict:
+async def health_delete_session(args: dict | str | None = None, date: str | None = None) -> dict:
     """Delete a training session by date.
 
     Args:
@@ -50,7 +58,10 @@ async def health_delete_session(date: str) -> dict:
     Raises:
         ValueError: If session not found
     """
-    store = _get_store()
+    if date is None:
+        date = args.get("date") if isinstance(args, dict) else args
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
     table, active_pk, _ = _get_table_and_pk()
     program_sk = _resolve_program_sk(table, active_pk, "current")

@@ -1,0 +1,17 @@
+layers:
+- pl_boto3
+memory: 256
+timeout: 900
+description: Build the current user's profile (by mapped_pk) with program + videos.
+input_schema:
+  type: object
+  properties:
+    mapped_pk:
+      type: string
+      description: Mapped partition key (defaults to 'operator').
+    viewer_username:
+      type: string
+      description: Discord username of the requesting user.
+  required: []
+
+reserved_concurrency: null

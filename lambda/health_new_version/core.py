@@ -23,7 +23,15 @@ def _get_store():
     return _store
 
 
-async def health_new_version(change_reason: str, patches: list[dict]) -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_new_version(args: dict | None = None, change_reason: str | None = None, patches: list[dict] | None = None) -> dict:
     """Create a new major version of the program.
 
     Args:
@@ -38,7 +46,13 @@ async def health_new_version(change_reason: str, patches: list[dict]) -> dict:
         ValueError: If patch format invalid
         RuntimeError: If store not initialized or DynamoDB fails
     """
-    store = _get_store()
+    if isinstance(args, dict):
+        if change_reason is None:
+            change_reason = args.get("change_reason")
+        if patches is None:
+            patches = args.get("patches")
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     updated_program = await store.new_version(patches, change_reason)
 
     version_label = updated_program.get("meta", {}).get("version_label", "unknown")

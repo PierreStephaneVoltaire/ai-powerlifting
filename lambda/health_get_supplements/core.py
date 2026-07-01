@@ -18,13 +18,22 @@ def _get_store():
     return _store
 
 
-async def health_get_supplements() -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_supplements(args: dict | None = None) -> dict:
     """Load supplements and supplement phases.
 
     Returns:
         {supplements: [...], supplement_phases: [...]}
     """
-    store = _get_store()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
 
     return {

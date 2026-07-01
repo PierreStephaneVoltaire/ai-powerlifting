@@ -1,0 +1,21 @@
+layers:
+- pl_boto3
+memory: 256
+timeout: 900
+description: Add or replace a weight entry by date in the weight log.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    version:
+      type: string
+      description: Program version key suffix (defaults to "current").
+    entry:
+      type: object
+      description: 'Weight entry: {date, ...weight fields}'
+  required:
+  - entry
+
+reserved_concurrency: null

@@ -29,6 +29,14 @@ def _get_table_and_pk():
     return store.table, store.pk, store
 
 
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -39,9 +47,10 @@ def _resolve_program_sk(table, pk: str, version: str) -> str:
 
 
 async def health_create_session(
-    date: str,
-    day: str,
-    week_number: int,
+    args: dict | None = None,
+    date: str | None = None,
+    day: str | None = None,
+    week_number: int | None = None,
     exercises: list[dict] | None = None,
     session_notes: str = "",
 ) -> dict:
@@ -60,9 +69,21 @@ async def health_create_session(
     Raises:
         ValueError: If session already exists on that date
     """
+    if isinstance(args, dict):
+        if date is None:
+            date = args.get("date")
+        if day is None:
+            day = args.get("day")
+        if week_number is None:
+            week_number = args.get("week_number")
+        if exercises is None:
+            exercises = args.get("exercises")
+        if not session_notes:
+            session_notes = args.get("session_notes", "")
+    pk = args.get("pk") if isinstance(args, dict) else None
     datetime.strptime(date, "%Y-%m-%d")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     table, active_pk, _ = _get_table_and_pk()
     program_sk = _resolve_program_sk(table, active_pk, "current")

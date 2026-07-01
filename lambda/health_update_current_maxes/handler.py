@@ -3,6 +3,6 @@ import json
 from .core import health_update_current_maxes
 def handler(event, context):
     args = event.get("args", event)
-    result = asyncio.run(health_update_current_maxes(args.get("squat_kg"), args.get("bench_kg"), args.get("deadlift_kg")))
+    result = asyncio.run(health_update_current_maxes(args))
     body = result if isinstance(result, str) else json.dumps(result, default=str)
     return {"statusCode": 200, "body": body}

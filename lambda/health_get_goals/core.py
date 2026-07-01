@@ -18,8 +18,17 @@ def _get_store():
     return _store
 
 
-async def health_get_goals() -> list[dict]:
-    """Get explicit goals attached to the current program block."""
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
     store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_goals(args: dict | None = None) -> list[dict]:
+    """Get explicit goals attached to the current program block."""
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
     return program.get("goals", []) or []

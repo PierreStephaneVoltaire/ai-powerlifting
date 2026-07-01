@@ -3,6 +3,6 @@ import json
 from .core import health_update_supplements
 def handler(event, context):
     args = event.get("args", event)
-    result = asyncio.run(health_update_supplements(args["patch"]))
+    result = asyncio.run(health_update_supplements(args))
     body = result if isinstance(result, str) else json.dumps(result, default=str)
     return {"statusCode": 200, "body": body}

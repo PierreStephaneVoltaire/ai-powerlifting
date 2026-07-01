@@ -11,6 +11,7 @@ LAYER_MODULE_DIRS = {
     "pl_imports": os.path.join(LAYERS_DIR, "pl-imports", "python"),
     "pl_federation": os.path.join(LAYERS_DIR, "pl-federation", "python"),
     "pl_analysis_cache": os.path.join(LAYERS_DIR, "pl-analysis-cache", "python"),
+    "pl_budget": os.path.join(LAYERS_DIR, "pl-budget", "python"),
     "pl_ai": os.path.join(LAYERS_DIR, "pl-ai", "content"),
     "pl_rag": os.path.join(LAYERS_DIR, "pl-rag", "python"),
     "pl_boto3": None,
@@ -29,6 +30,7 @@ LAYER_PIP_REQS = {
     "pl_imports": [],
     "pl_federation": [],
     "pl_analysis_cache": [],
+    "pl_budget": [],
 }
 
 EXTRA_TOOL_REQS = {

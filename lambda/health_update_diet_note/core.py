@@ -18,7 +18,15 @@ def _get_store():
     return _store
 
 
-async def health_update_diet_note(date: str, notes: str) -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_update_diet_note(args: dict | None = None, date: str | None = None, notes: str | None = None) -> dict:
     """Update or create a diet note for a specific date.
 
     Creates a new minor version of the program. Replaces existing content.
@@ -32,7 +40,14 @@ async def health_update_diet_note(date: str, notes: str) -> dict:
     """
     import copy
 
-    store = _get_store()
+    if isinstance(args, dict):
+        if date is None:
+            date = args.get("date")
+        if notes is None:
+            notes = args.get("notes")
+    pk = args.get("pk") if isinstance(args, dict) else None
+
+    store = _store_for(pk)
     program = await store.get_program()
     new_program = copy.deepcopy(program)
 

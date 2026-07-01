@@ -24,7 +24,15 @@ def _get_store():
     return _store
 
 
-async def health_update_session(date_str: str, patch: dict) -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_update_session(args: dict | None = None, date_str: str | None = None, patch: dict | None = None) -> dict:
     """Update a session by date with the given patch.
 
     Validates date format and patch keys before applying.
@@ -47,6 +55,12 @@ async def health_update_session(date_str: str, patch: dict) -> dict:
         ValueError: If date format invalid, patch keys invalid, or session not found
         RuntimeError: If store not initialized or DynamoDB fails
     """
+    if isinstance(args, dict):
+        if date_str is None:
+            date_str = args.get("date") or args.get("date_str")
+        if patch is None:
+            patch = args.get("patch")
+    pk = args.get("pk") if isinstance(args, dict) else None
     try:
         datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
@@ -57,7 +71,7 @@ async def health_update_session(date_str: str, patch: dict) -> dict:
     if unknown_keys:
         raise ValueError(f"Unknown patch keys: {unknown_keys}. Allowed: {allowed_keys}")
 
-    store = _get_store()
+    store = _store_for(pk)
     updated_program = await store.update_session(date_str, patch)
     if patch.get("completed") is True:
         try:

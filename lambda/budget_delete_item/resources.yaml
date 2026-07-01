@@ -1,0 +1,19 @@
+layers:
+- pl_boto3
+- pl_budget
+memory: 256
+timeout: 900
+description: Delete a budget item by id.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    item_id:
+      type: string
+      description: Budget item id to delete.
+  required:
+  - item_id
+
+reserved_concurrency: null

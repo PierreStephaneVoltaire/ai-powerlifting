@@ -23,7 +23,15 @@ def _get_store():
     return _store
 
 
-async def health_get_program() -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_program(args: dict | None = None) -> dict:
     """Get the full training program.
 
     Returns:
@@ -33,5 +41,6 @@ async def health_get_program() -> dict:
         ProgramNotFoundError: If no program exists
         RuntimeError: If store not initialized or DynamoDB fails
     """
-    store = _get_store()
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     return await store.get_program()

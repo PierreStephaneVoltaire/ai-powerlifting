@@ -18,7 +18,15 @@ def _get_store():
     return _store
 
 
-async def health_update_phases(phases: list[dict]) -> list[dict]:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_update_phases(args: dict | None = None, phases: list[dict] | None = None) -> list[dict]:
     """Replace the full phases array.
 
     Each phase dict: name (required), start_week (int), end_week (int), intent (str).
@@ -33,11 +41,14 @@ async def health_update_phases(phases: list[dict]) -> list[dict]:
         ValueError: If any phase is missing required fields
     """
     import copy
+    if phases is None:
+        phases = args.get("phases") if isinstance(args, dict) else None
+    pk = args.get("pk") if isinstance(args, dict) else None
     for i, phase in enumerate(phases):
         if not phase.get("name"):
             raise ValueError(f"phases[{i}].name is required")
 
-    store = _get_store()
+    store = _store_for(pk)
     program = await store.get_program()
     new_program = copy.deepcopy(program)
     new_program["phases"] = phases

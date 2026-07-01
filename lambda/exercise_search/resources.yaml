@@ -1,0 +1,18 @@
+layers:
+- pl_boto3
+- pl_glossary
+memory: 256
+timeout: 900
+description: Search exercises by substring across name/description/muscles.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    query:
+      type: string
+      description: Substring to search for (empty returns all).
+  required: []
+
+reserved_concurrency: null

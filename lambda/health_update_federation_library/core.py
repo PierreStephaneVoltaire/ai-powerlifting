@@ -24,6 +24,14 @@ def _get_federation_store():
     return _federation_store
 
 
+def _federation_store_for(pk: str | None):
+    """Return the FederationStore singleton, retargeted to pk when provided."""
+    store = _get_federation_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
 GOAL_TYPES = {
     "qualify_for_federation",
     "hit_total",
@@ -215,7 +223,17 @@ async def _write_federation_library(library: dict[str, Any]) -> dict[str, Any]:
         logger.warning("[HealthTools] Analysis cache invalidation failed after federation update: %s", exc)
     return library
 
-async def health_update_federation_library(library: dict) -> dict:
+async def health_update_federation_library(args: dict | None = None, library: dict | None = None) -> dict:
     """Replace the shared federation library document."""
+    if library is None and isinstance(args, dict):
+        if args.get("library"):
+            library = args.get("library")
+        elif "federations" in args or "qualification_standards" in args:
+            library = {
+                "federations": args.get("federations") or [],
+                "qualification_standards": args.get("qualification_standards") or [],
+            }
+    pk = args.get("pk") if isinstance(args, dict) else None
+    _federation_store_for(pk)
     payload = _build_federation_library_payload(library)
     return await _write_federation_library(payload)

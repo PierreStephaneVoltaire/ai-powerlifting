@@ -42,7 +42,15 @@ def _resolve_phase(session: dict, phases: list[dict]) -> dict:
     return phases[0] if phases else {}
 
 
-async def health_get_session(date: str) -> dict:
+def _store_for(pk: str | None):
+    """Return the ProgramStore singleton, retargeted to pk when provided."""
+    store = _get_store()
+    if pk:
+        store.pk = pk
+    return store
+
+
+async def health_get_session(args: dict | str | None = None, date: str | None = None) -> dict:
     """Load a single session by date.
 
     Args:
@@ -54,7 +62,10 @@ async def health_get_session(date: str) -> dict:
     Raises:
         ValueError: If session not found
     """
-    store = _get_store()
+    if date is None:
+        date = args.get("date") if isinstance(args, dict) else args
+    pk = args.get("pk") if isinstance(args, dict) else None
+    store = _store_for(pk)
     program = await store.get_program()
 
     phases = program.get("phases", [])
