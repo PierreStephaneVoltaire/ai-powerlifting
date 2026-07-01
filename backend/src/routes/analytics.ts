@@ -1105,14 +1105,14 @@ analyticsRouter.post('/budget/timeline', async (req, res) => {
     let competitions: unknown[] = []
     let federation_memberships: unknown[] = []
     try {
-      const userComps = await competitionController.listUserCompetitions(pk)
-      competitions = userComps
-        .filter((c) => c.user_status !== 'completed' && c.user_status !== 'skipped')
+      const comps = await competitionController.getCompetitions(pk, 'current')
+      competitions = comps
+        .filter((c) => c.status !== 'completed' && c.status !== 'skipped')
         .map((c) => ({
-          master_id: c.master_id,
+          master_id: c.date,
           name: c.name,
-          start_date: c.start_date,
-          user_status: c.user_status,
+          start_date: c.date,
+          user_status: c.status || 'optional',
         }))
     } catch (compErr) {
       logger.warn({ err: compErr, pk }, 'Failed to load competitions for budget timeline')

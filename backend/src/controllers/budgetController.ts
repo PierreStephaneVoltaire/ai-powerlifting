@@ -2,7 +2,6 @@ import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { v4 as uuidv4 } from 'uuid'
 import { invokeLambda } from '../utils/lambda'
-import { invokeToolDirect } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import type {
@@ -64,8 +63,6 @@ function normalizeConfig(raw: unknown, pk: string): BudgetConfig {
   }
 }
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-
 export async function getBudgetConfig(pk: string): Promise<BudgetConfig> {
   const result = await invokeLambda('budget_get_config', { pk })
   return normalizeConfig(result, pk)
@@ -75,8 +72,6 @@ export async function putBudgetConfig(pk: string, raw: unknown): Promise<BudgetC
   const result = await invokeLambda('budget_put_config', { pk, config: raw })
   return normalizeConfig(result, pk)
 }
-
-// ─── Items ────────────────────────────────────────────────────────────────────
 
 export async function listBudgetItems(pk: string, filters?: BudgetItemFilters): Promise<BudgetItem[]> {
   const payload: Record<string, unknown> = { pk }
@@ -117,13 +112,9 @@ export async function markItemCut(pk: string, itemId: string, cut: boolean): Pro
   return updateBudgetItem(pk, itemId, updated)
 }
 
-// ─── Summary ──────────────────────────────────────────────────────────────────
-
 export async function getBudgetSummary(pk: string, month: string): Promise<BudgetSummary> {
   return invokeLambda('budget_get_summary', { pk, month }) as Promise<BudgetSummary>
 }
-
-// ─── Legacy whole-store read/write (backward compatibility) ───────────────────
 
 export async function getBudget(pk: string): Promise<BudgetStore> {
   const [config, items] = await Promise.all([getBudgetConfig(pk), listBudgetItems(pk)])
@@ -135,7 +126,6 @@ export async function putBudget(
   configRaw: unknown,
   itemsRaw: unknown[],
 ): Promise<void> {
-  const now = new Date().toISOString()
   await putBudgetConfig(pk, configRaw)
   const existing = await listBudgetItems(pk)
   const incomingById = new Map<string, unknown>()
@@ -165,8 +155,6 @@ export async function putBudget(
   logger.info({ pk, module: 'budget', fn: 'putBudget', itemCount: incomingById.size }, 'budget store replaced via Fission')
 }
 
-// ─── Photos (S3 support preserved) ───────────────────────────────────────────
-
 export async function uploadItemPhoto(
   pk: string,
   itemId: string,
@@ -180,7 +168,7 @@ export async function uploadItemPhoto(
 
   const photoId = uuidv4()
   const extension = filename.split('.').pop() || 'jpg'
-  const s3Key = `budget/${pk}/${itemId}/${photoId}.${extension}`
+  const s3Key = `budget/${s3SafeSegment(pk)}/${itemId}/${photoId}.${extension}`
 
   const upload = new Upload({
     client: s3Client,
@@ -219,8 +207,6 @@ export async function deleteItemPhoto(pk: string, itemId: string): Promise<void>
   await updateBudgetItem(pk, itemId, updated)
 }
 
-// ─── AI advisor analysis (BUD-05) ─────────────────────────────────────────────
-
 export interface BudgetAiCompetition {
   master_id: string
   name: string
@@ -234,10 +220,6 @@ export async function getBudgetAiAnalysis(
   competitionsProvider: (pk: string) => Promise<BudgetAiCompetition[]>,
 ): Promise<BudgetAiAnalysis> {
   const now = new Date().toISOString()
-  const currentMonth = now.slice(0, 7)
-
-  // Note: the cached analysis path lives in analysisCache and still touches DynamoDB.
-  // This path skips the cache and always calls the Fission budget advisor.
 
   const [config, items] = await Promise.all([getBudgetConfig(pk), listBudgetItems(pk)])
 
@@ -275,18 +257,14 @@ export async function getBudgetAiAnalysis(
 
   const result = (await invokeLambda('budget_priority_timeline', payload)) as Partial<BudgetAiAnalysis>
 
-  // budget_priority_timeline can also be invoked through the existing MCP tool chain;
-  // if the Fission payload is empty, fall back to the legacy `budget_advisor` tool.
-  const fallback = result && Object.keys(result).length ? result : await invokeToolDirect('budget_advisor', payload)
-
   const analysis: BudgetAiAnalysis = {
-    overall_assessment: String(fallback?.overall_assessment ?? ''),
-    locked_in: Array.isArray(fallback?.locked_in) ? fallback.locked_in : [],
-    suggested_cuts: Array.isArray(fallback?.suggested_cuts) ? fallback.suggested_cuts : [],
-    gaps: Array.isArray(fallback?.gaps) ? fallback.gaps : [],
-    coach_note: String(fallback?.coach_note ?? ''),
-    insufficient_data: Boolean(fallback?.insufficient_data),
-    insufficient_data_reason: String(fallback?.insufficient_data_reason ?? ''),
+    overall_assessment: String(result?.overall_assessment ?? ''),
+    locked_in: Array.isArray(result?.locked_in) ? result.locked_in : [],
+    suggested_cuts: Array.isArray(result?.suggested_cuts) ? result.suggested_cuts : [],
+    gaps: Array.isArray(result?.gaps) ? result.gaps : [],
+    coach_note: String(result?.coach_note ?? ''),
+    insufficient_data: Boolean(result?.insufficient_data),
+    insufficient_data_reason: String(result?.insufficient_data_reason ?? ''),
     cached: false,
     generated_at: now,
   }

@@ -150,12 +150,12 @@ budgetRouter.post('/ai-analysis', async (req, res, next) => {
       return res.status(403).json({ data: null, error: 'Only the athlete can generate a fresh budget analysis.' })
     }
     const analysis = await budgetController.getBudgetAiAnalysis(req.mapped_pk!, refresh, async (pk) => {
-      const userComps = await competitionController.listUserCompetitions(pk)
-      return userComps.map((c) => ({
-        master_id: c.master_id,
+      const competitions = await competitionController.getCompetitions(pk, 'current')
+      return competitions.map((c) => ({
+        master_id: c.date,
         name: c.name,
-        start_date: c.start_date,
-        user_status: c.user_status,
+        start_date: c.date,
+        user_status: c.status === 'completed' || c.status === 'skipped' ? c.status : 'optional',
       }))
     })
     res.json({ data: analysis, error: null })
