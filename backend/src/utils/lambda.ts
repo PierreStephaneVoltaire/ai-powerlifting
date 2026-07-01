@@ -1,15 +1,10 @@
-// ─── Lambda invocation (API Gateway HTTP path) ──────────────────────────────
-// Deterministic Phase 2 powerlifting tools are deployed behind an AWS API
-// Gateway HTTP API (Phase 3). Each tool is exposed as a POST `/{tool}` route on
-// the API Gateway endpoint. Instead of calling the Lambda functions directly
-// through the AWS SDK, we POST the tool arguments to the per-tool HTTP route and
-// parse the Lambda response body, returning the same shape the old SDK version
-// returned and the same shape `invokeToolDirect` returns.
-//
-// The base URL is read from `POWERLIFTING_LAMBDA_BASE_URL` (e.g.
-// `https://<id>.execute-api.<region>.amazonaws.com`). There is no default — if it
-// is unset, invocation fails fast with a clear configuration error.
-const LAMBDA_BASE_URL = process.env.POWERLIFTING_LAMBDA_BASE_URL
+// ─── Lambda / Fission invocation (HTTP path) ────────────────────────────────
+// The powerlifting tools are exposed as POST `/{tool}` on the configured
+// runtime substrate. In production the substrate is the in-cluster Fission
+// router (`http://router.fission.svc.cluster.local:80`). During the migration
+// the same code works against the AWS API Gateway HTTP endpoint by changing
+// the `POWERLIFTING_LAMBDA_BASE_URL` env var.
+const LAMBDA_BASE_URL = process.env.POWERLIFTING_LAMBDA_BASE_URL 
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 /**

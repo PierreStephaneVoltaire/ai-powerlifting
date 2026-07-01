@@ -1,12 +1,8 @@
 import { Request, Response } from 'express'
-import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { Upload } from '@aws-sdk/lib-storage'
-import { v4 as uuidv4 } from 'uuid'
 import {
   getSettings,
   getSettingsByMappedPk,
   updateNickname,
-  updateAvatarUrl,
   updateProfile,
   updateRankingLocation,
   updateAgeClass,
@@ -14,55 +10,10 @@ import {
   invalidateCache,
   type ProfileVisibility,
 } from '../services/userSettings'
+import { invokeLambda } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 
-const S3_BUCKET = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
-const S3_REGION = process.env.AWS_REGION || 'ca-central-1'
-
-const s3Client = new S3Client({
-  region: S3_REGION,
-  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-    ? {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      }
-    : undefined,
-})
-
-function avatarExtension(file: Express.Multer.File): string {
-  const byMime: Record<string, string> = {
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-  }
-  const mimeExtension = byMime[file.mimetype]
-  if (mimeExtension) return mimeExtension
-  return file.originalname.split('.').pop()?.toLowerCase() || 'jpg'
-}
-
-function profileAvatarKeyFromUrl(value: string | null | undefined): string | null {
-  if (!value) return null
-  // Legacy avatar URLs were full CloudFront URLs like
-  // "https://dXXX.cloudfront.net/profiles/...". Extract the S3 key portion.
-  if (/^https?:\/\//i.test(value)) {
-    try {
-      const url = new URL(value)
-      return decodeURIComponent(url.pathname.slice(1))
-    } catch {
-      return null
-    }
-  }
-  // New-style avatar URLs are raw S3 keys (e.g. "profiles/..."). Return as-is.
-  return value.startsWith('profiles/') ? value : null
-}
-
-function s3SafeSegment(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 128) || 'user'
-}
-
 export async function getSettingsHandler(req: Request, res: Response): Promise<void> {
-
   let settings = null
   if (req.user?.username) {
     settings = await getSettings(req.user.username)
@@ -71,7 +22,6 @@ export async function getSettingsHandler(req: Request, res: Response): Promise<v
     settings = await getSettingsByMappedPk(req.mapped_pk)
   }
   if (!settings) {
-
     if (!req.user) {
       res.json({
         data: {
@@ -146,58 +96,6 @@ export async function updateProfileHandler(req: Request, res: Response): Promise
   res.json({ data: settings })
 }
 
-export async function updateAvatarHandler(req: Request, res: Response): Promise<void> {
-  if (!req.user) {
-    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
-  }
-
-  const file = req.file
-  if (!file) {
-    throw new AppError('No profile picture provided', 400)
-  }
-
-  const existing = await getSettings(req.user.username)
-  if (!existing) {
-    throw new AppError('Settings not found', 404)
-  }
-
-  const avatarId = uuidv4()
-  const extension = avatarExtension(file)
-  const owner = s3SafeSegment(req.mapped_pk || existing.pk)
-  const s3Key = `profiles/${owner}/avatars/${avatarId}.${extension}`
-
-  try {
-    await new Upload({
-      client: s3Client,
-      params: {
-        Bucket: S3_BUCKET,
-        Key: s3Key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-        Metadata: {
-          profile_avatar: 'true',
-          username: existing.username,
-          mapped_pk: owner,
-        },
-      },
-    }).done()
-  } catch (err) {
-    console.error('[SettingsController] S3 avatar upload failed:', err)
-    throw new AppError('Failed to upload profile picture', 500)
-  }
-
-  const avatarUrl = s3Key
-  const settings = await updateAvatarUrl(req.user.username, avatarUrl)
-  const previousKey = profileAvatarKeyFromUrl(existing.avatar_url)
-  if (previousKey && previousKey !== s3Key) {
-    s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: previousKey })).catch((err) => {
-      console.warn('[SettingsController] Failed to delete previous avatar:', err)
-    })
-  }
-
-  res.json({ data: settings })
-}
-
 export async function updateRankingLocationHandler(req: Request, res: Response): Promise<void> {
   if (!req.user) {
     throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
@@ -234,3 +132,25 @@ export async function updateAgeClassHandler(req: Request, res: Response): Promis
   res.json({ data: settings })
 }
 
+export async function updateAvatarHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user) {
+    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
+  }
+
+  const file = req.file
+  if (!file) {
+    throw new AppError('No profile picture provided', 400)
+  }
+
+  const fileB64 = Buffer.from(file.buffer).toString('base64')
+  const settings = await invokeLambda('settings_update_avatar', {
+    username: req.user.username,
+    mapped_pk: req.mapped_pk,
+    file_b64: fileB64,
+    mimetype: file.mimetype,
+    filename: file.originalname,
+  })
+
+  invalidateCache(req.user.username)
+  res.json({ data: settings })
+}
