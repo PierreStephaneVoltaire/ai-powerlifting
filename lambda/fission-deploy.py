@@ -92,6 +92,11 @@ def _manifest_resource(name_prefix, yaml_body):
 
 def _build_authorizer():
     folder = os.path.join(LAMBDA_ROOT, "pl_authorizer")
+    res = _read_resources(folder)
+    resources = res.get("resources") or {
+        "requests": {"cpu": "50m", "memory": "64Mi"},
+        "limits": {"cpu": "200m", "memory": "128Mi"},
+    }
     archive = os.path.join(BUILD_DIR, "pl_authorizer.zip")
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(ENTRY_FILE, ENTRY_ZIP_NAME)
@@ -149,11 +154,11 @@ spec:
                 key: INTERNAL_API_TOKEN
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: {resources["requests"]["cpu"]}
+            memory: {resources["requests"]["memory"]}
           limits:
-            cpu: 200m
-            memory: 128Mi
+            cpu: {resources["limits"]["cpu"]}
+            memory: {resources["limits"]["memory"]}
     volumes: []"""
     return _manifest_resource("pl_authorizer_pkg", pkg) + _manifest_resource("pl_authorizer_fn", fn)
 
@@ -275,10 +280,7 @@ resource "kubectl_manifest" "pl_functions" {
               each.value.s3_read ? [{ name = "POWERLIFTING_S3_BUCKET", value = var.powerlifting_s3_bucket }] : [],
             )
             envFrom = [{ secretRef = { name = "pl-fission-secrets" } }]
-            resources = {
-              requests = { cpu = "100m", memory = "${max(128, each.value.memory // 2)}Mi" }
-              limits   = { cpu = "1000m", memory = "${each.value.memory}Mi" }
-            }
+            resources = each.value.resources
           },
         ]
         volumes = []
@@ -321,10 +323,14 @@ def generate_tf():
         archive = _build_archive(tool_id, folder, layers)
         cls = fl.tool_class(tool_id)
         s = fl.SCALE_PROFILE[cls]
+        resources = res.get("resources") or {
+            "requests": {"cpu": "100m", "memory": "128Mi"},
+            "limits": {"cpu": "1000m", "memory": f"{res.get('memory', 256)}Mi"},
+        }
         tools[tool_id] = {
             "archive": os.path.basename(archive),
             "class": cls,
-            "memory": res.get("memory", 256),
+            "resources": resources,
             "timeout": res.get("timeout", 900),
             "s3_read": bool(res.get("s3_read")),
             "is_registry": tool_id == REGISTRY_TOOL,
@@ -337,10 +343,20 @@ def generate_tf():
     tools_str = ""
     for tid in sorted(tools):
         t = tools[tid]
+        r = t["resources"]
         tools_str += f'    "{tid}" = {{\n'
         tools_str += f'      archive       = "{t["archive"]}"\n'
         tools_str += f'      class          = "{t["class"]}"\n'
-        tools_str += f'      memory         = {t["memory"]}\n'
+        tools_str += f'      resources      = {{\n'
+        tools_str += f'        requests = {{\n'
+        tools_str += f'          cpu    = "{r["requests"]["cpu"]}"\n'
+        tools_str += f'          memory = "{r["requests"]["memory"]}"\n'
+        tools_str += f'        }}\n'
+        tools_str += f'        limits = {{\n'
+        tools_str += f'          cpu    = "{r["limits"]["cpu"]}"\n'
+        tools_str += f'          memory = "{r["limits"]["memory"]}"\n'
+        tools_str += f'        }}\n'
+        tools_str += f'      }}\n'
         tools_str += f'      timeout        = {t["timeout"]}\n'
         tools_str += f'      s3_read        = {str(t["s3_read"]).lower()}\n'
         tools_str += f'      is_registry    = {str(t["is_registry"]).lower()}\n'

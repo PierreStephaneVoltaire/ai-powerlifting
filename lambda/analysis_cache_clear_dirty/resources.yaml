@@ -1,7 +1,13 @@
 layers:
 - pl_boto3
 - pl_analysis_cache
-memory: 256
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
 timeout: 60
 description: Delete the dirty marker for a user's markdown export.
 input_schema:

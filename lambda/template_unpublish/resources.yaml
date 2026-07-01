@@ -1,7 +1,13 @@
 layers:
 - pl_boto3
 - pl_templates
-memory: 256
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
 timeout: 900
 description: Unpublish an authored template so only its author can see it.
 input_schema:

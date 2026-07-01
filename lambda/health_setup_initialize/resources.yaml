@@ -3,7 +3,13 @@ layers:
 - pl_program
 - pl_templates
 - pl_sessions
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
 timeout: 900
 description: Initialize the first valid current training block for a no-data user.
 input_schema:

@@ -1,6 +1,12 @@
 layers:
 - pl_boto3
-memory: 256
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
 timeout: 900
 description: Replace block notes for a program version.
 input_schema:

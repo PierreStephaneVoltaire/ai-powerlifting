@@ -3,7 +3,13 @@ layers:
 - pl_imports
 - pl_program
 - pl_templates
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
 timeout: 900
 description: Apply a staged import to the program or template library.
 input_schema:

@@ -1,6 +1,12 @@
 layers:
 - pl_boto3
-memory: 128
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
 timeout: 30
 description: List program versions for a user, newest first.
 input_schema:

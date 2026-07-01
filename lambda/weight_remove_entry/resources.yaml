@@ -1,6 +1,12 @@
 layers:
 - pl_boto3
-memory: 256
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
 timeout: 900
 description: Remove a weight entry by date from the weight log.
 input_schema:

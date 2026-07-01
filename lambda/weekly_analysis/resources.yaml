@@ -3,7 +3,13 @@ layers:
 - pl_program
 - pl_sessions
 - pl_glossary
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
 timeout: 900
 description: Full weekly training analysis — progression, RPE drift, fatigue index, compliance, meet projection. Returns structured JSON.
 input_schema:

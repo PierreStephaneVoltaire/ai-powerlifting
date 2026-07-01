@@ -1,7 +1,13 @@
 layers:
 - pl_boto3
 - pl_pandas
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
 timeout: 900
 s3_read: true
 description: Returns national/regional/global top-percentile cards for the dashboard. Filters the OpenPowerlifting dataset to the 3 nearest IPF weight classes, last 3 calendar years, deduplicated by lifter (best total per name). Returns percentile (0-100) for Squat/Bench/Deadlift/Total across global, national (country), and regional (country+region) scopes. A value is null when <10 comparison lifters or the lift was not provided.

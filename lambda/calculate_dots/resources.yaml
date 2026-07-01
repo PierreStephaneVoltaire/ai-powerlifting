@@ -1,5 +1,11 @@
 layers: []
-memory: 128
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
 timeout: 900
 description: Calculate DOTS score from competition total and bodyweight.
 input_schema:

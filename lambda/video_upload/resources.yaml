@@ -1,7 +1,13 @@
 layers:
 - pl_boto3
 - pl_sessions
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
 timeout: 900
 description: Upload a session video to S3 and attach it to a session.
 input_schema:

@@ -1,7 +1,13 @@
 layers:
 - pl_boto3
 - pl_program
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
 timeout: 900
 description: Generate the markdown export of the current program and return its content as a string. Used internally by regenerate_analysis.
 input_schema:

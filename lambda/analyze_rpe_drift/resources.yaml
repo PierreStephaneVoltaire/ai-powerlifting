@@ -3,7 +3,13 @@ layers:
 - pl_program
 - pl_sessions
 - pl_pandas
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
 timeout: 900
 description: Detect RPE drift for a lift — whether perceived exertion is trending up (fatigue) or down (adaptation).
 input_schema:

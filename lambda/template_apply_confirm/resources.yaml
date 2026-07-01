@@ -3,7 +3,13 @@ layers:
 - pl_templates
 - pl_program
 - pl_glossary
-memory: 512
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
 timeout: 900
 description: Confirm and write concretized block from template.
 input_schema:

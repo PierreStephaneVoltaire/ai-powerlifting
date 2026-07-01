@@ -2,7 +2,13 @@ layers:
 - pl_boto3
 - pl_program
 - pl_sessions
-memory: 256
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
 timeout: 900
 description: Update fields on an existing training session.
 input_schema:
