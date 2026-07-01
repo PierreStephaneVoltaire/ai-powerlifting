@@ -1,0 +1,18 @@
+layers:
+- pl_boto3
+memory: 128
+timeout: 30
+description: List the most recent training sessions for a user.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    limit:
+      type: integer
+      description: Maximum number of sessions to return (1-200, default 50).
+      default: 50
+  required: []
+
+reserved_concurrency: null

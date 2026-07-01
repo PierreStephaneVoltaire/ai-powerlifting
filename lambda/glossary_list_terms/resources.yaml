@@ -1,0 +1,14 @@
+layers:
+- pl_boto3
+memory: 128
+timeout: 30
+description: List glossary exercise terms (flattened) for a user.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+  required: []
+
+reserved_concurrency: null

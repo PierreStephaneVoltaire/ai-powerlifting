@@ -1,0 +1,18 @@
+layers:
+- pl_boto3
+memory: 128
+timeout: 30
+description: List program versions for a user, newest first.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    include_archived:
+      type: boolean
+      description: Include archived program versions.
+      default: false
+  required: []
+
+reserved_concurrency: null

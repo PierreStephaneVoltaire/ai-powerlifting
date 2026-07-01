@@ -12,6 +12,9 @@ LAYER_MODULE_DIRS = {
     "pl_federation": os.path.join(LAYERS_DIR, "pl-federation", "python"),
     "pl_analysis_cache": os.path.join(LAYERS_DIR, "pl-analysis-cache", "python"),
     "pl_budget": os.path.join(LAYERS_DIR, "pl-budget", "python"),
+    "pl_per_user": os.path.join(LAYERS_DIR, "pl-per-user", "python"),
+    "pl_federation_library": os.path.join(LAYERS_DIR, "pl-federation-library", "python"),
+    "pl_master_copy": os.path.join(LAYERS_DIR, "pl-master-copy", "python"),
     "pl_ai": os.path.join(LAYERS_DIR, "pl-ai", "content"),
     "pl_rag": os.path.join(LAYERS_DIR, "pl-rag", "python"),
     "pl_boto3": None,
@@ -31,6 +34,9 @@ LAYER_PIP_REQS = {
     "pl_federation": [],
     "pl_analysis_cache": [],
     "pl_budget": [],
+    "pl_per_user": [],
+    "pl_federation_library": [],
+    "pl_master_copy": [],
 }
 
 EXTRA_TOOL_REQS = {
@@ -54,7 +60,7 @@ WARM_READS = {
     "health_get_program", "health_get_session", "health_get_sessions_range",
     "health_get_current_maxes", "health_get_goals", "health_get_meta",
     "health_get_phases", "template_list", "template_get",
-    "get_analysis_markdown",
+    "get_analysis_markdown", "tool_registry",
 }
 
 STATS_TOOLS = {

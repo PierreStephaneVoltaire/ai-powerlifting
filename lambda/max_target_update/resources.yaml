@@ -1,0 +1,29 @@
+layers:
+- pl_boto3
+memory: 256
+timeout: 60
+description: Replace the target maxes (squat/bench/deadlift) for a program version.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    version:
+      type: string
+      description: Program version key suffix (defaults to "current").
+    squat_kg:
+      type: number
+      description: Target squat 1RM in kg.
+    bench_kg:
+      type: number
+      description: Target bench 1RM in kg.
+    deadlift_kg:
+      type: number
+      description: Target deadlift 1RM in kg.
+  required:
+  - squat_kg
+  - bench_kg
+  - deadlift_kg
+
+reserved_concurrency: null

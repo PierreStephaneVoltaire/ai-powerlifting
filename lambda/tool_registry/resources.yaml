@@ -1,4 +1,11 @@
-layers: []
+layers:
+- pl_boto3
 memory: 128
-timeout: 900
-reserved_concurrency: null
+timeout: 60
+description: "Fission tool registry: serves the OpenAPI 3 discovery document at GET /openapi.json so health_lambda_mcp can register every Fission powerlifting tool on startup."
+input_schema:
+  type: object
+  properties: {}
+  required: []
+
+reserved_concurrency: 3

@@ -1,0 +1,15 @@
+layers:
+- pl_boto3
+- pl_federation
+memory: 128
+timeout: 30
+description: Return the global federation library for a user (entries + standards).
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+  required: []
+
+reserved_concurrency: null
