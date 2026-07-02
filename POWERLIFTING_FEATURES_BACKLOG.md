@@ -884,7 +884,7 @@ lighthearted and so others can search profiles by similar tag.
 - Profanity / abuse: tags proposed by OTHER users are public-facing once
   approved, but a malicious proposer could spam offensive proposals. Define
   whether there's a block/report or proposal rate-limit. (Blind spot — pills
-  are "lighthearted" but this is user-generated content shown publicly.)
+  are "lighthearted" but this is user-generated content shown publicly.) - not a blind spot tags can be submitted but they woin't show unless set as aprroved in dynamo (do manually )
 - Tags only appear on profiles visible to the viewer (respect public/private).
 
 **Open questions / blind spots:**
