@@ -374,11 +374,6 @@ export interface AiBlockComparisonResult {
   deterministic: BlockComparisonResult
 }
 
-const CACHE_SCHEMA_VERSION = 1
-const MAX_SHARD_CHARS = 350_000
-// Past blocks are permanent (no TTL). Current block uses 7 days.
-const CURRENT_BLOCK_TTL_DAYS = 7
-const DEFAULT_BLOCK = 'current'
 
 type InvokeTool = (toolName: string, args: Record<string, unknown>) => Promise<unknown>
 
@@ -421,25 +416,6 @@ function blockKeyFor(block: string): string {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-  for (let index = 0; index < keys.length; index += 25) {
-    const batch = keys.slice(index, index + 25)
-    if (!batch.length) continue
-    await docClient.send(new BatchWriteCommand({
-      RequestItems: {
-        [tableName]: batch.map((Key) => ({ DeleteRequest: { Key } })),
-      },
-    }))
-  }
 }
 
 
@@ -883,71 +859,7 @@ function buildDataQualityFlags(
   return flags
 }
 
-  const pk = cachePk(userPk)
-  const statuses = new Map<string, { sourceFingerprint?: string; generatedAt?: string }>()
-  try {
-    let ExclusiveStartKey: Record<string, unknown> | undefined
-    do {
-      const response = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': `block_analysis#v${CACHE_SCHEMA_VERSION}#`,
-        },
-        ProjectionExpression: 'block_key, source_fingerprint, generated_at',
-        ExclusiveStartKey,
-      }))
-      for (const item of response.Items || []) {
-        if (typeof item.block_key === 'string') {
-          statuses.set(item.block_key, {
-            sourceFingerprint: typeof item.source_fingerprint === 'string' ? item.source_fingerprint : undefined,
-            generatedAt: typeof item.generated_at === 'string' ? item.generated_at : undefined,
-          })
-        }
-      }
-      ExclusiveStartKey = response.LastEvaluatedKey
-    } while (ExclusiveStartKey)
-  } catch (error) {
-    logger.warn({ err: error, userPk }, 'Block analysis cache status read failed')
-  }
-  return statuses
-}
-
-  const pk = cachePk(userPk)
-  const statuses = new Map<string, { sourceFingerprint?: string; generatedAt?: string }>()
-  try {
-    let ExclusiveStartKey: Record<string, unknown> | undefined
-    do {
-      const response = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': `block_program_eval#v${CACHE_SCHEMA_VERSION}#`,
-        },
-        ProjectionExpression: 'block_key, source_fingerprint, generated_at',
-        ExclusiveStartKey,
-      }))
-      for (const item of response.Items || []) {
-        if (typeof item.block_key === 'string') {
-          statuses.set(item.block_key, {
-            sourceFingerprint: typeof item.source_fingerprint === 'string' ? item.source_fingerprint : undefined,
-            generatedAt: typeof item.generated_at === 'string' ? item.generated_at : undefined,
-          })
-        }
-      }
-      ExclusiveStartKey = response.LastEvaluatedKey
-    } while (ExclusiveStartKey)
-  } catch (error) {
-    logger.warn({ err: error, userPk }, 'Block program evaluation cache status read failed')
-  }
-  return statuses
-}
-
 export async function buildCurrentProgramBlockIndex(userPk: string, program: Program, allGoals?: AthleteGoal[]): Promise<ProgramBlockIndexEntry[]> {
-  const cacheStatuses = await listBlockCacheStatuses(userPk)
-  const evalCacheStatuses = await listBlockProgramEvaluationCacheStatuses(userPk)
   const goals = allGoals ?? (userPk ? await loadGoals(userPk) : [])
   const groups = new Map<string, Session[]>()
   for (const session of program.sessions ?? []) {
@@ -972,8 +884,6 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
     const scopedGoals = goalsForCompetitions(goals, scopedCompetitions)
     const sourceFingerprint = blockSourceFingerprint(program, block, sorted, phases, scopedCompetitions, scopedGoals)
     const dataQualityFlags = buildDataQualityFlags(program, sorted, startDate, endDate, linkedCompetition, blockKey)
-    const cacheStatus = cacheStatuses.get(blockKey)
-    const evalCacheStatus = evalCacheStatuses.get(blockKey)
     const results = linkedCompetition?.competition.results
 
     const entry: ProgramBlockIndexEntry = {
@@ -1001,208 +911,6 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
       comparisonEligible: Boolean(linkedCompetition && hasResults(results)),
       dataQualityFlags,
     }
-    const cacheFingerprint = analysisScopedBlockEntry(program, entry).sourceFingerprint
-
-    return {
-      ...entry,
-      cacheStatus: {
-        cached: cacheStatus?.sourceFingerprint === cacheFingerprint || (block !== DEFAULT_BLOCK && Boolean(cacheStatus)),
-        generatedAt: cacheStatus?.generatedAt,
-      },
-      programEvaluationCacheStatus: {
-        cached: evalCacheStatus?.sourceFingerprint === cacheFingerprint || (block !== DEFAULT_BLOCK && Boolean(evalCacheStatus)),
-        generatedAt: evalCacheStatus?.generatedAt,
-      },
-    } satisfies ProgramBlockIndexEntry
-  })
-
-  return blocks.sort((a, b) => {
-    if (a.isCurrent !== b.isCurrent) return a.isCurrent ? 1 : -1
-    return a.startDate.localeCompare(b.startDate)
-  })
-}
-
-): Promise<BlockAnalysisBundle | null> {
-  try {
-    const pk = cachePk(userPk)
-    
-    // Find the latest version of this block analysis.
-    // FilterExpression cannot reference primary key attributes (sk) — blockKey filtering
-    // is done via the KeyConditionExpression prefix so DynamoDB uses the primary key index.
-    const response = await docClient.send(new QueryCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      ExpressionAttributeValues: {
-        ':pk': pk,
-        ':prefix': `block_analysis#v${CACHE_SCHEMA_VERSION}#${blockKey}`,
-      },
-    }))
-
-    const items = response.Items || []
-    if (!items.length) return null
-
-    // Sort by schema_version desc, then generated_at desc
-    const sorted = items.sort((a, b) => {
-      const vA = Number(a.schema_version || 0)
-      const vB = Number(b.schema_version || 0)
-      if (vA !== vB) return vB - vA
-      return String(b.generated_at || '').localeCompare(String(a.generated_at || ''))
-    })
-
-    const item = sorted[0]
-    const sk = item.sk as string
-
-    // Support new plain-JSON payload and legacy gzip+base64 for backward compat
-    let payloadStr = typeof item.payload === 'string' ? item.payload : ''
-    const shardCount = Number(item.shard_count || 0)
-
-    if (!payloadStr && shardCount > 0) {
-      const parts = await Promise.all(
-        Array.from({ length: shardCount }, async (_, index) => {
-          const part = await docClient.send(new GetCommand({
-            TableName: ANALYSIS_CACHE_TABLE,
-            Key: { pk, sk: partSk(sk, index) },
-          }))
-          return String(part.Item?.payload ?? '')
-        }),
-      )
-      payloadStr = parts.join('')
-    }
-
-    // Legacy: decode gzip+base64 if payload is absent but payload_gzip_b64 exists
-    if (!payloadStr) {
-      const legacyB64 = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
-      if (legacyB64) {
-        try {
-          const { gunzipSync } = await import('zlib')
-          payloadStr = gunzipSync(Buffer.from(legacyB64, 'base64')).toString('utf8')
-        } catch {
-          return null
-        }
-      }
-    }
-
-    if (!payloadStr) return null
-    const bundle = decodePayload(payloadStr)
-    if (bundle.block.blockKey !== blockKey) return null
-    return { ...bundle, cached: true }
-  } catch (error) {
-    logger.warn({ err: error, userPk, blockKey }, 'Block analysis cache read failed')
-    return null
-  }
-}
-
-
-): Promise<T | null> {
-  try {
-    const pk = cachePk(userPk)
-    const response = await docClient.send(new GetCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      Key: { pk, sk },
-    }))
-    const item = response.Item
-    if (!item) return null
-    if (
-      expectedSourceFingerprint
-      && options?.allowStale !== true
-      && item.source_fingerprint !== expectedSourceFingerprint
-    ) {
-      return null
-    }
-
-    // New plain JSON payload
-    let payloadStr = typeof item.payload === 'string' ? item.payload : ''
-    const shardCount = Number(item.shard_count || 0)
-
-    if (!payloadStr && shardCount > 0) {
-      const parts = await Promise.all(
-        Array.from({ length: shardCount }, async (_, index) => {
-          const part = await docClient.send(new GetCommand({
-            TableName: ANALYSIS_CACHE_TABLE,
-            Key: { pk, sk: partSk(sk, index) },
-          }))
-          return String(part.Item?.payload ?? '')
-        }),
-      )
-      payloadStr = parts.join('')
-    }
-
-    // Legacy gzip fallback
-    if (!payloadStr) {
-      const legacyB64 = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
-      if (legacyB64) {
-        try {
-          const { gunzipSync } = await import('zlib')
-          payloadStr = gunzipSync(Buffer.from(legacyB64, 'base64')).toString('utf8')
-        } catch {
-          return null
-        }
-      }
-    }
-
-    return payloadStr ? decodeJsonPayload<T>(payloadStr) : null
-  } catch (error) {
-    logger.warn({ err: error, userPk, sk }, 'Block JSON cache read failed')
-    return null
-  }
-}
-
-
-
-): Promise<void> {
-  try {
-    const pk = cachePk(userPk)
-    const encoded = encodeJsonPayload(payloadValue)
-    const expiry = expiresAt(metadata.isCurrent ?? false)
-
-    await deleteBundleObject(pk, sk)
-
-    const baseItem: Record<string, unknown> = {
-      pk,
-      sk,
-      schema_version: CACHE_SCHEMA_VERSION,
-      source_fingerprint: metadata.sourceFingerprint,
-      generated_at: new Date().toISOString(),
-    }
-    if (expiry !== undefined) baseItem.expires_at = expiry
-    if (metadata.blockKey) baseItem.block_key = metadata.blockKey
-    if (metadata.blockLabel) baseItem.block_label = metadata.blockLabel
-
-    if (encoded.length <= MAX_SHARD_CHARS) {
-      await docClient.send(new PutCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        Item: { ...baseItem, payload: encoded },
-      }))
-      return
-    }
-
-    const chunks = chunkString(encoded, MAX_SHARD_CHARS)
-    await docClient.send(new PutCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      Item: { ...baseItem, shard_count: chunks.length },
-    }))
-
-    for (let index = 0; index < chunks.length; index += 25) {
-      const batch = chunks.slice(index, index + 25)
-      await docClient.send(new BatchWriteCommand({
-        RequestItems: {
-          [ANALYSIS_CACHE_TABLE]: batch.map((payload, batchIndex) => ({
-            PutRequest: {
-              Item: {
-                pk,
-                sk: partSk(sk, index + batchIndex),
-                payload,
-                ...(expiry !== undefined ? { expires_at: expiry } : {}),
-              },
-            },
-          })),
-        },
-      }))
-    }
-  } catch (error) {
-    logger.warn({ err: error, userPk, sk }, 'Block JSON cache write failed')
-  }
-}
 
 function canonicalLift(name: string): 'squat' | 'bench' | 'deadlift' | null {
   const lower = name.toLowerCase().trim()
