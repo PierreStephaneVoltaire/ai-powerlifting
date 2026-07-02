@@ -9,7 +9,7 @@ resources:
     cpu: 500m
     memory: 512Mi
 timeout: 900
-description: Archive a program version (repoints current pointer).
+description: In-place update of program phases (optionally scoped to a block).
 input_schema:
   type: object
   properties:
@@ -19,5 +19,9 @@ input_schema:
     program_sk:
       type: string
       description: Optional program SK; defaults to the current program pointer.
+    phases:
+      type: array
+    block:
+      type: string
   required: []
 reserved_concurrency: null

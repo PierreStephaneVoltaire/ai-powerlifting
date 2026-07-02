@@ -9,7 +9,7 @@ resources:
     cpu: 500m
     memory: 512Mi
 timeout: 900
-description: Archive a program version (repoints current pointer).
+description: Get the current training program with sessions joined from if-sessions.
 input_schema:
   type: object
   properties:

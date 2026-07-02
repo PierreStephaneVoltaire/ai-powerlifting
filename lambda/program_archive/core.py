@@ -1,11 +1,10 @@
-_store = None
-def _get_store():
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(table_name=os.environ.get("IF_HEALTH_TABLE_NAME","if-health"), pk=os.environ.get("HEALTH_PROGRAM_PK","operator"), region=os.environ.get("AWS_REGION","ca-central-1"))
-    return _store
+from __future__ import annotations
+from program_tool_helpers import get_store
 
-async def program_archive(sk):
-    store=_get_store(); await store.archive(sk); return {"status":"archived","sk":sk}
+async def program_archive(args: dict):
+    store = get_store(args)
+    sk = args.get("program_sk")
+    if not sk:
+        sk = store._current_program_sk_sync()
+    await store.archive(sk)
+    return {"success": True}

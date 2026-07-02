@@ -9,7 +9,7 @@ resources:
     cpu: 500m
     memory: 512Mi
 timeout: 900
-description: Archive a program version (repoints current pointer).
+description: In-place update of lift profiles on the current program.
 input_schema:
   type: object
   properties:
@@ -19,5 +19,7 @@ input_schema:
     program_sk:
       type: string
       description: Optional program SK; defaults to the current program pointer.
+    lift_profiles:
+      type: array
   required: []
 reserved_concurrency: null
