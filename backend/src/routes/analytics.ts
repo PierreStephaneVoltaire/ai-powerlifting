@@ -485,24 +485,10 @@ analyticsRouter.get('/analysis/weekly-bundle', async (req, res) => {
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const forceRefresh = req.query.refresh === 'true'
 
-    if (!forceRefresh) {
-      const cached = await import('../services/analysisCache').then(m => m.getCachedAllWindowAnalyses(pk))
-      if (cached) {
-        const program = await getProgramWithWeightLog(pk, 'current')
-        const windows = buildAnalysisWindows(program, asOfDate)
-        const bundle = makeWeeklyAnalysisBundle(asOfDate, windows, cached.results)
-        return res.json({ data: { ...bundle, cached: true, generatedAt: cached.generatedAt }, error: null })
-      }
-    }
-
     logger.info({ pk, asOfDate, forceRefresh }, 'Computing weekly bundle')
-    const { generatedAt, windows } = await runFullCurrentBlockRegeneration(pk, asOfDate)
-    const fresh = await import('../services/analysisCache').then(m => m.getCachedAllWindowAnalyses(pk))
-    if (fresh) {
-      const bundle = makeWeeklyAnalysisBundle(asOfDate, windows, fresh.results)
-      return res.json({ data: { ...bundle, cached: false, generatedAt }, error: null })
-    }
-    return res.status(502).json({ data: null, error: 'Analysis generation failed: cache write error' })
+    const { generatedAt, windows, results } = await runFullCurrentBlockRegeneration(pk, asOfDate)
+    const bundle = makeWeeklyAnalysisBundle(asOfDate, windows, results)
+    return res.json({ data: { ...bundle, cached: false, generatedAt }, error: null })
   } catch (err) {
     logger.error({ err }, 'Weekly bundle computation failed')
     res.status(502).json({ data: null, error: `Analysis error: ${err}` })
@@ -517,7 +503,6 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
     const windowKey = normalizeAnalysisWindowKey(req.body?.window ?? requestedWindows[0])
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
     const context = await buildAnalysisContext(pk, asOfDate, windowKey)
-    await invalidateAnalysisSections(pk, asOfDate, windowKey, sectionKeys)
     const queued = await queueMissingSections(context, sectionKeys, true)
     startAnalysisSectionWorker(context, queued)
     res.status(202).json({
@@ -683,10 +668,6 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
         pk,
       }) as { markdown?: string; content?: string } | null
       const markdown = markdownResult?.markdown ?? markdownResult?.content ?? ''
-      if (markdown) {
-        const { putCachedMarkdownExport } = await import('../services/analysisCache')
-        await putCachedMarkdownExport(pk, markdown, blockKey)
-      }
     } catch (mdErr) {
       logger.warn({ err: mdErr, pk, blockKey }, 'Markdown export failed for block regeneration')
     }
@@ -808,11 +789,12 @@ analyticsRouter.get('/blocks/:blockKey/export/:format', async (req, res) => {
       return res.status(400).json({ data: null, error: 'Unsupported export format. Use xlsx or markdown.' })
     }
 
-    const bundle = await getCachedBlockAnalysisBundle(pk, blockKey)
+    const program = await getProgramWithWeightLog(pk, 'current')
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, false, false)
     if (!bundle) {
       return res.status(404).json({
         data: null,
-        error: `No cached block analysis found for ${blockKey}. Open or generate the past block analysis before exporting.`,
+        error: `No block analysis found for ${blockKey}. Open or generate the past block analysis before exporting.`,
       })
     }
 
@@ -824,8 +806,8 @@ analyticsRouter.get('/blocks/:blockKey/export/:format', async (req, res) => {
     }
 
     const [programEvaluation, correlation] = await Promise.all([
-      getCachedBlockProgramEvaluationReport(pk, blockKey),
-      getCachedBlockCorrelationReport(pk, blockKey),
+      getOrCreateBlockProgramEvaluation(pk, program, blockKey, invokeToolDirect, false, false),
+      getOrCreateBlockCorrelationReport(pk, program, blockKey, invokeToolDirect, false, false),
     ])
     const filename = blockAnalysisExportFilename(bundle, format)
 
@@ -915,7 +897,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock, allGoals))
-      const bundle = await getCachedBlockAnalysisBundle(req.mapped_pk!, block.blockKey)
+      const bundle = await getOrCreateBlockAnalysisBundle(req.mapped_pk!, program, block.blockKey, invokeLambda, false, false)
       if (bundle) bundles.push(bundle)
       if (bundle) {
         correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(

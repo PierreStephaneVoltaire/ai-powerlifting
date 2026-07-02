@@ -3,10 +3,6 @@ import crypto from 'crypto'
 import * as sessionController from '../controllers/sessionController'
 import * as programController from '../controllers/programController'
 import { invokeSpecialistJson } from '../utils/agent'
-import {
-  getCachedWindowAnalysis,
-  markMarkdownExportDirty,
-} from '../services/analysisCache'
 import type { Session, Exercise, SessionStatus, SessionWellness, FailedSetReason } from '@powerlifting/types'
 
 export const sessionsRouter = Router({ mergeParams: true })
@@ -371,9 +367,6 @@ sessionsRouter.patch('/:version/:date/:index/complete', async (req, res, next) =
       index,
       { rpe, bodyWeightKg, notes, wellness: wellness ?? undefined }
     )
-    markMarkdownExportDirty(req.mapped_pk!, 'session_completion').catch((error) => {
-      console.warn('Failed to mark analysis markdown export dirty after session completion:', error)
-    })
     res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)
@@ -480,13 +473,7 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
       return res.status(400).json({ data: null, error: `Exercise index ${exerciseIndex} not found` })
     }
 
-    let cachedAnalysis: unknown = null
-    try {
-      const cached = await getCachedWindowAnalysis(req.mapped_pk!, 'current')
-      cachedAnalysis = cached?.data ?? null
-    } catch (error) {
-      console.warn('Cached weekly analysis unavailable for auto-regulation:', error)
-    }
+    const cachedAnalysis: unknown = null
 
     const task = {
       instruction: [

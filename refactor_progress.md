@@ -232,42 +232,78 @@ from `userSettings` unchanged (signatures preserved).
 
 ---
 
-## NEXT — Domain 10: Analytics (`services/analysisCache.ts` + `services/blockAnalytics.ts`)
+## DONE — Domain 10: Analytics (`services/analysisCache.ts` + `services/blockAnalytics.ts`)
 
-**Status:** These two services still import `db/dynamo` + `@aws-sdk/lib-dynamodb`
-(`BatchWriteCommand`, `DeleteCommand`, `GetCommand`, `PutCommand`, `QueryCommand`,
-`UpdateCommand`) against `POWERLIFTING_GOALS_TABLE`. They back the analysis/
-block-analytics features (`routes/analytics.ts` is huge).
+**Architecture decision (from user):** delete the DynamoDB cache entirely —
+consumers call the Fission compute parts every time; a future Redis layer will
+sit in front of Fission to cache by input with TTL. Also delete the section
+job-queue (collapse section orchestration to direct compute each request).
 
-**User note:** For the analytics/video domains the user said video is the LAST
-priority and "I'm getting rid of the cache" — so `analysisCache.ts` may be
-largely DELETED rather than ported. Needs a read to confirm whether the cache is
-still consumed anywhere or can simply be removed, vs `blockAnalytics.ts` which
-is real compute that must move to Fission.
+**What was wrong:**
+- `analysisCache.ts` (970 lines) — a DynamoDB-backed cache + section job-queue
+  (`getCached*`, `putCached*`, `invalidateAnalysisSections`, `queueAnalysisSectionJobs`,
+  `claimAnalysisSectionJob`, `completeAnalysisSectionJob`, `failAnalysisSectionJob`,
+  `analysisSectionStatus`, `markMarkdownExportDirty`, markdown/budget cache) against
+  `ANALYSIS_CACHE_TABLE` + `POWERLIFTING_GOALS_TABLE`. Also contained pure helpers
+  (`buildAnalysisWindows`, `makeWeeklyAnalysisBundle`, `isIsoDate`, normalizers, the
+  `*_KEYS` constants, types) mixed in.
+- `blockAnalytics.ts` (2778 lines) — `loadGoals` (direct Query on goals table) + a
+  parallel cache layer (`getCachedBlockAnalysisBundle`, `putCachedBlockAnalysisBundle`,
+  `getCachedJsonPayload`/`putCachedJsonPayload`, `listBlockCacheStatuses`, shard
+  helpers) wrapping Fission compute (`weekly_analysis`, `block_program_evaluation`,
+  `block_correlation_analysis`, `multi_block_comparison_analysis`). The 4
+  `getOrCreate*` functions were cache-check → Fission-compute → cache-store.
+- `routes/analytics.ts` (1152 lines) + `routes/sessions.ts` — orchestrated the
+  job-queue (enqueue → claim → compute → complete → store cached) + read cache.
 
-**What needs to be done:**
-1. Read `analysisCache.ts` + `blockAnalytics.ts` + who consumes them
-   (`routes/analytics.ts`, the AI `analysis_section`/`get_analysis_markdown`/
-   `regenerate_analysis` tools). Determine if the cache is removable wholesale.
-2. Port the real DynamoDB logic (block analytics compute) into a Fission layer
-   (`pl_analytics` or extend an existing one) + functions; delete the cache if
-   it's being dropped.
-3. Rewrite consumers so no `db/dynamo` import remains.
+**What I did:**
+- `blockAnalytics.ts` (2778→2174 lines): removed `db/dynamo` + `@aws-sdk` imports,
+  rerouted `loadGoals` → `invokeLambda('goals_list')`, stripped all cache from the
+  4 `getOrCreate*` functions (now direct Fission compute, `cacheOnly` returns null),
+  deleted all cache helper functions + `ANALYSIS_CACHE_TABLE` constant + shard logic.
+  `buildCurrentProgramBlockIndex` no longer attaches `cacheStatus`/`programEvaluationCacheStatus`.
+- `analysisCache.ts` (970→335 lines): deleted ALL dynamo cache + job-queue functions
+  + the `db/dynamo`/`@aws-sdk` imports. Kept ONLY the pure helpers
+  (`buildAnalysisWindows`, `makeWeeklyAnalysisBundle`, `buildAnalysisSourceFingerprint`,
+  `isIsoDate`, `normalizeAnalysisWindowKey`/`normalizeAnalysisSectionKeys`, the
+  `*_KEYS` constants, types). Rerouted `fetchGoalsForFingerprint` →
+  `invokeLambda('goals_list')`.
+- `routes/analytics.ts`: removed all cache/job-queue imports + the
+  `getCachedBlock*` imports. Added `analysisSectionStatusDirect` (computes a section
+  synchronously via `analysis_section`/`correlation_analysis`/`program_evaluation`
+  Fission tools, returns `{status:'complete', cached:false, payload}`). Rewrote
+  `queueMissingSections` (returns all keys — no cache), `computeDeterministicSection`
+  + `computeAiSection` (dropped claim/putCached/complete/fail, keep compute),
+  `runTargetedRegeneration`/`runFullCurrentBlockRegeneration` (return `results`,
+  dropped `putAllCachedWindowAnalyses`). Routes `/analysis/manifest`,
+  `/sections/:sectionKey` use `analysisSectionStatusDirect`; `/sections/queue`,
+  `/sections/invalidate`, `/analysis/regenerate` drop `invalidateAnalysisSections`;
+  `/analysis/weekly-bundle` always computes (no cache-read branch); export + block-
+  comparison routes use `getOrCreate*` with `program` loaded inline. Removed
+  `putCachedMarkdownExport` writes.
+- `routes/sessions.ts`: removed `analysisCache` import; `markMarkdownExportDirty`
+  call removed (cache invalidation dropped); `getCachedWindowAnalysis` removed
+  (`cachedAnalysis` is now `null` — future Redis will populate).
+
+**Verified:** 0 dynamo refs in analysisCache.ts + blockAnalytics.ts; 0 cache refs in
+analytics.ts + sessions.ts; `blockAnalysisExport.ts` clean; 174 zips build; the ONLY
+`.ts` still importing dynamo in the whole backend is `videoController.ts`.
 
 ---
 
-## PENDING — Domain 11: Video (`videoController.ts`) [user's LAST priority]
+## NEXT — Domain 11: Video (`videoController.ts`) [LAST priority]
 
 **Status:** `videoController.ts` imports `db/dynamo` AND `services/sessionStore`.
 Manages video metadata stored as an array on session items in `if-sessions` +
 S3 uploads.
 
 **User direction:** keep the actual S3 upload in the backend (binary I/O, not
-DynamoDB logic), move the session-video-array PATCH to Fission, and "get rid of
-the cache."
+DynamoDB logic), move the session-video-array PATCH to Fission.
 
 **What needs to be done:**
 1. Read `videoController.ts` + `routes/videos.ts` end-to-end.
 2. Move session-video-array read/patch to Fission (extend `pl_sessions` or new
    `video_*` functions); keep S3 `PutObject` in the backend.
 3. Rewrite `videoController.ts` — remove `db/dynamo` import; keep S3 client only.
+
+**Once video is done, `db/dynamo.ts` itself can be deleted (no consumers remain).**
