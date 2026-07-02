@@ -1,0 +1,42 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_program
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: "AI budget triage and pre-competition priority analysis for a powerlifter. Returns a structured assessment: overall status vs monthly cap, locked-in MANDATORY items, suggested cuts when over budget, missing-expense gaps based on the nearest competition, and a coach-facing note. Competition day is the north star — mandatory comp-linked items are never suggested for cuts."
+input_schema:
+  type: object
+  properties:
+    config:
+      type: object
+      description: "Budget config: monthly_cap (hard cap), currency."
+      properties:
+        monthly_cap:
+          type: number
+        currency:
+          type: string
+    items:
+      type: array
+      description: "Budget items with id, name, category, cost, recurrence, priority_tier, purchased, comp linkage."
+      items:
+        type: object
+    competitions:
+      type: array
+      description: "Optional upcoming competitions with name, start_date, user_status."
+      items:
+        type: object
+    spent_this_month:
+      type: number
+      description: "Total spent in the current month, for over/under-cap reasoning."
+  required:
+  - config
+  - items

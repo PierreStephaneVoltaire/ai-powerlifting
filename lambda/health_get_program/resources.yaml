@@ -1,0 +1,19 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Get the full training program from DynamoDB. Returns the cached program dict with all sessions, phases, meta, and preferences.
+input_schema:
+  type: object
+  properties: {}
+  required: []
+
+reserved_concurrency: null

@@ -1,0 +1,28 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_analysis_cache
+- pl_glossary
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
+timeout: 900
+description: Return the cached markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Use the cache unless it is stale, dirty, or refresh is true.
+input_schema:
+  type: object
+  properties:
+    refresh:
+      type: boolean
+      description: Force regeneration before returning markdown
+      default: false
+    max_age_hours:
+      type: integer
+      description: Maximum cache age before regeneration
+      default: 72
+  required: []
+
+reserved_concurrency: null

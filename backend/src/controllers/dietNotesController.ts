@@ -1,56 +1,33 @@
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
-import { docClient, TABLE } from '../db/dynamo'
-import { AppError } from '../middleware/errorHandler'
+import { invokeLambda } from '../utils/lambda'
 import type { DietNote } from '@powerlifting/types'
-
-async function resolveVersionSk(pk: string, version: string): Promise<string> {
-  if (version === 'current') {
-    const pointerCommand = new GetCommand({
-      TableName: TABLE,
-      Key: { pk, sk: 'program#current' },
-    })
-    const pointerResult = await docClient.send(pointerCommand)
-    if (!pointerResult.Item) return 'program#v001'
-    return (pointerResult.Item as any).ref_sk || 'program#v001'
-  }
-  return `program#${version}`
-}
 
 export async function updateDietNotes(
   pk: string,
-  version: string,
+  _version: string,
   dietNotes: DietNote[]
 ): Promise<void> {
-  const sk = await resolveVersionSk(pk, version)
+  // TODO: full replacement is emulated date-by-date because no bulk
+  // `health_replace_diet_notes` handler exists yet.
+  const current = await getDietNotes(pk, _version)
+  const newDates = new Set(dietNotes.map((n) => n.date))
+  const currentDates = new Set(current.map((n) => n.date))
 
-  const updateCommand = new UpdateCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    UpdateExpression: 'SET diet_notes = :notes, #meta.updated_at = :now',
-    ExpressionAttributeNames: { '#meta': 'meta' },
-    ExpressionAttributeValues: {
-      ':notes': dietNotes,
-      ':now': new Date().toISOString(),
-    },
-  })
-
-  await docClient.send(updateCommand)
-}
-
-export async function getDietNotes(pk: string, version: string): Promise<DietNote[]> {
-  const sk = await resolveVersionSk(pk, version)
-
-  const getCommand = new GetCommand({
-    TableName: TABLE,
-    Key: { pk, sk },
-    ProjectionExpression: 'diet_notes',
-  })
-
-  const result = await docClient.send(getCommand)
-
-  if (!result.Item) {
-    throw new AppError(`Program version ${version} not found`, 404)
+  for (const note of dietNotes) {
+    await invokeLambda('health_update_diet_note', {
+      pk,
+      date: note.date,
+      notes: note.notes,
+    })
   }
 
-  return (result.Item.diet_notes ?? []) as DietNote[]
+  for (const date of currentDates) {
+    if (!newDates.has(date)) {
+      await invokeLambda('health_delete_diet_note', { pk, date })
+    }
+  }
+}
+
+export async function getDietNotes(pk: string, _version: string): Promise<DietNote[]> {
+  const result = await invokeLambda('health_get_diet_notes', { pk })
+  return Array.isArray(result) ? result : []
 }

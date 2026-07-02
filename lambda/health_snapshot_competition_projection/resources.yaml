@@ -1,0 +1,31 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
+timeout: 900
+description: Snapshot projected maxes 7 days before a competition and optionally backfill missed snapshots.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Snapshot date (YYYY-MM-DD)
+    version:
+      type: string
+      description: Program version to update
+      default: current
+    allow_retrospective:
+      type: boolean
+      description: Allow backfilling a missed snapshot
+      default: false
+  required:
+  - date
+
+reserved_concurrency: null

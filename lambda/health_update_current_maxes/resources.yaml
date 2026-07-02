@@ -1,0 +1,28 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Update current training maxes.
+input_schema:
+  type: object
+  properties:
+    squat_kg:
+      type: number
+      description: New squat max in kg
+    bench_kg:
+      type: number
+      description: New bench max in kg
+    deadlift_kg:
+      type: number
+      description: New deadlift max in kg
+  required: []
+
+reserved_concurrency: null

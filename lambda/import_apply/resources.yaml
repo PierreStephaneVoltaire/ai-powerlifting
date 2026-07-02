@@ -1,0 +1,32 @@
+layers:
+- pl_boto3
+- pl_imports
+- pl_program
+- pl_templates
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
+timeout: 900
+description: Apply a staged import to the program or template library.
+input_schema:
+  type: object
+  properties:
+    import_id:
+      type: string
+    merge_strategy:
+      type: string
+      default: append
+    conflict_resolutions:
+      type: array
+      items:
+        type: object
+    start_date:
+      type: string
+  required:
+  - import_id
+
+reserved_concurrency: null

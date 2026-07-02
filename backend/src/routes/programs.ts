@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import * as programController from '../controllers/programController'
-import { invokeToolDirect } from '../utils/agent'
+import { invokeLambda } from '../utils/lambda'
 import type { PlannedExercise, LiftProfile } from '@powerlifting/types'
 
 export const programsRouter = Router()
@@ -156,7 +156,7 @@ programsRouter.put('/:version/lift-profiles', async (req, res, next) => {
     }
 
     await programController.updateLiftProfiles(req.mapped_pk!, req.params.version, liftProfiles)
-    invokeToolDirect('health_invalidate_program_cache', { pk: req.mapped_pk }).catch((err) => {
+    invokeLambda('health_invalidate_program_cache', { pk: req.mapped_pk }).catch((err) => {
       console.warn('Failed to invalidate IF health program cache after lift profile update:', err)
     })
     res.json({ data: { success: true }, error: null })

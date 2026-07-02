@@ -1,0 +1,23 @@
+layers:
+- pl_boto3
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Search public profiles by substring.
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: Substring to search (empty returns all visible profiles).
+    viewer_username:
+      type: string
+      description: Discord username of the requesting user (includes self).
+  required: []
+
+reserved_concurrency: null

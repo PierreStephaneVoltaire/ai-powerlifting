@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { invokeToolDirect } from '../utils/agent'
+import { invokeLambda } from '../utils/lambda'
 import { logger } from '../utils/logger'
 import * as programController from '../controllers/programController'
 import * as competitionController from '../controllers/competitionController'
@@ -13,19 +14,10 @@ import {
   DETERMINISTIC_SECTION_KEYS,
   buildAnalysisWindows,
   buildAnalysisSourceFingerprint,
-  analysisSectionStatus,
-  claimAnalysisSectionJob,
-  completeAnalysisSectionJob,
-  failAnalysisSectionJob,
-  getCachedAnalysisSection,
-  invalidateAnalysisSections,
-  putAllCachedWindowAnalyses,
   isIsoDate,
   makeWeeklyAnalysisBundle,
   normalizeAnalysisSectionKeys,
   normalizeAnalysisWindowKey,
-  putCachedAnalysisSection,
-  queueAnalysisSectionJobs,
   type AnalysisWindowKey,
   type AnalysisSectionKey,
 } from '../services/analysisCache'
@@ -34,9 +26,6 @@ import {
   buildBlockComparison,
   buildBlockComparisonContext,
   buildCurrentProgramBlockIndex,
-  getCachedBlockAnalysisBundle,
-  getCachedBlockCorrelationReport,
-  getCachedBlockProgramEvaluationReport,
   getOrCreateAiBlockComparison,
   getOrCreateBlockAnalysisBundle,
   getOrCreateBlockCorrelationReport,
@@ -74,7 +63,7 @@ async function getProgramWithWeightLog(pk: string, version = 'current'): Promise
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
   try {
-    await invokeToolDirect('health_snapshot_competition_projection', {
+    await invokeLambda('health_snapshot_competition_projection', {
       date,
       version: 'current',
       allow_retrospective: false,
@@ -107,34 +96,99 @@ async function buildAnalysisContext(
   return { pk, asOfDate, windowKey, program, windows, sourceFingerprint }
 }
 
-async function queueMissingSections(
+type AnalysisSectionStatusShape = {
+  sectionKey: AnalysisSectionKey
+  status: 'complete' | 'error'
+  generatedAt?: string
+  updatedAt?: string
+  error?: string
+  sourceFingerprint?: string
+  cached: boolean
+  payload?: unknown
+}
+
+async function analysisSectionStatusDirect(
   context: AnalysisContext,
+  sectionKey: AnalysisSectionKey,
+): Promise<AnalysisSectionStatusShape> {
+  const nowIso = new Date().toISOString()
+  try {
+    let payload: unknown
+    if (DETERMINISTIC_SECTION_SET.has(sectionKey)) {
+      if (sectionKey === 'overview' || sectionKey === 'alerts') {
+        await snapshotCompetitionProjection(context.pk, context.asOfDate)
+      }
+      const window = context.windows[context.windowKey]
+      payload = await invokeLambda('analysis_section', {
+        section: sectionKey,
+        weeks: window.weeks,
+        block: 'current',
+        window_start: window.start,
+        window_end: window.end,
+        ref_date: context.asOfDate,
+        week_start: window.weekStart,
+        week_end: window.weekEnd,
+        refresh_program: false,
+        program: context.program,
+        sessions: context.program.sessions ?? [],
+        pk: context.pk,
+      }) as Record<string, unknown>
+    } else if (sectionKey === 'ai_correlation') {
+      const window = context.windows[context.windowKey]
+      if (window.weeks < 4) {
+        payload = {
+          insufficient_data: true,
+          insufficient_data_reason: 'Correlation analysis requires at least 4 weeks of data.',
+          cache_miss: false,
+        }
+      } else {
+        payload = await invokeToolDirect('correlation_analysis', {
+          weeks: window.weeks,
+          block: 'current',
+          refresh: true,
+          cache_only: false,
+          pk: context.pk,
+        })
+      }
+    } else if (sectionKey === 'program_evaluation') {
+      if (context.windowKey !== 'block') {
+        payload = {
+          insufficient_data: true,
+          insufficient_data_reason: 'Program evaluation is only available for the full block.',
+          cache_miss: false,
+        }
+      } else {
+        payload = await invokeToolDirect('program_evaluation', {
+          refresh: true,
+          cache_only: false,
+          pk: context.pk,
+        })
+      }
+    } else {
+      payload = {}
+    }
+    return {
+      sectionKey,
+      status: 'complete',
+      generatedAt: nowIso,
+      updatedAt: nowIso,
+      sourceFingerprint: context.sourceFingerprint,
+      cached: false,
+      payload,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { sectionKey, status: 'error', error: message, cached: false }
+  }
+}
+
+async function queueMissingSections(
+  _context: AnalysisContext,
   sectionKeys: AnalysisSectionKey[],
-  force = false,
+  _force = false,
 ): Promise<AnalysisSectionKey[]> {
-  const missing: AnalysisSectionKey[] = []
-  for (const sectionKey of sectionKeys) {
-    const cached = force
-      ? null
-      : await getCachedAnalysisSection(
-        context.pk,
-        context.asOfDate,
-        context.windowKey,
-        sectionKey,
-        context.sourceFingerprint,
-      )
-    if (!cached) missing.push(sectionKey)
-  }
-  if (missing.length) {
-    await queueAnalysisSectionJobs(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      missing,
-      context.sourceFingerprint,
-    )
-  }
-  return missing
+  // No cache layer — every requested section is treated as "missing" and computed directly.
+  return sectionKeys
 }
 
 async function computeDeterministicSection(
@@ -142,21 +196,13 @@ async function computeDeterministicSection(
   sectionKey: AnalysisSectionKey,
 ): Promise<void> {
   if (!DETERMINISTIC_SECTION_SET.has(sectionKey)) return
-  const didClaim = await claimAnalysisSectionJob(
-    context.pk,
-    context.asOfDate,
-    context.windowKey,
-    sectionKey,
-    context.sourceFingerprint,
-  )
-  if (!didClaim) return
 
   try {
     if (sectionKey === 'overview' || sectionKey === 'alerts') {
       await snapshotCompetitionProjection(context.pk, context.asOfDate)
     }
     const window = context.windows[context.windowKey]
-    const payload = await invokeToolDirect('analysis_section', {
+    await invokeLambda('analysis_section', {
       section: sectionKey,
       weeks: window.weeks,
       block: 'current',
@@ -169,32 +215,9 @@ async function computeDeterministicSection(
       program: context.program,
       sessions: context.program.sessions ?? [],
       pk: context.pk,
-    }) as Record<string, unknown>
-    await putCachedAnalysisSection(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-      payload,
-    )
-    await completeAnalysisSectionJob(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-    )
+    })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await failAnalysisSectionJob(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-      message,
-    ).catch((err) => logger.warn({ err, sectionKey }, 'Failed to mark analysis section job failed'))
+    logger.warn({ err: error, sectionKey, pk: context.pk, windowKey: context.windowKey }, 'Deterministic analysis section compute failed')
   }
 }
 
@@ -202,15 +225,6 @@ async function computeAiSection(
   context: AnalysisContext,
   sectionKey: AnalysisSectionKey,
 ): Promise<void> {
-  const didClaim = await claimAnalysisSectionJob(
-    context.pk,
-    context.asOfDate,
-    context.windowKey,
-    sectionKey,
-    context.sourceFingerprint,
-  )
-  if (!didClaim) return
-
   try {
     const window = context.windows[context.windowKey]
     let payload: unknown
@@ -247,31 +261,9 @@ async function computeAiSection(
     } else {
       payload = {}
     }
-    await putCachedAnalysisSection(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-      payload,
-    )
-    await completeAnalysisSectionJob(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-    )
+    void payload
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await failAnalysisSectionJob(
-      context.pk,
-      context.asOfDate,
-      context.windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-      message,
-    ).catch((err) => logger.warn({ err, sectionKey }, 'Failed to mark AI analysis section failed'))
+    logger.warn({ err: error, sectionKey, pk: context.pk, windowKey: context.windowKey }, 'AI analysis section compute failed')
   }
 }
 
@@ -297,7 +289,7 @@ async function runTargetedRegeneration(
   pk: string,
   asOfDate: string,
   targetWindows?: AnalysisWindowKey[],
-): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows> }> {
+): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows>; results: Record<AnalysisWindowKey, unknown> }> {
   const program = await getProgramWithWeightLog(pk, 'current')
   const windows = buildAnalysisWindows(program, asOfDate)
   const sessions = program.sessions ?? []
@@ -309,7 +301,7 @@ async function runTargetedRegeneration(
     logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window from sections')
     const merged: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeToolDirect('analysis_section', {
+      const sectionPayload = await invokeLambda('analysis_section', {
         section: sectionKey,
         weeks: window.weeks,
         block: 'current',
@@ -328,44 +320,37 @@ async function runTargetedRegeneration(
     results[key] = merged
   }
 
-  await putAllCachedWindowAnalyses(pk, results)
-
   try {
-    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeToolDirect, true, false)
+    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeLambda, true, false)
   } catch (err) {
     logger.warn({ err, pk }, 'block_analysis#v1#current regeneration failed')
   }
 
   const generatedAt = new Date().toISOString()
   logger.info({ pk, generatedAt, windows: keys }, 'Targeted regeneration complete')
-  return { generatedAt, windows }
+  return { generatedAt, windows, results }
 }
 
 async function runFullCurrentBlockRegeneration(
   pk: string,
   asOfDate: string,
-): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows> }> {
+): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows>; results: Record<AnalysisWindowKey, unknown> }> {
   await snapshotCompetitionProjection(pk, asOfDate)
-  const { generatedAt, windows } = await runTargetedRegeneration(pk, asOfDate)
+  const { generatedAt, windows, results } = await runTargetedRegeneration(pk, asOfDate)
 
   try {
-    const markdownResult = await invokeToolDirect('export_program_markdown', {
+    await invokeLambda('export_program_markdown', {
       version: 'current',
       include_analysis: true,
       analysis_weeks: windows.block.weeks,
       pk,
-    }) as { markdown?: string; content?: string } | null
-    const markdown = markdownResult?.markdown ?? markdownResult?.content ?? ''
-    if (markdown) {
-      const { putCachedMarkdownExport } = await import('../services/analysisCache')
-      await putCachedMarkdownExport(pk, markdown, 'current')
-    }
+    })
   } catch (err) {
     logger.warn({ err, pk }, 'Markdown export failed during regeneration')
   }
 
   logger.info({ pk, generatedAt }, 'Full current block regeneration complete')
-  return { generatedAt, windows }
+  return { generatedAt, windows, results }
 }
 
 analyticsRouter.post('/e1rm-multiplier/suggestions', async (req, res) => {
@@ -385,13 +370,7 @@ analyticsRouter.get('/analysis/manifest', async (req, res) => {
     const windowKey = normalizeAnalysisWindowKey(req.query.window)
     const context = await buildAnalysisContext(pk, asOfDate, windowKey)
     const statuses = await Promise.all(ALL_SECTION_KEYS.map(async (sectionKey) => {
-      const status = await analysisSectionStatus(
-        pk,
-        asOfDate,
-        windowKey,
-        sectionKey,
-        context.sourceFingerprint,
-      )
+      const status = await analysisSectionStatusDirect(context, sectionKey)
       const { payload: _payload, ...withoutPayload } = status
       return withoutPayload
     }))
@@ -427,13 +406,9 @@ analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
         error: 'Read-only users can only queue deterministic analysis sections.',
       })
     }
-    const force = req.readOnly ? false : req.body?.force === true
     const context = await buildAnalysisContext(pk, asOfDate, windowKey)
-    if (force) {
-      await invalidateAnalysisSections(pk, asOfDate, windowKey, sectionKeys)
-    }
-    const queued = await queueMissingSections(context, sectionKeys, force)
-    startAnalysisSectionWorker(context, queued.length ? queued : sectionKeys)
+    const queued = await queueMissingSections(context, sectionKeys, true)
+    startAnalysisSectionWorker(context, queued)
     res.status(202).json({
       data: {
         accepted: true,
@@ -461,13 +436,7 @@ analyticsRouter.get('/analysis/sections/:sectionKey', async (req, res) => {
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.query.window)
     const context = await buildAnalysisContext(pk, asOfDate, windowKey)
-    const status = await analysisSectionStatus(
-      pk,
-      asOfDate,
-      windowKey,
-      sectionKey,
-      context.sourceFingerprint,
-    )
+    const status = await analysisSectionStatusDirect(context, sectionKey)
     res.json({
       data: {
         ...status,
@@ -490,7 +459,6 @@ analyticsRouter.post('/analysis/sections/invalidate', async (req, res) => {
     const windowKey = normalizeAnalysisWindowKey(req.body?.window)
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
     const context = await buildAnalysisContext(pk, asOfDate, windowKey)
-    await invalidateAnalysisSections(pk, asOfDate, windowKey, sectionKeys)
     const queued = await queueMissingSections(context, sectionKeys, true)
     startAnalysisSectionWorker(context, queued)
     res.status(202).json({
@@ -573,7 +541,7 @@ analyticsRouter.get('/analysis/markdown', async (req, res) => {
   try {
     const pk = req.mapped_pk!
 
-    const markdownResult = await invokeToolDirect('get_analysis_markdown', {
+    const markdownResult = await invokeLambda('get_analysis_markdown', {
       pk,
     }) as { markdown?: string; generated_at?: string; cached?: boolean } | null
 
@@ -611,7 +579,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
     const data: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeToolDirect('analysis_section', {
+      const sectionPayload = await invokeLambda('analysis_section', {
         section: sectionKey,
         weeks,
         block,
@@ -658,14 +626,14 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
     const refresh = req.query.refresh === 'true'
 
     if (isCurrent) {
-      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, refresh, false)
+      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, refresh, false)
       if (!bundle) {
         return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
       }
       return res.json({ data: bundle, error: null })
     }
 
-    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, refresh, false)
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, refresh, false)
     if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
     }
@@ -687,7 +655,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     let evalReport: Awaited<ReturnType<typeof getOrCreateBlockProgramEvaluation>> = null
 
     try {
-      bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeToolDirect, true, false)
+      bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, true, false)
     } catch (err) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
     }
@@ -709,7 +677,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     }
 
     try {
-      const markdownResult = await invokeToolDirect('export_program_markdown', {
+      const markdownResult = await invokeLambda('export_program_markdown', {
         version: 'current',
         include_analysis: false,
         pk,
@@ -901,7 +869,7 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
           req.mapped_pk!,
           program,
           block.blockKey,
-          invokeToolDirect,
+          invokeLambda,
           block.isCurrent,
           false,
           allGoals,
@@ -1104,14 +1072,14 @@ analyticsRouter.post('/budget/timeline', async (req, res) => {
     let competitions: unknown[] = []
     let federation_memberships: unknown[] = []
     try {
-      const userComps = await competitionController.listUserCompetitions(pk)
-      competitions = userComps
-        .filter((c) => c.user_status !== 'completed' && c.user_status !== 'skipped')
+      const comps = await competitionController.getCompetitions(pk, 'current')
+      competitions = comps
+        .filter((c) => c.status !== 'completed' && c.status !== 'skipped')
         .map((c) => ({
-          master_id: c.master_id,
+          master_id: c.date,
           name: c.name,
-          start_date: c.start_date,
-          user_status: c.user_status,
+          start_date: c.date,
+          user_status: c.status || 'optional',
         }))
     } catch (compErr) {
       logger.warn({ err: compErr, pk }, 'Failed to load competitions for budget timeline')

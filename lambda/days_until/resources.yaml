@@ -1,0 +1,24 @@
+layers: []
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+timeout: 900
+description: Calculate days until a target date.
+input_schema:
+  type: object
+  properties:
+    target_date:
+      type: string
+      description: Target date (YYYY-MM-DD)
+    label:
+      type: string
+      description: Human label for the milestone
+      default: target
+  required:
+  - target_date
+
+reserved_concurrency: null

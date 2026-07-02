@@ -1,13 +1,6 @@
 import { logger } from '../utils/logger'
-import {
-  BatchWriteCommand,
-  DeleteCommand,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-} from '@aws-sdk/lib-dynamodb'
+import { invokeLambda } from '../utils/lambda'
 import { createHash } from 'crypto'
-import { docClient, POWERLIFTING_GOALS_TABLE } from '../db/dynamo'
 import type { AgeCategory, AthleteGoal, Competition, LiftResults, Program, Session, WeightEntry } from '@powerlifting/types'
 
 const GOAL_TYPE_VALUES: ReadonlyArray<string> = [
@@ -381,12 +374,6 @@ export interface AiBlockComparisonResult {
   deterministic: BlockComparisonResult
 }
 
-const CACHE_SCHEMA_VERSION = 1
-const ANALYSIS_CACHE_TABLE = process.env.ANALYSIS_CACHE_TABLE_NAME || 'if-powerlifting-analysis-cache'
-const MAX_SHARD_CHARS = 350_000
-// Past blocks are permanent (no TTL). Current block uses 7 days.
-const CURRENT_BLOCK_TTL_DAYS = 7
-const DEFAULT_BLOCK = 'current'
 
 type InvokeTool = (toolName: string, args: Record<string, unknown>) => Promise<unknown>
 
@@ -428,99 +415,9 @@ function blockKeyFor(block: string): string {
   return `block_${createHash('sha1').update(block).digest('hex').slice(0, 14)}`
 }
 
-function cachePk(userPk: string): string {
-  return `analysis#${userPk}`
+
 }
 
-function blockAnalysisSk(blockKey: string): string {
-  return `block_analysis#v${CACHE_SCHEMA_VERSION}#${blockKey}`
-}
-
-function blockProgramEvaluationSk(blockKey: string): string {
-  return `block_program_eval#v${CACHE_SCHEMA_VERSION}#${blockKey}`
-}
-
-function blockCorrelationSk(blockKey: string): string {
-  return `block_correlation#v${CACHE_SCHEMA_VERSION}#${blockKey}`
-}
-
-function blockAiComparisonSk(fingerprint: string): string {
-  return `block_compare_ai#v${CACHE_SCHEMA_VERSION}#${fingerprint.slice(0, 40)}`
-}
-
-function partSk(baseSk: string, index: number): string {
-  return `${baseSk}#part#${String(index).padStart(3, '0')}`
-}
-
-function expiresAt(isCurrent: boolean): number | undefined {
-  if (!isCurrent) return undefined
-  return Math.floor(Date.now() / 1000) + CURRENT_BLOCK_TTL_DAYS * 24 * 60 * 60
-}
-
-function encodePayload(bundle: BlockAnalysisBundle): string {
-  return JSON.stringify({ ...bundle, cached: false })
-}
-
-function decodePayload(payload: string): BlockAnalysisBundle {
-  return JSON.parse(payload) as BlockAnalysisBundle
-}
-
-function encodeJsonPayload(value: unknown): string {
-  return JSON.stringify(value)
-}
-
-function decodeJsonPayload<T>(payload: string): T {
-  return JSON.parse(payload) as T
-}
-
-function chunkString(value: string, chunkSize: number): string[] {
-  const chunks: string[] = []
-  for (let index = 0; index < value.length; index += chunkSize) {
-    chunks.push(value.slice(index, index + chunkSize))
-  }
-  return chunks
-}
-async function batchDelete(tableName: string, keys: Array<{ pk: string; sk: string }>): Promise<void> {
-  for (let index = 0; index < keys.length; index += 25) {
-    const batch = keys.slice(index, index + 25)
-    if (!batch.length) continue
-    await docClient.send(new BatchWriteCommand({
-      RequestItems: {
-        [tableName]: batch.map((Key) => ({ DeleteRequest: { Key } })),
-      },
-    }))
-  }
-}
-
-async function deleteBundleObject(pk: string, sk: string): Promise<void> {
-  await docClient.send(new DeleteCommand({
-    TableName: ANALYSIS_CACHE_TABLE,
-    Key: { pk, sk },
-  }))
-
-  const partKeys: Array<{ pk: string; sk: string }> = []
-  let ExclusiveStartKey: Record<string, unknown> | undefined
-  do {
-    const response = await docClient.send(new QueryCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      ExpressionAttributeValues: {
-        ':pk': pk,
-        ':prefix': `${sk}#part#`,
-      },
-      ProjectionExpression: 'pk, sk',
-      ExclusiveStartKey,
-    }))
-    for (const item of response.Items || []) {
-      if (typeof item.pk === 'string' && typeof item.sk === 'string') {
-        partKeys.push({ pk: item.pk, sk: item.sk })
-      }
-    }
-    ExclusiveStartKey = response.LastEvaluatedKey
-  } while (ExclusiveStartKey)
-
-  await batchDelete(ANALYSIS_CACHE_TABLE, partKeys)
-}
 
 function parseDate(value?: string | null): Date | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -678,18 +575,7 @@ function goalTargetCompetitionDates(goal: AthleteGoal): string[] {
 }
 
 export async function loadGoals(pk: string): Promise<AthleteGoal[]> {
-  const items: Record<string, unknown>[] = []
-  let lastKey: Record<string, unknown> | undefined
-  do {
-    const resp = await docClient.send(new QueryCommand({
-      TableName: POWERLIFTING_GOALS_TABLE,
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      ExpressionAttributeValues: { ':pk': pk, ':prefix': 'GOAL#' },
-      ExclusiveStartKey: lastKey,
-    }))
-    for (const it of resp.Items ?? []) items.push(it as Record<string, unknown>)
-    lastKey = resp.LastEvaluatedKey
-  } while (lastKey)
+  const items = (await invokeLambda('goals_list', { pk })) as Record<string, unknown>[]
   return items
     .map((it) => {
       const { sk: _sk, pk: _pk, created_at: _c, updated_at: _u, target_competition_ids: _t, ...rest } = it as Record<string, unknown>
@@ -973,73 +859,7 @@ function buildDataQualityFlags(
   return flags
 }
 
-export async function listBlockCacheStatuses(userPk: string): Promise<Map<string, { sourceFingerprint?: string; generatedAt?: string }>> {
-  const pk = cachePk(userPk)
-  const statuses = new Map<string, { sourceFingerprint?: string; generatedAt?: string }>()
-  try {
-    let ExclusiveStartKey: Record<string, unknown> | undefined
-    do {
-      const response = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': `block_analysis#v${CACHE_SCHEMA_VERSION}#`,
-        },
-        ProjectionExpression: 'block_key, source_fingerprint, generated_at',
-        ExclusiveStartKey,
-      }))
-      for (const item of response.Items || []) {
-        if (typeof item.block_key === 'string') {
-          statuses.set(item.block_key, {
-            sourceFingerprint: typeof item.source_fingerprint === 'string' ? item.source_fingerprint : undefined,
-            generatedAt: typeof item.generated_at === 'string' ? item.generated_at : undefined,
-          })
-        }
-      }
-      ExclusiveStartKey = response.LastEvaluatedKey
-    } while (ExclusiveStartKey)
-  } catch (error) {
-    logger.warn({ err: error, userPk }, 'Block analysis cache status read failed')
-  }
-  return statuses
-}
-
-export async function listBlockProgramEvaluationCacheStatuses(userPk: string): Promise<Map<string, { sourceFingerprint?: string; generatedAt?: string }>> {
-  const pk = cachePk(userPk)
-  const statuses = new Map<string, { sourceFingerprint?: string; generatedAt?: string }>()
-  try {
-    let ExclusiveStartKey: Record<string, unknown> | undefined
-    do {
-      const response = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': `block_program_eval#v${CACHE_SCHEMA_VERSION}#`,
-        },
-        ProjectionExpression: 'block_key, source_fingerprint, generated_at',
-        ExclusiveStartKey,
-      }))
-      for (const item of response.Items || []) {
-        if (typeof item.block_key === 'string') {
-          statuses.set(item.block_key, {
-            sourceFingerprint: typeof item.source_fingerprint === 'string' ? item.source_fingerprint : undefined,
-            generatedAt: typeof item.generated_at === 'string' ? item.generated_at : undefined,
-          })
-        }
-      }
-      ExclusiveStartKey = response.LastEvaluatedKey
-    } while (ExclusiveStartKey)
-  } catch (error) {
-    logger.warn({ err: error, userPk }, 'Block program evaluation cache status read failed')
-  }
-  return statuses
-}
-
 export async function buildCurrentProgramBlockIndex(userPk: string, program: Program, allGoals?: AthleteGoal[]): Promise<ProgramBlockIndexEntry[]> {
-  const cacheStatuses = await listBlockCacheStatuses(userPk)
-  const evalCacheStatuses = await listBlockProgramEvaluationCacheStatuses(userPk)
   const goals = allGoals ?? (userPk ? await loadGoals(userPk) : [])
   const groups = new Map<string, Session[]>()
   for (const session of program.sessions ?? []) {
@@ -1064,8 +884,6 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
     const scopedGoals = goalsForCompetitions(goals, scopedCompetitions)
     const sourceFingerprint = blockSourceFingerprint(program, block, sorted, phases, scopedCompetitions, scopedGoals)
     const dataQualityFlags = buildDataQualityFlags(program, sorted, startDate, endDate, linkedCompetition, blockKey)
-    const cacheStatus = cacheStatuses.get(blockKey)
-    const evalCacheStatus = evalCacheStatuses.get(blockKey)
     const results = linkedCompetition?.competition.results
 
     const entry: ProgramBlockIndexEntry = {
@@ -1093,309 +911,6 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
       comparisonEligible: Boolean(linkedCompetition && hasResults(results)),
       dataQualityFlags,
     }
-    const cacheFingerprint = analysisScopedBlockEntry(program, entry).sourceFingerprint
-
-    return {
-      ...entry,
-      cacheStatus: {
-        cached: cacheStatus?.sourceFingerprint === cacheFingerprint || (block !== DEFAULT_BLOCK && Boolean(cacheStatus)),
-        generatedAt: cacheStatus?.generatedAt,
-      },
-      programEvaluationCacheStatus: {
-        cached: evalCacheStatus?.sourceFingerprint === cacheFingerprint || (block !== DEFAULT_BLOCK && Boolean(evalCacheStatus)),
-        generatedAt: evalCacheStatus?.generatedAt,
-      },
-    } satisfies ProgramBlockIndexEntry
-  })
-
-  return blocks.sort((a, b) => {
-    if (a.isCurrent !== b.isCurrent) return a.isCurrent ? 1 : -1
-    return a.startDate.localeCompare(b.startDate)
-  })
-}
-
-export async function getCachedBlockAnalysisBundle(
-  userPk: string,
-  blockKey: string,
-  _expectedSourceFingerprint?: string,
-  _options?: { allowStale?: boolean },
-): Promise<BlockAnalysisBundle | null> {
-  try {
-    const pk = cachePk(userPk)
-    
-    // Find the latest version of this block analysis.
-    // FilterExpression cannot reference primary key attributes (sk) — blockKey filtering
-    // is done via the KeyConditionExpression prefix so DynamoDB uses the primary key index.
-    const response = await docClient.send(new QueryCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-      ExpressionAttributeValues: {
-        ':pk': pk,
-        ':prefix': `block_analysis#v${CACHE_SCHEMA_VERSION}#${blockKey}`,
-      },
-    }))
-
-    const items = response.Items || []
-    if (!items.length) return null
-
-    // Sort by schema_version desc, then generated_at desc
-    const sorted = items.sort((a, b) => {
-      const vA = Number(a.schema_version || 0)
-      const vB = Number(b.schema_version || 0)
-      if (vA !== vB) return vB - vA
-      return String(b.generated_at || '').localeCompare(String(a.generated_at || ''))
-    })
-
-    const item = sorted[0]
-    const sk = item.sk as string
-
-    // Support new plain-JSON payload and legacy gzip+base64 for backward compat
-    let payloadStr = typeof item.payload === 'string' ? item.payload : ''
-    const shardCount = Number(item.shard_count || 0)
-
-    if (!payloadStr && shardCount > 0) {
-      const parts = await Promise.all(
-        Array.from({ length: shardCount }, async (_, index) => {
-          const part = await docClient.send(new GetCommand({
-            TableName: ANALYSIS_CACHE_TABLE,
-            Key: { pk, sk: partSk(sk, index) },
-          }))
-          return String(part.Item?.payload ?? '')
-        }),
-      )
-      payloadStr = parts.join('')
-    }
-
-    // Legacy: decode gzip+base64 if payload is absent but payload_gzip_b64 exists
-    if (!payloadStr) {
-      const legacyB64 = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
-      if (legacyB64) {
-        try {
-          const { gunzipSync } = await import('zlib')
-          payloadStr = gunzipSync(Buffer.from(legacyB64, 'base64')).toString('utf8')
-        } catch {
-          return null
-        }
-      }
-    }
-
-    if (!payloadStr) return null
-    const bundle = decodePayload(payloadStr)
-    if (bundle.block.blockKey !== blockKey) return null
-    return { ...bundle, cached: true }
-  } catch (error) {
-    logger.warn({ err: error, userPk, blockKey }, 'Block analysis cache read failed')
-    return null
-  }
-}
-
-export async function putCachedBlockAnalysisBundle(userPk: string, bundle: BlockAnalysisBundle): Promise<void> {
-  try {
-    const pk = cachePk(userPk)
-    const sk = blockAnalysisSk(bundle.block.blockKey)
-    const encoded = encodePayload(bundle)
-    const isCurrent = bundle.block.isCurrent
-    const expiry = expiresAt(isCurrent)
-
-    await deleteBundleObject(pk, sk)
-
-    if (encoded.length <= MAX_SHARD_CHARS) {
-      const item: Record<string, unknown> = {
-        pk,
-        sk,
-        schema_version: CACHE_SCHEMA_VERSION,
-        block_key: bundle.block.blockKey,
-        block_label: bundle.block.label,
-        source_fingerprint: bundle.sourceFingerprint,
-        generated_at: bundle.generatedAt,
-        payload: encoded,
-      }
-      if (expiry !== undefined) item.expires_at = expiry
-      await docClient.send(new PutCommand({ TableName: ANALYSIS_CACHE_TABLE, Item: item }))
-      return
-    }
-
-    const chunks = chunkString(encoded, MAX_SHARD_CHARS)
-    const manifestItem: Record<string, unknown> = {
-      pk,
-      sk,
-      schema_version: CACHE_SCHEMA_VERSION,
-      block_key: bundle.block.blockKey,
-      block_label: bundle.block.label,
-      source_fingerprint: bundle.sourceFingerprint,
-      generated_at: bundle.generatedAt,
-      shard_count: chunks.length,
-    }
-    if (expiry !== undefined) manifestItem.expires_at = expiry
-    await docClient.send(new PutCommand({ TableName: ANALYSIS_CACHE_TABLE, Item: manifestItem }))
-
-    for (let index = 0; index < chunks.length; index += 25) {
-      const batch = chunks.slice(index, index + 25)
-      await docClient.send(new BatchWriteCommand({
-        RequestItems: {
-          [ANALYSIS_CACHE_TABLE]: batch.map((payload, batchIndex) => ({
-            PutRequest: {
-              Item: {
-                pk,
-                sk: partSk(sk, index + batchIndex),
-                payload,
-                ...(expiry !== undefined ? { expires_at: expiry } : {}),
-              },
-            },
-          })),
-        },
-      }))
-    }
-  } catch (error) {
-    logger.warn({ err: error, userPk, blockKey: bundle.block.blockKey }, 'Block analysis cache write failed')
-  }
-}
-
-async function getCachedJsonPayload<T>(
-  userPk: string,
-  sk: string,
-  expectedSourceFingerprint?: string,
-  options?: { allowStale?: boolean },
-): Promise<T | null> {
-  try {
-    const pk = cachePk(userPk)
-    const response = await docClient.send(new GetCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      Key: { pk, sk },
-    }))
-    const item = response.Item
-    if (!item) return null
-    if (
-      expectedSourceFingerprint
-      && options?.allowStale !== true
-      && item.source_fingerprint !== expectedSourceFingerprint
-    ) {
-      return null
-    }
-
-    // New plain JSON payload
-    let payloadStr = typeof item.payload === 'string' ? item.payload : ''
-    const shardCount = Number(item.shard_count || 0)
-
-    if (!payloadStr && shardCount > 0) {
-      const parts = await Promise.all(
-        Array.from({ length: shardCount }, async (_, index) => {
-          const part = await docClient.send(new GetCommand({
-            TableName: ANALYSIS_CACHE_TABLE,
-            Key: { pk, sk: partSk(sk, index) },
-          }))
-          return String(part.Item?.payload ?? '')
-        }),
-      )
-      payloadStr = parts.join('')
-    }
-
-    // Legacy gzip fallback
-    if (!payloadStr) {
-      const legacyB64 = typeof item.payload_gzip_b64 === 'string' ? item.payload_gzip_b64 : ''
-      if (legacyB64) {
-        try {
-          const { gunzipSync } = await import('zlib')
-          payloadStr = gunzipSync(Buffer.from(legacyB64, 'base64')).toString('utf8')
-        } catch {
-          return null
-        }
-      }
-    }
-
-    return payloadStr ? decodeJsonPayload<T>(payloadStr) : null
-  } catch (error) {
-    logger.warn({ err: error, userPk, sk }, 'Block JSON cache read failed')
-    return null
-  }
-}
-
-export async function getCachedBlockProgramEvaluationReport(
-  userPk: string,
-  blockKey: string,
-): Promise<Record<string, unknown> | null> {
-  const cached = await getCachedJsonPayload<Record<string, unknown>>(
-    userPk,
-    blockProgramEvaluationSk(blockKey),
-  )
-  return cached ? { ...cached, cached: true } : null
-}
-
-export async function getCachedBlockCorrelationReport(
-  userPk: string,
-  blockKey: string,
-): Promise<Record<string, unknown> | null> {
-  const cached = await getCachedJsonPayload<Record<string, unknown>>(
-    userPk,
-    blockCorrelationSk(blockKey),
-  )
-  return cached ? { ...cached, cached: true } : null
-}
-
-async function putCachedJsonPayload(
-  userPk: string,
-  sk: string,
-  payloadValue: unknown,
-  metadata: {
-    sourceFingerprint: string
-    blockKey?: string
-    blockLabel?: string
-    isCurrent?: boolean
-  },
-): Promise<void> {
-  try {
-    const pk = cachePk(userPk)
-    const encoded = encodeJsonPayload(payloadValue)
-    const expiry = expiresAt(metadata.isCurrent ?? false)
-
-    await deleteBundleObject(pk, sk)
-
-    const baseItem: Record<string, unknown> = {
-      pk,
-      sk,
-      schema_version: CACHE_SCHEMA_VERSION,
-      source_fingerprint: metadata.sourceFingerprint,
-      generated_at: new Date().toISOString(),
-    }
-    if (expiry !== undefined) baseItem.expires_at = expiry
-    if (metadata.blockKey) baseItem.block_key = metadata.blockKey
-    if (metadata.blockLabel) baseItem.block_label = metadata.blockLabel
-
-    if (encoded.length <= MAX_SHARD_CHARS) {
-      await docClient.send(new PutCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        Item: { ...baseItem, payload: encoded },
-      }))
-      return
-    }
-
-    const chunks = chunkString(encoded, MAX_SHARD_CHARS)
-    await docClient.send(new PutCommand({
-      TableName: ANALYSIS_CACHE_TABLE,
-      Item: { ...baseItem, shard_count: chunks.length },
-    }))
-
-    for (let index = 0; index < chunks.length; index += 25) {
-      const batch = chunks.slice(index, index + 25)
-      await docClient.send(new BatchWriteCommand({
-        RequestItems: {
-          [ANALYSIS_CACHE_TABLE]: batch.map((payload, batchIndex) => ({
-            PutRequest: {
-              Item: {
-                pk,
-                sk: partSk(sk, index + batchIndex),
-                payload,
-                ...(expiry !== undefined ? { expires_at: expiry } : {}),
-              },
-            },
-          })),
-        },
-      }))
-    }
-  } catch (error) {
-    logger.warn({ err: error, userPk, sk }, 'Block JSON cache write failed')
-  }
-}
 
 function canonicalLift(name: string): 'squat' | 'bench' | 'deadlift' | null {
   const lower = name.toLowerCase().trim()
@@ -1752,15 +1267,6 @@ export async function getOrCreateBlockAnalysisBundle(
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
 
-  if (!refresh || cacheOnly) {
-    const cached = await getCachedBlockAnalysisBundle(userPk, blockKey)
-    if (cached && (cacheOnly || !hasPastDateProjectionFailure(cached, entry))) {
-      if (!entry.isCurrent) {
-        logger.info({ userPk, blockKey, cached: true }, 'Block analysis cache hit')
-      }
-      return cached
-    }
-  }
   if (cacheOnly) return null
 
   logger.info({ userPk, blockKey, isCurrent: entry.isCurrent, weeks: entry.weekCount }, 'Computing block analysis')
@@ -1794,7 +1300,6 @@ export async function getOrCreateBlockAnalysisBundle(
     weekly,
     historical: makeHistoricalSummary(program, entry, weekly),
   }
-  await putCachedBlockAnalysisBundle(userPk, bundle)
   return bundle
 }
 
@@ -1813,29 +1318,7 @@ export async function getOrCreateBlockProgramEvaluation(
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
 
-  const sk = blockProgramEvaluationSk(blockKey)
-  if (!refresh) {
-    const cached = await getCachedJsonPayload<Record<string, unknown>>(userPk, sk, entry.sourceFingerprint)
-    if (cached) {
-      return {
-        ...cached,
-        cached: true,
-        window_start: cached.window_start ?? entry.startDate,
-      }
-    }
-  }
-
-  if (cacheOnly) {
-    return {
-      insufficient_data: true,
-      insufficient_data_reason: 'No cached program analysis exists for this block. Generate it to run AI analysis.',
-      cache_miss: true,
-      cached: false,
-      generated_at: '',
-      window_start: entry.startDate,
-      weeks: 0,
-    }
-  }
+  if (cacheOnly) return null
 
   const analysisSessions = analysisSessionsForBlock(program, entry, { includeSyntheticCompetition: false })
   const completedWeeks = new Set(
@@ -1871,12 +1354,6 @@ export async function getOrCreateBlockProgramEvaluation(
     weeks: completedWeeks.size,
   }
 
-  await putCachedJsonPayload(userPk, sk, report, {
-    sourceFingerprint: entry.sourceFingerprint,
-    blockKey,
-    blockLabel: entry.label,
-    isCurrent: entry.isCurrent,
-  })
   return report
 }
 
@@ -1895,32 +1372,7 @@ export async function getOrCreateBlockCorrelationReport(
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
 
-  const sk = blockCorrelationSk(blockKey)
-  if (!refresh) {
-    const cached = await getCachedJsonPayload<Record<string, unknown>>(userPk, sk)
-    if (cached) {
-      return {
-        ...cached,
-        cached: true,
-        window_start: cached.window_start ?? entry.startDate,
-        weeks: cached.weeks ?? entry.weekCount,
-      }
-    }
-  }
-
-  if (cacheOnly) {
-    return {
-      findings: [],
-      summary: '',
-      insufficient_data: true,
-      insufficient_data_reason: 'No cached ROI correlation report exists for this block. Generate it to run AI analysis.',
-      cache_miss: true,
-      cached: false,
-      generated_at: '',
-      window_start: entry.startDate,
-      weeks: entry.weekCount,
-    }
-  }
+  if (cacheOnly) return null
 
   const programForBlock = buildBlockProgram(program, entry, goals, {
     normalizeToCurrent: true,
@@ -1934,12 +1386,6 @@ export async function getOrCreateBlockCorrelationReport(
     pk: userPk,
   }))
 
-  await putCachedJsonPayload(userPk, sk, report, {
-    sourceFingerprint: entry.sourceFingerprint,
-    blockKey,
-    blockLabel: entry.label,
-    isCurrent: entry.isCurrent,
-  })
   return report
 }
 
@@ -2693,55 +2139,6 @@ export async function getOrCreateAiBlockComparison(
     contexts,
   )
   const selectedBlockKeys = deterministic.selectedBlockKeys
-  const sk = blockAiComparisonSk(sourceFingerprint)
-
-  if (!refresh) {
-    const cached = await getCachedJsonPayload<AiBlockComparisonResult>(userPk, sk, sourceFingerprint)
-    if (cached) {
-      return {
-        ...cached,
-        cached: true,
-        deterministic,
-        selectedBlockKeys,
-        sourceFingerprint,
-      }
-    }
-    
-    try {
-      const pk = `analysis#${userPk}`
-      const prefix = `block_compare_ai#v${CACHE_SCHEMA_VERSION}#`
-      const response = await docClient.send(new QueryCommand({
-        TableName: ANALYSIS_CACHE_TABLE,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues: {
-          ':pk': pk,
-          ':prefix': prefix,
-        },
-      }))
-      
-      const items = response.Items || []
-      if (items.length > 0) {
-        const sorted = items.sort((a, b) => {
-          return String(b.generated_at || '').localeCompare(String(a.generated_at || ''))
-        })
-        const latestItem = sorted[0]
-        const fallbackSk = latestItem.sk as string
-        const fallbackCached = await getCachedJsonPayload<AiBlockComparisonResult>(userPk, fallbackSk)
-        if (fallbackCached) {
-           return {
-             ...fallbackCached,
-             cached: true,
-             deterministic,
-             selectedBlockKeys,
-             sourceFingerprint,
-           }
-        }
-      }
-    } catch (error) {
-      logger.warn({ err: error, userPk }, 'Block compare fallback cache read failed')
-    }
-  }
-
   if (cacheOnly) {
     return {
       schemaVersion: CACHE_SCHEMA_VERSION,
@@ -2773,6 +2170,5 @@ export async function getOrCreateAiBlockComparison(
     deterministic,
   }
 
-  await putCachedJsonPayload(userPk, sk, result, { sourceFingerprint })
   return result
 }

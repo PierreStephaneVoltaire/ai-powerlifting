@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { invokeToolDirect } from '../utils/agent'
+import { invokeLambda } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 
 export const statsRouter = Router()
@@ -10,7 +10,7 @@ export const statsRouter = Router()
 
 statsRouter.get('/categories', async (req, res, next) => {
   try {
-    const data = await invokeToolDirect('powerlifting_filter_categories', {})
+    const data = await invokeLambda('powerlifting_filter_categories', {})
     // Return 503 while dataset is still loading
     if (typeof data === 'string' && data.includes('Dataset not ready')) {
       return res.status(503).set('Retry-After', '30').json({ error: 'DATASET_NOT_FOUND', message: data })
@@ -31,7 +31,7 @@ statsRouter.post('/analyze', async (req, res, next) => {
       sex_code, federation, country, region,
       equipment, sex, age_class, year, event_type, min_dots,
     } = req.body
-    const data = await invokeToolDirect('analyze_powerlifting_stats', {
+    const data = await invokeLambda('analyze_powerlifting_stats', {
       squat_kg: squat,
       bench_kg: bench,
       deadlift_kg: deadlift,
@@ -64,7 +64,7 @@ statsRouter.get('/ranking_percentile', async (req, res, next) => {
     const toNum = (v: unknown) => v !== undefined && v !== '' ? Number(v) : undefined
     const toStr = (v: unknown) => v !== undefined && v !== '' ? String(v) : undefined
 
-    const data = await invokeToolDirect('powerlifting_ranking_percentile', {
+    const data = await invokeLambda('powerlifting_ranking_percentile', {
       squat_kg:     toNum(req.query.squat_kg),
       bench_kg:     toNum(req.query.bench_kg),
       deadlift_kg:  toNum(req.query.deadlift_kg),

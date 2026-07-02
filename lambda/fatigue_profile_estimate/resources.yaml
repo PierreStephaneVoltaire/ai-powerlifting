@@ -1,0 +1,48 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_program
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+timeout: 900
+s3_read: false
+reserved_concurrency: 5
+description: Estimate the fatigue profile (axial/neural/peripheral/systemic components) for an exercise using AI analysis of biomechanical characteristics.
+input_schema:
+  type: object
+  properties:
+    exercise:
+      type: object
+      description: Exercise metadata dict
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        equipment:
+          type: string
+        primary_muscles:
+          type: array
+          items:
+            type: string
+        secondary_muscles:
+          type: array
+          items:
+            type: string
+        tertiary_muscles:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        how_to_perform:
+          type: string
+        why_do_it:
+          type: string
+  required:
+  - exercise

@@ -1,0 +1,48 @@
+layers:
+- pl_boto3
+- pl_pandas
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+timeout: 900
+s3_read: true
+description: Compares a user's powerlifting stats against the OpenPowerlifting dataset.
+input_schema:
+  type: object
+  properties:
+    squat_kg:
+      type: number
+    bench_kg:
+      type: number
+    deadlift_kg:
+      type: number
+    bodyweight_kg:
+      type: number
+    sex_code:
+      type: string
+      description: 'User''s sex for DOTS: ''M'' or ''F'''
+    federation:
+      type: string
+    country:
+      type: string
+    region:
+      type: string
+    equipment:
+      type: string
+    sex:
+      type: string
+    age_class:
+      type: string
+    year:
+      type: integer
+    event_type:
+      type: string
+    min_dots:
+      type: number
+  required: []
+
+reserved_concurrency: null

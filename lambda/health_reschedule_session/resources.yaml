@@ -1,0 +1,27 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Move a training session from one date to another.
+input_schema:
+  type: object
+  properties:
+    old_date:
+      type: string
+      description: Current session date (YYYY-MM-DD)
+    new_date:
+      type: string
+      description: Target date to move to (YYYY-MM-DD)
+  required:
+  - old_date
+  - new_date
+
+reserved_concurrency: null

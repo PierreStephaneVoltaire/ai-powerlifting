@@ -1,0 +1,25 @@
+layers:
+- pl_boto3
+- pl_glossary
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Archive an exercise in the glossary by id.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    id:
+      type: string
+      description: Exercise id to archive.
+  required:
+  - id
+
+reserved_concurrency: null

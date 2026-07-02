@@ -1,0 +1,24 @@
+layers:
+- pl_boto3
+- pl_templates
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Unpublish an authored template so only its author can see it.
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+  required:
+  - sk
+
+reserved_concurrency: null

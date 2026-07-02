@@ -1,0 +1,31 @@
+layers:
+- pl_boto3
+- pl_analysis_cache
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 60
+description: Get a cached per-window weekly analysis bundle from DynamoDB.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: User partition key (defaults to env HEALTH_PROGRAM_PK).
+    window_key:
+      type: string
+      description: Window identifier (e.g. "last_7d", "last_28d").
+    as_of_date:
+      type: string
+      description: Optional ISO date the window was anchored to (informational).
+    block_key:
+      type: string
+      description: Optional block key (defaults to current block).
+  required:
+  - window_key
+
+reserved_concurrency: null

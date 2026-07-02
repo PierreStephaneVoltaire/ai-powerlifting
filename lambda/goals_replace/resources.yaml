@@ -1,0 +1,25 @@
+layers:
+- pl_boto3
+- pl_goals
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Full replace of a user's athlete goals (upsert incoming by id, delete missing).
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    goals:
+      type: array
+      description: Array of raw goal bodies to replace the current set with.
+  required:
+  - goals
+
+reserved_concurrency: null

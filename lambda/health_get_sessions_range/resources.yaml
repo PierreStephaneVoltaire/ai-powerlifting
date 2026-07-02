@@ -1,0 +1,27 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Get training sessions for a date range.
+input_schema:
+  type: object
+  properties:
+    start_date:
+      type: string
+      description: Start of date range (YYYY-MM-DD)
+    end_date:
+      type: string
+      description: End of date range (YYYY-MM-DD)
+  required:
+  - start_date
+  - end_date
+
+reserved_concurrency: null

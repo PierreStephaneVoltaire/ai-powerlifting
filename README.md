@@ -150,36 +150,53 @@ invoke. There are 10+ AI surfaces (details in [`docs/ARCHITECTURE.md`](docs/ARCH
 ```mermaid
 flowchart LR
   subgraph Client[Client interfaces]
-    UI[React PWA\nVite + Mantine 9]
-    Discord[Discord\nagent channel]
+    UI[React PWA Vite + Mantine 9]
+    Discord[Discord
+agent channel]
   end
   subgraph K3S[Bare-metal k3s cluster]
-    BE[Express API\nthin transport]
-    Agent[IF Agent API\nspecialist routing + tools]
-    Tools[Health tools\nanalytics.py + *_ai.py]
+    BE[Express API
+thin transport + LRU cache]
+    Agent[IF Agent API
+specialist routing + health_lambda MCP]
   end
   subgraph AWS[AWS - powerlifting scope]
-    DDB[(DynamoDB\nif-health, if-sessions,\nif-powerlifting-*)]
-    S3[(S3\nvideos, budget media)]
-    Lambda[Lambda\nvideo thumbnails]
+    DDB[(DynamoDB
+if-health, if-sessions,
+if-powerlifting-*)]
+    S3[(S3
+videos, budget media)]
+    APIGW[HTTP API Gateway
+94 health tools + pl_authorizer]
+    PL[pl-* Lambda functions
+health tools + pl-ai layer]
+    Thumbnails[Lambda
+video thumbnails]
   end
   UI -->|/api| BE
   Discord --> Agent
-  BE -->|invokeToolDirect\nX-Direct-Tool-Invoke| Agent
-  Agent --> Tools
-  Tools --> DDB
-  Tools --> S3
+  BE -->|invokeLambda
+HTTP POST /<tool>| APIGW
+  Agent -->|health_lambda MCP
+POST /<tool>| APIGW
+  APIGW -->|X-Internal-Token gate| PL
+  PL --> DDB
+  PL --> S3
+  BE -.->|invokeToolDirect (health_rag_search only)| Agent
   BE --> DDB
   BE --> S3
-  S3 -->|S3 event| Lambda
-  Lambda --> DDB
+  S3 -->|S3 event| Thumbnails
+  Thumbnails --> DDB
 ```
 
-The stack runs on a **bare-metal k3s** cluster for cost savings, but it's
-designed so I can spin up more nodes in AWS or any other cloud. I'd just need to
-create an NFS server that provides secure access to my local master node, then
-cloud-native workloads could connect to that and work seamlessly. I also plan to
-lean on **Lambdas for calculations** for that flexibility.
+The stack runs on a **bare-metal k3s** cluster for cost savings. Analytics and
+long-running calculations run as 94 AWS Lambda functions behind an HTTP API
+Gateway so the cluster doesn't size for peak compute — the portal backend reaches
+them with `invokeLambda` (HTTP POST `/<tool>`) and the IF agent reaches them via
+the `health_lambda` MCP category. The `pl_authorizer` request-authorizer Lambda
+gates each route by `X-Internal-Token`. The stack is designed so I can spin up
+more nodes in AWS or any other cloud with an NFS server that provides secure
+access to my local master node.
 
 For more on the request flow, data model, caching, and AI execution model, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -214,8 +231,8 @@ erDiagram
   **one handler**.
 - **Handler matching** same one-to-many rule for handlers.
 - **Forums** for like-minded lifters.
-- More **cloud portability** (NFS-backed cross-cloud workloads) and
-  **lambda-powered calculations**.
+- More **cloud portability** (NFS-backed cross-cloud workloads) and additional
+  **Lambda-based compute tools** extending the existing 94-health-tool pattern.
 
 This isn't meant to replace coaching it's a shared notebook where coaches and
 athletes use the formulas and AI above to collaborate on the meet-prep journey.
@@ -226,12 +243,12 @@ athletes use the formulas and AI above to collaborate on the meet-prep journey.
 
 ```
 powerlifting-app/
-├── backend/        Express API (thin transport → IF Agent API)
+├── backend/        Express API (thin transport → health-tool Lambda HTTP + IF Agent API for RAG)
 ├── frontend/       React 19 + Vite PWA
 ├── packages/types/  Shared TypeScript types
-├── lambda/         Lambdas: master-sync, video-thumbnail (ffmpeg)
+├── lambda/         Lambdas: 94 health tools (1/tool) + pl_authorizer + tool_registry + master-sync + video-thumbnail; 10 layers in lambda/layers/
 ├── docker/         Container build context
-├── terraform/      Powerlifting-specific AWS resources (ECR, S3, Lambda, budget table)
+├── terraform/      Powerlifting-specific AWS resources (ECR, S3, Lambda, API Gateway, SSM params, budget table)
 └── docs/           Architecture, formulas, and the implementation reference
 ```
 

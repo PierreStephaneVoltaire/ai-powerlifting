@@ -1,0 +1,25 @@
+layers:
+- pl_boto3
+- pl_program
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: List all program versions (summaries).
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    program_sk:
+      type: string
+      description: Optional program SK; defaults to the current program pointer.
+    include_archived:
+      type: boolean
+  required: []
+reserved_concurrency: null

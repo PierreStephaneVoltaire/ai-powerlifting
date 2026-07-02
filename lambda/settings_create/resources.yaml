@@ -1,0 +1,24 @@
+layers:
+- pl_boto3
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+timeout: 30
+description: "Create the initial user settings row on first Discord login (conditional put)."
+input_schema:
+  type: object
+  properties:
+    discord_id:
+      type: string
+    discord_username:
+      type: string
+    avatar_url:
+      type: string
+  required:
+  - discord_id
+  - discord_username
+reserved_concurrency: null

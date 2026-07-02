@@ -1,0 +1,23 @@
+layers:
+- pl_boto3
+- pl_imports
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Reject a staged import.
+input_schema:
+  type: object
+  properties:
+    import_id:
+      type: string
+    reason:
+      type: string
+  required:
+  - import_id
+
+reserved_concurrency: null

@@ -1,0 +1,36 @@
+layers:
+- pl_boto3
+- pl_templates
+- pl_program
+- pl_glossary
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
+timeout: 900
+description: Confirm and write concretized block from template.
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    backfilled_maxes:
+      type: object
+    start_date:
+      type: string
+    week_start_day:
+      type: string
+    target:
+      type: string
+      description: Apply strategy
+      default: new_block
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition for draft visibility
+  required:
+  - sk
+
+reserved_concurrency: null

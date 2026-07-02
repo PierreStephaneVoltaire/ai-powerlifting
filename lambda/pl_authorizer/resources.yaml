@@ -1,0 +1,16 @@
+layers: []
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+timeout: 5
+s3_read: false
+description: "Internal X-Internal-Token authorizer for pl-* API Gateway"
+input_schema:
+  type: object
+  properties: {}
+  required: []
+reserved_concurrency: null

@@ -1,0 +1,28 @@
+layers:
+- pl_boto3
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Delete a training session at date+index.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    program_sk:
+      type: string
+      description: Optional program SK; defaults to the current program pointer.
+    date:
+      type: string
+    index:
+      type: integer
+  required: []
+
+reserved_concurrency: null

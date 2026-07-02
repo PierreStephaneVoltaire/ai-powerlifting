@@ -1,0 +1,23 @@
+layers:
+- pl_boto3
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Get user settings by discord username or mapped pk.
+input_schema:
+  type: object
+  properties:
+    username:
+      type: string
+      description: Discord username to look up.
+    mapped_pk:
+      type: string
+      description: Mapped partition key to look up.
+  required: []
+
+reserved_concurrency: null

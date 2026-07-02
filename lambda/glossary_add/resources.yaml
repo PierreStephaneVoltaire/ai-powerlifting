@@ -1,0 +1,21 @@
+layers:
+- pl_boto3
+- pl_glossary
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Add new exercise to glossary.
+input_schema:
+  type: object
+  properties:
+    exercise:
+      type: object
+  required:
+  - exercise
+
+reserved_concurrency: null

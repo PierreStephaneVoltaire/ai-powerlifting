@@ -1,0 +1,9 @@
+import os
+AWS_REGION = os.getenv("AWS_REGION", "ca-central-1")
+SANDBOX_PATH = os.getenv("SANDBOX_PATH", "/tmp/sandbox")
+IF_HEALTH_TABLE_NAME = os.getenv("IF_HEALTH_TABLE_NAME", "if-health")
+HEALTH_PROGRAM_PK = os.getenv("HEALTH_PROGRAM_PK", "operator")
+IF_TEMPLATES_TABLE_NAME = os.getenv("IF_TEMPLATES_TABLE_NAME", "if-health-templates")
+IF_SESSIONS_TABLE_NAME = os.getenv("IF_SESSIONS_TABLE_NAME", "if-sessions")
+IF_PROPOSALS_TABLE_NAME = os.getenv("IF_PROPOSALS_TABLE_NAME", "if-proposals")
+ANALYSIS_CACHE_TABLE_NAME = os.getenv("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache")

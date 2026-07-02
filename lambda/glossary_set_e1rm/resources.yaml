@@ -1,0 +1,26 @@
+layers:
+- pl_boto3
+- pl_glossary
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Manually set e1RM for glossary exercise.
+input_schema:
+  type: object
+  properties:
+    id:
+      type: string
+    value_kg:
+      type: number
+    method:
+      type: string
+  required:
+  - id
+  - value_kg
+
+reserved_concurrency: null

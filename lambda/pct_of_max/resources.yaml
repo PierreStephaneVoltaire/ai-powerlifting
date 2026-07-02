@@ -1,0 +1,24 @@
+layers: []
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+timeout: 900
+description: Calculate a percentage of a max weight.
+input_schema:
+  type: object
+  properties:
+    max_kg:
+      type: number
+      description: Maximum weight in kg
+    pct:
+      type: number
+      description: Percentage (0-150, not 0-1)
+  required:
+  - max_kg
+  - pct
+
+reserved_concurrency: null

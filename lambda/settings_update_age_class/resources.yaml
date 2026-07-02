@@ -1,0 +1,24 @@
+layers:
+- pl_boto3
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Update the age class for a user.
+input_schema:
+  type: object
+  properties:
+    username:
+      type: string
+      description: Discord username of the user.
+    age_class:
+      type: string
+      description: 'open | subjunior | junior | master1 | master2 | master3 | master4'
+  required:
+  - username
+
+reserved_concurrency: null

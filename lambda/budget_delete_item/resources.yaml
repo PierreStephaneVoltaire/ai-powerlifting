@@ -1,0 +1,25 @@
+layers:
+- pl_boto3
+- pl_budget
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Delete a budget item by id.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    item_id:
+      type: string
+      description: Budget item id to delete.
+  required:
+  - item_id
+
+reserved_concurrency: null

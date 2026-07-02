@@ -1,0 +1,20 @@
+layers:
+- pl_boto3
+- pl_federation
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 60
+description: "Get the per-user federation library (federations#v1, raw shape)."
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+  required: []
+reserved_concurrency: null

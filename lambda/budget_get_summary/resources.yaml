@@ -1,0 +1,24 @@
+layers:
+- pl_boto3
+- pl_budget
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Get the budget summary (spent, recurring, breakdown) for a month.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    month:
+      type: string
+      description: Month key YYYY-MM (defaults to current month).
+  required: []
+
+reserved_concurrency: null

@@ -1,0 +1,30 @@
+layers:
+- pl_boto3
+- pl_budget
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: List budget items with optional filters (comp_id/category/priority).
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: Partition key (defaults to env HEALTH_PROGRAM_PK).
+    comp_id:
+      type: string
+      description: Filter by competition_id.
+    category:
+      type: string
+      description: Filter by category.
+    priority:
+      type: string
+      description: Filter by priority_tier (MANDATORY|IMPORTANT|OPTIONAL).
+  required: []
+
+reserved_concurrency: null

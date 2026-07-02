@@ -8,8 +8,6 @@ variable "ecr_repository_prefix" {
   default = "if"
 }
 
-# DynamoDB table names — created by the main infra stack, referenced here
-# for the video thumbnail Lambda's IAM policy and env vars.
 variable "dynamodb_health_table" {
   type    = string
   default = "if-health"
@@ -19,3 +17,58 @@ variable "dynamodb_sessions_table" {
   type    = string
   default = "if-sessions"
 }
+
+variable "dynamodb_templates_table" {
+  type    = string
+  default = "if-health-templates"
+}
+
+variable "dynamodb_analysis_cache_table" {
+  type    = string
+  default = "if-powerlifting-analysis-cache"
+}
+
+variable "dynamodb_proposals_table" {
+  type    = string
+  default = "if-proposals"
+}
+
+variable "powerlifting_s3_bucket" {
+  type    = string
+  default = "powerlifting-openpowerlifting-dataset"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+variable "node_name" {
+  type    = string
+  default = "sirsimpalot-g5-5000"
+}
+variable "openrouter_api_key" {
+  description = "OpenRouter API key for AI health tools (SSM plaintext param source)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "pl_internal_token" {
+  description = "Internal API token for powerlifting Lambda authorizer / Fission prefn (SSM plaintext param source)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+

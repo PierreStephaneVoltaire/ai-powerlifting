@@ -1,0 +1,30 @@
+layers:
+- pl_boto3
+- pl_templates
+- pl_program
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Convert program block to template.
+input_schema:
+  type: object
+  properties:
+    name:
+      type: string
+    program_sk:
+      type: string
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+    author:
+      type: string
+      description: Display author
+  required:
+  - name
+
+reserved_concurrency: null

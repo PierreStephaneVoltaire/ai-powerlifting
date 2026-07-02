@@ -1,0 +1,14 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_federation
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 750m
+    memory: 512Mi
+timeout: 900
+
+reserved_concurrency: null

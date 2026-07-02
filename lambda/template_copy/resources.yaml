@@ -1,0 +1,30 @@
+layers:
+- pl_boto3
+- pl_templates
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Duplicate a template.
+input_schema:
+  type: object
+  properties:
+    sk:
+      type: string
+    new_name:
+      type: string
+    actor_pk:
+      type: string
+      description: Signed-in user/template author partition
+    author:
+      type: string
+      description: Display author
+  required:
+  - sk
+  - new_name
+
+reserved_concurrency: null

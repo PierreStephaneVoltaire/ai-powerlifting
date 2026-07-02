@@ -1,0 +1,25 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Replace the full phases list.
+input_schema:
+  type: object
+  properties:
+    phases:
+      type: array
+      items:
+        type: object
+      description: 'Complete phases list. Each: {name, start_week, end_week, intent}'
+  required:
+  - phases
+
+reserved_concurrency: null

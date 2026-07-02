@@ -1,0 +1,19 @@
+layers:
+- pl_boto3
+- pl_pandas
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+timeout: 900
+s3_read: true
+description: Retrieves the unique options available for filtering the OpenPowerlifting dataset.
+input_schema:
+  type: object
+  properties: {}
+  required: []
+
+reserved_concurrency: null
