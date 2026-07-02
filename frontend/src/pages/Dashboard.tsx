@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { differenceInCalendarDays, format, parse } from 'date-fns'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -285,6 +285,7 @@ function phaseState(phase: Phase, currentWeek: number): 'completed' | 'current' 
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const { readOnly } = useAuth()
   const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases, updateLiftProfiles } = useProgramStore()
   const { unit } = useSettingsStore()
@@ -868,7 +869,15 @@ export default function Dashboard() {
       )}
 
       <div className="if-dashboard-row if-dashboard-row-top">
-        <section className="if-mock-card" data-testid="dashboard-next-workout">
+        <section
+          className="if-mock-card"
+          data-testid="dashboard-next-workout"
+          style={nextWorkout ? { cursor: 'pointer', textDecoration: 'none', color: 'inherit', display: 'block' } : undefined}
+          onClick={nextWorkout ? () => navigate(`/session/${nextWorkout.date}`) : undefined}
+          role={nextWorkout ? 'link' : undefined}
+          tabIndex={nextWorkout ? 0 : undefined}
+          onKeyDown={nextWorkout ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/session/${nextWorkout.date}`) } } : undefined}
+        >
           <div className="if-mock-card-label"><Dumbbell size={12} /> Next workout</div>
           {nextWorkout ? (() => {
             const planned = nextWorkout.planned_exercises?.length ? nextWorkout.planned_exercises : nextWorkout.exercises

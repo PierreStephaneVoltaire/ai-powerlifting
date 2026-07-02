@@ -16,7 +16,7 @@ detail is ambiguous, the implementing agent must `ask_question` — never guess.
 > story that reads or writes data implies one or more function endpoints; the
 > portal backend and the IF agent only ever call functions, they never run data
 > logic in-pod. The implementing agent should enumerate the functions a story
-> needs during planning. This does not change the *user* requirements below; it
+> needs during planning. This does not change the _user_ requirements below; it
 > just sets the delivery shape. Where a story already names a tool/table, treat
 > those as the data it touches, not as the only function it needs.
 
@@ -84,7 +84,7 @@ in that story.
 - Use battle-tested identity **and** RBAC libraries only. Do NOT handroll role
   comparisons, claims parsing, or session management. Discord login is fine but
   must flow through Passport.js (or equivalent) — see `Identity & RBAC
-  mechanism` decision below.
+mechanism` decision below.
 - New DynamoDB tables follow the same single-domain-per-table rule as the
   existing health/finance/diary tables. No domain mixing.
 - Every float bound for a DynamoDB write is converted to `Decimal(str(value))`
@@ -105,9 +105,9 @@ handlers~~. Pick one and confirm with the operator via `ask_question`:
   Battle-tested, supports Discord as a social identity provider (so users log
   in with Discord through Keycloak's broker), ships full RBAC: realm roles,
   group roles, scopes, fine-grained authorization services (``evaluate
-  permissions'' API), and user attributes for the display-name / federations /
-  public-private toggle. The Node backend validates JWTs with
-  `passport-keycloak-oauth2` / `keycloak-connect`. The frontend still gets a
+permissions'' API), and user attributes for the display-name / federations /
+public-private toggle. The Node backend validates JWTs with
+`passport-keycloak-oauth2`/`keycloak-connect`. The frontend still gets a
   JWT + refresh-token pattern. Heavy container (~600MB JVM) — fits the cluster
   but adds memory pressure on the single node.
 - **(B) Ory Kratos + Ory Keto + Ory Oathkeeper** — identity (Kratos),
@@ -135,6 +135,7 @@ full-RBAC story is the most battle-tested.
 ## Epic 1 — Session-detail UX bugs
 
 ### BUG-1.1 — Session-detail action menu is too small
+
 As an athlete, when I open a session detail page and try to tap the plate
 calculator I want the action targets to be comfortably sized so I don't
 accidentally trigger **Delete** (the irreversible action next to the
@@ -147,6 +148,7 @@ calculator).
   handwave this as "looks fine in desktop."
 
 **Acceptance criteria (expanded):**
+
 - The destructive **Delete** action is not just visually separated but also
   ordered away from the most-tapped action; an accidental tap on Delete always
   surfaces a confirm with the session name/date so the user knows what they're
@@ -160,12 +162,14 @@ calculator).
   same confirm and the action is attributed to the coach.
 
 **Open questions / blind spots:**
+
 - Is Delete reversible (soft-delete / undo toast) or hard-delete? The story
   calls it "irreversible" — confirm there is no undo, or add one.
 - Does the same too-small-menu problem exist on the set-row actions inside the
   editor, or only the session-level menu? Scope it.
 
 ### BUG-1.2 — Add/remove a set wipes RPE and completed sets
+
 As an athlete, when I change my mind and decide to add or remove a set on an
 exercise mid-session, my prior inputs — RPE per set, completed-set flags,
 notes per set — must be preserved and carried over to the new set list.
@@ -181,6 +185,7 @@ notes per set — must be preserved and carried over to the new set list.
   update so the backend doesn't see the wipe as a feature.
 
 **Acceptance criteria (expanded):**
+
 - Define which set fields are "state to preserve": at minimum RPE, completed
   flag, per-set notes, actual weight, actual reps, and failure reason. List the
   full set of preserved fields so nothing is missed.
@@ -193,6 +198,7 @@ notes per set — must be preserved and carried over to the new set list.
 - Behavior is identical when a coach edits the athlete's in-progress session.
 
 **Open questions / blind spots:**
+
 - What is the source of truth for set identity — does the backend emit a
   stable `set_id` today, or only `(exercise, set_index)`? This determines
   whether the merge is reliable; confirm before building.
@@ -202,6 +208,7 @@ notes per set — must be preserved and carried over to the new set list.
   and should that propagate to analytics, or is it a session-local edit only?
 
 ### BUG-1.3 — Dashboard "next workout" card doesn't navigate
+
 As an athlete on the dashboard, when I click the "next workout" card I expect
 to be redirected to that session's detail page.
 
@@ -210,6 +217,7 @@ to be redirected to that session's detail page.
 - Loading state on the card while the session is being fetched.
 
 **Acceptance criteria (expanded):**
+
 - Define "next workout": the soonest future planned session, or today's if one
   exists? State the tie-break (e.g. today before tomorrow; earliest start time).
 - Empty state: if there is no upcoming session (program finished, no program,
@@ -219,12 +227,14 @@ to be redirected to that session's detail page.
   spinner.
 
 **Open questions / blind spots:**
+
 - What does the card show on a rest day or between blocks — nothing, the last
   session, or "start a new block"?
 - For a coach viewing an athlete, does "next workout" reflect the athlete's
   program (expected) and route into the athlete's session?
 
 ### BUG-1.4 — Session list scroll position carries into session detail
+
 As an athlete, when I scroll down my sessions list and click one, I expect to
 land on the session detail page scrolled to the top — not preserving the
 list's scroll offset from the previous page.
@@ -236,12 +246,14 @@ list's scroll offset from the previous page.
   config).
 
 **Acceptance criteria (expanded):**
+
 - Forward navigation (list → detail) lands at top; **back** navigation (detail
   → list) restores the list's previous scroll position so the user doesn't lose
   their place. State this asymmetry explicitly — it's the common expectation.
 - Deep-linking / refresh on a detail page lands at top, not mid-page.
 
 **Open questions / blind spots:**
+
 - Should back-from-detail preserve scroll (better UX) or also reset? Confirm the
   expected back behavior; the story only specifies the forward case.
 
@@ -250,6 +262,7 @@ list's scroll offset from the previous page.
 ## Epic 2 — Lift profile enhancements
 
 ### FEAT-2.1 — Upload three form-demonstration videos per lift
+
 As an athlete, on the lift-profile page I want to be able to upload three
 videos per lift demonstrating my form — front, side, and diagonal — so a coach
 or handler can see mechanics from multiple angles.
@@ -283,6 +296,7 @@ or handler can see mechanics from multiple angles.
   already in the profile; do not push the weight formula into a new lambda.
 
 **Acceptance criteria (expanded):**
+
 - Per-slot lifecycle states are explicit: empty → uploading (with progress) →
   processing (video-lambda working) → ready → playable; plus a **failed**
   state with a retry/replace action.
@@ -303,6 +317,7 @@ or handler can see mechanics from multiple angles.
   (kg/lb), while the canonical stored values remain kg.
 
 **Open questions / blind spots:**
+
 - Are these three videos required to "complete" a lift profile, or always
   optional? Does an empty slot block anything downstream?
 - Retention/privacy: are form videos covered by the public/private profile
@@ -315,6 +330,7 @@ or handler can see mechanics from multiple angles.
 - Who can delete a video — only the athlete, or also their coach?
 
 ### FEAT-2.2 — Failure-mode nodes per lift
+
 As an athlete, I want to be able to specify **failure nodes** for each lift ——
 common scenarios that usually cause me to fail the lift (e.g. "falls forward
 in the hole," "hits J-hooks on the way up," "loses upper back tightness off
@@ -330,6 +346,7 @@ the floor").
   lift-profile read tool to include the field).
 
 **Acceptance criteria (expanded):**
+
 - Add, edit, and remove a failure node; duplicates on the same lift are
   prevented or merged.
 - Define a sane cap on length and count per lift so the card doesn't become an
@@ -341,6 +358,7 @@ the floor").
   two independent concepts? (See blind spot.)
 
 **Open questions / blind spots:**
+
 - The session editor already has a per-set **failure reason** (README). Are
   lift-profile "failure nodes" the curated/reusable list that the per-set
   failure reason picks from, or fully separate free-text? Clarify the
@@ -351,9 +369,11 @@ the floor").
 ---
 
 ## Epic 3 — Onboarding flow (replaces the current "go straight to create a
+
 block" landing)
 
 ### FEAT-3.1 — Mandatory athlete basics
+
 As a new user, before I can create my first training block I expect to be
 prompted for the mandatory athlete basics: body weight, current training max
 per lift (squat, bench, deadlift), sex, country, and state/province. Most of
@@ -367,6 +387,7 @@ the app is useless without these.
 - This step only fires for athletes & coaches — handlers and guests skip it.
 
 **Acceptance criteria (expanded):**
+
 - The flow is resumable: if a user abandons onboarding partway, returning lands
   them back at the first incomplete step rather than restarting or, worse,
   dropping them into a half-configured app.
@@ -380,6 +401,7 @@ the app is useless without these.
   calculation (attempts, plate guidance, projections). This MUST be unambiguous.
 
 **Open questions / blind spots:**
+
 - "sex" — what options, and is it used only for DOTS/weight-class math or also
   shown on the profile? Confirm the allowed values and their purpose so the copy
   is respectful and correct.
@@ -391,6 +413,7 @@ the app is useless without these.
   allowed, or is a number always forced?
 
 ### FEAT-3.2 — Profile creation
+
 As a new user after the basics, I expect to create a profile.
 
 - Display name — required.
@@ -403,6 +426,7 @@ As a new user after the basics, I expect to create a profile.
 - Stored in the same `if-health` user-settings record schema used today.
 
 **Acceptance criteria (expanded):**
+
 - Display name rules are defined: length bounds, allowed characters, and
   whether it must be unique across users (matters because Search shows display
   names — duplicate "John" profiles are confusing).
@@ -413,6 +437,7 @@ As a new user after the basics, I expect to create a profile.
   gracefully (the master list is finite).
 
 **Open questions / blind spots:**
+
 - Is display name the public identifier, or is there a separate handle/username?
   Search and relationship requests need a stable way to find someone.
 - Profile photo / avatar — implied by "profiles" but never specified. In scope?
@@ -421,6 +446,7 @@ As a new user after the basics, I expect to create a profile.
   decision the search + profile-view stories depend on — pin it down here.
 
 ### FEAT-3.3 — Role selection during onboarding
+
 As a new user, I select my role during onboarding: athlete, coach, or handler.
 
 - Guest path: an unauthenticated user can skip all of this (current demo UI
@@ -431,6 +457,7 @@ As a new user, I select my role during onboarding: athlete, coach, or handler.
   irrelevant for handler role).
 
 **Acceptance criteria (expanded):**
+
 - The role chosen here determines the post-onboarding landing nav (Epic 5);
   state the redirect target per role.
 - The "Switch role" nav item (Personas section) implies a user can hold or move
@@ -443,9 +470,10 @@ As a new user, I select my role during onboarding: athlete, coach, or handler.
   an athlete who later also wants to coach) collects only the missing pieces.
 
 **Open questions / blind spots:**
+
 - Can one human be an athlete AND a coach AND a handler under one login, or is
   each account exactly one role? Everything downstream (data ownership, `mapped_
-  pk`, the single-coach rule, the handler dashboard) hinges on this answer.
+pk`, the single-coach rule, the handler dashboard) hinges on this answer.
 - Is a coach also implicitly an athlete (do they have their own training data),
   or coach-only? The personas say a coach's UI equals an athlete's — confirm
   whether a coach has their own program too.
@@ -455,6 +483,7 @@ As a new user, I select my role during onboarding: athlete, coach, or handler.
 ## Epic 4 — Identity & RBAC infrastructure
 
 ### FEAT-4.1 — Identity provider in the cluster
+
 As the operator, I want a battle-tested identity provider deployed in the
 cluster that handles Discord social login, user attributes, sessions, and
 credential rotation so the team isn't handrolling auth.
@@ -469,6 +498,7 @@ credential rotation so the team isn't handrolling auth.
   the existing Discord OAuth flow is replaced, not duplicated.
 
 **Acceptance criteria (expanded):**
+
 - Existing operator/Discord users are migrated, not orphaned: define what
   happens to the current operator identity and any existing data keyed by the
   current `pk`/`mapped_pk` when the new IdP becomes the source of truth.
@@ -478,14 +508,8 @@ credential rotation so the team isn't handrolling auth.
 - Failure modes: IdP is down / login fails / Discord denies consent — each has
   a user-visible message, not a blank screen.
 
-**Open questions / blind spots:**
-- Login methods: Discord-only, or also email/password? If Discord-only, what's
-  the recovery path if a user loses their Discord account?
-- This is operator-facing infra, but it gates EVERY other authed story. Confirm
-  the mechanism decision (Open Decisions list) is closed before any of Epics
-  3/5/6/7 start.
-
 ### FEAT-4.2 — Granular RBAC for athlete / coach / handler
+
 As an athlete, I want to be the grant-admin of read/write permissions on my
 own data so I can scope what a coach or handler can see.
 
@@ -507,6 +531,7 @@ own data so I can scope what a coach or handler can see.
   reviewers can audit it.
 
 **Acceptance criteria (expanded):**
+
 - The full list of grantable domains is enumerated explicitly (e.g. profile,
   sessions, program/designer, competitions, attempts, budget, analytics,
   lift-profile + videos, maxes history, templates, glossary). A granular grant
@@ -523,21 +548,23 @@ own data so I can scope what a coach or handler can see.
   consistent "not permitted" response (same shape everywhere), never a 500.
 
 **Open questions / blind spots:**
-- Can an athlete grant another *athlete* read access (peer sharing), or only a
+
+- Can an athlete grant another _athlete_ read access (peer sharing) (-yes), or only a
   coach/handler? FEAT-6.2 implies athletes can request read access to each
   other — reconcile this with the grant model.
 - Do grants have an optional expiry the athlete can set, or only the
-  handler-auto-expiry (FEAT-7.3)?
+  handler-auto-expiry (-only auto)(FEAT-7.3)?
 - When a coach is replaced (single-coach rule, FEAT-7.4), are the old coach's
-  grants fully revoked, downgraded to read, or left until manually removed?
+  grants fully revoked (fully revoked), downgraded to read, or left until manually removed?
 - Does write-by-coach create data "owned" by the athlete, and can the athlete
-  later edit/delete what the coach wrote? Confirm ownership semantics.
+  later edit/delete what the coach wrote? Confirm ownership semantics.(become read and delete only by ahtlete,not edit, only the coach can edit if they still have the grant otherwise it's perma stuck with the original content)
 
 ---
 
 ## Epic 5 — Per-role navigation
 
 ### FEAT-5.1 — Guest / unauth nav
+
 As an unauth (or logged-in guest), I see only Search, About, and Switch role
 in the nav.
 
@@ -547,15 +574,18 @@ in the nav.
   restores the demo landing.
 
 ### FEAT-5.2 — Athlete nav
+
 As an athlete, I see the current nav (today's tabs) plus Search + Switch role.
 Switch role lives in the settings sidebar, not as its own nav item.
 
 ### FEAT-5.3 — Coach nav
+
 As a coach, I see the same nav as an athlete. Visiting an athlete I coach gives
 me full read+write (per FEAT-4.2 coach-default) using that athlete's data — UI
 is the same, but my actions go through their `mapped_pk` for that session.
 
 ### FEAT-5.4 — Handler nav
+
 As a handler, I see guest-style nav (Search, About, Switch role) plus a
 "Dashboard" of profiles I handle.
 
@@ -564,6 +594,7 @@ As a handler, I see guest-style nav (Search, About, Switch role) plus a
 - Clicking the card opens the handler's "athlete details" page (FEAT-6.4).
 
 **Acceptance criteria (expanded — applies across FEAT-5.1 to 5.4):**
+
 - "Switch role" behavior is defined consistently with the FEAT-3.3 role-model
   decision: is it switching which data I'm operating on, or switching my own
   account's active role? The nav cannot be specified until that's settled.
@@ -577,6 +608,7 @@ As a handler, I see guest-style nav (Search, About, Switch role) plus a
   upcoming comp, no attempts yet).
 
 **Open questions / blind spots:**
+
 - When a coach is "operating as" an athlete, is there a persistent, obvious
   visual indicator (banner/badge) showing whose data they're editing, to
   prevent a coach accidentally logging to the wrong athlete? Strongly implied,
@@ -591,6 +623,7 @@ As a handler, I see guest-style nav (Search, About, Switch role) plus a
 ## Epic 6 — Search & profile navigation state
 
 ### FEAT-6.1 — Public search
+
 As anyone (incl. unauth), when I use Search I see all public profiles (athletes
 and coaches only — handlers and guests are never in the search list because
 they're not athletes).
@@ -604,6 +637,7 @@ they're not athletes).
 - Athletes searching filter themselves out of the result list.
 
 **Acceptance criteria (expanded):**
+
 - Define what the search box matches on: display name only, or also tags
   (FEAT-8.1) and federations? State the match rule (prefix, fuzzy, exact).
 - Results have a defined order (relevance, alphabetical, recently active?),
@@ -615,12 +649,14 @@ they're not athletes).
   unauthenticated endpoint).
 
 **Open questions / blind spots:**
+
 - Can guests see the same profile detail as authed users, or a reduced view?
   (Ties to the "what's on a public profile" decision in FEAT-3.2.)
 - What is searchable text exactly — is searching by tag a first-class filter
   here, or only in the Tags epic? FEAT-8.1 says search by tag; reconcile.
 
 ### FEAT-6.2 — Authenticated-athlete search
+
 As an athlete, I use Search and can see all public profiles PLUS any private
 profiles I have read access to (granted to me explicitly).
 
@@ -629,11 +665,12 @@ profiles I have read access to (granted to me explicitly).
   "Request read access" button (requests are reviewed by the profile owner).
 
 ### FEAT-6.3 — Athlete browsing another athlete
+
 As an athlete/coach, when I am viewing another user's (mapped_pk or pk)
 profile, the active app "operating as" state has been switched (via
 `req.mapped_pk` thread-through — same pattern the backend already uses for the
 Discord-operator identity) so every downstream fetch resolves their data, not
-  mine.
+mine.
 
 - The existing backend `req.mapped_pk` plumbing already supports this.
 - The frontend's currently-'operator'-implicit profile context becomes
@@ -643,6 +680,7 @@ Discord-operator identity) so every downstream fetch resolves their data, not
   This matches the existing Discord-operator convention.
 
 ### FEAT-6.4 — Handler's athlete-details page
+
 As a handler, when I open an athlete card from my dashboard I see everything I
 need for the comp-day flow:
 
@@ -662,6 +700,7 @@ need for the comp-day flow:
   that athlete disappears from the dashboard.
 
 **Acceptance criteria (expanded):**
+
 - Each card field renders the athlete's data in the unit preference appropriate
   to comp day (the competition's declared unit, typically kg) — be explicit,
   since handlers act on real platform numbers.
@@ -674,6 +713,7 @@ need for the comp-day flow:
   edits on the comp-day screen complete, or hard-stop? (Tie to FEAT-4.2 default.)
 
 **Open questions / blind spots:**
+
 - "Estimated-max card" — is this the athlete's current training max, an e1RM
   computed from recent sessions, or the comp projection? Name the source.
 - Can a handler see the athlete's failure nodes and form videos (useful on
@@ -688,7 +728,9 @@ need for the comp-day flow:
 ## Epic 7 — Relationship requests
 
 ### FEAT-7.1 — Send a relationship request
+
 Everyone (athlete, coach, handler) can request one of:
+
 - To be **someone's** coach or handler (you take the role on their profile).
 - To be **coached or handled by** that person's existing coach or handler
   (you want to be their athlete) — when used, this is scoped to a **specific
@@ -707,6 +749,7 @@ Everyone (athlete, coach, handler) can request one of:
   NOT this — different domain.
 
 **Acceptance criteria (expanded):**
+
 - Duplicate-request guard: a user cannot have two identical pending requests to
   the same target (same `kind` + `competition_id`); re-requesting updates the
   existing pending row or is blocked with a clear message.
@@ -722,6 +765,7 @@ Everyone (athlete, coach, handler) can request one of:
   the cross-cutting Notification decision).
 
 **Open questions / blind spots:**
+
 - Who approves a `be_coached_by`/`be_handled_by` request — the target athlete,
   or the coach/handler being asked to take on the work, or both? The approval
   story (7.2) only covers the athlete approving inbound requests; this comp-
@@ -733,6 +777,7 @@ Everyone (athlete, coach, handler) can request one of:
   and who approves each.
 
 ### FEAT-7.2 — Athlete-side approve / reject page
+
 As an athlete, I expect a page where I see every pending request sent to me
 (favorite, read access, coach, handler, athlete-to-their-coach-for-comp, etc.)
 and can approve or reject each one.
@@ -746,6 +791,7 @@ and can approve or reject each one.
   ledger — UI is naive; backend + RBAC library do the work.
 
 **Acceptance criteria (expanded):**
+
 - Empty state: an athlete with no pending requests sees an intentional "no
   requests" state.
 - Each request row shows enough context to decide: who (display name), what
@@ -760,6 +806,7 @@ and can approve or reject each one.
   per the Notification decision).
 
 **Open questions / blind spots:**
+
 - Can an athlete later revoke an already-approved relationship from this same
   page, or is revoke a separate surface (the grants screen in FEAT-4.2)?
   Reconcile so revoke has exactly one home.
@@ -767,6 +814,7 @@ and can approve or reject each one.
   current pending list?
 
 ### FEAT-7.3 — Handler write-access auto-expiry
+
 As a handler, my write access to an athlete I'm handling lapses 1 week after
 the competition I'm handling them for. I still retain read access after
 that.
@@ -779,6 +827,7 @@ that.
 - Lazy check is preferred — no new scheduled cron on the cluster.
 
 ### FEAT-7.4 — Single-coach and single-handler-per-athlete rule
+
 An athlete can have at most 1 active coach and 1 active handler at any one
 time.
 
@@ -787,6 +836,7 @@ time.
 - Coaches and handlers can serve multiple athletes simultaneously.
 
 **Acceptance criteria (expanded):**
+
 - Replacing a coach/handler defines what happens to the outgoing one: their
   write access is removed, and the story states whether they keep read, lose
   all access, or are notified. (Tie to FEAT-4.2 ownership questions.)
@@ -799,6 +849,7 @@ time.
   decision).
 
 **Open questions / blind spots:**
+
 - Does "1 active handler" mean 1 at a time globally, or 1 per competition? A
   handler relationship is competition-scoped (FEAT-7.1/7.3), so an athlete
   prepping two meets might reasonably want two handlers. Clarify whether the
@@ -812,6 +863,7 @@ time.
 ## Epic 8 — Tags
 
 ### FEAT-8.1 — Profile tags (cosmetic pills)
+
 As an athlete, I want to add tags to my profile that show as pills under my
 display name (e.g. "novice", "does not wash knee sleeves") so I can be
 lighthearted and so others can search profiles by similar tag.
@@ -824,6 +876,7 @@ lighthearted and so others can search profiles by similar tag.
 - Search supports tag-AND / tag-OR filtering.
 
 **Acceptance criteria (expanded):**
+
 - Define limits: max tags per profile, max tag length, and allowed characters
   (so pills stay short and the row doesn't overflow).
 - The athlete can remove any tag on their profile (including ones they
@@ -835,6 +888,7 @@ lighthearted and so others can search profiles by similar tag.
 - Tags only appear on profiles visible to the viewer (respect public/private).
 
 **Open questions / blind spots:**
+
 - Can the same tag be proposed by multiple users (a "+3 others suggested this"
   count), or is it one row per tag regardless of proposer?
 - Do tags participate in Search ranking, or are they only a filter? (FEAT-6.1
@@ -890,65 +944,65 @@ broken validate or a build that breaks the portal.
 ## Open decisions (ask the operator before Phase A starts)
 
 - [ ] Identity & RBAC mechanism: (A) Keycloak, (B) Ory Kratos + Keto +
-  Oathkeeper, or (C) AWS Cognito + Verified Permissions. Default if unspecified:
-  Keycloak.
+      Oathkeeper, or (C) AWS Cognito + Verified Permissions. Default if unspecified:
+      Keycloak.
 - [ ] Tags storage: new `if-powerlifting-tags` table (Option A) vs metadata
-  on user-settings/rbac (Option B). Default if unspecified: Option A
-  (cleaner domain separation + smaller user-settings fetches).
+      on user-settings/rbac (Option B). Default if unspecified: Option A
+      (cleaner domain separation + smaller user-settings fetches).
 - [ ] Should guests register ("Sign up" → onboarding) from the demo landing
-  page? Or do they switch role explicitly from the existing nav via
-  "Switch role" item? Default: Switch role from the nav, no "Sign up" CTA.
+      page? Or do they switch role explicitly from the existing nav via
+      "Switch role" item? Default: Switch role from the nav, no "Sign up" CTA.
 - [ ] Bar weight for the video-guidance formula: respect the user's chosen
-  sub-type per lift (men's 20kg / women's 15kg / specialty bar override).
-  Default: use the existing per-athlete bar_PREF setting if it exists;
-  otherwise 20kg.
+      sub-type per lift (men's 20kg / women's 15kg / specialty bar override).
+      Default: use the existing per-athlete bar_PREF setting if it exists;
+      otherwise 20kg.
 - [ ] Video storage: reuse `aws_s3_bucket.powerlifting_data` (yes/no). Default
-  yes; reuse the existing bucket + CDN/cache behavior.
+      yes; reuse the existing bucket + CDN/cache behavior.
 - [ ] Granular-read presets for athletes granting read access — should we
-  ship 3 presets {profile, sessions, competitions} + a custom pick-list,
-  or stick to a single "basic read" preset only? Default: 3 presets + custom.
+      ship 3 presets {profile, sessions, competitions} + a custom pick-list,
+      or stick to a single "basic read" preset only? Default: 3 presets + custom.
 - [ ] Revoking a coach mid-training-cycle: any in-flight writes (session logs)
-  are completed but new writes are blocked — confirm this is the desired
-  behavior. Default yes.
+      are completed but new writes are blocked — confirm this is the desired
+      behavior. Default yes.
 
 ### New decisions surfaced by the PM review (resolve before the dependent epic)
 
 - [ ] **Role model (blocks Epics 3, 5, 6, 7).** Can one login hold multiple
-  roles (athlete + coach + handler) and switch between them, or is each account
-  exactly one role? Is a coach also an athlete with their own training data?
-  "Switch role" is referenced everywhere but never defined. No safe default —
-  must be answered.
+      roles (athlete + coach + handler) and switch between them, or is each account
+      exactly one role? Is a coach also an athlete with their own training data?
+      "Switch role" is referenced everywhere but never defined. No safe default —
+      must be answered.
 - [ ] **Notification channel (blocks every request/grant/expiry/video-ready
-  story).** There is no notification system specified. How is a user told a
-  request arrived / was approved / access expired / a video finished
-  processing? Options likely include in-app inbox, Discord DM (the IF bot
-  already has Discord), email, or none-for-now (poll on next load). Default if
-  unspecified: in-app only, no push.
+      story).** There is no notification system specified. How is a user told a
+      request arrived / was approved / access expired / a video finished
+      processing? Options likely include in-app inbox, Discord DM (the IF bot
+      already has Discord), email, or none-for-now (poll on next load). Default if
+      unspecified: in-app only, no push.
 - [ ] **What a public profile exposes to a stranger** (blocks FEAT-3.2 /
-  6.1 / 8.1). Display name + federations + tags only, or also maxes / recent
-  competition results? This is the core privacy contract for the whole social
-  layer. Default: display name + federations + tags + public competition
-  results only; training data (sessions, analytics, lift videos) always private
-  unless explicitly granted.
+      6.1 / 8.1). Display name + federations + tags only, or also maxes / recent
+      competition results? This is the core privacy contract for the whole social
+      layer. Default: display name + federations + tags + public competition
+      results only; training data (sessions, analytics, lift videos) always private
+      unless explicitly granted.
 - [ ] **"Training max" definition** (blocks Epics 2, 3, and all attempt/
-  projection math). Is the onboarding "current training max per lift" a true
-  1RM, a working/training max, or a recent top single? Everything downstream
-  computes off it. Default: treat it as a true 1RM estimate; label the field
-  accordingly.
+      projection math). Is the onboarding "current training max per lift" a true
+      1RM, a working/training max, or a recent top single? Everything downstream
+      computes off it. Default: treat it as a true 1RM estimate; label the field
+      accordingly.
 - [ ] **Handler count rule** (blocks FEAT-7.4 vs 7.1/7.3 conflict). Is the
-  single-active-handler rule absolute, or per-competition (since handler
-  relationships are competition-scoped)? Default: per-competition (1 handler
-  per comp), not 1 globally — confirm.
+      single-active-handler rule absolute, or per-competition (since handler
+      relationships are competition-scoped)? Default: per-competition (1 handler
+      per comp), not 1 globally — confirm.
 - [ ] **Account lifecycle** (cross-cutting, currently unowned). Sign-out
-  (single device vs everywhere), account deletion, and data export are not
-  covered by any story. Default: ship sign-out-everywhere + account deletion
-  before any public/multi-user exposure; data export deferred.
+      (single device vs everywhere), account deletion, and data export are not
+      covered by any story. Default: ship sign-out-everywhere + account deletion
+      before any public/multi-user exposure; data export deferred.
 - [ ] **Offline conflict policy for shared records** (cross-cutting). When an
-  athlete and their coach edit the same session/program concurrently (or the
-  athlete edits offline then syncs), what is the resolution? Default: detect
-  conflicting writes and prompt the second writer; never silent last-write-wins
-  on session logs.
+      athlete and their coach edit the same session/program concurrently (or the
+      athlete edits offline then syncs), what is the resolution? Default: detect
+      conflicting writes and prompt the second writer; never silent last-write-wins
+      on session logs.
 - [ ] **Failure-node ↔ per-set failure-reason relationship** (blocks FEAT-2.2).
-  Are lift-profile "failure nodes" the reusable vocabulary that the session
-  editor's per-set "failure reason" selects from, or independent free-text?
-  Default: independent for now, with a note to unify later.
+      Are lift-profile "failure nodes" the reusable vocabulary that the session
+      editor's per-set "failure reason" selects from, or independent free-text?
+      Default: independent for now, with a note to unify later.

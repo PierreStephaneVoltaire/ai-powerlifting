@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { MantineProvider, createTheme, type CSSVariablesResolver } from '@mantine/core'
@@ -53,6 +54,14 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
   },
 })
 
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <MantineProvider
@@ -62,6 +71,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <Notifications position="top-right" />
       <BrowserRouter basename="/">
+        <ScrollToTop />
         <App />
       </BrowserRouter> 
     </MantineProvider> 
