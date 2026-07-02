@@ -1,5 +1,3 @@
-import { PutCommand } from '@aws-sdk/lib-dynamodb'
-import { docClient, USER_TABLE } from '../db/dynamo'
 import { invokeLambda } from '../utils/lambda'
 import { seedMasterCopiesForNewUser } from './masterCopy'
 import type { AgeCategory } from '@powerlifting/types'
@@ -231,9 +229,10 @@ export async function updateAgeClass(
   return normalizeSettings(result as Record<string, unknown>)
 }
 
-// TODO: replace with a Fission `settings_create` / `settings_get_or_create` handler
-// once it exists. The initial user row must still be created on first Discord login,
-// so this path keeps the only remaining direct DynamoDB touch for user settings.
+// The initial user row is created on first Discord login via the Fission
+// `settings_create` tool (conditional put with attribute_not_exists(pk) + race
+// re-get). getSettings() above already routes to `settings_get`; this path was
+// the only remaining direct DynamoDB touch for user settings — now removed.
 export async function getOrCreateSettings(
   discordId: string,
   discordUsername: string,
@@ -242,45 +241,20 @@ export async function getOrCreateSettings(
   const existing = await getSettings(discordUsername)
   if (existing) return existing
 
-  const now = new Date().toISOString()
-  const username = usernameKey(discordUsername)
-  const settings: UserSettings = {
-    pk: username,
-    username,
+  const result = (await invokeLambda('settings_create', {
     discord_id: discordId,
     discord_username: discordUsername,
     avatar_url: avatarUrl,
-    nickname: username,
-    profile_visibility: 'private',
-    display_name: discordUsername,
-    bio: '',
-    public_training_summary_enabled: false,
-    ranking_country: null,
-    ranking_region: null,
-    age_class: 'open',
-    created_at: now,
-    updated_at: now,
-  }
+  })) as { settings: Record<string, unknown>; created: boolean }
 
-  let created = true
-  await docClient.send(new PutCommand({
-    TableName: USER_TABLE,
-    Item: settings,
-    ConditionExpression: 'attribute_not_exists(pk)',
-  })).catch(() => {
-    created = false
-  })
-
-  if (!created) {
-    const raced = await getSettings(discordUsername)
-    if (raced) return raced
-  }
-
+  const settings = normalizeSettings(result.settings)
   cache.set(usernameKey(discordUsername), { settings, expires: Date.now() + CACHE_TTL_MS })
 
-  seedMasterCopiesForNewUser(mappedPkForSettings(settings)).catch((err) => {
-    console.error('[userSettings] Failed to seed master copies for new user', username, err)
-  })
+  if (result.created) {
+    seedMasterCopiesForNewUser(mappedPkForSettings(settings)).catch((err) => {
+      console.error('[userSettings] Failed to seed master copies for new user', settings.username, err)
+    })
+  }
 
   return settings
 }

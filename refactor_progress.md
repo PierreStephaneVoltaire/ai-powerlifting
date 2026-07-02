@@ -141,40 +141,133 @@ calls preserved (same signatures — except fork which is flagged above).
 
 ---
 
-## NEXT — Domain 4: Videos (`videoController.ts`)
+## DONE — Domain 4: Federations (`federationsController.ts`)
 
-**Status:** `videoController.ts` imports `db/dynamo` AND `services/sessionStore`
-(`listSessions`, `patchSessionByDate`, `transformVideo`). It manages video
-metadata stored INSIDE session items (videos are an array on each session) +
-S3 uploads for the video files themselves.
+**What was wrong:** `federationsController.ts` did all DynamoDB itself across TWO
+tables — `listFederations` (paginated Query of `POWERLIFTING_USER_FEDERATIONS_TABLE`
++ heavy `normalizeFederation`/`normalizeStandard`/`normalizeEntries`/bracket/legacy
+parsing), `updateFederation` (UpdateCommand on `FED#<masterId>`), `getFederationLibrary`
+(GetItem `federations#v1` from if-health), `updateFederationLibrary` (PutItem).
+Imported `db/dynamo` + `@aws-sdk/lib-dynamodb`.
+
+**Key conflation I had to untangle:** pre-existing Fission federation tools served a
+DIFFERENT feature — `federation_list` reads the global `federations#v1` and
+*reshapes* it for the AI agent; `federation_library_get/set` use a different SK
+`federation_library#v1` with shape `{entries:[{federation_slug,...}]}` (the AI-side
+per-user library, `FederationLibraryStore`/`pl-federation-library`). Those did NOT
+cover the controller's 4 ops and must NOT be repurposed (would break AI tools).
+
+**What I did:**
+- Rewrote/extended `pl-federation` layer `federation_store.py` (56→356 lines): kept
+  `get_library` (per-user `federations#v1`, raw shape) for `federation_list` compat,
+  ported the full TS normalization to Python (`_normalize_federation`,
+  `_normalize_standard`, `_normalize_entries`, `_entries_from_brackets`,
+  `_entries_from_legacy_maps`, `_coerce_entry`, `_pick_age_category`/`_pick_sex`/
+  `_pick_level`, age-category masters→master mapping), added `master_table` (lazy
+  `POWERLIFTING_USER_FEDERATIONS_TABLE`), `list_master_federations` (paginated Query
+  + normalize), `update_master_federation` (dynamic UpdateExpression), and
+  `set_user_library` (PutItem `federations#v1`).
+- Created 4 Fission functions (`pl_boto3` + `pl_federation`, per-function
+  resources.yaml): `federation_master_list`, `federation_master_update`,
+  `federation_user_library_get`, `federation_user_library_set`.
+- Rewrote `federationsController.ts` to 4 thin `invokeLambda` calls (317→59 lines),
+  zero dynamo. Kept `FederationUpdate` type + all 4 function signatures (routes
+  unchanged; `routes/analytics.ts` also imports `getFederationLibrary` +
+  `listFederations` — both preserved).
+
+**Verified:** 173 zips (+4), `federation_store.py` bundled, controller 0 dynamo
+imports, 5 exports intact, analytics.ts references preserved, Python syntax OK.
+
+---
+
+## DONE — Domains 5–8: Competitions, Glossary, Templates, Block-phases, Profile
+
+**No work needed — already pure routers.** An authoritative grep across all
+controllers showed that after Federations, the ONLY controller still importing
+`db/dynamo` is `videoController.ts`. The following priority-list domains are
+already thin `invokeLambda` routers with zero direct DynamoDB:
+
+- **Competitions** (`competitionController.ts`) — routes to `health_get_program` /
+  `health_update_competition` / `health_complete_competition` /
+  `health_snapshot_competition_projection`. No dynamo import.
+- **Glossary** (`exerciseController.ts`) — routes to `exercise_get_glossary` /
+  `exercise_upsert` / `exercise_remove` / `exercise_archive` / `exercise_unarchive`
+  / `exercise_set_e1rm` / `glossary_estimate_*`. Only retains request-validation
+  (YouTube URL check). No dynamo import.
+- **Templates** (`templateController.ts`) — in the routed list. No dynamo import.
+- **Block phases** — handled by the Program domain (`update_phases` with block
+  scoping) + `blockNotesController.ts` (routed). No dynamo import.
+- **Profile** (`profilesController.ts`) — in the routed list. No dynamo import.
+
+---
+
+## DONE — Domain 9: Settings (`services/userSettings.ts`)
+
+**What was wrong:** `userSettings.ts` was almost entirely routed to Fission
+(`settings_get`, `settings_update_nickname/profile/ranking_location/age_class/
+avatar`) BUT kept ONE direct DynamoDB touch: `getOrCreateSettings` did a
+`PutCommand` to `USER_TABLE` (if-user) with `ConditionExpression:
+'attribute_not_exists(pk)'` to create the initial user row on first Discord
+login (followed by a race re-get + `seedMasterCopiesForNewUser`). There was even
+a TODO in the file asking for a `settings_create` Fission handler. Imported
+`PutCommand` + `docClient` + `USER_TABLE` from `db/dynamo`.
+
+**What I did:**
+- Created Fission function `settings_create` (inline `pl_boto3`, matching the
+  existing `settings_get` inline style — the `pl-user-settings` layer exists but
+  no settings tool uses it). It takes `{discord_id, discord_username,
+  avatar_url}`, builds the default settings row, does a conditional `put_item`
+  with `attribute_not_exists(pk)`, catches `ConditionalCheckFailedException` for
+  the race, re-gets by pk on race, and returns `{settings, created}`. Ports
+  `_sanitize_username` / `_normalize_settings` from `settings_get`.
+- Rewrote `getOrCreateSettings` in `userSettings.ts` to call `settings_get` first
+  (already did), then `invokeLambda('settings_create', ...)` when absent; seeds
+  master copies only when `created` is true. Removed `PutCommand` /
+  `docClient` / `USER_TABLE` imports.
+
+**Verified:** `userSettings.ts` has 0 dynamo/aws-sdk refs, 174 zips (+1),
+`settings_create.zip` bundles `core.py`, Python syntax OK, all 3 consumers
+(`settingsController.ts`, `authController.ts`, `middleware/auth.ts`) still import
+from `userSettings` unchanged (signatures preserved).
+
+---
+
+## NEXT — Domain 10: Analytics (`services/analysisCache.ts` + `services/blockAnalytics.ts`)
+
+**Status:** These two services still import `db/dynamo` + `@aws-sdk/lib-dynamodb`
+(`BatchWriteCommand`, `DeleteCommand`, `GetCommand`, `PutCommand`, `QueryCommand`,
+`UpdateCommand`) against `POWERLIFTING_GOALS_TABLE`. They back the analysis/
+block-analytics features (`routes/analytics.ts` is huge).
+
+**User note:** For the analytics/video domains the user said video is the LAST
+priority and "I'm getting rid of the cache" — so `analysisCache.ts` may be
+largely DELETED rather than ported. Needs a read to confirm whether the cache is
+still consumed anywhere or can simply be removed, vs `blockAnalytics.ts` which
+is real compute that must move to Fission.
 
 **What needs to be done:**
-1. Read `videoController.ts` + `routes/videos.ts` end-to-end to map the video
-   operations (list/get/create/update/delete + S3 upload + thumbnail handling).
-2. Videos are stored as an array on session items in `if-sessions`, so video
-   ops compose session reads + patches. The session fission tools
-   (`session_get`, `session_patch`) already exist — decide whether video ops
-   should be their own fission functions (cleaner, the backend stays a pure
-   router) OR compose the session tools from the backend (simpler but the
-   backend retains video-specific merge logic). Recommend: own fission functions
-   so ALL logic moves out of the backend.
-3. S3 uploads: videos upload binary to S3. Decide whether the S3 `PutObject`
-   stays in the backend (binary upload boundary — multer already handles the
-   multipart in the route) or moves to Fission (would need the binary passed
-   through, which is awkward over the fission HTTP path). Likely: S3 upload
-   stays in backend (it's I/O, not DynamoDB logic), but the session-video-array
-   PATCH moves to Fission.
-4. Create `pl_videos` layer or extend `pl_sessions` with video-array helpers;
-   create `video_*` fission functions for the metadata CRUD.
-5. Rewrite `videoController.ts` — remove `db/dynamo` import; for S3 uploads keep
-   the S3 client but delegate the session-video-array update to Fission.
-6. Verify `routes/videos.ts` still compiles against the same signatures.
+1. Read `analysisCache.ts` + `blockAnalytics.ts` + who consumes them
+   (`routes/analytics.ts`, the AI `analysis_section`/`get_analysis_markdown`/
+   `regenerate_analysis` tools). Determine if the cache is removable wholesale.
+2. Port the real DynamoDB logic (block analytics compute) into a Fission layer
+   (`pl_analytics` or extend an existing one) + functions; delete the cache if
+   it's being dropped.
+3. Rewrite consumers so no `db/dynamo` import remains.
 
-**Also pending (services with direct dynamo, not yet addressed):**
-- `services/userSettings.ts` — mapped_pk lookup (auth-adjacent, may stay in
-  backend as it's part of the auth/middleware path — needs a decision)
-- `services/analysisCache.ts` — analysis cache table read/write
-- `services/blockAnalytics.ts` — block analytics
-- `services/masterCopy.ts` — master competition/federation table scans + batch
-  writes
-- `controllers/federationsController.ts` — per-user federation library
+---
+
+## PENDING — Domain 11: Video (`videoController.ts`) [user's LAST priority]
+
+**Status:** `videoController.ts` imports `db/dynamo` AND `services/sessionStore`.
+Manages video metadata stored as an array on session items in `if-sessions` +
+S3 uploads.
+
+**User direction:** keep the actual S3 upload in the backend (binary I/O, not
+DynamoDB logic), move the session-video-array PATCH to Fission, and "get rid of
+the cache."
+
+**What needs to be done:**
+1. Read `videoController.ts` + `routes/videos.ts` end-to-end.
+2. Move session-video-array read/patch to Fission (extend `pl_sessions` or new
+   `video_*` functions); keep S3 `PutObject` in the backend.
+3. Rewrite `videoController.ts` — remove `db/dynamo` import; keep S3 client only.
