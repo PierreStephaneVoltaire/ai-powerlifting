@@ -553,7 +553,12 @@ own data so I can scope what a coach or handler can see.
   coach/handler? FEAT-6.2 implies athletes can request read access to each
   other — reconcile this with the grant model.
 - Do grants have an optional expiry the athlete can set, or only the
-  handler-auto-expiry (-only auto)(FEAT-7.3)?
+  handler-auto-expiry? **Resolved (domain-modeling session 2026-07-02): BOTH
+  Coach and Handler grants auto-expire. A grant is tied to one or more
+  Competition Events the Athlete chooses at grant time; expiry =
+  `max(tied competition dates) + 7 days`, or earlier on explicit revoke. The
+  Athlete has at most one active Coach grant and one active Handler grant at a
+  time. See `CONTEXT.md` People & Roles.**
 - When a coach is replaced (single-coach rule, FEAT-7.4), are the old coach's
   grants fully revoked (fully revoked), downgraded to read, or left until manually removed?
 - Does write-by-coach create data "owned" by the athlete, and can the athlete
