@@ -8,36 +8,40 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-_SECRETS_ROOT = "/secrets"
-if os.path.isdir(_SECRETS_ROOT):
-    for _ns in os.listdir(_SECRETS_ROOT):
-        _ns_dir = os.path.join(_SECRETS_ROOT, _ns)
-        if not os.path.isdir(_ns_dir):
+_AWS_CREDS_DIR = "/secrets/aws-credentials"
+if os.path.isdir(_AWS_CREDS_DIR):
+    for _key in os.listdir(_AWS_CREDS_DIR):
+        _key_path = os.path.join(_AWS_CREDS_DIR, _key)
+        if not os.path.isfile(_key_path):
             continue
-        for _sec in os.listdir(_ns_dir):
-            _sec_dir = os.path.join(_ns_dir, _sec)
-            if not os.path.isdir(_sec_dir):
-                continue
-            for _key in os.listdir(_sec_dir):
-                _key_path = os.path.join(_sec_dir, _key)
-                if not os.path.isfile(_key_path):
-                    continue
-                try:
-                    with open(_key_path) as _f:
-                        _val = _f.read().strip()
-                    if _val:
-                        os.environ.setdefault(_key, _val)
-                except Exception:
-                    pass
+        try:
+            with open(_key_path) as _f:
+                _val = _f.read().strip()
+            if _val:
+                os.environ.setdefault(_key, _val)
+        except Exception:
+            pass
 
-for _ns in os.listdir(_SECRETS_ROOT) if os.path.isdir(_SECRETS_ROOT) else []:
-    _candidate = os.path.join(_SECRETS_ROOT, _ns, "pl-aws-credentials")
-    if os.path.isfile(os.path.join(_candidate, "credentials")):
-        os.environ.setdefault("AWS_SHARED_CREDENTIALS_FILE", os.path.join(_candidate, "credentials"))
-        os.environ.setdefault("AWS_CONFIG_FILE", os.path.join(_candidate, "config"))
-        os.environ.setdefault("AWS_REGION", "ca-central-1")
-        os.environ.setdefault("AWS_DEFAULT_REGION", "ca-central-1")
-        break
+_creds_file = os.path.join(_AWS_CREDS_DIR, "credentials")
+if os.path.isfile(_creds_file):
+    os.environ.setdefault("AWS_SHARED_CREDENTIALS_FILE", _creds_file)
+    os.environ.setdefault("AWS_CONFIG_FILE", os.path.join(_AWS_CREDS_DIR, "config"))
+    os.environ.setdefault("AWS_REGION", "ca-central-1")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "ca-central-1")
+
+_PL_SECRETS_DIR = "/secrets/pl-secrets"
+if os.path.isdir(_PL_SECRETS_DIR):
+    for _key in os.listdir(_PL_SECRETS_DIR):
+        _key_path = os.path.join(_PL_SECRETS_DIR, _key)
+        if not os.path.isfile(_key_path):
+            continue
+        try:
+            with open(_key_path) as _f:
+                _val = _f.read().strip()
+            if _val:
+                os.environ.setdefault(_key, _val)
+        except Exception:
+            pass
 
 _TOOL_NAME = ""
 _tool_id_path = os.path.join(os.path.dirname(__file__), "tool_id.txt")
