@@ -2,7 +2,6 @@ layers:
 - pl_ai
 - pl_boto3
 - pl_glossary
-- pl_pandas
 - pl_program
 - pl_sessions
 resources:

@@ -52,7 +52,7 @@ def _get_glossary_store():
 def _get_import_store():
     global _import_store
     if _import_store is None:
-        from import_store import ImportStore
+        from _import_store import ImportStore
         _import_store = ImportStore(
             table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
             pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),

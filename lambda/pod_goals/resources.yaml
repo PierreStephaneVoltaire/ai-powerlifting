@@ -1,6 +1,5 @@
 layers:
 - pl_boto3
-- pl_goals
 - pl_program
 - pl_sessions
 resources:

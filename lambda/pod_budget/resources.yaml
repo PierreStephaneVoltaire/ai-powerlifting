@@ -1,7 +1,6 @@
 layers:
 - pl_ai
 - pl_boto3
-- pl_budget
 - pl_program
 resources:
   requests:

@@ -13,7 +13,7 @@ def _get_store():
     """Lazily create and return the FederationLibraryStore singleton."""
     global _store
     if _store is None:
-        from federation_library_store import FederationLibraryStore
+        from _federation_library_store import FederationLibraryStore
         _store = FederationLibraryStore(
             table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
             pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),

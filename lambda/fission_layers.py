@@ -8,35 +8,19 @@ LAYER_MODULE_DIRS = {
     "pl_sessions": os.path.join(LAYERS_DIR, "pl-sessions", "python"),
     "pl_glossary": os.path.join(LAYERS_DIR, "pl-glossary", "python"),
     "pl_templates": os.path.join(LAYERS_DIR, "pl-templates", "python"),
-    "pl_imports": os.path.join(LAYERS_DIR, "pl-imports", "python"),
-    "pl_federation": os.path.join(LAYERS_DIR, "pl-federation", "python"),
     "pl_analysis_cache": os.path.join(LAYERS_DIR, "pl-analysis-cache", "python"),
-    "pl_budget": os.path.join(LAYERS_DIR, "pl-budget", "python"),
-    "pl_goals": os.path.join(LAYERS_DIR, "pl-goals", "python"),
-    "pl_per_user": os.path.join(LAYERS_DIR, "pl-per-user", "python"),
-    "pl_federation_library": os.path.join(LAYERS_DIR, "pl-federation-library", "python"),
-    "pl_master_copy": os.path.join(LAYERS_DIR, "pl-master-copy", "python"),
     "pl_ai": os.path.join(LAYERS_DIR, "pl-ai", "content"),
     "pl_boto3": None,
-    "pl_pandas": None,
 }
 
 LAYER_PIP_REQS = {
     "pl_boto3": ["boto3==1.42.83", "botocore==1.42.83", "s3transfer==0.16.0"],
-    "pl_pandas": ["pandas==2.2.3", "numpy==2.1.3"],
     "pl_ai": ["httpx", "jinja2"],
     "pl_program": [],
     "pl_sessions": [],
     "pl_glossary": [],
     "pl_templates": [],
-    "pl_imports": [],
-    "pl_federation": [],
     "pl_analysis_cache": [],
-    "pl_budget": [],
-    "pl_goals": [],
-    "pl_per_user": [],
-    "pl_federation_library": [],
-    "pl_master_copy": [],
 }
 
 EXTRA_TOOL_REQS = {

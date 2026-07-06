@@ -1,7 +1,0 @@
-# pl-imports — DynamoDB domain Lambda layer for the "if-health" import staging domain.
-#
-# Pure-python layer: ships only import_store.py (copied verbatim from
-# tools/health/). There are no pip dependencies for this layer.
-#
-# boto3 / botocore / s3transfer are provided by the pl-boto3 layer, which
-# lambdas attach alongside this one. Do not add those here.

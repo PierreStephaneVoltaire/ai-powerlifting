@@ -8,7 +8,7 @@ _store: Optional[Any] = None
 def _get_store():
     global _store
     if _store is None:
-        from federation_store import FederationStore
+        from _federation_store import FederationStore
         _store = FederationStore(
             table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
             pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),

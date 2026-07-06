@@ -1,7 +1,6 @@
 layers:
+- pl_analysis_cache
 - pl_boto3
-- pl_federation
-- pl_federation_library
 - pl_program
 - pl_sessions
 resources:

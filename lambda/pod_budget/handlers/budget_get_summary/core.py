@@ -13,7 +13,7 @@ _store: Optional[Any] = None
 def _get_store():
     global _store
     if _store is None:
-        from budget_store import BudgetStore as _BS
+        from _budget_store import BudgetStore as _BS
         _store = _BS(
             table_name=os.environ.get("POWERLIFTING_BUDGET_TABLE", "if-powerlifting-budget"),
             pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
