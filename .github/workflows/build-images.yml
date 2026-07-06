@@ -58,6 +58,7 @@ jobs:
     outputs:
       backend: ${{ steps.result.outputs.backend }}
       frontend: ${{ steps.result.outputs.frontend }}
+      functions: ${{ steps.result.outputs.functions }}
       terraform: ${{ steps.result.outputs.terraform }}
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +85,10 @@ jobs:
               - 'package-lock.json'
               - 'tsconfig.json'
               - '.github/workflows/build-images.yml'
+            functions:
+              - 'lambda/**'
+              - 'docker/powerlifting-fn.pkr.hcl'
+              - '.github/workflows/build-images.yml'
             terraform:
               - 'terraform/**'
               - '.github/workflows/build-images.yml'
@@ -94,10 +99,12 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "backend=true" >> "$GITHUB_OUTPUT"
             echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "functions=true" >> "$GITHUB_OUTPUT"
             echo "terraform=true" >> "$GITHUB_OUTPUT"
           else
             echo "backend=${{ steps.filter.outputs.backend }}" >> "$GITHUB_OUTPUT"
             echo "frontend=${{ steps.filter.outputs.frontend }}" >> "$GITHUB_OUTPUT"
+            echo "functions=${{ steps.filter.outputs.functions }}" >> "$GITHUB_OUTPUT"
             echo "terraform=${{ steps.filter.outputs.terraform }}" >> "$GITHUB_OUTPUT"
           fi
 
@@ -202,6 +209,85 @@ jobs:
             -var "api_url=/api" \
             -var "cloudfront_media_base_url=${{ steps.tfout.outputs.cloudfront_media_base_url }}" \
             powerlifting-frontend.pkr.hcl
+
+  build-functions:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: ${{ needs.changes.outputs.functions == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - run: pip install pyyaml
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Login to public ECR
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+
+      - uses: hashicorp/setup-packer@v3
+        with:
+          version: 1.13.x
+
+      - name: Build source zips
+        working-directory: lambda
+        run: python3 fission-deploy.py
+
+      - name: Detect changed or missing functions
+        id: changed
+        working-directory: terraform/fission-build
+        env:
+          ECR_REPO: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-fns
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          CHANGED=""
+          for zip in *.zip; do
+            tool_id="${zip%.zip}"
+            CURRENT_SHA=$(sha256sum "$zip" | cut -d' ' -f1)
+            PREV_SHA=$(git show HEAD~1:terraform/fission-build/"$zip" 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "")
+            if [ "$CURRENT_SHA" != "$PREV_SHA" ]; then
+              CHANGED="$CHANGED $tool_id"
+              continue
+            fi
+            IMAGE_EXISTS=$(aws ecr describe-images \
+              --repository-name "$(echo "$ECR_REPO" | cut -d'/' -f2-)" \
+              --region "$AWS_REGION" \
+              --image-ids imageTag="$tool_id" \
+              --query 'imageDetails[0].imageTags[0]' \
+              --output text 2>/dev/null || echo "")
+            if [ "$IMAGE_EXISTS" != "$tool_id" ]; then
+              CHANGED="$CHANGED $tool_id"
+            fi
+          done
+          CHANGED=$(echo "$CHANGED" | xargs)
+          echo "tools=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "Functions to build: $CHANGED"
+
+      - name: Build and push function images
+        if: ${{ steps.changed.outputs.tools != '' }}
+        working-directory: docker
+        run: |
+          for tool_id in ${{ steps.changed.outputs.tools }}; do
+            echo "Building $tool_id..."
+            packer init powerlifting-fn.pkr.hcl
+            packer build -color=false \
+              -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-fns" \
+              -var "image_tag=${tool_id}" \
+              -var "tool_id=${tool_id}" \
+              -var "source_archive=../terraform/fission-build/${tool_id}.zip" \
+              powerlifting-fn.pkr.hcl
+          done
 
   terraform-validate:
     needs: changes
