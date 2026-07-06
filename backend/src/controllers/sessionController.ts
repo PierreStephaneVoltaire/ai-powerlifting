@@ -19,7 +19,7 @@ import type { Session, Exercise, SessionStatus, SessionWellness } from '@powerli
 // status need no read (the patch is self-contained).
 
 async function fetchCurrent(pk: string, date: string, index: number): Promise<Session> {
-  const session = await invokeLambda('session_get', { pk, date, index })
+  const session = await invokeLambda('pod_sessions', { function: 'session_get',  pk, date, index })
   if (!session) throw new AppError(`Session at index ${index} not found`, 404)
   return session as Session
 }
@@ -29,7 +29,7 @@ export async function createSession(
   _version: string,
   session: Session,
 ): Promise<void> {
-  await invokeLambda('session_create', { pk, session })
+  await invokeLambda('pod_sessions', { function: 'session_create',  pk, session })
 }
 
 export async function deleteSession(
@@ -38,7 +38,7 @@ export async function deleteSession(
   date: string,
   index: number,
 ): Promise<void> {
-  await invokeLambda('session_delete', { pk, date, index })
+  await invokeLambda('pod_sessions', { function: 'session_delete',  pk, date, index })
 }
 
 export async function getSession(
@@ -47,7 +47,7 @@ export async function getSession(
   date: string,
   index: number,
 ): Promise<Session | null> {
-  return (await invokeLambda('session_get', { pk, date, index })) as Session | null
+  return (await invokeLambda('pod_sessions', { function: 'session_get',  pk, date, index })) as Session | null
 }
 
 export async function updateSession(
@@ -57,7 +57,7 @@ export async function updateSession(
   index: number,
   session: Session,
 ): Promise<void> {
-  await invokeLambda('session_replace', { pk, date, index, session })
+  await invokeLambda('pod_sessions', { function: 'session_replace',  pk, date, index, session })
 }
 
 export async function rescheduleSession(
@@ -68,7 +68,7 @@ export async function rescheduleSession(
   newDate: string,
   newDay: string,
 ): Promise<void> {
-  await invokeLambda('session_patch', { pk, date, index, patch: { date: newDate, day: newDay } })
+  await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { date: newDate, day: newDay } })
 }
 
 export async function completeSession(
@@ -79,7 +79,7 @@ export async function completeSession(
   data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | undefined },
 ): Promise<void> {
   const current = await fetchCurrent(pk, date, index)
-  await invokeLambda('session_patch', {
+  await invokeLambda('pod_sessions', { function: 'session_patch', 
     pk,
     date,
     index,
@@ -101,7 +101,7 @@ export async function updateSessionStatus(
   index: number,
   status: SessionStatus,
 ): Promise<void> {
-  await invokeLambda('session_patch', {
+  await invokeLambda('pod_sessions', { function: 'session_patch', 
     pk,
     date,
     index,
@@ -120,7 +120,7 @@ export async function addExercise(
   exercise: Exercise,
 ): Promise<void> {
   const current = await fetchCurrent(pk, date, index)
-  await invokeLambda('session_patch', {
+  await invokeLambda('pod_sessions', { function: 'session_patch', 
     pk,
     date,
     index,
@@ -141,7 +141,7 @@ export async function removeExercise(
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
   exercises.splice(exerciseIndex, 1)
-  await invokeLambda('session_patch', { pk, date, index, patch: { exercises } })
+  await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { exercises } })
 }
 
 export async function updateExerciseField(
@@ -159,5 +159,5 @@ export async function updateExerciseField(
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
   ;(exercises[exerciseIndex] as any)[field] = value
-  await invokeLambda('session_patch', { pk, date, index, patch: { exercises } })
+  await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { exercises } })
 }

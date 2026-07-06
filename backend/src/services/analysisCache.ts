@@ -310,7 +310,7 @@ function hashValue(value: unknown): string {
 }
 
 async function fetchGoalsForFingerprint(pk: string): Promise<AthleteGoal[]> {
-  const items = (await invokeLambda('goals_list', { pk })) as Record<string, unknown>[]
+  const items = (await invokeLambda('pod_goals', { function: 'goals_list',  pk })) as Record<string, unknown>[]
   return items
     .map((it) => {
       const { sk: _sk, pk: _pk, created_at: _c, updated_at: _u, ...rest } = it

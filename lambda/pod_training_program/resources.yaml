@@ -1,0 +1,298 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+- pl_templates
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Training program management pod. Handles program CRUD (get, list, list-full,
+  archive, unarchive), structured updates (meta fields, phases, lift profiles), per-version
+  notes (block notes, diet notes, supplement phases), program exports (markdown, history),
+  version management (new version creation with patches), setup initialization (from
+  blank or template), setup status, and program cache invalidation. Pass the operation
+  name in the "function" field and all operation arguments as top-level fields alongside
+  it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - block_notes_get
+      - block_notes_update
+      - diet_notes_get
+      - diet_notes_update
+      - export_program_history
+      - export_program_markdown
+      - health_invalidate_program_cache
+      - health_new_version
+      - health_setup_initialize
+      - health_setup_status
+      - program_archive
+      - program_get
+      - program_list
+      - program_list_full
+      - program_unarchive
+      - program_update_lift_profiles
+      - program_update_meta_field
+      - program_update_phases
+      - supplement_phases_get
+      - supplement_phases_update
+    pk: &id001
+      type: string
+    version: &id002
+      type: string
+    block_notes: &id003
+      type: array
+    notes: &id004
+      type: string
+    format: &id005
+      type: string
+    change_reason: &id006
+      type: string
+    patches: &id007
+      type: array
+    mode: &id008
+      type: string
+    program_name: &id009
+      type: string
+    start_date: &id010
+      type: string
+    week_start_day: &id011
+      type: string
+    template_sk: &id012
+      type: string
+    maxes: &id013
+      type: object
+    program_sk: &id014
+      type: string
+    include_archived: &id015
+      type: boolean
+    lift_profiles: &id016
+      type: array
+    field: &id017
+      type: string
+    value: &id018 {}
+    phases: &id019
+      type: array
+    block: &id020
+      type: string
+  required:
+  - function
+  - block_notes
+  - change_reason
+  - mode
+  - notes
+  - patches
+  - phases
+  - start_date
+  - week_start_day
+operations:
+  block_notes_get:
+    description: block_notes_get
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+        version: *id002
+      required: []
+  block_notes_update:
+    description: block_notes_update
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+        block_notes: *id003
+      required:
+      - block_notes
+  diet_notes_get:
+    description: diet_notes_get
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+      required: []
+  diet_notes_update:
+    description: diet_notes_update
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+        notes: *id004
+      required:
+      - notes
+  export_program_history:
+    description: export_program_history
+    input_schema:
+      type: object
+      properties:
+        format: *id005
+      required: []
+  export_program_markdown:
+    description: export_program_markdown
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_invalidate_program_cache:
+    description: health_invalidate_program_cache
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_new_version:
+    description: health_new_version
+    input_schema:
+      type: object
+      properties:
+        change_reason: *id006
+        patches: *id007
+      required:
+      - change_reason
+      - patches
+  health_setup_initialize:
+    description: health_setup_initialize
+    input_schema:
+      type: object
+      properties:
+        mode: *id008
+        program_name: *id009
+        start_date: *id010
+        week_start_day: *id011
+        template_sk: *id012
+        maxes: *id013
+      required:
+      - mode
+      - start_date
+      - week_start_day
+  health_setup_status:
+    description: health_setup_status
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  program_archive:
+    description: program_archive
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk: *id014
+      required: []
+  program_get:
+    description: program_get
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+      required: []
+  program_list:
+    description: program_list
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        include_archived: *id015
+      required: []
+  program_list_full:
+    description: program_list_full
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        include_archived:
+          type: boolean
+      required: []
+  program_unarchive:
+    description: program_unarchive
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+      required: []
+  program_update_lift_profiles:
+    description: program_update_lift_profiles
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        lift_profiles: *id016
+      required: []
+  program_update_meta_field:
+    description: program_update_meta_field
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        field: *id017
+        value: *id018
+      required: []
+  program_update_phases:
+    description: program_update_phases
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        phases: *id019
+        block: *id020
+      required: []
+  supplement_phases_get:
+    description: supplement_phases_get
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+      required: []
+  supplement_phases_update:
+    description: supplement_phases_update
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+        phases:
+          type: array
+      required:
+      - phases

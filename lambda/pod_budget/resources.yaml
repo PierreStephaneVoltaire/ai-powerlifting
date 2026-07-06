@@ -1,0 +1,154 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_budget
+- pl_program
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Budget management pod. Handles budget item CRUD (create, update, delete,
+  list), budget configuration (get, put), budget summary retrieval (monthly rollup),
+  AI budget advisor, and priority timeline generation. Pass the operation name in
+  the "function" field and all operation arguments as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - budget_advisor
+      - budget_create_item
+      - budget_delete_item
+      - budget_get_config
+      - budget_get_summary
+      - budget_list_items
+      - budget_priority_timeline
+      - budget_put_config
+      - budget_update_item
+    pk: &id001
+      type: string
+    item: &id002
+      type: object
+    item_id: &id003
+      type: string
+    month: &id004
+      type: string
+    comp_id: &id005
+      type: string
+    category: &id006
+      type: string
+    priority: &id007
+      type: string
+    config: &id008
+      type: object
+    items: &id009
+      type: array
+    competitions: &id010
+      type: array
+    federation_memberships: &id011
+      type: array
+  required:
+  - function
+  - config
+  - item
+  - item_id
+  - items
+operations:
+  budget_advisor:
+    description: budget_advisor
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+      required: []
+  budget_create_item:
+    description: budget_create_item
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        item: *id002
+      required: []
+  budget_delete_item:
+    description: budget_delete_item
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        item_id: *id003
+      required:
+      - item_id
+  budget_get_config:
+    description: budget_get_config
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+      required: []
+  budget_get_summary:
+    description: budget_get_summary
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        month: *id004
+      required: []
+  budget_list_items:
+    description: budget_list_items
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        comp_id: *id005
+        category: *id006
+        priority: *id007
+      required: []
+  budget_priority_timeline:
+    description: budget_priority_timeline
+    input_schema:
+      type: object
+      properties:
+        config: *id008
+        items: *id009
+        competitions: *id010
+        federation_memberships: *id011
+      required:
+      - config
+      - items
+  budget_put_config:
+    description: budget_put_config
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        config:
+          type: object
+      required:
+      - config
+  budget_update_item:
+    description: budget_update_item
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        item_id:
+          type: string
+        item:
+          type: object
+      required:
+      - item_id
+      - item

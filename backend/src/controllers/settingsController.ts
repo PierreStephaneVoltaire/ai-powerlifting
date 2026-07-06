@@ -143,7 +143,7 @@ export async function updateAvatarHandler(req: Request, res: Response): Promise<
   }
 
   const fileB64 = Buffer.from(file.buffer).toString('base64')
-  const settings = await invokeLambda('settings_update_avatar', {
+  const settings = await invokeLambda('pod_user', { function: 'settings_update_avatar', 
     username: req.user.username,
     mapped_pk: req.mapped_pk,
     file_b64: fileB64,

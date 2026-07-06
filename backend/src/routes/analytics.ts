@@ -63,7 +63,7 @@ async function getProgramWithWeightLog(pk: string, version = 'current'): Promise
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
   try {
-    await invokeLambda('health_snapshot_competition_projection', {
+    await invokeLambda('pod_competition', { function: 'health_snapshot_competition_projection', 
       date,
       version: 'current',
       allow_retrospective: false,
@@ -119,7 +119,7 @@ async function analysisSectionStatusDirect(
         await snapshotCompetitionProjection(context.pk, context.asOfDate)
       }
       const window = context.windows[context.windowKey]
-      payload = await invokeLambda('analysis_section', {
+      payload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
         section: sectionKey,
         weeks: window.weeks,
         block: 'current',
@@ -202,7 +202,7 @@ async function computeDeterministicSection(
       await snapshotCompetitionProjection(context.pk, context.asOfDate)
     }
     const window = context.windows[context.windowKey]
-    await invokeLambda('analysis_section', {
+    await invokeLambda('pod_analysis', { function: 'analysis_section', 
       section: sectionKey,
       weeks: window.weeks,
       block: 'current',
@@ -301,7 +301,7 @@ async function runTargetedRegeneration(
     logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window from sections')
     const merged: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeLambda('analysis_section', {
+      const sectionPayload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
         section: sectionKey,
         weeks: window.weeks,
         block: 'current',
@@ -339,7 +339,7 @@ async function runFullCurrentBlockRegeneration(
   const { generatedAt, windows, results } = await runTargetedRegeneration(pk, asOfDate)
 
   try {
-    await invokeLambda('export_program_markdown', {
+    await invokeLambda('pod_training_program', { function: 'export_program_markdown', 
       version: 'current',
       include_analysis: true,
       analysis_weeks: windows.block.weeks,
@@ -564,7 +564,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
     const data: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeLambda('analysis_section', {
+      const sectionPayload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
         section: sectionKey,
         weeks,
         block,
@@ -662,7 +662,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     }
 
     try {
-      const markdownResult = await invokeLambda('export_program_markdown', {
+      const markdownResult = await invokeLambda('pod_training_program', { function: 'export_program_markdown', 
         version: 'current',
         include_analysis: false,
         pk,

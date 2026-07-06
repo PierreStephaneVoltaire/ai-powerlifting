@@ -1,0 +1,159 @@
+layers:
+- pl_boto3
+- pl_glossary
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Glossary and exercise library pod. Handles glossary term management (add,
+  update, list, set estimated 1RM) and exercise library management (upsert, archive,
+  unarchive, remove, search, get full glossary, set per-exercise E1RM). Read-heavy
+  catalog. Pass the operation name in the "function" field and all operation arguments
+  as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - exercise_archive
+      - exercise_get_glossary
+      - exercise_remove
+      - exercise_search
+      - exercise_set_e1rm
+      - exercise_unarchive
+      - exercise_upsert
+      - glossary_add
+      - glossary_list_terms
+      - glossary_set_e1rm
+      - glossary_update
+    pk: &id001
+      type: string
+    id: &id002
+      type: string
+    query: &id003
+      type: string
+    value_kg: &id004
+      type: number
+    method: &id005
+      type: string
+    exercise: &id006
+      type: object
+    term: &id007
+      type: object
+  required:
+  - function
+operations:
+  exercise_archive:
+    description: exercise_archive
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+        id: *id002
+      required: []
+  exercise_get_glossary:
+    description: exercise_get_glossary
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+      required: []
+  exercise_remove:
+    description: exercise_remove
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        id:
+          type: string
+      required: []
+  exercise_search:
+    description: exercise_search
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        query: *id003
+      required: []
+  exercise_set_e1rm:
+    description: exercise_set_e1rm
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        id:
+          type: string
+        value_kg: *id004
+        method: *id005
+      required: []
+  exercise_unarchive:
+    description: exercise_unarchive
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        id:
+          type: string
+      required: []
+  exercise_upsert:
+    description: exercise_upsert
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        exercise: *id006
+      required: []
+  glossary_add:
+    description: glossary_add
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        term: *id007
+      required: []
+  glossary_list_terms:
+    description: glossary_list_terms
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+      required: []
+  glossary_set_e1rm:
+    description: glossary_set_e1rm
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        id:
+          type: string
+        value_kg:
+          type: number
+        method:
+          type: string
+      required: []
+  glossary_update:
+    description: glossary_update
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        term:
+          type: object
+      required: []

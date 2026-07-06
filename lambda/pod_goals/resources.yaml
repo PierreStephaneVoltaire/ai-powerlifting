@@ -1,0 +1,69 @@
+layers:
+- pl_boto3
+- pl_goals
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Goals management pod. Handles goal listing and full replacement, plus
+  health-integrated goal get/update. Goals are read before being replaced. Pass the
+  operation name in the "function" field and all operation arguments as top-level
+  fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - goals_list
+      - goals_replace
+      - health_get_goals
+      - health_update_goals
+    pk: &id001
+      type: string
+    goals: &id002
+      type: array
+  required:
+  - function
+  - goals
+operations:
+  goals_list:
+    description: goals_list
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+      required: []
+  goals_replace:
+    description: goals_replace
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        goals: *id002
+      required:
+      - goals
+  health_get_goals:
+    description: health_get_goals
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_update_goals:
+    description: health_update_goals
+    input_schema:
+      type: object
+      properties:
+        goals:
+          type: array
+      required:
+      - goals

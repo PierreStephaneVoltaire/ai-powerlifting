@@ -577,7 +577,7 @@ function goalTargetCompetitionDates(goal: AthleteGoal): string[] {
 }
 
 export async function loadGoals(pk: string): Promise<AthleteGoal[]> {
-  const items = (await invokeLambda('goals_list', { pk })) as Record<string, unknown>[]
+  const items = (await invokeLambda('pod_goals', { function: 'goals_list',  pk })) as Record<string, unknown>[]
   return items
     .map((it) => {
       const { sk: _sk, pk: _pk, created_at: _c, updated_at: _u, target_competition_ids: _t, ...rest } = it as Record<string, unknown>

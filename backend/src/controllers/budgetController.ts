@@ -64,12 +64,12 @@ function normalizeConfig(raw: unknown, pk: string): BudgetConfig {
 }
 
 export async function getBudgetConfig(pk: string): Promise<BudgetConfig> {
-  const result = await invokeLambda('budget_get_config', { pk })
+  const result = await invokeLambda('pod_budget', { function: 'budget_get_config',  pk })
   return normalizeConfig(result, pk)
 }
 
 export async function putBudgetConfig(pk: string, raw: unknown): Promise<BudgetConfig> {
-  const result = await invokeLambda('budget_put_config', { pk, config: raw })
+  const result = await invokeLambda('pod_budget', { function: 'budget_put_config',  pk, config: raw })
   return normalizeConfig(result, pk)
 }
 
@@ -78,26 +78,26 @@ export async function listBudgetItems(pk: string, filters?: BudgetItemFilters): 
   if (filters?.comp_id !== undefined) payload.comp_id = filters.comp_id
   if (filters?.category !== undefined) payload.category = filters.category
   if (filters?.priority !== undefined) payload.priority = filters.priority
-  const result = await invokeLambda('budget_list_items', payload)
+  const result = await invokeLambda('pod_budget', { function: 'budget_list_items', ...payload })
   return Array.isArray(result?.items) ? result.items : []
 }
 
 export async function createBudgetItem(pk: string, raw: unknown): Promise<BudgetItem> {
-  const result = await invokeLambda('budget_create_item', { pk, item: raw })
+  const result = await invokeLambda('pod_budget', { function: 'budget_create_item',  pk, item: raw })
   if (!result) throw new AppError('Failed to create budget item', 500)
   logger.info({ pk, module: 'budget', fn: 'createBudgetItem', itemId: (result as BudgetItem).id }, 'budget item created via Fission')
   return result as BudgetItem
 }
 
 export async function updateBudgetItem(pk: string, itemId: string, raw: unknown): Promise<BudgetItem> {
-  const result = await invokeLambda('budget_update_item', { pk, item_id: itemId, item: raw })
+  const result = await invokeLambda('pod_budget', { function: 'budget_update_item',  pk, item_id: itemId, item: raw })
   if (!result) throw new AppError('Failed to update budget item', 500)
   logger.info({ pk, module: 'budget', fn: 'updateBudgetItem', itemId }, 'budget item updated via Fission')
   return result as BudgetItem
 }
 
 export async function deleteBudgetItem(pk: string, itemId: string): Promise<void> {
-  await invokeLambda('budget_delete_item', { pk, item_id: itemId })
+  await invokeLambda('pod_budget', { function: 'budget_delete_item',  pk, item_id: itemId })
   logger.info({ pk, module: 'budget', fn: 'deleteBudgetItem', itemId }, 'budget item deleted via Fission')
 }
 
@@ -113,7 +113,7 @@ export async function markItemCut(pk: string, itemId: string, cut: boolean): Pro
 }
 
 export async function getBudgetSummary(pk: string, month: string): Promise<BudgetSummary> {
-  return invokeLambda('budget_get_summary', { pk, month }) as Promise<BudgetSummary>
+  return invokeLambda('pod_budget', { function: 'budget_get_summary',  pk, month }) as Promise<BudgetSummary>
 }
 
 export async function getBudget(pk: string): Promise<BudgetStore> {
@@ -255,7 +255,7 @@ export async function getBudgetAiAnalysis(
 
   logger.info({ pk, module: 'budget', fn: 'getBudgetAiAnalysis', refresh, itemCount: items.length }, 'budget AI analysis generating via Fission')
 
-  const result = (await invokeLambda('budget_priority_timeline', payload)) as Partial<BudgetAiAnalysis>
+  const result = (await invokeLambda('pod_budget', { function: 'budget_priority_timeline', ...payload })) as Partial<BudgetAiAnalysis>
 
   const analysis: BudgetAiAnalysis = {
     overall_assessment: String(result?.overall_assessment ?? ''),

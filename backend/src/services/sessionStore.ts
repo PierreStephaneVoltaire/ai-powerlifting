@@ -23,7 +23,7 @@ export function transformVideo(video: any): any {
 }
 
 export async function listSessions(pk: string, programSk: string, _phases?: Phase[]): Promise<Session[]> {
-  const result = await invokeLambda('session_list_full', { pk, program_sk: programSk })
+  const result = await invokeLambda('pod_sessions', { function: 'session_list_full',  pk, program_sk: programSk })
   return Array.isArray(result) ? (result as Session[]) : []
 }
 
@@ -33,7 +33,7 @@ export async function createSession(
   session: Session,
   _phases?: Phase[],
 ): Promise<Session> {
-  return (await invokeLambda('session_create', { pk, program_sk: programSk, session })) as Session
+  return (await invokeLambda('pod_sessions', { function: 'session_create',  pk, program_sk: programSk, session })) as Session
 }
 
 export async function patchSessionAt(
@@ -44,7 +44,7 @@ export async function patchSessionAt(
   patch: Partial<Session>,
   _phases?: Phase[],
 ): Promise<Session> {
-  return (await invokeLambda('session_patch', { pk, program_sk: programSk, date, index, patch })) as Session
+  return (await invokeLambda('pod_sessions', { function: 'session_patch',  pk, program_sk: programSk, date, index, patch })) as Session
 }
 
 export async function patchSessionByDate(
@@ -54,7 +54,7 @@ export async function patchSessionByDate(
   patch: Partial<Session>,
   _phases?: Phase[],
 ): Promise<Session> {
-  return (await invokeLambda('session_patch_by_date', { pk, program_sk: programSk, date, patch })) as Session
+  return (await invokeLambda('pod_sessions', { function: 'session_patch_by_date',  pk, program_sk: programSk, date, patch })) as Session
 }
 
 export async function replaceProgramSessions(
@@ -63,5 +63,5 @@ export async function replaceProgramSessions(
   sessions: Session[],
   _phases?: Phase[],
 ): Promise<void> {
-  await invokeLambda('session_replace_all', { pk, program_sk: programSk, sessions })
+  await invokeLambda('pod_sessions', { function: 'session_replace_all',  pk, program_sk: programSk, sessions })
 }

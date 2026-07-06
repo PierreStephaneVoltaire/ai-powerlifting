@@ -1,0 +1,146 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Competition management pod. Handles competition CRUD (create, get, update,
+  delete), attempt calculation (suggests openers and jump strategy from current maxes),
+  competition completion (records results, body weight, post-meet report), and competition
+  projection snapshots. Pass the operation name in the "function" field and all operation
+  arguments as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - calculate_attempts
+      - health_complete_competition
+      - health_create_competition
+      - health_delete_competition
+      - health_get_competition
+      - health_snapshot_competition_projection
+      - health_update_competition
+    lift: &id001
+      type: string
+    opener_kg: &id002
+      type: number
+    j1_override: &id003
+      type: number
+    j2_override: &id004
+      type: number
+    last_felt: &id005
+      type: string
+    date: &id006
+      type: string
+    results: &id007
+      type: object
+    body_weight_kg: &id008
+      type: number
+    post_meet_report: &id009
+      type: string
+    version: &id010
+      type: string
+    allow_retrospective: &id011
+      type: boolean
+    competition: &id012
+      type: object
+    patch: &id013
+      type: object
+  required:
+  - function
+  - body_weight_kg
+  - competition
+  - date
+  - lift
+  - opener_kg
+  - patch
+  - results
+operations:
+  calculate_attempts:
+    description: calculate_attempts
+    input_schema:
+      type: object
+      properties:
+        lift: *id001
+        opener_kg: *id002
+        j1_override: *id003
+        j2_override: *id004
+        last_felt: *id005
+      required:
+      - lift
+      - opener_kg
+  health_complete_competition:
+    description: health_complete_competition
+    input_schema:
+      type: object
+      properties:
+        date: *id006
+        results: *id007
+        body_weight_kg: *id008
+        post_meet_report: *id009
+        version: *id010
+        allow_retrospective: *id011
+      required:
+      - date
+      - results
+      - body_weight_kg
+  health_create_competition:
+    description: health_create_competition
+    input_schema:
+      type: object
+      properties:
+        competition: *id012
+      required:
+      - competition
+  health_delete_competition:
+    description: health_delete_competition
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+      required:
+      - date
+  health_get_competition:
+    description: health_get_competition
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+      required:
+      - date
+  health_snapshot_competition_projection:
+    description: health_snapshot_competition_projection
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+        version:
+          type: string
+        allow_retrospective:
+          type: boolean
+      required:
+      - date
+  health_update_competition:
+    description: health_update_competition
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+        patch: *id013
+      required:
+      - date
+      - patch

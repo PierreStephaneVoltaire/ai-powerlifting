@@ -155,7 +155,7 @@ export async function getSettings(discordUsername: string): Promise<UserSettings
   const cached = cache.get(key)
   if (cached && cached.expires > Date.now()) return cached.settings
 
-  const result = await invokeLambda('settings_get', { username: discordUsername })
+  const result = await invokeLambda('pod_user', { function: 'settings_get',  username: discordUsername })
   if (!result) return null
   const settings = normalizeSettings(result as Record<string, unknown>)
   cache.set(key, { settings, expires: Date.now() + CACHE_TTL_MS })
@@ -167,7 +167,7 @@ export async function getSettingsByMappedPk(mappedPk: string): Promise<UserSetti
   const cached = cache.get(key)
   if (cached && cached.expires > Date.now()) return cached.settings
 
-  const result = await invokeLambda('settings_get', { mapped_pk: mappedPk })
+  const result = await invokeLambda('pod_user', { function: 'settings_get',  mapped_pk: mappedPk })
   if (!result) return null
   const settings = normalizeSettings(result as Record<string, unknown>)
   cache.set(key, { settings, expires: Date.now() + CACHE_TTL_MS })
@@ -179,7 +179,7 @@ export async function updateNickname(discordUsername: string, nickname: string):
     throw new Error('Invalid nickname: must be 2-32 chars, lowercase alphanumeric, hyphens, underscores only')
   }
 
-  const result = await invokeLambda('settings_update_nickname', { username: discordUsername, nickname })
+  const result = await invokeLambda('pod_user', { function: 'settings_update_nickname',  username: discordUsername, nickname })
   invalidateCache(discordUsername)
   return normalizeSettings(result as Record<string, unknown>)
 }
@@ -193,7 +193,7 @@ export async function updateProfile(
     public_training_summary_enabled?: boolean
   },
 ): Promise<UserSettings> {
-  const result = await invokeLambda('settings_update_profile', {
+  const result = await invokeLambda('pod_user', { function: 'settings_update_profile', 
     username: discordUsername,
     profile_visibility: input.profile_visibility,
     display_name: input.display_name,
@@ -208,7 +208,7 @@ export async function updateRankingLocation(
   discordUsername: string,
   input: { ranking_country: string | null; ranking_region: string | null },
 ): Promise<UserSettings> {
-  const result = await invokeLambda('settings_update_ranking_location', {
+  const result = await invokeLambda('pod_user', { function: 'settings_update_ranking_location', 
     username: discordUsername,
     ranking_country: input.ranking_country,
     ranking_region: input.ranking_region,
@@ -221,7 +221,7 @@ export async function updateAgeClass(
   discordUsername: string,
   input: { age_class: AgeCategory | null },
 ): Promise<UserSettings> {
-  const result = await invokeLambda('settings_update_age_class', {
+  const result = await invokeLambda('pod_user', { function: 'settings_update_age_class', 
     username: discordUsername,
     age_class: input.age_class,
   })
@@ -241,7 +241,7 @@ export async function getOrCreateSettings(
   const existing = await getSettings(discordUsername)
   if (existing) return existing
 
-  const result = (await invokeLambda('settings_create', {
+  const result = (await invokeLambda('pod_user', { function: 'settings_create', 
     discord_id: discordId,
     discord_username: discordUsername,
     avatar_url: avatarUrl,

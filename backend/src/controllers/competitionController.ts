@@ -26,7 +26,7 @@ export async function updateCompetitions(
       }
     }
     if (Object.keys(patch).length === 0) continue
-    await invokeLambda('health_update_competition', { pk, date: legacy.date, patch })
+    await invokeLambda('pod_competition', { function: 'health_update_competition',  pk, date: legacy.date, patch })
   }
 }
 
@@ -43,7 +43,7 @@ export async function completeCompetition(
   const snapshotDate = compDateObj.toISOString().slice(0, 10)
 
   try {
-    await invokeLambda('health_snapshot_competition_projection', {
+    await invokeLambda('pod_competition', { function: 'health_snapshot_competition_projection', 
       pk,
       date: snapshotDate,
       version,
@@ -53,7 +53,7 @@ export async function completeCompetition(
     logger.warn({ err: snapshotErr, pk, module: 'competition', fn: 'completeCompetition' }, 'failed to snapshot competition projection')
   }
 
-  return invokeLambda('health_complete_competition', {
+  return invokeLambda('pod_competition', { function: 'health_complete_competition', 
     pk,
     date: compDate,
     results,

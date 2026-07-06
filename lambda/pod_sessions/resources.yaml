@@ -1,0 +1,288 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Training session management pod. Handles session CRUD (create, delete,
+  get, list, list-full, patch, patch-by-date, replace, replace-all), exercise add/remove
+  within sessions, session rescheduling, and session range queries. Writes always
+  follow a read. Pass the operation name in the "function" field and all operation
+  arguments as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - health_add_exercise
+      - health_create_session
+      - health_delete_session
+      - health_get_session
+      - health_get_sessions_range
+      - health_remove_exercise
+      - health_reschedule_session
+      - health_update_session
+      - session_create
+      - session_delete
+      - session_get
+      - session_list
+      - session_list_full
+      - session_patch
+      - session_patch_by_date
+      - session_replace
+      - session_replace_all
+    date: &id001
+      type: string
+    exercise: &id002
+      type: object
+    day: &id003
+      type: integer
+    week_number: &id004
+      type: integer
+    exercises: &id005
+      type: array
+    session_notes: &id006
+      type: string
+    start_date: &id007
+      type: string
+    end_date: &id008
+      type: string
+    exercise_index: &id009
+      type: integer
+    old_date: &id010
+      type: string
+    new_date: &id011
+      type: string
+    patch: &id012
+      type: object
+    pk: &id013
+      type: string
+    program_sk: &id014
+      type: string
+    session: &id015
+      type: object
+    index: &id016
+      type: integer
+    limit: &id017
+      type: integer
+    sessions: &id018
+      type: array
+  required:
+  - function
+  - date
+  - day
+  - end_date
+  - exercise
+  - exercise_index
+  - new_date
+  - old_date
+  - patch
+  - start_date
+  - week_number
+operations:
+  health_add_exercise:
+    description: health_add_exercise
+    input_schema:
+      type: object
+      properties:
+        date: *id001
+        exercise: *id002
+      required:
+      - date
+      - exercise
+  health_create_session:
+    description: health_create_session
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+        day: *id003
+        week_number: *id004
+        exercises: *id005
+        session_notes: *id006
+      required:
+      - date
+      - day
+      - week_number
+  health_delete_session:
+    description: health_delete_session
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+      required:
+      - date
+  health_get_session:
+    description: health_get_session
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+      required:
+      - date
+  health_get_sessions_range:
+    description: health_get_sessions_range
+    input_schema:
+      type: object
+      properties:
+        start_date: *id007
+        end_date: *id008
+      required:
+      - start_date
+      - end_date
+  health_remove_exercise:
+    description: health_remove_exercise
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+        exercise_index: *id009
+      required:
+      - date
+      - exercise_index
+  health_reschedule_session:
+    description: health_reschedule_session
+    input_schema:
+      type: object
+      properties:
+        old_date: *id010
+        new_date: *id011
+      required:
+      - old_date
+      - new_date
+  health_update_session:
+    description: health_update_session
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+        patch: *id012
+      required:
+      - date
+      - patch
+  session_create:
+    description: session_create
+    input_schema:
+      type: object
+      properties:
+        pk: *id013
+        program_sk: *id014
+        session: *id015
+      required: []
+  session_delete:
+    description: session_delete
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        date:
+          type: string
+        index: *id016
+      required: []
+  session_get:
+    description: session_get
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        date:
+          type: string
+        index:
+          type: integer
+      required: []
+  session_list:
+    description: session_list
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        limit: *id017
+      required: []
+  session_list_full:
+    description: session_list_full
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+      required: []
+  session_patch:
+    description: session_patch
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        date:
+          type: string
+        index:
+          type: integer
+        patch:
+          type: object
+      required: []
+  session_patch_by_date:
+    description: session_patch_by_date
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        date:
+          type: string
+        patch:
+          type: object
+      required: []
+  session_replace:
+    description: session_replace
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        date:
+          type: string
+        index:
+          type: integer
+        session:
+          type: object
+      required: []
+  session_replace_all:
+    description: session_replace_all
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        sessions: *id018
+      required: []

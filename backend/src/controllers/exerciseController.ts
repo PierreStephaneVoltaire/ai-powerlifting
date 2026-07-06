@@ -57,7 +57,7 @@ function normalizeStoredExercise(raw: GlossaryExercise): GlossaryExercise {
 }
 
 export async function getGlossary(pk: string): Promise<GlossaryStore> {
-  const glossary = await invokeLambda('exercise_get_glossary', { pk })
+  const glossary = await invokeLambda('pod_glossary', { function: 'exercise_get_glossary',  pk })
   return {
     pk,
     sk: 'glossary#v1',
@@ -73,11 +73,11 @@ export async function upsertExercise(pk: string, exercise: GlossaryExercise): Pr
   if (!exercise.id) {
     exercise.id = uuidv4()
   }
-  await invokeLambda('exercise_upsert', { pk, exercise })
+  await invokeLambda('pod_glossary', { function: 'exercise_upsert',  pk, exercise })
 }
 
 export async function removeExercise(pk: string, exerciseId: string): Promise<void> {
-  await invokeLambda('exercise_remove', { pk, id: exerciseId })
+  await invokeLambda('pod_glossary', { function: 'exercise_remove',  pk, id: exerciseId })
 }
 
 export async function getExerciseById(pk: string, exerciseId: string): Promise<GlossaryExercise | null> {
@@ -101,11 +101,11 @@ export async function searchExercises(pk: string, query: string): Promise<Glossa
 }
 
 export async function archiveExercise(pk: string, id: string): Promise<void> {
-  await invokeLambda('exercise_archive', { pk, id })
+  await invokeLambda('pod_glossary', { function: 'exercise_archive',  pk, id })
 }
 
 export async function unarchiveExercise(pk: string, id: string): Promise<void> {
-  await invokeLambda('exercise_unarchive', { pk, id })
+  await invokeLambda('pod_glossary', { function: 'exercise_unarchive',  pk, id })
 }
 
 export async function setE1rmEstimate(
@@ -114,7 +114,7 @@ export async function setE1rmEstimate(
   valueKg: number,
   method: 'manual' | 'ai_backfill' | 'logged' = 'manual',
 ): Promise<void> {
-  await invokeLambda('exercise_set_e1rm', { pk, id, value_kg: valueKg, method })
+  await invokeLambda('pod_glossary', { function: 'exercise_set_e1rm', pk, id, value_kg: valueKg, method })
 }
 
 export async function estimateExerciseE1rm(pk: string, id: string): Promise<any> {

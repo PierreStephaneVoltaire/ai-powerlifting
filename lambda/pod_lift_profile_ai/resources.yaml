@@ -1,0 +1,140 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_program
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Lift profile AI inference pod. Handles fatigue profile estimation, glossary
+  E1RM/fatigue/muscle estimation, glossary text generation, lift profile stimulus
+  estimation, lift profile review, lift profile rewrite, combined rewrite-and-estimate,
+  and muscle group estimation. All operations are pure inference (read-only). Pass
+  the operation name in the "function" field and all operation arguments as top-level
+  fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - fatigue_profile_estimate
+      - glossary_estimate_e1rm
+      - glossary_estimate_fatigue
+      - glossary_estimate_muscles
+      - glossary_generate_text
+      - lift_profile_estimate_stimulus
+      - lift_profile_review
+      - lift_profile_rewrite
+      - lift_profile_rewrite_and_estimate
+      - muscle_group_estimate
+    exercise: &id001
+      type: string
+    id: &id002
+      type: string
+    lift_profiles: &id003
+      type: array
+    profile: &id004
+      type: object
+  required:
+  - function
+  - exercise
+  - id
+  - profile
+operations:
+  fatigue_profile_estimate:
+    description: fatigue_profile_estimate
+    input_schema:
+      type: object
+      properties:
+        exercise: *id001
+      required:
+      - exercise
+  glossary_estimate_e1rm:
+    description: glossary_estimate_e1rm
+    input_schema:
+      type: object
+      properties:
+        id: *id002
+      required:
+      - id
+  glossary_estimate_fatigue:
+    description: glossary_estimate_fatigue
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+      required:
+      - id
+  glossary_estimate_muscles:
+    description: glossary_estimate_muscles
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+      required:
+      - id
+  glossary_generate_text:
+    description: glossary_generate_text
+    input_schema:
+      type: object
+      properties:
+        exercise:
+          type: string
+        lift_profiles: *id003
+      required:
+      - exercise
+  lift_profile_estimate_stimulus:
+    description: lift_profile_estimate_stimulus
+    input_schema:
+      type: object
+      properties:
+        profile: *id004
+      required:
+      - profile
+  lift_profile_review:
+    description: lift_profile_review
+    input_schema:
+      type: object
+      properties:
+        profile:
+          type: object
+      required:
+      - profile
+  lift_profile_rewrite:
+    description: lift_profile_rewrite
+    input_schema:
+      type: object
+      properties:
+        profile:
+          type: object
+      required:
+      - profile
+  lift_profile_rewrite_and_estimate:
+    description: lift_profile_rewrite_and_estimate
+    input_schema:
+      type: object
+      properties:
+        profile:
+          type: object
+      required:
+      - profile
+  muscle_group_estimate:
+    description: muscle_group_estimate
+    input_schema:
+      type: object
+      properties:
+        exercise:
+          type: string
+        lift_profiles:
+          type: array
+      required:
+      - exercise

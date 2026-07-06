@@ -4,7 +4,7 @@ import { AppError } from '../middleware/errorHandler'
 
 export async function searchProfilesHandler(req: Request, res: Response): Promise<void> {
   const query = typeof req.query.q === 'string' ? req.query.q : ''
-  const result = await invokeLambda('profile_search', {
+  const result = await invokeLambda('pod_user', { function: 'profile_search', 
     query,
     viewer_username: req.user?.username,
   })
@@ -12,7 +12,7 @@ export async function searchProfilesHandler(req: Request, res: Response): Promis
 }
 
 export async function getCurrentProfileHandler(req: Request, res: Response): Promise<void> {
-  const profile = await invokeLambda('profile_get_current', {
+  const profile = await invokeLambda('pod_user', { function: 'profile_get_current', 
     mapped_pk: req.mapped_pk ?? 'operator',
     viewer_username: req.user?.username,
   })
@@ -23,7 +23,7 @@ export async function getCurrentProfileHandler(req: Request, res: Response): Pro
 }
 
 export async function getProfileHandler(req: Request, res: Response): Promise<void> {
-  const profile = await invokeLambda('profile_get', {
+  const profile = await invokeLambda('pod_user', { function: 'profile_get', 
     nickname: req.params.nickname,
     viewer_username: req.user?.username,
   })

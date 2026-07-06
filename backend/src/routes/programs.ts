@@ -145,7 +145,7 @@ programsRouter.put('/:version/lift-profiles', async (req, res, next) => {
     }
 
     await programController.updateLiftProfiles(req.mapped_pk!, req.params.version, liftProfiles)
-    invokeLambda('health_invalidate_program_cache', { pk: req.mapped_pk }).catch((err) => {
+    invokeLambda('pod_training_program', { function: 'health_invalidate_program_cache',  pk: req.mapped_pk }).catch((err) => {
       console.warn('Failed to invalidate IF health program cache after lift profile update:', err)
     })
     res.json({ data: { success: true }, error: null })

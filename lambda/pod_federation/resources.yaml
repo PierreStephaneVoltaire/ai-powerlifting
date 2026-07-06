@@ -1,0 +1,133 @@
+layers:
+- pl_boto3
+- pl_federation
+- pl_federation_library
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Federation management pod. Handles federation listing, master federation
+  list/update, user federation library get/set, federation library get/set (qualification
+  standards), and health-integrated federation library get/update. Read-heavy reference
+  data. Pass the operation name in the "function" field and all operation arguments
+  as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - federation_library_get
+      - federation_library_set
+      - federation_list
+      - federation_master_list
+      - federation_master_update
+      - federation_user_library_get
+      - federation_user_library_set
+      - health_get_federation_library
+      - health_update_federation_library
+    pk: &id001
+      type: string
+    entries: &id002
+      type: array
+    master_id: &id003
+      type: string
+    updates: &id004
+      type: object
+    federations: &id005
+      type: array
+    qualification_standards: &id006
+      type: array
+  required:
+  - function
+  - entries
+  - federations
+  - qualification_standards
+operations:
+  federation_library_get:
+    description: federation_library_get
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+      required: []
+  federation_library_set:
+    description: federation_library_set
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        entries: *id002
+      required:
+      - entries
+  federation_list:
+    description: federation_list
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+      required: []
+  federation_master_list:
+    description: federation_master_list
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+      required: []
+  federation_master_update:
+    description: federation_master_update
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        master_id: *id003
+        updates: *id004
+      required: []
+  federation_user_library_get:
+    description: federation_user_library_get
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+      required: []
+  federation_user_library_set:
+    description: federation_user_library_set
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        federations: *id005
+        qualification_standards: *id006
+      required: []
+  health_get_federation_library:
+    description: health_get_federation_library
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_update_federation_library:
+    description: health_update_federation_library
+    input_schema:
+      type: object
+      properties:
+        federations:
+          type: array
+        qualification_standards:
+          type: array
+      required:
+      - federations
+      - qualification_standards

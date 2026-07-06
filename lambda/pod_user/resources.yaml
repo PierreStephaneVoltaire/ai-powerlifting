@@ -1,0 +1,186 @@
+layers:
+- pl_boto3
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: User settings and profile pod. Handles profile retrieval (by nickname,
+  current user, search) and settings management (create, get, update nickname, profile,
+  avatar, age class, ranking location). Pass the operation name in the "function"
+  field and all operation arguments as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - profile_get
+      - profile_get_current
+      - profile_search
+      - settings_create
+      - settings_get
+      - settings_update_age_class
+      - settings_update_avatar
+      - settings_update_nickname
+      - settings_update_profile
+      - settings_update_ranking_location
+    nickname: &id001
+      type: string
+    viewer_username: &id002
+      type: string
+    mapped_pk: &id003
+      type: string
+    query: &id004
+      type: string
+    discord_id: &id005
+      type: string
+    discord_username: &id006
+      type: string
+    avatar_url: &id007
+      type: string
+    username: &id008
+      type: string
+    age_class: &id009
+      type: string
+    file_b64: &id010
+      type: string
+    mimetype: &id011
+      type: string
+    filename: &id012
+      type: string
+    profile_visibility: &id013
+      type: string
+    display_name: &id014
+      type: string
+    bio: &id015
+      type: string
+    public_training_summary_enabled: &id016
+      type: boolean
+    ranking_country: &id017
+      type: string
+    ranking_region: &id018
+      type: string
+  required:
+  - function
+  - discord_id
+  - discord_username
+  - file_b64
+  - mimetype
+  - nickname
+  - username
+operations:
+  profile_get:
+    description: profile_get
+    input_schema:
+      type: object
+      properties:
+        nickname: *id001
+        viewer_username: *id002
+      required:
+      - nickname
+  profile_get_current:
+    description: profile_get_current
+    input_schema:
+      type: object
+      properties:
+        mapped_pk: *id003
+        viewer_username:
+          type: string
+      required: []
+  profile_search:
+    description: profile_search
+    input_schema:
+      type: object
+      properties:
+        query: *id004
+        viewer_username:
+          type: string
+      required: []
+  settings_create:
+    description: settings_create
+    input_schema:
+      type: object
+      properties:
+        discord_id: *id005
+        discord_username: *id006
+        avatar_url: *id007
+      required:
+      - discord_id
+      - discord_username
+  settings_get:
+    description: settings_get
+    input_schema:
+      type: object
+      properties:
+        username: *id008
+        mapped_pk:
+          type: string
+      required: []
+  settings_update_age_class:
+    description: settings_update_age_class
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+        age_class: *id009
+      required:
+      - username
+  settings_update_avatar:
+    description: settings_update_avatar
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+        file_b64: *id010
+        mimetype: *id011
+        filename: *id012
+        mapped_pk:
+          type: string
+      required:
+      - username
+      - file_b64
+      - mimetype
+  settings_update_nickname:
+    description: settings_update_nickname
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+        nickname:
+          type: string
+      required:
+      - username
+      - nickname
+  settings_update_profile:
+    description: settings_update_profile
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+        profile_visibility: *id013
+        display_name: *id014
+        bio: *id015
+        public_training_summary_enabled: *id016
+      required:
+      - username
+  settings_update_ranking_location:
+    description: settings_update_ranking_location
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+        ranking_country: *id017
+        ranking_region: *id018
+      required:
+      - username

@@ -24,7 +24,7 @@ function templateActor(req: Request): Record<string, string> {
 export async function listTemplates(req: Request, res: Response) {
   const include_archived = req.query.includeArchived === 'true'
   try {
-    const data = await invokeLambda('template_list', { include_archived, ...templateActor(req) })
+    const data = await invokeLambda('pod_templates', { function: 'template_list',  include_archived, ...templateActor(req) })
     res.json(data)
   } catch (err: any) {
     throw new AppError(`List failed: ${err.message}`, 502)
@@ -34,7 +34,7 @@ export async function listTemplates(req: Request, res: Response) {
 export async function getTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const data = await invokeLambda('template_get', { sk, ...templateActor(req) })
+    const data = await invokeLambda('pod_templates', { function: 'template_get',  sk, ...templateActor(req) })
     res.json(data)
   } catch (err: any) {
     if (err.message?.includes('not found')) throw new AppError('Template not found', 404)
@@ -45,7 +45,7 @@ export async function getTemplate(req: Request, res: Response) {
 export async function createTemplateFromBlock(req: Request, res: Response) {
   const { name, program_sk } = req.body
   try {
-    const result = await invokeLambda('template_create_from_block', { name, program_sk, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_create_from_block',  name, program_sk, ...templateActor(req), pk: req.mapped_pk })
     res.status(201).json(result)
   } catch (err: any) {
     throw new AppError(`Template creation failed: ${err.message}`, 502)
@@ -55,7 +55,7 @@ export async function createTemplateFromBlock(req: Request, res: Response) {
 export async function createBlankTemplate(req: Request, res: Response) {
   const { name, description, estimated_weeks, days_per_week } = req.body
   try {
-    const result = await invokeLambda('template_create_blank', {
+    const result = await invokeLambda('pod_templates', { function: 'template_create_blank', 
       name,
       description: description ?? '',
       estimated_weeks: estimated_weeks ?? 4,
@@ -73,7 +73,7 @@ export async function updateTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const template = req.body
   try {
-    const result = await invokeLambda('template_update', { sk, template, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_update',  sk, template, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err.message?.includes('not found')) throw new AppError('Template not found', 404)
@@ -85,7 +85,7 @@ export async function copyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const { new_name } = req.body
   try {
-    const result = await invokeLambda('template_copy', { sk, new_name, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_copy',  sk, new_name, ...templateActor(req), pk: req.mapped_pk })
     res.status(201).json(result)
   } catch (err: any) {
     throw new AppError(`Copy failed: ${err.message}`, 502)
@@ -95,7 +95,7 @@ export async function copyTemplate(req: Request, res: Response) {
 export async function archiveTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('template_archive', { sk, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_archive',  sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     throw new AppError(`Archive failed: ${err.message}`, 502)
@@ -105,7 +105,7 @@ export async function archiveTemplate(req: Request, res: Response) {
 export async function unarchiveTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('template_unarchive', { sk, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_unarchive',  sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     throw new AppError(`Unarchive failed: ${err.message}`, 502)
@@ -126,7 +126,7 @@ export async function applyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const { target, start_date, week_start_day } = req.body
   try {
-    const result = await invokeLambda('template_apply', { sk, target, start_date, week_start_day, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_apply',  sk, target, start_date, week_start_day, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     throw new AppError(`Apply preview failed: ${err.message}`, 502)
@@ -137,7 +137,7 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const { backfilled_maxes, start_date, week_start_day, target } = req.body
   try {
-    const result = await invokeLambda('template_apply_confirm', {
+    const result = await invokeLambda('pod_templates', { function: 'template_apply_confirm', 
       sk,
       backfilled_maxes,
       start_date,
@@ -155,7 +155,7 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
 export async function publishTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('template_publish', { sk, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_publish',  sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     throw new AppError(`Publish failed: ${err.message}`, 502)
@@ -165,7 +165,7 @@ export async function publishTemplate(req: Request, res: Response) {
 export async function unpublishTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('template_unpublish', { sk, ...templateActor(req), pk: req.mapped_pk })
+    const result = await invokeLambda('pod_templates', { function: 'template_unpublish',  sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     throw new AppError(`Unpublish failed: ${err.message}`, 502)

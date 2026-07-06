@@ -1,0 +1,114 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_imports
+- pl_program
+- pl_templates
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: 'Import pipeline pod. Handles file parsing (base64 content to structured
+  sessions), pending import listing, import detail retrieval, import application (with
+  merge strategy and conflict resolutions), and import rejection. Write follows read:
+  parse, review, then apply or reject. Pass the operation name in the "function" field
+  and all operation arguments as top-level fields alongside it.'
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - import_apply
+      - import_get_pending
+      - import_list
+      - import_list_pending
+      - import_parse_file
+      - import_reject
+    import_id: &id001
+      type: string
+    merge_strategy: &id002
+      type: string
+    conflict_resolutions: &id003
+      type: array
+    start_date: &id004
+      type: string
+    pk: &id005
+      type: string
+    limit: &id006
+      type: integer
+    import_type: &id007
+      type: string
+    base64_content: &id008
+      type: string
+    filename: &id009
+      type: string
+    reason: &id010
+      type: string
+  required:
+  - function
+  - base64_content
+  - filename
+  - import_id
+operations:
+  import_apply:
+    description: import_apply
+    input_schema:
+      type: object
+      properties:
+        import_id: *id001
+        merge_strategy: *id002
+        conflict_resolutions: *id003
+        start_date: *id004
+      required:
+      - import_id
+  import_get_pending:
+    description: import_get_pending
+    input_schema:
+      type: object
+      properties:
+        import_id:
+          type: string
+      required:
+      - import_id
+  import_list:
+    description: import_list
+    input_schema:
+      type: object
+      properties:
+        pk: *id005
+        limit: *id006
+      required: []
+  import_list_pending:
+    description: import_list_pending
+    input_schema:
+      type: object
+      properties:
+        import_type: *id007
+      required: []
+  import_parse_file:
+    description: import_parse_file
+    input_schema:
+      type: object
+      properties:
+        base64_content: *id008
+        filename: *id009
+      required:
+      - base64_content
+      - filename
+  import_reject:
+    description: import_reject
+    input_schema:
+      type: object
+      properties:
+        import_id:
+          type: string
+        reason: *id010
+      required:
+      - import_id

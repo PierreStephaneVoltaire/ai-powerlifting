@@ -8,11 +8,11 @@ import type { AthleteGoal } from '@powerlifting/types'
 // backend is now a pure auth/pk router.
 
 export async function getGoals(pk: string): Promise<AthleteGoal[]> {
-  const result = await invokeLambda('goals_list', { pk })
+  const result = await invokeLambda('pod_goals', { function: 'goals_list',  pk })
   return Array.isArray(result) ? (result as AthleteGoal[]) : []
 }
 
 export async function updateGoals(pk: string, goals: unknown[]): Promise<void> {
-  await invokeLambda('goals_replace', { pk, goals })
+  await invokeLambda('pod_goals', { function: 'goals_replace',  pk, goals })
 }
 

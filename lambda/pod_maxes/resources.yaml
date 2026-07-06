@@ -1,0 +1,117 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Maxes and targets pod. Handles current maxes get/update (squat, bench,
+  deadlift in kg), max history entries (add new PR, retrieve history), and max targets
+  (get/set target maxes for goal tracking). Pass the operation name in the "function"
+  field and all operation arguments as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - health_get_current_maxes
+      - health_update_current_maxes
+      - max_history_add
+      - max_history_get
+      - max_target_get
+      - max_target_update
+    squat_kg: &id001
+      type: number
+    bench_kg: &id002
+      type: number
+    deadlift_kg: &id003
+      type: number
+    pk: &id004
+      type: string
+    version: &id005
+      type: string
+    entry: &id006
+      type: object
+    date: &id007
+      type: string
+    total_kg: &id008
+      type: number
+  required:
+  - function
+operations:
+  health_get_current_maxes:
+    description: health_get_current_maxes
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_update_current_maxes:
+    description: health_update_current_maxes
+    input_schema:
+      type: object
+      properties:
+        squat_kg: *id001
+        bench_kg: *id002
+        deadlift_kg: *id003
+      required: []
+  max_history_add:
+    description: max_history_add
+    input_schema:
+      type: object
+      properties:
+        pk: *id004
+        version: *id005
+        entry: *id006
+        date: *id007
+        squat_kg:
+          type: number
+        bench_kg:
+          type: number
+        deadlift_kg:
+          type: number
+        total_kg: *id008
+      required: []
+  max_history_get:
+    description: max_history_get
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+      required: []
+  max_target_get:
+    description: max_target_get
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+      required: []
+  max_target_update:
+    description: max_target_update
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+        squat_kg:
+          type: number
+        bench_kg:
+          type: number
+        deadlift_kg:
+          type: number
+      required: []

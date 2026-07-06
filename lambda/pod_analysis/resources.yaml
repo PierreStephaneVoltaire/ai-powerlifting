@@ -1,0 +1,230 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_glossary
+- pl_pandas
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Analysis and analytics pod. Handles weekly analysis generation, per-section
+  analysis retrieval, progression analysis, RPE drift analysis, powerlifting stats
+  analysis, correlation analysis (within and across blocks), multi-block comparison,
+  program evaluation, analysis regeneration, powerlifting ranking percentiles, and
+  filter category enumeration. Compute-heavy, no writes to user data. Pass the operation
+  name in the "function" field and all operation arguments as top-level fields alongside
+  it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - analysis_section
+      - analyze_powerlifting_stats
+      - analyze_progression
+      - analyze_rpe_drift
+      - block_correlation_analysis
+      - block_program_evaluation
+      - correlation_analysis
+      - multi_block_comparison_analysis
+      - powerlifting_filter_categories
+      - powerlifting_ranking_percentile
+      - program_evaluation
+      - regenerate_analysis
+      - weekly_analysis
+    pk: &id001
+      type: string
+    program_sk: &id002
+      type: string
+    block_key: &id003
+      type: string
+    section: &id004
+      type: string
+    refresh: &id005
+      type: boolean
+    version: &id006
+      type: string
+    cache_only: &id007
+      type: boolean
+    weeks: &id008
+      type: integer
+    block: &id009
+      type: string
+    block_keys: &id010
+      type: array
+    total_kg: &id011
+      type: number
+    body_weight_kg: &id012
+      type: number
+    gender: &id013
+      type: string
+    equipment: &id014
+      type: string
+    federation: &id015
+      type: string
+    week: &id016
+      type: string
+  required:
+  - function
+operations:
+  analysis_section:
+    description: analysis_section
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+        program_sk: *id002
+        block_key: *id003
+        section: *id004
+        refresh: *id005
+      required: []
+  analyze_powerlifting_stats:
+    description: analyze_powerlifting_stats
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version: *id006
+      required: []
+  analyze_progression:
+    description: analyze_progression
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+      required: []
+  analyze_rpe_drift:
+    description: analyze_rpe_drift
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        version:
+          type: string
+      required: []
+  block_correlation_analysis:
+    description: block_correlation_analysis
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        block_key:
+          type: string
+        refresh:
+          type: boolean
+        cache_only: *id007
+      required: []
+  block_program_evaluation:
+    description: block_program_evaluation
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        block_key:
+          type: string
+        refresh:
+          type: boolean
+        cache_only:
+          type: boolean
+      required: []
+  correlation_analysis:
+    description: correlation_analysis
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        weeks: *id008
+        block: *id009
+        refresh:
+          type: boolean
+        cache_only:
+          type: boolean
+      required: []
+  multi_block_comparison_analysis:
+    description: multi_block_comparison_analysis
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        block_keys: *id010
+      required: []
+  powerlifting_filter_categories:
+    description: powerlifting_filter_categories
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  powerlifting_ranking_percentile:
+    description: powerlifting_ranking_percentile
+    input_schema:
+      type: object
+      properties:
+        total_kg: *id011
+        body_weight_kg: *id012
+        gender: *id013
+        equipment: *id014
+        federation: *id015
+      required: []
+  program_evaluation:
+    description: program_evaluation
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        refresh:
+          type: boolean
+        cache_only:
+          type: boolean
+      required: []
+  regenerate_analysis:
+    description: regenerate_analysis
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        block_key:
+          type: string
+      required: []
+  weekly_analysis:
+    description: weekly_analysis
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+        program_sk:
+          type: string
+        week: *id016
+        refresh:
+          type: boolean
+      required: []
