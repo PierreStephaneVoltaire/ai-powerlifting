@@ -13,9 +13,9 @@ timeout: 900
 description: Lift profile AI inference pod. Handles fatigue profile estimation, glossary
   E1RM/fatigue/muscle estimation, glossary text generation, lift profile stimulus
   estimation, lift profile review, lift profile rewrite, combined rewrite-and-estimate,
-  and muscle group estimation. All operations are pure inference (read-only). Pass
-  the operation name in the "function" field and all operation arguments as top-level
-  fields alongside it.
+  and muscle group estimation. All operations are pure inference (read-only, no user
+  data writes). Pass the operation name in the "function" field and all operation
+  arguments as top-level fields alongside it.
 input_schema:
   type: object
   properties:
@@ -36,12 +36,16 @@ input_schema:
       - muscle_group_estimate
     exercise: &id001
       type: string
+      description: Exercise name (e.g. "squat", "bench_press", "deadlift").
     id: &id002
       type: string
+      description: Glossary exercise ID.
     lift_profiles: &id003
       type: array
+      description: Optional array of lift profile dicts for context.
     profile: &id004
       type: object
+      description: Lift profile dict with exercise, sets, reps, RPE, and other parameters.
   required:
   - function
   - exercise
@@ -49,7 +53,9 @@ input_schema:
   - profile
 operations:
   fatigue_profile_estimate:
-    description: fatigue_profile_estimate
+    description: Estimate the fatigue profile for an exercise using AI. Takes the
+      exercise name and returns estimated fatigue multiplier, recovery time, and related
+      fatigue metrics.
     input_schema:
       type: object
       properties:
@@ -57,7 +63,9 @@ operations:
       required:
       - exercise
   glossary_estimate_e1rm:
-    description: glossary_estimate_e1rm
+    description: Estimate the 1-rep max (E1RM) for a glossary exercise by ID using
+      AI. Takes the exercise ID and returns an estimated E1RM in kg with a confidence
+      level.
     input_schema:
       type: object
       properties:
@@ -65,35 +73,45 @@ operations:
       required:
       - id
   glossary_estimate_fatigue:
-    description: glossary_estimate_fatigue
+    description: Estimate the fatigue profile for a glossary exercise by ID using
+      AI. Takes the exercise ID and returns estimated fatigue metrics.
     input_schema:
       type: object
       properties:
         id:
           type: string
+          description: Glossary exercise ID.
       required:
       - id
   glossary_estimate_muscles:
-    description: glossary_estimate_muscles
+    description: Estimate the muscle group involvement for a glossary exercise by
+      ID using AI. Takes the exercise ID and returns estimated primary and secondary
+      muscle group activation.
     input_schema:
       type: object
       properties:
         id:
           type: string
+          description: Glossary exercise ID.
       required:
       - id
   glossary_generate_text:
-    description: glossary_generate_text
+    description: Generate descriptive text for a glossary exercise using AI. Takes
+      the exercise name and optional lift profiles to produce a human-readable description
+      of the exercise and its execution.
     input_schema:
       type: object
       properties:
         exercise:
           type: string
+          description: Exercise name.
         lift_profiles: *id003
       required:
       - exercise
   lift_profile_estimate_stimulus:
-    description: lift_profile_estimate_stimulus
+    description: Estimate the training stimulus for a lift profile using AI. Takes
+      a lift profile dict and returns estimated stimulus magnitude, fatigue cost,
+      and recovery implications.
     input_schema:
       type: object
       properties:
@@ -101,40 +119,53 @@ operations:
       required:
       - profile
   lift_profile_review:
-    description: lift_profile_review
+    description: Review a lift profile using AI. Takes a lift profile dict and returns
+      a structured assessment of the profile suitability, potential issues, and recommendations.
     input_schema:
       type: object
       properties:
         profile:
           type: object
+          description: Lift profile dict to review.
       required:
       - profile
   lift_profile_rewrite:
-    description: lift_profile_rewrite
+    description: Rewrite a lift profile using AI. Takes a lift profile dict and returns
+      a revised version with improved parameters (sets, reps, RPE, etc.) based on
+      AI analysis.
     input_schema:
       type: object
       properties:
         profile:
           type: object
+          description: Lift profile dict to rewrite.
       required:
       - profile
   lift_profile_rewrite_and_estimate:
-    description: lift_profile_rewrite_and_estimate
+    description: Rewrite a lift profile and estimate the stimulus of the revised version
+      using AI. Combines lift_profile_rewrite and lift_profile_estimate_stimulus in
+      a single call. Takes a lift profile dict and returns the revised profile plus
+      stimulus estimates.
     input_schema:
       type: object
       properties:
         profile:
           type: object
+          description: Lift profile dict to rewrite and estimate.
       required:
       - profile
   muscle_group_estimate:
-    description: muscle_group_estimate
+    description: Estimate muscle group activation for an exercise using AI. Takes
+      the exercise name and optional lift profiles to return primary and secondary
+      muscle group involvement estimates.
     input_schema:
       type: object
       properties:
         exercise:
           type: string
+          description: Exercise name.
         lift_profiles:
           type: array
+          description: Optional array of lift profile dicts for context.
       required:
       - exercise

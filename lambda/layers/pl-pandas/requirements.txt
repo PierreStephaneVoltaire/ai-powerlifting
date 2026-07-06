@@ -1,0 +1,6 @@
+# pl-pandas — shared Lambda layer for the OpenPowerlifting stats lambdas
+#
+# Pinned to versions known to work on the AWS Lambda python3.12 runtime.
+# pandas 2.x ships manylinux wheels that fit the Lambda layer size budget.
+pandas==2.2.3
+numpy==2.1.3

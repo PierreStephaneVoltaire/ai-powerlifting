@@ -1,0 +1,11 @@
+# pl-analysis-cache — DynamoDB domain Lambda layer for the "if-powerlifting-analysis-cache" table.
+#
+# Pure-python layer: ships analysis_cache.py and cache_invalidation.py (both
+# copied verbatim from tools/health/). There are no pip dependencies for this
+# layer.
+#
+# cache_invalidation is a tiny cross-cutting util that operates on the
+# analysis-cache table; it is bundled here to keep it within the one domain.
+#
+# boto3 / botocore / s3transfer are provided by the pl-boto3 layer, which
+# lambdas attach alongside this one. Do not add those here.

@@ -13,8 +13,9 @@ resources:
 timeout: 900
 description: Budget management pod. Handles budget item CRUD (create, update, delete,
   list), budget configuration (get, put), budget summary retrieval (monthly rollup),
-  AI budget advisor, and priority timeline generation. Pass the operation name in
-  the "function" field and all operation arguments as top-level fields alongside it.
+  AI budget advisor (recommendations based on config, items, and competitions), and
+  priority timeline generation. Pass the operation name in the "function" field and
+  all operation arguments as top-level fields alongside it.
 input_schema:
   type: object
   properties:
@@ -34,26 +35,38 @@ input_schema:
       - budget_update_item
     pk: &id001
       type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
     item: &id002
       type: object
+      description: Budget item dict with name, cost, category, priority, and optional
+        comp_id.
     item_id: &id003
       type: string
+      description: Budget item ID to delete.
     month: &id004
       type: string
+      description: Month to summarize (YYYY-MM).
     comp_id: &id005
       type: string
+      description: Filter by competition ID.
     category: &id006
       type: string
+      description: Filter by category.
     priority: &id007
       type: string
+      description: Filter by priority tier.
     config: &id008
       type: object
+      description: Budget config dict.
     items: &id009
       type: array
+      description: Array of budget item dicts.
     competitions: &id010
       type: array
+      description: Array of upcoming competition dicts.
     federation_memberships: &id011
       type: array
+      description: Array of federation membership dicts.
   required:
   - function
   - config
@@ -62,61 +75,74 @@ input_schema:
   - items
 operations:
   budget_advisor:
-    description: budget_advisor
+    description: AI budget advisor. Analyzes the user budget config, all budget items,
+      and upcoming competitions to produce spending recommendations and priority advice.
+      Uses AI to generate natural-language guidance.
     input_schema:
       type: object
       properties:
         pk: *id001
       required: []
   budget_create_item:
-    description: budget_create_item
+    description: Create a new budget item. The item dict contains the item name, cost,
+      category, priority, and optional competition linkage.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         item: *id002
       required: []
   budget_delete_item:
-    description: budget_delete_item
+    description: Delete a budget item by its item_id.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         item_id: *id003
       required:
       - item_id
   budget_get_config:
-    description: budget_get_config
+    description: Get the budget config for a user. Includes monthly_cap, currency,
+      and notes.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
       required: []
   budget_get_summary:
-    description: budget_get_summary
+    description: Get the budget summary for a specific month. Returns spent, recurring,
+      and breakdown by category.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         month: *id004
       required: []
   budget_list_items:
-    description: budget_list_items
+    description: List budget items, optionally filtered by competition ID, category,
+      or priority tier.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         comp_id: *id005
         category: *id006
         priority: *id007
       required: []
   budget_priority_timeline:
-    description: budget_priority_timeline
+    description: Generate a priority timeline for budget items leading up to competitions.
+      Takes config, items, competitions, and federation memberships to produce a timeline
+      of when items should be purchased based on priority and competition dates.
     input_schema:
       type: object
       properties:
@@ -128,27 +154,34 @@ operations:
       - config
       - items
   budget_put_config:
-    description: budget_put_config
+    description: Upsert the budget config for a user. The config dict must include
+      monthly_cap, currency, and optional notes.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         config:
           type: object
+          description: Budget config dict with monthly_cap, currency, notes.
       required:
       - config
   budget_update_item:
-    description: budget_update_item
+    description: Update a budget item by its item_id. The item dict contains the updated
+      fields (name, cost, category, priority, etc.).
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         item_id:
           type: string
+          description: Budget item ID to update.
         item:
           type: object
+          description: Updated budget item dict.
       required:
       - item_id
       - item

@@ -27,21 +27,27 @@ input_schema:
       - weight_remove_entry
     pk: &id001
       type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
     version: &id002
       type: string
+      description: Program version. Defaults to "current".
     entry: &id003
       type: object
+      description: Weight entry dict with date and weight fields.
     date: &id004
       type: string
+      description: Date of the weight entry (YYYY-MM-DD).
     weight_kg: &id005
       type: number
+      description: Body weight in kg.
   required:
   - function
   - date
   - entry
 operations:
   weight_add_entry:
-    description: weight_add_entry
+    description: Add (or replace by date) a weight entry in the weight log. The entry
+      dict must include a date plus weight fields (e.g. weight_kg, body_fat_pct).
     input_schema:
       type: object
       properties:
@@ -51,62 +57,79 @@ operations:
       required:
       - entry
   weight_get_log:
-    description: weight_get_log
+    description: Get the weight log for a program version. Returns the array of weight
+      entries sorted by date.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         version:
           type: string
+          description: Program version. Defaults to "current".
       required: []
   weight_log_add:
-    description: weight_log_add
+    description: Add (or replace by date) a weight entry in the weight log. Takes
+      a date plus any additional weight fields. The full entry shape is forwarded
+      as-is into the entries list.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         version:
           type: string
+          description: Program version. Defaults to "current".
         entry:
           type: object
+          description: Weight entry dict.
         date: *id004
         weight_kg: *id005
       required: []
   weight_log_get:
-    description: weight_log_get
+    description: Get the weight log for a program version. Returns the array of weight
+      entries sorted by date.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         version:
           type: string
+          description: Program version. Defaults to "current".
       required: []
   weight_log_remove:
-    description: weight_log_remove
+    description: Remove a weight entry by date from the weight log.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         version:
           type: string
+          description: Program version. Defaults to "current".
         date:
           type: string
+          description: Date of the entry to remove (YYYY-MM-DD).
       required:
       - date
   weight_remove_entry:
-    description: weight_remove_entry
+    description: Remove a weight entry by date from the weight log.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         version:
           type: string
+          description: Program version. Defaults to "current".
         date:
           type: string
+          description: Date of the entry to remove (YYYY-MM-DD).
       required:
       - date

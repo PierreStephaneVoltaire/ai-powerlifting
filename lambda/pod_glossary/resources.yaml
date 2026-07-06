@@ -33,127 +33,164 @@ input_schema:
       - glossary_list_terms
       - glossary_set_e1rm
       - glossary_update
-    pk: &id001
+    pk: &id003
       type: string
-    id: &id002
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    id: &id004
       type: string
-    query: &id003
+      description: Exercise ID to archive.
+    query: &id005
       type: string
-    value_kg: &id004
+      description: Search substring.
+    value_kg: &id006
       type: number
-    method: &id005
+      description: E1RM value in kg.
+    method: &id007
       type: string
-    exercise: &id006
+      description: Method used to derive the E1RM.
+    exercise: &id002
       type: object
-    term: &id007
+      description: Exercise dict with name, muscle groups, and other metadata.
+    term: &id001
       type: object
+      description: Glossary term dict with exercise metadata.
   required:
   - function
 operations:
-  exercise_archive:
-    description: exercise_archive
-    input_schema:
-      type: object
-      properties:
-        pk: *id001
-        id: *id002
-      required: []
-  exercise_get_glossary:
-    description: exercise_get_glossary
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-      required: []
-  exercise_remove:
-    description: exercise_remove
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        id:
-          type: string
-      required: []
-  exercise_search:
-    description: exercise_search
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        query: *id003
-      required: []
-  exercise_set_e1rm:
-    description: exercise_set_e1rm
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        id:
-          type: string
-        value_kg: *id004
-        method: *id005
-      required: []
-  exercise_unarchive:
-    description: exercise_unarchive
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        id:
-          type: string
-      required: []
-  exercise_upsert:
-    description: exercise_upsert
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        exercise: *id006
-      required: []
   glossary_add:
-    description: glossary_add
+    description: Add a new glossary exercise term for a user. The term dict defines
+      the exercise name, muscle groups, fatigue estimate, and other metadata.
     input_schema:
       type: object
       properties:
         pk:
           type: string
-        term: *id007
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        term: *id001
       required: []
   glossary_list_terms:
-    description: glossary_list_terms
+    description: List all glossary exercise terms for a user. Scans the templates
+      table for rows with sk beginning with "glossary#" and flattens into a list of
+      term summaries.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
       required: []
   glossary_set_e1rm:
-    description: glossary_set_e1rm
+    description: Set the estimated 1-rep max (E1RM) for a glossary exercise by ID.
+      The value is stored in kg; method describes how it was derived (e.g. "epley",
+      "brzycki", "direct").
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         id:
           type: string
+          description: Glossary exercise ID.
         value_kg:
           type: number
+          description: E1RM value in kg.
         method:
           type: string
+          description: Method used to derive the E1RM (e.g. "epley", "brzycki", "direct").
       required: []
   glossary_update:
-    description: glossary_update
+    description: Update an existing glossary exercise term. The term dict replaces
+      the exercise metadata for the given ID.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         term:
           type: object
+          description: Updated glossary term dict.
+      required: []
+  exercise_upsert:
+    description: Upsert an exercise in the glossary. If the exercise ID exists, it
+      is updated; otherwise a new entry is created.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        exercise: *id002
+      required: []
+  exercise_archive:
+    description: Archive a glossary exercise by ID. The exercise is hidden from default
+      views but remains accessible.
+    input_schema:
+      type: object
+      properties:
+        pk: *id003
+        id: *id004
+      required: []
+  exercise_unarchive:
+    description: Unarchive a previously archived glossary exercise, restoring it to
+      default views.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        id:
+          type: string
+          description: Exercise ID to unarchive.
+      required: []
+  exercise_remove:
+    description: "Permanently remove a glossary exercise by ID. This is a hard delete\
+      \ \u2014 the exercise is removed from the table."
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        id:
+          type: string
+          description: Exercise ID to remove.
+      required: []
+  exercise_search:
+    description: Search glossary exercises by substring across exercise name, muscle
+      groups, and other text fields.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        query: *id005
+      required: []
+  exercise_get_glossary:
+    description: "Get the full glossary for a user \u2014 all exercises with their\
+      \ metadata, E1RM values, and muscle group assignments."
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+      required: []
+  exercise_set_e1rm:
+    description: Set the estimated 1-rep max for a specific glossary exercise by ID.
+      Same as glossary_set_e1rm but accessed via the exercise namespace.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        id:
+          type: string
+          description: Exercise ID.
+        value_kg: *id006
+        method: *id007
       required: []

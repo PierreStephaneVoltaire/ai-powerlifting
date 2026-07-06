@@ -36,16 +36,22 @@ input_schema:
       - health_update_federation_library
     pk: &id001
       type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
     entries: &id002
       type: array
+      description: Full array of federation library entry dicts.
     master_id: &id003
       type: string
+      description: Master federation ID to update.
     updates: &id004
       type: object
+      description: Dict of fields to update on the master federation.
     federations: &id005
       type: array
+      description: Array of federation membership dicts.
     qualification_standards: &id006
       type: array
+      description: Array of qualification standard dicts.
   required:
   - function
   - entries
@@ -53,81 +59,98 @@ input_schema:
   - qualification_standards
 operations:
   federation_library_get:
-    description: federation_library_get
+    description: Get the per-user federation library. Returns the list of federations
+      the user is a member of and their qualification standards.
     input_schema:
       type: object
       properties:
         pk: *id001
       required: []
   federation_library_set:
-    description: federation_library_set
+    description: "Replace the per-user federation library entries. Full replace \u2014\
+      \ send the complete list of federation entries."
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         entries: *id002
       required:
       - entries
   federation_list:
-    description: federation_list
+    description: Return the global federation library for a user. Lists all available
+      federations with their names, regions, and qualification standards.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
       required: []
   federation_master_list:
-    description: federation_master_list
+    description: List all master federation definitions. Master federations are the
+      global reference list of federations available to all users.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
       required: []
   federation_master_update:
-    description: federation_master_update
+    description: Update a master federation definition by master_id. The updates dict
+      contains the fields to modify (name, region, qualification standards, etc.).
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         master_id: *id003
         updates: *id004
       required: []
   federation_user_library_get:
-    description: federation_user_library_get
+    description: Get the user federation library, including federation memberships
+      and qualification standards. Returns the user-specific federation configuration.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
       required: []
   federation_user_library_set:
-    description: federation_user_library_set
+    description: Replace the user federation library. Sets which federations the user
+      is a member of and their qualification standards. Full replace.
     input_schema:
       type: object
       properties:
         pk:
           type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
         federations: *id005
         qualification_standards: *id006
       required: []
   health_get_federation_library:
-    description: health_get_federation_library
+    description: Get the shared federation and qualification standards library. Returns
+      the global reference data not scoped to a specific user.
     input_schema:
       type: object
       properties: {}
       required: []
   health_update_federation_library:
-    description: health_update_federation_library
+    description: "Replace the shared federation library document. Full replace \u2014\
+      \ send both the federations array and qualification_standards array."
     input_schema:
       type: object
       properties:
         federations:
           type: array
+          description: Array of federation dicts.
         qualification_standards:
           type: array
+          description: Array of qualification standard dicts.
       required:
       - federations
       - qualification_standards

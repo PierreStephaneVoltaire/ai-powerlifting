@@ -32,30 +32,45 @@ input_schema:
       - health_update_competition
     lift: &id001
       type: string
+      description: 'Which lift: "squat", "bench", or "deadlift".'
     opener_kg: &id002
       type: number
+      description: First attempt weight in kg.
     j1_override: &id003
       type: number
+      description: Override jump 1 from program prefs (optional).
     j2_override: &id004
       type: number
+      description: Override jump 2 from program prefs (optional).
     last_felt: &id005
       type: string
+      description: 'How the last attempt felt: "hard", "medium", or "easy".'
     date: &id006
       type: string
+      description: Competition date (YYYY-MM-DD).
     results: &id007
       type: object
+      description: Best successful lift attempts / totals.
     body_weight_kg: &id008
       type: number
+      description: Weigh-in body weight in kg.
     post_meet_report: &id009
       type: string
+      description: Optional post-meet report text.
     version: &id010
       type: string
+      description: Program version to update. Defaults to current.
     allow_retrospective: &id011
       type: boolean
+      description: Backfill a missing T-1 snapshot if needed. Default false.
     competition: &id012
       type: object
+      description: 'Competition dict with required keys: name, date, federation. Optional:
+        federation_id, counts_toward_federation_ids, status, weight_class_kg, location,
+        targets.'
     patch: &id013
       type: object
+      description: Dict with competition fields to update.
   required:
   - function
   - body_weight_kg
@@ -67,7 +82,9 @@ input_schema:
   - results
 operations:
   calculate_attempts:
-    description: calculate_attempts
+    description: Calculate competition attempts based on program preferences. Suggests
+      openers and jump strategy for squat, bench, or deadlift from the current maxes
+      and program attempt preferences.
     input_schema:
       type: object
       properties:
@@ -80,7 +97,10 @@ operations:
       - lift
       - opener_kg
   health_complete_competition:
-    description: health_complete_competition
+    description: Mark a competition as completed and compute the post-meet report
+      (PRR). Records results (best successful lifts), body weight, and optional post-meet
+      report text. Optionally backfills a missing T-1 snapshot if allow_retrospective
+      is true.
     input_schema:
       type: object
       properties:
@@ -95,7 +115,10 @@ operations:
       - results
       - body_weight_kg
   health_create_competition:
-    description: health_create_competition
+    description: 'Create a new competition entry. The competition dict must include
+      name, date (YYYY-MM-DD), and federation. Optional fields: federation_id, counts_toward_federation_ids,
+      status (default "confirmed"), weight_class_kg, location, targets (squat_kg,
+      bench_kg, deadlift_kg, total_kg).'
     input_schema:
       type: object
       properties:
@@ -103,43 +126,53 @@ operations:
       required:
       - competition
   health_delete_competition:
-    description: health_delete_competition
+    description: 'Delete a competition by date. Returns {"deleted": date}.'
     input_schema:
       type: object
       properties:
         date:
           type: string
+          description: Competition date (YYYY-MM-DD).
       required:
       - date
   health_get_competition:
-    description: health_get_competition
+    description: Load a specific competition by date. Returns the full competition
+      object with results, targets, and status.
     input_schema:
       type: object
       properties:
         date:
           type: string
+          description: Competition date (YYYY-MM-DD).
       required:
       - date
   health_snapshot_competition_projection:
-    description: health_snapshot_competition_projection
+    description: Snapshot the projected competition totals at a given date. Predicts
+      future totals from current progression. Optionally allows retrospective backfill
+      of a missing pre-competition snapshot.
     input_schema:
       type: object
       properties:
         date:
           type: string
+          description: Competition date (YYYY-MM-DD).
         version:
           type: string
+          description: Program version. Defaults to current.
         allow_retrospective:
           type: boolean
+          description: Allow retrospective backfill. Default false.
       required:
       - date
   health_update_competition:
-    description: health_update_competition
+    description: Update a competition by date with a patch dict. Only the fields in
+      the patch are updated; other fields remain unchanged.
     input_schema:
       type: object
       properties:
         date:
           type: string
+          description: Competition date (YYYY-MM-DD).
         patch: *id013
       required:
       - date

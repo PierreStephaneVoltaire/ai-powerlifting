@@ -32,40 +32,58 @@ input_schema:
       - settings_update_ranking_location
     nickname: &id001
       type: string
+      description: The nickname of the profile to fetch.
     viewer_username: &id002
       type: string
+      description: The requesting user username, used for visibility checks.
     mapped_pk: &id003
       type: string
+      description: User partition key. Defaults to "operator".
     query: &id004
       type: string
+      description: Search substring.
     discord_id: &id005
       type: string
+      description: Discord user ID.
     discord_username: &id006
       type: string
+      description: Discord username.
     avatar_url: &id007
       type: string
+      description: Optional avatar URL.
     username: &id008
       type: string
+      description: Discord username to look up.
     age_class: &id009
       type: string
+      description: Age class string (e.g. "open", "sub_junior", "junior").
     file_b64: &id010
       type: string
+      description: Base64-encoded image bytes.
     mimetype: &id011
       type: string
+      description: Image MIME type (e.g. "image/png").
     filename: &id012
       type: string
+      description: Original filename.
     profile_visibility: &id013
       type: string
+      description: 'Profile visibility: "private" or "public".'
     display_name: &id014
       type: string
+      description: Display name to show on profile.
     bio: &id015
       type: string
+      description: Bio text.
     public_training_summary_enabled: &id016
       type: boolean
+      description: Whether to show training summary on public profile.
     ranking_country: &id017
       type: string
+      description: Ranking country code or name.
     ranking_region: &id018
       type: string
+      description: Ranking region.
   required:
   - function
   - discord_id
@@ -76,7 +94,8 @@ input_schema:
   - username
 operations:
   profile_get:
-    description: profile_get
+    description: Build a public profile by nickname. Returns the user profile with
+      visibility checks applied based on the viewer_username.
     input_schema:
       type: object
       properties:
@@ -85,25 +104,33 @@ operations:
       required:
       - nickname
   profile_get_current:
-    description: profile_get_current
+    description: Build the current user profile, looked up by mapped_pk. Returns the
+      profile with visibility checks applied.
     input_schema:
       type: object
       properties:
         mapped_pk: *id003
         viewer_username:
           type: string
+          description: The requesting user username, used for visibility checks.
       required: []
   profile_search:
-    description: profile_search
+    description: Search public profiles by substring across nickname, display_name,
+      and bio. Returns matching profiles, including private self profiles for the
+      requesting user.
     input_schema:
       type: object
       properties:
         query: *id004
         viewer_username:
           type: string
+          description: The requesting user, used to include private self profiles.
       required: []
   settings_create:
-    description: settings_create
+    description: Create the initial user settings row on first Discord login. Uses
+      a conditional put (attribute_not_exists(pk)) so concurrent first-logins do not
+      overwrite each other; on a race the existing row is returned. Returns {settings,
+      created}.
     input_schema:
       type: object
       properties:
@@ -114,59 +141,71 @@ operations:
       - discord_id
       - discord_username
   settings_get:
-    description: settings_get
+    description: Get user settings by discord username or mapped_pk. If neither resolves
+      a record and no username is supplied, a default operator settings object is
+      returned.
     input_schema:
       type: object
       properties:
         username: *id008
         mapped_pk:
           type: string
+          description: Mapped partition key to look up.
       required: []
   settings_update_age_class:
-    description: settings_update_age_class
+    description: Update the age class for a user. The age_class string defaults to
+      "open" when invalid or absent.
     input_schema:
       type: object
       properties:
         username:
           type: string
+          description: Discord username of the user to update.
         age_class: *id009
       required:
       - username
   settings_update_avatar:
-    description: settings_update_avatar
+    description: Upload a profile avatar to S3 and set avatar_url on the user settings.
+      The file_b64 is a base64-encoded image; mimetype is required.
     input_schema:
       type: object
       properties:
         username:
           type: string
+          description: Discord username.
         file_b64: *id010
         mimetype: *id011
         filename: *id012
         mapped_pk:
           type: string
+          description: Mapped partition key.
       required:
       - username
       - file_b64
       - mimetype
   settings_update_nickname:
-    description: settings_update_nickname
+    description: Update the nickname for a user.
     input_schema:
       type: object
       properties:
         username:
           type: string
+          description: Discord username of the user to update.
         nickname:
           type: string
+          description: New nickname.
       required:
       - username
       - nickname
   settings_update_profile:
-    description: settings_update_profile
+    description: 'Update profile fields: visibility, display_name, bio, and public
+      training summary flag. Only the provided fields are updated.'
     input_schema:
       type: object
       properties:
         username:
           type: string
+          description: Discord username.
         profile_visibility: *id013
         display_name: *id014
         bio: *id015
@@ -174,12 +213,14 @@ operations:
       required:
       - username
   settings_update_ranking_location:
-    description: settings_update_ranking_location
+    description: Update ranking country and/or region for a user. Used for powerlifting
+      ranking percentile lookups.
     input_schema:
       type: object
       properties:
         username:
           type: string
+          description: Discord username.
         ranking_country: *id017
         ranking_region: *id018
       required:

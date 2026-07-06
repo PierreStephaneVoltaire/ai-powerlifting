@@ -40,42 +40,62 @@ input_schema:
       - session_patch_by_date
       - session_replace
       - session_replace_all
-    date: &id001
+    date: &id007
       type: string
-    exercise: &id002
+      description: Session date (YYYY-MM-DD).
+    exercise: &id008
       type: object
-    day: &id003
+      description: 'Exercise dict with keys: name (required), sets, reps, kg, rpe,
+        notes.'
+    day: &id010
       type: integer
-    week_number: &id004
+      description: Day label as integer (e.g. 0 for Monday).
+    week_number: &id011
       type: integer
-    exercises: &id005
+      description: Training week number.
+    exercises: &id012
       type: array
-    session_notes: &id006
+      description: Optional list of exercise dicts with name, sets, reps, kg, rpe,
+        notes.
+    session_notes: &id013
       type: string
-    start_date: &id007
+      description: Optional session notes.
+    start_date: &id014
       type: string
-    end_date: &id008
+      description: Start of range (YYYY-MM-DD).
+    end_date: &id015
       type: string
+      description: End of range (YYYY-MM-DD).
     exercise_index: &id009
       type: integer
-    old_date: &id010
+      description: Zero-based index of the exercise to remove.
+    old_date: &id016
       type: string
-    new_date: &id011
+      description: Current session date (YYYY-MM-DD).
+    new_date: &id017
       type: string
-    patch: &id012
+      description: Target date (YYYY-MM-DD).
+    patch: &id018
       type: object
-    pk: &id013
+      description: Dict with session fields to update.
+    pk: &id001
       type: string
-    program_sk: &id014
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    program_sk: &id002
       type: string
-    session: &id015
+      description: Program sort key. Defaults to current.
+    session: &id003
       type: object
-    index: &id016
+      description: Full session object with date, day, week_number, exercises, session_notes.
+    index: &id004
       type: integer
-    limit: &id017
+      description: Zero-based index for same-day session ordinals.
+    limit: &id005
       type: integer
-    sessions: &id018
+      description: Maximum number of sessions to return. Default 50, max 200.
+    sessions: &id006
       type: array
+      description: Full array of session objects to write.
   required:
   - function
   - date
@@ -89,200 +109,251 @@ input_schema:
   - start_date
   - week_number
 operations:
-  health_add_exercise:
-    description: health_add_exercise
+  session_create:
+    description: Create a new session for the current program. The session is appended
+      to the program sessions list with the provided session object.
     input_schema:
       type: object
       properties:
-        date: *id001
-        exercise: *id002
+        pk: *id001
+        program_sk: *id002
+        session: *id003
+      required: []
+  session_delete:
+    description: Delete a session at a specific date and index (for same-day ordinals).
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        date:
+          type: string
+          description: Session date (YYYY-MM-DD).
+        index: *id004
+      required: []
+  session_get:
+    description: Load a single session by date and index (for same-day ordinals).
+      Returns the session with resolved phase object.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        date:
+          type: string
+          description: Session date (YYYY-MM-DD).
+        index:
+          type: integer
+          description: Zero-based index for same-day session ordinals.
+      required: []
+  session_list:
+    description: List the most recent sessions for a user. Returns session summaries
+      sorted by date descending, then by sort key descending. Use limit to cap the
+      number returned.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        limit: *id005
+      required: []
+  session_list_full:
+    description: List full session objects (with resolved phases) for a specific program.
+      Returns complete session objects, not summaries.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+      required: []
+  session_patch:
+    description: Apply a partial patch to a session at a specific date and index.
+      Only the fields in the patch dict are updated; other fields remain unchanged.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        date:
+          type: string
+          description: Session date (YYYY-MM-DD).
+        index:
+          type: integer
+          description: Zero-based index for same-day session ordinals.
+        patch:
+          type: object
+          description: 'Dict with session fields to update. Allowed keys: completed,
+            session_rpe, body_weight_kg, exercises, session_notes, day, week_number.'
+      required: []
+  session_patch_by_date:
+    description: Patch a session by date without specifying an index. Finds the matching
+      date and applies the patch. Use when you only have the date, not the ordinal.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        date:
+          type: string
+          description: Session date (YYYY-MM-DD).
+        patch:
+          type: object
+          description: Dict with session fields to update.
+      required: []
+  session_replace:
+    description: Full replace of a session at a specific date and index. Overwrites
+      all session fields with the provided session object.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        date:
+          type: string
+          description: Session date (YYYY-MM-DD).
+        index:
+          type: integer
+          description: Zero-based index for same-day session ordinals.
+        session:
+          type: object
+          description: Full session object to write.
+      required: []
+  session_replace_all:
+    description: "Replace ALL sessions for a program. Deletes all existing sessions\
+      \ and writes the incoming array. Use with caution \u2014 this is a destructive\
+      \ full replace."
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        sessions: *id006
+      required: []
+  health_add_exercise:
+    description: Add an exercise to an existing session by date. The exercise dict
+      must have at least a name; sets, reps, kg, rpe, notes are optional.
+    input_schema:
+      type: object
+      properties:
+        date: *id007
+        exercise: *id008
       required:
       - date
       - exercise
-  health_create_session:
-    description: health_create_session
+  health_remove_exercise:
+    description: Remove an exercise from a session by date and zero-based exercise
+      index.
     input_schema:
       type: object
       properties:
         date:
           type: string
-        day: *id003
-        week_number: *id004
-        exercises: *id005
-        session_notes: *id006
+          description: Session date (YYYY-MM-DD).
+        exercise_index: *id009
+      required:
+      - date
+      - exercise_index
+  health_create_session:
+    description: Create a new training session on a specific date. The session is
+      added to the current program. Fails if a session already exists on that date.
+    input_schema:
+      type: object
+      properties:
+        date:
+          type: string
+          description: Session date (YYYY-MM-DD).
+        day: *id010
+        week_number: *id011
+        exercises: *id012
+        session_notes: *id013
       required:
       - date
       - day
       - week_number
   health_delete_session:
-    description: health_delete_session
+    description: 'Delete a training session by date. Returns {"deleted": date}. Fails
+      if the session is not found.'
     input_schema:
       type: object
       properties:
         date:
           type: string
+          description: Session date (YYYY-MM-DD).
       required:
       - date
   health_get_session:
-    description: health_get_session
+    description: Load a single session by date. Returns the session object with exercises
+      and resolved phase object. Fails if not found.
     input_schema:
       type: object
       properties:
         date:
           type: string
+          description: Session date (YYYY-MM-DD).
       required:
       - date
   health_get_sessions_range:
-    description: health_get_sessions_range
+    description: Load all sessions within a date range (inclusive). Returns sessions
+      in date order, each with resolved phase object.
     input_schema:
       type: object
       properties:
-        start_date: *id007
-        end_date: *id008
+        start_date: *id014
+        end_date: *id015
       required:
       - start_date
       - end_date
-  health_remove_exercise:
-    description: health_remove_exercise
-    input_schema:
-      type: object
-      properties:
-        date:
-          type: string
-        exercise_index: *id009
-      required:
-      - date
-      - exercise_index
   health_reschedule_session:
-    description: health_reschedule_session
+    description: Move a session from one date to another. Fails if the old session
+      is not found or the new date already has a session.
     input_schema:
       type: object
       properties:
-        old_date: *id010
-        new_date: *id011
+        old_date: *id016
+        new_date: *id017
       required:
       - old_date
       - new_date
   health_update_session:
-    description: health_update_session
+    description: 'Update a session by date with a patch dict. Validates date format
+      and patch keys before applying. Allowed patch keys: completed, session_rpe,
+      body_weight_kg, exercises, session_notes, day, week_number.'
     input_schema:
       type: object
       properties:
         date:
           type: string
-        patch: *id012
+          description: Session date (YYYY-MM-DD).
+        patch: *id018
       required:
       - date
       - patch
-  session_create:
-    description: session_create
-    input_schema:
-      type: object
-      properties:
-        pk: *id013
-        program_sk: *id014
-        session: *id015
-      required: []
-  session_delete:
-    description: session_delete
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        program_sk:
-          type: string
-        date:
-          type: string
-        index: *id016
-      required: []
-  session_get:
-    description: session_get
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        program_sk:
-          type: string
-        date:
-          type: string
-        index:
-          type: integer
-      required: []
-  session_list:
-    description: session_list
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        limit: *id017
-      required: []
-  session_list_full:
-    description: session_list_full
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        program_sk:
-          type: string
-      required: []
-  session_patch:
-    description: session_patch
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        program_sk:
-          type: string
-        date:
-          type: string
-        index:
-          type: integer
-        patch:
-          type: object
-      required: []
-  session_patch_by_date:
-    description: session_patch_by_date
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        program_sk:
-          type: string
-        date:
-          type: string
-        patch:
-          type: object
-      required: []
-  session_replace:
-    description: session_replace
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        program_sk:
-          type: string
-        date:
-          type: string
-        index:
-          type: integer
-        session:
-          type: object
-      required: []
-  session_replace_all:
-    description: session_replace_all
-    input_schema:
-      type: object
-      properties:
-        pk:
-          type: string
-        program_sk:
-          type: string
-        sessions: *id018
-      required: []
