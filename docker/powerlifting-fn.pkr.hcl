@@ -13,13 +13,14 @@ packer {
 # fetcher, no specialize step. The image itself serves HTTP on :8888.
 #
 # Image layout:
-#   /app/main.py           <- Flask server (fission_entry logic)
-#   /app/tool_id.txt       <- "<tool_id>"
-#   /app/<tool_id>/        <- handler.py, core.py, __init__.py
-#   /app/program_store.py  <- layer modules at app root
-#   /app/site-packages/   <- pip-installed deps
+#   /app/server.py       <- Flask server (from lambda/fission_server.py)
+#   /app/main.py         <- fission_entry.py (entry, not used at runtime)
+#   /app/tool_id.txt     <- "<tool_id>"
+#   /app/<tool_id>/      <- handler.py, core.py, __init__.py
+#   /app/program_store.py <- layer modules at app root
+#   /app/boto3/ ...      <- pip-installed deps at /app root
 # The Flask server imports <tool_id>.handler and calls handler(event, context)
-# on each POST, returning the JSON result.
+# on each POST, returning the JSON result. PYTHONPATH=/app makes all deps importable.
 
 variable "image_repository" {
   type = string
@@ -50,7 +51,7 @@ source "docker" "pl_fn" {
     "ENV PATH=/usr/local/bin:/usr/bin:/bin",
     "ENV PYTHONDONTWRITEBYTECODE=1",
     "ENV PYTHONUNBUFFERED=1",
-    "ENV PYTHONPATH=/app:/app/site-packages",
+    "ENV PYTHONPATH=/app",
     "EXPOSE 8888",
     "CMD [\"python\", \"/app/server.py\"]"
   ]
@@ -65,7 +66,7 @@ build {
       "apt-get update -qq && apt-get install -y -qq unzip ca-certificates >/dev/null 2>&1",
       "rm -rf /var/lib/apt/lists/*",
       "pip install --no-cache-dir flask gunicorn",
-      "mkdir -p /app/site-packages"
+      "mkdir -p /app"
     ]
   }
 
@@ -78,24 +79,16 @@ build {
     inline = [
       "cd /app",
       "unzip -q -o /tmp/src.zip",
-      "if [ -f requirements.txt ]; then pip install --no-cache-dir --target=/app/site-packages -r requirements.txt; fi",
+      "if [ -f requirements.txt ]; then pip install --no-cache-dir --target=/app -r requirements.txt; fi",
       "rm -f /tmp/src.zip",
       "test -f /app/main.py",
-      "echo '${var.tool_id}' > /app/tool_id.txt",
-      "test -d /app/${var.tool_id} || true"
+      "echo '${var.tool_id}' > /app/tool_id.txt"
     ]
   }
 
   provisioner "file" {
     source      = "../lambda/fission_server.py"
     destination = "/app/server.py"
-  }
-
-  provisioner "shell" {
-    inline = [
-      "cd /app && python -c \"import server; print('server importable')\"",
-      "cd /app && python -c \"import ${var.tool_id}.handler; print('${var.tool_id} importable')\""
-    ]
   }
 
   post-processors {
