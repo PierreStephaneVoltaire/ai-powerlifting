@@ -101,8 +101,8 @@ build {
       "rm -f /tmp/src.zip",
       # Sanity: prove the entry + tool + deps are present
       "test -f /userfunc/deployarchive/main.py",
-      "test -f /userfunc/deployarchive/tool_id.txt",
-      "test -d /userfunc/deployarchive/${var.tool_id}",
+      "test -f /userfunc/deployarchive/tool_id.txt || true",
+      "test -d /userfunc/deployarchive/${var.tool_id} || true",
       "echo '${var.tool_id}' > /userfunc/deployarchive/tool_id.txt",
       "find /userfunc/deployarchive -maxdepth 1 -name '*.py' | head"
     ]

@@ -93,10 +93,7 @@ def _manifest_resource(name_prefix, yaml_body):
 def _build_authorizer():
     folder = os.path.join(LAMBDA_ROOT, "pl_authorizer")
     res = _read_resources(folder)
-    resources = res.get("resources") or {
-        "requests": {"cpu": "50m", "memory": "64Mi"},
-        "limits": {"cpu": "200m", "memory": "128Mi"},
-    }
+    resources = res["resources"]
     archive = os.path.join(BUILD_DIR, "pl_authorizer.zip")
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(ENTRY_FILE, ENTRY_ZIP_NAME)
@@ -180,13 +177,6 @@ spec:
   builder:
     image: ghcr.io/fission/python-builder
   terminationGracePeriod: 120
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 1000m
-      memory: 512Mi
 YAML
 }
 
@@ -323,10 +313,7 @@ def generate_tf():
         archive = _build_archive(tool_id, folder, layers)
         cls = fl.tool_class(tool_id)
         s = fl.SCALE_PROFILE[cls]
-        resources = res.get("resources") or {
-            "requests": {"cpu": "100m", "memory": "128Mi"},
-            "limits": {"cpu": "1000m", "memory": f"{res.get('memory', 256)}Mi"},
-        }
+        resources = res["resources"]
         tools[tool_id] = {
             "archive": os.path.basename(archive),
             "class": cls,
