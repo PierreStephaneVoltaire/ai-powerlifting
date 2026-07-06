@@ -44,17 +44,6 @@ programsRouter.put('/:version/meta', async (req, res, next) => {
   }
 })
 
-// POST /api/programs/:version/fork - Fork to a new version
-programsRouter.post('/:version/fork', async (req, res, next) => {
-  try {
-    const { label } = req.body
-    const newVersion = await programController.forkProgram(req.mapped_pk!, req.params.version, label)
-    res.json({ data: { version: newVersion }, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
 // PUT /api/programs/:version/body-weight - Update body weight
 programsRouter.put('/:version/body-weight', async (req, res, next) => {
   try {

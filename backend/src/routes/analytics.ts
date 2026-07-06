@@ -398,7 +398,7 @@ analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
     const windowKey = normalizeAnalysisWindowKey(req.body?.window)
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
     const unsafeReadOnlySections = req.readOnly
-      ? sectionKeys.filter((sectionKey) => !DETERMINISTIC_SECTION_SET.has(sectionKey))
+      ? sectionKeys.filter((sectionKey: AnalysisSectionKey) => !DETERMINISTIC_SECTION_SET.has(sectionKey))
       : []
     if (unsafeReadOnlySections.length) {
       return res.status(403).json({

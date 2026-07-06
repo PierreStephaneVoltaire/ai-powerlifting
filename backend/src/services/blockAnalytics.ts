@@ -1,7 +1,10 @@
 import { logger } from '../utils/logger'
 import { invokeLambda } from '../utils/lambda'
 import { createHash } from 'crypto'
+import { CACHE_SCHEMA_VERSION } from './analysisCache'
 import type { AgeCategory, AthleteGoal, Competition, LiftResults, Program, Session, WeightEntry } from '@powerlifting/types'
+
+const DEFAULT_BLOCK = 'current'
 
 const GOAL_TYPE_VALUES: ReadonlyArray<string> = [
   'hit_total',
@@ -416,7 +419,6 @@ function blockKeyFor(block: string): string {
 }
 
 
-}
 
 
 function parseDate(value?: string | null): Date | null {
@@ -911,6 +913,12 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
       comparisonEligible: Boolean(linkedCompetition && hasResults(results)),
       dataQualityFlags,
     }
+
+    return entry
+  })
+
+  return blocks
+}
 
 function canonicalLift(name: string): 'squat' | 'bench' | 'deadlift' | null {
   const lower = name.toLowerCase().trim()

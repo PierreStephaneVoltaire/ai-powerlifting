@@ -77,7 +77,8 @@ export interface AnalysisSectionJob {
   attempts?: number
 }
 
-const CACHE_SCHEMA_VERSION = 5
+export const CACHE_SCHEMA_VERSION = 5
+export const SECTION_CACHE_SCHEMA_VERSION = 2
 // Current-block window caches expire after 7 days. Past-block caches have no TTL.
 // Shard size: keep individual DynamoDB string attributes under 400KB.
 // ~350_000 JSON chars is a safe ceiling before sharding kicks in.
@@ -104,6 +105,25 @@ export const DETERMINISTIC_SECTION_KEYS: AnalysisSectionKey[] = [
 ]
 export const AI_SECTION_KEYS: AnalysisSectionKey[] = ['ai_correlation', 'program_evaluation']
 export const ALL_SECTION_KEYS: AnalysisSectionKey[] = [...DETERMINISTIC_SECTION_KEYS, ...AI_SECTION_KEYS]
+
+const DETERMINISTIC_SECTION_SET = new Set(DETERMINISTIC_SECTION_KEYS)
+const ALL_WINDOW_KEY_SET = new Set(ALL_WINDOW_KEYS)
+const ALL_SECTION_KEY_SET = new Set(ALL_SECTION_KEYS)
+
+export function normalizeAnalysisWindowKey(value: unknown): AnalysisWindowKey {
+  return typeof value === 'string' && ALL_WINDOW_KEY_SET.has(value as AnalysisWindowKey)
+    ? value as AnalysisWindowKey
+    : 'current'
+}
+
+export function normalizeAnalysisSectionKeys(
+  value: unknown,
+  fallback: AnalysisSectionKey[] = ALL_SECTION_KEYS,
+): AnalysisSectionKey[] {
+  if (!Array.isArray(value)) return fallback
+  const filtered = value.filter((v): v is AnalysisSectionKey => typeof v === 'string' && ALL_SECTION_KEY_SET.has(v as AnalysisSectionKey))
+  return filtered.length ? filtered : fallback
+}
 
 type WeekStartDay =
   | 'Monday'
