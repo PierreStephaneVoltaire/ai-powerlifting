@@ -17,7 +17,6 @@ LAYER_MODULE_DIRS = {
     "pl_federation_library": os.path.join(LAYERS_DIR, "pl-federation-library", "python"),
     "pl_master_copy": os.path.join(LAYERS_DIR, "pl-master-copy", "python"),
     "pl_ai": os.path.join(LAYERS_DIR, "pl-ai", "content"),
-    "pl_rag": os.path.join(LAYERS_DIR, "pl-rag", "python"),
     "pl_boto3": None,
     "pl_pandas": None,
 }
@@ -26,7 +25,6 @@ LAYER_PIP_REQS = {
     "pl_boto3": ["boto3==1.42.83", "botocore==1.42.83", "s3transfer==0.16.0"],
     "pl_pandas": ["pandas==2.2.3", "numpy==2.1.3"],
     "pl_ai": ["httpx", "jinja2"],
-    "pl_rag": ["chromadb==0.4.24", "tika==2.6.0"],
     "pl_program": [],
     "pl_sessions": [],
     "pl_glossary": [],
