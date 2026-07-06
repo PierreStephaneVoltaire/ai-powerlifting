@@ -77,6 +77,24 @@ Per the `.meta` config + the powerlifting `AGENTS.md`:
 - Tool classes: 15 AI (minReplicas 0), 4 warm reads (minReplicas 1), 5 stats
   (minReplicas 0), 71 deterministic (minReplicas 0)
 
+## Scale & idle tuning (resources.yaml)
+
+Per-function scale and idle behavior is controlled by four optional top-level
+fields in each tool's `resources.yaml` (read by `fission-deploy.py`):
+
+| Field | Default | Maps to | Notes |
+| --- | --- | --- | --- |
+| `min_replicas` | `1` for `pod_*`, else `0` | Fission `MinScale` | 0 lets pods scale to zero; 1 keeps one warm. No class fallback — set explicitly. |
+| `max_replicas` | class-based (ai=1, warm/stats=2, det=3) | Fission `MaxScale` | |
+| `target_cpu` | class-based (stats=80, others=70) | Fission `TargetCPUPercent` | |
+| `idle_timeout_seconds` | class-based (warm=60, ai/stats=120, det=90) | Fission `SpecializationTimeout` | How long an idle specialized pod is kept alive before scaling to 0. The "60s idle" the warm class used to hardcode. |
+
+The `pod_*` pods default to `min_replicas: 1` because the portal hits them on
+every page load. Override per pod (e.g. set `min_replicas: 0` on `pod_video`
+if videos are rare). Standalone tools that should always be warm
+(`health_get_program`, `tool_registry`, etc.) need `min_replicas: 1` set
+explicitly — there is no class-based fallback.
+
 ## Auth wiring
 
 `pl_authorizer` is its own Fission Function with `INTERNAL_API_TOKEN` from the

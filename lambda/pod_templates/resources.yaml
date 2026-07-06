@@ -4,6 +4,7 @@ layers:
 - pl_glossary
 - pl_program
 - pl_templates
+min_replicas: 1
 resources:
   requests:
     cpu: 100m

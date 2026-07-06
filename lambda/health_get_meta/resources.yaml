@@ -10,6 +10,7 @@ resources:
     cpu: 300m
     memory: 256Mi
 timeout: 900
+min_replicas: 1
 description: Get program metadata (name, dates, weight class, etc.).
 input_schema:
   type: object

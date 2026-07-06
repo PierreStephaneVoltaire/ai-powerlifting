@@ -131,10 +131,10 @@ spec:
     StrategyType: execution
     ExecutionStrategy:
       ExecutorType: newdeploy
-      MinScale: 0
-      MaxScale: 1
-      SpecializationTimeout: 30
-      TargetCPUPercent: 70
+      MinScale: {res.get("min_replicas", 0)}
+      MaxScale: {res.get("max_replicas", 1)}
+      SpecializationTimeout: {res.get("idle_timeout_seconds", 30)}
+      TargetCPUPercent: {res.get("target_cpu", 70)}
   podspec:
     serviceAccountName: default
     containers:
@@ -303,6 +303,31 @@ resource "kubectl_manifest" "pl_triggers" {
 '''
 
 
+def _scale_for(tool_id, res):
+    """Resolve scale values from resources.yaml, falling back to the class profile.
+
+    resources.yaml fields (all optional):
+      min_replicas: int           — Fission MinScale (defaults: pod_* → 1, else 0)
+      max_replicas: int           — Fission MaxScale (class-based default)
+      target_cpu: int             — Fission TargetCPUPercent (class-based default)
+      idle_timeout_seconds: int   — Fission SpecializationTimeout, idle keepalive
+                                    (class-based default)
+
+    min_replicas has no class fallback because the user wants to choose per
+    function which ones are always up; the class-based default for warm tools
+    (MinScale=1) is now expressed explicitly in resources.yaml instead.
+    """
+    cls = fl.tool_class(tool_id)
+    defaults = fl.SCALE_PROFILE[cls]
+    pod_default_min = 1 if tool_id.startswith("pod_") else 0
+    return {
+        "min_scale": int(res.get("min_replicas", pod_default_min)),
+        "max_scale": int(res.get("max_replicas", defaults["maxReplicas"])),
+        "target_cpu": int(res.get("target_cpu", defaults["targetCPU"])),
+        "spec_timeout": int(res.get("idle_timeout_seconds", defaults["timeout"])),
+    }
+
+
 def generate_tf():
     os.makedirs(BUILD_DIR, exist_ok=True)
     tools = {}
@@ -311,20 +336,19 @@ def generate_tf():
         res = _read_resources(folder)
         layers = res.get("layers") or []
         archive = _build_archive(tool_id, folder, layers)
-        cls = fl.tool_class(tool_id)
-        s = fl.SCALE_PROFILE[cls]
+        scale = _scale_for(tool_id, res)
         resources = res["resources"]
         tools[tool_id] = {
             "archive": os.path.basename(archive),
-            "class": cls,
+            "class": fl.tool_class(tool_id),
             "resources": resources,
             "timeout": res.get("timeout", 900),
             "s3_read": bool(res.get("s3_read")),
             "is_registry": tool_id == REGISTRY_TOOL,
-            "min_scale": s["minReplicas"],
-            "max_scale": s["maxReplicas"],
-            "spec_timeout": s["timeout"],
-            "target_cpu": s["targetCPU"],
+            "min_scale": scale["min_scale"],
+            "max_scale": scale["max_scale"],
+            "spec_timeout": scale["spec_timeout"],
+            "target_cpu": scale["target_cpu"],
         }
 
     tools_str = ""

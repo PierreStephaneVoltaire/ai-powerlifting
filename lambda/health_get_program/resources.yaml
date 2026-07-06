@@ -10,6 +10,7 @@ resources:
     cpu: 300m
     memory: 256Mi
 timeout: 900
+min_replicas: 1
 description: Get the full training program from DynamoDB. Returns the cached program dict with all sessions, phases, meta, and preferences.
 input_schema:
   type: object

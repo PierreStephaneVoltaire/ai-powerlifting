@@ -3,6 +3,7 @@ layers:
 - pl_program
 - pl_sessions
 - pl_templates
+min_replicas: 1
 resources:
   requests:
     cpu: 100m
