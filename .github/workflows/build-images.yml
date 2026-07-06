@@ -244,7 +244,7 @@ jobs:
         working-directory: lambda
         run: python3 fission-deploy.py
 
-      - name: Detect changed or missing functions
+      - name: Detect missing function images on ECR
         id: changed
         working-directory: terraform/fission-build
         env:
@@ -252,16 +252,11 @@ jobs:
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
           CHANGED=""
+          REPO_NAME="$(echo "$ECR_REPO" | cut -d'/' -f2-)"
           for zip in *.zip; do
             tool_id="${zip%.zip}"
-            CURRENT_SHA=$(sha256sum "$zip" | cut -d' ' -f1)
-            PREV_SHA=$(git show HEAD~1:terraform/fission-build/"$zip" 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "")
-            if [ "$CURRENT_SHA" != "$PREV_SHA" ]; then
-              CHANGED="$CHANGED $tool_id"
-              continue
-            fi
             IMAGE_EXISTS=$(aws ecr describe-images \
-              --repository-name "$(echo "$ECR_REPO" | cut -d'/' -f2-)" \
+              --repository-name "$REPO_NAME" \
               --region "$AWS_REGION" \
               --image-ids imageTag="$tool_id" \
               --query 'imageDetails[0].imageTags[0]' \
