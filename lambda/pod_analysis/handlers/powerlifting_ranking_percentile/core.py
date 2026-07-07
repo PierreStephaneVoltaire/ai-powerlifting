@@ -46,7 +46,7 @@ def _ensure_dataset_downloaded() -> None:
         s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ca-central-1"))
         os.makedirs(SANDBOX_PATH, exist_ok=True)
         paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket, Prefix="openpowerlifting-"):
+        for page in paginator.paginate(Bucket=bucket, Prefix="datasets/openpowerlifting-"):
             for obj in page.get("Contents", []) or []:
                 key = obj["Key"]
                 if not key.endswith(".csv"):

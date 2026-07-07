@@ -15,7 +15,6 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
-from boto3.dynamodb.types import TypeDeserializer
 
 from .config import (
     AWS_REGION,
@@ -41,7 +40,17 @@ def _get_table():
 def _from_item(item: Optional[dict]) -> Optional[dict]:
     if not item:
         return None
-    return {k: _deserializer.deserialize(v) if hasattr(v, "items") else v for k, v in item.items()}
+    out: dict = {}
+    for k, v in item.items():
+        if isinstance(v, Decimal):
+            out[k] = float(v)
+        elif isinstance(v, dict):
+            out[k] = _from_item(v)
+        elif isinstance(v, list):
+            out[k] = [_from_item(x) if isinstance(x, dict) else (float(x) if isinstance(x, Decimal) else x) for x in v]
+        else:
+            out[k] = v
+    return out
 
 
 def _to_decimal(value: Any) -> Any:

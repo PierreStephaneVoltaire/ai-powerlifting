@@ -140,7 +140,9 @@ def _public_profile(settings: dict, viewer_username: Optional[str]) -> dict:
 
 
 def _positive_number(value) -> Optional[float]:
-    return value if isinstance(value, (int, float)) and value > 0 else None
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value)
+    return None
 
 
 def _resolve_program_sk_sync(health_table, pk: str, version: str = "current") -> str:
