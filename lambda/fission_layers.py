@@ -25,7 +25,7 @@ LAYER_PIP_REQS = {
     "pl_ai": ["httpx", "jinja2"],
     "pl_program": [],
     "pl_sessions": [],
-    "pl_glossary": [],
+    "pl_glossary": ["rapidfuzz==3.10.1"],
     "pl_templates": [],
     "pl_analysis_cache": [],
 }
@@ -53,18 +53,27 @@ def layer_modules(layer):
     return out
 
 
+def _read_requirements_file(path):
+    if not os.path.isfile(path):
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                yield line
+
+
 def requirements_for(tool_id, layers):
     reqs = []
     for layer in layers:
         reqs.extend(LAYER_PIP_REQS.get(layer, []))
     reqs.extend(EXTRA_TOOL_REQS.get(tool_id, []))
-    tool_req_file = os.path.join(LAMBDA_ROOT, tool_id, "requirements.txt")
-    if os.path.isfile(tool_req_file):
-        with open(tool_req_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    reqs.append(line)
+    tool_root = os.path.join(LAMBDA_ROOT, tool_id)
+    reqs.extend(_read_requirements_file(os.path.join(tool_root, "requirements.txt")))
+    handlers_dir = os.path.join(tool_root, "handlers")
+    if os.path.isdir(handlers_dir):
+        for handler_name in sorted(os.listdir(handlers_dir)):
+            reqs.extend(_read_requirements_file(os.path.join(handlers_dir, handler_name, "requirements.txt")))
     seen = set()
     out = []
     for r in reqs:
