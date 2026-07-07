@@ -1,3 +1,10 @@
+"""Layer-to-source/pip contract used by `fission-deploy.py` to assemble each
+function's source archive. Tool classification (ai/warm/stats/det) and scale
+profiles are not in this file — they live in the main repo's
+`terraform/k8s-fission-powerlifting.tf`, which is the single source of truth
+for the Fission Function CRDs.
+"""
+
 import os
 
 LAMBDA_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -28,58 +35,6 @@ EXTRA_TOOL_REQS = {
     "analyze_rpe_drift": ["scipy"],
 }
 
-SKIP_TOOLS = {"layers", "pl_authorizer"}
-
-AI_TOOLS = {
-    "budget_advisor", "block_program_evaluation", "block_comparison_synthesis",
-    "budget_priority_timeline", "correlation_analysis", "e1rm_backfill",
-    "fatigue_profile_estimate", "glossary_estimate_e1rm", "glossary_estimate_fatigue",
-    "glossary_generate_text", "glossary_resolve_term", "import_classify_file",
-    "import_parse_file", "lift_profile_estimate_stimulus", "lift_profile_rewrite",
-    "lift_profile_review", "muscle_group_estimate", "program_evaluation",
-    "template_evaluate", "multi_block_comparison",
-}
-
-WARM_READS = {
-    "health_get_program", "health_get_session", "health_get_sessions_range",
-    "health_get_current_maxes", "health_get_goals", "health_get_meta",
-    "health_get_phases", "template_list", "template_get",
-    "get_analysis_markdown", "tool_registry",
-}
-
-STATS_TOOLS = {
-    "analyze_powerlifting_stats", "powerlifting_filter_categories",
-    "powerlifting_ranking_percentile", "analyze_progression", "analyze_rpe_drift",
-}
-
-SCALE_PROFILE = {
-    "ai": {"minReplicas": 0, "maxReplicas": 1, "targetCPU": 70, "timeout": 120},
-    "warm": {"minReplicas": 1, "maxReplicas": 2, "targetCPU": 70, "timeout": 60},
-    "stats": {"minReplicas": 0, "maxReplicas": 2, "targetCPU": 80, "timeout": 120},
-    "det": {"minReplicas": 0, "maxReplicas": 3, "targetCPU": 70, "timeout": 90},
-}
-
-
-def tool_class(tool_id):
-    if tool_id in AI_TOOLS:
-        return "ai"
-    if tool_id in WARM_READS:
-        return "warm"
-    if tool_id in STATS_TOOLS:
-        return "stats"
-    return "det"
-
-
-def is_deployable(tool_id):
-    if tool_id in SKIP_TOOLS:
-        return False
-    folder = os.path.join(LAMBDA_ROOT, tool_id)
-    return os.path.isfile(os.path.join(folder, "handler.py")) and os.path.isfile(os.path.join(folder, "resources.yaml"))
-
-
-def deployable_tools():
-    return sorted(t for t in os.listdir(LAMBDA_ROOT) if is_deployable(t))
-
 
 def layer_modules(layer):
     d = LAYER_MODULE_DIRS.get(layer)
@@ -103,18 +58,13 @@ def requirements_for(tool_id, layers):
     for layer in layers:
         reqs.extend(LAYER_PIP_REQS.get(layer, []))
     reqs.extend(EXTRA_TOOL_REQS.get(tool_id, []))
-    # Merge the tool's own requirements.txt (per-tool deps like scipy that are
-    # not in any layer and not in EXTRA_TOOL_REQS). fission-deploy.py writes the
-    # merged list into the archive's requirements.txt; without this the tool's
-    # own requirements.txt is never copied into the archive (the build filter only
-    # ships .py/.json/.yaml/.j2), so per-tool deps were silently dropped.
     tool_req_file = os.path.join(LAMBDA_ROOT, tool_id, "requirements.txt")
     if os.path.isfile(tool_req_file):
-        with open(tool_req_file) as _f:
-            for _line in _f:
-                _line = _line.strip()
-                if _line and not _line.startswith("#"):
-                    reqs.append(_line)
+        with open(tool_req_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    reqs.append(line)
     seen = set()
     out = []
     for r in reqs:

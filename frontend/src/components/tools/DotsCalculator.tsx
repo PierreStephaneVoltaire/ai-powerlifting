@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import {
@@ -34,7 +34,7 @@ export default function DotsCalculator() {
   const [targetDots, setTargetDots] = useState<number>(300)
 
   // Initialize from program maxes
-  useMemo(() => {
+  useEffect(() => {
     if (program?.meta) {
       setSquatKg(program.meta.target_squat_kg || 0)
       setBenchKg(program.meta.target_bench_kg || 0)

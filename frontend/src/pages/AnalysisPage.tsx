@@ -974,7 +974,25 @@ export default function AnalysisPage() {
 
       {error && (
         <Paper withBorder p="md" className="if-card" style={{ borderColor: 'var(--status-danger-border)' }}>
-          <Text c="red">{error}</Text>
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text c="red" fw={500}>Analysis failed to load</Text>
+              <Button size="xs" variant="light" onClick={() => setAnalysisRefreshNonce((n) => n + 1)}>
+                Retry
+              </Button>
+            </Group>
+            <Text size="sm" c="red">{error}</Text>
+            {Object.keys(sectionStatuses).length > 0 && (
+              <Stack gap={2} mt="xs">
+                <Text size="xs" c="dimmed">Section statuses:</Text>
+                {Object.entries(sectionStatuses).map(([key, status]) => (
+                  <Text key={key} size="xs" ff="monospace">
+                    {key}: {status}
+                  </Text>
+                ))}
+              </Stack>
+            )}
+          </Stack>
         </Paper>
       )}
 

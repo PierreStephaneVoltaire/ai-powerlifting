@@ -238,10 +238,13 @@ export default function ProfilePage() {
       ? calculateDotsFromLifts(squat, bench, deadlift, bodyweight, scoreSex).dots
       : null
 
-    const weightValue = (kg: number) => {
-      if (kg <= 0) return '--'
-      const display = toDisplayUnit(kg, unit)
-      return Number.isInteger(display) ? String(display) : display.toFixed(1)
+    const weightValue = (kg: number | null | undefined) => {
+      const n = Number(kg)
+      if (!Number.isFinite(n) || n <= 0) return '--'
+      const display = toDisplayUnit(n, unit)
+      const num = Number(display)
+      if (!Number.isFinite(num)) return '--'
+      return Number.isInteger(num) ? String(num) : num.toFixed(1)
     }
 
     return [
@@ -249,7 +252,7 @@ export default function ProfilePage() {
       { label: 'Bench', value: weightValue(bench), sub: unit },
       { label: 'Deadlift', value: weightValue(deadlift), sub: unit },
       { label: 'Total', value: weightValue(total), sub: unit },
-      { label: 'DOTS', value: dots !== null ? dots.toFixed(1) : '--', sub: 'pts' },
+      { label: 'DOTS', value: dots !== null && dots !== undefined && Number.isFinite(Number(dots)) ? Number(dots).toFixed(1) : '--', sub: 'pts' },
       { label: 'Class', value: meta?.weight_class_kg ? String(meta.weight_class_kg) : '--', sub: 'kg' },
     ]
   }, [program, sex, unit])
@@ -264,10 +267,13 @@ export default function ProfilePage() {
 
   const publicProfileMetrics = useMemo(() => {
     const summary = publicProfile?.summary
-    const weightValue = (kg: number | null | undefined) => {
-      if (!kg || kg <= 0) return '--'
-      const display = toDisplayUnit(kg, unit)
-      return Number.isInteger(display) ? String(display) : display.toFixed(1)
+    const weightValue = (kg: number | string | null | undefined) => {
+      const n = Number(kg)
+      if (!Number.isFinite(n) || n <= 0) return '--'
+      const display = toDisplayUnit(n, unit)
+      const num = Number(display)
+      if (!Number.isFinite(num)) return '--'
+      return Number.isInteger(num) ? String(num) : num.toFixed(1)
     }
 
     return [
@@ -275,7 +281,7 @@ export default function ProfilePage() {
       { label: 'Bench', value: weightValue(summary?.bench_kg), sub: unit },
       { label: 'Deadlift', value: weightValue(summary?.deadlift_kg), sub: unit },
       { label: 'Total', value: weightValue(summary?.total_kg), sub: unit },
-      { label: 'DOTS', value: summary?.dots !== null && summary?.dots !== undefined ? summary.dots.toFixed(1) : '--', sub: 'pts' },
+      { label: 'DOTS', value: summary?.dots !== null && summary?.dots !== undefined && Number.isFinite(Number(summary.dots)) ? Number(summary.dots).toFixed(1) : '--', sub: 'pts' },
       { label: 'Class', value: publicProfile?.weight_class_kg ? String(publicProfile.weight_class_kg) : '--', sub: 'kg' },
     ]
   }, [publicProfile, unit])

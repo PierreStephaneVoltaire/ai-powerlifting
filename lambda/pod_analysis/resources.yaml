@@ -5,6 +5,7 @@ layers:
 - pl_program
 - pl_sessions
 min_replicas: 1
+s3_read: true
 resources:
   requests:
     cpu: 100m

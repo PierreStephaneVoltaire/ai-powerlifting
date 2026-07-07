@@ -24,9 +24,48 @@ _df_lock = threading.Lock()
 _df_ready = threading.Event()
 _df_error: Optional[str] = None
 
+
+def _ensure_dataset_downloaded() -> None:
+    """Download OpenPowerlifting CSVs from S3 to SANDBOX_PATH if not present.
+
+    Reads POWERLIFTING_S3_BUCKET (injected by the Fission function env when
+    resources.yaml sets s3_read: true). Skips the download if the local cache
+    already has any matching file, so cold start pays the cost exactly once
+    per pod lifetime.
+    """
+    pattern = os.path.join(SANDBOX_PATH, "openpowerlifting-*.csv")
+    if glob.glob(pattern):
+        return
+    bucket = os.environ.get("POWERLIFTING_S3_BUCKET", "")
+    if not bucket:
+        return
+    try:
+        import boto3
+        s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ca-central-1"))
+        os.makedirs(SANDBOX_PATH, exist_ok=True)
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix="openpowerlifting-"):
+            for obj in page.get("Contents", []) or []:
+                key = obj["Key"]
+                if not key.endswith(".csv"):
+                    continue
+                dest = os.path.join(SANDBOX_PATH, os.path.basename(key))
+                if os.path.isfile(dest) and os.path.getsize(dest) == obj.get("Size", 0):
+                    continue
+                logger.info(f"[Powerlifting] Downloading s3://{bucket}/{key} -> {dest}")
+                s3.download_file(bucket, key, dest)
+    except Exception as e:
+        logger.warning(f"[Powerlifting] S3 dataset download skipped: {e}")
+
+
 def _parse_csvs() -> pd.DataFrame:
     """Read and parse all matching CSVs from sandbox. Called only from background thread."""
+    _ensure_dataset_downloaded()
     pattern = os.path.join(SANDBOX_PATH, "openpowerlifting-*.csv")
+    csv_files = glob.glob(pattern)
+
+    if not csv_files:
+        raise FileNotFoundError(f"No powerlifting datasets found in sandbox matching: {pattern}")
     csv_files = glob.glob(pattern)
 
     if not csv_files:

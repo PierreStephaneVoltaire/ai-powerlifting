@@ -1,8 +1,53 @@
 import { Router } from 'express'
 import * as competitionController from '../controllers/competitionController'
-import type { LiftResults, PostMeetReport } from '@powerlifting/types'
+import type { LiftResults, PostMeetReport, UserCompetitionUpdate } from '@powerlifting/types'
 
 export const competitionsRouter = Router({ mergeParams: true })
+
+competitionsRouter.get('/', async (req, res, next) => {
+  try {
+    const competitions = await competitionController.getUserCompetitions(req.mapped_pk!, {
+      country: typeof req.query.country === 'string' ? req.query.country : undefined,
+      state: typeof req.query.state === 'string' ? req.query.state : undefined,
+    })
+    res.json({ data: competitions, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+competitionsRouter.patch('/:masterId', async (req, res, next) => {
+  try {
+    const updates = (req.body ?? {}) as UserCompetitionUpdate
+    const updated = await competitionController.patchUserCompetition(
+      req.mapped_pk!,
+      req.params.masterId,
+      updates,
+    )
+    res.json({ data: updated, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+competitionsRouter.post('/:masterId/complete', async (req, res, next) => {
+  try {
+    const { results, bodyWeightKg, postMeetReport } = req.body ?? {}
+    if (!results || typeof bodyWeightKg !== 'number') {
+      return res.status(400).json({ data: null, error: 'Missing results or bodyWeightKg' })
+    }
+    const updated = await competitionController.completeUserCompetition(
+      req.mapped_pk!,
+      req.params.masterId,
+      results as LiftResults,
+      bodyWeightKg,
+      postMeetReport as PostMeetReport | undefined,
+    )
+    res.json({ data: updated, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
 
 competitionsRouter.get('/:version', async (req, res, next) => {
   try {

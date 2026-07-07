@@ -14,11 +14,14 @@ if _HANDLERS_DIR not in sys.path:
 _ROUTING = {
     "calculate_attempts": "calculate_attempts",
     "health_complete_competition": "health_complete_competition",
+    "health_complete_user_competition": "health_list_competitions",
     "health_create_competition": "health_create_competition",
     "health_delete_competition": "health_delete_competition",
     "health_get_competition": "health_get_competition",
+    "health_list_competitions": "health_list_competitions",
     "health_snapshot_competition_projection": "health_snapshot_competition_projection",
     "health_update_competition": "health_update_competition",
+    "health_update_user_competition": "health_list_competitions",
 }
 
 
