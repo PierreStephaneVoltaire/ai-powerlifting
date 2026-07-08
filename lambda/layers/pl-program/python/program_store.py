@@ -625,9 +625,8 @@ class ProgramStore:
         for item in items:
             p = dict(item)
             results.append(p)
-            
 
-
+        return results
     # ─── In-place updates (no new version — matches the pre-refactor controller) ─
 
     ALLOWED_META_FIELDS = (
@@ -696,5 +695,3 @@ class ProgramStore:
             ExpressionAttributeNames={"#meta": "meta"},
             ExpressionAttributeValues={":profiles": self._floats_to_decimals(profiles), ":now": now},
         )
-
-        return results

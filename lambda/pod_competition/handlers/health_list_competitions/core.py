@@ -24,7 +24,6 @@ from .config import (
 
 logger = logging.getLogger(__name__)
 
-_deserializer = TypeDeserializer()
 _table = None
 
 
