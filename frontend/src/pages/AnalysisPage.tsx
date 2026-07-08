@@ -510,18 +510,14 @@ export default function AnalysisPage() {
         setSectionStatuses(Object.fromEntries(
           DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => [section, manifest.sections[section]?.status ?? 'missing']),
         ))
-        return queueAnalysisSections({
+        queueAnalysisSections({
           asOfDate,
           windowKey: analysisKey,
           sections: DETERMINISTIC_ANALYSIS_SECTIONS,
-        })
+        }).then(() => pollSections()).catch(() => pollSections())
       })
-      .then(() => pollSections())
-      .catch((e) => {
-        if (!cancelled) {
-          setError(e.message)
-          setLoading(false)
-        }
+      .catch(() => {
+        if (!cancelled) pollSections()
       })
 
     return () => {

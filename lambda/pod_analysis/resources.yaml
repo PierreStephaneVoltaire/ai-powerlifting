@@ -8,11 +8,11 @@ min_replicas: 1
 s3_read: true
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
+    cpu: 200m
     memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 4Gi
 timeout: 900
 description: Analysis and analytics pod. Handles weekly analysis generation, per-section
   analysis retrieval, progression analysis, RPE drift analysis, powerlifting stats

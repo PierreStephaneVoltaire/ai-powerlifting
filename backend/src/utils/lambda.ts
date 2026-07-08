@@ -25,14 +25,28 @@ export async function invokeLambda(
     )
   }
 
-  const response = await fetch(`${LAMBDA_BASE_URL}/${functionName}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(INTERNAL_API_TOKEN ? { 'X-Internal-Token': INTERNAL_API_TOKEN } : {}),
-    },
-    body: JSON.stringify(args),
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.POWERLIFTING_LAMBDA_TIMEOUT_MS || 15000))
+
+  let response: Response
+  try {
+    response = await fetch(`${LAMBDA_BASE_URL}/${functionName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(INTERNAL_API_TOKEN ? { 'X-Internal-Token': INTERNAL_API_TOKEN } : {}),
+      },
+      body: JSON.stringify(args),
+      signal: controller.signal,
+    })
+  } catch (fetchErr: any) {
+    if (fetchErr?.name === 'AbortError') {
+      throw new Error(`Lambda tool timeout after 15s for ${functionName}`)
+    }
+    throw fetchErr
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!response.ok) {
     const text = await response.text()
@@ -44,7 +58,11 @@ export async function invokeLambda(
   if (parsed && typeof parsed === 'object' && 'body' in parsed) {
     const body = parsed.body
     if (typeof body === 'string' && body.length > 0) {
-      return JSON.parse(body)
+      try {
+        return JSON.parse(body)
+      } catch {
+        return body
+      }
     }
     return body
   }
