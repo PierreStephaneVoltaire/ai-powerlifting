@@ -105,7 +105,7 @@ def _parse_csvs() -> pd.DataFrame:
             csv_path,
             usecols=lambda c: c in usecols,
             dtype={k: v for k, v in dtypes.items() if k in usecols},
-            low_memory=False
+            low_memory=True
         )
         dfs.append(df)
 
