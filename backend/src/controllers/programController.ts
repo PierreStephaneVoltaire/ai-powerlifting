@@ -76,10 +76,8 @@ export async function batchCreateWeek(
   phase: string,
   exercises: PlannedExercise[],
 ): Promise<void> {
-  // Compose session_create for each day — sessions are a separate table/domain.
-  // Check for existing-date conflicts first (cheap read via session_list_full).
-  const existing = (await invokeLambda('pod_sessions', { function: 'session_list_full',  pk })) as Session[]
-  const existingDates = new Set(existing.map((s) => s.date))
+  const result = (await invokeLambda('pod_sessions', { function: 'session_list',  pk })) as { sessions: Session[] }
+  const existingDates = new Set((result?.sessions || []).map((s) => s.date))
   for (const day of days) {
     if (existingDates.has(day.date)) {
       throw new AppError(`Session with date ${day.date} already exists`, 400)

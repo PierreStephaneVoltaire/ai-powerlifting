@@ -46,6 +46,20 @@ def _sanitize_decimals(obj):
     return obj
 
 
+def _to_number(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, Decimal):
+        return float(value) if value % 1 > 0 else int(value)
+    try:
+        f = float(value)
+        return int(f) if f == int(f) else f
+    except (ValueError, TypeError):
+        return None
+
+
 async def max_target_get(args: dict) -> dict:
     """Get the target maxes (squat/bench/deadlift/total) for a program version.
 
@@ -70,10 +84,10 @@ async def max_target_get(args: dict) -> dict:
         return {
             "version": version,
             "sk": sk,
-            "squat_kg": meta.get("target_squat_kg"),
-            "bench_kg": meta.get("target_bench_kg"),
-            "deadlift_kg": meta.get("target_dl_kg"),
-            "total_kg": meta.get("target_total_kg"),
+            "squat_kg": _to_number(meta.get("target_squat_kg")),
+            "bench_kg": _to_number(meta.get("target_bench_kg")),
+            "deadlift_kg": _to_number(meta.get("target_dl_kg")),
+            "total_kg": _to_number(meta.get("target_total_kg")),
         }
 
     result = await asyncio.get_running_loop().run_in_executor(None, _sync)
