@@ -155,6 +155,10 @@ def load_data() -> pd.DataFrame:
         return _df_cache
     if _df_error and "No powerlifting datasets" in _df_error:
         raise FileNotFoundError(_df_error)
+    import threading as _t
+    _alive = any(th.name == "pl-cache-warm" and th.is_alive() for th in _t.enumerate())
+    if not _alive:
+        warm_cache()
     raise DatasetNotReadyError(
         "The dataset is still loading in the background. Try again in a moment."
     )
