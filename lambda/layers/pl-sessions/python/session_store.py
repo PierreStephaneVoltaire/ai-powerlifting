@@ -110,8 +110,18 @@ def _program_version_number(program_sk: str) -> int | None:
     except ValueError:
         return None
 
+def _sanitize_decimals(obj):
+    if isinstance(obj, Decimal):
+        return float(obj) if obj % 1 > 0 else int(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_decimals(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_decimals(v) for v in obj]
+    return obj
+
+
 def _public_session(item: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
-    session = copy.deepcopy(item)
+    session = _sanitize_decimals(copy.deepcopy(item))
     if "session_id" in session and "id" not in session:
         session["id"] = str(session["session_id"])
     for key in (

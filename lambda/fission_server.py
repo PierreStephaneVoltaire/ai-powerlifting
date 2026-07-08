@@ -2,6 +2,7 @@ import json
 import os
 import hmac
 import importlib
+from decimal import Decimal
 
 from flask import Flask, request, jsonify
 
@@ -9,6 +10,12 @@ app = Flask(__name__)
 
 _TOOL_NAME = os.environ.get("IF_TOOL_NAME", "")
 _EXPECTED_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
+
+
+def _json_default(obj):
+    if isinstance(obj, Decimal):
+        return float(obj) if obj % 1 > 0 else int(obj)
+    return str(obj)
 
 
 def _check_token(headers):
@@ -35,7 +42,7 @@ def handle(path=""):
             return jsonify(result), result["statusCode"]
         if isinstance(result, str):
             return result, 200
-        return json.dumps(result, default=str), 200
+        return json.dumps(result, default=_json_default), 200
     except PermissionError as e:
         return jsonify({"error": str(e)}), 401
     except Exception as e:

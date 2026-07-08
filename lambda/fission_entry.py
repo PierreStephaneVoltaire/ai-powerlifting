@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import hmac
+from decimal import Decimal
 
 _USERFUNC = os.environ.get("USERFUNC", "/userfunc")
 if _USERFUNC not in sys.path:
@@ -69,6 +70,12 @@ if not _TOOL_NAME:
 _EXPECTED_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
 
 
+def _json_default(obj):
+    if isinstance(obj, Decimal):
+        return float(obj) if obj % 1 > 0 else int(obj)
+    return str(obj)
+
+
 def _check_token(headers):
     if not _EXPECTED_TOKEN:
         return
@@ -124,6 +131,6 @@ def main(*args):
             return result
         if isinstance(result, str):
             return {"statusCode": 200, "body": result}
-        return {"statusCode": 200, "body": json.dumps(result, default=str)}
+        return {"statusCode": 200, "body": json.dumps(result, default=_json_default)}
     except Exception as exc:
         return {"statusCode": 500, "body": json.dumps({"error": str(exc)})}

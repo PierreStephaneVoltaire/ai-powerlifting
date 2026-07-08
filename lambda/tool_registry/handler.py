@@ -17,6 +17,7 @@ shared event-based dispatch in ``fission_entry.py``.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 import os
 from typing import Any
 
@@ -130,6 +131,11 @@ def _build_spec() -> dict[str, Any]:
         "paths": paths,
     }
 
+
+def _json_default(obj):
+    if isinstance(obj, Decimal):
+        return float(obj) if obj % 1 > 0 else int(obj)
+    return str(obj)
 
 def handler(event, context):  # noqa: ARG001 - Fission signature
     """Fission entry point. ``GET /openapi.json`` returns the discovery doc."""
