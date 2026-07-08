@@ -150,18 +150,16 @@ def warm_cache():
     thread.start()
 
 def load_data() -> pd.DataFrame:
-    """Return the cached DataFrame. Raises if not ready yet or permanently missing."""
+    """Return the cached DataFrame. Loads synchronously if not cached yet."""
     if _df_ready.is_set() and _df_cache is not None:
         return _df_cache
     if _df_error and "No powerlifting datasets" in _df_error:
         raise FileNotFoundError(_df_error)
-    import threading as _t
-    _alive = any(th.name == "pl-cache-warm" and th.is_alive() for th in _t.enumerate())
-    if not _alive:
-        warm_cache()
-    raise DatasetNotReadyError(
-        "The dataset is still loading in the background. Try again in a moment."
-    )
+    df = _parse_csvs()
+    with _df_lock:
+        _df_cache = df
+        _df_ready.set()
+    return df
 
 _IPF_CLASSES: Dict[str, list] = {
     "M": [59.0, 66.0, 74.0, 83.0, 93.0, 105.0, 120.0, float("inf")],
