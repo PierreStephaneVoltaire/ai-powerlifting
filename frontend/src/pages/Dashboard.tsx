@@ -484,31 +484,18 @@ export default function Dashboard() {
     }
 
     setRankingPercentileLoading(true)
-    let attempt = 0
-    const maxAttempts = 5
-    const doFetch = () => {
-      if (cancelled) return
-      attempt++
-      fetchRankingPercentile({
-        squat_kg:    inline.squat    > 0 ? inline.squat    : undefined,
-        bench_kg:    inline.bench    > 0 ? inline.bench    : undefined,
-        deadlift_kg: inline.deadlift > 0 ? inline.deadlift : undefined,
-        bodyweight_kg: bw,
-        sex_code: sexCode,
-        country: rankingCountry ?? undefined,
-        region:  rankingRegion  ?? undefined,
-      })
-        .then((data) => { if (!cancelled) setRankingPercentile(data); if (!cancelled) setRankingPercentileLoading(false) })
-        .catch(() => {
-          if (cancelled) return
-          if (attempt < maxAttempts) {
-            setTimeout(doFetch, 15000)
-          } else {
-            setRankingPercentileLoading(false)
-          }
-        })
-    }
-    doFetch()
+    fetchRankingPercentile({
+      squat_kg:    inline.squat    > 0 ? inline.squat    : undefined,
+      bench_kg:    inline.bench    > 0 ? inline.bench    : undefined,
+      deadlift_kg: inline.deadlift > 0 ? inline.deadlift : undefined,
+      bodyweight_kg: bw,
+      sex_code: sexCode,
+      country: rankingCountry ?? undefined,
+      region:  rankingRegion  ?? undefined,
+    })
+      .then((data) => { if (!cancelled) setRankingPercentile(data) })
+      .catch(() => { if (!cancelled) console.warn('Ranking percentile unavailable') })
+      .finally(() => { if (!cancelled) setRankingPercentileLoading(false) })
 
     return () => { cancelled = true }
   }, [program, needsSetup, rankingCountry, rankingRegion])

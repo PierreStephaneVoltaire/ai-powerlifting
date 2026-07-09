@@ -6,11 +6,11 @@ layers:
 min_replicas: 1
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 200m
+    memory: 256Mi
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 1Gi
 timeout: 900
 description: Training program management pod. Handles program CRUD (get, list, list-full,
   archive, unarchive), structured updates (meta fields, phases, lift profiles), per-version

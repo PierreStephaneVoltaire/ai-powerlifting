@@ -151,6 +151,7 @@ def warm_cache():
 
 def load_data() -> pd.DataFrame:
     """Return the cached DataFrame. Loads synchronously if not cached yet."""
+    global _df_cache, _df_ready, _df_error
     if _df_ready.is_set() and _df_cache is not None:
         return _df_cache
     if _df_error and "No powerlifting datasets" in _df_error:

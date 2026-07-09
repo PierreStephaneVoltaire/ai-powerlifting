@@ -4,14 +4,14 @@ layers:
 - pl_glossary
 - pl_program
 - pl_templates
-min_replicas: 1
+min_replicas: 0
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 3000m
+    memory: 2Gi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 4000m
+    memory: 4Gi
 timeout: 900
 description: Training template management pod. Handles template CRUD (create blank,
   from block, from payload, get, list, update, copy, archive, unarchive), publishing

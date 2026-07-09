@@ -5,11 +5,11 @@ layers:
 min_replicas: 1
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 1000m
+    memory: 1Gi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1500m
+    memory: 2Gi
 timeout: 900
 description: Competition management pod. Handles competition CRUD (create, get, update,
   delete), attempt calculation (suggests openers and jump strategy from current maxes),

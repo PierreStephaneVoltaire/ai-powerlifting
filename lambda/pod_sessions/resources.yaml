@@ -5,11 +5,11 @@ layers:
 min_replicas: 1
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
+    cpu: 2000m
     memory: 512Mi
+  limits:
+    cpu: 2500m
+    memory: 1Gi
 timeout: 900
 description: Training session management pod. Handles session CRUD (create, delete,
   get, list, list-full, patch, patch-by-date, replace, replace-all), exercise add/remove

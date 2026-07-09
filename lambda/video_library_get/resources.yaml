@@ -1,13 +1,14 @@
 layers:
 - pl_boto3
 - pl_sessions
+min_replicas: 1
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 500m
+    memory: 512Mi
   limits:
-    cpu: 300m
-    memory: 256Mi
+    cpu: 1
+    memory: 1Gi
 timeout: 900
 description: Get the video library across sessions with optional exercise filter.
 input_schema:

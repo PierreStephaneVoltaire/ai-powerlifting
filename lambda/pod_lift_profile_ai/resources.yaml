@@ -5,11 +5,11 @@ layers:
 min_replicas: 1
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
+    cpu: 200m
     memory: 512Mi
+  limits:
+    cpu: 750m
+    memory: 1Gi
 timeout: 900
 description: Lift profile AI inference pod. Handles fatigue profile estimation, glossary
   E1RM/fatigue/muscle estimation, glossary text generation, lift profile stimulus

@@ -3,11 +3,11 @@ layers:
 - pl_sessions
 resources:
   requests:
-    cpu: 250m
-    memory: 256Mi
+    cpu: 1
+    memory: 1Gi
   limits:
-    cpu: 750m
-    memory: 512Mi
+    cpu: 1750m
+    memory: 1.5Gi
 timeout: 900
 description: Upload a session video to S3 and attach it to a session.
 input_schema:
