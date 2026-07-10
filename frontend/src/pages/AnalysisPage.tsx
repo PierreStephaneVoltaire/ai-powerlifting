@@ -356,8 +356,9 @@ export default function AnalysisPage() {
   const { competitions: userCompetitions, loadAll: loadUserCompetitions } = useCompetitionsStore()
 
   useEffect(() => {
-    loadUserCompetitions({ country: ranking_country ?? undefined, state: ranking_region ?? undefined })
-  }, [ranking_country, ranking_region, loadUserCompetitions])
+    // Load all of the Athlete's Competition Entries without ranking-location filters.
+    loadUserCompetitions()
+  }, [loadUserCompetitions])
   const [searchParams, setSearchParams] = useSearchParams()
 
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
@@ -461,12 +462,28 @@ export default function AnalysisPage() {
     let pollTimer: number | undefined
 
     async function pollSections() {
-      const statuses = await Promise.all(
+      // Use Promise.allSettled so a single section transport failure does not
+      // hide successful sections or frontend-local sections. A failed section
+      // is recorded as status=error and rendered behind its own boundary.
+      const results = await Promise.allSettled(
         DETERMINISTIC_ANALYSIS_SECTIONS.map((section) =>
           fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section),
         ),
       )
       if (cancelled) return
+
+      const statuses = results.map((result, index) => {
+        const section = DETERMINISTIC_ANALYSIS_SECTIONS[index]
+        if (result.status === 'fulfilled') return result.value
+        // A rejected promise means the transport itself failed for this section.
+        return {
+          sectionKey: section,
+          status: 'error' as const,
+          payload: null,
+          generatedAt: null,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        }
+      })
 
       setSectionStatuses(Object.fromEntries(statuses.map((status) => [status.sectionKey, status.status])))
       setSectionPayloads((current) => {
@@ -485,9 +502,18 @@ export default function AnalysisPage() {
         .slice(-1)[0]
       if (generated) setLatestGeneratedAt(generated)
 
+      // A section-level error should NOT collapse the entire view. Only set
+      // the global error if EVERY section failed with no successful payloads.
       const terminal = statuses.every((status) => status.status === 'complete' || status.status === 'error')
       const hasAnyPayload = statuses.some((status) => status.status === 'complete' && status.payload)
+      const allErrored = statuses.every((status) => status.status === 'error')
       setLoading(!terminal && !hasAnyPayload)
+      if (allErrored && !hasAnyPayload) {
+        const firstError = statuses.find((s) => s.status === 'error' && (s as any).error)
+        setError((firstError as any)?.error ?? 'All analysis sections failed to load')
+      } else if (!allErrored) {
+        setError(null)
+      }
       if (!terminal) {
         pollTimer = window.setTimeout(() => {
           pollSections().catch((e) => {

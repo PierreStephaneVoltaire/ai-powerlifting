@@ -43,6 +43,40 @@ export const analyticsRouter = Router()
 
 type ProgramWithWeightLog = Program & { weight_log: WeightEntry[] }
 
+// ─── pod_analysis sub-function routing ─────────────────────────────────────
+// blockAnalytics.ts calls invokeTool('weekly_analysis', ...) etc. These are
+// NOT standalone Lambda endpoints — they are sub-functions routed through the
+// pod_analysis aggregate handler. This wrapper rewrites the tool name into a
+// pod_analysis call with function=<toolName> so past-block and comparison
+// analytics hit the correct endpoint instead of 404/502.
+const POD_ANALYSIS_SUBFUNCTIONS = new Set([
+  'weekly_analysis',
+  'analysis_section',
+  'analyze_powerlifting_stats',
+  'analyze_progression',
+  'analyze_rpe_drift',
+  'block_correlation_analysis',
+  'block_program_evaluation',
+  'correlation_analysis',
+  'multi_block_comparison_analysis',
+  'powerlifting_filter_categories',
+  'powerlifting_ranking_percentile',
+  'program_evaluation',
+  'regenerate_analysis',
+])
+
+async function invokeAnalysisTool(
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  if (POD_ANALYSIS_SUBFUNCTIONS.has(toolName)) {
+    const { pk, ...rest } = args
+    return invokeLambda('pod_analysis', { function: toolName, ...rest, pk })
+  }
+  // Non-pod_analysis tools (e.g. health_rag_search) go through invokeToolDirect.
+  return invokeToolDirect(toolName, args)
+}
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -321,7 +355,7 @@ async function runTargetedRegeneration(
   }
 
   try {
-    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeLambda, true, false)
+    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeAnalysisTool, true, false)
   } catch (err) {
     logger.warn({ err, pk }, 'block_analysis#v1#current regeneration failed')
   }
@@ -611,14 +645,14 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
     const refresh = req.query.refresh === 'true'
 
     if (isCurrent) {
-      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, refresh, false)
+      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, false)
       if (!bundle) {
         return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
       }
       return res.json({ data: bundle, error: null })
     }
 
-    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, refresh, false)
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, false)
     if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
     }
@@ -640,7 +674,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     let evalReport: Awaited<ReturnType<typeof getOrCreateBlockProgramEvaluation>> = null
 
     try {
-      bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, true, false)
+      bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, true, false)
     } catch (err) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
     }
@@ -790,7 +824,7 @@ analyticsRouter.get('/blocks/:blockKey/export/:format', async (req, res) => {
     }
 
     const program = await getProgramWithWeightLog(pk, 'current')
-    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeLambda, false, false)
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, false, false)
     if (!bundle) {
       return res.status(404).json({
         data: null,
@@ -851,7 +885,7 @@ analyticsRouter.post('/block-comparison', async (req, res) => {
           req.mapped_pk!,
           program,
           block.blockKey,
-          invokeLambda,
+          invokeAnalysisTool,
           block.isCurrent,
           false,
           allGoals,
@@ -897,7 +931,7 @@ analyticsRouter.post('/block-comparison/ai', async (req, res) => {
     for (const rawBlock of selectedBlocks) {
       const block = analysisScopedBlockEntry(program, rawBlock)
       contexts.set(block.blockKey, buildBlockComparisonContext(program, rawBlock, allGoals))
-      const bundle = await getOrCreateBlockAnalysisBundle(req.mapped_pk!, program, block.blockKey, invokeLambda, false, false)
+      const bundle = await getOrCreateBlockAnalysisBundle(req.mapped_pk!, program, block.blockKey, invokeAnalysisTool, false, false)
       if (bundle) bundles.push(bundle)
       if (bundle) {
         correlationReports.set(block.blockKey, await getOrCreateBlockCorrelationReport(

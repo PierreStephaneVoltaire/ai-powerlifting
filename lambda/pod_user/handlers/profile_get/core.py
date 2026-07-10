@@ -296,7 +296,7 @@ def _build_profile(settings: dict, viewer_username: Optional[str], program: Opti
         "weight_class_kg": _positive_number(meta.get("weight_class_kg")),
         "practicing_for": meta.get("practicing_for") or None,
         "summary": {"squat_kg": squat, "bench_kg": bench, "deadlift_kg": deadlift, "total_kg": total, "bodyweight_kg": bodyweight, "dots": dots},
-        "lift_videos": [it["video"] for it in video_items[:24]],
+        "lift_videos": video_items[:24],
     }
 
 

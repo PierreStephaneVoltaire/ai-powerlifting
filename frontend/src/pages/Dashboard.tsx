@@ -455,8 +455,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!settingsLoaded) return
-    loadUserCompetitions({ country: rankingCountry ?? undefined, state: rankingRegion ?? undefined })
-  }, [settingsLoaded, rankingCountry, rankingRegion, loadUserCompetitions])
+    // Load the Athlete's complete canonical Competition Entry list without
+    // ranking-location filters. Ranking geography is only for percentile
+    // requests; the Athlete's own Entries are filtered by lifecycle/date locally.
+    loadUserCompetitions()
+  }, [settingsLoaded, loadUserCompetitions])
 
   // Load ranking percentile once we have actual maxes + bodyweight + settings
   // Uses actualMaxes (computed after program loads below) — but since this effect

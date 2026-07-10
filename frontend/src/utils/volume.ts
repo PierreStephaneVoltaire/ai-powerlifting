@@ -12,7 +12,7 @@ export function executedSets(ex: Pick<Exercise, 'sets' | 'set_statuses'>): numbe
   if (ex.set_statuses?.length) {
     return ex.set_statuses.filter((status) => status === 'completed' || status === 'failed').length
   }
-  return ex.sets || 0
+  return Number(ex.sets) || 0
 }
 
 export function exerciseVolume(ex: Exercise): number {
