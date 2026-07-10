@@ -244,41 +244,54 @@ jobs:
         working-directory: lambda
         run: python3 fission-deploy.py
 
-      - name: Detect missing function images on ECR
+      - name: Detect functions needing a build
         id: changed
         working-directory: terraform/fission-build
         env:
           ECR_REPO: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-fns
           AWS_REGION: ${{ env.AWS_REGION }}
+          SHORT_SHA: ${{ github.sha }}
         run: |
           CHANGED=""
           REPO_NAME="$(echo "$ECR_REPO" | cut -d'/' -f2-)"
+          SHORT_SHA="$(echo "$SHORT_SHA" | cut -c1-7)"
           for zip in *.zip; do
             tool_id="${zip%.zip}"
+            SHA_TAG="${tool_id}-${SHORT_SHA}"
+            # Check if the commit-pinned tag already exists. If it does, this
+            # exact code was already built — skip it. If it doesn't, the image
+            # is new (or the code changed) and needs building.
             IMAGE_EXISTS=$(aws ecr describe-images \
               --repository-name "$REPO_NAME" \
               --region "$AWS_REGION" \
-              --image-ids imageTag="$tool_id" \
+              --image-ids imageTag="$SHA_TAG" \
               --query 'imageDetails[0].imageTags[0]' \
               --output text 2>/dev/null || echo "")
-            if [ "$IMAGE_EXISTS" != "$tool_id" ]; then
+            if [ "$IMAGE_EXISTS" != "$SHA_TAG" ]; then
               CHANGED="$CHANGED $tool_id"
+            else
+              echo "  $tool_id: commit tag $SHA_TAG already exists, skipping"
             fi
           done
           CHANGED=$(echo "$CHANGED" | xargs)
           echo "tools=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "Functions to build: $CHANGED"
 
       - name: Build and push function images
         if: ${{ steps.changed.outputs.tools != '' }}
         working-directory: docker
+        env:
+          SHORT_SHA: ${{ steps.changed.outputs.short_sha }}
         run: |
           for tool_id in ${{ steps.changed.outputs.tools }}; do
-            echo "Building $tool_id..."
+            SHA_TAG="${tool_id}-${SHORT_SHA}"
+            echo "Building $tool_id (sha tag: $SHA_TAG)..."
             packer init powerlifting-fn.pkr.hcl
             packer build -color=false \
               -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-fns" \
               -var "image_tag=${tool_id}" \
+              -var "image_tag_sha=${SHA_TAG}" \
               -var "tool_id=${tool_id}" \
               -var "source_archive=../terraform/fission-build/${tool_id}.zip" \
               powerlifting-fn.pkr.hcl

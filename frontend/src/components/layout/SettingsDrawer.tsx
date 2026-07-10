@@ -78,14 +78,30 @@ export default function SettingsDrawer() {
     }).catch(() => {})
   }, [isOpen, user])
 
-  // Load categories for dropdowns (reuse existing categories endpoint)
+  // Load categories for dropdowns (reuse existing categories endpoint).
+  // Handles 503 (dataset loading) with a retry so the drawer doesn't silently
+  // fail to populate the country/region selectors.
   useEffect(() => {
     if (!isOpen || rankingCategories) return
-    fetchStatCategories().then((data: any) => {
-      if (data && !data.error) {
-        setRankingCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
-      }
-    }).catch(() => {})
+    let cancelled = false
+    const load = () => {
+      if (cancelled) return
+      fetchStatCategories().then((data: any) => {
+        if (cancelled) return
+        if (!data) return
+        if (data._status === 503 || data.error === 'DATASET_NOT_FOUND') {
+          setTimeout(load, 30000)
+          return
+        }
+        if (!data.error) {
+          setRankingCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
+        }
+      }).catch(() => {
+        if (!cancelled) setTimeout(load, 30000)
+      })
+    }
+    load()
+    return () => { cancelled = true }
   }, [isOpen, rankingCategories])
 
   const rankingRegionOptions: string[] = rankingCountry

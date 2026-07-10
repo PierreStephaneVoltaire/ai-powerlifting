@@ -43,6 +43,11 @@ variable "tag_latest" {
   default = false
 }
 
+variable "image_tag_sha" {
+  type    = string
+  default = ""
+}
+
 source "docker" "pl_fn" {
   image    = "public.ecr.aws/docker/library/python:3.13-slim"
   commit   = true
@@ -94,7 +99,11 @@ build {
   post-processors {
     post-processor "docker-tag" {
       repository = var.image_repository
-      tags       = var.tag_latest ? [var.image_tag, "latest"] : [var.image_tag]
+      tags = var.image_tag_sha != "" ? (
+        var.tag_latest ? [var.image_tag, var.image_tag_sha, "latest"] : [var.image_tag, var.image_tag_sha]
+      ) : (
+        var.tag_latest ? [var.image_tag, "latest"] : [var.image_tag]
+      )
     }
     post-processor "docker-push" {
       ecr_login    = true

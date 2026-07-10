@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { checkSession, clearCache } from '@/api/cache'
 
 interface AuthUser {
   discord_id: string
@@ -48,11 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(res => res.json())
       .then(data => {
         setUser(data.user)
-        setMappedPk(data.mapped_pk || 'operator')
+        const pk = data.mapped_pk || 'operator'
+        setMappedPk(pk)
         setReadOnly(data.readOnly !== false)
         setRankingCountry(data.ranking_country || null)
         setRankingRegion(data.ranking_region || null)
         setAgeClass(data.age_class || 'open')
+        // Validate IndexedDB cache — wipes if user changed
+        checkSession(pk).catch(() => {})
       })
       .catch(() => {
         setUser(null)
@@ -71,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    await clearCache().catch(() => {})
     setUser(null)
     setMappedPk('operator')
     setReadOnly(true)

@@ -459,67 +459,46 @@ export default function AnalysisPage() {
     }
 
     let cancelled = false
-    let pollTimer: number | undefined
+    const sectionTimers: Partial<Record<AnalysisSectionKey, number>> = {}
 
-    async function pollSections() {
-      // Use Promise.allSettled so a single section transport failure does not
-      // hide successful sections or frontend-local sections. A failed section
-      // is recorded as status=error and rendered behind its own boundary.
-      const results = await Promise.allSettled(
-        DETERMINISTIC_ANALYSIS_SECTIONS.map((section) =>
-          fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section),
-        ),
-      )
-      if (cancelled) return
+    async function pollSection(section: AnalysisSectionKey) {
+      try {
+        const result = await fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section)
+        if (cancelled) return
 
-      const statuses = results.map((result, index) => {
-        const section = DETERMINISTIC_ANALYSIS_SECTIONS[index]
-        if (result.status === 'fulfilled') return result.value
-        // A rejected promise means the transport itself failed for this section.
-        return {
-          sectionKey: section,
-          status: 'error' as const,
-          payload: null,
-          generatedAt: null,
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        setSectionStatuses((prev) => ({ ...prev, [section]: result.status }))
+        if (result.status === 'complete' && result.payload) {
+          setSectionPayloads((prev) => ({ ...prev, [section]: result.payload }))
         }
-      })
-
-      setSectionStatuses(Object.fromEntries(statuses.map((status) => [status.sectionKey, status.status])))
-      setSectionPayloads((current) => {
-        const next = { ...current }
-        for (const status of statuses) {
-          if (status.status === 'complete' && status.payload) {
-            next[status.sectionKey] = status.payload
-          }
-        }
-        return next
-      })
-      const generated = statuses
-        .map((status) => status.generatedAt)
-        .filter((value): value is string => Boolean(value))
-        .sort()
-        .slice(-1)[0]
-      if (generated) setLatestGeneratedAt(generated)
-
-      // A section-level error should NOT collapse the entire view. Only set
-      // the global error if EVERY section failed with no successful payloads.
-      const terminal = statuses.every((status) => status.status === 'complete' || status.status === 'error')
-      const hasAnyPayload = statuses.some((status) => status.status === 'complete' && status.payload)
-      const allErrored = statuses.every((status) => status.status === 'error')
-      setLoading(!terminal && !hasAnyPayload)
-      if (allErrored && !hasAnyPayload) {
-        const firstError = statuses.find((s) => s.status === 'error' && (s as any).error)
-        setError((firstError as any)?.error ?? 'All analysis sections failed to load')
-      } else if (!allErrored) {
-        setError(null)
-      }
-      if (!terminal) {
-        pollTimer = window.setTimeout(() => {
-          pollSections().catch((e) => {
-            if (!cancelled) setError(e.message)
+        if (result.generatedAt) {
+          setLatestGeneratedAt((prev) => {
+            if (!prev || result.generatedAt! > prev) return result.generatedAt!
+            return prev
           })
-        }, 2000)
+        }
+
+        // Clear global error as soon as any section succeeds
+        if (result.status === 'complete' || (result.status === 'error' && result.payload)) {
+          setError(null)
+        }
+
+        // Re-poll this section independently if it's still pending/running
+        if (result.status === 'pending' || result.status === 'running' || result.status === 'missing') {
+          sectionTimers[section] = window.setTimeout(() => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          }, 2000)
+        }
+      } catch (err) {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
+        setSectionStatuses((prev) => ({ ...prev, [section]: 'error' }))
+        // Only set global error if NO section has data yet
+        setSectionPayloads((prev) => {
+          if (Object.keys(prev).length === 0) setError(message)
+          return prev
+        })
       }
     }
 
@@ -540,17 +519,50 @@ export default function AnalysisPage() {
           asOfDate,
           windowKey: analysisKey,
           sections: DETERMINISTIC_ANALYSIS_SECTIONS,
-        }).then(() => pollSections()).catch(() => pollSections())
+        }).then(() => {
+          // Fire each section poll independently — no Promise.all/allSettled.
+          // Each section updates its own state the moment it resolves.
+          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          })
+        }).catch(() => {
+          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          })
+        })
       })
       .catch(() => {
-        if (!cancelled) pollSections()
+        if (!cancelled) {
+          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          })
+        }
       })
 
+    // Stop loading as soon as the first section payload arrives — the
+    // loading gate is cleared in a separate effect below.
     return () => {
       cancelled = true
-      if (pollTimer !== undefined) window.clearTimeout(pollTimer)
+      for (const timer of Object.values(sectionTimers)) {
+        if (timer !== undefined) window.clearTimeout(timer)
+      }
     }
   }, [activeSection, analysisKey, analysisRefreshNonce, asOfDate])
+
+  // Clear the global loading spinner the moment ANY section payload arrives.
+  // Sections load independently — don't make the user stare at a spinner while
+  // some sections are already ready.
+  useEffect(() => {
+    if (activeSection === 'weekly' && loading && Object.keys(sectionPayloads).length > 0) {
+      setLoading(false)
+    }
+  }, [activeSection, loading, sectionPayloads])
 
   useEffect(() => {
     if (activeSection !== 'weekly') return

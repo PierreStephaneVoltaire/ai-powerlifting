@@ -156,6 +156,7 @@ export default function CompetitionsPage() {
   const rankingCountry = ranking_country
   const [selectedState, setSelectedState] = useState<string | null>(ranking_region)
   const [categories, setCategories] = useState<{ countries: string[]; country_regions: Record<string, string[]> } | null>(null)
+  const [datasetLoading, setDatasetLoading] = useState(false)
 
   const [showCompleteModal, setShowCompleteModal] = useState<string | null>(null)
   const [completeForm, setCompleteForm] = useState<{ body_weight_kg: number; report: PostMeetReport }>({
@@ -165,11 +166,24 @@ export default function CompetitionsPage() {
   const [drafts, setDrafts] = useState<Record<string, UserCompetitionUpdate>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadCategories = useCallback(() => {
     fetchStatCategories().then((data: any) => {
-      if (data && !data.error) setCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
-    }).catch(() => {})
+      if (!data) return
+      if (data._status === 503 || data.error === 'DATASET_NOT_FOUND') {
+        setDatasetLoading(true)
+        setTimeout(loadCategories, 30000)
+        return
+      }
+      setDatasetLoading(false)
+      if (!data.error) setCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
+    }).catch(() => {
+      setTimeout(loadCategories, 30000)
+    })
   }, [])
+
+  useEffect(() => {
+    loadCategories()
+  }, [loadCategories])
 
   useEffect(() => {
     if (authLoading) return
@@ -280,8 +294,9 @@ export default function CompetitionsPage() {
       <Paper withBorder p="md">
         <Group gap="md" align="flex-end">
           <TextInput label="Country" value={rankingCountry ?? ''} readOnly style={{ minWidth: 120 }} description="From your ranking settings" />
-          <Select label="State / Region" placeholder="Select state" data={stateOptions} value={selectedState} onChange={setSelectedState} style={{ minWidth: 180 }} searchable />
+          <Select label="State / Region" placeholder={datasetLoading ? 'Loading regions...' : 'Select state'} data={stateOptions} value={selectedState} onChange={setSelectedState} style={{ minWidth: 180 }} searchable disabled={datasetLoading} />
           <Button leftSection={<Search size={16} />} onClick={handleSearch} loading={isLoading}>Search</Button>
+          {datasetLoading && <Text size="xs" c="dimmed" style={{ alignSelf: 'center' }}>Ranking dataset loading...</Text>}
         </Group>
       </Paper>
 

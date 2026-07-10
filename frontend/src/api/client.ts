@@ -1,4 +1,12 @@
 import axios from 'axios'
+import {
+  cachedGet,
+  invalidateDomain,
+  invalidateDomains,
+  patchSessionInCachedProgram,
+  addSessionToCachedProgram,
+  removeSessionFromCachedProgram,
+} from './cache'
 import type {
   Program,
   ProgramListItem,
@@ -103,13 +111,13 @@ export async function initializeSetup(input: InitializeSetupInput): Promise<Init
 // ─── Programs ────────────────────────────────────────────────────────────────
 
 export async function fetchPrograms(): Promise<ProgramListItem[]> {
-  const res = await api.get<ApiResponse<ProgramListItem[]>>('/programs')
-  return res.data.data
+  const data = await cachedGet(api, '/programs', ['programs'])
+  return data.data
 }
 
 export async function fetchProgram(version: string): Promise<Program> {
-  const res = await api.get<ApiResponse<Program>>(`/programs/${version}`)
-  return res.data.data
+  const data = await cachedGet(api, `/programs/${version}`, [`program:${version}`, `sessions:${version}`])
+  return data.data
 }
 
 export async function updateMetaField(
@@ -118,6 +126,7 @@ export async function updateMetaField(
   value: unknown
 ): Promise<void> {
   await api.put(`/programs/${version}/meta`, { field, value })
+  await invalidateDomain(`program:${version}`)
 }
 
 export async function forkProgram(
@@ -141,7 +150,9 @@ export async function createSession(
     `/sessions/${version}`,
     session
   )
-  return res.data.data.session
+  const created = res.data.data.session
+  await addSessionToCachedProgram(`/programs/${version}`, created)
+  return created
 }
 
 export async function deleteSession(
@@ -150,6 +161,7 @@ export async function deleteSession(
   index: number
 ): Promise<void> {
   await api.delete(`/sessions/${version}/${date}/${index}`)
+  await removeSessionFromCachedProgram(`/programs/${version}`, date, index)
 }
 
 export async function fetchSession(
@@ -170,6 +182,7 @@ export async function updateSession(
   session: Session
 ): Promise<void> {
   await api.put(`/sessions/${version}/${date}/${index}`, session)
+  await patchSessionInCachedProgram(`/programs/${version}`, date, index, () => session)
 }
 
 export async function updatePlannedExercises(
@@ -179,6 +192,8 @@ export async function updatePlannedExercises(
   plannedExercises: PlannedExercise[]
 ): Promise<void> {
   await api.put(`/programs/${version}/designer/${date}/${index}/planned-exercises`, { planned_exercises: plannedExercises })
+  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
+    (s) => ({ ...s, planned_exercises: plannedExercises }))
 }
 
 export async function rescheduleSession(
@@ -192,6 +207,8 @@ export async function rescheduleSession(
     newDate,
     newDay,
   })
+  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
+    (s) => ({ ...s, date: newDate, day: newDay }))
 }
 
 export async function completeSession(
@@ -201,6 +218,15 @@ export async function completeSession(
   data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | null }
 ): Promise<void> {
   await api.patch(`/sessions/${version}/${date}/${index}/complete`, data)
+  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
+    (s) => ({
+      ...s,
+      completed: true,
+      session_rpe: data.rpe ?? s.session_rpe,
+      body_weight_kg: data.bodyWeightKg ?? s.body_weight_kg,
+      session_notes: data.notes ?? s.session_notes,
+      wellness: data.wellness ?? s.wellness,
+    }))
 }
 
 export async function draftSessionNotes(
@@ -253,6 +279,8 @@ export async function addExercise(
   exercise: Exercise
 ): Promise<void> {
   await api.post(`/sessions/${version}/${date}/${index}/exercise`, exercise)
+  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
+    (s) => ({ ...s, exercises: [...s.exercises, exercise] }))
 }
 
 export async function updateExerciseField(
@@ -267,6 +295,11 @@ export async function updateExerciseField(
     `/sessions/${version}/${date}/${index}/exercise/${exerciseIndex}`,
     { field, value }
   )
+  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
+    (s: any) => ({
+      ...s,
+      exercises: s.exercises.map((ex: any, i: number) => i === exerciseIndex ? { ...ex, [field]: value } : ex),
+    }))
 }
 
 export async function removeExercise(
@@ -276,6 +309,11 @@ export async function removeExercise(
   exerciseIndex: number
 ): Promise<void> {
   await api.delete(`/sessions/${version}/${date}/${index}/exercise/${exerciseIndex}`)
+  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
+    (s: any) => ({
+      ...s,
+      exercises: s.exercises.filter((_: any, i: number) => i !== exerciseIndex),
+    }))
 }
 
 // ─── Maxes ───────────────────────────────────────────────────────────────────
@@ -284,13 +322,8 @@ export async function fetchMaxes(version: string): Promise<{
   targets: { squat_kg: number; bench_kg: number; deadlift_kg: number; total_kg: number }
   history: MaxEntry[]
 }> {
-  const res = await api.get<
-    ApiResponse<{
-      targets: { squat_kg: number; bench_kg: number; deadlift_kg: number; total_kg: number }
-      history: MaxEntry[]
-    }>
-  >(`/maxes/${version}`)
-  return res.data.data
+  const data = await cachedGet(api, `/maxes/${version}`, [`maxes:${version}`])
+  return data.data
 }
 
 export async function updateTargetMaxes(
@@ -298,6 +331,7 @@ export async function updateTargetMaxes(
   maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number }
 ): Promise<void> {
   await api.put(`/maxes/${version}`, maxes)
+  await invalidateDomains([`maxes:${version}`, `program:${version}`])
 }
 
 export async function updateBodyWeight(
@@ -305,6 +339,7 @@ export async function updateBodyWeight(
   weightKg: number
 ): Promise<void> {
   await api.put(`/programs/${version}/body-weight`, { weightKg })
+  await invalidateDomains([`program:${version}`, `weight-log:${version}`])
 }
 
 export async function updatePhases(
@@ -315,6 +350,7 @@ export async function updatePhases(
   const body: { phases: Phase[]; block?: string } = { phases }
   if (block !== undefined) body.block = block
   await api.put(`/programs/${version}/phases`, body)
+  await invalidateDomain(`program:${version}`)
 }
 
 export async function addMaxEntry(
@@ -322,6 +358,7 @@ export async function addMaxEntry(
   entry: MaxEntry
 ): Promise<void> {
   await api.post(`/maxes/${version}/history`, entry)
+  await invalidateDomain(`maxes:${version}`)
 }
 
 // ─── Weight Log ──────────────────────────────────────────────────────────────
@@ -329,10 +366,8 @@ export async function addMaxEntry(
 export async function fetchWeightLog(
   version: string
 ): Promise<WeightEntry[]> {
-  const res = await api.get<ApiResponse<{ entries: WeightEntry[] }>>(
-    `/weight/${version}`
-  )
-  return res.data.data.entries
+  const data = await cachedGet(api, `/weight/${version}`, [`weight-log:${version}`])
+  return data.data.entries
 }
 
 export async function addWeightEntry(
@@ -340,6 +375,7 @@ export async function addWeightEntry(
   entry: WeightEntry
 ): Promise<void> {
   await api.post(`/weight/${version}`, entry)
+  await invalidateDomain(`weight-log:${version}`)
 }
 
 export async function removeWeightEntry(
@@ -347,13 +383,14 @@ export async function removeWeightEntry(
   date: string
 ): Promise<void> {
   await api.delete(`/weight/${version}/${date}`)
+  await invalidateDomain(`weight-log:${version}`)
 }
 
 // ─── Exercises (Glossary) ────────────────────────────────────────────────────
 
 export async function fetchGlossary(): Promise<GlossaryExercise[]> {
-  const res = await api.get<ApiResponse<GlossaryExercise[]>>('/exercises')
-  return res.data.data
+  const data = await cachedGet(api, '/exercises', ['glossary'])
+  return data.data
 }
 
 export async function searchExercises(query: string): Promise<GlossaryExercise[]> {
@@ -371,10 +408,12 @@ export async function upsertExercise(
   } else {
     await api.post('/exercises', exercise)
   }
+  await invalidateDomain('glossary')
 }
 
 export async function deleteExercise(exerciseId: string): Promise<void> {
   await api.delete(`/exercises/${exerciseId}`)
+  await invalidateDomain('glossary')
 }
 
 // ─── Supplements ──────────────────────────────────────────────────────────────
@@ -382,8 +421,8 @@ export async function deleteExercise(exerciseId: string): Promise<void> {
 export async function fetchSupplementPhases(
   version: string
 ): Promise<SupplementPhase[]> {
-  const res = await api.get<ApiResponse<SupplementPhase[]>>(`/supplements/${version}`)
-  return res.data.data
+  const data = await cachedGet(api, `/supplements/${version}`, [`supplements:${version}`])
+  return data.data
 }
 
 export async function updateSupplementPhases(
@@ -391,13 +430,14 @@ export async function updateSupplementPhases(
   phases: SupplementPhase[]
 ): Promise<void> {
   await api.put(`/supplements/${version}`, { phases })
+  await invalidateDomain(`supplements:${version}`)
 }
 
 // ─── Diet Notes ───────────────────────────────────────────────────────────────
 
 export async function fetchDietNotes(version: string): Promise<DietNote[]> {
-  const res = await api.get<ApiResponse<DietNote[]>>(`/diet-notes/${version}`)
-  return res.data.data
+  const data = await cachedGet(api, `/diet-notes/${version}`, [`diet-notes:${version}`])
+  return data.data
 }
 
 export async function updateDietNotes(
@@ -405,13 +445,14 @@ export async function updateDietNotes(
   dietNotes: DietNote[]
 ): Promise<void> {
   await api.put(`/diet-notes/${version}`, { dietNotes })
+  await invalidateDomain(`diet-notes:${version}`)
 }
 
 // ─── Block Notes ───────────────────────────────────────────────────────────────
 
 export async function fetchBlockNotes(version: string): Promise<BlockNote[]> {
-  const res = await api.get<ApiResponse<BlockNote[]>>(`/block-notes/${version}`)
-  return res.data.data
+  const data = await cachedGet(api, `/block-notes/${version}`, [`block-notes:${version}`])
+  return data.data
 }
 
 export async function updateBlockNotes(
@@ -419,38 +460,41 @@ export async function updateBlockNotes(
   blockNotes: BlockNote[]
 ): Promise<void> {
   await api.put(`/block-notes/${version}`, { blockNotes })
+  await invalidateDomain(`block-notes:${version}`)
 }
 
 // ─── Goals ───────────────────────────────────────────────────────────────────
 
 export async function fetchGoals(): Promise<AthleteGoal[]> {
-  const res = await api.get<ApiResponse<AthleteGoal[]>>(`/goals`)
-  return res.data.data
+  const data = await cachedGet(api, '/goals', ['goals'])
+  return data.data
 }
 
 export async function updateGoals(goals: AthleteGoal[]): Promise<void> {
   await api.put(`/goals`, { goals })
+  await invalidateDomains(['goals', 'program:current'])
 }
 
 // ─── Federations ─────────────────────────────────────────────────────────────
 
 export async function fetchFederationLibrary(): Promise<FederationLibrary> {
-  const res = await api.get<ApiResponse<FederationLibrary>>('/federations')
-  return res.data.data
+  const data = await cachedGet(api, '/federations', ['federations'])
+  return data.data
 }
 
 export async function updateFederationLibrary(
   library: FederationLibrary,
 ): Promise<FederationLibrary> {
   const res = await api.put<ApiResponse<FederationLibrary>>('/federations', { library })
+  await invalidateDomain('federations')
   return res.data.data
 }
 
 // ─── Competitions ─────────────────────────────────────────────────────────────
 
 export async function fetchCompetitions(version: string): Promise<Competition[]> {
-  const res = await api.get<ApiResponse<Competition[]>>(`/competitions/${version}`)
-  return res.data.data
+  const data = await cachedGet(api, `/competitions/${version}`, [`competitions:${version}`])
+  return data.data
 }
 
 export async function fetchUserCompetitions(filters?: { country?: string; state?: string }): Promise<UserCompetition[]> {
@@ -458,8 +502,8 @@ export async function fetchUserCompetitions(filters?: { country?: string; state?
   if (filters?.country) params.set('country', filters.country)
   if (filters?.state) params.set('state', filters.state)
   const qs = params.toString()
-  const res = await api.get<ApiResponse<UserCompetition[]>>(`/competitions${qs ? `?${qs}` : ''}`)
-  return res.data.data
+  const data = await cachedGet(api, `/competitions${qs ? `?${qs}` : ''}`, ['competitions'])
+  return data.data
 }
 
 export async function patchUserCompetition(
@@ -467,6 +511,7 @@ export async function patchUserCompetition(
   updates: UserCompetitionUpdate,
 ): Promise<void> {
   await api.patch(`/competitions/${masterId}`, updates)
+  await invalidateDomain('competitions')
 }
 
 export async function completeUserCompetition(
@@ -476,6 +521,7 @@ export async function completeUserCompetition(
   postMeetReport?: PostMeetReport,
 ): Promise<void> {
   await api.post(`/competitions/${masterId}/complete`, { results, bodyWeightKg, postMeetReport })
+  await invalidateDomain('competitions')
 }
 
 export async function updateCompetitions(
@@ -483,10 +529,12 @@ export async function updateCompetitions(
   competitions: Competition[]
 ): Promise<void> {
   await api.put(`/competitions/${version}`, { competitions })
+  await invalidateDomain(`competitions:${version}`)
 }
 
 export async function migrateLastComp(version: string): Promise<Competition[]> {
   const res = await api.post<ApiResponse<Competition[]>>(`/competitions/${version}/migrate`)
+  await invalidateDomain(`competitions:${version}`)
   return res.data.data
 }
 
@@ -501,6 +549,7 @@ export async function completeCompetition(
     `/competitions/${version}/${date}/complete`,
     { results, bodyWeightKg, postMeetReport }
   )
+  await invalidateDomain(`competitions:${version}`)
   return res.data.data
 }
 
@@ -508,8 +557,8 @@ export async function fetchFederations(filters?: { country?: string }): Promise<
   const params = new URLSearchParams()
   if (filters?.country) params.set('country', filters.country)
   const qs = params.toString()
-  const res = await api.get<ApiResponse<MasterFederation[]>>(`/federations${qs ? `?${qs}` : ''}`)
-  return res.data.data
+  const data = await cachedGet(api, `/federations${qs ? `?${qs}` : ''}`, ['federations:master'])
+  return data.data
 }
 
 export type FederationUpdatePayload = {
@@ -529,6 +578,7 @@ export async function updateFederation(
   updates: FederationUpdatePayload,
 ): Promise<void> {
   await api.put(`/federations/${masterId}`, updates)
+  await invalidateDomain('federations:master')
 }
 
 // ─── Videos ───────────────────────────────────────────────────────────────────
@@ -637,6 +687,7 @@ export async function updateLiftProfiles(
   liftProfiles: LiftProfile[]
 ): Promise<void> {
   await api.put(`/programs/${version}/lift-profiles`, { liftProfiles })
+  await invalidateDomain(`program:${version}`)
 }
 
 export async function reviewLiftProfile(profile: LiftProfile): Promise<LiftProfileReview> {
@@ -945,8 +996,24 @@ export async function estimateExerciseMuscles(id: string): Promise<any> {
 // ─── Stats ───────────────────────────────────────────────────────────────────
 
 export async function fetchStatCategories(): Promise<any> {
-  const res = await api.get('/stats/categories')
-  return res.data
+  // The backend returns 503 while the OpenPowerlifting dataset is still
+  // loading, with a JSON body { error: 'DATASET_NOT_FOUND', message: ... }.
+  // Axios throws on non-2xx, so we catch and return the structured body so
+  // callers can distinguish "dataset loading" from a real transport failure.
+  try {
+    const res = await api.get('/stats/categories')
+    return res.data
+  } catch (err: any) {
+    const status = err?.response?.status
+    const body = err?.response?.data
+    if (status === 503 && body) {
+      return { ...body, _status: 503 }
+    }
+    if (status === 404 && body) {
+      return { ...body, _status: 404 }
+    }
+    throw err
+  }
 }
 
 export async function analyzeStats(payload: any): Promise<any> {
@@ -996,20 +1063,22 @@ export async function fetchRankingPercentile(params: RankingPercentileParams): P
       query.set(key, String(value))
     }
   }
-  const res = await api.get<RankingPercentileResult>(`/stats/ranking_percentile?${query.toString()}`)
-  return res.data
+  const url = `/stats/ranking_percentile?${query.toString()}`
+  const data = await cachedGet(api, url, ['stats:percentile'])
+  return data.data
 }
 
 
 // ─── Budget ───────────────────────────────────────────────────────────────────
 
 export async function fetchBudget(): Promise<BudgetStore> {
-  const res = await api.get<ApiResponse<BudgetStore>>('/budget')
-  return res.data.data
+  const data = await cachedGet(api, '/budget', ['budget'])
+  return data.data
 }
 
 export async function putBudget(store: { config: BudgetConfig; items: BudgetItem[] }): Promise<void> {
   await api.put('/budget', store)
+  await invalidateDomain('budget')
 }
 
 export async function uploadBudgetItemPhoto(itemId: string, file: File): Promise<{ photo_s3_key: string }> {
@@ -1042,6 +1111,7 @@ export async function fetchBudgetAiAnalysis(refresh = false): Promise<BudgetAiAn
 
 export async function markBudgetItemCut(id: string, cut: boolean): Promise<BudgetItem> {
   const res = await api.patch<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}/cut`, { cut })
+  await invalidateDomain('budget')
   return res.data.data
 }
 
@@ -1061,16 +1131,19 @@ export async function fetchBudgetItems(params?: {
 
 export async function createBudgetItem(item: BudgetItem): Promise<BudgetItem> {
   const res = await api.post<ApiResponse<BudgetItem>>('/budget/items', item)
+  await invalidateDomain('budget')
   return res.data.data
 }
 
 export async function updateBudgetItem(id: string, patch: Partial<BudgetItem>): Promise<BudgetItem> {
   const res = await api.put<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}`, patch)
+  await invalidateDomain('budget')
   return res.data.data
 }
 
 export async function deleteBudgetItem(id: string): Promise<void> {
   await api.delete(`/budget/items/${encodeURIComponent(id)}`)
+  await invalidateDomain('budget')
 }
 
 export default api

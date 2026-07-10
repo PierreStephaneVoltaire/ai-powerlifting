@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { cachedGet, invalidateDomain, invalidateDomains } from './cache'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -26,12 +27,13 @@ export interface UserSettings {
 }
 
 export async function getSettings(): Promise<UserSettings> {
-  const res = await api.get<{ data: UserSettings }>('/settings')
-  return res.data.data
+  const data = await cachedGet(api, '/settings', ['settings'])
+  return data.data
 }
 
 export async function updateNickname(nickname: string): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/nickname', { nickname })
+  await invalidateDomains(['settings', 'profile:current'])
   return res.data.data
 }
 
@@ -42,6 +44,7 @@ export async function updateProfile(input: {
   public_training_summary_enabled?: boolean
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/profile', input)
+  await invalidateDomains(['settings', 'profile:current'])
   return res.data.data
 }
 
@@ -72,6 +75,7 @@ export async function uploadProfileAvatar(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText)
+          invalidateDomains(['settings', 'profile:current'])
           resolve(response.data)
         } catch {
           reject(new Error('Invalid response from server'))
@@ -102,6 +106,7 @@ export async function updateRankingLocation(input: {
   ranking_region: string | null
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/ranking-location', input)
+  await invalidateDomains(['settings', 'stats:percentile'])
   return res.data.data
 }
 
@@ -109,5 +114,6 @@ export async function updateAgeClass(input: {
   age_class: UserSettings['age_class'] | null
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/age-class', input)
+  await invalidateDomains(['settings', 'stats:percentile'])
   return res.data.data
 }
