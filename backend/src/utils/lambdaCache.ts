@@ -12,13 +12,7 @@ type CacheEntry = { value: unknown; expires: number }
 const cache = new Map<string, CacheEntry>()
 
 export const MATH_TOOLS = new Set<string>([
-  'kg_to_lb',
-  'lb_to_kg',
-  'ipf_weight_classes',
-  'pct_of_max',
-  'days_until',
-  'estimate_1rm',
-  'calculate_dots',
+  'pod_calc',
   'calculate_attempts',
   'analyze_progression',
   'analyze_rpe_drift',

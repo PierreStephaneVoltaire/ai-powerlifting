@@ -1,0 +1,145 @@
+layers: []
+min_replicas: 1
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+timeout: 900
+description: Stateless powerlifting calculation pod. Handles unit conversions (kg_to_lb,
+  lb_to_kg), percentage of max (pct_of_max), IPF weight classes (ipf_weight_classes),
+  DOTS score (calculate_dots), 1RM estimation (estimate_1rm), and days-until countdown
+  (days_until). Pass the operation name in the "function" field and all operation arguments
+  as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - lb_to_kg
+      - kg_to_lb
+      - pct_of_max
+      - ipf_weight_classes
+      - calculate_dots
+      - estimate_1rm
+      - days_until
+    lb: &id001
+      type: number
+      description: Weight in pounds.
+    kg: &id002
+      type: number
+      description: Weight in kilograms.
+    max_kg: &id003
+      type: number
+      description: Maximum weight in kilograms.
+    pct: &id004
+      type: number
+      description: Percentage to calculate (0-150, not 0-1).
+    sex: &id005
+      type: string
+      description: "Sex identifier: 'M' or 'F' for ipf_weight_classes; 'male' or 'female'
+        for calculate_dots."
+    total_kg: &id006
+      type: number
+      description: Combined squat + bench + deadlift total in kilograms.
+    bodyweight_kg: &id007
+      type: number
+      description: Lifter bodyweight in kilograms.
+    weight_kg: &id008
+      type: number
+      description: Weight lifted in kilograms.
+    reps: &id009
+      type: integer
+      description: Number of repetitions performed.
+    rpe: &id010
+      type: integer
+      description: RPE of the set (6-10). Optional; omit to use the conservative rep-percentage
+        method.
+    target_date: &id011
+      type: string
+      description: Target date as ISO-8601 (YYYY-MM-DD).
+    label: &id012
+      type: string
+      description: Human label for the milestone (e.g., "comp", "deload start"). Defaults
+        to "target".
+  required:
+  - function
+operations:
+  lb_to_kg:
+    description: Convert pounds to kilograms. Returns the input lb value and the rounded
+      kg equivalent.
+    input_schema:
+      type: object
+      properties:
+        lb: *id001
+      required:
+      - lb
+  kg_to_lb:
+    description: Convert kilograms to pounds. Returns the input kg value and the rounded
+      lb equivalent.
+    input_schema:
+      type: object
+      properties:
+        kg: *id002
+      required:
+      - kg
+  pct_of_max:
+    description: Calculate a percentage of a max weight. Returns the raw kg value, the
+      value rounded to the nearest 2.5 kg plate, and the lb equivalent.
+    input_schema:
+      type: object
+      properties:
+        max_kg: *id003
+        pct: *id004
+      required:
+      - max_kg
+      - pct
+  ipf_weight_classes:
+    description: Get IPF weight classes for a given sex. Returns the sex, class cutoffs
+      in kg, and the operator's configured weight class if available.
+    input_schema:
+      type: object
+      properties:
+        sex: *id005
+      required:
+      - sex
+  calculate_dots:
+    description: Calculate the DOTS score from a competition total, bodyweight, and sex.
+      Returns the raw dots value.
+    input_schema:
+      type: object
+      properties:
+        total_kg: *id006
+        bodyweight_kg: *id007
+        sex: *id005
+      required:
+      - total_kg
+      - bodyweight_kg
+      - sex
+  estimate_1rm:
+    description: Estimate one-rep max using Epley, Brzycki, and RPE-based formulas. Provide
+      weight_kg and reps; rpe is optional. Returns the estimated e1rm and the method used.
+    input_schema:
+      type: object
+      properties:
+        weight_kg: *id008
+        reps: *id009
+        rpe: *id010
+      required:
+      - weight_kg
+      - reps
+  days_until:
+    description: Calculate days until a target date. Returns the label, target date, today's
+      date, days remaining, weeks remaining, and whether the date is in the past.
+    input_schema:
+      type: object
+      properties:
+        target_date: *id011
+        label: *id012
+      required:
+      - target_date
