@@ -29,6 +29,10 @@ _ROUTING = {
     "settings_update_nickname": "settings_update_nickname",
     "settings_update_profile": "settings_update_profile",
     "settings_update_ranking_location": "settings_update_ranking_location",
+    "settings_tag_add": "settings_tag_add",
+    "settings_tag_remove": "settings_tag_remove",
+    "settings_tag_approve": "settings_tag_approve",
+    "settings_tag_propose": "settings_tag_propose",
 }
 
 

@@ -44,6 +44,13 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
             {profile.federation || 'Federation unset'} - {profile.weight_class_kg || '--'} kg
           </Text>
         )}
+        {(profile.tags || []).length > 0 && (
+          <Group gap={4} wrap="wrap">
+            {profile.tags.map((tag) => (
+              <Badge key={tag} variant="light" size="xs">{tag}</Badge>
+            ))}
+          </Group>
+        )}
         <Group gap="xs">
           <span className={`if-pill ${profile.profile_visibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
             {profile.profile_visibility}
@@ -225,6 +232,13 @@ export function PublicProfilePage() {
                   {profile.federation || 'Federation unset'} - {profile.weight_class_kg || '--'} kg
                   {profile.practicing_for ? ` - ${profile.practicing_for}` : ''}
                 </Text>
+                {(profile.tags || []).length > 0 && (
+                  <Group gap={4} wrap="wrap">
+                    {profile.tags.map((tag) => (
+                      <Badge key={tag} variant="light" size="sm">{tag}</Badge>
+                    ))}
+                  </Group>
+                )}
               </Stack>
             </Group>
             {profile.is_self && (

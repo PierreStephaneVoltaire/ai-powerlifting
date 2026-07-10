@@ -35,7 +35,7 @@ def _get_table():
         region = os.environ.get("AWS_REGION", "ca-central-1")
         table_name = os.environ.get("IF_USER_TABLE", "if-user")
         _table = boto3.resource("dynamodb", region_name=region).Table(table_name)
-        logger.info("[ProfileTools] User table initialised: %s", table_name)
+        logger.info("[SettingsTools] User table initialised: %s", table_name)
     return _table
 
 
@@ -119,80 +119,40 @@ def _normalize_settings(raw: dict) -> dict:
     return settings
 
 
-def _is_self(settings: dict, viewer_username: Optional[str]) -> bool:
-    viewer_key = _sanitize_username(viewer_username) if viewer_username else ""
-    return bool(viewer_key and viewer_key == (settings.get("username") or ""))
+def _get_existing_sync(table, discord_username: str) -> Optional[dict]:
+    key = _sanitize_username(discord_username)
+    resp = table.get_item(Key={"pk": key})
+    item = resp.get("Item")
+    if not item:
+        return None
+    return _normalize_settings(_sanitize_decimals(item))
 
 
-def _can_view(settings: dict, viewer_username: Optional[str]) -> bool:
-    return settings.get("profile_visibility") == "public" or _is_self(settings, viewer_username)
-
-
-def _public_profile(settings: dict, viewer_username: Optional[str]) -> dict:
-    return {
-        "nickname": settings.get("nickname"),
-        "display_name": settings.get("display_name"),
-        "avatar_url": settings.get("avatar_url"),
-        "bio": settings.get("bio"),
-        "profile_visibility": settings.get("profile_visibility"),
-        "public_training_summary_enabled": settings.get("public_training_summary_enabled"),
-        "is_self": _is_self(settings, viewer_username),
-        "tags": [t["tag"] for t in (settings.get("tags") or []) if t.get("approved")],
-    }
-
-
-def _scan_settings_sync(table) -> list[dict]:
-    settings_list: list[dict] = []
-    last_key = None
-    while True:
-        kwargs = {}
-        if last_key:
-            kwargs["ExclusiveStartKey"] = last_key
-        resp = table.scan(**kwargs)
-        for item in resp.get("Items") or []:
-            settings_list.append(_normalize_settings(_sanitize_decimals(item)))
-        last_key = resp.get("LastEvaluatedKey")
-        if not last_key:
-            break
-    return settings_list
-
-
-async def profile_search(args: dict) -> dict:
-    """Search public profiles by substring across nickname/display_name/bio.
+async def settings_tag_remove(args: dict) -> dict:
+    """Remove a tag from the athlete's own profile.
 
     Args:
-        args: dict with optional `query` (substring) and `viewer_username`
-              (the requesting user, used to include private self profiles).
+        args: dict with required `username` (discord username) and `tag` (string).
     """
     table = _get_table()
-    query = (args.get("query") or "").strip().lower()
-    viewer_username = args.get("viewer_username")
+    username = args.get("username") or ""
+    tag = _normalize_tag(args.get("tag"))
+    if not tag:
+        raise ValueError("Invalid tag")
 
     def _sync():
-        all_settings = _scan_settings_sync(table)
-        results = []
-        for settings in all_settings:
-            if not _can_view(settings, viewer_username):
-                continue
-            if not query:
-                results.append(settings)
-                continue
-            haystack = [
-                settings.get("nickname") or "",
-                settings.get("display_name") or "",
-                settings.get("discord_username") or "",
-                settings.get("bio") or "",
-            ]
-            approved_tags = [
-                t.get("tag", "")
-                for t in (settings.get("tags") or [])
-                if t.get("approved")
-            ]
-            haystack.extend(approved_tags)
-            if any(query in str(v).lower() for v in haystack):
-                results.append(settings)
-        results.sort(key=lambda s: str(s.get("display_name") or "").lower())
-        return [_public_profile(s, viewer_username) for s in results[:50]]
+        existing = _get_existing_sync(table, username)
+        if not existing:
+            raise ValueError("Settings not found")
+        tags = [t for t in (existing.get("tags") or []) if t.get("tag") != tag]
+        now = datetime.now(timezone.utc).isoformat()
+        table.update_item(
+            Key={"pk": existing["pk"]},
+            UpdateExpression="SET tags = :tags, updated_at = :now",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeValues={":tags": tags, ":now": now},
+        )
+        updated = _get_existing_sync(table, username)
+        return updated or existing
 
-    profiles = await asyncio.get_running_loop().run_in_executor(None, _sync)
-    return {"profiles": profiles}
+    return await asyncio.get_running_loop().run_in_executor(None, _sync)

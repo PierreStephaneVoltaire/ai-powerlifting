@@ -14,6 +14,12 @@ const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
 
 export type ProfileVisibility = 'private' | 'public'
 
+export interface ProfileTag {
+  tag: string
+  approved: boolean
+  proposed_by: string
+}
+
 export interface UserSettings {
   pk: string
   mapped_pk?: string
@@ -29,6 +35,7 @@ export interface UserSettings {
   ranking_country: string | null
   ranking_region: string | null
   age_class: AgeCategory
+  tags: ProfileTag[]
   created_at: string
   updated_at: string
 }
@@ -41,6 +48,7 @@ export interface PublicProfile {
   profile_visibility: ProfileVisibility
   public_training_summary_enabled: boolean
   is_self: boolean
+  tags: string[]
 }
 
 const CACHE_TTL_MS = 60_000
@@ -95,6 +103,41 @@ function normalizeAgeClass(value: unknown): AgeCategory {
     : 'open'
 }
 
+const TAG_RE = /^[a-z0-9_-]{1,30}$/
+const MAX_TAGS = 20
+
+function normalizeTag(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const tag = raw.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30)
+  return TAG_RE.test(tag) ? tag : null
+}
+
+function normalizeTags(raw: unknown): ProfileTag[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const result: ProfileTag[] = []
+  for (const item of raw) {
+    let tag: string | null
+    let approved: boolean
+    let proposedBy: string
+    if (typeof item === 'object' && item !== null) {
+      tag = normalizeTag((item as Record<string, unknown>).tag)
+      approved = Boolean((item as Record<string, unknown>).approved)
+      proposedBy = String((item as Record<string, unknown>).proposed_by || '')
+    } else if (typeof item === 'string') {
+      tag = normalizeTag(item)
+      approved = true
+      proposedBy = ''
+    } else {
+      continue
+    }
+    if (!tag || seen.has(tag)) continue
+    seen.add(tag)
+    result.push({ tag, approved, proposed_by: proposedBy })
+  }
+  return result.slice(0, MAX_TAGS)
+}
+
 function normalizeSettings(raw: Record<string, unknown>): UserSettings {
   const discordUsername = String(raw.discord_username || raw.username || '')
   const username = usernameKey(String(raw.username || discordUsername || raw.nickname || 'user'))
@@ -116,6 +159,7 @@ function normalizeSettings(raw: Record<string, unknown>): UserSettings {
     ranking_country: typeof raw.ranking_country === 'string' ? raw.ranking_country : null,
     ranking_region: typeof raw.ranking_region === 'string' ? raw.ranking_region : null,
     age_class: normalizeAgeClass(raw.age_class),
+    tags: normalizeTags(raw.tags),
     created_at: String(raw.created_at || new Date().toISOString()),
     updated_at: String(raw.updated_at || new Date().toISOString()),
   }
@@ -139,6 +183,7 @@ export function publicProfile(settings: UserSettings, viewerUsername?: string): 
     profile_visibility: settings.profile_visibility,
     public_training_summary_enabled: settings.public_training_summary_enabled,
     is_self: isSelfProfile(settings, viewerUsername),
+    tags: (settings.tags || []).filter((t) => t.approved).map((t) => t.tag),
   }
 }
 
@@ -226,6 +271,50 @@ export async function updateAgeClass(
     age_class: input.age_class,
   })
   invalidateCache(discordUsername)
+  return normalizeSettings(result as Record<string, unknown>)
+}
+
+// ─── Tags (FEAT-8) ──────────────────────────────────────────────────────────
+// The backend is a thin middleman: each operation delegates to the `pod_user`
+// Fission function and busts the in-memory settings cache on success.
+
+export async function addTag(discordUsername: string, tag: string): Promise<UserSettings> {
+  const result = await invokeLambda('pod_user', { function: 'settings_tag_add',
+    username: discordUsername,
+    tag,
+  })
+  invalidateCache(discordUsername)
+  return normalizeSettings(result as Record<string, unknown>)
+}
+
+export async function removeTag(discordUsername: string, tag: string): Promise<UserSettings> {
+  const result = await invokeLambda('pod_user', { function: 'settings_tag_remove',
+    username: discordUsername,
+    tag,
+  })
+  invalidateCache(discordUsername)
+  return normalizeSettings(result as Record<string, unknown>)
+}
+
+export async function approveTag(discordUsername: string, tag: string): Promise<UserSettings> {
+  const result = await invokeLambda('pod_user', { function: 'settings_tag_approve',
+    username: discordUsername,
+    tag,
+  })
+  invalidateCache(discordUsername)
+  return normalizeSettings(result as Record<string, unknown>)
+}
+
+export async function proposeTag(
+  proposerUsername: string,
+  targetNickname: string,
+  tag: string,
+): Promise<UserSettings> {
+  const result = await invokeLambda('pod_user', { function: 'settings_tag_propose',
+    proposed_by: proposerUsername,
+    target_nickname: targetNickname,
+    tag,
+  })
   return normalizeSettings(result as Record<string, unknown>)
 }
 

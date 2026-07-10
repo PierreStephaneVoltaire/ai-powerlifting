@@ -16,6 +16,7 @@ export interface PublicProfile {
   profile_visibility: 'private' | 'public'
   public_training_summary_enabled: boolean
   is_self: boolean
+  tags: string[]
   federation?: string | null
   weight_class_kg?: number | null
   practicing_for?: string | null

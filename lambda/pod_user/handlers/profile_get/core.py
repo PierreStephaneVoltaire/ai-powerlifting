@@ -27,6 +27,9 @@ AGE_CATEGORY_VALUES = (
     "master3",
     "master4",
 )
+MAX_TAGS = 20
+MAX_TAG_LENGTH = 30
+TAG_RE = re.compile(r"^[a-z0-9_-]{1,30}$")
 DOTS_COEFFICIENTS = {
     "male": {"a": -307.75076, "b": 24.0900756, "c": -0.1918759221, "d": 0.0007391293, "e": -0.000001093},
     "female": {"a": -57.96288, "b": 13.6175032, "c": -0.1126655495, "d": 0.0005158568, "e": -0.0000010706},
@@ -78,6 +81,34 @@ def _sanitize_decimals(obj):
     return obj
 
 
+def _normalize_tag(raw) -> Optional[str]:
+    tag = str(raw or "").strip().lower().replace(" ", "-")[:MAX_TAG_LENGTH]
+    return tag if TAG_RE.match(tag) else None
+
+
+def _normalize_tags(raw_tags) -> list[dict]:
+    if not isinstance(raw_tags, list):
+        return []
+    seen = set()
+    result = []
+    for item in raw_tags:
+        if isinstance(item, dict):
+            tag = _normalize_tag(item.get("tag"))
+            approved = bool(item.get("approved"))
+            proposed_by = str(item.get("proposed_by") or "")
+        elif isinstance(item, str):
+            tag = _normalize_tag(item)
+            approved = True
+            proposed_by = ""
+        else:
+            continue
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        result.append({"tag": tag, "approved": approved, "proposed_by": proposed_by})
+    return result[:MAX_TAGS]
+
+
 def _normalize_settings(raw: dict) -> dict:
     discord_username = str(raw.get("discord_username") or raw.get("username") or "")
     username = _sanitize_username(str(raw.get("username") or discord_username or raw.get("nickname") or "user"))
@@ -106,6 +137,7 @@ def _normalize_settings(raw: dict) -> dict:
             else None
         ),
         "age_class": raw.get("age_class") if raw.get("age_class") in AGE_CATEGORY_VALUES else "open",
+        "tags": _normalize_tags(raw.get("tags")),
         "created_at": str(raw.get("created_at") or datetime.now(timezone.utc).isoformat()),
         "updated_at": str(raw.get("updated_at") or datetime.now(timezone.utc).isoformat()),
     }
@@ -136,6 +168,7 @@ def _public_profile(settings: dict, viewer_username: Optional[str]) -> dict:
         "profile_visibility": settings.get("profile_visibility"),
         "public_training_summary_enabled": settings.get("public_training_summary_enabled"),
         "is_self": _is_self(settings, viewer_username),
+        "tags": [t["tag"] for t in (settings.get("tags") or []) if t.get("approved")],
     }
 
 

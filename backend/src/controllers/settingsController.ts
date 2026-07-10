@@ -6,6 +6,10 @@ import {
   updateProfile,
   updateRankingLocation,
   updateAgeClass,
+  addTag,
+  removeTag,
+  approveTag,
+  proposeTag,
   validateNickname,
   invalidateCache,
   type ProfileVisibility,
@@ -38,6 +42,7 @@ export async function getSettingsHandler(req: Request, res: Response): Promise<v
           ranking_country: null,
           ranking_region: null,
           age_class: 'open',
+          tags: [],
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -129,6 +134,79 @@ export async function updateAgeClassHandler(req: Request, res: Response): Promis
   const settings = await updateAgeClass(req.user.username, {
     age_class: typeof age_class === 'string' ? (age_class as never) : null,
   })
+  res.json({ data: settings })
+}
+
+// ─── Tag handlers (FEAT-8) ──────────────────────────────────────────────────
+
+const TAG_RE = /^[a-z0-9_-]{1,30}$/
+
+function normalizeTagInput(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const tag = raw.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30)
+  return TAG_RE.test(tag) ? tag : null
+}
+
+export async function addTagHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user) {
+    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
+  }
+
+  const tag = normalizeTagInput(req.body?.tag)
+  if (!tag) {
+    throw new AppError('Invalid tag: must be 1-30 chars, lowercase alphanumeric, hyphens, underscores only', 400)
+  }
+
+  const settings = await addTag(req.user.username, tag)
+  invalidateCache(req.user.username)
+  res.json({ data: settings })
+}
+
+export async function removeTagHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user) {
+    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
+  }
+
+  const tag = normalizeTagInput(req.params.tag)
+  if (!tag) {
+    throw new AppError('Invalid tag', 400)
+  }
+
+  const settings = await removeTag(req.user.username, tag)
+  invalidateCache(req.user.username)
+  res.json({ data: settings })
+}
+
+export async function approveTagHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user) {
+    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
+  }
+
+  const tag = normalizeTagInput(req.params.tag)
+  if (!tag) {
+    throw new AppError('Invalid tag', 400)
+  }
+
+  const settings = await approveTag(req.user.username, tag)
+  invalidateCache(req.user.username)
+  res.json({ data: settings })
+}
+
+export async function proposeTagHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user) {
+    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
+  }
+
+  const { target_nickname, tag } = req.body ?? {}
+  if (typeof target_nickname !== 'string' || !validateNickname(target_nickname)) {
+    throw new AppError('Invalid target_nickname', 400)
+  }
+  const normalizedTag = normalizeTagInput(tag)
+  if (!normalizedTag) {
+    throw new AppError('Invalid tag: must be 1-30 chars, lowercase alphanumeric, hyphens, underscores only', 400)
+  }
+
+  const settings = await proposeTag(req.user.username, target_nickname, normalizedTag)
   res.json({ data: settings })
 }
 

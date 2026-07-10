@@ -8,6 +8,12 @@ const api = axios.create({
 })
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
+export interface ProfileTag {
+  tag: string
+  approved: boolean
+  proposed_by: string
+}
+
 export interface UserSettings {
   pk: string
   mapped_pk?: string
@@ -22,6 +28,7 @@ export interface UserSettings {
   ranking_country: string | null
   ranking_region: string | null
   age_class: 'open' | 'subjunior' | 'junior' | 'master1' | 'master2' | 'master3' | 'master4'
+  tags: ProfileTag[]
   created_at: string
   updated_at: string
 }
@@ -115,5 +122,34 @@ export async function updateAgeClass(input: {
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/age-class', input)
   await invalidateDomains(['settings', 'stats:percentile'])
+  return res.data.data
+}
+
+// ─── Tags (FEAT-8) ──────────────────────────────────────────────────────────
+
+export async function addTag(tag: string): Promise<UserSettings> {
+  const res = await api.post<{ data: UserSettings }>('/settings/tags', { tag })
+  await invalidateDomains(['settings', 'profile:current'])
+  return res.data.data
+}
+
+export async function removeTag(tag: string): Promise<UserSettings> {
+  const res = await api.delete<{ data: UserSettings }>(`/settings/tags/${encodeURIComponent(tag)}`)
+  await invalidateDomains(['settings', 'profile:current'])
+  return res.data.data
+}
+
+export async function approveTag(tag: string): Promise<UserSettings> {
+  const res = await api.post<{ data: UserSettings }>(`/settings/tags/${encodeURIComponent(tag)}/approve`)
+  await invalidateDomains(['settings', 'profile:current'])
+  return res.data.data
+}
+
+export async function proposeTag(targetNickname: string, tag: string): Promise<unknown> {
+  const res = await api.post<{ data: unknown }>('/settings/tags/propose', {
+    target_nickname: targetNickname,
+    tag,
+  })
+  await invalidateDomains(['profiles:search'])
   return res.data.data
 }

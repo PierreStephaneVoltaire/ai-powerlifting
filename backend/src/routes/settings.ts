@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import multer from 'multer'
-import { getSettingsHandler, updateAvatarHandler, updateNicknameHandler, updateProfileHandler, updateRankingLocationHandler, updateAgeClassHandler } from '../controllers/settingsController'
+import { getSettingsHandler, updateAvatarHandler, updateNicknameHandler, updateProfileHandler, updateRankingLocationHandler, updateAgeClassHandler, addTagHandler, removeTagHandler, approveTagHandler, proposeTagHandler } from '../controllers/settingsController'
 
 export const settingsRouter = Router()
 
@@ -25,3 +25,9 @@ settingsRouter.put('/profile', updateProfileHandler)
 settingsRouter.put('/ranking-location', updateRankingLocationHandler)
 settingsRouter.put('/age-class', updateAgeClassHandler)
 settingsRouter.post('/avatar', avatarUpload.single('avatar'), updateAvatarHandler)
+
+// Tags (FEAT-8)
+settingsRouter.post('/tags', addTagHandler)
+settingsRouter.delete('/tags/:tag', removeTagHandler)
+settingsRouter.post('/tags/:tag/approve', approveTagHandler)
+settingsRouter.post('/tags/propose', proposeTagHandler)

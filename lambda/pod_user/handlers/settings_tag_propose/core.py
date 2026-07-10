@@ -9,12 +9,14 @@ from decimal import Decimal
 from typing import Optional
 
 import boto3
+from boto3.dynamodb.conditions import Attr
 
 logger = logging.getLogger(__name__)
 
 _table = None
 
 NICKNAME_RE = re.compile(r"^[a-z0-9_-]{2,32}$")
+MAPPED_PK_RE = re.compile(r"^[A-Za-z0-9:_#-]{1,128}$")
 AGE_CATEGORY_VALUES = (
     "open",
     "subjunior",
@@ -51,37 +53,6 @@ def _sanitize_decimals(obj):
         return {k: _sanitize_decimals(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [_sanitize_decimals(v) for v in obj]
-    return obj
-
-
-def _normalize_tag(raw) -> Optional[str]:
-    tag = str(raw or "").strip().lower().replace(" ", "-")[:MAX_TAG_LENGTH]
-    return tag if TAG_RE.match(tag) else None
-
-
-def _normalize_tags(raw_tags) -> list[dict]:
-    if not isinstance(raw_tags, list):
-        return []
-    seen = set()
-    result = []
-    for item in raw_tags:
-        if isinstance(item, dict):
-            tag = _normalize_tag(item.get("tag"))
-            approved = bool(item.get("approved"))
-            proposed_by = str(item.get("proposed_by") or "")
-        elif isinstance(item, str):
-            tag = _normalize_tag(item)
-            approved = True
-            proposed_by = ""
-        else:
-            continue
-        if not tag or tag in seen:
-            continue
-        seen.add(tag)
-        result.append({"tag": tag, "approved": approved, "proposed_by": proposed_by})
-    return result[:MAX_TAGS]
-
-
 def _normalize_settings(raw: dict) -> dict:
     discord_username = str(raw.get("discord_username") or raw.get("username") or "")
     username = _sanitize_username(str(raw.get("username") or discord_username or raw.get("nickname") or "user"))
@@ -128,67 +99,91 @@ def _get_existing_sync(table, discord_username: str) -> Optional[dict]:
     return _normalize_settings(_sanitize_decimals(item))
 
 
-def _normalize_display_name(value, fallback: str) -> str:
-    display = str(value).strip() if isinstance(value, str) else ""
-    return display[:80] or fallback
+def _get_settings_by_nickname_sync(table, nickname: str) -> Optional[dict]:
+    normalized = (nickname or "").strip().lower()
+    if not NICKNAME_RE.match(normalized):
+        return None
+    last_key = None
+    while True:
+        kwargs = {}
+        if last_key:
+            kwargs["ExclusiveStartKey"] = last_key
+        resp = table.scan(**kwargs)
+        for item in resp.get("Items") or []:
+            settings = _normalize_settings(_sanitize_decimals(item))
+            if (settings.get("nickname") or "").lower() == normalized:
+                return settings
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key:
+            break
+    return None
 
 
-def _normalize_bio(value) -> str:
-    bio = str(value).strip() if isinstance(value, str) else ""
-    return bio[:280]
-
-
-async def settings_update_profile(args: dict) -> dict:
-    """Update profile fields (visibility, display_name, bio, summary flag).
+async def settings_tag_propose(args: dict) -> dict:
+    """Propose a tag for another athlete's profile (approved=false).
 
     Args:
-        args: dict with required `username`, and any of `profile_visibility`
-              ('private'|'public'), `display_name`, `bio`,
-              `public_training_summary_enabled` (boolean).
+        args: dict with required `target_nickname`, `proposed_by` (discord username
+              of the proposer), and `tag` (string). Self-targeting is prevented.
     """
     table = _get_table()
-    username = args.get("username") or ""
-    profile_visibility = args.get("profile_visibility")
-    if profile_visibility is not None and profile_visibility not in ("private", "public"):
-        raise ValueError("profile_visibility must be private or public")
-    display_name = args.get("display_name")
-    bio = args.get("bio")
-    public_training_summary_enabled = args.get("public_training_summary_enabled")
+    target_nickname = args.get("target_nickname") or ""
+    proposed_by_username = args.get("proposed_by") or ""
+    tag = _normalize_tag(args.get("tag"))
+    if not tag:
+        raise ValueError("Invalid tag: must be 1-30 chars, lowercase alphanumeric, hyphens, underscores only")
 
     def _sync():
-        existing = _get_existing_sync(table, username)
-        if not existing:
-            raise ValueError("Settings not found")
-        visibility = profile_visibility if profile_visibility is not None else existing["profile_visibility"]
-        display = (
-            _normalize_display_name(display_name, existing["discord_username"] or existing["nickname"])
-            if display_name is not None
-            else existing["display_name"]
-        )
-        bio_val = _normalize_bio(bio) if bio is not None else existing["bio"]
-        summary = (
-            bool(public_training_summary_enabled)
-            if public_training_summary_enabled is not None
-            else existing["public_training_summary_enabled"]
-        )
+        target = _get_settings_by_nickname_sync(table, target_nickname)
+        if not target:
+            raise ValueError("Target profile not found")
+        proposer = _get_existing_sync(table, proposed_by_username)
+        proposer_pk = proposer["pk"] if proposer else _sanitize_username(proposed_by_username)
+        if proposer_pk == target["pk"]:
+            raise ValueError("Cannot propose tags for yourself")
+        tags = target.get("tags") or []
+        existing_tags = {t["tag"] for t in tags}
+        if tag not in existing_tags:
+            tags.append({"tag": tag, "approved": False, "proposed_by": proposer_pk})
+            tags = tags[:MAX_TAGS]
         now = datetime.now(timezone.utc).isoformat()
         table.update_item(
-            Key={"pk": existing["pk"]},
-            UpdateExpression=(
-                "SET profile_visibility = :visibility, "
-                "display_name = :display, bio = :bio, "
-                "public_training_summary_enabled = :summary, updated_at = :now"
-            ),
+            Key={"pk": target["pk"]},
+            UpdateExpression="SET tags = :tags, updated_at = :now",
             ConditionExpression="attribute_exists(pk)",
-            ExpressionAttributeValues={
-                ":visibility": visibility,
-                ":display": display,
-                ":bio": bio_val,
-                ":summary": summary,
-                ":now": now,
-            },
+            ExpressionAttributeValues={":tags": tags, ":now": now},
         )
-        updated = _get_existing_sync(table, username)
-        return updated or existing
+        updated = _get_existing_sync(table, target.get("discord_username") or target.get("username") or "")
+        return updated or target
 
     return await asyncio.get_running_loop().run_in_executor(None, _sync)
+
+    return obj
+
+
+def _normalize_tag(raw) -> Optional[str]:
+    tag = str(raw or "").strip().lower().replace(" ", "-")[:MAX_TAG_LENGTH]
+    return tag if TAG_RE.match(tag) else None
+
+
+def _normalize_tags(raw_tags) -> list[dict]:
+    if not isinstance(raw_tags, list):
+        return []
+    seen = set()
+    result = []
+    for item in raw_tags:
+        if isinstance(item, dict):
+            tag = _normalize_tag(item.get("tag"))
+            approved = bool(item.get("approved"))
+            proposed_by = str(item.get("proposed_by") or "")
+        elif isinstance(item, str):
+            tag = _normalize_tag(item)
+            approved = True
+            proposed_by = ""
+        else:
+            continue
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        result.append({"tag": tag, "approved": approved, "proposed_by": proposed_by})
+    return result[:MAX_TAGS]
