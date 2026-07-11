@@ -1065,7 +1065,7 @@ export async function fetchRankingPercentile(params: RankingPercentileParams): P
   }
   const url = `/stats/ranking_percentile?${query.toString()}`
   const data = await cachedGet(api, url, ['stats:percentile'])
-  return data.data
+  return data
 }
 
 
