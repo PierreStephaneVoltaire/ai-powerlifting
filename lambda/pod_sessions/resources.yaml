@@ -5,7 +5,7 @@ layers:
 min_replicas: 1
 resources:
   requests:
-    cpu: 2000m
+    cpu: 1000m
     memory: 512Mi
   limits:
     cpu: 2500m
