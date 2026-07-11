@@ -26,7 +26,6 @@ export function sessionVolume(session: Session): number {
 }
 
 const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
-  // ─── Squat ──────────────────────────────────────────────────────
   'Squat': 'squat',
   'Squat (Backout Heavy)': 'squat',
   'Squat (Backout Light)': 'squat',
@@ -38,7 +37,6 @@ const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   'Safety Bar Squat': 'squat',
   'Hack Squat': 'squat',
 
-  // ─── Bench ──────────────────────────────────────────────────────
   'Bench Press': 'bench',
   'Bench Press (Backout)': 'bench',
   'Pause Bench Press': 'bench',
@@ -48,7 +46,6 @@ const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   'Floor Press': 'bench',
   'Incline Bench Press': 'bench',
 
-  // ─── Deadlift ───────────────────────────────────────────────────
   'Deadlift': 'deadlift',
   'Deadlift (Backout)': 'deadlift',
   'Conventional Deadlift': 'deadlift',
@@ -58,7 +55,6 @@ const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   'Rack Pull': 'deadlift',
   'Block Pull': 'deadlift',
 
-  // ─── Back ───────────────────────────────────────────────────────
   'Lat Pulldown': 'back',
   'Row': 'back',
   'Barbell Row': 'back',
@@ -70,13 +66,11 @@ const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   'Chin-up': 'back',
   'Shrug': 'back',
 
-  // ─── Lower Back ─────────────────────────────────────────────────
   'Romanian Deadlift': 'lower_back',
   'RDL': 'lower_back',
   'Good Morning': 'lower_back',
   'Back Extension': 'lower_back',
 
-  // ─── Chest ──────────────────────────────────────────────────────
   'OHP': 'chest',
   'Overhead Press': 'chest',
   'Shoulder Press': 'chest',
@@ -89,7 +83,6 @@ const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   'Push-up': 'chest',
   'Dip': 'chest',
 
-  // ─── Arm ────────────────────────────────────────────────────────
   'Curl': 'arm',
   'Barbell Curl': 'arm',
   'DB Curl': 'arm',
@@ -102,7 +95,6 @@ const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   'Tricep Extension': 'arm',
   'Overhead Tricep Extension': 'arm',
 
-  // ─── Legs ───────────────────────────────────────────────────────
   'Leg Press': 'legs',
   'Lunges': 'legs',
   'Split Squat': 'legs',
@@ -116,7 +108,6 @@ const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
   'Calf Raise': 'legs',
   'Seated Calf Raise': 'legs',
 
-  // ─── Core ───────────────────────────────────────────────────────
   'Plank': 'core',
   'Ab Rollout': 'core',
   'Ab Wheel': 'core',
@@ -248,7 +239,6 @@ export function weeklyVolumeByCategory(
     .sort((a, b) => a.week - b.week)
 }
 
-// ─── Muscle Group Utilities ──────────────────────────────────────────────────
 
 function buildGlossaryLookup(
   glossary: GlossaryExercise[]
@@ -345,7 +335,6 @@ function filterByBlock(sessions: Session[], block?: string): Session[] {
   return sessions.filter((s) => (s.block || 'current') === block)
 }
 
-// ─── Max Tracking ───────────────────────────────────────────────────────────────
 
 export function allTimeMaxByExercise(
   sessions: Session[],

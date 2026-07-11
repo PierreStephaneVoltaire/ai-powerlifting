@@ -137,7 +137,6 @@ export async function updateAgeClassHandler(req: Request, res: Response): Promis
   res.json({ data: settings })
 }
 
-// ─── Tag handlers (FEAT-8) ──────────────────────────────────────────────────
 
 const TAG_RE = /^[a-z0-9_-]{1,30}$/
 

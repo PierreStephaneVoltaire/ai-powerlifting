@@ -1,20 +1,8 @@
-// ─── Lambda / Fission invocation (HTTP path) ────────────────────────────────
-// The powerlifting tools are exposed as POST `/{tool}` on the configured
-// runtime substrate. In production the substrate is the in-cluster Fission
-// router (`http://router.fission.svc.cluster.local:80`). During the migration
-// the same code works against the AWS API Gateway HTTP endpoint by changing
-// the `POWERLIFTING_LAMBDA_BASE_URL` env var.
+
 const LAMBDA_BASE_URL = process.env.POWERLIFTING_LAMBDA_BASE_URL
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
-/**
- * Invoke a Phase 2 powerlifting tool through its API Gateway HTTP route.
- *
- * `functionName` is the endpoint name (e.g. `pod_sessions`). The request
- * is a POST to `${POWERLIFTING_LAMBDA_BASE_URL}/${functionName}` with the tool
- * arguments JSON-encoded as the request body and a `Content-Type: application/json`
- * header.
- */
+
 export async function invokeLambda(
   functionName: string,
   args: Record<string, unknown>,

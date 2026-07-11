@@ -274,10 +274,7 @@ export async function updateAgeClass(
   return normalizeSettings(result as Record<string, unknown>)
 }
 
-// ─── Tags (FEAT-8) ──────────────────────────────────────────────────────────
-// The backend is a thin middleman: each operation delegates to the `pod_user`
-// Fission function and busts the in-memory settings cache on success.
-
+/
 export async function addTag(discordUsername: string, tag: string): Promise<UserSettings> {
   const result = await invokeLambda('pod_user', { function: 'settings_tag_add',
     username: discordUsername,

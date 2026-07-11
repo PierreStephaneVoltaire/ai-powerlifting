@@ -1,24 +1,8 @@
 import { invokeLambda } from '../utils/lambda'
 import type { Phase, Session } from '@powerlifting/types'
 
-// ─── Fission shim ───────────────────────────────────────────────────────────
-//
-// Sessions are owned by the `session_*` Fission functions (layer pl_sessions /
-// session_store), which perform ALL DynamoDB work against the if-sessions table
-// (program#current pointer resolution, phase loading, SK construction,
-// same-day ordinals, buildItem/publicSession).
-//
-// This file is now a thin delegating shim kept ONLY so that other controllers
-// not yet refactored (videoController, programController) keep compiling with
-// their existing imports. It contains NO DynamoDB logic — every call forwards
-// to Fission with the caller's `programSk` (those controllers still resolve a
-// versioned programSk themselves; the session controller itself no longer uses
-// this file). The `phases` arguments are ignored here because the Fission store
-// loads phases from the program item itself.
 
 export function transformVideo(video: any): any {
-  // Videos are served directly from CloudFront by the frontend, which resolves
-  // s3_key / thumbnail_s3_key into full URLs at render time. No transform needed.
   return video
 }
 

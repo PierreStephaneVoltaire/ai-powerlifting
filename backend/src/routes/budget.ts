@@ -18,7 +18,6 @@ const upload = multer({
 
 export const budgetRouter = Router()
 
-// ─── Config ──────────────────────────────────────────────────────────────────
 
 budgetRouter.get('/config', async (req, res, next) => {
   try {
@@ -38,7 +37,6 @@ budgetRouter.put('/config', async (req, res, next) => {
   }
 })
 
-// ─── Items ───────────────────────────────────────────────────────────────────
 
 function parseFilters(query: Record<string, unknown>): budgetController.BudgetItemFilters | undefined {
   const compId = typeof query.comp_id === 'string' ? query.comp_id : undefined
@@ -126,7 +124,6 @@ budgetRouter.patch('/items/:id/cut', async (req, res, next) => {
   }
 })
 
-// ─── Summary ──────────────────────────────────────────────────────────────────
 
 budgetRouter.get('/summary', async (req, res, next) => {
   try {
@@ -141,7 +138,6 @@ budgetRouter.get('/summary', async (req, res, next) => {
   }
 })
 
-// ─── AI advisor (BUD-05) ──────────────────────────────────────────────────────
 
 budgetRouter.post('/ai-analysis', async (req, res, next) => {
   try {
@@ -164,10 +160,6 @@ budgetRouter.post('/ai-analysis', async (req, res, next) => {
   }
 })
 
-// ─── Legacy whole-store read/write (backward compatibility) ───────────────────
-//
-// Kept so the existing frontend store (useBudgetStore) and the analytics budget
-// timeline endpoint keep working until BUD-02..05 migrate to the granular API.
 
 budgetRouter.get('/', async (req, res, next) => {
   try {

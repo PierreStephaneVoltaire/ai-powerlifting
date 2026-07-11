@@ -45,7 +45,6 @@ function getDB(): Promise<IDBPDatabase> {
   return dbPromise
 }
 
-// ─── Session guard ──────────────────────────────────────────────────────────
 
 export async function checkSession(userPk: string): Promise<void> {
   try {
@@ -65,7 +64,6 @@ export async function clearCache(): Promise<void> {
   } catch { /* no-op */ }
 }
 
-// ─── Read / Write ───────────────────────────────────────────────────────────
 
 export async function getCached<T = unknown>(url: string): Promise<T | undefined> {
   try {
@@ -82,7 +80,6 @@ export async function setCached(url: string, data: unknown, domains: string[]): 
   } catch { /* no-op */ }
 }
 
-// ─── Invalidation ───────────────────────────────────────────────────────────
 
 export async function invalidateDomain(domain: string): Promise<void> {
   try {
@@ -102,13 +99,7 @@ export async function invalidateDomains(domains: string[]): Promise<void> {
   await Promise.all(domains.map((d) => invalidateDomain(d)))
 }
 
-// ─── Session-specific cache patching ────────────────────────────────────────
 
-/**
- * Patch a single session inside a cached program object. After a session write
- * succeeds, find that session in the cached program and replace it with the
- * updated version — avoiding a full program refetch.
- */
 export async function patchSessionInCachedProgram(
   programUrl: string,
   date: string,
@@ -161,17 +152,7 @@ export async function removeSessionFromCachedProgram(
   } catch { await invalidateDomain('program:current').catch(() => {}) }
 }
 
-// ─── cachedGet wrapper ──────────────────────────────────────────────────────
 
-/**
- * Wrap an axios GET call with IndexedDB caching.
- *
- * 1. Check cache by URL → hit: return instantly (no network)
- * 2. Miss → await api.get, cache res.data with domain tags, return res.data
- *
- * Only caches 2xx responses (non-2xx throws from axios, so catch paths
- * like 503 are never cached).
- */
 export async function cachedGet(
   axiosInstance: any,
   url: string,

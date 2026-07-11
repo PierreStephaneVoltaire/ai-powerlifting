@@ -43,12 +43,6 @@ export const analyticsRouter = Router()
 
 type ProgramWithWeightLog = Program & { weight_log: WeightEntry[] }
 
-// ─── pod_analysis sub-function routing ─────────────────────────────────────
-// blockAnalytics.ts calls invokeTool('weekly_analysis', ...) etc. These are
-// NOT standalone Lambda endpoints — they are sub-functions routed through the
-// pod_analysis aggregate handler. This wrapper rewrites the tool name into a
-// pod_analysis call with function=<toolName> so past-block and comparison
-// analytics hit the correct endpoint instead of 404/502.
 const POD_ANALYSIS_SUBFUNCTIONS = new Set([
   'weekly_analysis',
   'analysis_section',
