@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { fetchGlossary } from '@/api/client'
+import { useState, useMemo, useEffect } from 'react'
 import { PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Paper, Title, Text, Select, SimpleGrid, Stack, Group, Table } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
@@ -6,7 +7,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { allTimeMaxByExercise, maxByCategoryInWindow, categorizeExercise } from '@/utils/volume'
 import { displayWeight } from '@/utils/units'
 import type { LiftCategory } from '@/utils/volume'
-import type { Session } from '@powerlifting/types'
+import type { GlossaryExercise } from '@powerlifting/types'
 
 const BIG3_COLORS: Record<string, string> = {
   squat: '#ef4444',
@@ -61,6 +62,19 @@ export default function MaxesPage() {
   const { program } = useProgramStore()
   const { unit } = useSettingsStore()
   const [block, setBlock] = useState('current')
+  const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
+
+  useEffect(() => {
+    fetchGlossary().then(setGlossary).catch(() => {})
+  }, [])
+
+  const categoryLookup = useMemo(() => {
+    const map = new Map<string, LiftCategory>()
+    for (const ex of glossary) {
+      map.set(ex.name.toLowerCase(), ex.category)
+    }
+    return map
+  }, [glossary])
 
   const availableBlocks = useMemo(() => {
     if (!program) return ['current']
@@ -77,11 +91,11 @@ export default function MaxesPage() {
   const allTimeBig3 = useMemo(() => {
     const result: Record<string, number> = { squat: 0, bench: 0, deadlift: 0 }
     allTimeMaxes.forEach(({ kg }, key) => {
-      const cat = categorizeExercise(key)
+      const cat = categorizeExercise(key, categoryLookup)
       if (cat in result && kg > result[cat]) result[cat] = kg
     })
     return result
-  }, [allTimeMaxes])
+  }, [allTimeMaxes, categoryLookup])
 
   const maxTableRows = useMemo(() => {
     return Array.from(allTimeMaxes.entries())
@@ -104,7 +118,7 @@ export default function MaxesPage() {
     return upcomingComps.map((comp) => {
       const compIdx = allCompDates.indexOf(comp.date)
       const windowStart = compIdx > 0 ? allCompDates[compIdx - 1] : programStart
-      const maxes = maxByCategoryInWindow(program.sessions, windowStart, comp.date, ['squat', 'bench', 'deadlift'], block)
+      const maxes = maxByCategoryInWindow(program.sessions, glossary, windowStart, comp.date, ['squat', 'bench', 'deadlift'], block)
       const targets = comp.targets
         ? { squat: comp.targets.squat_kg, bench: comp.targets.bench_kg, deadlift: comp.targets.deadlift_kg }
         : null
