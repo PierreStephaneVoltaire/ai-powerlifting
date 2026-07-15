@@ -11,6 +11,8 @@ export interface AuthUser {
   avatar: string | null
   groups: string[]
   roles: string[]
+  // Epic 3 — self-declared app role. Drives the default role-based UI.
+  active_role: 'athlete' | 'coach' | 'handler' | null
   email: string | null
   discord_id: string
 }

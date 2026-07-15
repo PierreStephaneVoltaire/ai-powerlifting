@@ -1,5 +1,7 @@
 import { Request, Response } from 'express'
 import { signToken, signState, verifyState, type AuthToken } from '../middleware/auth'
+import { reissueTokenFromSettings } from '../middleware/auth'
+import { setAuthCookie, clearAuthCookie } from '../auth/cookies'
 import { getSettings, getSettingsByMappedPk } from '../services/userSettings'
 import { invalidateAllForUser } from '../utils/cache'
 
@@ -8,8 +10,6 @@ const CLIENT_ID = process.env.DISCORD_CLIENT_ID || ''
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || ''
 const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || ''
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
-const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || ''
-const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true'
 
 // Authentik OIDC configuration (FEAT-4.1)
 const AUTHENTIK_CLIENT_ID = process.env.AUTHENTIK_CLIENT_ID || ''
@@ -58,27 +58,6 @@ async function fetchDiscordUser(accessToken: string): Promise<DiscordUser> {
   return res.json() as Promise<DiscordUser>
 }
 
-function setAuthCookie(res: Response, token: string): void {
-  res.cookie('pl_auth', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: COOKIE_SECURE,
-    path: '/',
-    domain: COOKIE_DOMAIN || undefined,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  })
-}
-
-function clearAuthCookie(res: Response): void {
-  res.clearCookie('pl_auth', {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: COOKIE_SECURE,
-    path: '/',
-    domain: COOKIE_DOMAIN || undefined,
-  })
-}
-
 export function discordLogin(_req: Request, res: Response): void {
   const state = signState()
   const params = new URLSearchParams({
@@ -123,6 +102,12 @@ export async function discordCallback(req: Request, res: Response): Promise<void
 
     const jwt = signToken(tokenPayload)
     setAuthCookie(res, jwt)
+    // Apply Epic 3 onboarding-driven role/groups before sending the user off.
+    try {
+      await reissueTokenFromSettings(res, { ...tokenPayload, groups: [], roles: [] }, discordUser.username)
+    } catch (err) {
+      console.warn('Failed to apply settings-driven claims on Discord login:', err)
+    }
     try {
       const existingSettings = await getSettings(discordUser.username)
       if (existingSettings?.mapped_pk) {
@@ -243,6 +228,11 @@ export async function authentikCallback(req: Request, res: Response): Promise<vo
     const jwt = signToken(tokenPayload)
     setAuthCookie(res, jwt)
     try {
+      await reissueTokenFromSettings(res, tokenPayload, username)
+    } catch (err) {
+      console.warn('Failed to apply settings-driven claims on Authentik login:', err)
+    }
+    try {
       const existingSettings = await getSettings(username)
       if (existingSettings?.mapped_pk) {
         await invalidateAllForUser(existingSettings.mapped_pk)
@@ -292,6 +282,7 @@ export async function getMe(req: Request, res: Response): Promise<void> {
           avatar: req.user.identity.avatar,
           groups: req.user.identity.groups,
           roles: req.user.identity.roles,
+          active_role: req.user.identity.active_role ?? null,
           email: req.user.identity.email,
           discord_id: req.user.discord_id,
         }

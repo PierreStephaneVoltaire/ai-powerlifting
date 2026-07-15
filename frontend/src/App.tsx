@@ -34,6 +34,7 @@ import ProfilePage from '@/pages/ProfilePage'
 import LogPage from '@/pages/LogPage'
 import LoginPage from '@/pages/LoginPage'
 import AuthCallbackPage from '@/pages/AuthCallbackPage'
+import OnboardingPage from '@/pages/OnboardingPage'
 import LiftProfilePage from '@/pages/LiftProfilePage'
 
 // Tool Components
@@ -67,6 +68,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/" element={<Dashboard />} />
         <Route path="/lift-profiles/:lift" element={<LiftProfilePage />} />
         <Route path="/calendar" element={<Navigate to="/sessions" replace />} />

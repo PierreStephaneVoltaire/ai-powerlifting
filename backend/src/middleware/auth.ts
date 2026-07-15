@@ -1,8 +1,14 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-import { resolveMappedPk } from '../services/userSettings'
+import { resolveMappedPk, getSettings as fetchSettings } from '../services/userSettings'
 import { AppError } from './errorHandler'
 import type { AuthIdentity, IdentityProvider } from '../auth/identity'
+import {
+  groupsFromSettings,
+  isAppRole,
+  type AppRole,
+} from '../auth/identity'
+import { setAuthCookie } from '../auth/cookies'
 
 declare global {
   namespace Express {
@@ -45,6 +51,9 @@ export interface AuthToken {
   groups: string[]
   roles: string[]
   email?: string | null
+  // Epic 3 — self-declared app role from settings.roles / settings.active_role.
+  // Not present for legacy tokens issued before Epic 3 shipped.
+  active_role?: AppRole | null
   // Backwards-compat field for code paths that still read `payload.discord_id`.
   discord_id: string
 }
@@ -90,6 +99,7 @@ export function tokenToIdentity(token: AuthToken): AuthIdentity {
     avatar: token.avatar ?? null,
     groups: token.groups ?? [],
     roles: token.roles ?? [],
+    active_role: isAppRole(token.active_role) ? token.active_role : null,
     email: token.email ?? null,
   }
 }
@@ -206,4 +216,32 @@ export function requireAdmin(req: Request, _res: Response, next: NextFunction): 
   }
 
   next()
+}
+
+/**
+ * Re-sign the user's JWT with the latest `groups`, `roles`, and `active_role`
+ * claims derived from their settings record. Used by the login callbacks and
+ * by the onboarding endpoint after a role / profile / athlete-basics change so
+ * the next request sees fresh claims without forcing a re-login.
+ */
+export async function reissueTokenFromSettings(
+  res: Response,
+  currentToken: AuthToken,
+  username: string,
+): Promise<AuthToken> {
+  const settings = await fetchSettings(username).catch(() => null)
+  const merged = groupsFromSettings(
+    currentToken.groups ?? [],
+    currentToken.roles ?? [],
+    settings?.roles,
+    settings?.active_role,
+  )
+  const nextToken: AuthToken = {
+    ...currentToken,
+    groups: merged.groups,
+    roles: merged.roles,
+    active_role: merged.active_role,
+  }
+  setAuthCookie(res, signToken(nextToken))
+  return nextToken
 }
