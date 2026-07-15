@@ -33,6 +33,10 @@ _ROUTING = {
     "settings_tag_remove": "settings_tag_remove",
     "settings_tag_approve": "settings_tag_approve",
     "settings_tag_propose": "settings_tag_propose",
+    "grant_create": "grant_create",
+    "grant_revoke": "grant_revoke",
+    "grant_list": "grant_list",
+    "grant_check": "grant_check",
 }
 
 

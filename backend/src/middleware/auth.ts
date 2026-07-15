@@ -2,12 +2,21 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { resolveMappedPk } from '../services/userSettings'
 import { AppError } from './errorHandler'
+import type { AuthIdentity, IdentityProvider } from '../auth/identity'
 
 declare global {
   namespace Express {
     interface Request {
-      user?: { discord_id: string; username: string; avatar: string | null } | null
+      user?:
+        | ({
+            discord_id: string
+            username: string
+            avatar: string | null
+            actor_mapped_pk: string
+            identity: AuthIdentity
+          } | null)
       mapped_pk?: string
+      actor_mapped_pk?: string
       isAuthenticated?: boolean
       readOnly?: boolean
     }
@@ -28,9 +37,16 @@ function testMappedPkOverride(): string | null {
 }
 
 export interface AuthToken {
-  discord_id: string
+  provider: IdentityProvider
+  sub: string
   username: string
+  display_name: string
   avatar: string | null
+  groups: string[]
+  roles: string[]
+  email?: string | null
+  // Backwards-compat field for code paths that still read `payload.discord_id`.
+  discord_id: string
 }
 
 export function signToken(payload: AuthToken): string {
@@ -39,7 +55,14 @@ export function signToken(payload: AuthToken): string {
 
 export function verifyToken(token: string): AuthToken | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as AuthToken
+    const decoded = jwt.verify(token, JWT_SECRET) as Partial<AuthToken>
+    if (!decoded || typeof decoded !== 'object') return null
+    if (!decoded.provider) decoded.provider = 'discord'
+    if (!decoded.sub) decoded.sub = decoded.discord_id || ''
+    if (!decoded.username) return null
+    if (!Array.isArray(decoded.groups)) decoded.groups = []
+    if (!Array.isArray(decoded.roles)) decoded.roles = []
+    return decoded as AuthToken
   } catch {
     return null
   }
@@ -58,6 +81,27 @@ export function verifyState(state: string): boolean {
   }
 }
 
+export function tokenToIdentity(token: AuthToken): AuthIdentity {
+  return {
+    provider: token.provider,
+    sub: token.sub,
+    username: token.username,
+    display_name: token.display_name || token.username,
+    avatar: token.avatar ?? null,
+    groups: token.groups ?? [],
+    roles: token.roles ?? [],
+    email: token.email ?? null,
+  }
+}
+
+function legacyUserShape(token: AuthToken) {
+  return {
+    discord_id: token.provider === 'discord' ? token.sub : token.discord_id || '',
+    username: token.username,
+    avatar: token.avatar ?? null,
+  }
+}
+
 export async function requireUserOptional(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const token = req.cookies?.pl_auth
   if (!token) {
@@ -73,7 +117,12 @@ export async function requireUserOptional(req: Request, _res: Response, next: Ne
     return next()
   }
 
-  req.user = { discord_id: payload.discord_id, username: payload.username, avatar: payload.avatar }
+  const identity = tokenToIdentity(payload)
+  req.user = {
+    ...legacyUserShape(payload),
+    identity,
+    actor_mapped_pk: 'operator',
+  }
   req.isAuthenticated = true
   next()
 }
@@ -82,23 +131,29 @@ export async function resolvePk(req: Request, _res: Response, next: NextFunction
   const testMappedPk = testMappedPkOverride()
   if (testMappedPk) {
     req.mapped_pk = testMappedPk
+    req.actor_mapped_pk = testMappedPk
     req.readOnly = false
+    if (req.user) req.user.actor_mapped_pk = testMappedPk
     return next()
   }
 
   if (!req.user) {
     req.mapped_pk = 'operator'
+    req.actor_mapped_pk = 'operator'
     req.readOnly = true
     return next()
   }
 
   try {
-    req.mapped_pk = await resolveMappedPk(
+    const mappedPk = await resolveMappedPk(
       req.user.discord_id,
       req.user.username,
       req.user.avatar,
     )
+    req.mapped_pk = mappedPk
+    req.actor_mapped_pk = mappedPk
     req.readOnly = false
+    req.user.actor_mapped_pk = mappedPk
   } catch (err) {
     console.error('Failed to resolve PK for user', req.user.discord_id, err)
     return next(new AppError('Failed to resolve authenticated user settings', 500, 'AUTH_CONTEXT_FAILED'))
@@ -112,8 +167,6 @@ export function requireWriteAuth(req: Request, _res: Response, next: NextFunctio
     return next()
   }
 
-  // READs and these analytics POSTs are safe for coach/read-only viewers; they
-  // compute projections, they do not mutate user data.
   const readOnlySafePost = req.method === 'POST' && [
     '/api/analytics/analysis/sections/queue',
     '/api/analytics/block-comparison/ai',
@@ -129,9 +182,6 @@ export function requireWriteAuth(req: Request, _res: Response, next: NextFunctio
     return next()
   }
 
-  // Unauthenticated visitor: require sign-in (401). An authenticated coach who
-  // is viewing an athlete's profile in read-only mode: forbid writes (403) —
-  // the coach can see everything but must not mutate the athlete's data.
   if (!req.user) {
     return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
   }

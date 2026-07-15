@@ -35,6 +35,10 @@ input_schema:
       - settings_tag_remove
       - settings_tag_approve
       - settings_tag_propose
+      - grant_create
+      - grant_revoke
+      - grant_list
+      - grant_check
     nickname: &id001
       type: string
       description: The nickname of the profile to fetch.

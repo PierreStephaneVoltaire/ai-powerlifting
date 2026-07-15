@@ -20,6 +20,7 @@ import { LogIn, LogOut } from 'lucide-react'
 import { AGE_CATEGORY_OPTIONS, type Sex, type WeekStartDay } from '@powerlifting/types'
 import { getSettings, updateAgeClass, updateRankingLocation } from '@/api/settings'
 import { fetchStatCategories } from '@/api/client'
+import { GrantsPanel } from '@/components/settings/GrantsPanel'
 
 const themeOptions: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -207,6 +208,12 @@ export default function SettingsDrawer() {
               Sign in with Discord
             </Button>
           )}
+        </div>
+
+        {/* Grants (FEAT-4.2) */}
+        <div>
+          <SectionLabel>Grants</SectionLabel>
+          <GrantsPanel />
         </div>
 
         {/* Theme */}
