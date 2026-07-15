@@ -31,6 +31,9 @@ input_schema:
       - settings_update_nickname
       - settings_update_profile
       - settings_update_ranking_location
+      - settings_update_athlete_basics
+      - settings_update_onboarding_profile
+      - settings_update_role
       - settings_tag_add
       - settings_tag_remove
       - settings_tag_approve
@@ -234,3 +237,84 @@ operations:
         ranking_region: *id018
       required:
       - username
+  settings_update_athlete_basics:
+    description: 'Update athlete basics: sex, country, region, bodyweight, and training
+      maxes for squat/bench/deadlift. Required to mark athlete_basics_complete.
+      Validates that all three training maxes are positive. Rejects updates when the
+      user does not have the ''athlete'' role.'
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+          description: Discord username.
+        input:
+          type: object
+          description: 'Athlete basics payload: { sex, country, region, bodyweight_kg,
+            training_maxes: { squat_kg, bench_kg, deadlift_kg } }.'
+          properties:
+            sex:
+              type: string
+              enum: [male, female]
+            country:
+              type: string
+              description: 'Short country code (<= 8 chars). Informational; federations
+                are the source of truth for weight classes.'
+            region:
+              type: string
+              description: Freeform state/province text.
+            bodyweight_kg:
+              type: number
+              description: Bodyweight in kilograms, 30..300.
+            training_maxes:
+              type: object
+              properties:
+                squat_kg: { type: number }
+                bench_kg: { type: number }
+                deadlift_kg: { type: number }
+      required:
+      - username
+  settings_update_onboarding_profile:
+    description: 'Update profile fields during onboarding: display_name (required),
+      bio, profile_visibility, public_training_summary_enabled, federations. Marks
+      profile_complete = true.'
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+          description: Discord username.
+        input:
+          type: object
+          description: 'Profile payload: { display_name, bio, profile_visibility,
+            public_training_summary_enabled, federations }.'
+          properties:
+            display_name: { type: string }
+            bio: { type: string }
+            profile_visibility: { type: string, enum: [private, public] }
+            public_training_summary_enabled: { type: boolean }
+            federations:
+              type: array
+              items: { type: string }
+      required:
+      - username
+  settings_update_role:
+    description: 'Set the user''s roles and active role. Roles is an array containing
+      at least one of: ''athlete'', ''coach'', ''handler''. active_role (optional) must
+      be one of the assigned roles. Used by the ''Switch role'' UI.'
+    input_schema:
+      type: object
+      properties:
+        username:
+          type: string
+          description: Discord username.
+        roles:
+          type: array
+          items: { type: string, enum: [athlete, coach, handler] }
+          minItems: 1
+        active_role:
+          type: string
+          enum: [athlete, coach, handler]
+      required:
+      - username
+      - roles

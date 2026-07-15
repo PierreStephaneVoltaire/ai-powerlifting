@@ -1,4 +1,4 @@
-"""Shared helpers for the grant_* handlers (FEAT-4.2 grant store).
+"""Shared helpers for the grant_* handlers (grant store).
 
 The grant store lives in the `if-powerlifting-requests` DynamoDB table.
 

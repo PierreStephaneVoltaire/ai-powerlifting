@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 MAPPED_PK_RE = re.compile(r"^[A-Za-z0-9:_#-]{1,128}$")
 NICKNAME_RE = re.compile(r"^[a-z0-9_-]{2,32}$")
-EXPIRY_TAIL_DAYS = 7  # FEAT-4.2: grant expires max(tied competition dates) + 7d
+EXPIRY_TAIL_DAYS = 7  # Grant expires max(tied competition dates) + this many days.
 TIE_DURATION_DEFAULT_DAYS = 60  # for open-ended grants (no tied competitions)
 
 

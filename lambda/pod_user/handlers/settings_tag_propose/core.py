@@ -11,6 +11,16 @@ from typing import Optional
 import boto3
 from boto3.dynamodb.conditions import Attr
 
+from .._shared.settings_normalize import (
+    SEX_VALUES,
+    ROLE_VALUES,
+    _to_float,
+    _normalize_role,
+    _normalize_roles,
+    _normalize_training_maxes,
+    _normalize_federations,
+)
+
 logger = logging.getLogger(__name__)
 
 _table = None
@@ -53,6 +63,8 @@ def _sanitize_decimals(obj):
         return {k: _sanitize_decimals(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [_sanitize_decimals(v) for v in obj]
+
+
 def _normalize_settings(raw: dict) -> dict:
     discord_username = str(raw.get("discord_username") or raw.get("username") or "")
     username = _sanitize_username(str(raw.get("username") or discord_username or raw.get("nickname") or "user"))
@@ -82,6 +94,14 @@ def _normalize_settings(raw: dict) -> dict:
         ),
         "age_class": raw.get("age_class") if raw.get("age_class") in AGE_CATEGORY_VALUES else "open",
         "tags": _normalize_tags(raw.get("tags")),
+        "sex": raw.get("sex") if raw.get("sex") in SEX_VALUES else None,
+        "bodyweight_kg": _to_float(raw.get("bodyweight_kg")),
+        "training_maxes": _normalize_training_maxes(raw.get("training_maxes")),
+        "federations": _normalize_federations(raw.get("federations")),
+        "roles": _normalize_roles(raw.get("roles")),
+        "active_role": _normalize_role(raw.get("active_role")) or ((_normalize_roles(raw.get("roles")) or ["athlete"])[0]),
+        "athlete_basics_complete": bool(raw.get("athlete_basics_complete")),
+        "profile_complete": bool(raw.get("profile_complete")),
         "created_at": str(raw.get("created_at") or datetime.now(timezone.utc).isoformat()),
         "updated_at": str(raw.get("updated_at") or datetime.now(timezone.utc).isoformat()),
     }

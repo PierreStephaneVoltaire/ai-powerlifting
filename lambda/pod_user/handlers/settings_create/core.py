@@ -71,6 +71,15 @@ def _normalize_settings(raw: dict) -> dict:
         "public_training_summary_enabled": raw.get("public_training_summary_enabled") is True,
         "ranking_country": raw.get("ranking_country") if isinstance(raw.get("ranking_country"), str) else None,
         "ranking_region": raw.get("ranking_region") if isinstance(raw.get("ranking_region"), str) else None,
+        "sex": raw.get("sex") if raw.get("sex") in SEX_VALUES else None,
+        "bodyweight_kg": _to_float(raw.get("bodyweight_kg")),
+        "training_maxes": _normalize_training_maxes(raw.get("training_maxes")),
+        "federations": _normalize_federations(raw.get("federations")),
+        "roles": _normalize_roles(raw.get("roles")),
+        "active_role": _normalize_role(raw.get("active_role")) or ((_normalize_roles(raw.get("roles")) or ["athlete"])[0]),
+        "athlete_basics_complete": bool(raw.get("athlete_basics_complete")),
+        "profile_complete": bool(raw.get("profile_complete")),
+
         "age_class": raw.get("age_class") if raw.get("age_class") in ("open", "subjunior", "junior", "master1", "master2", "master3", "master4") else "open",
         "created_at": str(raw.get("created_at") or datetime.now(timezone.utc).isoformat()),
         "updated_at": str(raw.get("updated_at") or datetime.now(timezone.utc).isoformat()),
@@ -88,6 +97,16 @@ def _get_by_pk_sync(table, pk: str) -> Optional[dict]:
 def _create_sync(discord_id: str, discord_username: str, avatar_url: Optional[str]):
     """Conditionally create the initial user row; on race, return the winner."""
     from botocore.exceptions import ClientError
+
+from .._shared.settings_normalize import (
+    SEX_VALUES,
+    ROLE_VALUES,
+    _to_float,
+    _normalize_role,
+    _normalize_roles,
+    _normalize_training_maxes,
+    _normalize_federations,
+)
     table = _get_table()
     username = _sanitize_username(discord_username)
     now = datetime.now(timezone.utc).isoformat()
@@ -105,6 +124,14 @@ def _create_sync(discord_id: str, discord_username: str, avatar_url: Optional[st
         "ranking_country": None,
         "ranking_region": None,
         "age_class": "open",
+        "sex": None,
+        "bodyweight_kg": None,
+        "training_maxes": None,
+        "federations": [],
+        "roles": [],
+        "active_role": "athlete",
+        "athlete_basics_complete": False,
+        "profile_complete": False,
         "created_at": now,
         "updated_at": now,
     }

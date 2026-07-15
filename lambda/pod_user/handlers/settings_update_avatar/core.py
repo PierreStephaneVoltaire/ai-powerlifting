@@ -96,6 +96,15 @@ def _normalize_settings(raw: dict) -> dict:
             if isinstance(raw.get("ranking_region"), str) and raw.get("ranking_region").strip()
             else None
         ),
+        "sex": raw.get("sex") if raw.get("sex") in SEX_VALUES else None,
+        "bodyweight_kg": _to_float(raw.get("bodyweight_kg")),
+        "training_maxes": _normalize_training_maxes(raw.get("training_maxes")),
+        "federations": _normalize_federations(raw.get("federations")),
+        "roles": _normalize_roles(raw.get("roles")),
+        "active_role": _normalize_role(raw.get("active_role")) or ((_normalize_roles(raw.get("roles")) or ["athlete"])[0]),
+        "athlete_basics_complete": bool(raw.get("athlete_basics_complete")),
+        "profile_complete": bool(raw.get("profile_complete")),
+
         "age_class": raw.get("age_class") if raw.get("age_class") in AGE_CATEGORY_VALUES else "open",
         "created_at": str(raw.get("created_at") or datetime.now(timezone.utc).isoformat()),
         "updated_at": str(raw.get("updated_at") or datetime.now(timezone.utc).isoformat()),
@@ -132,6 +141,16 @@ def _profile_avatar_key_from_url(value) -> Optional[str]:
     if isinstance(value, str) and value.startswith("http://") or (isinstance(value, str) and value.startswith("https://")):
         try:
             from urllib.parse import urlparse, unquote
+
+from .._shared.settings_normalize import (
+    SEX_VALUES,
+    ROLE_VALUES,
+    _to_float,
+    _normalize_role,
+    _normalize_roles,
+    _normalize_training_maxes,
+    _normalize_federations,
+)
             return unquote(urlparse(value).path).lstrip("/")
         except Exception:
             return None
