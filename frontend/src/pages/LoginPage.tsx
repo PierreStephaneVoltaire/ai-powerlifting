@@ -9,7 +9,6 @@ const DISCORD_ERROR_MESSAGES: Record<string, string> = {
 }
 
 const AUTHENTIK_ERROR_MESSAGES: Record<string, string> = {
-  authentik_disabled: 'Authentik sign-in is not enabled on this server.',
   authentik_failed: 'Authentik authentication failed. Please try again.',
   no_code: 'Authorization code was not received.',
   invalid_state: 'Security verification failed. Please try again.',
@@ -25,13 +24,10 @@ function formatError(error: string | null): string {
 }
 
 export default function LoginPage() {
-  const { signInDiscord, signInAuthentik, providers } = useAuth()
+  const { signInDiscord, signInAuthentik } = useAuth()
   const [searchParams] = useSearchParams()
   const error = searchParams.get('error')
   const errorMessage = formatError(error)
-  const discordEnabled = providers.discord.enabled
-  const authentikEnabled = providers.authentik.enabled
-  const showDivider = discordEnabled && authentikEnabled
 
   return (
     <Center h="100dvh">
@@ -45,42 +41,30 @@ export default function LoginPage() {
             </Text>
           )}
 
-          {discordEnabled && (
-            <Group style={{ width: '100%' }}>
-              <Button
-                size="lg"
-                onClick={signInDiscord}
-                style={{ flex: 1 }}
-                data-testid="signin-discord"
-              >
-                Sign in with Discord
-              </Button>
-            </Group>
-          )}
+          <Group style={{ width: '100%' }}>
+            <Button
+              size="lg"
+              onClick={signInDiscord}
+              style={{ flex: 1 }}
+              data-testid="signin-discord"
+            >
+              Sign in with Discord
+            </Button>
+          </Group>
 
-          {showDivider && (
-            <Divider label="or" labelPosition="center" style={{ width: '100%' }} />
-          )}
+          <Divider label="or" labelPosition="center" style={{ width: '100%' }} />
 
-          {authentikEnabled && (
-            <Group style={{ width: '100%' }}>
-              <Button
-                size="lg"
-                variant="default"
-                onClick={signInAuthentik}
-                style={{ flex: 1 }}
-                data-testid="signin-authentik"
-              >
-                Sign in with email (Authentik)
-              </Button>
-            </Group>
-          )}
-
-          {!discordEnabled && !authentikEnabled && (
-            <Text size="sm" c="dimmed">
-              Sign-in is not currently available. Please contact the administrator.
-            </Text>
-          )}
+          <Group style={{ width: '100%' }}>
+            <Button
+              size="lg"
+              variant="default"
+              onClick={signInAuthentik}
+              style={{ flex: 1 }}
+              data-testid="signin-authentik"
+            >
+              Sign in with email (Authentik)
+            </Button>
+          </Group>
 
           <Text size="xs" c="dimmed">
             Sign in to access your personal training data.

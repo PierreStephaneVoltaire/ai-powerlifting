@@ -17,11 +17,6 @@ export interface AuthUser {
   discord_id: string
 }
 
-export interface EnabledProviders {
-  discord: { enabled: boolean }
-  authentik: { enabled: boolean }
-}
-
 interface AuthContextType {
   user: AuthUser | null
   loading: boolean
@@ -30,12 +25,6 @@ interface AuthContextType {
   ranking_country: string | null
   ranking_region: string | null
   age_class: 'open' | 'subjunior' | 'junior' | 'master1' | 'master2' | 'master3' | 'master4'
-  providers: EnabledProviders
-  /**
-   * @deprecated Discord-specific sign-in. Kept as an alias for `signInDiscord`
-   * to avoid breaking existing call sites; new code should call `signInDiscord`
-   * (the original Discord path) or `signInAuthentik` (the new OIDC path) directly.
-   */
   signIn: () => void
   signInDiscord: () => void
   signInAuthentik: () => void
@@ -50,7 +39,6 @@ const AuthContext = createContext<AuthContextType>({
   ranking_country: null,
   ranking_region: null,
   age_class: 'open',
-  providers: { discord: { enabled: true }, authentik: { enabled: false } },
   signIn: () => {},
   signInDiscord: () => {},
   signInAuthentik: () => {},
@@ -69,24 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ranking_country, setRankingCountry] = useState<string | null>(null)
   const [ranking_region, setRankingRegion] = useState<string | null>(null)
   const [age_class, setAgeClass] = useState<AuthContextType['age_class']>('open')
-  const [providers, setProviders] = useState<EnabledProviders>({
-    discord: { enabled: true },
-    authentik: { enabled: false },
-  })
-
-  useEffect(() => {
-    fetch('/api/auth/providers', { credentials: 'include' })
-      .then(res => res.json())
-      .then(data => {
-        if (data && typeof data === 'object') {
-          setProviders({
-            discord: { enabled: Boolean(data.discord?.enabled) },
-            authentik: { enabled: Boolean(data.authentik?.enabled) },
-          })
-        }
-      })
-      .catch(() => {})
-  }, [])
 
   useEffect(() => {
     fetch('/api/auth/me', { credentials: 'include' })
@@ -141,7 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ranking_country,
         ranking_region,
         age_class,
-        providers,
         signIn: signInDiscord,
         signInDiscord,
         signInAuthentik,
