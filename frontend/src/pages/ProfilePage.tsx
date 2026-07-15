@@ -19,7 +19,7 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core'
-import { AlertCircle, Calendar, Check, Film, LogIn, Plus, Save, Tag as TagIcon, Upload, User, X } from 'lucide-react'
+import { AlertCircle, Calendar, Check, Film, Plus, Save, Tag as TagIcon, Upload, User, X } from 'lucide-react'
 import {
   getSettings,
   isValidProfileAvatarType,
@@ -123,7 +123,7 @@ function metricTestId(label: string): string {
 }
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, readOnly, signIn } = useAuth()
+  const { user, loading: authLoading, readOnly } = useAuth()
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
   const { pushToast } = useUiStore()
@@ -425,9 +425,6 @@ export default function ProfilePage() {
               <Text component="h1" className="if-page-title">Profile</Text>
               <Text className="if-page-subtitle">Read-only public profile and lift gallery.</Text>
             </Stack>
-            <Button leftSection={<LogIn size={16} />} onClick={signIn} variant="light">
-              Sign in with Discord
-            </Button>
           </div>
 
           <Paper withBorder p="lg" radius="md" className="if-card">
@@ -559,10 +556,7 @@ export default function ProfilePage() {
         </Group>
         <Paper withBorder p="lg" radius="md" className="if-card">
           <Stack gap="md">
-            <Text c="dimmed">This profile is private or unavailable. Sign in to manage your profile.</Text>
-            <Button leftSection={<LogIn size={16} />} onClick={signIn} w="fit-content">
-              Sign in with Discord
-            </Button>
+            <Text c="dimmed">This profile is private or unavailable.</Text>
           </Stack>
         </Paper>
       </Stack>

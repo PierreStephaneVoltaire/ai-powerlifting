@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { Wallet, Plus, Trash2, Save, Camera, CalendarClock, Sparkles, Loader2, Info, LogIn } from 'lucide-react'
+import { Wallet, Plus, Trash2, Save, Camera, CalendarClock, Sparkles, Loader2, Info } from 'lucide-react'
 import {
   ActionIcon,
   Badge,
@@ -119,7 +119,7 @@ function priorityColor(p: BudgetPriority): string {
 }
 
 export default function BudgetPage() {
-  const { readOnly, loading: authLoading, signIn } = useAuth()
+  const { readOnly, loading: authLoading } = useAuth()
   const { pushToast } = useUiStore()
   const { currency: profileCurrency } = useSettingsStore()
   const { config, items, isLoading, loaded, load, save } = useBudgetStore()
@@ -295,21 +295,6 @@ export default function BudgetPage() {
   return (
     <Container size="xl" pb={40}>
       <Stack gap="md">
-        {readOnly && (
-          <Paper withBorder p="sm" radius="md" style={{ borderLeft: '3px solid var(--mantine-color-blue-5)' }}>
-            <Group gap="sm" align="center" justify="space-between" wrap="nowrap">
-              <Group gap="sm" align="center" wrap="nowrap">
-                <Wallet size={18} color="var(--mantine-color-blue-6)" />
-                <Text size="sm" c="dimmed">
-                  Viewing demo data (operator). Sign in to manage your own budget.
-                </Text>
-              </Group>
-              <Button size="xs" variant="light" leftSection={<LogIn size={14} />} onClick={signIn}>
-                Sign in
-              </Button>
-            </Group>
-          </Paper>
-        )}
         <Group justify="space-between" align="flex-end">
           <Stack gap={2}>
             <Group gap="sm">
