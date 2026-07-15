@@ -1,4 +1,3 @@
-// ─── Program Structure ───────────────────────────────────────────────────────
 
 export interface ProgramMeta {
   program_name: string
@@ -115,10 +114,6 @@ export interface CaffeineStep {
   notes: string
 }
 
-// ─── Phase ───────────────────────────────────────────────────────────────────
-
-// Phase is loaded directly from program.phases — never hardcoded in UI logic.
-// start_week/end_week are BLOCK-LOCAL (1 = first week of the phase's block).
 export interface Phase {
   name: string
   intent: string
@@ -175,7 +170,6 @@ export interface FederationLibrary {
   qualification_standards: QualificationStandard[]
 }
 
-// ─── Competition ─────────────────────────────────────────────────────────────
 
 export interface Competition {
   name: string
@@ -270,7 +264,6 @@ export interface BetweenCompPlan {
   inflammation: string
 }
 
-// ─── Session & Exercise ───────────────────────────────────────────────────────
 
 export interface Exercise {
   id?: string
@@ -347,7 +340,6 @@ export interface Session {
   pain_log?: unknown[]
 }
 
-// ─── Session Video ───────────────────────────────────────────────────────────
 
 export interface SessionVideo {
   video_id: string
@@ -364,7 +356,6 @@ export interface SessionVideo {
   thumbnail_status?: 'pending' | 'ready' | 'failed'
 }
 
-// ─── Video Library ─────────────────────────────────────────────────────────────
 
 export interface VideoLibraryItem {
   video: SessionVideo
@@ -384,7 +375,6 @@ export interface VideoLibraryResponse {
 
 export type VideoSort = 'newest' | 'oldest' | 'volume' | 'weight'
 
-// ─── Full Program ─────────────────────────────────────────────────────────────
 
 export interface Program {
   pk: string
@@ -418,7 +408,6 @@ export interface DietNote {
   consistent?: boolean
 }
 
-// ─── Lift Profile ─────────────────────────────────────────────────────────────
 
 export interface LiftProfile {
   lift: 'squat' | 'bench' | 'deadlift'
@@ -451,7 +440,6 @@ export interface SupplementPhase {
   end_week?: number       // Week range end (from block's sessions)
 }
 
-// ─── Max History ─────────────────────────────────────────────────────────────
 
 export interface MaxEntry {
   date: string
@@ -463,14 +451,12 @@ export interface MaxEntry {
   context: string
 }
 
-// ─── Body Weight Log ─────────────────────────────────────────────────────────
 
 export interface WeightEntry {
   date: string
   kg: number
 }
 
-// ─── Glossary ─────────────────────────────────────────────────────────────────
 
 export type MuscleGroup =
   | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'tibialis_anterior' | 'hip_flexors' | 'adductors'
@@ -527,7 +513,6 @@ export interface GlossaryExercise {
   archived?: boolean
 }
 
-// ─── Templates ────────────────────────────────────────────────────────────────
 
 export interface Template {
   pk: string
@@ -646,7 +631,6 @@ export interface TemplateImportJob {
   updated_at?: string
 }
 
-// ─── Imports ─────────────────────────────────────────────────────────────────
 
 export type ImportType = 'template' | 'session_import'
 export type ImportStatus = 'awaiting_review' | 'applied' | 'rejected'
@@ -693,7 +677,6 @@ export interface ImportPending {
   rejection_reason?: string
 }
 
-// ─── Plate Calculator ─────────────────────────────────────────────────────────
 
 export type PlateUnit = 'kg' | 'lb'
 
@@ -705,7 +688,6 @@ export interface PlateLoadout {
   achievable: boolean
 }
 
-// ─── DOTS ─────────────────────────────────────────────────────────────────────
 
 export type Sex = 'male' | 'female'
 
@@ -716,7 +698,6 @@ export interface DotsResult {
   sex: Sex
 }
 
-// ─── API Response Wrappers ────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {
   data: T
@@ -733,7 +714,6 @@ export interface ProgramListItem {
   archived?: boolean
 }
 
-// ─── Glossary Store Item ──────────────────────────────────────────────────────
 
 export interface GlossaryStore {
   pk: string
@@ -742,7 +722,6 @@ export interface GlossaryStore {
   updated_at: string
 }
 
-// ─── Max History Store Item ───────────────────────────────────────────────────
 
 export interface MaxHistoryStore {
   pk: string
@@ -751,7 +730,6 @@ export interface MaxHistoryStore {
   updated_at: string
 }
 
-// ─── Weight Log Store Item ────────────────────────────────────────────────────
 
 export interface WeightLogStore {
   pk: string
@@ -760,7 +738,6 @@ export interface WeightLogStore {
   updated_at: string
 }
 
-// ─── Analytics Response Additions ────────────────────────────────────────────
 
 export interface FatigueAnalyticsFields {
   fatigue_model?: string
@@ -800,7 +777,6 @@ export interface ReadinessAnalyticsFields {
   external_readiness_confidence?: number
 }
 
-// ─── New master/user competition catalog (additive, original Competition type preserved) ───
 
 export type CompEventType = 'full_power' | 'bench_only' | 'deadlift_only' | 'unknown' | null
 export type CompTestingStatus = 'tested' | 'untested' | 'unknown'
@@ -936,7 +912,6 @@ export const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
   'master4',
 ]
 
-// ─── Goals ────────────────────────────────────────────────────────────────────
 
 export type GoalType =
   | 'hit_total'
@@ -1150,13 +1125,6 @@ export interface UserCompetitionUpdate {
   notes?: string
 }
 
-// ─── Budgeting ───────────────────────────────────────────────────────────────
-//
-// The budget model is anchored to competition day: anything required to walk
-// onto the platform is MANDATORY and never suggested for cuts. Items carry a
-// priority tier, flexible date precision, optional competition linkage, and a
-// recurrence cadence. BudgetConfig holds the per-user monthly cap.
-
 export type BudgetCategory =
   | 'equipment'
   | 'supplement'
@@ -1295,9 +1263,6 @@ export interface BudgetSummary {
   upcoming_one_time: BudgetItem[]
 }
 
-// ─── Legacy budget AI timeline ───────────────────────────────────────────────
-// Kept for the existing /analytics/budget/timeline specialist tool surface and
-// its frontend client. The new budget tabs (BUD-02..05) do not use these shapes.
 
 export type BudgetPriority = 'buy_now' | 'buy_later' | 'optional' | 'drop'
 
@@ -1354,7 +1319,6 @@ export interface BudgetTimeline {
   notes: string[]
 }
 
-// ─── Budget AI advisor (BUD-05) ──────────────────────────────────────────────
 
 export interface BudgetAiLockedItem {
   item_id: string
@@ -1386,4 +1350,47 @@ export interface BudgetAiAnalysis {
   insufficient_data_reason: string
   cached: boolean
   generated_at: string
+}
+
+
+// =============================================================================
+// Epic 3 — Onboarding (role / athlete basics / profile)
+// =============================================================================
+
+export type Role = 'athlete' | 'coach' | 'handler'
+
+export const ROLE_VALUES: ReadonlyArray<Role> = ['athlete', 'coach', 'handler']
+
+export const ROLE_LABELS: Record<Role, string> = {
+  athlete: 'Athlete',
+  coach: 'Coach',
+  handler: 'Handler',
+}
+
+export interface TrainingMaxes {
+  squat_kg: number
+  bench_kg: number
+  deadlift_kg: number
+}
+
+export interface AthleteBasics {
+  sex: Sex
+  bodyweight_kg: number
+  country: string          // ISO 3166-1 alpha-2; informational. Federations are the source of truth for weight classes.
+  region: string           // Freeform state/province (e.g. "CA", "Ontario"); no subdivision list validation.
+  training_maxes: TrainingMaxes
+}
+
+export interface OnboardingState {
+  athlete_basics_complete: boolean
+  profile_complete: boolean
+  roles: Role[]
+  active_role: Role
+}
+
+export interface OnboardingStatus {
+  is_onboarded: boolean
+  next_step: 'role' | 'profile' | 'athlete_basics' | 'done' | null
+  state: OnboardingState
+  has_athlete_basics: boolean
 }

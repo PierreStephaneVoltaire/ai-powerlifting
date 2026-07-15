@@ -1,127 +1,59 @@
-# AGENTS.md — Guidelines for agents and contributors working in this repo
+# Powerlifting Meet-Prep Portal (NoLift)
 
-This file tells an AI agent (or human contributor) how the powerlifting-app
-stack is laid out, how the Terraform split works, and the rules to follow when
-making changes here. Read it before writing code.
+Competition-geared meet-prep portal for powerlifters. Domain terms in
+[CONTEXT.md](CONTEXT.md); decisions in [docs/adr/](docs/adr/). Read both before
+working — this file is only layout + operating rules.
 
----
+## Layout
 
-## The stack at a glance
+- `frontend/` — React + Vite app
+- `backend/` — Express API (Node)
+- `lambda/` — ~94 health-tool nano-functions (one HTTP route each) + `pl_authorizer`
+  + `tool_registry`, behind an API Gateway gated by `X-Internal-Token`. See ADR-0001.
+- `terraform/` — AWS-only (Lambdas, S3, API Gateway, SSM). Applied separately from
+  the root infra.
 
-```mermaid
-flowchart TB
-  subgraph InfraScope[Two Terraform scopes — do not cross them]
-    direction LR
-    RootTF["Root terraform/\n(repo root)\n— applied LOCALLY against the k3s kubeconfig"]
-    AppTF["powerlifting-app/terraform/\n— applied separately, AWS-only"]
-  end
-  RootTF -->|provisions| K8sStuff[K8s networking, namespaces, ingress,\nCloudflare tunnel, Fission, ECR, RBAC,\nobservability, IF agent + portal deploys]
-  AppTF -->|provisions| AppStuff[Powerlifting ECR repos,\nS3 video + budget buckets,\nvideo-thumbnail Lambda + ffmpeg layer,\nbudget DynamoDB table]
-  K8sStuff -->|hosting| BareMetal[Bare-metal k3s cluster]
-  AppStuff -->|consumed by| BareMetal
+## Two Terraform scopes — do not cross them
+
+- Root `terraform/` (in the parent IF agent repo) → k3s infra, applied locally.
+- `powerlifting-app/terraform/` → AWS resources only.
+
+## Run
+
+```bash
+npm install
+npm run dev:backend    # Express API
+npm run dev:frontend   # Vite dev server
+npm run build          # build all workspaces
+npm run typecheck      # typecheck all workspaces
 ```
 
-The app runs on a **bare-metal k3s** cluster. The root `terraform/` at the repo
-root is the infra stack — it is **applied locally** (it points `kubeconfig_path`
-at the local k3s kubeconfig) and owns all the Kubernetes networking, namespace,
-ingress, Cloudflare tunnel, Fission (OpenCode job pods), ECR, RBAC, and
-observability resources, plus the IF agent and portal Deployments.
+## Operating rules
 
-The `powerlifting-app/terraform/` in **this** directory is a **separate,
-AWS-only** stack. It only creates powerlifting-specific resources:
+1. **Diagnose from the live env, not the code.** Check pod logs, `kubectl
+   describe`, `kubectl get events`, and AWS resources first. Live cluster is the
+   source of truth — never guess from code.
+2. **Protect the live IF agent API.** Non-targeted `terraform apply` and all
+   `terraform destroy` are hook-blocked. `kubectl cordon/drain` are blocked
+   (single-node cluster). Destructive kubectl verbs are blocked only when they
+   target the IF agent API (`if-agent-*` / `app=if-agent-api`) or a broad `all`/
+   `--all` blast in `if-portals`; this portal's backend/frontend may be mutated
+   freely. `terraform apply -target=...` needs explicit operator approval.
+   Otherwise give the operator the command. Read-only kubectl and `terraform
+   fmt/validate/plan` are fine.
+3. **Never delete AWS resources.** Give the operator the command.
+4. **No git writes.** Give the operator the command.
+5. **Code first; don't over-plan.** Start implementing. Plan part 1 → implement →
+   plan part 2 → implement. No hours of planning before code.
+6. **No comments in code.** Self-documenting code; default zero comments.
+7. **Prefer modules over stuffing one file.** Split by concern.
+8. **When stuck, hand off and move on.** More than ~4 "but wait"/"let me
+   reconsider" cycles on one problem → write the stuck point to `HANDOFF.md`, move
+   to the next task. Come back only when the queue is done.
+9. **Stay in scope — no rabbit holes.** Unrelated bug → `bug.md`. Unrelated
+   instruction dropped mid-task → `todo.md`.
+10. **"Pivot" means full pivot.** Drop current requirements, do the new ones.
 
-- ECR repositories for the backend and frontend images
-- S3 buckets for session videos and budget media
-- the `video-thumbnail-generator` Lambda + its ffmpeg layer + S3 event trigger
-- the `if-powerlifting-budget` DynamoDB table
+## Build bar
 
-The two stacks share an S3 Terraform backend (different state keys) and reference
-shared table names via variables. **Do not move k8s/networking resources into
-this directory's Terraform** — that belongs in the root stack. Conversely, do not
-add powerlifting app resources to the root stack. Keep the scopes clean.
-
-### Resource constraints drive the design
-
-k3s on bare metal means resources are limited. That is why:
-
-- the backend is a **thin transport layer** — heavy analytics and AI don't run in
-  the Node process; they're delegated to the IF Agent API's health tools.
-- **rolling Lambdas** are the intended path for expensive or bursty calculations
-  so the cluster doesn't have to size for peak compute.
-- when you add a compute-heavy feature, prefer a Lambda (see `lambda/` and
-  `terraform/videos.tf` for the pattern) over a long-running pod.
-
-### AWS and k3s creds are available for debugging
-
-Runtime creds exist in the environment. When debugging runtime behavior:
-
-- use `kubectl logs`, `kubectl describe`, `kubectl get events` against the k3s
-  cluster — **do not guess at runtime behavior from code alone**.
-- use the AWS CLI / SDK against DynamoDB, S3, and Lambda for data-path debugging.
-
-Treat the resources as **production**. Be careful.
-
----
-
-## Code rules
-
-### Comments are a last resort
-
-Do not add comments to the code unless it's an obscure edge case. Comments are a
-failure of being able to convey intent through clean code. Before reaching for a
-comment, ask whether a better name, a smaller function, or a clearer structure
-would make the comment unnecessary. If you must comment, explain *why*, not
-*what*.
-
-### Use libraries and providers — rarely hand-roll
-
-Prefer established libraries and cloud-managed resources over hand-rolled
-equivalents. Reach for a provider/managed service first; only hand-roll when
-there is a concrete reason the library can't do the job. This applies to both
-application code (use the SDKs and packages already in `package.json`) and
-infrastructure (use Terraform providers rather than scripting around them).
-
-### Responsive design down to iPhone SE
-
-Every screen must work on small viewports. The minimum supported viewport is the
-**iPhone SE (375px wide)**. Test new layouts and components at that width. If a
-layout breaks below a larger breakpoint, fix it — don't add a disclaimer.
-
-### Logging
-
-Add a log entry at **every function call and interactive component**, and at every
-**failure node**. These logs are the debugging surface when something goes wrong
-in the cluster. Use the existing `backend/src/utils/logger.ts` (pino) on the
-backend; follow the established frontend logging conventions. A function that
-fails silently is a bug factory.
-
-### Errors must be loud
-
-No migration fallbacks. No clever error handling that swallows a failure and
-limps on. Errors are meant to be loud so we can catch them. Let exceptions
-propagate; surface failures to the user and to the logs. If a code path can
-fail, it should fail visibly, not return a silent default.
-
-### Do not permute DynamoDB objects with the `pk` = `operator`
-
-The `operator` partition key is the **admin user's data**. Never write, mutate,
-or permute Dynamo objects under `pk = operator`. When you need test data, use
-the `test` partition (`pk = test`) and the `if-portals-test` namespace. The
-`mapped_pk` resolution (`mapped_pk || pk`) redirects authenticated users away from
-`operator` — do not bypass it.
-
-### Stay on task; note bugs separately
-
-When you encounter code that could have a possible bug, **note it in `bug.md`**
-at the repo root, then continue with the main task. Do not rabbit-hole into
-fixing it unless the bug is the task. One line per bug in `bug.md` is enough:
-file path, short description. The focus stays on the requested change.
-
-### Every feature is multi-interface
-
-Any feature — calculations, analytics, AI skills — must be reachable through
-**Discord** as well as the web UI. The UI is just one possible interface for the
-user to work with their training data. Because the backend delegates to the IF
-Agent API's health tools (the same tools the Discord agent exposes), features
-are multi-interface by default — do not add a feature that only the web UI can
-do. If a feature isn't callable through the agent tools, it's incomplete.
+`npm run build` must pass before declaring work done.

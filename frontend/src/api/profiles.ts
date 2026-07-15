@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { cachedGet, invalidateDomain } from './cache'
 import type { VideoLibraryItem } from '@powerlifting/types'
 
 const api = axios.create({
@@ -15,6 +16,7 @@ export interface PublicProfile {
   profile_visibility: 'private' | 'public'
   public_training_summary_enabled: boolean
   is_self: boolean
+  tags: string[]
   federation?: string | null
   weight_class_kg?: number | null
   practicing_for?: string | null
@@ -30,18 +32,16 @@ export interface PublicProfile {
 }
 
 export async function searchProfiles(query: string): Promise<PublicProfile[]> {
-  const res = await api.get<{ data: PublicProfile[] }>('/profiles/search', {
-    params: { q: query },
-  })
-  return res.data.data
+  const data = await cachedGet(api, `/profiles/search?q=${encodeURIComponent(query)}`, ['profiles:search'])
+  return data.data
 }
 
 export async function fetchProfile(nickname: string): Promise<PublicProfile> {
-  const res = await api.get<{ data: PublicProfile }>(`/profiles/${encodeURIComponent(nickname)}`)
-  return res.data.data
+  const data = await cachedGet(api, `/profiles/${encodeURIComponent(nickname)}`, [`profile:${nickname}`])
+  return data.data
 }
 
 export async function fetchCurrentProfile(): Promise<PublicProfile> {
-  const res = await api.get<{ data: PublicProfile }>('/profiles/current')
-  return res.data.data
+  const data = await cachedGet(api, '/profiles/current', ['profile:current'])
+  return data.data
 }

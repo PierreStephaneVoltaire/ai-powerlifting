@@ -3,19 +3,8 @@ variable "region" {
   default = "ca-central-1"
 }
 
-variable "ecr_repository_prefix" {
+variable "powerlifting_s3_bucket" {
   type    = string
-  default = "if"
+  default = "powerlifting-openpowerlifting-dataset"
 }
 
-# DynamoDB table names — created by the main infra stack, referenced here
-# for the video thumbnail Lambda's IAM policy and env vars.
-variable "dynamodb_health_table" {
-  type    = string
-  default = "if-health"
-}
-
-variable "dynamodb_sessions_table" {
-  type    = string
-  default = "if-sessions"
-}

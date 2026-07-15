@@ -12,7 +12,7 @@ import {
 import { Paper, Text } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { weeklyVolumeByCategory6 } from '@/utils/volume'
+import { weeklyVolumeByCategory } from '@/utils/volume'
 import { displayWeight } from '@/utils/units'
 import { fetchGlossary } from '@/api/client'
 import type { GlossaryExercise } from '@powerlifting/types'
@@ -54,7 +54,7 @@ export default function VolumeChart({ block }: { block?: string }) {
 
   const data = useMemo(() => {
     if (!program) return []
-    return weeklyVolumeByCategory6(program.sessions, block, glossary)
+    return weeklyVolumeByCategory(program.sessions, glossary, block)
   }, [program, block, glossary])
 
   if (!program || data.length === 0) {

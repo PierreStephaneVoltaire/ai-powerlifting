@@ -1,0 +1,77 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+min_replicas: 1
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Goals management pod. Handles goal listing and full replacement, plus
+  health-integrated goal get/update. Goals are read before being replaced. Pass the
+  operation name in the "function" field and all operation arguments as top-level
+  fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - goals_list
+      - goals_replace
+      - health_get_goals
+      - health_update_goals
+    pk: &id001
+      type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    goals: &id002
+      type: array
+      description: Full array of goal objects to write.
+  required:
+  - function
+  - goals
+operations:
+  goals_list:
+    description: List all athlete goals for a user. Returns the full array of goal
+      objects.
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+      required: []
+  goals_replace:
+    description: Full replace of a user athlete goals. Upserts incoming goals by id
+      and deletes any goals not in the incoming array. Send the complete goals array.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        goals: *id002
+      required:
+      - goals
+  health_get_goals:
+    description: Get explicit goals attached to the current program block. Returns
+      the goals array from the current block metadata.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_update_goals:
+    description: "Replace the explicit goals array on the current program block. Full\
+      \ replace \u2014 send the complete goals array."
+    input_schema:
+      type: object
+      properties:
+        goals:
+          type: array
+          description: Full array of goal objects to write.
+      required:
+      - goals

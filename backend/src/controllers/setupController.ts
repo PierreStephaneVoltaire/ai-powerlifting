@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { invokeToolDirect } from '../utils/agent'
+import { invokeLambda } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 
 type InitializeBody = {
@@ -38,7 +38,7 @@ function setupError(error: unknown): AppError {
 
 export async function getSetupStatus(req: Request, res: Response): Promise<void> {
   try {
-    const result = await invokeToolDirect('health_setup_status', { pk: req.mapped_pk })
+    const result = await invokeLambda('pod_training_program', { function: 'health_setup_status',  pk: req.mapped_pk })
     res.json({
       data: {
         mapped_pk: req.mapped_pk ?? result.mapped_pk ?? 'operator',
@@ -61,7 +61,7 @@ export async function initializeSetup(req: Request, res: Response): Promise<void
 
   const body = req.body as InitializeBody
   try {
-    const result = await invokeToolDirect('health_setup_initialize', {
+    const result = await invokeLambda('pod_training_program', { function: 'health_setup_initialize', 
       pk: req.mapped_pk,
       mode: body.mode,
       program_name: body.programName,

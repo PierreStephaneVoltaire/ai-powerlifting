@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Alert,
   Avatar,
+  Badge,
   Box,
   Button,
   FileButton,
@@ -18,7 +19,7 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core'
-import { AlertCircle, Calendar, Film, LogIn, Save, Upload, User } from 'lucide-react'
+import { AlertCircle, Calendar, Check, Film, LogIn, Plus, Save, Tag as TagIcon, Upload, User, X } from 'lucide-react'
 import {
   getSettings,
   isValidProfileAvatarType,
@@ -27,6 +28,9 @@ import {
   updateNickname,
   updateProfile,
   uploadProfileAvatar,
+  addTag,
+  removeTag,
+  approveTag,
   type UserSettings,
 } from '@/api/settings'
 import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
@@ -140,6 +144,8 @@ export default function ProfilePage() {
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarProgress, setAvatarProgress] = useState(0)
   const [ageClass, setAgeClass] = useState<AgeCategory>('open')
+  const [newTag, setNewTag] = useState('')
+  const [tagSaving, setTagSaving] = useState(false)
 
   // The page renders one of two video grids (own-videos when signed in,
   // public-videos when reading someone else's profile). Both grids feed
@@ -238,10 +244,13 @@ export default function ProfilePage() {
       ? calculateDotsFromLifts(squat, bench, deadlift, bodyweight, scoreSex).dots
       : null
 
-    const weightValue = (kg: number) => {
-      if (kg <= 0) return '--'
-      const display = toDisplayUnit(kg, unit)
-      return Number.isInteger(display) ? String(display) : display.toFixed(1)
+    const weightValue = (kg: number | null | undefined) => {
+      const n = Number(kg)
+      if (!Number.isFinite(n) || n <= 0) return '--'
+      const display = toDisplayUnit(n, unit)
+      const num = Number(display)
+      if (!Number.isFinite(num)) return '--'
+      return Number.isInteger(num) ? String(num) : num.toFixed(1)
     }
 
     return [
@@ -249,7 +258,7 @@ export default function ProfilePage() {
       { label: 'Bench', value: weightValue(bench), sub: unit },
       { label: 'Deadlift', value: weightValue(deadlift), sub: unit },
       { label: 'Total', value: weightValue(total), sub: unit },
-      { label: 'DOTS', value: dots !== null ? dots.toFixed(1) : '--', sub: 'pts' },
+      { label: 'DOTS', value: dots !== null && dots !== undefined && Number.isFinite(Number(dots)) ? Number(dots).toFixed(1) : '--', sub: 'pts' },
       { label: 'Class', value: meta?.weight_class_kg ? String(meta.weight_class_kg) : '--', sub: 'kg' },
     ]
   }, [program, sex, unit])
@@ -264,10 +273,13 @@ export default function ProfilePage() {
 
   const publicProfileMetrics = useMemo(() => {
     const summary = publicProfile?.summary
-    const weightValue = (kg: number | null | undefined) => {
-      if (!kg || kg <= 0) return '--'
-      const display = toDisplayUnit(kg, unit)
-      return Number.isInteger(display) ? String(display) : display.toFixed(1)
+    const weightValue = (kg: number | string | null | undefined) => {
+      const n = Number(kg)
+      if (!Number.isFinite(n) || n <= 0) return '--'
+      const display = toDisplayUnit(n, unit)
+      const num = Number(display)
+      if (!Number.isFinite(num)) return '--'
+      return Number.isInteger(num) ? String(num) : num.toFixed(1)
     }
 
     return [
@@ -275,7 +287,7 @@ export default function ProfilePage() {
       { label: 'Bench', value: weightValue(summary?.bench_kg), sub: unit },
       { label: 'Deadlift', value: weightValue(summary?.deadlift_kg), sub: unit },
       { label: 'Total', value: weightValue(summary?.total_kg), sub: unit },
-      { label: 'DOTS', value: summary?.dots !== null && summary?.dots !== undefined ? summary.dots.toFixed(1) : '--', sub: 'pts' },
+      { label: 'DOTS', value: summary?.dots !== null && summary?.dots !== undefined && Number.isFinite(Number(summary.dots)) ? Number(summary.dots).toFixed(1) : '--', sub: 'pts' },
       { label: 'Class', value: publicProfile?.weight_class_kg ? String(publicProfile.weight_class_kg) : '--', sub: 'kg' },
     ]
   }, [publicProfile, unit])
@@ -351,6 +363,47 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleAddTag() {
+    const tag = newTag.trim().toLowerCase().replace(/\s+/g, '-')
+    if (!tag || !settings || tagSaving) return
+    setTagSaving(true)
+    try {
+      const updated = await addTag(tag)
+      setSettings(updated)
+      setNewTag('')
+    } catch {
+      pushToast({ message: 'Failed to add tag', type: 'error' })
+    } finally {
+      setTagSaving(false)
+    }
+  }
+
+  async function handleRemoveTag(tag: string) {
+    if (!settings || tagSaving) return
+    setTagSaving(true)
+    try {
+      const updated = await removeTag(tag)
+      setSettings(updated)
+    } catch {
+      pushToast({ message: 'Failed to remove tag', type: 'error' })
+    } finally {
+      setTagSaving(false)
+    }
+  }
+
+  async function handleApproveTag(tag: string) {
+    if (!settings || tagSaving) return
+    setTagSaving(true)
+    try {
+      const updated = await approveTag(tag)
+      setSettings(updated)
+    } catch {
+      pushToast({ message: 'Failed to approve tag', type: 'error' })
+    } finally {
+      setTagSaving(false)
+    }
+  }
+
   if (authLoading) {
     return <Text c="dimmed">Loading profile...</Text>
   }
@@ -398,6 +451,13 @@ export default function ProfilePage() {
                     {publicProfile.federation || 'Federation unset'} - {publicProfile.weight_class_kg || '--'} kg
                     {publicProfile.practicing_for ? ` - ${publicProfile.practicing_for}` : ''}
                   </Text>
+                  {(publicProfile.tags || []).length > 0 && (
+                    <Group gap={4} wrap="wrap">
+                      {publicProfile.tags.map((tag) => (
+                        <Badge key={tag} variant="light" size="sm">{tag}</Badge>
+                      ))}
+                    </Group>
+                  )}
                   {publicProfile.bio && (
                     <Text size="sm" c="var(--text-primary)" lh={1.6}>
                       {publicProfile.bio}
@@ -581,6 +641,62 @@ export default function ProfilePage() {
                   {program?.meta.federation || 'Federation unset'} - {program?.meta.weight_class_kg || '--'} kg
                   {program?.meta.practicing_for ? ` - ${program.meta.practicing_for}` : ''}
                 </Text>
+
+                {/* Tags (FEAT-8) */}
+                <Stack gap={4}>
+                  <Group gap={4} wrap="wrap" align="center">
+                    <TagIcon size={14} color="var(--text-muted)" />
+                    <Text size="xs" c="var(--text-muted)">Tags</Text>
+                    {(settings?.tags || []).filter((t) => t.approved).map((t) => (
+                      <Badge key={t.tag} variant="light" size="sm" pr={4}
+                        rightSection={
+                          <button type="button" onClick={() => handleRemoveTag(t.tag)} disabled={tagSaving || readOnly}
+                            style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                            <X size={12} />
+                          </button>
+                        }
+                      >
+                        {t.tag}
+                      </Badge>
+                    ))}
+                    {(settings?.tags || []).filter((t) => !t.approved).map((t) => (
+                      <Badge key={t.tag} variant="dot" color="orange" size="sm" pr={4}
+                        rightSection={
+                          <Group gap={2}>
+                            <button type="button" onClick={() => handleApproveTag(t.tag)} disabled={tagSaving || readOnly}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                              <Check size={12} />
+                            </button>
+                            <button type="button" onClick={() => handleRemoveTag(t.tag)} disabled={tagSaving || readOnly}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                              <X size={12} />
+                            </button>
+                          </Group>
+                        }
+                      >
+                        {t.tag}
+                      </Badge>
+                    ))}
+                  </Group>
+                  {!readOnly && (
+                    <Group gap={4}>
+                      <TextInput
+                        size="xs"
+                        placeholder="Add a tag…"
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.currentTarget.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag() } }}
+                        disabled={tagSaving || !settings}
+                        maxLength={30}
+                        w={140}
+                      />
+                      <Button size="xs" variant="light" leftSection={<Plus size={12} />} onClick={handleAddTag}
+                        disabled={tagSaving || !newTag.trim() || !settings}>
+                        Add
+                      </Button>
+                    </Group>
+                  )}
+                </Stack>
               </Stack>
             </Group>
           </Group>

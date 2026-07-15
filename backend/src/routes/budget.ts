@@ -2,6 +2,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import * as budgetController from '../controllers/budgetController'
 import * as competitionController from '../controllers/competitionController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { BudgetCategory, BudgetPriorityTier } from '@powerlifting/types'
 
 const upload = multer({
@@ -18,7 +19,6 @@ const upload = multer({
 
 export const budgetRouter = Router()
 
-// ─── Config ──────────────────────────────────────────────────────────────────
 
 budgetRouter.get('/config', async (req, res, next) => {
   try {
@@ -29,7 +29,7 @@ budgetRouter.get('/config', async (req, res, next) => {
   }
 })
 
-budgetRouter.put('/config', async (req, res, next) => {
+budgetRouter.put('/config', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const config = await budgetController.putBudgetConfig(req.mapped_pk!, req.body)
     res.json({ data: config, error: null })
@@ -38,7 +38,6 @@ budgetRouter.put('/config', async (req, res, next) => {
   }
 })
 
-// ─── Items ───────────────────────────────────────────────────────────────────
 
 function parseFilters(query: Record<string, unknown>): budgetController.BudgetItemFilters | undefined {
   const compId = typeof query.comp_id === 'string' ? query.comp_id : undefined
@@ -60,7 +59,7 @@ budgetRouter.get('/items', async (req, res, next) => {
   }
 })
 
-budgetRouter.post('/items', async (req, res, next) => {
+budgetRouter.post('/items', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const item = await budgetController.createBudgetItem(req.mapped_pk!, req.body)
     res.json({ data: item, error: null })
@@ -69,7 +68,7 @@ budgetRouter.post('/items', async (req, res, next) => {
   }
 })
 
-budgetRouter.put('/items/:id', async (req, res, next) => {
+budgetRouter.put('/items/:id', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const item = await budgetController.updateBudgetItem(req.mapped_pk!, req.params.id, req.body)
     res.json({ data: item, error: null })
@@ -78,7 +77,7 @@ budgetRouter.put('/items/:id', async (req, res, next) => {
   }
 })
 
-budgetRouter.delete('/items/:id', async (req, res, next) => {
+budgetRouter.delete('/items/:id', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     await budgetController.deleteBudgetItem(req.mapped_pk!, req.params.id)
     res.json({ data: { success: true }, error: null })
@@ -115,7 +114,7 @@ budgetRouter.delete('/items/:itemId/photo', async (req, res, next) => {
   }
 })
 
-budgetRouter.patch('/items/:id/cut', async (req, res, next) => {
+budgetRouter.patch('/items/:id/cut', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const body = req.body as { cut?: boolean } | null
     const cut = body?.cut !== false
@@ -126,7 +125,6 @@ budgetRouter.patch('/items/:id/cut', async (req, res, next) => {
   }
 })
 
-// ─── Summary ──────────────────────────────────────────────────────────────────
 
 budgetRouter.get('/summary', async (req, res, next) => {
   try {
@@ -141,7 +139,6 @@ budgetRouter.get('/summary', async (req, res, next) => {
   }
 })
 
-// ─── AI advisor (BUD-05) ──────────────────────────────────────────────────────
 
 budgetRouter.post('/ai-analysis', async (req, res, next) => {
   try {
@@ -150,12 +147,12 @@ budgetRouter.post('/ai-analysis', async (req, res, next) => {
       return res.status(403).json({ data: null, error: 'Only the athlete can generate a fresh budget analysis.' })
     }
     const analysis = await budgetController.getBudgetAiAnalysis(req.mapped_pk!, refresh, async (pk) => {
-      const userComps = await competitionController.listUserCompetitions(pk)
-      return userComps.map((c) => ({
-        master_id: c.master_id,
+      const competitions = await competitionController.getCompetitions(pk, 'current')
+      return competitions.map((c) => ({
+        master_id: c.date,
         name: c.name,
-        start_date: c.start_date,
-        user_status: c.user_status,
+        start_date: c.date,
+        user_status: c.status === 'completed' || c.status === 'skipped' ? c.status : 'optional',
       }))
     })
     res.json({ data: analysis, error: null })
@@ -164,12 +161,8 @@ budgetRouter.post('/ai-analysis', async (req, res, next) => {
   }
 })
 
-// ─── Legacy whole-store read/write (backward compatibility) ───────────────────
-//
-// Kept so the existing frontend store (useBudgetStore) and the analytics budget
-// timeline endpoint keep working until BUD-02..05 migrate to the granular API.
 
-budgetRouter.get('/', async (req, res, next) => {
+budgetRouter.get('/', cacheGet(['budget']), async (req, res, next) => {
   try {
     const store = await budgetController.getBudget(req.mapped_pk!)
     res.json({ data: store, error: null })
@@ -178,7 +171,7 @@ budgetRouter.get('/', async (req, res, next) => {
   }
 })
 
-budgetRouter.put('/', async (req, res, next) => {
+budgetRouter.put('/', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const { config, items } = req.body as { config?: unknown; items?: unknown[] }
     if (!config || typeof config !== 'object') {

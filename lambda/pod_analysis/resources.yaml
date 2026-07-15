@@ -1,0 +1,305 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_glossary
+- pl_program
+- pl_sessions
+min_replicas: 1
+s3_read: true
+resources:
+  requests:
+    cpu: 1000m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+timeout: 900
+description: Analysis and analytics pod. Handles weekly analysis generation, per-section
+  analysis retrieval, progression analysis, RPE drift analysis, powerlifting stats
+  analysis, correlation analysis (within and across blocks), multi-block comparison,
+  program evaluation, analysis regeneration, powerlifting ranking percentiles, and
+  filter category enumeration. Compute-heavy, no writes to user data. Pass the operation
+  name in the "function" field and all operation arguments as top-level fields alongside
+  it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - analysis_section
+      - analyze_powerlifting_stats
+      - analyze_progression
+      - analyze_rpe_drift
+      - block_correlation_analysis
+      - block_program_evaluation
+      - correlation_analysis
+      - multi_block_comparison_analysis
+      - powerlifting_filter_categories
+      - powerlifting_ranking_percentile
+      - program_evaluation
+      - regenerate_analysis
+      - weekly_analysis
+    pk: &id001
+      type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    program_sk: &id002
+      type: string
+      description: Program sort key. Defaults to current.
+    block_key: &id003
+      type: string
+      description: Block key to analyze.
+    section: &id004
+      type: string
+      description: Analysis section name (e.g. "volume", "intensity", "progression",
+        "rpe_drift").
+    refresh: &id005
+      type: boolean
+      description: Force recompute instead of using cached value. Default false.
+    version: &id006
+      type: string
+      description: Program version. Defaults to current.
+    cache_only: &id007
+      type: boolean
+      description: Only return cached results, do not recompute. Default false.
+    weeks: &id008
+      type: integer
+      description: Number of weeks to analyze. Default 4.
+    block: &id009
+      type: string
+      description: Block key to scope the analysis.
+    block_keys: &id010
+      type: array
+      description: List of block keys to compare.
+    total_kg: &id011
+      type: number
+      description: Total in kg.
+    body_weight_kg: &id012
+      type: number
+      description: Body weight in kg.
+    gender: &id013
+      type: string
+      description: Gender category.
+    equipment: &id014
+      type: string
+      description: Equipment category (e.g. "raw", "equipped").
+    federation: &id015
+      type: string
+      description: Federation name.
+    week: &id016
+      type: string
+      description: Week identifier to analyze.
+  required:
+  - function
+operations:
+  analysis_section:
+    description: Compute a single deterministic weekly analysis section. Loads program+sessions
+      via the ProgramStore layer, fetches glossary via direct DynamoDB, then computes
+      one analysis section (e.g. "volume", "intensity", "progression"). AI section
+      keys (ai_correlation, program_evaluation) are rejected before reaching this
+      core.
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+        program_sk: *id002
+        block_key: *id003
+        section: *id004
+        refresh: *id005
+      required: []
+  analyze_powerlifting_stats:
+    description: Analyze powerlifting statistics for the current program version.
+      Computes totals, Wilks, DOTS, and comparative metrics. Copied from tools/health/powerlifting_stats.py.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version: *id006
+      required: []
+  analyze_progression:
+    description: Analyze progression rate for the current program. Loads program+sessions,
+      then calls analytics.progression_rate to compute week-over-week progression
+      trends.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to current.
+      required: []
+  analyze_rpe_drift:
+    description: Analyze RPE (rate of perceived exertion) drift for a specific exercise
+      over a window of weeks. Loads program+sessions, then calls analytics.rpe_drift.
+      Uses window_weeks (default 4) to set the lookback period.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to current.
+      required: []
+  block_correlation_analysis:
+    description: Generate an AI correlation report for a specific block. Analyzes
+      relationships between training variables (volume, intensity, RPE) and outcomes
+      (progression, fatigue). Uses AI to generate natural-language findings and summary.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        block_key:
+          type: string
+          description: Block key to analyze.
+        refresh:
+          type: boolean
+          description: Force recompute. Default false.
+        cache_only: *id007
+      required: []
+  block_program_evaluation:
+    description: Generate an AI program evaluation report for a specific block. Assesses
+      the overall program design, exercise selection, volume distribution, and progression.
+      Uses AI to produce a structured evaluation with recommendations.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        block_key:
+          type: string
+          description: Block key to evaluate.
+        refresh:
+          type: boolean
+          description: Force recompute. Default false.
+        cache_only:
+          type: boolean
+          description: Only return cached results. Default false.
+      required: []
+  correlation_analysis:
+    description: Generate a correlation analysis report across training variables.
+      Analyzes how volume, intensity, RPE, and other factors correlate with progression.
+      Uses cached DynamoDB values for deterministic sections.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        weeks: *id008
+        block: *id009
+        refresh:
+          type: boolean
+          description: Force recompute. Default false.
+        cache_only:
+          type: boolean
+          description: Only return cached results. Default false.
+      required: []
+  multi_block_comparison_analysis:
+    description: Generate a comparison report across multiple training blocks. Analyzes
+      differences in volume, intensity, progression, and outcomes between blocks.
+      Uses AI to produce a structured comparison.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        block_keys: *id010
+      required: []
+  powerlifting_filter_categories:
+    description: List available filter categories for powerlifting ranking data. Returns
+      the distinct values for federation, equipment, gender, and weight class filters
+      used by the ranking percentile tool.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  powerlifting_ranking_percentile:
+    description: Compute the ranking percentile for a given total, body weight, gender,
+      equipment, and federation. Returns the percentile rank compared to known competition
+      results.
+    input_schema:
+      type: object
+      properties:
+        total_kg: *id011
+        body_weight_kg: *id012
+        gender: *id013
+        equipment: *id014
+        federation: *id015
+      required: []
+  program_evaluation:
+    description: Generate an AI program evaluation report for the current program.
+      Assesses overall design, volume, intensity, exercise selection, and progression.
+      Caches results in DynamoDB for fast retrieval.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        refresh:
+          type: boolean
+          description: Force recompute. Default false.
+        cache_only:
+          type: boolean
+          description: Only return cached results. Default false.
+      required: []
+  regenerate_analysis:
+    description: "Regenerate deterministic current-block analysis caches and markdown\
+      \ export. AI reports are intentionally excluded \u2014 they are regenerated\
+      \ only through explicit AI section tools. NEVER touches past-block caches."
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        block_key:
+          type: string
+          description: Block key to regenerate analysis for.
+      required: []
+  weekly_analysis:
+    description: Build a full sectioned deterministic weekly analysis for the current
+      program. Loads program+sessions, fetches glossary, then computes all deterministic
+      analysis sections via the analytics module. AI sections (program_evaluation,
+      correlation) are intentionally omitted.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        week: *id016
+        refresh:
+          type: boolean
+          description: Force recompute. Default false.
+      required: []

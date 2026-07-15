@@ -96,12 +96,6 @@ export function getCurrentWeek(programStart: string): number {
   return Math.max(1, Math.floor(diffDays / 7) + 1)
 }
 
-// ─── Budget transforms ──────────────────────────────────────────────────────
-//
-// Budget items are stored and read in the canonical BUD-01 shape. These
-// normalisers validate inbound request bodies and stored rows against the
-// canonical BudgetItem / BudgetConfig contracts, filling required fields with
-// safe defaults only when a field is genuinely absent.
 
 import type {
   BudgetItem,

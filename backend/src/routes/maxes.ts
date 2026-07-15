@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import * as maxController from '../controllers/maxController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { MaxEntry } from '@powerlifting/types'
 
 export const maxesRouter = Router()
 
 // GET /api/maxes/:version - Get current targets and history
-maxesRouter.get('/:version', async (req, res, next) => {
+maxesRouter.get('/:version', cacheGet((req) => [`maxes:${req.params.version}`]), async (req, res, next) => {
   try {
     const [targets, history] = await Promise.all([
       maxController.getTargetMaxes(req.mapped_pk!, req.params.version),
@@ -21,7 +22,7 @@ maxesRouter.get('/:version', async (req, res, next) => {
 })
 
 // PUT /api/maxes/:version - Update target maxes
-maxesRouter.put('/:version', async (req, res, next) => {
+maxesRouter.put('/:version', invalidateAfter((req) => [`maxes:${req.params.version}`, `program:${req.params.version}`]), async (req, res, next) => {
   try {
     const { squat_kg, bench_kg, deadlift_kg } = req.body
 
@@ -48,7 +49,7 @@ maxesRouter.put('/:version', async (req, res, next) => {
 })
 
 // POST /api/maxes/:version/history - Add to max history
-maxesRouter.post('/:version/history', async (req, res, next) => {
+maxesRouter.post('/:version/history', invalidateAfter((req) => [`maxes:${req.params.version}`]), async (req, res, next) => {
   try {
     const entry = req.body as MaxEntry
 

@@ -356,8 +356,9 @@ export default function AnalysisPage() {
   const { competitions: userCompetitions, loadAll: loadUserCompetitions } = useCompetitionsStore()
 
   useEffect(() => {
-    loadUserCompetitions({ country: ranking_country ?? undefined, state: ranking_region ?? undefined })
-  }, [ranking_country, ranking_region, loadUserCompetitions])
+    // Load all of the Athlete's Competition Entries without ranking-location filters.
+    loadUserCompetitions()
+  }, [loadUserCompetitions])
   const [searchParams, setSearchParams] = useSearchParams()
 
   const weeksMode = parseWeeksMode(searchParams.get('weeks'))
@@ -458,42 +459,46 @@ export default function AnalysisPage() {
     }
 
     let cancelled = false
-    let pollTimer: number | undefined
+    const sectionTimers: Partial<Record<AnalysisSectionKey, number>> = {}
 
-    async function pollSections() {
-      const statuses = await Promise.all(
-        DETERMINISTIC_ANALYSIS_SECTIONS.map((section) =>
-          fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section),
-        ),
-      )
-      if (cancelled) return
+    async function pollSection(section: AnalysisSectionKey) {
+      try {
+        const result = await fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section)
+        if (cancelled) return
 
-      setSectionStatuses(Object.fromEntries(statuses.map((status) => [status.sectionKey, status.status])))
-      setSectionPayloads((current) => {
-        const next = { ...current }
-        for (const status of statuses) {
-          if (status.status === 'complete' && status.payload) {
-            next[status.sectionKey] = status.payload
-          }
+        setSectionStatuses((prev) => ({ ...prev, [section]: result.status }))
+        if (result.status === 'complete' && result.payload) {
+          setSectionPayloads((prev) => ({ ...prev, [section]: result.payload }))
         }
-        return next
-      })
-      const generated = statuses
-        .map((status) => status.generatedAt)
-        .filter((value): value is string => Boolean(value))
-        .sort()
-        .slice(-1)[0]
-      if (generated) setLatestGeneratedAt(generated)
-
-      const terminal = statuses.every((status) => status.status === 'complete' || status.status === 'error')
-      const hasAnyPayload = statuses.some((status) => status.status === 'complete' && status.payload)
-      setLoading(!terminal && !hasAnyPayload)
-      if (!terminal) {
-        pollTimer = window.setTimeout(() => {
-          pollSections().catch((e) => {
-            if (!cancelled) setError(e.message)
+        if (result.generatedAt) {
+          setLatestGeneratedAt((prev) => {
+            if (!prev || result.generatedAt! > prev) return result.generatedAt!
+            return prev
           })
-        }, 2000)
+        }
+
+        // Clear global error as soon as any section succeeds
+        if (result.status === 'complete' || (result.status === 'error' && result.payload)) {
+          setError(null)
+        }
+
+        // Re-poll this section independently if it's still pending/running
+        if (result.status === 'pending' || result.status === 'running' || result.status === 'missing') {
+          sectionTimers[section] = window.setTimeout(() => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          }, 2000)
+        }
+      } catch (err) {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
+        setSectionStatuses((prev) => ({ ...prev, [section]: 'error' }))
+        // Only set global error if NO section has data yet
+        setSectionPayloads((prev) => {
+          if (Object.keys(prev).length === 0) setError(message)
+          return prev
+        })
       }
     }
 
@@ -510,25 +515,54 @@ export default function AnalysisPage() {
         setSectionStatuses(Object.fromEntries(
           DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => [section, manifest.sections[section]?.status ?? 'missing']),
         ))
-        return queueAnalysisSections({
+        queueAnalysisSections({
           asOfDate,
           windowKey: analysisKey,
           sections: DETERMINISTIC_ANALYSIS_SECTIONS,
+        }).then(() => {
+          // Fire each section poll independently — no Promise.all/allSettled.
+          // Each section updates its own state the moment it resolves.
+          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          })
+        }).catch(() => {
+          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          })
         })
       })
-      .then(() => pollSections())
-      .catch((e) => {
+      .catch(() => {
         if (!cancelled) {
-          setError(e.message)
-          setLoading(false)
+          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
+            pollSection(section).catch((e) => {
+              if (!cancelled) setError(e.message)
+            })
+          })
         }
       })
 
+    // Stop loading as soon as the first section payload arrives — the
+    // loading gate is cleared in a separate effect below.
     return () => {
       cancelled = true
-      if (pollTimer !== undefined) window.clearTimeout(pollTimer)
+      for (const timer of Object.values(sectionTimers)) {
+        if (timer !== undefined) window.clearTimeout(timer)
+      }
     }
   }, [activeSection, analysisKey, analysisRefreshNonce, asOfDate])
+
+  // Clear the global loading spinner the moment ANY section payload arrives.
+  // Sections load independently — don't make the user stare at a spinner while
+  // some sections are already ready.
+  useEffect(() => {
+    if (activeSection === 'weekly' && loading && Object.keys(sectionPayloads).length > 0) {
+      setLoading(false)
+    }
+  }, [activeSection, loading, sectionPayloads])
 
   useEffect(() => {
     if (activeSection !== 'weekly') return
@@ -974,7 +1008,25 @@ export default function AnalysisPage() {
 
       {error && (
         <Paper withBorder p="md" className="if-card" style={{ borderColor: 'var(--status-danger-border)' }}>
-          <Text c="red">{error}</Text>
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text c="red" fw={500}>Analysis failed to load</Text>
+              <Button size="xs" variant="light" onClick={() => setAnalysisRefreshNonce((n) => n + 1)}>
+                Retry
+              </Button>
+            </Group>
+            <Text size="sm" c="red">{error}</Text>
+            {Object.keys(sectionStatuses).length > 0 && (
+              <Stack gap={2} mt="xs">
+                <Text size="xs" c="dimmed">Section statuses:</Text>
+                {Object.entries(sectionStatuses).map(([key, status]) => (
+                  <Text key={key} size="xs" ff="monospace">
+                    {key}: {status}
+                  </Text>
+                ))}
+              </Stack>
+            )}
+          </Stack>
         </Paper>
       )}
 

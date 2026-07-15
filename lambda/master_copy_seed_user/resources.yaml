@@ -1,0 +1,21 @@
+layers:
+- pl_boto3
+- pl_master_copy
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 120
+description: Seed per-user copies of master competitions and federations.
+input_schema:
+  type: object
+  properties:
+    pk:
+      type: string
+      description: User partition key (defaults to env HEALTH_PROGRAM_PK).
+  required: []
+
+reserved_concurrency: null

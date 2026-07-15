@@ -1,0 +1,7 @@
+# pl-boto3 — shared Lambda layer for AWS SDK
+#
+# Pinned to the versions verified locally. boto3, botocore, and s3transfer
+# are version-locked together (boto3 pulls a matching botocore + s3transfer).
+boto3==1.42.83
+botocore==1.42.83
+s3transfer==0.16.0

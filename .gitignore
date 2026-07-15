@@ -13,7 +13,8 @@ override.tf.json
 # Lambda / Bundles
 *.zip
 layer/
-layers/
+layers/**/*.zip
+layers/**/.stage/
 
 # Docker
 .docker/

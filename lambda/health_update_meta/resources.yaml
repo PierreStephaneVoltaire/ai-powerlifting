@@ -1,0 +1,23 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Update program metadata fields, including sex for DOTS calculations.
+input_schema:
+  type: object
+  properties:
+    updates:
+      type: object
+      description: Dict of meta fields to update
+  required:
+  - updates
+
+reserved_concurrency: null

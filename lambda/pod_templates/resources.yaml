@@ -1,0 +1,264 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_glossary
+- pl_program
+- pl_templates
+min_replicas: 0
+resources:
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+  limits:
+    cpu: 4000m
+    memory: 4Gi
+timeout: 900
+description: Training template management pod. Handles template CRUD (create blank,
+  from block, from payload, get, list, update, copy, archive, unarchive), publishing
+  workflow (publish, unpublish), template evaluation (assesses suitability for an
+  athlete), and template application (apply initiates a preview, apply_confirm executes
+  the concretized program). Pass the operation name in the "function" field and all
+  operation arguments as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - template_apply
+      - template_apply_confirm
+      - template_archive
+      - template_copy
+      - template_create_blank
+      - template_create_from_block
+      - template_create_from_payload
+      - template_evaluate
+      - template_get
+      - template_list
+      - template_publish
+      - template_unarchive
+      - template_unpublish
+      - template_update
+    pk: &id001
+      type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    template_sk: &id002
+      type: string
+      description: Template sort key to apply.
+    start_date: &id003
+      type: string
+      description: Program start date (YYYY-MM-DD).
+    maxes: &id004
+      type: object
+      description: Initial maxes object with squat_kg, bench_kg, deadlift_kg.
+    preview_id: &id005
+      type: string
+      description: Preview ID returned by template_apply.
+    new_name: &id006
+      type: string
+      description: Name for the copied template.
+    name: &id007
+      type: string
+      description: Template name.
+    weeks: &id008
+      type: integer
+      description: Number of weeks in the template.
+    block: &id009
+      type: object
+      description: Block object to extract into a template.
+    payload: &id010
+      type: object
+      description: Full template payload dict.
+    include_archived: &id011
+      type: boolean
+      description: Include archived templates. Default false.
+    updates: &id012
+      type: object
+      description: Dict with template fields to update.
+  required:
+  - function
+operations:
+  template_apply:
+    description: Initiate template application for a user. Generates a preview of
+      what the program would look like with the template applied, using the provided
+      start date and maxes. Returns a preview ID that must be passed to template_apply_confirm
+      to execute.
+    input_schema:
+      type: object
+      properties:
+        pk: *id001
+        template_sk: *id002
+        start_date: *id003
+        maxes: *id004
+      required: []
+  template_apply_confirm:
+    description: Confirm and execute a template application preview. Takes the preview
+      ID from template_apply and writes the concretized program to DynamoDB.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        preview_id: *id005
+      required: []
+  template_archive:
+    description: Archive a template by sort key. Archived templates are hidden from
+      default list views but remain accessible.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key to archive.
+      required: []
+  template_copy:
+    description: Create a copy of an existing template under a new name. The copy
+      is owned by the user and can be modified independently.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key to copy.
+        new_name: *id006
+      required: []
+  template_create_blank:
+    description: Create a new blank template with a given name and number of weeks.
+      The template starts with empty phases and can be filled in via template_update.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        name: *id007
+        weeks: *id008
+      required: []
+  template_create_from_block:
+    description: Create a new template from an existing program block. Extracts the
+      block structure, exercises, and configuration into a reusable template.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        block: *id009
+        name:
+          type: string
+          description: Template name.
+      required: []
+  template_create_from_payload:
+    description: Create a new template from a full payload dict. The payload contains
+      the complete template structure (phases, exercises, meta).
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        payload: *id010
+      required: []
+  template_evaluate:
+    description: Evaluate a template suitability for an athlete based on their current
+      maxes. Returns an assessment of whether the template volume, intensity, and
+      exercise selection are appropriate.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key to evaluate.
+        maxes:
+          type: object
+          description: Athlete current maxes with squat_kg, bench_kg, deadlift_kg.
+      required: []
+  template_get:
+    description: Get a specific template by sort key. Returns the full template object
+      with phases, exercises, and meta.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key.
+      required: []
+  template_list:
+    description: List all templates for a user. Returns template summaries sorted
+      by name. Use include_archived=true to include archived templates.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        include_archived: *id011
+      required: []
+  template_publish:
+    description: Publish a template, making it available to other users as a shared
+      template. Published templates appear in the public template library.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key to publish.
+      required: []
+  template_unarchive:
+    description: Unarchive a previously archived template, restoring it to default
+      list views.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key to unarchive.
+      required: []
+  template_unpublish:
+    description: Unpublish a template, removing it from the public template library.
+      The template remains accessible to the owner but is no longer shared.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key to unpublish.
+      required: []
+  template_update:
+    description: Update a template by sort key with a dict of field updates. Only
+      the fields in the updates dict are modified; other fields remain unchanged.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        template_sk:
+          type: string
+          description: Template sort key to update.
+        updates: *id012
+      required: []

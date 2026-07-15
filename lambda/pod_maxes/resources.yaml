@@ -1,0 +1,146 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+min_replicas: 1
+resources:
+  requests:
+    cpu: 500m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+timeout: 900
+description: Maxes and targets pod. Handles current maxes get/update (squat, bench,
+  deadlift in kg), max history entries (add new PR, retrieve history), and max targets
+  (get/set target maxes for goal tracking). Pass the operation name in the "function"
+  field and all operation arguments as top-level fields alongside it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - health_get_current_maxes
+      - health_update_current_maxes
+      - max_history_add
+      - max_history_get
+      - max_target_get
+      - max_target_update
+    squat_kg: &id001
+      type: number
+      description: New squat max in kg.
+    bench_kg: &id002
+      type: number
+      description: New bench max in kg.
+    deadlift_kg: &id003
+      type: number
+      description: New deadlift max in kg.
+    pk: &id004
+      type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    version: &id005
+      type: string
+      description: Program version. Defaults to "current".
+    entry: &id006
+      type: object
+      description: Entry dict with date and weight fields.
+    date: &id007
+      type: string
+      description: Date of the max entry (YYYY-MM-DD).
+    total_kg: &id008
+      type: number
+      description: Total in kg (computed as sum of three lifts if omitted).
+  required:
+  - function
+operations:
+  health_get_current_maxes:
+    description: 'Get current competition maxes. Returns {squat: kg, bench: kg, deadlift:
+      kg}.'
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_update_current_maxes:
+    description: "Update current competition maxes. Provide any of squat_kg, bench_kg,\
+      \ deadlift_kg \u2014 omitted fields are left unchanged. Returns the updated\
+      \ current_maxes dict."
+    input_schema:
+      type: object
+      properties:
+        squat_kg: *id001
+        bench_kg: *id002
+        deadlift_kg: *id003
+      required: []
+  max_history_add:
+    description: Append a max entry to the max history for a program version. The
+      entry must include a date and at least one of squat_kg, bench_kg, deadlift_kg.
+      total_kg is optional (computed if omitted).
+    input_schema:
+      type: object
+      properties:
+        pk: *id004
+        version: *id005
+        entry: *id006
+        date: *id007
+        squat_kg:
+          type: number
+          description: Squat max in kg.
+        bench_kg:
+          type: number
+          description: Bench max in kg.
+        deadlift_kg:
+          type: number
+          description: Deadlift max in kg.
+        total_kg: *id008
+      required: []
+  max_history_get:
+    description: Get the max history for a program version. Returns an array of max
+      entries sorted by date.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+      required: []
+  max_target_get:
+    description: Get the target maxes (squat/bench/deadlift/total) for a program version.
+      These are goal targets used for progression tracking.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+      required: []
+  max_target_update:
+    description: Replace the target maxes for a program version. Provide squat_kg,
+      bench_kg, deadlift_kg; total_kg is recomputed as the sum of the three lifts.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+        squat_kg:
+          type: number
+          description: Target squat max in kg.
+        bench_kg:
+          type: number
+          description: Target bench max in kg.
+        deadlift_kg:
+          type: number
+          description: Target deadlift max in kg.
+      required: []

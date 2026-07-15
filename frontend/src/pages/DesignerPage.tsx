@@ -341,9 +341,10 @@ export default function DesignerPage() {
     const counts = { squat: 0, bench: 0, deadlift: 0 }
     for (const ex of plannedEntries) {
       const name = (ex.name || '').toLowerCase().trim()
-      if (name.includes('squat') && !name.includes('split') && !name.includes('hack')) counts.squat += (ex.sets ?? 0)
-      else if (name === 'bench' || name === 'bench press') counts.bench += (ex.sets ?? 0)
-      else if ((name === 'deadlift' || name.includes('deadlift')) && !name.includes('romanian') && !name.includes('rdl')) counts.deadlift += (ex.sets ?? 0)
+      const sets = Number(ex.sets) || 0
+      if (name.includes('squat') && !name.includes('split') && !name.includes('hack')) counts.squat += sets
+      else if (name === 'bench' || name === 'bench press') counts.bench += sets
+      else if ((name === 'deadlift' || name.includes('deadlift')) && !name.includes('romanian') && !name.includes('rdl')) counts.deadlift += sets
     }
     return counts
   }, [weekSessions])
@@ -648,7 +649,7 @@ export default function DesignerPage() {
                   }}
                 />
               </span>
-              <span className="if-designer-vol-count">{item.sets.toFixed(1).replace(/\.0$/, '')} sets</span>
+              <span className="if-designer-vol-count">{Number(item.sets).toFixed(1).replace(/\.0$/, '')} sets</span>
             </div>
           ))
         })()}

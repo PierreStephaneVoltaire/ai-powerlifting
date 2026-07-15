@@ -13,8 +13,12 @@ export function videoVolumeKg(item: VideoLibraryItem): number {
 }
 
 function compareNewest(a: VideoLibraryItem, b: VideoLibraryItem): number {
-  const cmp = a.session_date.localeCompare(b.session_date)
-    || a.video.uploaded_at.localeCompare(b.video.uploaded_at)
+  const aDate = typeof a?.session_date === 'string' ? a.session_date : ''
+  const bDate = typeof b?.session_date === 'string' ? b.session_date : ''
+  const aUploaded = typeof a?.video?.uploaded_at === 'string' ? a.video.uploaded_at : ''
+  const bUploaded = typeof b?.video?.uploaded_at === 'string' ? b.video.uploaded_at : ''
+  const cmp = aDate.localeCompare(bDate)
+    || aUploaded.localeCompare(bUploaded)
   return -cmp
 }
 

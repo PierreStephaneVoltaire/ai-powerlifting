@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { differenceInCalendarDays, format, parse } from 'date-fns'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { useCompetitionsStore } from '@/store/competitionsStore'
-import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, fetchRankingPercentile, type LiftProfileReview, type RankingPercentileResult } from '@/api/client'
+import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, fetchRankingPercentile, type LiftProfileReview, type RankingPercentileResult, type RankingPercentileCard } from '@/api/client'
 import {
   fetchAnalysisManifest,
   fetchAnalysisSection,
@@ -285,6 +285,7 @@ function phaseState(phase: Phase, currentWeek: number): 'completed' | 'current' 
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const { readOnly } = useAuth()
   const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases, updateLiftProfiles } = useProgramStore()
   const { unit } = useSettingsStore()
@@ -454,8 +455,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!settingsLoaded) return
-    loadUserCompetitions({ country: rankingCountry ?? undefined, state: rankingRegion ?? undefined })
-  }, [settingsLoaded, rankingCountry, rankingRegion, loadUserCompetitions])
+    // Load the Athlete's complete canonical Competition Entry list without
+    // ranking-location filters. Ranking geography is only for percentile
+    // requests; the Athlete's own Entries are filtered by lifecycle/date locally.
+    loadUserCompetitions()
+  }, [settingsLoaded, loadUserCompetitions])
 
   // Load ranking percentile once we have actual maxes + bodyweight + settings
   // Uses actualMaxes (computed after program loads below) — but since this effect
@@ -493,7 +497,7 @@ export default function Dashboard() {
       region:  rankingRegion  ?? undefined,
     })
       .then((data) => { if (!cancelled) setRankingPercentile(data) })
-      .catch(() => {})
+      .catch(() => { if (!cancelled) console.warn('Ranking percentile unavailable') })
       .finally(() => { if (!cancelled) setRankingPercentileLoading(false) })
 
     return () => { cancelled = true }
@@ -868,7 +872,15 @@ export default function Dashboard() {
       )}
 
       <div className="if-dashboard-row if-dashboard-row-top">
-        <section className="if-mock-card" data-testid="dashboard-next-workout">
+        <section
+          className="if-mock-card"
+          data-testid="dashboard-next-workout"
+          style={nextWorkout ? { cursor: 'pointer', textDecoration: 'none', color: 'inherit', display: 'block' } : undefined}
+          onClick={nextWorkout ? () => navigate(`/session/${nextWorkout.date}`) : undefined}
+          role={nextWorkout ? 'link' : undefined}
+          tabIndex={nextWorkout ? 0 : undefined}
+          onKeyDown={nextWorkout ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/session/${nextWorkout.date}`) } } : undefined}
+        >
           <div className="if-mock-card-label"><Dumbbell size={12} /> Next workout</div>
           {nextWorkout ? (() => {
             const planned = nextWorkout.planned_exercises?.length ? nextWorkout.planned_exercises : nextWorkout.exercises
@@ -1017,404 +1029,108 @@ export default function Dashboard() {
           )}
         </section>
 
-  
-         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
-          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
-            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
-              <Trophy size={12} /> Percentile rankings
-            </div>
-            {rankingPercentile?.weight_class_label && (
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
-                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
-              </span>
-            )}
-          </div>
-          {rankingPercentileLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Loader size="xs" />
-              <Text size="xs" c="dimmed">Loading rankings...</Text>
-            </div>
-          ) : !rankingPercentile ? (
-            <Text size="xs" c="dimmed">
-              {meta.current_body_weight_kg > 0
-                ? 'Rankings unavailable — dataset may still be loading.'
-                : 'Set your body weight to see percentile rankings.'}
-            </Text>
-          ) : (() => {
-            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
-            const fmtTop = (beaten: number | null | undefined): string | null => {
-              if (typeof beaten !== 'number') return null
-              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
-            }
-            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
-              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
-              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
-              return 0;
-            }
 
-            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
-            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
-              { key: 'squat',    label: 'Squat',    userKg: actualMaxes.squat,    color: LIFT_COLORS.squat },
-    
-            ]
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
-                  if (userKg <= 0) return null
-                  const g  = rankingPercentile.global?.[key] as number | null
-                  const n  = rankingPercentile.national?.[key] as number | null
-                  const r  = rankingPercentile.regional?.[key] as number | null
-                  type CardKey = keyof typeof rankingPercentile.global
-                  const top10k = `top10_mean_${key}` as CardKey
-                  const gMean = rankingPercentile.global?.[top10k] as number | null
-                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
-                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
-                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
-
-                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
-                    { beaten: g, mean: gMean, label: 'worldwide' },
-                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
-                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
-                  ]
-
-                  return (
-                    <div key={key}>
-                      {/* Lift name + current value */}
-                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
-                        {label} — {displayWeight(userKg, unit)}
-                      </div>
-                      {/* One text + bar block per scope */}
-                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
-                        const top = fmtTop(beaten)
-                        if (!top) return null
-                        const pct = barPct(userKg, mean, beaten)
-                        return (
-                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
-                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
-                              {top} {scopeLabel}
-                            </div>
-                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
-                              <div className="if-progress-track" style={{ flex: 1 }}>
-                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
-                              </div>
-                              {mean && mean > 0 && (
-                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-                {!rankingCountry && (
-                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
-                )}
-                {rankingCountry && !rankingRegion && (
-                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
-                )}
-              </div>
-            )
-          })()}
-        </section>
-         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
-          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
-            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
-              <Trophy size={12} /> Percentile rankings
-            </div>
-            {rankingPercentile?.weight_class_label && (
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
-                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
-              </span>
-            )}
-          </div>
-          {rankingPercentileLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Loader size="xs" />
-              <Text size="xs" c="dimmed">Loading rankings...</Text>
-            </div>
-          ) : !rankingPercentile ? (
-            <Text size="xs" c="dimmed">
-              {meta.current_body_weight_kg > 0
-                ? 'Rankings unavailable — dataset may still be loading.'
-                : 'Set your body weight to see percentile rankings.'}
-            </Text>
-          ) : (() => {
-            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
-            const fmtTop = (beaten: number | null | undefined): string | null => {
-              if (typeof beaten !== 'number') return null
-              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
-            }
-            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
-              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
-              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
-              return 0;
-            }
-
-            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
-            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
-              { key: 'bench',    label: 'Bench',    userKg: actualMaxes.bench,    color: LIFT_COLORS.bench },
-   
-            ]
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
-                  if (userKg <= 0) return null
-                  const g  = rankingPercentile.global?.[key] as number | null
-                  const n  = rankingPercentile.national?.[key] as number | null
-                  const r  = rankingPercentile.regional?.[key] as number | null
-                  type CardKey = keyof typeof rankingPercentile.global
-                  const top10k = `top10_mean_${key}` as CardKey
-                  const gMean = rankingPercentile.global?.[top10k] as number | null
-                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
-                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
-                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
-
-                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
-                    { beaten: g, mean: gMean, label: 'worldwide' },
-                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
-                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
-                  ]
-
-                  return (
-                    <div key={key}>
-                      {/* Lift name + current value */}
-                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
-                        {label} — {displayWeight(userKg, unit)}
-                      </div>
-                      {/* One text + bar block per scope */}
-                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
-                        const top = fmtTop(beaten)
-                        if (!top) return null
-                        const pct = barPct(userKg, mean, beaten)
-                        return (
-                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
-                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
-                              {top} {scopeLabel}
-                            </div>
-                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
-                              <div className="if-progress-track" style={{ flex: 1 }}>
-                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
-                              </div>
-                              {mean && mean > 0 && (
-                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-                {!rankingCountry && (
-                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
-                )}
-                {rankingCountry && !rankingRegion && (
-                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
-                )}
-              </div>
-            )
-          })()}
-        </section>
-         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
-          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
-            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
-              <Trophy size={12} /> Percentile rankings
-            </div>
-            {rankingPercentile?.weight_class_label && (
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
-                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
-              </span>
-            )}
-          </div>
-          {rankingPercentileLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Loader size="xs" />
-              <Text size="xs" c="dimmed">Loading rankings...</Text>
-            </div>
-          ) : !rankingPercentile ? (
-            <Text size="xs" c="dimmed">
-              {meta.current_body_weight_kg > 0
-                ? 'Rankings unavailable — dataset may still be loading.'
-                : 'Set your body weight to see percentile rankings.'}
-            </Text>
-          ) : (() => {
-            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
-            const fmtTop = (beaten: number | null | undefined): string | null => {
-              if (typeof beaten !== 'number') return null
-              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
-            }
-            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
-              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
-              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
-              return 0;
-            }
-
-            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
-            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
-   
-              { key: 'deadlift', label: 'Deadlift', userKg: actualMaxes.deadlift, color: LIFT_COLORS.deadlift },
-             
-            ]
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
-                  if (userKg <= 0) return null
-                  const g  = rankingPercentile.global?.[key] as number | null
-                  const n  = rankingPercentile.national?.[key] as number | null
-                  const r  = rankingPercentile.regional?.[key] as number | null
-                  type CardKey = keyof typeof rankingPercentile.global
-                  const top10k = `top10_mean_${key}` as CardKey
-                  const gMean = rankingPercentile.global?.[top10k] as number | null
-                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
-                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
-                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
-
-                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
-                    { beaten: g, mean: gMean, label: 'worldwide' },
-                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
-                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
-                  ]
-
-                  return (
-                    <div key={key}>
-                      {/* Lift name + current value */}
-                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
-                        {label} — {displayWeight(userKg, unit)}
-                      </div>
-                      {/* One text + bar block per scope */}
-                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
-                        const top = fmtTop(beaten)
-                        if (!top) return null
-                        const pct = barPct(userKg, mean, beaten)
-                        return (
-                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
-                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
-                              {top} {scopeLabel}
-                            </div>
-                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
-                              <div className="if-progress-track" style={{ flex: 1 }}>
-                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
-                              </div>
-                              {mean && mean > 0 && (
-                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-                {!rankingCountry && (
-                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
-                )}
-                {rankingCountry && !rankingRegion && (
-                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
-                )}
-              </div>
-            )
-          })()}
-        </section>
-         <section className="if-mock-card" data-testid="dashboard-ranking-percentile">
-          <div style={{ alignItems: 'baseline', display: 'flex', gap: 8, marginBottom: 12 }}>
-            <div className="if-mock-card-label" style={{ marginBottom: 0 }}>
-              <Trophy size={12} /> Percentile rankings
-            </div>
-            {rankingPercentile?.weight_class_label && (
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: 10 }}>
-                {rankingPercentile.weight_class_label} class · last 3 years · deduplicated by lifter
-              </span>
-            )}
-          </div>
-          {rankingPercentileLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Loader size="xs" />
-              <Text size="xs" c="dimmed">Loading rankings...</Text>
-            </div>
-          ) : !rankingPercentile ? (
-            <Text size="xs" c="dimmed">
-              {meta.current_body_weight_kg > 0
-                ? 'Rankings unavailable — dataset may still be loading.'
-                : 'Set your body weight to see percentile rankings.'}
-            </Text>
-          ) : (() => {
-            // beaten = % of lifters the user beat; top% = 100 - beaten, rounded to nearest 10
-            const fmtTop = (beaten: number | null | undefined): string | null => {
-              if (typeof beaten !== 'number') return null
-              return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
-            }
-            const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
-              if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100);
-              if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten));
-              return 0;
-            }
-
-            const actualTotal = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
-            const LIFT_ROWS: Array<{ key: keyof typeof rankingPercentile.global; label: string; userKg: number; color: string }> = [
-            
-              { key: 'total',    label: 'Total',    userKg: actualTotal,          color: 'var(--accent-blue)' },
-            ]
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {LIFT_ROWS.map(({ key, label, userKg, color }) => {
-                  if (userKg <= 0) return null
-                  const g  = rankingPercentile.global?.[key] as number | null
-                  const n  = rankingPercentile.national?.[key] as number | null
-                  const r  = rankingPercentile.regional?.[key] as number | null
-                  type CardKey = keyof typeof rankingPercentile.global
-                  const top10k = `top10_mean_${key}` as CardKey
-                  const gMean = rankingPercentile.global?.[top10k] as number | null
-                  const nMean = (rankingPercentile.national?.[top10k] ?? null) as number | null
-                  const rMean = (rankingPercentile.regional?.[top10k] ?? null) as number | null
-                  if (typeof g !== 'number' && typeof n !== 'number' && typeof r !== 'number') return null
-
-                  const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
-                    { beaten: g, mean: gMean, label: 'worldwide' },
-                    ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
-                    ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
-                  ]
-
-                  return (
-                    <div key={key}>
-                      {/* Lift name + current value */}
-                      <div style={{ color: color, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>
-                        {label} — {displayWeight(userKg, unit)}
-                      </div>
-                      {/* One text + bar block per scope */}
-                      {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
-                        const top = fmtTop(beaten)
-                        if (!top) return null
-                        const pct = barPct(userKg, mean, beaten)
-                        return (
-                          <div key={scopeLabel} style={{ marginBottom: 8 }}>
-                            <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, marginBottom: 3 }}>
-                              {top} {scopeLabel}
-                            </div>
-                            <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
-                              <div className="if-progress-track" style={{ flex: 1 }}>
-                                <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
-                              </div>
-                              {mean && mean > 0 && (
-                                <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>↑ {displayWeight(mean, unit)} avg</span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-                {!rankingCountry && (
-                  <Text size="xs" c="dimmed">Set your country in Settings to see national rankings.</Text>
-                )}
-                {rankingCountry && !rankingRegion && (
-                  <Text size="xs" c="dimmed">Set your region in Settings to see regional rankings.</Text>
-                )}
-              </div>
-            )
-          })()}
-        </section>
+         {/* Percentile rankings — one card per lift (Squat, Bench, Deadlift).
+             Each card shows only that lift's worldwide / national / regional
+             percentile bars so the row stays compact instead of one giant
+             9-bar card. */}
+         {(() => {
+           type CardKey = keyof RankingPercentileCard
+           const LIFT_ROWS: Array<{ key: CardKey; meanKey: CardKey; label: string; userKg: number; color: string }> = [
+             { key: 'squat',    meanKey: 'top10_mean_squat',    label: 'Squat',    userKg: actualMaxes.squat,    color: LIFT_COLORS.squat },
+             { key: 'bench',    meanKey: 'top10_mean_bench',    label: 'Bench',    userKg: actualMaxes.bench,    color: LIFT_COLORS.bench },
+             { key: 'deadlift', meanKey: 'top10_mean_deadlift', label: 'Deadlift', userKg: actualMaxes.deadlift, color: LIFT_COLORS.deadlift },
+           ]
+           const fmtTop = (beaten: number | null | undefined): string | null => {
+             if (typeof beaten !== 'number') return null
+             return `top ${Math.max(1, Math.round((100 - beaten) / 10) * 10)}%`
+           }
+           const barPct = (userKg: number, mean: number | null | undefined, beaten: number | null | undefined): number => {
+             if (mean && mean > 0) return Math.min(100, (userKg / mean) * 100)
+             if (typeof beaten === 'number') return Math.min(100, Math.max(0, beaten))
+             return 0
+           }
+           return LIFT_ROWS.map(({ key, meanKey, label, userKg, color }) => {
+             const g  = rankingPercentile?.global?.[key]    ?? null
+             const n  = rankingPercentile?.national?.[key]  ?? null
+             const r  = rankingPercentile?.regional?.[key]  ?? null
+             const gMean = rankingPercentile?.global?.[meanKey]    ?? null
+             const nMean = rankingPercentile?.national?.[meanKey]  ?? null
+             const rMean = rankingPercentile?.regional?.[meanKey]  ?? null
+             const hasData = typeof g === 'number' || typeof n === 'number' || typeof r === 'number'
+             return (
+               <section
+                 key={key}
+                 className="if-mock-card"
+                 data-testid={`dashboard-ranking-percentile-${key}`}
+               >
+                 <div style={{ alignItems: 'baseline', display: 'flex', gap: 6, marginBottom: 8 }}>
+                   <div className="if-mock-card-label" style={{ marginBottom: 0, color }}>
+                     <Trophy size={12} /> {label}
+                   </div>
+                   {userKg > 0 && (
+                     <span className="if-mock-num" style={{ fontSize: 12, fontWeight: 500 }}>
+                       {displayWeight(userKg, unit)}
+                     </span>
+                   )}
+                 </div>
+                 {rankingPercentileLoading ? (
+                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                     <Loader size="xs" />
+                     <Text size="xs" c="dimmed">Loading...</Text>
+                   </div>
+                 ) : !rankingPercentile ? (
+                   <Text size="xs" c="dimmed">
+                     {meta.current_body_weight_kg > 0
+                       ? 'Unavailable — dataset may be loading.'
+                       : 'Set body weight to see rankings.'}
+                   </Text>
+                 ) : !hasData || userKg <= 0 ? (
+                   <Text size="xs" c="dimmed">No ranking data for this lift.</Text>
+                 ) : (() => {
+                   const SCOPES: Array<{ beaten: number | null; mean: number | null; label: string }> = [
+                     { beaten: g, mean: gMean, label: 'worldwide' },
+                     ...(rankingCountry ? [{ beaten: n, mean: nMean, label: `in ${rankingCountry}` }] : []),
+                     ...(rankingRegion  ? [{ beaten: r, mean: rMean, label: `in ${rankingRegion}`  }] : []),
+                   ]
+                   return (
+                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                       {SCOPES.map(({ beaten, mean, label: scopeLabel }) => {
+                         const top = fmtTop(beaten)
+                         if (!top) return null
+                         const pct = barPct(userKg, mean, beaten)
+                         return (
+                           <div key={scopeLabel}>
+                             <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginBottom: 3 }}>
+                               {top} {scopeLabel}
+                             </div>
+                             <div style={{ alignItems: 'center', display: 'flex', gap: 6 }}>
+                               <div className="if-progress-track" style={{ flex: 1 }}>
+                                 <div className="if-progress-fill" style={{ width: `${pct}%`, background: color }} />
+                               </div>
+                               {mean && mean > 0 && (
+                                 <span className="if-progress-target" style={{ width: 'auto', flexShrink: 0 }}>
+                                   {'\u2191'} {displayWeight(mean, unit)} avg
+                                 </span>
+                               )}
+                             </div>
+                           </div>
+                         )
+                       })}
+                     </div>
+                   )
+                 })()}
+               </section>
+             )
+           })
+         })()}
+         {rankingPercentile?.weight_class_label && (
+           <section className="if-mock-card" style={{ display: 'flex', alignItems: 'center' }}>
+             <Text size="xs" c="dimmed">
+               {rankingPercentile.weight_class_label} class {'\u00b7'} last 3 years {'\u00b7'} deduplicated by lifter
+             </Text>
+           </section>
+         )}
       </div>
 
       <div className="if-dashboard-row if-dashboard-row-mid">

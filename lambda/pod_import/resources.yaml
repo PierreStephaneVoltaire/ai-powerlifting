@@ -1,0 +1,135 @@
+layers:
+- pl_ai
+- pl_boto3
+- pl_program
+- pl_templates
+min_replicas: 0
+resources:
+  requests:
+    cpu: 2000m
+    memory: 2Gi
+  limits:
+    cpu: 2500m
+    memory: 4Gi
+timeout: 900
+description: 'Import pipeline pod. Handles file parsing (base64 content to structured
+  sessions), pending import listing, import detail retrieval, import application (with
+  merge strategy and conflict resolutions), and import rejection. Write follows read:
+  parse, review, then apply or reject. Pass the operation name in the "function" field
+  and all operation arguments as top-level fields alongside it.'
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - import_apply
+      - import_get_pending
+      - import_list
+      - import_list_pending
+      - import_parse_file
+      - import_reject
+    import_id: &id001
+      type: string
+      description: The pending import ID to apply.
+    merge_strategy: &id002
+      type: string
+      description: 'Merge strategy: "overwrite" or "append".'
+    conflict_resolutions: &id003
+      type: array
+      description: Array of conflict resolution dicts for date collisions.
+    start_date: &id004
+      type: string
+      description: Optional start date to offset imported sessions (YYYY-MM-DD).
+    pk: &id005
+      type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    limit: &id006
+      type: integer
+      description: Maximum number of imports to return. Default 100, max 500.
+    import_type: &id007
+      type: string
+      description: Filter by import type (e.g. "csv", "excel").
+    base64_content: &id008
+      type: string
+      description: Base64-encoded file content.
+    filename: &id009
+      type: string
+      description: 'Original filename (used for type detection: .csv, .xlsx, etc.).'
+    reason: &id010
+      type: string
+      description: Optional rejection reason.
+  required:
+  - function
+  - base64_content
+  - filename
+  - import_id
+operations:
+  import_apply:
+    description: Apply a pending import, writing the parsed sessions into the user
+      program. Takes a merge_strategy (e.g. "overwrite", "append"), optional conflict_resolutions,
+      and an optional start_date to offset the imported sessions.
+    input_schema:
+      type: object
+      properties:
+        import_id: *id001
+        merge_strategy: *id002
+        conflict_resolutions: *id003
+        start_date: *id004
+      required:
+      - import_id
+  import_get_pending:
+    description: Get a specific pending import by its ID. Returns the parsed sessions
+      and any conflicts for review.
+    input_schema:
+      type: object
+      properties:
+        import_id:
+          type: string
+          description: The pending import ID.
+      required:
+      - import_id
+  import_list:
+    description: List import summaries for a user. Returns import rows (sk begins_with
+      "import#") sorted newest first by sk. Use limit to cap results (default 100,
+      max 500).
+    input_schema:
+      type: object
+      properties:
+        pk: *id005
+        limit: *id006
+      required: []
+  import_list_pending:
+    description: List all pending imports across all users, optionally filtered by
+      import type. Used by the admin review queue.
+    input_schema:
+      type: object
+      properties:
+        import_type: *id007
+      required: []
+  import_parse_file:
+    description: Parse a file (base64-encoded content) into a structured import preview.
+      Returns a pending import with parsed sessions and any conflicts for review.
+      The file must include a filename for type detection.
+    input_schema:
+      type: object
+      properties:
+        base64_content: *id008
+        filename: *id009
+      required:
+      - base64_content
+      - filename
+  import_reject:
+    description: Reject a pending import by ID. Takes an optional reason string. Deletes
+      the pending import from the table.
+    input_schema:
+      type: object
+      properties:
+        import_id:
+          type: string
+          description: The pending import ID to reject.
+        reason: *id010
+      required:
+      - import_id

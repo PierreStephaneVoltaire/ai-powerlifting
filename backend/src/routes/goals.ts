@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import * as goalsController from '../controllers/goalsController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 
 export const goalsRouter = Router()
 
-goalsRouter.get('/', async (req, res, next) => {
+goalsRouter.get('/', cacheGet(['goals']), async (req, res, next) => {
   try {
     const goals = await goalsController.getGoals(req.mapped_pk!)
     res.json({ data: goals, error: null })
@@ -12,7 +13,7 @@ goalsRouter.get('/', async (req, res, next) => {
   }
 })
 
-goalsRouter.put('/', async (req, res, next) => {
+goalsRouter.put('/', invalidateAfter(['goals', 'program:current']), async (req, res, next) => {
   try {
     const { goals } = req.body as { goals: unknown[] }
 

@@ -44,6 +44,13 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
             {profile.federation || 'Federation unset'} - {profile.weight_class_kg || '--'} kg
           </Text>
         )}
+        {(profile.tags || []).length > 0 && (
+          <Group gap={4} wrap="wrap">
+            {profile.tags.map((tag) => (
+              <Badge key={tag} variant="light" size="xs">{tag}</Badge>
+            ))}
+          </Group>
+        )}
         <Group gap="xs">
           <span className={`if-pill ${profile.profile_visibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
             {profile.profile_visibility}
@@ -162,8 +169,9 @@ export function PublicProfilePage() {
   const profileMetrics = useMemo(() => {
     const summary = profile?.summary
     const weightValue = (kg: number | null | undefined) => {
-      if (!kg || kg <= 0) return '--'
-      const display = toDisplayUnit(kg, unit)
+      const n = Number(kg)
+      if (!Number.isFinite(n) || n <= 0) return '--'
+      const display = toDisplayUnit(n, unit)
       return Number.isInteger(display) ? String(display) : display.toFixed(1)
     }
 
@@ -172,7 +180,7 @@ export function PublicProfilePage() {
       { label: 'Bench', value: weightValue(summary?.bench_kg), sub: unit },
       { label: 'Deadlift', value: weightValue(summary?.deadlift_kg), sub: unit },
       { label: 'Total', value: weightValue(summary?.total_kg), sub: unit },
-      { label: 'DOTS', value: summary?.dots !== null && summary?.dots !== undefined ? summary.dots.toFixed(1) : '--', sub: 'pts' },
+      { label: 'DOTS', value: summary?.dots !== null && summary?.dots !== undefined && Number.isFinite(Number(summary.dots)) ? Number(summary.dots).toFixed(1) : '--', sub: 'pts' },
       { label: 'Class', value: profile?.weight_class_kg ? String(profile.weight_class_kg) : '--', sub: 'kg' },
     ]
   }, [profile, unit])
@@ -224,6 +232,13 @@ export function PublicProfilePage() {
                   {profile.federation || 'Federation unset'} - {profile.weight_class_kg || '--'} kg
                   {profile.practicing_for ? ` - ${profile.practicing_for}` : ''}
                 </Text>
+                {(profile.tags || []).length > 0 && (
+                  <Group gap={4} wrap="wrap">
+                    {profile.tags.map((tag) => (
+                      <Badge key={tag} variant="light" size="sm">{tag}</Badge>
+                    ))}
+                  </Group>
+                )}
               </Stack>
             </Group>
             {profile.is_self && (

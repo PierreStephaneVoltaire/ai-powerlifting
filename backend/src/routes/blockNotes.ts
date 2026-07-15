@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import * as blockNotesController from '../controllers/blockNotesController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { BlockNote } from '@powerlifting/types'
 
 export const blockNotesRouter = Router({ mergeParams: true })
 
-blockNotesRouter.get('/:version', async (req, res, next) => {
+blockNotesRouter.get('/:version', cacheGet((req) => [`block-notes:${req.params.version}`]), async (req, res, next) => {
   try {
     const notes = await blockNotesController.getBlockNotes(req.mapped_pk!, req.params.version)
     res.json({ data: notes, error: null })
@@ -13,7 +14,7 @@ blockNotesRouter.get('/:version', async (req, res, next) => {
   }
 })
 
-blockNotesRouter.put('/:version', async (req, res, next) => {
+blockNotesRouter.put('/:version', invalidateAfter((req) => [`block-notes:${req.params.version}`]), async (req, res, next) => {
   try {
     const { blockNotes } = req.body
 

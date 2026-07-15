@@ -1,0 +1,382 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+- pl_templates
+min_replicas: 1
+resources:
+  requests:
+    cpu: 500m
+    memory: 256Mi
+  limits:
+    cpu: 2500m
+    memory: 2Gi
+timeout: 900
+description: Training program management pod. Handles program CRUD (get, list, list-full,
+  archive, unarchive), structured updates (meta fields, phases, lift profiles), per-version
+  notes (block notes, diet notes, supplement phases), program exports (markdown, history),
+  version management (new version creation with patches), setup initialization (from
+  blank or template), setup status, and program cache invalidation. Pass the operation
+  name in the "function" field and all operation arguments as top-level fields alongside
+  it.
+input_schema:
+  type: object
+  properties:
+    function:
+      type: string
+      description: The operation to dispatch to. See the operations field for available
+        operations and their individual schemas.
+      enum:
+      - block_notes_get
+      - block_notes_update
+      - diet_notes_get
+      - diet_notes_update
+      - export_program_history
+      - export_program_markdown
+      - health_invalidate_program_cache
+      - health_new_version
+      - health_setup_initialize
+      - health_setup_status
+      - program_archive
+      - program_get
+      - program_list
+      - program_list_full
+      - program_unarchive
+      - program_update_lift_profiles
+      - program_update_meta_field
+      - program_update_phases
+      - supplement_phases_get
+      - supplement_phases_update
+    pk: &id008
+      type: string
+      description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+    version: &id009
+      type: string
+      description: Program version. Defaults to "current".
+    block_notes: &id010
+      type: array
+      description: Full array of block note dicts to write.
+    notes: &id011
+      type: string
+      description: The notes content to write.
+    format: &id012
+      type: string
+      description: 'Export format: "xlsx" or "md".'
+    change_reason: &id013
+      type: string
+      description: Human-readable reason for the version change.
+    patches: &id014
+      type: array
+      description: 'List of patches, each with "path" and "value" keys. Example: {"path":
+        "sessions[0].exercises[1].kg", "value": 180}'
+    mode: &id015
+      type: string
+      description: 'Initialization mode: "blank" for empty program or "template" to
+        apply a template.'
+    program_name: &id016
+      type: string
+      description: Name for the new program.
+    start_date: &id017
+      type: string
+      description: Program start date (YYYY-MM-DD).
+    week_start_day: &id018
+      type: string
+      description: Day of the week the training week starts on (e.g. "Monday").
+    template_sk: &id019
+      type: string
+      description: Template sort key to apply (required when mode is "template").
+    maxes: &id020
+      type: object
+      description: Initial maxes object with squat_kg, bench_kg, deadlift_kg.
+    program_sk: &id002
+      type: string
+      description: Program sort key to archive.
+    include_archived: &id001
+      type: boolean
+      description: Include archived versions in the list. Default false.
+    lift_profiles: &id007
+      type: array
+      description: Full lift_profiles array to write.
+    field: &id003
+      type: string
+      description: The meta field name to update (e.g. "name", "start_date", "current_body_weight_kg").
+    value: &id004
+      description: The new value for the field. Type depends on the field being updated.
+    phases: &id005
+      type: array
+      description: Full phases array to replace.
+    block: &id006
+      type: string
+      description: Optional block key to update a single block within phases instead
+        of replacing all.
+  required:
+  - function
+  - block_notes
+  - change_reason
+  - mode
+  - notes
+  - patches
+  - phases
+  - start_date
+  - week_start_day
+operations:
+  program_get:
+    description: Get a specific program version by its sort key. Returns the full
+      program object with phases, sessions, meta, lift profiles, and competitions.
+      Use this to load a program for display or before modifying it.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key (e.g. "program#v3" or "program#current").
+      required: []
+  program_list:
+    description: List all program versions for a user, newest first. Returns summaries
+      (version number, created date, archived status). Use include_archived=true to
+      include archived versions.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        include_archived: *id001
+      required: []
+  program_list_full:
+    description: List all program versions with full program objects (not just summaries)
+      for a user. Includes resolved phases and sessions. Use include_archived=true
+      to include archived versions.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Optional specific program sort key to filter to.
+        include_archived:
+          type: boolean
+          description: Include archived versions. Default false.
+      required: []
+  program_archive:
+    description: Archive a program version by setting its archived flag. The version
+      remains accessible via program_list with include_archived=true but is hidden
+      from default views.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk: *id002
+      required: []
+  program_unarchive:
+    description: Unarchive a previously archived program version, restoring it to
+      the default view.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key to unarchive.
+      required: []
+  program_update_meta_field:
+    description: Update a single top-level meta field on the current program (e.g.
+      name, start_date, current_body_weight_kg, current_body_weight_lb). Reads the
+      program, applies the field update, and writes it back.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        field: *id003
+        value: *id004
+      required: []
+  program_update_phases:
+    description: Update the phases array on a program version, or replace a single
+      block within the phases. Reads the program, applies the phase/block update,
+      and writes it back.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        phases: *id005
+        block: *id006
+      required: []
+  program_update_lift_profiles:
+    description: Replace the lift_profiles array on a program version. Lift profiles
+      define per-exercise stimulus targets and configuration used by the AI analysis
+      tools.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        program_sk:
+          type: string
+          description: Program sort key. Defaults to current.
+        lift_profiles: *id007
+      required: []
+  block_notes_get:
+    description: Get block notes for a program version. Block notes are free-form
+      per-block commentary stored alongside the program.
+    input_schema:
+      type: object
+      properties:
+        pk: *id008
+        version: *id009
+      required: []
+  block_notes_update:
+    description: "Replace the block notes array for a program version. This is a full\
+      \ replace \u2014 send the complete array of block note dicts."
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+        block_notes: *id010
+      required:
+      - block_notes
+  diet_notes_get:
+    description: Get the diet notes array for a program version. Diet notes are free-form
+      per-date nutrition notes.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+      required: []
+  diet_notes_update:
+    description: "Replace the diet notes array for a program version. Full replace\
+      \ \u2014 send the complete array of note dicts."
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+        notes: *id011
+      required:
+      - notes
+  supplement_phases_get:
+    description: Get the supplement phases array for a program version. Supplement
+      phases define per-phase supplement protocols.
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+      required: []
+  supplement_phases_update:
+    description: "Replace the supplement phases array for a program version. Full\
+      \ replace \u2014 send the complete array of phase dicts."
+    input_schema:
+      type: object
+      properties:
+        pk:
+          type: string
+          description: User partition key. Defaults to env HEALTH_PROGRAM_PK.
+        version:
+          type: string
+          description: Program version. Defaults to "current".
+        phases:
+          type: array
+          description: Full array of supplement phase dicts to write.
+      required:
+      - phases
+  export_program_history:
+    description: Export the full training program history to Excel (.xlsx) or Markdown
+      (.md) format. Returns a download URL or file content. AI section calls (program_evaluation)
+      are intentionally omitted from the analysis bundle; correlation uses cached
+      DynamoDB values only.
+    input_schema:
+      type: object
+      properties:
+        format: *id012
+      required: []
+  export_program_markdown:
+    description: "Generate a markdown export of the current program and return its\
+      \ content as a string. Includes phases, sessions, meta, and analysis sections\
+      \ (deterministic only \u2014 AI sections excluded)."
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_new_version:
+    description: Create a new major version of the program. Copies the current program,
+      applies patches to specific fields, and stores as a new version. Use this when
+      making significant program changes that should be tracked as a separate version.
+    input_schema:
+      type: object
+      properties:
+        change_reason: *id013
+        patches: *id014
+      required:
+      - change_reason
+      - patches
+  health_setup_initialize:
+    description: Initialize a no-data user first training block for the active partition.
+      Creates a blank program or applies a template depending on mode. Use when a
+      new user needs their first program.
+    input_schema:
+      type: object
+      properties:
+        mode: *id015
+        program_name: *id016
+        start_date: *id017
+        week_start_day: *id018
+        template_sk: *id019
+        maxes: *id020
+      required:
+      - mode
+      - start_date
+      - week_start_day
+  health_setup_status:
+    description: Return first-class setup state for the active health data partition.
+      Indicates whether the user has a program, whether setup initialization is needed,
+      and what step they are on.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+  health_invalidate_program_cache:
+    description: Invalidate the program cache for the current user. Forces the next
+      read to go to DynamoDB instead of the in-process LRU cache. Use after writes
+      that must be immediately visible.
+    input_schema:
+      type: object
+      properties: {}
+      required: []

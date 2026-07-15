@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { cachedGet, invalidateDomain, invalidateDomains } from './cache'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -6,6 +7,20 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+
+export interface ProfileTag {
+  tag: string
+  approved: boolean
+  proposed_by: string
+}
+
+export type AppRole = 'athlete' | 'coach' | 'handler'
+
+export interface TrainingMaxes {
+  squat_kg: number
+  bench_kg: number
+  deadlift_kg: number
+}
 
 export interface UserSettings {
   pk: string
@@ -21,17 +36,27 @@ export interface UserSettings {
   ranking_country: string | null
   ranking_region: string | null
   age_class: 'open' | 'subjunior' | 'junior' | 'master1' | 'master2' | 'master3' | 'master4'
+  tags: ProfileTag[]
+  sex: 'male' | 'female' | null
+  bodyweight_kg: number | null
+  training_maxes: TrainingMaxes | null
+  federations: string[]
+  roles: AppRole[]
+  active_role: AppRole
+  athlete_basics_complete: boolean
+  profile_complete: boolean
   created_at: string
   updated_at: string
 }
 
 export async function getSettings(): Promise<UserSettings> {
-  const res = await api.get<{ data: UserSettings }>('/settings')
-  return res.data.data
+  const data = await cachedGet(api, '/settings', ['settings'])
+  return data.data
 }
 
 export async function updateNickname(nickname: string): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/nickname', { nickname })
+  await invalidateDomains(['settings', 'profile:current'])
   return res.data.data
 }
 
@@ -42,6 +67,7 @@ export async function updateProfile(input: {
   public_training_summary_enabled?: boolean
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/profile', input)
+  await invalidateDomains(['settings', 'profile:current'])
   return res.data.data
 }
 
@@ -72,6 +98,7 @@ export async function uploadProfileAvatar(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText)
+          invalidateDomains(['settings', 'profile:current'])
           resolve(response.data)
         } catch {
           reject(new Error('Invalid response from server'))
@@ -102,6 +129,7 @@ export async function updateRankingLocation(input: {
   ranking_region: string | null
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/ranking-location', input)
+  await invalidateDomains(['settings', 'stats:percentile'])
   return res.data.data
 }
 
@@ -109,5 +137,35 @@ export async function updateAgeClass(input: {
   age_class: UserSettings['age_class'] | null
 }): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/settings/age-class', input)
+  await invalidateDomains(['settings', 'stats:percentile'])
+  return res.data.data
+}
+
+// ─── Tags (FEAT-8) ──────────────────────────────────────────────────────────
+
+export async function addTag(tag: string): Promise<UserSettings> {
+  const res = await api.post<{ data: UserSettings }>('/settings/tags', { tag })
+  await invalidateDomains(['settings', 'profile:current'])
+  return res.data.data
+}
+
+export async function removeTag(tag: string): Promise<UserSettings> {
+  const res = await api.delete<{ data: UserSettings }>(`/settings/tags/${encodeURIComponent(tag)}`)
+  await invalidateDomains(['settings', 'profile:current'])
+  return res.data.data
+}
+
+export async function approveTag(tag: string): Promise<UserSettings> {
+  const res = await api.post<{ data: UserSettings }>(`/settings/tags/${encodeURIComponent(tag)}/approve`)
+  await invalidateDomains(['settings', 'profile:current'])
+  return res.data.data
+}
+
+export async function proposeTag(targetNickname: string, tag: string): Promise<unknown> {
+  const res = await api.post<{ data: unknown }>('/settings/tags/propose', {
+    target_nickname: targetNickname,
+    tag,
+  })
+  await invalidateDomains(['profiles:search'])
   return res.data.data
 }

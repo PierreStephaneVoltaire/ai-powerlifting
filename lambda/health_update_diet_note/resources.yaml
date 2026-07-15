@@ -1,0 +1,27 @@
+layers:
+- pl_boto3
+- pl_program
+- pl_sessions
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+timeout: 900
+description: Create or replace a diet note for a date.
+input_schema:
+  type: object
+  properties:
+    date:
+      type: string
+      description: Date for the diet note (YYYY-MM-DD)
+    notes:
+      type: string
+      description: The diet notes content
+  required:
+  - date
+  - notes
+
+reserved_concurrency: null

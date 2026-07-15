@@ -12,7 +12,7 @@ export function executedSets(ex: Pick<Exercise, 'sets' | 'set_statuses'>): numbe
   if (ex.set_statuses?.length) {
     return ex.set_statuses.filter((status) => status === 'completed' || status === 'failed').length
   }
-  return ex.sets || 0
+  return Number(ex.sets) || 0
 }
 
 export function exerciseVolume(ex: Exercise): number {
@@ -25,109 +25,6 @@ export function sessionVolume(session: Session): number {
   return session.exercises.reduce((sum, ex) => sum + exerciseVolume(ex), 0)
 }
 
-const LIFT_CATEGORY_MAP: Record<string, LiftCategory> = {
-  // ─── Squat ──────────────────────────────────────────────────────
-  'Squat': 'squat',
-  'Squat (Backout Heavy)': 'squat',
-  'Squat (Backout Light)': 'squat',
-  'Back Squat': 'squat',
-  'Front Squat': 'squat',
-  'Box Squat': 'squat',
-  'Pause Squat': 'squat',
-  'Tempo Squat': 'squat',
-  'Safety Bar Squat': 'squat',
-  'Hack Squat': 'squat',
-
-  // ─── Bench ──────────────────────────────────────────────────────
-  'Bench Press': 'bench',
-  'Bench Press (Backout)': 'bench',
-  'Pause Bench Press': 'bench',
-  'Spoto Press': 'bench',
-  'Close-Grip Bench Press': 'bench',
-  'Wide-Grip Bench Press': 'bench',
-  'Floor Press': 'bench',
-  'Incline Bench Press': 'bench',
-
-  // ─── Deadlift ───────────────────────────────────────────────────
-  'Deadlift': 'deadlift',
-  'Deadlift (Backout)': 'deadlift',
-  'Conventional Deadlift': 'deadlift',
-  'Sumo Deadlift': 'deadlift',
-  'Stiff-Leg Deadlift': 'deadlift',
-  'Deficit Deadlift': 'deadlift',
-  'Rack Pull': 'deadlift',
-  'Block Pull': 'deadlift',
-
-  // ─── Back ───────────────────────────────────────────────────────
-  'Lat Pulldown': 'back',
-  'Row': 'back',
-  'Barbell Row': 'back',
-  'DB Row': 'back',
-  'Cable Row': 'back',
-  'Face Pull': 'back',
-  'Pull-up': 'back',
-  'Weighted Pull-up': 'back',
-  'Chin-up': 'back',
-  'Shrug': 'back',
-
-  // ─── Lower Back ─────────────────────────────────────────────────
-  'Romanian Deadlift': 'lower_back',
-  'RDL': 'lower_back',
-  'Good Morning': 'lower_back',
-  'Back Extension': 'lower_back',
-
-  // ─── Chest ──────────────────────────────────────────────────────
-  'OHP': 'chest',
-  'Overhead Press': 'chest',
-  'Shoulder Press': 'chest',
-  'DB Shoulder Press': 'chest',
-  'Push Press': 'chest',
-  'Lateral Raise': 'chest',
-  'Rear Delt Fly': 'chest',
-  'DB Bench Press': 'chest',
-  'DB Incline Press': 'chest',
-  'Push-up': 'chest',
-  'Dip': 'chest',
-
-  // ─── Arm ────────────────────────────────────────────────────────
-  'Curl': 'arm',
-  'Barbell Curl': 'arm',
-  'DB Curl': 'arm',
-  'Hammer Curl': 'arm',
-  'Tricep Pushdown': 'arm',
-  'Skull Crusher': 'arm',
-  'Cable Curl': 'arm',
-  'Preacher Curl': 'arm',
-  'Incline DB Curl': 'arm',
-  'Tricep Extension': 'arm',
-  'Overhead Tricep Extension': 'arm',
-
-  // ─── Legs ───────────────────────────────────────────────────────
-  'Leg Press': 'legs',
-  'Lunges': 'legs',
-  'Split Squat': 'legs',
-  'Bulgarian Split Squat': 'legs',
-  'Leg Curl': 'legs',
-  'Nordic Hamstring Curl': 'legs',
-  'Glute Ham Raise': 'legs',
-  'Hip Thrust': 'legs',
-  'Reverse Hyper': 'legs',
-  'Leg Extension': 'legs',
-  'Calf Raise': 'legs',
-  'Seated Calf Raise': 'legs',
-
-  // ─── Core ───────────────────────────────────────────────────────
-  'Plank': 'core',
-  'Ab Rollout': 'core',
-  'Ab Wheel': 'core',
-  'Russian Twist': 'core',
-  'Hanging Leg Raise': 'core',
-  'Cable Crunch': 'core',
-  'Pallof Press': 'core',
-  'Dead Bug': 'core',
-  'Side Plank': 'core',
-  'Cable Woodchop': 'core',
-}
 
 function singularize(word: string): string {
   if (word.endsWith('sses') || word.endsWith('ches') || word.endsWith('shes') || word.endsWith('xes')) {
@@ -147,23 +44,25 @@ export function normalizeExerciseName(name: string): string {
 function buildCategoryLookup(glossary: GlossaryExercise[]): Map<string, LiftCategory> {
   const lookup = new Map<string, LiftCategory>()
   for (const ex of glossary) {
-    lookup.set(normalizeExerciseName(ex.name), ex.category as LiftCategory)
+    lookup.set(normalizeExerciseName(ex.name), ex.category)
   }
   return lookup
 }
 
-export function categorizeExercise(name: string, glossaryLookup?: Map<string, LiftCategory>): LiftCategory {
-  if (glossaryLookup) {
-    const norm = normalizeExerciseName(name)
-    const cat = glossaryLookup.get(norm)
-    if (cat) return cat
-  }
-  return LIFT_CATEGORY_MAP[name] ?? LIFT_CATEGORY_MAP[normalizeExerciseName(name)] ?? 'arm'
+export function categorizeExercise(name: string, glossaryLookup: Map<string, LiftCategory>): LiftCategory {
+  const norm = normalizeExerciseName(name)
+  return glossaryLookup.get(norm) ?? 'arm'
 }
 
-export function volumeByCategory6(sessions: Session[], block?: string, glossary?: GlossaryExercise[]): Record<LiftCategory, number> {
+
+
+export function volumeByCategory(
+  sessions: Session[],
+  glossary: GlossaryExercise[],
+  block?: string
+): Record<LiftCategory, number> {
   const result = zeroCategoryRecord()
-  const lookup = glossary ? buildCategoryLookup(glossary) : undefined
+  const lookup = buildCategoryLookup(glossary)
 
   for (const session of filterByBlock(sessions, block)) {
     for (const ex of session.exercises) {
@@ -175,31 +74,13 @@ export function volumeByCategory6(sessions: Session[], block?: string, glossary?
   return result
 }
 
-export function volumeByCategory(sessions: Session[], block?: string): Record<string, number> {
-  const result = { squat: 0, bench: 0, deadlift: 0, accessory: 0 }
-
-  for (const session of filterByBlock(sessions, block)) {
-    for (const ex of session.exercises) {
-      const vol = exerciseVolume(ex)
-      const cat = categorizeExercise(ex.name)
-      if (cat === 'squat' || cat === 'bench' || cat === 'deadlift') {
-        result[cat] += vol
-      } else {
-        result.accessory += vol
-      }
-    }
-  }
-
-  return result
-}
-
-export function weeklyVolumeByCategory6(
+export function weeklyVolumeByCategory(
   sessions: Session[],
-  block?: string,
-  glossary?: GlossaryExercise[]
+  glossary: GlossaryExercise[],
+  block?: string
 ): Array<{ week: number; squat: number; bench: number; deadlift: number; back: number; chest: number; arm: number; legs: number; core: number; lower_back: number }> {
   const weekMap = new Map<number, Record<LiftCategory, number>>()
-  const lookup = glossary ? buildCategoryLookup(glossary) : undefined
+  const lookup = buildCategoryLookup(glossary)
 
   for (const session of filterByBlock(sessions, block)) {
     const week = session.week_number
@@ -219,11 +100,13 @@ export function weeklyVolumeByCategory6(
     .sort((a, b) => a.week - b.week)
 }
 
-export function weeklyVolumeByCategory(
+export function weeklyVolumeByBig3(
   sessions: Session[],
+  glossary: GlossaryExercise[],
   block?: string
 ): Array<{ week: number; squat: number; bench: number; deadlift: number; accessory: number }> {
   const weekMap = new Map<number, { squat: number; bench: number; deadlift: number; accessory: number }>()
+  const lookup = buildCategoryLookup(glossary)
 
   for (const session of filterByBlock(sessions, block)) {
     const week = session.week_number
@@ -234,7 +117,7 @@ export function weeklyVolumeByCategory(
 
     for (const ex of session.exercises) {
       const vol = exerciseVolume(ex)
-      const cat = categorizeExercise(ex.name)
+      const cat = categorizeExercise(ex.name, lookup)
       if (cat === 'squat' || cat === 'bench' || cat === 'deadlift') {
         weekData[cat] += vol
       } else {
@@ -248,7 +131,29 @@ export function weeklyVolumeByCategory(
     .sort((a, b) => a.week - b.week)
 }
 
-// ─── Muscle Group Utilities ──────────────────────────────────────────────────
+export function volumeByBig3(
+  sessions: Session[],
+  glossary: GlossaryExercise[],
+  block?: string
+): Record<string, number> {
+  const result = { squat: 0, bench: 0, deadlift: 0, accessory: 0 }
+  const lookup = buildCategoryLookup(glossary)
+
+  for (const session of filterByBlock(sessions, block)) {
+    for (const ex of session.exercises) {
+      const vol = exerciseVolume(ex)
+      const cat = categorizeExercise(ex.name, lookup)
+      if (cat === 'squat' || cat === 'bench' || cat === 'deadlift') {
+        result[cat] += vol
+      } else {
+        result.accessory += vol
+      }
+    }
+  }
+
+  return result
+}
+
 
 function buildGlossaryLookup(
   glossary: GlossaryExercise[]
@@ -345,7 +250,6 @@ function filterByBlock(sessions: Session[], block?: string): Session[] {
   return sessions.filter((s) => (s.block || 'current') === block)
 }
 
-// ─── Max Tracking ───────────────────────────────────────────────────────────────
 
 export function allTimeMaxByExercise(
   sessions: Session[],
@@ -370,6 +274,7 @@ export function allTimeMaxByExercise(
 
 export function maxByCategoryInWindow(
   sessions: Session[],
+  glossary: GlossaryExercise[],
   startDate: string,
   endDate: string,
   categories: LiftCategory[] = ['squat', 'bench', 'deadlift'],
@@ -377,13 +282,14 @@ export function maxByCategoryInWindow(
 ): Record<string, number> {
   const result: Record<string, number> = {}
   for (const cat of categories) result[cat] = 0
+  const lookup = buildCategoryLookup(glossary)
 
   for (const session of filterByBlock(sessions, block)) {
     if (!session.completed) continue
     if (session.date < startDate || session.date > endDate) continue
     for (const ex of session.exercises) {
       if (ex.kg == null || executedSets(ex) <= 0) continue
-      const cat = categorizeExercise(ex.name)
+      const cat = categorizeExercise(ex.name, lookup)
       if (cat in result && ex.kg > result[cat]) {
         result[cat] = ex.kg
       }

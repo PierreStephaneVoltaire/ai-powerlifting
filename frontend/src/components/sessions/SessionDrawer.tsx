@@ -767,7 +767,29 @@ export default function SessionDrawer({
       if (!prev) return prev
       const exercises = prev.exercises.map((ex, i) => {
         if (i !== index) return ex
-        return withSetStatusFields({ ...ex, sets: newSets }, prev.completed)
+        // Preserve per-set state (RPE via exercise-level, set_statuses, failed_set_reasons,
+        // failed_sets) by index when adding/removing sets — BUG-1.2. Removing a set drops
+        // only that row's state; adding inserts a blank pending row. Existing rows keep
+        // their state across the resize.
+        const prevStatuses = normalizeSetStatuses(ex, prev.completed)
+        const prevReasons = normalizeFailedSetReasons(ex, prevStatuses)
+        const fallbackStatus: SetStatus = prev.completed ? 'completed' : 'pending'
+        const set_statuses: SetStatus[] = []
+        const failed_set_reasons: FailedSetReason[][] = []
+        for (let s = 0; s < newSets; s++) {
+          if (s < prevStatuses.length) {
+            set_statuses.push(prevStatuses[s])
+            failed_set_reasons.push(prevReasons[s] ?? [])
+          } else {
+            set_statuses.push(fallbackStatus)
+            failed_set_reasons.push([])
+          }
+        }
+        const failed_sets = set_statuses.map((status) => status === 'failed')
+        return withSetStatusFields(
+          { ...ex, sets: newSets, set_statuses, failed_sets, failed_set_reasons },
+          prev.completed,
+        )
       })
       return { ...prev, exercises }
     })
@@ -875,40 +897,51 @@ export default function SessionDrawer({
   }
 
   const renderMobileExerciseMenu = (exercise: Exercise, exerciseIndex: number) => (
-    <Menu withinPortal position="bottom-end" shadow="md">
+    <Menu withinPortal position="bottom-end" shadow="md" width={220}>
       <Menu.Target>
         <ActionIcon
           hiddenFrom="sm"
           variant="subtle"
           color="gray"
-          size="sm"
+          size="md"
+          style={{ minHeight: 44, minWidth: 44 }}
           title="Exercise actions"
-          aria-label="Exercise actions"
+          aria-label={`Exercise actions for ${exercise.name || 'unnamed'}`}
           disabled={readOnly}
         >
-          <MoreHorizontal size={16} />
+          <MoreHorizontal size={18} />
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
+        {/* Safe actions grouped at top — BUG-1.1 */}
         <Menu.Item
-          leftSection={<Bot size={14} />}
+          leftSection={<Bot size={16} />}
           onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
+          styles={{ item: { minHeight: 44, paddingInline: 12 } }}
         >
           Auto-regulation
         </Menu.Item>
         <Menu.Item
-          leftSection={<Calculator size={14} />}
+          leftSection={<Calculator size={16} />}
           onClick={() => openToolkitForExercise(exercise)}
+          styles={{ item: { minHeight: 44, paddingInline: 12 } }}
         >
-          Toolkit
+          Plate calculator
         </Menu.Item>
         <Menu.Divider />
+        {/* Destructive action separated + ordered away + confirm — BUG-1.1 */}
         <Menu.Item
           color="red"
-          leftSection={<Trash2 size={14} />}
-          onClick={() => removeExercise(exerciseIndex)}
+          leftSection={<Trash2 size={16} />}
+          styles={{ item: { minHeight: 44, paddingInline: 12 } }}
+          onClick={() => {
+            const label = exercise.name || 'this exercise'
+            if (window.confirm(`Delete "${label}"? This set's logged state will be removed. This cannot be undone.`)) {
+              removeExercise(exerciseIndex)
+            }
+          }}
         >
-          Delete Exercise
+          Delete exercise
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>
@@ -920,7 +953,8 @@ export default function SessionDrawer({
         visibleFrom="sm"
         variant="subtle"
         color="grape"
-        size="sm"
+        size="md"
+        style={{ minHeight: 44, minWidth: 44 }}
         onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
         title="Auto-regulation"
         disabled={readOnly}
@@ -932,9 +966,10 @@ export default function SessionDrawer({
         visibleFrom="sm"
         variant="subtle"
         color="blue"
-        size="sm"
+        size="md"
+        style={{ minHeight: 44, minWidth: 44 }}
         onClick={() => openToolkitForExercise(exercise)}
-        title="Open toolkit"
+        title="Plate calculator"
         disabled={readOnly}
         data-testid={`exercise-toolkit-${exerciseIndex}`}
       >
@@ -968,16 +1003,17 @@ export default function SessionDrawer({
             ? `Set ${setIndex + 1}: ${SET_STATUS_META[status].label} - ${reasonLabel}`
             : `Set ${setIndex + 1}: ${SET_STATUS_META[status].label}`
           return (
-            <Menu key={setIndex} withinPortal position="bottom-start" shadow="md">
+            <Menu key={setIndex} withinPortal position="bottom-start" shadow="md" width={200}>
               <Menu.Target>
                 <Tooltip label={tooltip}>
                   <ActionIcon
-                    size={32}
+                    size={40}
                     radius="xl"
                     variant="transparent"
                     className={statusDotClass(status)}
                     disabled={readOnly}
                     data-testid={`set-status-${exerciseIndex}-${setIndex}`}
+                    aria-label={`Set ${setIndex + 1} status: ${SET_STATUS_META[status].label}`}
                   >
                     {statusIcon(status, size === 'xs' ? 15 : 17)}
                   </ActionIcon>
@@ -990,6 +1026,7 @@ export default function SessionDrawer({
                     leftSection={statusIcon(option)}
                     color={SET_STATUS_META[option].color}
                     onClick={() => handleSetStatusSelection(exerciseIndex, setIndex, option)}
+                    styles={{ item: { minHeight: 44, paddingInline: 12 } }}
                   >
                     {SET_STATUS_META[option].label}
                   </Menu.Item>
@@ -997,7 +1034,10 @@ export default function SessionDrawer({
                 {status === 'failed' && (
                   <>
                     <Menu.Divider />
-                    <Menu.Item onClick={() => openFailedSetReasons(exerciseIndex, setIndex)}>
+                    <Menu.Item
+                      onClick={() => openFailedSetReasons(exerciseIndex, setIndex)}
+                      styles={{ item: { minHeight: 44, paddingInline: 12 } }}
+                    >
                       Edit reasons
                     </Menu.Item>
                   </>
@@ -1425,7 +1465,7 @@ export default function SessionDrawer({
             disabled={readOnly}
             data-testid="session-delete"
             fullWidth
-            h={40}
+            h={44}
             style={{
               background: 'var(--color-background-primary)',
               border: '0.5px solid var(--color-border-danger)',
