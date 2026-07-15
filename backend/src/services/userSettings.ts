@@ -1,7 +1,7 @@
 import { invokeLambda } from '../utils/lambda'
 import { seedMasterCopiesForNewUser } from './masterCopy'
 import type { AgeCategory, Role } from '@powerlifting/types'
-import { ROLE_VALUES } from '@powerlifting/types'
+import { APP_ROLE_VALUES } from '../auth/identity'
 
 const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
   'open',
@@ -154,7 +154,7 @@ function normalizeTags(raw: unknown): ProfileTag[] {
 }
 
 function normalizeRole(value: unknown): Role | null {
-  return typeof value === 'string' && (ROLE_VALUES as ReadonlyArray<string>).includes(value)
+  return typeof value === 'string' && (APP_ROLE_VALUES as ReadonlyArray<string>).includes(value)
     ? (value as Role)
     : null
 }
