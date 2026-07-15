@@ -1,74 +1,61 @@
 variable "region" {
-  type    = string
-  default = "ca-central-1"
+  type        = string
+  description = "AWS region this stack is deployed to."
+  default     = "ca-central-1"
 }
 
 variable "ecr_repository_prefix" {
-  type    = string
-  default = "if"
+  type        = string
+  description = "Prefix prepended to ECR repository names (e.g. \"if\" -> \"if-powerlifting-app-backend\")."
+  default     = "if"
 }
 
 variable "dynamodb_health_table" {
-  type    = string
-  default = "if-health"
+  type        = string
+  description = "Name of the health metrics DynamoDB table."
+  default     = "if-health"
 }
 
 variable "dynamodb_sessions_table" {
-  type    = string
-  default = "if-sessions"
+  type        = string
+  description = "Name of the training sessions DynamoDB table."
+  default     = "if-sessions"
 }
 
 variable "dynamodb_templates_table" {
-  type    = string
-  default = "if-health-templates"
+  type        = string
+  description = "Name of the templates DynamoDB table."
+  default     = "if-health-templates"
 }
 
 variable "dynamodb_analysis_cache_table" {
-  type    = string
-  default = "if-powerlifting-analysis-cache"
+  type        = string
+  description = "Name of the analysis cache DynamoDB table."
+  default     = "if-powerlifting-analysis-cache"
 }
 
 variable "dynamodb_proposals_table" {
-  type    = string
-  default = "if-proposals"
+  type        = string
+  description = "Name of the proposals DynamoDB table."
+  default     = "if-proposals"
 }
 
 variable "powerlifting_s3_bucket" {
-  type    = string
-  default = "powerlifting-openpowerlifting-dataset"
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-variable "node_name" {
-  type    = string
-  default = "sirsimpalot-g5-5000"
-}
-variable "openrouter_api_key" {
-  description = "OpenRouter API key for AI health tools (SSM plaintext param source)."
   type        = string
+  description = "Name of the S3 bucket that holds the openpowerlifting dataset."
+  default     = "powerlifting-openpowerlifting-dataset"
+}
+
+variable "openrouter_api_key" {
+  type        = string
+  description = "OpenRouter API key (sourced from SSM plaintext param)."
   default     = ""
   sensitive   = true
 }
 
 variable "pl_internal_token" {
-  description = "Internal API token for powerlifting Lambda authorizer / Fission prefn (SSM plaintext param source)."
   type        = string
+  description = "Internal API token for the Fission tools / API Gateway authorizer (sourced from SSM plaintext param)."
   default     = ""
   sensitive   = true
 }
-
