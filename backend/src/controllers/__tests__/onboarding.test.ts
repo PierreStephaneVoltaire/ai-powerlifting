@@ -88,7 +88,8 @@ function validateOnboardingProfile(input: any) {
   }
   const display_name = input.display_name.trim().slice(0, 80)
   const bio = typeof input.bio === 'string' ? input.bio.slice(0, 280) : ''
-  const visibility = input.profile_visibility === 'public' ? 'public' : 'private'
+  const profile_visibility: 'private' | 'public' =
+    input.profile_visibility === 'public' ? 'public' : 'private'
   const summary = input.public_training_summary_enabled === true
   let federations: string[] = []
   if (input.federations !== undefined) {
@@ -102,7 +103,7 @@ function validateOnboardingProfile(input: any) {
     }
     federations = seen
   }
-  return { display_name, bio, profile_visibility: visibility, public_training_summary_enabled: summary, federations }
+  return { display_name, bio, profile_visibility, public_training_summary_enabled: summary, federations }
 }
 
 function validateRoleInput(input: any) {
@@ -142,6 +143,7 @@ function deriveStatus(settings: Settings) {
   const has_athlete_basics =
     settings.bodyweight_kg != null &&
     settings.training_maxes != null &&
+    settings.sex != null &&
     VALID_SEX.has(settings.sex)
   let next_step = 'done'
   if (roles.length === 0) next_step = 'role'

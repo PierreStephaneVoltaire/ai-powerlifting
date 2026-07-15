@@ -34,7 +34,7 @@ module "cloudfront" {
   session_videos_origin_id                   = "powerlifting-session-videos"
 
   budget_media_bucket_regional_domain_name = module.budget_media.bucket_regional_domain_name
-  budget_media_origin_id                    = "powerlifting-budget-media"
+  budget_media_origin_id                   = "powerlifting-budget-media"
 }
 
 module "budget_media" {
