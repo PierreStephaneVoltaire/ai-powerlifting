@@ -168,39 +168,44 @@ function startFakeLambda(): Promise<http.Server> {
       req.on('end', () => {
         const body = buf ? JSON.parse(buf) : {}
         const route = (req.url || '').split('?')[0]
+        // The fission_server.py wrapper expects each handler to return
+        // either a `{ statusCode, body }` dict (which gets jsonified back out)
+        // or a plain JSON-serialisable value. The actual lambda handlers
+        // return `{statusCode: 200, body: json.dumps(settings_dict)}` and the
+        // backend's invokeLambda() unwraps that. So the HTTP body our fake
+        // emits is the same wire format the real fission server would emit.
         const respond = (status: number, payload: any) => {
           res.statusCode = status
           res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify(payload))
+          res.end(JSON.stringify({ statusCode: status, body: JSON.stringify(payload) }))
         }
         try {
-          // /pod_user is the prefix; the actual function name is in body.function.
           if (route === '/pod_user') {
             const fn = body.function
             const username = body.username
             if (fn === 'settings_get') {
-              if (!store[username]) return respond(200, { data: null })
-              return respond(200, { data: { ...store[username] } })
+              if (!store[username]) return respond(200, null)
+              return respond(200, { ...store[username] })
             }
             if (fn === 'settings_create') {
               const u = body.username || body.discord_id
               if (!store[u]) store[u] = defaultSettings(u)
-              return respond(200, { data: { ...store[u] } })
+              return respond(200, { ...store[u] })
             }
             if (fn === 'settings_update_athlete_basics') {
               if (!store[username]) store[username] = defaultSettings(username)
               store[username] = applyAthleteBasics(store[username], body.input)
-              return respond(200, { data: { ...store[username] } })
+              return respond(200, { ...store[username] })
             }
             if (fn === 'settings_update_onboarding_profile') {
               if (!store[username]) store[username] = defaultSettings(username)
               store[username] = applyOnboardingProfile(store[username], body.input)
-              return respond(200, { data: { ...store[username] } })
+              return respond(200, { ...store[username] })
             }
             if (fn === 'settings_update_role') {
               if (!store[username]) store[username] = defaultSettings(username)
               store[username] = applyRole(store[username], { roles: body.roles, active_role: body.active_role })
-              return respond(200, { data: { ...store[username] } })
+              return respond(200, { ...store[username] })
             }
             return respond(400, { error: `Unknown function: ${fn}` })
           }
@@ -281,6 +286,7 @@ async function jsonReq(
 }
 
 async function main() {
+  store['testuser'] = defaultSettings('testuser')
   // Start the fake Lambda backend first, then point the real backend at it.
   const lambdaServer = await startFakeLambda()
   const lambdaPort = (lambdaServer.address() as AddressInfo).port
