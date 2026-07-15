@@ -26,6 +26,7 @@ import { federationsRouter } from './routes/federations'
 import { budgetRouter } from './routes/budget'
 import { setupRouter } from './routes/setup'
 import { grantsRouter } from './routes/grants'
+import { onboardingRouter } from './routes/onboarding'
 import { errorHandler } from './middleware/errorHandler'
 import { requireUserOptional, requireWriteAuth, resolvePk } from './middleware/auth'
 
@@ -55,6 +56,7 @@ app.use('/api/settings', settingsRouter)
 app.use('/api/profiles', profilesRouter)
 app.use('/api/setup', setupRouter)
 app.use('/api/grants', grantsRouter)
+app.use('/api/onboarding', onboardingRouter)
 app.use('/api/programs', programsRouter)
 app.use('/api/goals', goalsRouter)
 app.use('/api/federations', federationsRouter)

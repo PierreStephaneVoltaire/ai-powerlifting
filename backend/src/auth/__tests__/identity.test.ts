@@ -1,5 +1,5 @@
 /**
- * Smoke tests for the Epic 3 identity helpers (groupsFromSettings, isAppRole,
+ * Smoke tests for the identity helpers (groupsFromSettings, isAppRole,
  * legacy-compat path). Run with:  npx tsx src/auth/__tests__/identity.test.ts
  */
 import {

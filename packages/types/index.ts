@@ -1351,3 +1351,46 @@ export interface BudgetAiAnalysis {
   cached: boolean
   generated_at: string
 }
+
+
+// =============================================================================
+// Epic 3 — Onboarding (role / athlete basics / profile)
+// =============================================================================
+
+export type Role = 'athlete' | 'coach' | 'handler'
+
+export const ROLE_VALUES: ReadonlyArray<Role> = ['athlete', 'coach', 'handler']
+
+export const ROLE_LABELS: Record<Role, string> = {
+  athlete: 'Athlete',
+  coach: 'Coach',
+  handler: 'Handler',
+}
+
+export interface TrainingMaxes {
+  squat_kg: number
+  bench_kg: number
+  deadlift_kg: number
+}
+
+export interface AthleteBasics {
+  sex: Sex
+  bodyweight_kg: number
+  country: string          // ISO 3166-1 alpha-2; informational. Federations are the source of truth for weight classes.
+  region: string           // Freeform state/province (e.g. "CA", "Ontario"); no subdivision list validation.
+  training_maxes: TrainingMaxes
+}
+
+export interface OnboardingState {
+  athlete_basics_complete: boolean
+  profile_complete: boolean
+  roles: Role[]
+  active_role: Role
+}
+
+export interface OnboardingStatus {
+  is_onboarded: boolean
+  next_step: 'role' | 'profile' | 'athlete_basics' | 'done' | null
+  state: OnboardingState
+  has_athlete_basics: boolean
+}

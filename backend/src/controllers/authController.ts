@@ -11,7 +11,7 @@ const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || ''
 const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || ''
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
-// Authentik OIDC configuration (FEAT-4.1)
+// Authentik OIDC configuration
 const AUTHENTIK_CLIENT_ID = process.env.AUTHENTIK_CLIENT_ID || ''
 const AUTHENTIK_CLIENT_SECRET = process.env.AUTHENTIK_CLIENT_SECRET || ''
 const AUTHENTIK_ISSUER_URL = (process.env.AUTHENTIK_ISSUER_URL || '').replace(/\/$/, '')
@@ -102,7 +102,8 @@ export async function discordCallback(req: Request, res: Response): Promise<void
 
     const jwt = signToken(tokenPayload)
     setAuthCookie(res, jwt)
-    // Apply Epic 3 onboarding-driven role/groups before sending the user off.
+    // Reissue the cookie with the settings-driven role/groups before sending
+    // the user off, so the post-login JWT already reflects their onboarding.
     try {
       await reissueTokenFromSettings(res, { ...tokenPayload, groups: [], roles: [] }, discordUser.username)
     } catch (err) {

@@ -14,6 +14,14 @@ export interface ProfileTag {
   proposed_by: string
 }
 
+export type AppRole = 'athlete' | 'coach' | 'handler'
+
+export interface TrainingMaxes {
+  squat_kg: number
+  bench_kg: number
+  deadlift_kg: number
+}
+
 export interface UserSettings {
   pk: string
   mapped_pk?: string
@@ -29,6 +37,14 @@ export interface UserSettings {
   ranking_region: string | null
   age_class: 'open' | 'subjunior' | 'junior' | 'master1' | 'master2' | 'master3' | 'master4'
   tags: ProfileTag[]
+  sex: 'male' | 'female' | null
+  bodyweight_kg: number | null
+  training_maxes: TrainingMaxes | null
+  federations: string[]
+  roles: AppRole[]
+  active_role: AppRole
+  athlete_basics_complete: boolean
+  profile_complete: boolean
   created_at: string
   updated_at: string
 }

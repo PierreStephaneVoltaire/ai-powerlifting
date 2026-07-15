@@ -28,7 +28,7 @@ export const HANDLER_ROLE = 'handlers'
 export const OPERATOR_MAPPED_PK = 'operator'
 
 // =============================================================================
-// Epic 3 — Self-declared app role (settings.roles + settings.active_role).
+// Self-declared app role (settings.roles + settings.active_role).
 // These functions compute the derived Discord group name from the user's
 // onboarding choices. They DO NOT replace the legacy guild-based `groups` and
 // `roles` checks above; they're additive so existing flows keep working.

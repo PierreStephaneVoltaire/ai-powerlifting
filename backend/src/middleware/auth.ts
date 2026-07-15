@@ -51,8 +51,8 @@ export interface AuthToken {
   groups: string[]
   roles: string[]
   email?: string | null
-  // Epic 3 — self-declared app role from settings.roles / settings.active_role.
-  // Not present for legacy tokens issued before Epic 3 shipped.
+  // Self-declared app role (settings.roles / settings.active_role). Not
+  // present for tokens issued before the role onboarding shipped.
   active_role?: AppRole | null
   // Backwards-compat field for code paths that still read `payload.discord_id`.
   discord_id: string
