@@ -9,9 +9,12 @@ resource "aws_ecr_repository" "this" {
 }
 
 resource "aws_ecr_lifecycle_policy" "keep_5" {
-  for_each = aws_ecr_repository.this
+  # Key off the static set of names so the keys are known at plan time
+  # (keying off aws_ecr_repository.this produces "known only after apply"
+  # which blocks plan and import).
+  for_each = toset(var.repository_names)
 
-  repository = each.value.name
+  repository = "${var.repository_prefix}-${each.value}"
 
   policy = jsonencode({
     rules = [

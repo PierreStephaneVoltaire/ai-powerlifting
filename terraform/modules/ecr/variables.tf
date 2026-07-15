@@ -1,9 +1,7 @@
 variable "repository_prefix" {
-  type        = string
-  description = "Prefix for ECR repository names (e.g. \"if\")."
+  type = string
 }
 
 variable "repository_names" {
-  type        = list(string)
-  description = "Suffix names to create repositories for (e.g. [\"powerlifting-app-backend\"])."
+  type = list(string)
 }

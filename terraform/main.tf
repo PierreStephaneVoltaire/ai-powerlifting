@@ -1,17 +1,10 @@
-###############################################################################
-# ECR repositories for backend and frontend container images.
-###############################################################################
 module "ecr" {
   source = "./modules/ecr"
 
-  repository_prefix = var.ecr_repository_prefix
+  repository_prefix = "if"
   repository_names  = ["powerlifting-app-backend", "powerlifting-app-frontend"]
 }
 
-###############################################################################
-# Session videos S3 bucket (uploaded by the app) + the ffmpeg Lambda that
-# generates thumbnails on object-created.
-###############################################################################
 module "session_videos" {
   source = "./modules/session_videos"
 
@@ -23,17 +16,13 @@ module "video_thumbnail_lambda" {
 
   function_name       = "video-thumbnail-generator"
   lambda_role_name    = "video-thumbnail-lambda-role"
-  region              = var.region
+  region              = "ca-central-1"
   videos_bucket_id    = module.session_videos.bucket_id
   videos_bucket_arn   = module.session_videos.bucket_arn
-  health_table_name   = var.dynamodb_health_table
-  sessions_table_name = var.dynamodb_sessions_table
+  health_table_name   = "if-health"
+  sessions_table_name = "if-sessions"
 }
 
-###############################################################################
-# CloudFront distribution fronting the session videos bucket (default) and
-# the budget media bucket (path pattern: budget/*).
-###############################################################################
 module "cloudfront" {
   source = "./modules/cloudfront"
 
@@ -48,12 +37,21 @@ module "cloudfront" {
   budget_media_origin_id                    = "powerlifting-budget-media"
 }
 
-###############################################################################
-# Budget media S3 bucket (depends on the CloudFront ARN it can read from).
-###############################################################################
 module "budget_media" {
   source = "./modules/budget_media"
 
   bucket_name                 = "powerlifting-budget-media"
   cloudfront_distribution_arn = module.cloudfront.distribution_arn
+}
+
+module "powerlifting_dynamodb" {
+  source = "./modules/powerlifting_dynamodb"
+}
+
+module "powerlifting_dataset" {
+  source = "./modules/powerlifting_dataset"
+}
+
+module "powerlifting_master_sync" {
+  source = "./modules/powerlifting_master_sync"
 }
