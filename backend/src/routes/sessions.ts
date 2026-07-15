@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import * as sessionController from '../controllers/sessionController'
 import * as programController from '../controllers/programController'
 import { invokeSpecialistJson } from '../utils/agent'
+import { invalidateAfter } from '../utils/cacheMiddleware'
 import type { Session, Exercise, SessionStatus, SessionWellness, FailedSetReason } from '@powerlifting/types'
 
 export const sessionsRouter = Router({ mergeParams: true })
@@ -217,7 +218,7 @@ sessionsRouter.get('/:version/:date/:index', async (req, res, next) => {
 })
 
 // POST /api/sessions/:version - Create a new session
-sessionsRouter.post('/:version', async (req, res, next) => {
+sessionsRouter.post('/:version', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const session = req.body as Partial<Session>
 
@@ -254,7 +255,7 @@ sessionsRouter.post('/:version', async (req, res, next) => {
 })
 
 // DELETE /api/sessions/:version/:date/:index - Delete a session
-sessionsRouter.delete('/:version/:date/:index', async (req, res, next) => {
+sessionsRouter.delete('/:version/:date/:index', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     await sessionController.deleteSession(
@@ -270,7 +271,7 @@ sessionsRouter.delete('/:version/:date/:index', async (req, res, next) => {
 })
 
 // PUT /api/sessions/:version/:date/:index - Replace entire session
-sessionsRouter.put('/:version/:date/:index', async (req, res, next) => {
+sessionsRouter.put('/:version/:date/:index', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const session = req.body as Session
     const index = parseInt(req.params.index, 10)
@@ -296,7 +297,7 @@ sessionsRouter.put('/:version/:date/:index', async (req, res, next) => {
 })
 
 // PATCH /api/sessions/:version/:date/:index/reschedule - Move session to new date
-sessionsRouter.patch('/:version/:date/:index/reschedule', async (req, res, next) => {
+sessionsRouter.patch('/:version/:date/:index/reschedule', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const { newDate, newDay } = req.body
     const index = parseInt(req.params.index, 10)
@@ -323,7 +324,7 @@ sessionsRouter.patch('/:version/:date/:index/reschedule', async (req, res, next)
 })
 
 // PATCH /api/sessions/:version/:date/:index/status - Update session status
-sessionsRouter.patch('/:version/:date/:index/status', async (req, res, next) => {
+sessionsRouter.patch('/:version/:date/:index/status', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const { status } = req.body as { status: SessionStatus }
     const index = parseInt(req.params.index, 10)
@@ -350,7 +351,7 @@ sessionsRouter.patch('/:version/:date/:index/status', async (req, res, next) => 
 })
 
 // PATCH /api/sessions/:version/:date/:index/complete - Mark session complete
-sessionsRouter.patch('/:version/:date/:index/complete', async (req, res, next) => {
+sessionsRouter.patch('/:version/:date/:index/complete', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const { rpe, bodyWeightKg, notes, wellness } = req.body as {
       rpe?: number

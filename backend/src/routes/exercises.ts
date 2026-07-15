@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import * as exerciseController from '../controllers/exerciseController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { GlossaryExercise } from '@powerlifting/types'
 
 export const exercisesRouter = Router()
 
 // GET /api/exercises - Get full glossary
-exercisesRouter.get('/', async (req, res, next) => {
+exercisesRouter.get('/', cacheGet(['glossary']), async (req, res, next) => {
   try {
     const glossary = await exerciseController.getGlossary(req.mapped_pk!)
     res.json({ data: glossary.exercises, error: null })
@@ -52,7 +53,7 @@ exercisesRouter.get('/:id', async (req, res, next) => {
 })
 
 // POST /api/exercises - Add exercise
-exercisesRouter.post('/', async (req, res, next) => {
+exercisesRouter.post('/', invalidateAfter(['glossary']), async (req, res, next) => {
   try {
     const exercise = req.body as GlossaryExercise
 
@@ -71,7 +72,7 @@ exercisesRouter.post('/', async (req, res, next) => {
 })
 
 // PUT /api/exercises/:id - Update exercise
-exercisesRouter.put('/:id', async (req, res, next) => {
+exercisesRouter.put('/:id', invalidateAfter(['glossary']), async (req, res, next) => {
   try {
     const exercise = req.body as GlossaryExercise
     exercise.id = req.params.id
@@ -84,7 +85,7 @@ exercisesRouter.put('/:id', async (req, res, next) => {
 })
 
 // DELETE /api/exercises/:id - Remove exercise
-exercisesRouter.delete('/:id', async (req, res, next) => {
+exercisesRouter.delete('/:id', invalidateAfter(['glossary']), async (req, res, next) => {
   try {
     await exerciseController.removeExercise(req.mapped_pk!, req.params.id)
     res.json({ data: { success: true }, error: null })
@@ -94,7 +95,7 @@ exercisesRouter.delete('/:id', async (req, res, next) => {
 })
 
 // PATCH /api/exercises/:id/archive - Archive an exercise
-exercisesRouter.patch('/:id/archive', async (req, res, next) => {
+exercisesRouter.patch('/:id/archive', invalidateAfter(['glossary']), async (req, res, next) => {
   try {
     await exerciseController.archiveExercise(req.mapped_pk!, req.params.id)
     res.json({ data: { success: true }, error: null })
@@ -104,7 +105,7 @@ exercisesRouter.patch('/:id/archive', async (req, res, next) => {
 })
 
 // PATCH /api/exercises/:id/unarchive - Unarchive an exercise
-exercisesRouter.patch('/:id/unarchive', async (req, res, next) => {
+exercisesRouter.patch('/:id/unarchive', invalidateAfter(['glossary']), async (req, res, next) => {
   try {
     await exerciseController.unarchiveExercise(req.mapped_pk!, req.params.id)
     res.json({ data: { success: true }, error: null })

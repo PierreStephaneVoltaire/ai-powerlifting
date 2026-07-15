@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import * as weightController from '../controllers/weightController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { WeightEntry } from '@powerlifting/types'
 
 export const weightRouter = Router()
 
 // GET /api/weight/:version - Get weight log
-weightRouter.get('/:version', async (req, res, next) => {
+weightRouter.get('/:version', cacheGet((req) => [`weight-log:${req.params.version}`]), async (req, res, next) => {
   try {
     const log = await weightController.getWeightLog(req.mapped_pk!, req.params.version)
     res.json({ data: log, error: null })
@@ -15,7 +16,7 @@ weightRouter.get('/:version', async (req, res, next) => {
 })
 
 // POST /api/weight/:version - Add weight entry
-weightRouter.post('/:version', async (req, res, next) => {
+weightRouter.post('/:version', invalidateAfter((req) => [`weight-log:${req.params.version}`]), async (req, res, next) => {
   try {
     const { date, kg } = req.body
 
@@ -35,7 +36,7 @@ weightRouter.post('/:version', async (req, res, next) => {
 })
 
 // DELETE /api/weight/:version/:date - Remove weight entry
-weightRouter.delete('/:version/:date', async (req, res, next) => {
+weightRouter.delete('/:version/:date', invalidateAfter((req) => [`weight-log:${req.params.version}`]), async (req, res, next) => {
   try {
     await weightController.removeWeightEntry(req.mapped_pk!, req.params.version, req.params.date)
     res.json({ data: { success: true }, error: null })

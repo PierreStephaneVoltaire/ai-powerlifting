@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { signToken, signState, verifyState } from '../middleware/auth'
 import { getSettings, getSettingsByMappedPk } from '../services/userSettings'
+import { invalidateAllForUser } from '../utils/cache'
 
 const DISCORD_API = 'https://discord.com/api/v10'
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID || ''
@@ -103,6 +104,16 @@ export async function discordCallback(req: Request, res: Response): Promise<void
     })
 
     setAuthCookie(res, jwt)
+    // Wipe any backend cache the user might have had from a prior device/session.
+    // The frontend will already have wiped its IndexedDB on the new-login redirect.
+    try {
+      const existingSettings = await getSettings(discordUser.username)
+      if (existingSettings?.mapped_pk) {
+        await invalidateAllForUser(existingSettings.mapped_pk)
+      }
+    } catch (err) {
+      console.warn('Failed to invalidate user cache on new login:', err)
+    }
     res.redirect(FRONTEND_URL)
   } catch (err) {
     console.error('Discord OAuth callback error:', err)

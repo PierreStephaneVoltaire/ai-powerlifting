@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import * as competitionController from '../controllers/competitionController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { LiftResults, PostMeetReport, UserCompetitionUpdate } from '@powerlifting/types'
 
 export const competitionsRouter = Router({ mergeParams: true })
 
-competitionsRouter.get('/', async (req, res, next) => {
+competitionsRouter.get('/', cacheGet(['competitions']), async (req, res, next) => {
   try {
     const competitions = await competitionController.getUserCompetitions(req.mapped_pk!, {
       country: typeof req.query.country === 'string' ? req.query.country : undefined,
@@ -16,7 +17,7 @@ competitionsRouter.get('/', async (req, res, next) => {
   }
 })
 
-competitionsRouter.patch('/:masterId', async (req, res, next) => {
+competitionsRouter.patch('/:masterId', invalidateAfter(['competitions']), async (req, res, next) => {
   try {
     const updates = (req.body ?? {}) as UserCompetitionUpdate
     const updated = await competitionController.patchUserCompetition(
@@ -30,7 +31,7 @@ competitionsRouter.patch('/:masterId', async (req, res, next) => {
   }
 })
 
-competitionsRouter.post('/:masterId/complete', async (req, res, next) => {
+competitionsRouter.post('/:masterId/complete', invalidateAfter(['competitions']), async (req, res, next) => {
   try {
     const { results, bodyWeightKg, postMeetReport } = req.body ?? {}
     if (!results || typeof bodyWeightKg !== 'number') {
@@ -49,7 +50,7 @@ competitionsRouter.post('/:masterId/complete', async (req, res, next) => {
   }
 })
 
-competitionsRouter.get('/:version', async (req, res, next) => {
+competitionsRouter.get('/:version', cacheGet((req) => [`competitions:${req.params.version}`]), async (req, res, next) => {
   try {
     const competitions = await competitionController.getCompetitions(req.mapped_pk!, req.params.version)
     res.json({ data: competitions, error: null })
@@ -58,7 +59,7 @@ competitionsRouter.get('/:version', async (req, res, next) => {
   }
 })
 
-competitionsRouter.put('/:version', async (req, res, next) => {
+competitionsRouter.put('/:version', invalidateAfter((req) => [`competitions:${req.params.version}`]), async (req, res, next) => {
   try {
     const { competitions } = req.body
 
@@ -73,7 +74,7 @@ competitionsRouter.put('/:version', async (req, res, next) => {
   }
 })
 
-competitionsRouter.patch('/:version/:date/complete', async (req, res, next) => {
+competitionsRouter.patch('/:version/:date/complete', invalidateAfter((req) => [`competitions:${req.params.version}`]), async (req, res, next) => {
   try {
     const { results, bodyWeightKg, postMeetReport } = req.body
 

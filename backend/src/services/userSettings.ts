@@ -274,7 +274,7 @@ export async function updateAgeClass(
   return normalizeSettings(result as Record<string, unknown>)
 }
 
-/
+
 export async function addTag(discordUsername: string, tag: string): Promise<UserSettings> {
   const result = await invokeLambda('pod_user', { function: 'settings_tag_add',
     username: discordUsername,

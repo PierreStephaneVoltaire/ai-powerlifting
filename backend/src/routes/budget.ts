@@ -2,6 +2,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import * as budgetController from '../controllers/budgetController'
 import * as competitionController from '../controllers/competitionController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { BudgetCategory, BudgetPriorityTier } from '@powerlifting/types'
 
 const upload = multer({
@@ -28,7 +29,7 @@ budgetRouter.get('/config', async (req, res, next) => {
   }
 })
 
-budgetRouter.put('/config', async (req, res, next) => {
+budgetRouter.put('/config', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const config = await budgetController.putBudgetConfig(req.mapped_pk!, req.body)
     res.json({ data: config, error: null })
@@ -58,7 +59,7 @@ budgetRouter.get('/items', async (req, res, next) => {
   }
 })
 
-budgetRouter.post('/items', async (req, res, next) => {
+budgetRouter.post('/items', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const item = await budgetController.createBudgetItem(req.mapped_pk!, req.body)
     res.json({ data: item, error: null })
@@ -67,7 +68,7 @@ budgetRouter.post('/items', async (req, res, next) => {
   }
 })
 
-budgetRouter.put('/items/:id', async (req, res, next) => {
+budgetRouter.put('/items/:id', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const item = await budgetController.updateBudgetItem(req.mapped_pk!, req.params.id, req.body)
     res.json({ data: item, error: null })
@@ -76,7 +77,7 @@ budgetRouter.put('/items/:id', async (req, res, next) => {
   }
 })
 
-budgetRouter.delete('/items/:id', async (req, res, next) => {
+budgetRouter.delete('/items/:id', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     await budgetController.deleteBudgetItem(req.mapped_pk!, req.params.id)
     res.json({ data: { success: true }, error: null })
@@ -113,7 +114,7 @@ budgetRouter.delete('/items/:itemId/photo', async (req, res, next) => {
   }
 })
 
-budgetRouter.patch('/items/:id/cut', async (req, res, next) => {
+budgetRouter.patch('/items/:id/cut', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const body = req.body as { cut?: boolean } | null
     const cut = body?.cut !== false
@@ -161,7 +162,7 @@ budgetRouter.post('/ai-analysis', async (req, res, next) => {
 })
 
 
-budgetRouter.get('/', async (req, res, next) => {
+budgetRouter.get('/', cacheGet(['budget']), async (req, res, next) => {
   try {
     const store = await budgetController.getBudget(req.mapped_pk!)
     res.json({ data: store, error: null })
@@ -170,7 +171,7 @@ budgetRouter.get('/', async (req, res, next) => {
   }
 })
 
-budgetRouter.put('/', async (req, res, next) => {
+budgetRouter.put('/', invalidateAfter(['budget']), async (req, res, next) => {
   try {
     const { config, items } = req.body as { config?: unknown; items?: unknown[] }
     if (!config || typeof config !== 'object') {

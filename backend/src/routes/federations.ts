@@ -1,11 +1,14 @@
 import { Router } from 'express'
 import * as federationsController from '../controllers/federationsController'
+import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import { requireAdmin } from '../middleware/auth'
 import type { FederationLibrary } from '@powerlifting/types'
 
 export const federationsRouter = Router()
 
-federationsRouter.get('/', async (req, res, next) => {
+federationsRouter.get('/', cacheGet((req) => {
+  return req.query.format === 'library' ? ['federations:master'] : ['federations']
+}), async (req, res, next) => {
   try {
     const format = req.query.format as string | undefined
     if (format === 'library') {
@@ -22,7 +25,7 @@ federationsRouter.get('/', async (req, res, next) => {
   }
 })
 
-federationsRouter.put('/:masterId', requireAdmin, async (req, res, next) => {
+federationsRouter.put('/:masterId', requireAdmin, invalidateAfter(['federations']), async (req, res, next) => {
   try {
     await federationsController.updateFederation(req.params.masterId, req.body)
     res.json({ data: { success: true }, error: null })
@@ -31,7 +34,7 @@ federationsRouter.put('/:masterId', requireAdmin, async (req, res, next) => {
   }
 })
 
-federationsRouter.put('/', requireAdmin, async (req, res, next) => {
+federationsRouter.put('/', requireAdmin, invalidateAfter(['federations:master']), async (req, res, next) => {
   try {
     const { library } = req.body as { library: FederationLibrary }
 

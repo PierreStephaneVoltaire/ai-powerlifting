@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { invokeLambda } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
+import { cacheGet } from '../utils/cacheMiddleware'
 
 export const statsRouter = Router()
 
@@ -59,7 +60,7 @@ statsRouter.post('/analyze', async (req, res, next) => {
   }
 })
 
-statsRouter.get('/ranking_percentile', async (req, res, next) => {
+statsRouter.get('/ranking_percentile', cacheGet(['stats:percentile']), async (req, res, next) => {
   try {
     const toNum = (v: unknown) => v !== undefined && v !== '' ? Number(v) : undefined
     const toStr = (v: unknown) => v !== undefined && v !== '' ? String(v) : undefined
