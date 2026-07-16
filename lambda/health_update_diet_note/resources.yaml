@@ -10,6 +10,7 @@ resources:
     cpu: 300m
     memory: 256Mi
 timeout: 900
+min_replicas: 0
 description: Create or replace a diet note for a date.
 input_schema:
   type: object

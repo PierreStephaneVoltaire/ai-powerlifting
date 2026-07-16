@@ -9,6 +9,7 @@ resources:
   limits:
     cpu: 300m
     memory: 256Mi
+min_replicas: 0
 timeout: 900
 description: Replace the full phases list.
 input_schema:

@@ -1,7 +1,7 @@
 layers:
 - pl_boto3
 - pl_sessions
-min_replicas: 1
+min_replicas: 0
 resources:
   requests:
     cpu: 500m

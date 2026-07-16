@@ -9,6 +9,7 @@ resources:
     cpu: 300m
     memory: 256Mi
 timeout: 120
+min_replicas: 0
 description: Seed per-user copies of master competitions and federations.
 input_schema:
   type: object

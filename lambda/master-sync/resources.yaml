@@ -10,5 +10,5 @@ resources:
     cpu: 750m
     memory: 512Mi
 timeout: 900
-
+min_replicas: 0
 reserved_concurrency: null

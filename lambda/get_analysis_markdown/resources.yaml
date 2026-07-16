@@ -11,7 +11,7 @@ resources:
     cpu: 750m
     memory: 512Mi
 timeout: 900
-min_replicas: 1
+min_replicas: 0
 description: Return the cached markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Use the cache unless it is stale, dirty, or refresh is true.
 input_schema:
   type: object

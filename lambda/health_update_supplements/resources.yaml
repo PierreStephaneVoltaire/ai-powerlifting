@@ -11,6 +11,7 @@ resources:
     memory: 256Mi
 timeout: 900
 description: Update the supplement protocol.
+min_replicas: 0
 input_schema:
   type: object
   properties:

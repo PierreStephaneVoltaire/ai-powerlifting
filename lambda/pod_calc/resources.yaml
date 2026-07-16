@@ -1,5 +1,5 @@
 layers: []
-min_replicas: 1
+min_replicas: 0
 resources:
   requests:
     cpu: 50m

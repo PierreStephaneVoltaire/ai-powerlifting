@@ -10,6 +10,7 @@ resources:
     cpu: 300m
     memory: 256Mi
 timeout: 900
+min_replicas: 0
 description: Update program metadata fields, including sex for DOTS calculations.
 input_schema:
   type: object

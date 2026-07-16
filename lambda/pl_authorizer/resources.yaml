@@ -7,6 +7,7 @@ resources:
     cpu: 200m
     memory: 128Mi
 timeout: 5
+min_replicas: 0
 s3_read: false
 description: "Internal X-Internal-Token authorizer for pl-* API Gateway"
 input_schema:

@@ -8,7 +8,7 @@ resources:
     cpu: 200m
     memory: 128Mi
 timeout: 60
-min_replicas: 1
+min_replicas: 0
 description: "Fission tool registry: serves the OpenAPI 3 discovery document at GET /openapi.json so health_lambda_mcp can register every Fission powerlifting tool on startup."
 input_schema:
   type: object

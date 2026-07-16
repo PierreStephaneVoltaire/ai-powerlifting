@@ -50,7 +50,7 @@ export default function SettingsDrawer() {
     currency, setCurrency,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
-  const { user, loading, readOnly, signIn, signOut, age_class: authAgeClass } = useAuth()
+  const { user, loading, readOnly, signInDiscord, signInAuthentik, signOut, age_class: authAgeClass } = useAuth()
 
   const isOpen = drawerOpen && drawerType === 'settings'
   const effectiveSex = program?.meta?.sex ?? sex
@@ -198,15 +198,28 @@ export default function SettingsDrawer() {
               </Button>
             </Stack>
           ) : (
-            <Button
-              variant="filled"
-              size="sm"
-              leftSection={<LogIn size={16} />}
-              onClick={signIn}
-              fullWidth
-            >
-              Sign in with Discord
-            </Button>
+            <Stack gap="xs">
+              <Button
+                variant="filled"
+                size="sm"
+                leftSection={<LogIn size={16} />}
+                onClick={signInDiscord}
+                fullWidth
+                data-testid="settings-signin-discord"
+              >
+                Sign in
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                leftSection={<LogIn size={16} />}
+                onClick={signInAuthentik}
+                fullWidth
+                data-testid="settings-signin-authentik"
+              >
+                Sign in
+              </Button>
+            </Stack>
           )}
         </div>
 
