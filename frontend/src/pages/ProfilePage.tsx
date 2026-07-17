@@ -636,7 +636,6 @@ export default function ProfilePage() {
                   {program?.meta.practicing_for ? ` - ${program.meta.practicing_for}` : ''}
                 </Text>
 
-                {/* Tags (FEAT-8) */}
                 <Stack gap={4}>
                   <Group gap={4} wrap="wrap" align="center">
                     <TagIcon size={14} color="var(--text-muted)" />

@@ -26,7 +26,6 @@ settingsRouter.put('/ranking-location', updateRankingLocationHandler)
 settingsRouter.put('/age-class', updateAgeClassHandler)
 settingsRouter.post('/avatar', avatarUpload.single('avatar'), updateAvatarHandler)
 
-// Tags (FEAT-8)
 settingsRouter.post('/tags', addTagHandler)
 settingsRouter.delete('/tags/:tag', removeTagHandler)
 settingsRouter.post('/tags/:tag/approve', approveTagHandler)

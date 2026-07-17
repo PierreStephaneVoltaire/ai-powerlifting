@@ -141,7 +141,6 @@ export async function updateAgeClass(input: {
   return res.data.data
 }
 
-// ─── Tags (FEAT-8) ──────────────────────────────────────────────────────────
 
 export async function addTag(tag: string): Promise<UserSettings> {
   const res = await api.post<{ data: UserSettings }>('/settings/tags', { tag })

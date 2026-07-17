@@ -207,7 +207,7 @@ export default function SettingsDrawer() {
                 fullWidth
                 data-testid="settings-signin-discord"
               >
-                Sign in
+                Sign in with discord
               </Button>
               <Button
                 variant="default"
@@ -217,13 +217,12 @@ export default function SettingsDrawer() {
                 fullWidth
                 data-testid="settings-signin-authentik"
               >
-                Sign in
+                Sign in with sso
               </Button>
             </Stack>
           )}
         </div>
 
-        {/* Grants (FEAT-4.2) */}
         <div>
           <SectionLabel>Grants</SectionLabel>
           <GrantsPanel />
