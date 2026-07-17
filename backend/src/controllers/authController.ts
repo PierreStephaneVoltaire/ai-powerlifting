@@ -4,6 +4,7 @@ import { reissueTokenFromSettings } from '../middleware/auth'
 import { setAuthCookie, clearAuthCookie } from '../auth/cookies'
 import { getSettings, getSettingsByMappedPk } from '../services/userSettings'
 import { invalidateAllForUser } from '../utils/cache'
+import logger from '../utils/logger'
 
 const DISCORD_API = 'https://discord.com/api/v10'
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID || ''
@@ -147,36 +148,58 @@ interface AuthentikClaims {
 async function exchangeAuthentikCode(code: string): Promise<AuthentikTokenResponse> {
   if (!isAuthentikEnabled()) throw new Error('Authentik is not configured')
   const tokenUrl = `${AUTHENTIK_INTERNAL_URL}/token/`
-  const res = await fetch(tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: AUTHENTIK_CLIENT_ID,
-      client_secret: AUTHENTIK_CLIENT_SECRET,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: AUTHENTIK_REDIRECT_URI,
-    }),
-  })
+  logger.info({ msg: 'Authentik token exchange starting', tokenUrl, clientId: AUTHENTIK_CLIENT_ID, redirectUri: AUTHENTIK_REDIRECT_URI, codeLen: code.length })
+  let res: globalThis.Response
+  try {
+    res = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: AUTHENTIK_CLIENT_ID,
+        client_secret: AUTHENTIK_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: AUTHENTIK_REDIRECT_URI,
+      }),
+    })
+  } catch (err) {
+    logger.error({ msg: 'Authentik token exchange network error', tokenUrl, error: err instanceof Error ? err.message : String(err) })
+    throw new Error(`Authentik token exchange network error: ${err instanceof Error ? err.message : String(err)}`)
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
+    logger.error({ msg: 'Authentik token exchange non-ok', status: res.status, statusText: res.statusText, body: body.slice(0, 500) })
     throw new Error(`Authentik token exchange failed: ${res.status} ${body}`)
   }
+  logger.info({ msg: 'Authentik token exchange succeeded' })
   return res.json() as Promise<AuthentikTokenResponse>
 }
 
 async function fetchAuthentikClaims(accessToken: string): Promise<AuthentikClaims> {
   if (!isAuthentikEnabled()) throw new Error('Authentik is not configured')
   const userinfoUrl = `${AUTHENTIK_INTERNAL_URL}/userinfo/`
-  const res = await fetch(userinfoUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  if (!res.ok) throw new Error(`Authentik userinfo failed: ${res.status}`)
+  logger.info({ msg: 'Authentik userinfo fetch starting', userinfoUrl, tokenLen: accessToken.length })
+  let res: globalThis.Response
+  try {
+    res = await fetch(userinfoUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  } catch (err) {
+    logger.error({ msg: 'Authentik userinfo network error', userinfoUrl, error: err instanceof Error ? err.message : String(err) })
+    throw new Error(`Authentik userinfo network error: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    logger.error({ msg: 'Authentik userinfo non-ok', status: res.status, statusText: res.statusText, body: body.slice(0, 500) })
+    throw new Error(`Authentik userinfo failed: ${res.status} ${body}`)
+  }
+  logger.info({ msg: 'Authentik userinfo fetch succeeded' })
   return res.json() as Promise<AuthentikClaims>
 }
 
 export function authentikLogin(_req: Request, res: Response): void {
   if (!isAuthentikEnabled()) {
+    logger.warn({ msg: 'Authentik login attempted but not enabled' })
     res.redirect(`${FRONTEND_URL}/login?error=authentik_disabled`)
     return
   }
@@ -191,20 +214,25 @@ export function authentikLogin(_req: Request, res: Response): void {
     nonce,
   })
   const authUrl = `${AUTHENTIK_ISSUER_URL}/authorize/?${params.toString()}`
+  logger.info({ msg: 'Authentik login redirect', authUrl: authUrl.slice(0, 200), issuer: AUTHENTIK_ISSUER_URL, clientId: AUTHENTIK_CLIENT_ID, redirectUri: AUTHENTIK_REDIRECT_URI })
   res.redirect(authUrl)
 }
 
 export async function authentikCallback(req: Request, res: Response): Promise<void> {
   const { code, state } = req.query
+  logger.info({ msg: 'Authentik callback HIT', hasCode: Boolean(code), hasState: Boolean(state), queryKeys: Object.keys(req.query) })
   if (!code || typeof code !== 'string') {
+    logger.warn({ msg: 'Authentik callback no code', query: req.query })
     res.redirect(`${FRONTEND_URL}/login?error=no_code`)
     return
   }
   if (!state || typeof state !== 'string' || !verifyState(state)) {
+    logger.warn({ msg: 'Authentik callback invalid state', stateProvided: Boolean(state), stateType: typeof state })
     res.redirect(`${FRONTEND_URL}/login?error=invalid_state`)
     return
   }
   if (!isAuthentikEnabled()) {
+    logger.warn({ msg: 'Authentik callback but not enabled' })
     res.redirect(`${FRONTEND_URL}/login?error=authentik_disabled`)
     return
   }
@@ -212,6 +240,7 @@ export async function authentikCallback(req: Request, res: Response): Promise<vo
   try {
     const tokens = await exchangeAuthentikCode(code)
     const claims = await fetchAuthentikClaims(tokens.access_token)
+    logger.info({ msg: 'Authentik claims fetched', sub: claims.sub, username: claims.preferred_username, email: claims.email, groupsCount: Array.isArray(claims.groups) ? claims.groups.length : null })
     const raw = String(claims.preferred_username || claims.email || `authentik_${claims.sub}`).toLowerCase()
     const username = raw.replace(/[^a-z0-9_-]/g, '_').slice(0, 32) || `authentik_${claims.sub}`
 
@@ -232,7 +261,7 @@ export async function authentikCallback(req: Request, res: Response): Promise<vo
     try {
       await reissueTokenFromSettings(res, tokenPayload, username)
     } catch (err) {
-      console.warn('Failed to apply settings-driven claims on Authentik login:', err)
+      logger.warn({ msg: 'Failed to apply settings-driven claims on Authentik login', error: err instanceof Error ? err.message : String(err) })
     }
     try {
       const existingSettings = await getSettings(username)
@@ -240,11 +269,12 @@ export async function authentikCallback(req: Request, res: Response): Promise<vo
         await invalidateAllForUser(existingSettings.mapped_pk)
       }
     } catch (err) {
-      console.warn('Failed to invalidate user cache on new login:', err)
+      logger.warn({ msg: 'Failed to invalidate user cache on new login', error: err instanceof Error ? err.message : String(err) })
     }
+    logger.info({ msg: 'Authentik login SUCCESS, redirecting to frontend', username, sub: claims.sub })
     res.redirect(FRONTEND_URL)
   } catch (err) {
-    console.error('Authentik OAuth callback error:', err)
+    logger.error({ msg: 'Authentik OAuth callback error', error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined })
     res.redirect(`${FRONTEND_URL}/login?error=authentik_failed`)
   }
 }
