@@ -15,6 +15,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 const AUTHENTIK_CLIENT_ID = process.env.AUTHENTIK_CLIENT_ID || ''
 const AUTHENTIK_CLIENT_SECRET = process.env.AUTHENTIK_CLIENT_SECRET || ''
 const AUTHENTIK_ISSUER_URL = (process.env.AUTHENTIK_ISSUER_URL || '').replace(/\/$/, '')
+const AUTHENTIK_INTERNAL_URL = (process.env.AUTHENTIK_INTERNAL_URL || AUTHENTIK_ISSUER_URL).replace(/\/$/, '')
 const AUTHENTIK_REDIRECT_URI = process.env.AUTHENTIK_REDIRECT_URI || ''
 
 export function isAuthentikEnabled(): boolean {
@@ -145,7 +146,7 @@ interface AuthentikClaims {
 
 async function exchangeAuthentikCode(code: string): Promise<AuthentikTokenResponse> {
   if (!isAuthentikEnabled()) throw new Error('Authentik is not configured')
-  const tokenUrl = `${AUTHENTIK_ISSUER_URL}/token/`
+  const tokenUrl = `${AUTHENTIK_INTERNAL_URL}/token/`
   const res = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -166,7 +167,7 @@ async function exchangeAuthentikCode(code: string): Promise<AuthentikTokenRespon
 
 async function fetchAuthentikClaims(accessToken: string): Promise<AuthentikClaims> {
   if (!isAuthentikEnabled()) throw new Error('Authentik is not configured')
-  const userinfoUrl = `${AUTHENTIK_ISSUER_URL}/userinfo/`
+  const userinfoUrl = `${AUTHENTIK_INTERNAL_URL}/userinfo/`
   const res = await fetch(userinfoUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
