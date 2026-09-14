@@ -13,6 +13,8 @@ def _json_default(obj):
 
 def handler(event, context):
     args = event.get("args", event)
-    result = asyncio.run(glossary_set_e1rm(args["id"], args["value_kg"], args.get("method", "manual")))
+    if not args.get("id") or not isinstance(args.get("value_kg"), (int, float)) or isinstance(args.get("value_kg"), bool):
+        raise ValueError("id and value_kg are required")
+    result = asyncio.run(glossary_set_e1rm(args["id"], args["value_kg"], args.get("method", "manual"), args.get("pk")))
     body = result if isinstance(result, str) else json.dumps(result, default=_json_default)
     return {"statusCode": 200, "body": body}

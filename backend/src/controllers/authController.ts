@@ -103,6 +103,7 @@ export async function discordCallback(req: Request, res: Response): Promise<void
     }
 
     const jwt = signToken(tokenPayload)
+    req.session.identity = tokenPayload
     setAuthCookie(res, jwt)
     // Reissue the cookie with the settings-driven role/groups before sending
     // the user off, so the post-login JWT already reflects their onboarding.
@@ -257,6 +258,7 @@ export async function authentikCallback(req: Request, res: Response): Promise<vo
     }
 
     const jwt = signToken(tokenPayload)
+    req.session.identity = tokenPayload
     setAuthCookie(res, jwt)
     try {
       await reissueTokenFromSettings(res, tokenPayload, username)
@@ -328,6 +330,7 @@ export async function getMe(req: Request, res: Response): Promise<void> {
 }
 
 export function logout(_req: Request, res: Response): void {
+  _req.session.destroy(() => undefined)
   clearAuthCookie(res)
   res.json({ ok: true })
 }

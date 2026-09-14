@@ -13,5 +13,5 @@ def _json_default(obj):
 def handler(event, context):
     args = event.get("args", event)
     result = template_evaluate(args)
-    body = result if isinstance(result, str) else json.dumps(result, default=_json_default)
+    body = result if isinstance(result, str) else json.dumps(result, default=str)
     return {"statusCode": 200, "body": body}

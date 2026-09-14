@@ -10,8 +10,8 @@ cares about, plus the qualifying standards they've saved. Stored in the
                   "parent_slug": "...", "qualifying_standards": [...]}, ...]
     - updated_at = ISO8601 timestamp
 
-This module is a thin async wrapper around a single get/put so the Fission
-tools stay small.
+This module is a thin async wrapper around a single get/put so domain
+operations stay small.
 """
 from __future__ import annotations
 

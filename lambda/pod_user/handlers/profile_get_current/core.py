@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from importlib import import_module
 import logging
 import os
 import re
@@ -40,10 +41,6 @@ AGE_CATEGORY_VALUES = (
 MAX_TAGS = 20
 MAX_TAG_LENGTH = 30
 TAG_RE = re.compile(r"^[a-z0-9_-]{1,30}$")
-DOTS_COEFFICIENTS = {
-    "male": {"a": -307.75076, "b": 24.0900756, "c": -0.1918759221, "d": 0.0007391293, "e": -0.000001093},
-    "female": {"a": -57.96288, "b": 13.6175032, "c": -0.1126655495, "d": 0.0005158568, "e": -0.0000010706},
-}
 
 
 def _get_user_table():
@@ -290,11 +287,8 @@ def _resolved_lift(program: dict, lift: str) -> Optional[float]:
 def _calculate_dots(total_kg: float, bodyweight_kg: float, sex: str) -> Optional[float]:
     if total_kg <= 0 or bodyweight_kg <= 0:
         return None
-    c = DOTS_COEFFICIENTS.get("female" if sex == "female" else "male")
-    denom = c["a"] + c["b"] * bodyweight_kg + c["c"] * bodyweight_kg ** 2 + c["d"] * bodyweight_kg ** 3 + c["e"] * bodyweight_kg ** 4
-    if abs(denom) < 1e-12:
-        return None
-    return round((500 / denom) * total_kg, 2)
+    calculate_dots = import_module("lambda.pod_calc.handlers.calculate_dots.core").calculate_dots
+    return calculate_dots(total_kg, bodyweight_kg, sex)
 
 
 def _video_library_items(sessions: list[dict]) -> list[dict]:
@@ -326,6 +320,7 @@ def _build_profile(settings: dict, viewer_username: Optional[str], program: Opti
             "summary": {"squat_kg": None, "bench_kg": None, "deadlift_kg": None, "total_kg": None, "bodyweight_kg": None, "dots": None},
             "lift_videos": [],
         }
+    program = {**program, "sessions": sessions}
     meta = program.get("meta") or {}
     squat = _resolved_lift(program, "squat")
     bench = _resolved_lift(program, "bench")

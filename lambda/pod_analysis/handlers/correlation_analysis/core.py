@@ -83,7 +83,7 @@ def correlation_analysis(args):
         }
 
     store.invalidate_cache()
-    program = _run_async(store.get_program())
+    program = args.get("_report_source", {}).get("program") or _run_async(store.get_program())
     sessions = program.get("sessions", [])
     lift_profiles = program.get("lift_profiles", [])
 

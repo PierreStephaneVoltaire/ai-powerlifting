@@ -1,0 +1,468 @@
+[
+  {
+    "name": "calculate_attempts",
+    "domain": "competition",
+    "description": "Calculate three competition attempts for a lift.",
+    "handler": "lambda.pod_competition.handlers.calculate_attempts.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lift": {
+          "type": "string",
+          "enum": [
+            "squat",
+            "bench",
+            "deadlift"
+          ]
+        },
+        "opener_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "j1_override": {
+          "type": "number",
+          "minimum": 0
+        },
+        "j2_override": {
+          "type": "number",
+          "minimum": 0
+        },
+        "last_felt": {
+          "type": "string",
+          "enum": [
+            "hard",
+            "medium",
+            "easy"
+          ]
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "lift",
+        "opener_kg"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "lift",
+        "attempt_1_kg",
+        "attempt_2_kg",
+        "attempt_3_kg",
+        "jumps_used",
+        "warnings"
+      ],
+      "properties": {
+        "lift": {
+          "type": "string"
+        },
+        "attempt_1_kg": {
+          "type": "number"
+        },
+        "attempt_2_kg": {
+          "type": "number"
+        },
+        "attempt_3_kg": {
+          "type": "number"
+        },
+        "jumps_used": {
+          "type": "object"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_list_competitions",
+    "domain": "competition",
+    "description": "List or mutate the athlete's directory competition entries.",
+    "handler": "lambda.pod_competition.handlers.health_list_competitions.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": [
+            "list",
+            "update",
+            "complete"
+          ]
+        },
+        "country": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "master_id": {
+          "type": "string"
+        },
+        "patch": {
+          "type": "object"
+        },
+        "results": {
+          "type": "object"
+        },
+        "body_weight_kg": {
+          "type": "number"
+        },
+        "post_meet_report": {},
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_update_user_competition",
+    "domain": "competition",
+    "description": "Patch an athlete's directory competition entry.",
+    "handler": "lambda.pod_competition.handlers.health_list_competitions.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "master_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "patch": {
+          "type": "object"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "master_id",
+        "patch"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_complete_user_competition",
+    "domain": "competition",
+    "description": "Complete an athlete's directory competition entry.",
+    "handler": "lambda.pod_competition.handlers.health_list_competitions.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "master_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "results": {
+          "type": "object"
+        },
+        "body_weight_kg": {
+          "type": "number"
+        },
+        "post_meet_report": {},
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "master_id",
+        "results",
+        "body_weight_kg"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_complete_competition",
+    "domain": "competition",
+    "description": "Complete a legacy competition entry and compute its post-meet report.",
+    "handler": "lambda.pod_competition.handlers.health_complete_competition.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "minLength": 10
+        },
+        "results": {
+          "type": "object"
+        },
+        "body_weight_kg": {
+          "type": "number"
+        },
+        "post_meet_report": {},
+        "version": {
+          "type": "string"
+        },
+        "allow_retrospective": {
+          "type": "boolean"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "date",
+        "results",
+        "body_weight_kg"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_create_competition",
+    "domain": "competition",
+    "description": "Create a legacy competition entry.",
+    "handler": "lambda.pod_competition.handlers.health_create_competition.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "competition": {
+          "type": "object"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "competition"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "name",
+        "date",
+        "federation"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_delete_competition",
+    "domain": "competition",
+    "description": "Delete a legacy competition entry by date.",
+    "handler": "lambda.pod_competition.handlers.health_delete_competition.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "minLength": 10
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "deleted"
+      ],
+      "properties": {
+        "deleted": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_get_competition",
+    "domain": "competition",
+    "description": "Load a legacy competition entry by date.",
+    "handler": "lambda.pod_competition.handlers.health_get_competition.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "minLength": 10
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_snapshot_competition_projection",
+    "domain": "competition",
+    "description": "Snapshot projected totals one week before a legacy competition.",
+    "handler": "lambda.pod_competition.handlers.health_snapshot_competition_projection.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "minLength": 10
+        },
+        "version": {
+          "type": "string"
+        },
+        "allow_retrospective": {
+          "type": "boolean"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "snapshot_date",
+        "updated",
+        "competitions"
+      ],
+      "properties": {
+        "snapshot_date": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "competitions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  },
+  {
+    "name": "health_update_competition",
+    "domain": "competition",
+    "description": "Patch a legacy competition entry by date.",
+    "handler": "lambda.pod_competition.handlers.health_update_competition.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "minLength": 10
+        },
+        "patch": {
+          "type": "object"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "date",
+        "patch"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_competition"
+    ]
+  }
+]

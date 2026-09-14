@@ -13,6 +13,9 @@ def _json_default(obj):
 
 def handler(event, context):
     args = event.get("args", event)
-    result = asyncio.run(glossary_add(args["exercise"]))
+    exercise = args.get("term", args.get("exercise"))
+    if not isinstance(exercise, dict) or not exercise:
+        raise ValueError("term is required")
+    result = asyncio.run(glossary_add(exercise, args.get("pk")))
     body = result if isinstance(result, str) else json.dumps(result, default=_json_default)
     return {"statusCode": 200, "body": body}

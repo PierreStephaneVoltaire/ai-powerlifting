@@ -1,0 +1,480 @@
+[
+  {
+    "name": "import_apply",
+    "domain": "imports",
+    "description": "Apply a reviewed import to the athlete program or template library.",
+    "handler": "lambda.pod_imports.handlers.import_apply.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "merge_strategy": {
+          "type": "string",
+          "enum": [
+            "append",
+            "overwrite",
+            "overwrite_future",
+            "selective"
+          ],
+          "default": "append"
+        },
+        "conflict_resolutions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "session_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "skip",
+                  "overwrite",
+                  "merge",
+                  "replace_planned",
+                  "append"
+                ]
+              }
+            },
+            "required": [
+              "session_date",
+              "action"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "classification_override": {
+          "type": "string",
+          "enum": [
+            "template",
+            "session_import"
+          ]
+        },
+        "glossary_overrides": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "confirmed_auto_adds": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "author": {
+          "type": "string"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "import_id"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "applied"
+            },
+            "target_sk": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "target_sk"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "applied"
+            },
+            "applied_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skipped_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "new_version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "applied_count",
+            "skipped_count",
+            "new_version"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_import"
+    ]
+  },
+  {
+    "name": "import_get_pending",
+    "domain": "imports",
+    "description": "Get one staged import by ID for review.",
+    "handler": "lambda.pod_imports.handlers.import_get_pending.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "import_id"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "import_id": {
+              "type": "string"
+            },
+            "import_type": {
+              "type": "string",
+              "enum": [
+                "template",
+                "session_import"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "awaiting_review",
+                "applying",
+                "applied",
+                "rejected",
+                "uncertain"
+              ]
+            },
+            "source_filename": {
+              "type": "string"
+            },
+            "source_file_hash": {
+              "type": "string"
+            },
+            "uploaded_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "ttl": {
+              "type": "integer"
+            },
+            "ai_parse_result": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "pk",
+            "sk",
+            "import_id",
+            "import_type",
+            "status",
+            "source_filename",
+            "source_file_hash",
+            "uploaded_at",
+            "expires_at",
+            "ttl",
+            "ai_parse_result"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_import"
+    ]
+  },
+  {
+    "name": "import_list",
+    "domain": "imports",
+    "description": "List staged import summaries for the athlete, newest first.",
+    "handler": "lambda.pod_imports.handlers.import_list.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "imports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "sk",
+              "id",
+              "filename",
+              "source",
+              "format",
+              "status",
+              "classification",
+              "row_count",
+              "session_count",
+              "created_at",
+              "updated_at"
+            ]
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "imports",
+        "count",
+        "total"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_import"
+    ]
+  },
+  {
+    "name": "import_list_pending",
+    "domain": "imports",
+    "description": "List the athlete's staged imports awaiting review, optionally filtered by type.",
+    "handler": "lambda.pod_imports.handlers.import_list_pending.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_type": {
+          "type": "string",
+          "enum": [
+            "template",
+            "session_import"
+          ]
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pk": {
+            "type": "string"
+          },
+          "sk": {
+            "type": "string"
+          },
+          "import_id": {
+            "type": "string"
+          },
+          "import_type": {
+            "type": "string",
+            "enum": [
+              "template",
+              "session_import"
+            ]
+          },
+          "status": {
+            "const": "awaiting_review"
+          }
+        },
+        "required": [
+          "pk",
+          "sk",
+          "import_id",
+          "import_type",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_import"
+    ]
+  },
+  {
+    "name": "import_parse_file",
+    "domain": "imports",
+    "description": "Parse and stage a CSV or XLSX training import for review.",
+    "handler": "lambda.pod_imports.handlers.import_parse_file.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "base64_content": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "base64_content",
+        "filename"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "type": "string"
+        },
+        "classification": {
+          "type": "string",
+          "enum": [
+            "template",
+            "session_import"
+          ]
+        },
+        "warnings": {
+          "type": "array"
+        },
+        "parse_notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "import_id",
+        "classification",
+        "warnings",
+        "parse_notes"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "ai",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_import"
+    ]
+  },
+  {
+    "name": "import_reject",
+    "domain": "imports",
+    "description": "Reject a staged import and retain its audit record.",
+    "handler": "lambda.pod_imports.handlers.import_reject.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "import_id"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "rejected"
+        },
+        "import_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "import_id"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_import"
+    ]
+  }
+]

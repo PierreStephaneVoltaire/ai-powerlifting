@@ -53,7 +53,8 @@ class ProgramStore:
             region: AWS region (default: "ca-central-1")
         """
         self._table_name = table_name
-        self._pk = pk
+        from storage_scope import current_athlete
+        self._pk = current_athlete.get() or pk
         self._region = region
         self._sessions_table_name = os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions")
         self._table = None
@@ -106,6 +107,9 @@ class ProgramStore:
         )
 
     def _current_program_sk_sync(self) -> str:
+        selected = getattr(self, "_selected_program_sk", None)
+        if selected and selected not in {self.POINTER_SK, "current"}:
+            return selected
         pointer_resp = self.table.get_item(Key={"pk": self._pk, "sk": self.POINTER_SK})
         if "Item" in pointer_resp:
             ref_sk = pointer_resp["Item"].get("ref_sk")
@@ -157,7 +161,8 @@ class ProgramStore:
     def _load_program_sync(self) -> dict:
         """Synchronous program loading logic."""
         logger.info(f"[ProgramStore] Reading pointer from table='{self._table_name}' region='{self._region}': pk={self._pk}, sk={self.POINTER_SK}")
-        pointer_resp = self.table.get_item(
+        selected = getattr(self, "_selected_program_sk", None)
+        pointer_resp = {"Item": {"ref_sk": selected, "version": 0}} if selected and selected not in {self.POINTER_SK, "current"} else self.table.get_item(
             Key={"pk": self._pk, "sk": self.POINTER_SK}
         )
 
@@ -319,6 +324,55 @@ class ProgramStore:
         updated_program = await self._write_new_version(new_program, minor=False)
         
         return updated_program
+
+    async def block_transition(
+        self,
+        action: str,
+        block_id: str,
+        *,
+        expected_revision: int = 0,
+        idempotency_key: str = "",
+        name: str | None = None,
+        start_date: str | None = None,
+        week_start_day: str | None = None,
+        start_maxes_kg: dict | None = None,
+    ) -> dict:
+        if action not in {"complete", "start_next", "complete_and_start"}:
+            raise ValueError("action must be complete, start_next, or complete_and_start")
+        if not block_id or not idempotency_key:
+            raise ValueError("block_id and idempotency_key are required")
+        program = copy.deepcopy(await self.get_program())
+        meta = program.setdefault("meta", {})
+        revision = int(meta.get("revision", 0))
+        done = meta.setdefault("transition_idempotency", {})
+        if idempotency_key in done:
+            replay = copy.deepcopy(done[idempotency_key])
+            replay["program"] = program
+            return replay
+        if revision != expected_revision:
+            raise ValueError(f"revision conflict: expected {expected_revision}, current {revision}")
+        blocks = [copy.deepcopy(b) for b in (meta.get("blocks") or []) if isinstance(b, dict)]
+        current = next((b for b in blocks if str(b.get("id") or b.get("block_id")) == block_id), None)
+        if current is None:
+            phases = [p for p in (program.get("phases") or []) if isinstance(p, dict) and str(p.get("block") or "current") == block_id]
+            current = {"id": block_id, "block_id": block_id, "name": name or block_id, "status": "active", "start_week": min((int(p.get("start_week", 0)) for p in phases), default=0), "end_week": max((int(p.get("end_week", 0)) for p in phases), default=0)}
+            blocks.append(current)
+        if name:
+            current["name"] = name
+        if action in {"complete", "complete_and_start"}:
+            current["status"] = "completed"
+            current["completed_at"] = datetime.now(timezone.utc).isoformat()
+        next_id = None
+        if action in {"start_next", "complete_and_start"}:
+            next_id = f"block-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+            blocks.append({"id": next_id, "block_id": next_id, "name": name or "Next block", "status": "active", "start_date": start_date, "week_start_day": week_start_day or meta.get("program_week_start_day"), "start_maxes_kg": copy.deepcopy(start_maxes_kg or program.get("current_maxes", {}))})
+        meta["blocks"] = blocks
+        meta["revision"] = revision + 1
+        result = {"action": action, "block_id": block_id, "next_block_id": next_id, "revision": revision + 1, "warning": "Unfinished sessions were preserved"}
+        meta["transition_idempotency"][idempotency_key] = result
+        written = await self._write_new_version(program, minor=False)
+        result["program"] = written
+        return result
     
     def _apply_patch(self, obj: dict, path: str, value: Any) -> None:
         """Apply a JSON-path-like patch to an object.

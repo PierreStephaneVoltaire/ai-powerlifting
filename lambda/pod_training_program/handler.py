@@ -29,6 +29,7 @@ _ROUTING = {
     "program_update_lift_profiles": "program_update_lift_profiles",
     "block_notes_get": "block_notes_get",
     "block_notes_update": "block_notes_update",
+    "block_transition": "block_transition",
     "diet_notes_get": "diet_notes_get",
     "diet_notes_update": "diet_notes_update",
     "supplement_phases_get": "supplement_phases_get",

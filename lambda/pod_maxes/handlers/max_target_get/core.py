@@ -9,17 +9,10 @@ import boto3
 
 logger = logging.getLogger(__name__)
 
-_table = None
-
-
 def _get_table():
-    global _table
-    if _table is None:
-        region = os.environ.get("AWS_REGION", "ca-central-1")
-        table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
-        _table = boto3.resource("dynamodb", region_name=region).Table(table_name)
-        logger.info("[MaxTargetGet] DynamoDB table initialised: %s", table_name)
-    return _table
+    region = os.environ.get("AWS_REGION", "ca-central-1")
+    table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
+    return boto3.resource("dynamodb", region_name=region).Table(table_name)
 
 
 def _resolve_pk(args: dict) -> str:

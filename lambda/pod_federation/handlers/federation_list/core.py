@@ -16,15 +16,13 @@ def _get_store():
     sk = ``federations#v1``. This is distinct from the per-user
     ``federation_library#v1`` item (owned by FederationLibraryStore).
     """
-    global _store
-    if _store is None:
-        from _federation_store import FederationStore
-        _store = FederationStore(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[FederationList] FederationStore initialised")
+    from _federation_store import FederationStore
+    _store = FederationStore(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[FederationList] FederationStore initialised")
     return _store
 
 

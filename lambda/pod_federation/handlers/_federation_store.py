@@ -74,7 +74,7 @@ class FederationStore:
         """Lazy-load the master federations table (separate from if-health)."""
         if self._master_table_obj is None:
             import os
-            name = os.environ.get("POWERLIFTING_USER_FEDERATIONS_TABLE", "if-powerlifting-user-federations")
+            name = os.environ.get("POWERLIFTING_MASTER_FEDERATIONS_TABLE", "if-powerlifting-master-federations")
             self._master_table_obj = boto3.resource("dynamodb", region_name=self._region).Table(name)
         return self._master_table_obj
 

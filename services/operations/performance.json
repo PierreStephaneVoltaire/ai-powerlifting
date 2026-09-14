@@ -1,0 +1,504 @@
+[
+  {
+    "name": "health_get_current_maxes",
+    "domain": "performance",
+    "description": "Get current competition maxes. Returns {squat: kg, bench: kg, deadlift: kg}.",
+    "handler": "lambda.pod_maxes.handlers.health_get_current_maxes.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "squat": {
+          "type": "number"
+        },
+        "bench": {
+          "type": "number"
+        },
+        "deadlift": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_maxes"
+    ]
+  },
+  {
+    "name": "health_update_current_maxes",
+    "domain": "performance",
+    "description": "Update current competition maxes. Provide any of squat_kg, bench_kg, deadlift_kg \u2014 omitted fields are left unchanged. Returns the updated current_maxes dict.",
+    "handler": "lambda.pod_maxes.handlers.health_update_current_maxes.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "squat_kg": {
+          "type": "number",
+          "description": "New squat max in kg.",
+          "minimum": 0
+        },
+        "bench_kg": {
+          "type": "number",
+          "description": "New bench max in kg.",
+          "minimum": 0
+        },
+        "deadlift_kg": {
+          "type": "number",
+          "description": "New deadlift max in kg.",
+          "minimum": 0
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": [
+            "squat_kg"
+          ]
+        },
+        {
+          "required": [
+            "bench_kg"
+          ]
+        },
+        {
+          "required": [
+            "deadlift_kg"
+          ]
+        }
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "squat": {
+          "type": "number"
+        },
+        "bench": {
+          "type": "number"
+        },
+        "deadlift": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_maxes"
+    ]
+  },
+  {
+    "name": "max_history_add",
+    "domain": "performance",
+    "description": "Append a max entry to the max history for a program version. The entry must include a date and at least one of squat_kg, bench_kg, deadlift_kg. total_kg is optional (computed if omitted).",
+    "handler": "lambda.pod_maxes.handlers.max_history_add.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "version": {
+          "type": "string",
+          "description": "Program version. Defaults to \"current\"."
+        },
+        "entry": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "description": "Date of the max entry (YYYY-MM-DD).",
+              "format": "date"
+            },
+            "squat_kg": {
+              "type": "number",
+              "description": "Squat max in kg.",
+              "minimum": 0
+            },
+            "bench_kg": {
+              "type": "number",
+              "description": "Bench max in kg.",
+              "minimum": 0
+            },
+            "deadlift_kg": {
+              "type": "number",
+              "description": "Deadlift max in kg.",
+              "minimum": 0
+            },
+            "total_kg": {
+              "type": "number",
+              "description": "Total in kg (computed as sum of three lifts if omitted).",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "date"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "squat_kg"
+              ]
+            },
+            {
+              "required": [
+                "bench_kg"
+              ]
+            },
+            {
+              "required": [
+                "deadlift_kg"
+              ]
+            }
+          ]
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of the max entry (YYYY-MM-DD).",
+          "format": "date"
+        },
+        "squat_kg": {
+          "type": "number",
+          "description": "Squat max in kg.",
+          "minimum": 0
+        },
+        "bench_kg": {
+          "type": "number",
+          "description": "Bench max in kg.",
+          "minimum": 0
+        },
+        "deadlift_kg": {
+          "type": "number",
+          "description": "Deadlift max in kg.",
+          "minimum": 0
+        },
+        "total_kg": {
+          "type": "number",
+          "description": "Total in kg (computed as sum of three lifts if omitted).",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": [
+            "entry"
+          ]
+        },
+        {
+          "required": [
+            "date",
+            "squat_kg"
+          ]
+        },
+        {
+          "required": [
+            "date",
+            "bench_kg"
+          ]
+        },
+        {
+          "required": [
+            "date",
+            "deadlift_kg"
+          ]
+        }
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "version",
+        "entries",
+        "updated_at"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_maxes"
+    ]
+  },
+  {
+    "name": "max_history_get",
+    "domain": "performance",
+    "description": "Get the max history for a program version. Returns an array of max entries sorted by date.",
+    "handler": "lambda.pod_maxes.handlers.max_history_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "version": {
+          "type": "string",
+          "description": "Program version. Defaults to \"current\"."
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Optional inclusive history window start (YYYY-MM-DD).",
+          "format": "date"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "Optional inclusive history window end (YYYY-MM-DD).",
+          "format": "date"
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "version",
+        "entries",
+        "updated_at"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "date"
+            ],
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "squat_kg": {
+                "type": "number"
+              },
+              "bench_kg": {
+                "type": "number"
+              },
+              "deadlift_kg": {
+                "type": "number"
+              },
+              "total_kg": {
+                "type": "number"
+              },
+              "bodyweight_kg": {
+                "type": "number"
+              },
+              "context": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_maxes"
+    ]
+  },
+  {
+    "name": "max_target_get",
+    "domain": "performance",
+    "description": "Get the target maxes (squat/bench/deadlift/total) for a program version. These are goal targets used for progression tracking.",
+    "handler": "lambda.pod_maxes.handlers.max_target_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "version": {
+          "type": "string",
+          "description": "Program version. Defaults to \"current\"."
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "version",
+        "sk",
+        "squat_kg",
+        "bench_kg",
+        "deadlift_kg",
+        "total_kg"
+      ],
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "squat_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "bench_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "deadlift_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "total_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_maxes"
+    ]
+  },
+  {
+    "name": "max_target_update",
+    "domain": "performance",
+    "description": "Replace the target maxes for a program version. Provide squat_kg, bench_kg, deadlift_kg; total_kg is recomputed as the sum of the three lifts.",
+    "handler": "lambda.pod_maxes.handlers.max_target_update.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "version": {
+          "type": "string",
+          "description": "Program version. Defaults to \"current\"."
+        },
+        "squat_kg": {
+          "type": "number",
+          "description": "Target squat max in kg.",
+          "minimum": 0
+        },
+        "bench_kg": {
+          "type": "number",
+          "description": "Target bench max in kg.",
+          "minimum": 0
+        },
+        "deadlift_kg": {
+          "type": "number",
+          "description": "Target deadlift max in kg.",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "squat_kg",
+        "bench_kg",
+        "deadlift_kg"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "version",
+        "sk",
+        "squat_kg",
+        "bench_kg",
+        "deadlift_kg",
+        "total_kg",
+        "updated_at"
+      ],
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "squat_kg": {
+          "type": "number"
+        },
+        "bench_kg": {
+          "type": "number"
+        },
+        "deadlift_kg": {
+          "type": "number"
+        },
+        "total_kg": {
+          "type": "number"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_maxes"
+    ]
+  }
+]

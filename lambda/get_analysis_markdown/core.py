@@ -10,40 +10,32 @@ import logging
 import time as _time
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-_store: Optional[Any] = None
-_glossary_store: Optional[Any] = None
-
-
 def _get_store():
-    """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
-    return _store
+    """Create the request-scoped ProgramStore."""
+    import os
+    from program_store import ProgramStore as _PS
+    store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
+    return store
 
 
 def _get_glossary_store():
-    global _glossary_store
-    if _glossary_store is None:
-        import os
-        from glossary_store import GlossaryStore
-        _glossary_store = GlossaryStore(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-    return _glossary_store
+    import os
+    from glossary_store import GlossaryStore
+    store = GlossaryStore(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    return store
 
 
 def _run_async(coro):
@@ -154,7 +146,8 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     program = await store.get_program()
     pk = store.pk
     sessions = program.get("sessions", [])
-    glossary = _run_async(_get_glossary_store().get_glossary()) if hasattr(_get_glossary_store(), "get_glossary") else []
+    glossary_store = _get_glossary_store()
+    glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
 
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
@@ -211,16 +204,17 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
             errors.append(f"window {window_key}: {exc}")
 
     try:
-        out_path = os.path.join(tempfile.gettempdir(), "program_history_regen.md")
         scoped_program = _scope_program_to_current_block(program)
         analysis_bundle = {
             "weekly": block_analysis_result or {},
             "pk": pk,
             "sex": str((program.get("meta") or {}).get("sex") or "male").lower(),
         }
-        build_program_markdown(scoped_program, out_path, analysis=analysis_bundle, export_context=analysis_bundle)
-        with open(out_path, "r", encoding="utf-8") as f:
-            markdown = f.read()
+        with tempfile.TemporaryDirectory() as directory:
+            out_path = os.path.join(directory, "program.md")
+            build_program_markdown(scoped_program, out_path, analysis=analysis_bundle, export_context=analysis_bundle)
+            with open(out_path, "r", encoding="utf-8") as f:
+                markdown = f.read()
         if markdown:
             md_item = {
                 "pk": cache_pk,
@@ -325,7 +319,8 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
         (int(s.get("week_number", 0)) for s in sessions if s.get("week_number")),
         default=1,
     )
-    glossary = _run_async(_get_glossary_store().get_glossary()) if hasattr(_get_glossary_store(), "get_glossary") else []
+    glossary_store = _get_glossary_store()
+    glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
     analysis = _build_sectioned_week_analysis(
         program,
         sessions,
@@ -335,15 +330,16 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
         ref_date=today_iso,
     )
     scoped_program = _scope_program_to_current_block(program)
-    out_path = os.path.join(tempfile.gettempdir(), "program_history_live.md")
     analysis_bundle = {
         "weekly": analysis,
         "pk": pk,
         "sex": str((program.get("meta") or {}).get("sex") or "male").lower(),
     }
-    build_program_markdown(scoped_program, out_path, analysis=analysis_bundle, export_context=analysis_bundle)
-    with open(out_path, "r", encoding="utf-8") as f:
-        markdown = f.read()
+    with tempfile.TemporaryDirectory() as directory:
+        out_path = os.path.join(directory, "program.md")
+        build_program_markdown(scoped_program, out_path, analysis=analysis_bundle, export_context=analysis_bundle)
+        with open(out_path, "r", encoding="utf-8") as f:
+            markdown = f.read()
 
     generated_at = datetime.utcnow().isoformat() + "Z"
     expires_at = int(_time.time()) + 7 * 86400

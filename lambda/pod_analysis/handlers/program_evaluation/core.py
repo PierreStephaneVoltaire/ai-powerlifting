@@ -59,8 +59,8 @@ def program_evaluation(args):
 
     store = _get_store()
     store.invalidate_cache()
-    program = _run_async(store.get_program())
-    federation_library = _run_async(_get_federation_store().get_library())
+    program = args.get("_report_source", {}).get("program") or _run_async(store.get_program())
+    federation_library = args.get("_report_source", {}).get("federation_library") or _run_async(_get_federation_store().get_library())
     active_pk = store.pk
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
 

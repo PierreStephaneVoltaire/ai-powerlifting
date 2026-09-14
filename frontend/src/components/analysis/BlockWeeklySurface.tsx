@@ -32,6 +32,7 @@ import type { Program, Session, WeightEntry, GlossaryExercise, ExerciseCategory 
 import type { Sex } from '@powerlifting/types'
 import type { Unit } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
+import { estimateSetE1rm } from '@/utils/rpe'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
@@ -44,30 +45,6 @@ import {
 } from '@/api/analytics'
 import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
-
-function estimateAnalysisE1rm(kg: number, reps: number, rpe?: number | null): number | null {
-  if (kg <= 0 || reps <= 0) return null
-  const RPE_TABLE_PRIMARY = new Map<string, number>([
-    ['1-10', 1.000], ['2-10', 0.960], ['3-10', 0.930], ['4-10', 0.900], ['5-10', 0.880], ['6-10', 0.860],
-    ['1-9', 1.000], ['2-9', 0.940], ['3-9', 0.900], ['4-9', 0.870], ['5-9', 0.845], ['6-9', 0.825],
-    ['1-8', 1.000], ['2-8', 0.920], ['3-8', 0.875], ['4-8', 0.845], ['5-8', 0.815], ['6-8', 0.795],
-    ['1-7', 1.000], ['2-7', 0.900], ['3-7', 0.850], ['4-7', 0.820], ['5-7', 0.795], ['6-7', 0.775],
-    ['1-6', 1.000], ['2-6', 0.880], ['3-6', 0.830], ['4-6', 0.800], ['5-6', 0.775], ['6-6', 0.755],
-  ])
-  const CONSERVATIVE_REP_PCT: Record<number, number> = {
-    1: 1.000, 2: 0.955, 3: 0.925, 4: 0.898, 5: 0.875,
-  }
-  if (rpe != null && Number.isFinite(rpe)) {
-    const rpeInt = Math.trunc(rpe)
-    if (reps >= 1 && reps <= 6 && rpeInt >= 6 && rpeInt <= 10) {
-      const pct = RPE_TABLE_PRIMARY.get(`${reps}-${rpeInt}`)
-      return pct ? kg / pct : null
-    }
-    return null
-  }
-  const pct = CONSERVATIVE_REP_PCT[reps]
-  return pct ? kg / pct : null
-}
 
 function fatigueBadgeColor(score: number | null): string {
   if (score === null) return 'gray'
@@ -403,7 +380,7 @@ export function BlockWeeklySurface({
         const kg = ex.kg || 0
         const reps = ex.reps || 0
         const rpe = (ex as { rpe?: number | null }).rpe ?? s.session_rpe
-        const e1rm = estimateAnalysisE1rm(kg, reps, rpe)
+        const e1rm = estimateSetE1rm(kg, reps, rpe)?.e1rmKg ?? null
         if (e1rm == null) continue
         if (name === 'squat' || (name.includes('squat') && !name.includes('hack') && !name.includes('split'))) {
           w.squat = Math.max(w.squat, e1rm)

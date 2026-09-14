@@ -2,24 +2,17 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import boto3
 
 logger = logging.getLogger(__name__)
 
-_table = None
-
-
 def _get_table():
-    global _table
-    if _table is None:
-        region = os.environ.get("AWS_REGION", "ca-central-1")
-        table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
-        _table = boto3.resource("dynamodb", region_name=region).Table(table_name)
-        logger.info("[MaxHistoryGet] DynamoDB table initialised: %s", table_name)
-    return _table
+    region = os.environ.get("AWS_REGION", "ca-central-1")
+    table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
+    return boto3.resource("dynamodb", region_name=region).Table(table_name)
 
 
 def _resolve_pk(args: dict) -> str:
@@ -49,6 +42,14 @@ async def max_history_get(args: dict) -> dict:
     table = _get_table()
     pk = _resolve_pk(args)
     version = args.get("version") or "current"
+    start_date = args.get("start_date")
+    end_date = args.get("end_date")
+    if start_date:
+        date.fromisoformat(str(start_date))
+    if end_date:
+        date.fromisoformat(str(end_date))
+    if start_date and end_date and start_date > end_date:
+        raise ValueError("start_date must be on or before end_date")
     sk = _max_history_sk(version)
     resp = table.get_item(Key={"pk": pk, "sk": sk})
     item = resp.get("Item")
@@ -60,4 +61,7 @@ async def max_history_get(args: dict) -> dict:
             "entries": [],
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-    return _sanitize_decimals(item)
+    item = _sanitize_decimals(item)
+    if start_date or end_date:
+        item["entries"] = [entry for entry in item.get("entries", []) if (not start_date or entry.get("date", "") >= start_date) and (not end_date or entry.get("date", "") <= end_date)]
+    return item

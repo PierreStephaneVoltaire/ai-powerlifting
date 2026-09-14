@@ -1,0 +1,807 @@
+[
+  {
+    "name": "template_apply",
+    "domain": "templates",
+    "description": "Preview applying a template to the athlete program.",
+    "handler": "lambda.pod_templates.handlers.template_apply.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "target": {
+          "enum": ["new_block", "append", "replace_incomplete"]
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "block_name": {
+          "type": "string"
+        },
+        "start_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "week_start_day": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "preview_sessions",
+            "target",
+            "start_date",
+            "week_start_day"
+          ],
+          "properties": {
+            "status": {
+              "const": "ready"
+            },
+            "preview_sessions": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "target": {
+              "type": "string"
+            },
+            "start_date": {
+              "type": "string"
+            },
+            "week_start_day": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "missing_exercises",
+            "missing_maxes"
+          ],
+          "properties": {
+            "status": {
+              "const": "gate_blocked"
+            },
+            "missing_exercises": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "missing_maxes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_apply_confirm",
+    "domain": "templates",
+    "description": "Apply a template and write a new versioned athlete program with template lineage.",
+    "handler": "lambda.pod_templates.handlers.template_apply_confirm.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "backfilled_maxes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "start_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "week_start_day": {
+          "type": "string"
+        },
+        "target": {
+          "enum": ["new_block", "append", "replace_incomplete"]
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "block_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "program_version",
+        "program_sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "applied"
+        },
+        "program_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "program_sk": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_archive",
+    "domain": "templates",
+    "description": "Archive an owned template.",
+    "handler": "lambda.pod_templates.handlers.template_archive.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "archived"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_copy",
+    "domain": "templates",
+    "description": "Copy a visible template into a new owned unpublished template.",
+    "handler": "lambda.pod_templates.handlers.template_copy.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "new_name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "sk",
+        "new_name"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "new_sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "copied"
+        },
+        "new_sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_create_blank",
+    "domain": "templates",
+    "description": "Create an empty reusable template.",
+    "handler": "lambda.pod_templates.handlers.template_create_blank.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "estimated_weeks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "days_per_week": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "created"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_create_from_block",
+    "domain": "templates",
+    "description": "Create a reusable template from an athlete program block.",
+    "handler": "lambda.pod_templates.handlers.template_create_from_block.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "program_sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "created"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_create_from_payload",
+    "domain": "templates",
+    "description": "Create a reusable template from a complete payload.",
+    "handler": "lambda.pod_templates.handlers.template_create_from_payload.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "template": {
+          "type": "object"
+        },
+        "author": {
+          "type": "string"
+        },
+        "published": {
+          "type": "boolean"
+        },
+        "import_job_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "created"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_evaluate",
+    "domain": "templates",
+    "description": "Evaluate template suitability for the athlete and return a structured report.",
+    "handler": "lambda.pod_templates.handlers.template_evaluate.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "stance",
+        "summary",
+        "strengths",
+        "weaknesses",
+        "suggestions",
+        "projected_readiness_at_comp"
+      ],
+      "properties": {
+        "stance": {
+          "type": "string",
+          "enum": [
+            "continue",
+            "monitor",
+            "adjust",
+            "critical"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "strengths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "weaknesses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "rationale"
+            ],
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "rationale": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "projected_readiness_at_comp": {
+          "type": "number"
+        },
+        "data_citations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "ai",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_get",
+    "domain": "templates",
+    "description": "Get a visible template with phases, sessions, and metadata.",
+    "handler": "lambda.pod_templates.handlers.template_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "sk",
+        "meta",
+        "phases",
+        "sessions"
+      ],
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "pk": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "object"
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "required_maxes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "glossary_resolution": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_list",
+    "domain": "templates",
+    "description": "List visible template summaries, excluding archived templates by default.",
+    "handler": "lambda.pod_templates.handlers.template_list.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "include_archived": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "sk",
+          "name",
+          "archived",
+          "published"
+        ],
+        "properties": {
+          "sk": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "published": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_publish",
+    "domain": "templates",
+    "description": "Publish an owned template to the shared library.",
+    "handler": "lambda.pod_templates.handlers.template_publish.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "published"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_unarchive",
+    "domain": "templates",
+    "description": "Restore an owned template to default lists.",
+    "handler": "lambda.pod_templates.handlers.template_unarchive.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "unarchived"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_unpublish",
+    "domain": "templates",
+    "description": "Remove an owned template from the shared library.",
+    "handler": "lambda.pod_templates.handlers.template_unpublish.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "unpublished"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
+    "name": "template_update",
+    "domain": "templates",
+    "description": "Replace editable content of an owned template while preserving metadata and publication state.",
+    "handler": "lambda.pod_templates.handlers.template_update.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "template": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "sk",
+        "template"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "updated"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  }
+]

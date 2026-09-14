@@ -1,13 +1,11 @@
 """LLM-powered comparison across multiple powerlifting training blocks."""
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 from typing import Any
 
-import httpx
-
-from ai_config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
 from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -166,31 +164,16 @@ async def generate_multi_block_comparison_report(payload: dict[str, Any]) -> dic
         return _default_report("No block analysis payload was supplied.")
 
     user_msg = json.dumps(_sanitize(payload), indent=2, default=str)
-    logger.info("[MultiBlockComparisonAI] model=%s payload_chars=%s", ANALYSIS_MODEL, len(user_msg))
+    logger.info("[MultiBlockComparisonAI] payload_chars=%s", len(user_msg))
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": ANALYSIS_MODEL,
-                    "thinking": {"type": "enabled", "budget_tokens": ANALYSIS_MODEL_THINKING_BUDGET},
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "tools": [_TOOL_SCHEMA],
-                    "tool_choice": "required",
-                },
-            )
-            if resp.status_code >= 400:
-                logger.error("[MultiBlockComparisonAI] HTTP %s: %s", resp.status_code, resp.text[:2000])
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await completion({
+            "messages": [{"role": "system", "content": _SYSTEM_PROMPT}, {"role": "user", "content": user_msg}],
+            "tools": [_TOOL_SCHEMA],
+            "tool_choice": "required",
+        })
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

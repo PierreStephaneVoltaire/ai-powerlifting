@@ -1,0 +1,2243 @@
+[
+  {
+    "name": "master_copy_seed_user",
+    "domain": "profile",
+    "description": "Seed per-user copies of master competitions and federations.",
+    "handler": "lambda.master_copy_seed_user.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "master_copy_seed_user"
+    ]
+  },
+  {
+    "name": "profile_get",
+    "domain": "profile",
+    "description": "Build a public profile by nickname, including visible training summary and videos.",
+    "handler": "lambda.pod_user.handlers.profile_get.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "nickname"
+      ],
+      "properties": {
+        "nickname": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]{2,32}$"
+        },
+        "viewer_username": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "nickname",
+        "display_name",
+        "avatar_url",
+        "bio",
+        "profile_visibility",
+        "public_training_summary_enabled",
+        "is_self",
+        "tags",
+        "federation",
+        "weight_class_kg",
+        "practicing_for",
+        "summary",
+        "lift_videos"
+      ],
+      "properties": {
+        "nickname": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "avatar_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bio": {
+          "type": "string"
+        },
+        "profile_visibility": {
+          "enum": [
+            "private",
+            "public"
+          ]
+        },
+        "public_training_summary_enabled": {
+          "type": "boolean"
+        },
+        "is_self": {
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "federation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight_class_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "practicing_for": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "squat_kg",
+            "bench_kg",
+            "deadlift_kg",
+            "total_kg",
+            "bodyweight_kg",
+            "dots"
+          ],
+          "additionalProperties": true
+        },
+        "lift_videos": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "profile_get_current",
+    "domain": "profile",
+    "description": "Build the current user profile by mapped partition key.",
+    "handler": "lambda.pod_user.handlers.profile_get_current.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "mapped_pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "viewer_username": {
+          "type": "string"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "nickname",
+        "display_name",
+        "avatar_url",
+        "bio",
+        "profile_visibility",
+        "public_training_summary_enabled",
+        "is_self",
+        "tags",
+        "federation",
+        "weight_class_kg",
+        "practicing_for",
+        "summary",
+        "lift_videos"
+      ],
+      "properties": {
+        "nickname": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "avatar_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bio": {
+          "type": "string"
+        },
+        "profile_visibility": {
+          "enum": [
+            "private",
+            "public"
+          ]
+        },
+        "public_training_summary_enabled": {
+          "type": "boolean"
+        },
+        "is_self": {
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "federation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight_class_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "practicing_for": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "squat_kg",
+            "bench_kg",
+            "deadlift_kg",
+            "total_kg",
+            "bodyweight_kg",
+            "dots"
+          ],
+          "additionalProperties": true
+        },
+        "lift_videos": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "profile_search",
+    "domain": "profile",
+    "description": "Search visible profiles by nickname, display name, bio, or approved tag.",
+    "handler": "lambda.pod_user.handlers.profile_search.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "viewer_username": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "profiles"
+      ],
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "nickname",
+              "display_name",
+              "avatar_url",
+              "bio",
+              "profile_visibility",
+              "public_training_summary_enabled",
+              "is_self",
+              "tags"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_create",
+    "domain": "profile",
+    "description": "Conditionally create the initial settings row for a Discord identity.",
+    "handler": "lambda.pod_user.handlers.settings_create.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "discord_id",
+        "discord_username"
+      ],
+      "properties": {
+        "discord_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "discord_username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "avatar_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "settings",
+        "created"
+      ],
+      "properties": {
+        "settings": {
+          "type": "object",
+          "required": [
+            "pk",
+            "username",
+            "discord_id",
+            "discord_username",
+            "avatar_url",
+            "nickname",
+            "profile_visibility",
+            "display_name",
+            "bio",
+            "public_training_summary_enabled",
+            "ranking_country",
+            "ranking_region",
+            "age_class",
+            "sex",
+            "bodyweight_kg",
+            "training_maxes",
+            "federations",
+            "roles",
+            "active_role",
+            "athlete_basics_complete",
+            "profile_complete",
+            "created_at",
+            "updated_at"
+          ],
+          "additionalProperties": true
+        },
+        "created": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_get",
+    "domain": "profile",
+    "description": "Get settings by Discord username or mapped partition key, defaulting to operator settings when anonymous.",
+    "handler": "lambda.pod_user.handlers.settings_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "mapped_pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "tags",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_age_class",
+    "domain": "profile",
+    "description": "Update a user's age class.",
+    "handler": "lambda.pod_user.handlers.settings_update_age_class.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "age_class": {
+          "enum": [
+            "open",
+            "subjunior",
+            "junior",
+            "master1",
+            "master2",
+            "master3",
+            "master4",
+            null
+          ]
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_avatar",
+    "domain": "profile",
+    "description": "Upload a profile avatar to configured media storage and update the settings row.",
+    "handler": "lambda.pod_user.handlers.settings_update_avatar.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "file_b64",
+        "mimetype"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file_b64": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mimetype": {
+          "enum": [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif"
+          ]
+        },
+        "filename": {
+          "type": "string"
+        },
+        "mapped_pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_nickname",
+    "domain": "profile",
+    "description": "Update a user's public nickname.",
+    "handler": "lambda.pod_user.handlers.settings_update_nickname.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "nickname"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nickname": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]{2,32}$"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_profile",
+    "domain": "profile",
+    "description": "Update profile visibility, display name, bio, and public training summary setting.",
+    "handler": "lambda.pod_user.handlers.settings_update_profile.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_visibility": {
+          "enum": [
+            "private",
+            "public"
+          ]
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "bio": {
+          "type": "string"
+        },
+        "public_training_summary_enabled": {
+          "type": "boolean"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "tags",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_ranking_location",
+    "domain": "profile",
+    "description": "Update a user's ranking country and region.",
+    "handler": "lambda.pod_user.handlers.settings_update_ranking_location.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ranking_country": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ranking_region": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_athlete_basics",
+    "domain": "profile",
+    "description": "Update athlete sex, country, region, bodyweight, and all three training maxes.",
+    "handler": "lambda.pod_user.handlers.settings_update_athlete_basics.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "input"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "type": "object",
+          "required": [
+            "sex",
+            "country",
+            "bodyweight_kg",
+            "training_maxes"
+          ],
+          "properties": {
+            "sex": {
+              "enum": [
+                "male",
+                "female"
+              ]
+            },
+            "country": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8
+            },
+            "region": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bodyweight_kg": {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 300
+            },
+            "training_maxes": {
+              "type": "object",
+              "required": [
+                "squat_kg",
+                "bench_kg",
+                "deadlift_kg"
+              ],
+              "properties": {
+                "squat_kg": {
+                  "type": "number",
+                  "minimum": 20,
+                  "maximum": 600
+                },
+                "bench_kg": {
+                  "type": "number",
+                  "minimum": 20,
+                  "maximum": 600
+                },
+                "deadlift_kg": {
+                  "type": "number",
+                  "minimum": 20,
+                  "maximum": 600
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_onboarding_profile",
+    "domain": "profile",
+    "description": "Complete onboarding profile fields and mark the profile complete.",
+    "handler": "lambda.pod_user.handlers.settings_update_onboarding_profile.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "input"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "type": "object",
+          "required": [
+            "display_name"
+          ],
+          "properties": {
+            "display_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bio": {
+              "type": "string"
+            },
+            "profile_visibility": {
+              "enum": [
+                "private",
+                "public"
+              ]
+            },
+            "public_training_summary_enabled": {
+              "type": "boolean"
+            },
+            "federations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_update_role",
+    "domain": "profile",
+    "description": "Set the user's assigned roles and active role.",
+    "handler": "lambda.pod_user.handlers.settings_update_role.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "roles"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "athlete",
+              "coach",
+              "handler"
+            ]
+          }
+        },
+        "active_role": {
+          "enum": [
+            "athlete",
+            "coach",
+            "handler"
+          ]
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "discord_id",
+        "discord_username",
+        "avatar_url",
+        "nickname",
+        "profile_visibility",
+        "display_name",
+        "bio",
+        "public_training_summary_enabled",
+        "ranking_country",
+        "ranking_region",
+        "age_class",
+        "sex",
+        "bodyweight_kg",
+        "training_maxes",
+        "federations",
+        "roles",
+        "active_role",
+        "athlete_basics_complete",
+        "profile_complete",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_tag_add",
+    "domain": "profile",
+    "description": "Add an approved tag to the authenticated user's profile.",
+    "handler": "lambda.pod_user.handlers.settings_tag_add.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "tag"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30,
+          "pattern": "^[a-zA-Z0-9 _-]+$"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "tags"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_tag_remove",
+    "domain": "profile",
+    "description": "Remove a tag from the authenticated user's profile.",
+    "handler": "lambda.pod_user.handlers.settings_tag_remove.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "tag"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30,
+          "pattern": "^[a-zA-Z0-9 _-]+$"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "tags"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_tag_approve",
+    "domain": "profile",
+    "description": "Approve a proposed tag on the authenticated user's profile.",
+    "handler": "lambda.pod_user.handlers.settings_tag_approve.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "username",
+        "tag"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30,
+          "pattern": "^[a-zA-Z0-9 _-]+$"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "tags"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "settings_tag_propose",
+    "domain": "profile",
+    "description": "Propose a tag for another profile.",
+    "handler": "lambda.pod_user.handlers.settings_tag_propose.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "target_nickname",
+        "proposed_by",
+        "tag"
+      ],
+      "properties": {
+        "target_nickname": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]{2,32}$"
+        },
+        "proposed_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30,
+          "pattern": "^[a-zA-Z0-9 _-]+$"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "username",
+        "tags"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "onboarding_status",
+    "domain": "profile",
+    "description": "Return the current onboarding state for the authenticated user.",
+    "handler": "lambda.pod_user.handlers.onboarding_status.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "mapped_pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "is_onboarded",
+        "next_step",
+        "state",
+        "has_athlete_basics"
+      ],
+      "properties": {
+        "is_onboarded": {
+          "type": "boolean"
+        },
+        "next_step": {
+          "enum": [
+            "role",
+            "profile",
+            "athlete_basics",
+            "done"
+          ]
+        },
+        "state": {
+          "type": "object",
+          "required": [
+            "roles",
+            "active_role",
+            "athlete_basics_complete",
+            "profile_complete"
+          ],
+          "additionalProperties": true
+        },
+        "has_athlete_basics": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "grant_check",
+    "domain": "profile",
+    "description": "grant check",
+    "handler": "lambda.pod_user.handlers.grant_check.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "athlete_mapped_pk": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_#-]{1,128}$"
+        },
+        "actor_mapped_pk": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_#-]{1,128}$"
+        },
+        "grant_type": {
+          "enum": [
+            "",
+            "coach",
+            "handler"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "",
+            "read",
+            "write"
+          ]
+        },
+        "tied_competition_id": {
+          "type": "string"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "athlete_mapped_pk",
+        "actor_mapped_pk"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "grant": {
+          "type": "object",
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "athlete_mapped_pk": {
+              "type": "string"
+            },
+            "athlete_nickname": {
+              "type": "string"
+            },
+            "grantee_mapped_pk": {
+              "type": "string"
+            },
+            "grantee_nickname": {
+              "type": "string"
+            },
+            "grantee_discord_id": {
+              "type": "string"
+            },
+            "grantee_authentik_sub": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "last_edited_by": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "updated_at": {
+              "type": "string"
+            },
+            "grant_type": {
+              "enum": [
+                "coach",
+                "handler"
+              ]
+            },
+            "scope": {
+              "enum": [
+                "read",
+                "write"
+              ]
+            },
+            "revoked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "revoked_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tied_competition_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "pk",
+            "sk",
+            "athlete_mapped_pk",
+            "grantee_mapped_pk",
+            "grant_type",
+            "scope",
+            "expires_at"
+          ]
+        }
+      },
+      "required": [
+        "allowed",
+        "reason"
+      ]
+    },
+    "ownership": "person",
+    "execution": "deterministic",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "grant_create",
+    "domain": "profile",
+    "description": "grant create",
+    "handler": "lambda.pod_user.handlers.grant_create.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "athlete_mapped_pk": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_#-]{1,128}$"
+        },
+        "grantee_mapped_pk": {
+          "type": "string"
+        },
+        "grantee_nickname": {
+          "type": "string"
+        },
+        "grantee_discord_id": {
+          "type": "string"
+        },
+        "grantee_authentik_sub": {
+          "type": "string"
+        },
+        "grant_type": {
+          "enum": [
+            "coach",
+            "handler"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "tied_competition_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "type": "string"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "tied_competition_dates": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "athlete_mapped_pk",
+        "grantee_mapped_pk",
+        "grant_type"
+      ]
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "athlete_mapped_pk": {
+              "type": "string"
+            },
+            "athlete_nickname": {
+              "type": "string"
+            },
+            "grantee_mapped_pk": {
+              "type": "string"
+            },
+            "grantee_nickname": {
+              "type": "string"
+            },
+            "grantee_discord_id": {
+              "type": "string"
+            },
+            "grantee_authentik_sub": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "last_edited_by": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "updated_at": {
+              "type": "string"
+            },
+            "grant_type": {
+              "enum": [
+                "coach",
+                "handler"
+              ]
+            },
+            "scope": {
+              "enum": [
+                "read",
+                "write"
+              ]
+            },
+            "revoked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "revoked_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tied_competition_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "pk",
+            "sk",
+            "athlete_mapped_pk",
+            "grantee_mapped_pk",
+            "grant_type",
+            "scope",
+            "expires_at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "existing": {
+              "type": "object",
+              "properties": {
+                "pk": {
+                  "type": "string"
+                },
+                "sk": {
+                  "type": "string"
+                },
+                "athlete_mapped_pk": {
+                  "type": "string"
+                },
+                "athlete_nickname": {
+                  "type": "string"
+                },
+                "grantee_mapped_pk": {
+                  "type": "string"
+                },
+                "grantee_nickname": {
+                  "type": "string"
+                },
+                "grantee_discord_id": {
+                  "type": "string"
+                },
+                "grantee_authentik_sub": {
+                  "type": "string"
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "created_by": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "last_edited_by": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "grant_type": {
+                  "enum": [
+                    "coach",
+                    "handler"
+                  ]
+                },
+                "scope": {
+                  "enum": [
+                    "read",
+                    "write"
+                  ]
+                },
+                "revoked_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "revoked_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tied_competition_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "pk",
+                "sk",
+                "athlete_mapped_pk",
+                "grantee_mapped_pk",
+                "grant_type",
+                "scope",
+                "expires_at"
+              ]
+            }
+          },
+          "required": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "ownership": "person",
+    "execution": "deterministic",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "grant_list",
+    "domain": "profile",
+    "description": "grant list",
+    "handler": "lambda.pod_user.handlers.grant_list.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "athlete_mapped_pk": {
+          "type": "string"
+        },
+        "grantee_mapped_pk": {
+          "type": "string"
+        },
+        "include_inactive": {
+          "type": "boolean"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pk": {
+                "type": "string"
+              },
+              "sk": {
+                "type": "string"
+              },
+              "athlete_mapped_pk": {
+                "type": "string"
+              },
+              "athlete_nickname": {
+                "type": "string"
+              },
+              "grantee_mapped_pk": {
+                "type": "string"
+              },
+              "grantee_nickname": {
+                "type": "string"
+              },
+              "grantee_discord_id": {
+                "type": "string"
+              },
+              "grantee_authentik_sub": {
+                "type": "string"
+              },
+              "expires_at": {
+                "type": "string"
+              },
+              "created_by": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "last_edited_by": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string"
+              },
+              "grant_type": {
+                "enum": [
+                  "coach",
+                  "handler"
+                ]
+              },
+              "scope": {
+                "enum": [
+                  "read",
+                  "write"
+                ]
+              },
+              "revoked_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revoked_by": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tied_competition_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "pk",
+              "sk",
+              "athlete_mapped_pk",
+              "grantee_mapped_pk",
+              "grant_type",
+              "scope",
+              "expires_at"
+            ]
+          }
+        },
+        "inactive": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pk": {
+                "type": "string"
+              },
+              "sk": {
+                "type": "string"
+              },
+              "athlete_mapped_pk": {
+                "type": "string"
+              },
+              "athlete_nickname": {
+                "type": "string"
+              },
+              "grantee_mapped_pk": {
+                "type": "string"
+              },
+              "grantee_nickname": {
+                "type": "string"
+              },
+              "grantee_discord_id": {
+                "type": "string"
+              },
+              "grantee_authentik_sub": {
+                "type": "string"
+              },
+              "expires_at": {
+                "type": "string"
+              },
+              "created_by": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "last_edited_by": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string"
+              },
+              "grant_type": {
+                "enum": [
+                  "coach",
+                  "handler"
+                ]
+              },
+              "scope": {
+                "enum": [
+                  "read",
+                  "write"
+                ]
+              },
+              "revoked_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revoked_by": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tied_competition_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "pk",
+              "sk",
+              "athlete_mapped_pk",
+              "grantee_mapped_pk",
+              "grant_type",
+              "scope",
+              "expires_at"
+            ]
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "active",
+        "inactive",
+        "total"
+      ]
+    },
+    "ownership": "person",
+    "execution": "deterministic",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "grant_revoke",
+    "domain": "profile",
+    "description": "grant revoke",
+    "handler": "lambda.pod_user.handlers.grant_revoke.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "athlete_mapped_pk": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_#-]{1,128}$"
+        },
+        "sk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revoked_by": {
+          "type": "string"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "athlete_mapped_pk",
+        "sk"
+      ]
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "athlete_mapped_pk": {
+              "type": "string"
+            },
+            "athlete_nickname": {
+              "type": "string"
+            },
+            "grantee_mapped_pk": {
+              "type": "string"
+            },
+            "grantee_nickname": {
+              "type": "string"
+            },
+            "grantee_discord_id": {
+              "type": "string"
+            },
+            "grantee_authentik_sub": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "last_edited_by": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "updated_at": {
+              "type": "string"
+            },
+            "grant_type": {
+              "enum": [
+                "coach",
+                "handler"
+              ]
+            },
+            "scope": {
+              "enum": [
+                "read",
+                "write"
+              ]
+            },
+            "revoked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "revoked_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tied_competition_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "pk",
+            "sk",
+            "athlete_mapped_pk",
+            "grantee_mapped_pk",
+            "grant_type",
+            "scope",
+            "expires_at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "existing": {
+              "type": "object",
+              "properties": {
+                "pk": {
+                  "type": "string"
+                },
+                "sk": {
+                  "type": "string"
+                },
+                "athlete_mapped_pk": {
+                  "type": "string"
+                },
+                "athlete_nickname": {
+                  "type": "string"
+                },
+                "grantee_mapped_pk": {
+                  "type": "string"
+                },
+                "grantee_nickname": {
+                  "type": "string"
+                },
+                "grantee_discord_id": {
+                  "type": "string"
+                },
+                "grantee_authentik_sub": {
+                  "type": "string"
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "created_by": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "last_edited_by": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "grant_type": {
+                  "enum": [
+                    "coach",
+                    "handler"
+                  ]
+                },
+                "scope": {
+                  "enum": [
+                    "read",
+                    "write"
+                  ]
+                },
+                "revoked_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "revoked_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tied_competition_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "pk",
+                "sk",
+                "athlete_mapped_pk",
+                "grantee_mapped_pk",
+                "grant_type",
+                "scope",
+                "expires_at"
+              ]
+            }
+          },
+          "required": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "ownership": "person",
+    "execution": "deterministic",
+    "legacy": [
+      "pod_user"
+    ]
+  }
+]

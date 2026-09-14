@@ -144,6 +144,7 @@ def _public_session(item: dict[str, Any], phases: Optional[list[dict[str, Any]]]
     phase = resolve_phase(session, phases)
     session["week_number"] = parse_week_number(session)
     session["block"] = str(session.get("block") or DEFAULT_BLOCK)
+    session["block_id"] = str(session.get("block_id") or session["block"])
     session["phase"] = phase
     session["phase_name"] = str(phase.get("name") or "Unscheduled")
     return session
@@ -167,7 +168,8 @@ class SessionStore:
         source_table_name: str = "if-health",
     ):
         self._table_name = table_name
-        self._pk = pk
+        from storage_scope import current_athlete
+        self._pk = current_athlete.get() or pk
         self._region = region
         self._source_table_name = source_table_name
         self._table = None
@@ -192,7 +194,7 @@ class SessionStore:
 
         Mirrors backend sessionController.resolveVersionSk(version='current').
         The session controller no longer handles program version (frontend
-        always operates on current), so the fission session tools call this to
+        always operates on current), so the session operations call this to
         find which program version the sessions are scoped to.
         """
         try:
@@ -271,12 +273,13 @@ class SessionStore:
         now = datetime.now(timezone.utc).isoformat()
         session_copy = copy.deepcopy(session)
         date_value = str(session_copy.get("date") or "undated")
-        session_id = str(session_copy.get("id") or session_copy.get("session_id") or uuid.uuid4())
+        session_id = str((existing_item or {}).get("session_id") or session_copy.get("id") or session_copy.get("session_id") or uuid.uuid4())
         ordinal = same_day_ordinal or _int_value((existing_item or {}).get("same_day_ordinal"), default=0)
         if ordinal <= 0:
             ordinal = self._same_day_ordinal_sync(program_sk, date_value)
 
         block = str(session_copy.get("block") or DEFAULT_BLOCK)
+        block_id = str(session_copy.get("block_id") or block)
         status = str(session_copy.get("status") or ("completed" if session_copy.get("completed") else "planned"))
         completed = bool(session_copy.get("completed")) or status in {"logged", "completed"}
         phase = resolve_phase({**session_copy, "block": block}, phases)
@@ -287,6 +290,7 @@ class SessionStore:
             "session_id": session_id,
             "date": date_value,
             "block": block,
+            "block_id": block_id,
             "status": status,
             "completed": completed,
             "week_number": parse_week_number(session_copy),
@@ -294,6 +298,12 @@ class SessionStore:
             "phase_name": str(phase.get("name") or "Unscheduled"),
             "planned_exercises": planned_exercises if isinstance(planned_exercises, list) else [],
         })
+        for exercise in session_copy.get("exercises", []):
+            if not isinstance(exercise, dict):
+                continue
+            count = _int_value(exercise.get("sets"), 0)
+            ids = exercise.get("set_ids") if isinstance(exercise.get("set_ids"), list) else []
+            exercise["set_ids"] = [str(ids[i]) if i < len(ids) and ids[i] else str(uuid.uuid4()) for i in range(count)]
 
         sk = (existing_item or {}).get("sk")
         preserve_sk = bool(sk and f"#{date_value}#" in str(sk))
@@ -323,12 +333,10 @@ class SessionStore:
     def _find_item_sync(self, program_sk: str, date_value: str, index: int | None = None) -> dict[str, Any]:
         items = self._query_items_sync(program_sk)
         if index is not None:
-            if index < 0 or index >= len(items):
+            dated_items = [item for item in items if str(item.get("date") or "") == date_value]
+            if index < 0 or index >= len(dated_items):
                 raise ValueError(f"Session at index {index} not found")
-            item = items[index]
-            if str(item.get("date") or "") != date_value:
-                raise ValueError(f"Session at index {index} has date={item.get('date')}, expected {date_value}")
-            return item
+            return dated_items[index]
         for item in items:
             if str(item.get("date") or "") == date_value:
                 return item
@@ -349,6 +357,10 @@ class SessionStore:
         sessions = await self.list_sessions(program_sk, phases)
         return [s for s in sessions if start_date <= str(s.get("date") or "") <= end_date]
 
+    def _invalidate_caches(self):
+        from cache_invalidation import invalidate_analysis_caches
+        invalidate_analysis_caches(self._pk, region=self._region)
+
     async def create_session(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(
             None, lambda: self.create_session_sync(program_sk, session, phases)
@@ -358,13 +370,12 @@ class SessionStore:
         date_value = str(session.get("date") or "")
         if not date_value:
             raise ValueError("Session date is required")
-        if self._query_items_sync(program_sk, date_prefix=date_value):
-            raise ValueError(f"Session already exists on {date_value}")
         item = self._build_item(program_sk, session, phases, source_index=len(self._query_items_sync(program_sk)))
         self.table.put_item(
             Item=_to_dynamo(item),
             ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
         )
+        self._invalidate_caches()
         return _public_session(item, phases)
 
     async def patch_session(
@@ -388,6 +399,9 @@ class SessionStore:
         index: int | None = None,
     ) -> dict[str, Any]:
         existing = self._find_item_sync(program_sk, date_value, index)
+        for key in ("id", "session_id"):
+            if key in patch and str(patch[key]) != str(existing.get("session_id")):
+                raise ValueError("Session identity cannot be changed")
         session = _public_session(existing, phases)
         session.update(copy.deepcopy(patch))
         item = self._build_item(program_sk, session, phases, existing_item=existing)
@@ -396,6 +410,7 @@ class SessionStore:
             self.table.delete_item(Key={"pk": self._pk, "sk": existing["sk"]})
         else:
             self.table.put_item(Item=_to_dynamo(item))
+        self._invalidate_caches()
         return _public_session(item, phases)
 
     async def delete_session(self, program_sk: str, date_value: str, index: int | None = None) -> dict[str, Any]:
@@ -406,6 +421,7 @@ class SessionStore:
     def delete_session_sync(self, program_sk: str, date_value: str, index: int | None = None) -> dict[str, Any]:
         existing = self._find_item_sync(program_sk, date_value, index)
         self.table.delete_item(Key={"pk": self._pk, "sk": existing["sk"]})
+        self._invalidate_caches()
         return {"deleted": date_value}
 
     async def replace_program_sessions(
@@ -425,21 +441,21 @@ class SessionStore:
         phases: Optional[list[dict[str, Any]]] = None,
     ) -> None:
         existing = self._query_items_sync(program_sk)
+        ordinals: dict[str, int] = {}
+        prepared = []
+        for source_index, session in enumerate(sessions):
+            if not isinstance(session, dict) or not session.get("date"):
+                raise ValueError("Every Session must have a date")
+            date_value = str(session["date"])
+            ordinals[date_value] = ordinals.get(date_value, 0) + 1
+            same_day = [item for item in existing if item.get("date") == date_value]
+            previous = next((item for item in existing if session.get("id") and item.get("session_id") == session["id"]), None)
+            if previous is None and len(same_day) >= ordinals[date_value]:
+                previous = same_day[ordinals[date_value] - 1]
+            prepared.append(self._build_item(program_sk, session, phases, source_index=source_index, same_day_ordinal=ordinals[date_value], existing_item=previous))
         with self.table.batch_writer() as batch:
             for item in existing:
                 batch.delete_item(Key={"pk": self._pk, "sk": item["sk"]})
-
-            ordinals: dict[str, int] = {}
-            for source_index, session in enumerate(sessions):
-                if not isinstance(session, dict):
-                    continue
-                date_value = str(session.get("date") or "undated")
-                ordinals[date_value] = ordinals.get(date_value, 0) + 1
-                item = self._build_item(
-                    program_sk,
-                    session,
-                    phases,
-                    source_index=source_index,
-                    same_day_ordinal=ordinals[date_value],
-                )
+            for item in prepared:
                 batch.put_item(Item=_to_dynamo(item))
+        self._invalidate_caches()

@@ -13,16 +13,14 @@ _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 
 def _get_store():
     """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
+    import os
+    from program_store import ProgramStore as _PS
+    _store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
     return _store
 
 
@@ -244,8 +242,7 @@ async def health_complete_competition(
         if post_meet_report is None:
             post_meet_report = args.get("post_meet_report")
     pk = args.get("pk") if isinstance(args, dict) else None
-    _store_for(pk)
-    program, sk, _store = _load_program_version(version)
+    program, sk, _store = _load_program_version(version, pk)
     updated_comp = _complete_competition_in_program(
         program,
         date,
@@ -254,5 +251,5 @@ async def health_complete_competition(
         allow_retrospective=allow_retrospective,
         post_meet_report=post_meet_report,
     )
-    _save_program_version(program, sk)
+    _save_program_version(program, sk, pk)
     return updated_comp

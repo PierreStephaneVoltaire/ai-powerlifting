@@ -1,123 +1,104 @@
-import { v4 as uuidv4 } from 'uuid'
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { Upload } from '@aws-sdk/lib-storage'
-import { AppError } from '../middleware/errorHandler'
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { createReadStream } from 'fs'
 import { invokeLambda } from '../utils/lambda'
-import { listSessions, patchSessionByDate, transformVideo } from '../services/sessionStore'
-import { sortVideos } from '../utils/videoSort'
-import type { Session, SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
+import type { SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
 
-const S3_BUCKET = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
-const S3_REGION = process.env.AWS_REGION || 'ca-central-1'
+export interface VideoUploadPresign {
+  video_id: string
+  s3_key: string
+  upload_url: string
+  upload_headers: Record<string, string>
+  expires_in: number
+}
 
-const s3Client = new S3Client({
-  region: S3_REGION,
-  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-    ? {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      }
-    : undefined,
-})
+const videosBucket = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
+const s3Client = new S3Client({ region: process.env.AWS_REGION || 'ca-central-1' })
 
 export async function uploadSessionVideo(
   pk: string,
   version: string,
   sessionDate: string,
-  file: Buffer,
+  filePath: string,
   filename: string,
   mimeType: string,
   exerciseName?: string,
   setNumber?: number,
-  notes?: string
+  notes?: string,
 ): Promise<SessionVideo> {
-  const programSk = '' // Fission resolves current internally
-  const session = (await listSessions(pk, programSk)).find(s => s.date === sessionDate)
-  if (!session) {
-    throw new AppError(`Session with date ${sessionDate} not found`, 404)
-  }
+  const presign = await presignSessionVideo(pk, version, sessionDate, filename, mimeType)
+  const metadata = Object.fromEntries(
+    Object.entries(presign.upload_headers)
+      .filter(([key]) => key.toLowerCase().startsWith('x-amz-meta-'))
+      .map(([key, value]) => [key.slice('x-amz-meta-'.length), value]),
+  )
+  await s3Client.send(new PutObjectCommand({
+    Bucket: videosBucket,
+    Key: presign.s3_key,
+    Body: createReadStream(filePath),
+    ContentType: mimeType,
+    Metadata: metadata,
+  }))
+  return confirmSessionVideo(pk, version, sessionDate, presign.video_id, presign.s3_key, exerciseName, setNumber, notes)
+}
 
-  const videoId = uuidv4()
-  const extension = filename.split('.').pop() || 'mp4'
-  const s3Key = `videos/${sessionDate}/${videoId}.${extension}`
+export async function headMedia(key: string) {
+  return s3Client.send(new HeadObjectCommand({ Bucket: videosBucket, Key: key }))
+}
 
-  try {
-    const upload = new Upload({
-      client: s3Client,
-      params: {
-        Bucket: S3_BUCKET,
-        Key: s3Key,
-        Body: file,
-        ContentType: mimeType,
-        Metadata: {
-          video_id: videoId,
-          session_date: sessionDate,
-          pk,
-          sk: programSk,
-        },
-      },
-    })
+export async function getMedia(key: string, range?: string) {
+  return s3Client.send(new GetObjectCommand({ Bucket: videosBucket, Key: key, ...(range ? { Range: range } : {}) }))
+}
 
-    await upload.done()
-  } catch (err) {
-    throw new AppError(`Failed to upload video to storage: ${String(err)}`, 500)
-  }
+export async function presignSessionVideo(
+  pk: string,
+  version: string,
+  sessionDate: string,
+  filename: string,
+  mimeType: string,
+): Promise<VideoUploadPresign> {
+  return (await invokeLambda('video_upload_presign', {
+    pk,
+    version,
+    session_date: sessionDate,
+    filename,
+    mimetype: mimeType,
+  })) as VideoUploadPresign
+}
 
-  const video: SessionVideo = {
+export async function confirmSessionVideo(
+  pk: string,
+  version: string,
+  sessionDate: string,
+  videoId: string,
+  s3Key: string,
+  exerciseName?: string,
+  setNumber?: number,
+  notes?: string,
+): Promise<SessionVideo> {
+  return (await invokeLambda('video_upload_confirm', {
+    pk,
+    version,
+    session_date: sessionDate,
     video_id: videoId,
     s3_key: s3Key,
-    ...(exerciseName !== undefined && { exercise_name: exerciseName }),
-    ...(setNumber !== undefined && { set_number: setNumber }),
-    ...(notes !== undefined && { notes }),
-    uploaded_at: new Date().toISOString(),
-    thumbnail_status: 'pending',
-  }
-
-  await patchSessionByDate(pk, programSk, sessionDate, {
-    videos: [...(session.videos || []), video],
-  } as Partial<Session>)
-
-  return transformVideo(video)
+    exercise_name: exerciseName,
+    set_number: setNumber,
+    notes,
+  })) as SessionVideo
 }
 
 export async function removeSessionVideo(
   pk: string,
   version: string,
   sessionDate: string,
-  videoId: string
+  videoId: string,
 ): Promise<void> {
-  const programSk = ''
-  const session = (await listSessions(pk, programSk)).find(s => s.date === sessionDate)
-  if (!session) {
-    throw new AppError(`Session with date ${sessionDate} not found`, 404)
-  }
-
-  if (!session.videos) {
-    throw new AppError(`Session has no videos`, 404)
-  }
-
-  const video = session.videos.find(v => v.video_id === videoId)
-
-  if (!video) {
-    throw new AppError(`Video ${videoId} not found`, 404)
-  }
-
-  const deletePromises: Promise<unknown>[] = [
-    s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: video.s3_key })),
-  ]
-
-  if (video.thumbnail_s3_key) {
-    deletePromises.push(
-      s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: video.thumbnail_s3_key }))
-    )
-  }
-
-  await Promise.all(deletePromises)
-
-  const videos = session.videos.filter(v => v.video_id !== videoId)
-  await patchSessionByDate(pk, programSk, sessionDate, {
-    videos: videos.length > 0 ? videos : undefined,
-  } as Partial<Session>)
+  await invokeLambda('video_remove', {
+    pk,
+    version,
+    session_date: sessionDate,
+    video_id: videoId,
+  })
 }
 
 export async function updateVideoThumbnail(
@@ -125,9 +106,9 @@ export async function updateVideoThumbnail(
   version: string,
   sessionDate: string,
   videoId: string,
-  thumbnailUrl: string,
+  _thumbnailUrl: string,
   thumbnailS3Key: string,
-  status: 'ready' | 'failed'
+  status: 'ready' | 'failed',
 ): Promise<void> {
   await invokeLambda('video_update_thumbnail', {
     pk,
@@ -143,7 +124,7 @@ export async function getVideoLibrary(
   pk: string,
   version: string,
   exercise?: string,
-  sort: VideoSort = 'newest'
+  sort: VideoSort = 'newest',
 ): Promise<{ videos: VideoLibraryItem[]; exercises: string[] }> {
   return (await invokeLambda('video_library_get', {
     pk,
@@ -158,7 +139,7 @@ export async function updateSessionVideoMetadata(
   version: string,
   sessionDate: string,
   videoId: string,
-  updates: { exerciseName?: string; setNumber?: number; notes?: string }
+  updates: { exerciseName?: string; setNumber?: number; notes?: string },
 ): Promise<SessionVideo> {
   return (await invokeLambda('video_update_metadata', {
     pk,

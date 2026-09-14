@@ -12,26 +12,21 @@ from __future__ import annotations
 import asyncio
 import logging
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_store: Optional[Any] = None
-
-
 def _get_store():
-    """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
-    return _store
+    """Create the request-scoped ProgramStore."""
+    import os
+    from program_store import ProgramStore as _PS
+    store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
+    return store
 
 
 def _run_async(coro):

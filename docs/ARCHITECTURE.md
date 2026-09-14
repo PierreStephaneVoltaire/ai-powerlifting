@@ -212,7 +212,6 @@ flowchart LR
 | `ESTIMATE_MODEL` (+ `..._REASONING_EFFORT`, `..._VERBOSITY`) | fatigue estimation, muscle-group estimation, lift-profile estimate flows, accessory e1RM backfill |
 | `HEALTH_HELPER_MODEL` | session note drafting, auto-regulation, lift-profile rewrite cleanup |
 | `MODEL_ROUTER_MODEL` | lightweight routing |
-| `IMPORT_FAST_MODEL` | import classification + glossary resolution |
 | `GLOSSARY_TEXT_MODEL` | glossary text generation |
 ### Budget AI advisor (BUD-05)
 

@@ -10,15 +10,13 @@ _glossary_store: Optional[Any] = None
 
 
 def _get_glossary_store():
-    global _glossary_store
-    if _glossary_store is None:
-        from glossary_store import GlossaryStore as _GS
-        _glossary_store = _GS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[ExerciseTools] GlossaryStore initialised from env vars")
+    from glossary_store import GlossaryStore as _GS
+    _glossary_store = _GS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[ExerciseTools] GlossaryStore initialised from env vars")
     return _glossary_store
 
 
@@ -33,5 +31,11 @@ async def exercise_upsert(args: dict) -> dict:
     if args.get("pk"):
         store.pk = args["pk"]
     exercise = args.get("exercise") or {}
+    if not isinstance(exercise, dict) or not exercise:
+        raise ValueError("exercise is required")
+    if exercise.get("id"):
+        existing = await store.get_exercise_by_id(exercise["id"])
+        if existing:
+            exercise = {**existing, **exercise}
     exercise_id = await store.upsert_exercise(exercise)
     return {"status": "upserted", "id": exercise_id}

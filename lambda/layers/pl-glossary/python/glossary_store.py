@@ -24,7 +24,8 @@ class GlossaryStore:
 
     def __init__(self, table_name: str, pk: str = "operator", region: str = "ca-central-1"):
         self._table_name = table_name
-        self._pk = pk
+        from storage_scope import current_athlete
+        self._pk = current_athlete.get() or pk
         self._region = region
         self._table = None
 

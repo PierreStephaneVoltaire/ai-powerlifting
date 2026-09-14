@@ -1,0 +1,407 @@
+[
+  {
+    "name": "lb_to_kg",
+    "domain": "calculations",
+    "description": "Convert pounds to kilograms. Returns the input lb value and the rounded kg equivalent.",
+    "handler": "lambda.pod_calc.handlers.lb_to_kg.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lb": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Weight in pounds."
+        }
+      },
+      "required": [
+        "lb"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "lb",
+        "kg"
+      ],
+      "properties": {
+        "lb": {
+          "type": "number"
+        },
+        "kg": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_calc"
+    ]
+  },
+  {
+    "name": "kg_to_lb",
+    "domain": "calculations",
+    "description": "Convert kilograms to pounds. Returns the input kg value and the rounded lb equivalent.",
+    "handler": "lambda.pod_calc.handlers.kg_to_lb.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "kg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Weight in kilograms."
+        }
+      },
+      "required": [
+        "kg"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "kg",
+        "lb"
+      ],
+      "properties": {
+        "kg": {
+          "type": "number"
+        },
+        "lb": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_calc"
+    ]
+  },
+  {
+    "name": "pct_of_max",
+    "domain": "calculations",
+    "description": "Calculate a percentage of a max weight. Returns the raw kg value, the value rounded to the nearest 2.5 kg plate, and the lb equivalent.",
+    "handler": "lambda.pod_calc.handlers.pct_of_max.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "max_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Maximum weight in kilograms."
+        },
+        "pct": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 150,
+          "description": "Percentage to calculate (0-150, not 0-1)."
+        }
+      },
+      "required": [
+        "max_kg",
+        "pct"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "max_kg",
+        "pct",
+        "raw_kg",
+        "rounded_2_5_kg",
+        "lb"
+      ],
+      "properties": {
+        "max_kg": {
+          "type": "number"
+        },
+        "pct": {
+          "type": "number"
+        },
+        "raw_kg": {
+          "type": "number"
+        },
+        "rounded_2_5_kg": {
+          "type": "number"
+        },
+        "lb": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_calc"
+    ]
+  },
+  {
+    "name": "ipf_weight_classes",
+    "domain": "calculations",
+    "description": "Get IPF weight classes for a given sex. Returns the sex, class cutoffs in kg, and the operator's configured weight class if available.",
+    "handler": "lambda.pod_calc.handlers.ipf_weight_classes.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sex": {
+          "type": "string",
+          "enum": [
+            "M",
+            "F"
+          ],
+          "description": "Sex identifier: 'M' or 'F' for ipf_weight_classes; 'male' or 'female' for calculate_dots."
+        }
+      },
+      "required": [
+        "sex"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "sex",
+        "classes_kg",
+        "operator_class_kg"
+      ],
+      "properties": {
+        "sex": {
+          "enum": [
+            "M",
+            "F"
+          ]
+        },
+        "classes_kg": {
+          "type": "array",
+          "items": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "operator_class_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_calc"
+    ]
+  },
+  {
+    "name": "calculate_dots",
+    "domain": "calculations",
+    "description": "Calculate the DOTS score from a competition total, bodyweight, and sex. Returns the raw dots value.",
+    "handler": "lambda.pod_calc.handlers.calculate_dots.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "total_kg": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Combined squat + bench + deadlift total in kilograms."
+        },
+        "bodyweight_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Lifter bodyweight in kilograms."
+        },
+        "sex": {
+          "type": "string",
+          "enum": [
+            "male",
+            "female"
+          ],
+          "description": "Sex identifier: 'M' or 'F' for ipf_weight_classes; 'male' or 'female' for calculate_dots."
+        }
+      },
+      "required": [
+        "total_kg",
+        "bodyweight_kg",
+        "sex"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "dots"
+      ],
+      "properties": {
+        "dots": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_calc"
+    ]
+  },
+  {
+    "name": "estimate_1rm",
+    "domain": "calculations",
+    "description": "Estimate E1RM using the shared RPE table for 1\u20136 reps, or conservative percentages without RPE for 1\u20135 reps. Unsupported ranges return null; legacy epley/brzycki fields remain null.",
+    "handler": "lambda.pod_calc.handlers.estimate_1rm.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "weight_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Weight lifted in kilograms."
+        },
+        "reps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Number of repetitions performed."
+        },
+        "rpe": {
+          "type": "integer",
+          "minimum": 6,
+          "maximum": 10,
+          "description": "RPE of the set (6-10). Optional; omit to use the conservative rep-percentage method."
+        }
+      },
+      "required": [
+        "weight_kg",
+        "reps"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "e1rm",
+        "method",
+        "input_weight_kg",
+        "epley",
+        "brzycki",
+        "rpe_based"
+      ],
+      "properties": {
+        "e1rm": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "input_weight_kg": {
+          "type": "number"
+        },
+        "epley": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "brzycki": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rpe_based": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_calc"
+    ]
+  },
+  {
+    "name": "days_until",
+    "domain": "calculations",
+    "description": "Calculate days until a target date. Returns the label, target date, today's date, days remaining, weeks remaining, and whether the date is in the past.",
+    "handler": "lambda.pod_calc.handlers.days_until.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "target_date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Target date as ISO-8601 (YYYY-MM-DD)."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human label for the milestone (e.g., \"comp\", \"deload start\"). Defaults to \"target\"."
+        }
+      },
+      "required": [
+        "target_date"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "label",
+        "target_date",
+        "today",
+        "days_remaining",
+        "weeks_remaining",
+        "days_elapsed_since",
+        "is_past"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "target_date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "today": {
+          "type": "string",
+          "format": "date"
+        },
+        "days_remaining": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "weeks_remaining": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "days_elapsed_since": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "is_past": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_calc"
+    ]
+  }
+]

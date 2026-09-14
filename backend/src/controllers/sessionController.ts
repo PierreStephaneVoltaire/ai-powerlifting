@@ -2,22 +2,6 @@ import { invokeLambda } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 import type { Session, Exercise, SessionStatus, SessionWellness } from '@powerlifting/types'
 
-// Sessions live in their own table (if-sessions), scoped to the CURRENT program.
-// All DynamoDB work (program#current pointer resolution, phase loading, SK
-// construction, same-day ordinals, buildItem/publicSession) lives in the
-// session_* Fission functions (layer pl_sessions / session_store). The backend
-// is now a pure auth/pk router.
-//
-// Program version is intentionally NOT handled — the frontend only ever
-// operates on the current program, and the Fission tools resolve
-// `program#current` internally. The `version` param is accepted by the route
-// but ignored here.
-//
-// Compound operations (complete / add-exercise / remove-exercise /
-// update-exercise-field) compose with a single session_get + session_patch;
-// the merge is trivial field selection, not DynamoDB logic. reschedule and
-// status need no read (the patch is self-contained).
-
 async function fetchCurrent(pk: string, date: string, index: number): Promise<Session> {
   const session = await invokeLambda('pod_sessions', { function: 'session_get',  pk, date, index })
   if (!session) throw new AppError(`Session at index ${index} not found`, 404)

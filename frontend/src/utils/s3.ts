@@ -15,60 +15,44 @@ export interface VideoUploadResult {
   video: SessionVideo
 }
 
-export async function uploadVideo(
-  version: string,
-  options: VideoUploadOptions
-): Promise<VideoUploadResult> {
-  const { file, sessionDate, exerciseName, setNumber, notes, onProgress } = options
+async function responseJson<T>(response: Response): Promise<T> {
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error || 'Video upload failed')
+  return body.data as T
+}
 
-  const formData = new FormData()
-  formData.append('video', file)
-  if (exerciseName) formData.append('exerciseName', exerciseName)
-  if (setNumber) formData.append('setNumber', String(setNumber))
-  if (notes) formData.append('notes', notes)
-
-  // Use XMLHttpRequest for progress tracking
+function uploadToBackend(url: string, body: FormData, onProgress?: (percent: number) => void): Promise<VideoUploadResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.withCredentials = true
-
     xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable && onProgress) {
-        const percent = Math.round((event.loaded / event.total) * 100)
-        onProgress(percent)
-      }
+      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
     })
-
     xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const response = JSON.parse(xhr.responseText)
-          resolve({ video: response.data })
-        } catch {
-          reject(new Error('Invalid response from server'))
-        }
-      } else {
-        try {
-          const response = JSON.parse(xhr.responseText)
-          reject(new Error(response.error || 'Upload failed'))
-        } catch {
-          reject(new Error('Upload failed'))
-        }
-      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText).data)
+      else reject(new Error(`Video upload failed (${xhr.status})`))
     })
-
-    xhr.addEventListener('error', () => {
-      reject(new Error('Network error during upload'))
-    })
-
-    xhr.open('POST', `${API_BASE}/videos/${version}/${sessionDate}`)
-    xhr.send(formData)
+    xhr.addEventListener('error', () => reject(new Error('Network error during video upload')))
+    xhr.open('POST', url)
+    xhr.withCredentials = true
+    xhr.send(body)
   })
 }
 
+export async function uploadVideo(
+  version: string,
+  options: VideoUploadOptions,
+): Promise<VideoUploadResult> {
+  const { file, sessionDate, exerciseName, setNumber, notes, onProgress } = options
+  const body = new FormData()
+  body.append('file', file)
+  if (exerciseName) body.append('exerciseName', exerciseName)
+  if (setNumber !== undefined) body.append('setNumber', String(setNumber))
+  if (notes) body.append('notes', notes)
+  return uploadToBackend(`${API_BASE}/videos/${version}/${sessionDate}`, body, onProgress)
+}
+
 export function isValidVideoType(file: File): boolean {
-  const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo']
-  return validTypes.includes(file.type)
+  return ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'].includes(file.type)
 }
 
 export function formatFileSize(bytes: number): string {

@@ -948,6 +948,22 @@ export function blockAnalysisExportUrl(blockKey: string, format: 'xlsx' | 'markd
   return `/api/analytics/blocks/${encodeURIComponent(blockKey)}/export/${format}`
 }
 
+async function resolveReport<T>(value: T, cacheOnly = false): Promise<T> {
+  const reference = value as T & { generation_id?: string; status?: string; cache_miss?: boolean }
+  if (!reference?.generation_id || reference.cache_miss || cacheOnly) return value
+  for (let attempt = 0; attempt < 900; attempt += 1) {
+    const response = await api.get(`/analytics/generations/${encodeURIComponent(reference.generation_id)}`)
+    if (response.data.error) throw new Error(response.data.error)
+    const generation = response.data.data
+    if (generation.status === 'succeeded') return generation.result as T
+    if (['failed', 'cancelled', 'uncertain'].includes(generation.status)) {
+      throw new Error(generation.error?.message || String(generation.error || 'Report interrupted. Retry explicitly.'))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  throw new Error('Report is still running. Reopen it to check its saved status.')
+}
+
 export async function fetchBlockProgramEvaluation(
   blockKey: string,
   refresh = false,
@@ -960,7 +976,7 @@ export async function fetchBlockProgramEvaluation(
   const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/program-evaluation?${params.toString()}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
-  return normalizeProgramEvaluation(body.data)
+  return normalizeProgramEvaluation(await resolveReport(body.data, cacheOnly))
 }
 
 export async function updateBlockStartMaxes(
@@ -993,7 +1009,7 @@ export async function fetchAiBlockComparison(options: {
   const res = await api.post('/analytics/block-comparison/ai', options)
   const body = res.data
   if (body.error) throw new Error(body.error)
-  return body.data
+  return { ...body.data, report: await resolveReport(body.data.report, options.cacheOnly) }
 }
 
 export async function fetchCorrelationReport(
@@ -1011,7 +1027,7 @@ export async function fetchCorrelationReport(
   const res = await api.get(`/analytics/correlation?${params.toString()}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
-  return normalizeCorrelationReport(body.data)
+  return normalizeCorrelationReport(await resolveReport(body.data, cacheOnly))
 }
 
 export async function fetchBlockCorrelationReport(
@@ -1025,7 +1041,7 @@ export async function fetchBlockCorrelationReport(
   const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/correlation?${params.toString()}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
-  return normalizeCorrelationReport(body.data)
+  return normalizeCorrelationReport(await resolveReport(body.data, options.cacheOnly))
 }
 
 export async function fetchProgramEvaluation(refresh = false, cacheOnly = false): Promise<ProgramEvaluationReport> {
@@ -1036,7 +1052,7 @@ export async function fetchProgramEvaluation(refresh = false, cacheOnly = false)
   const res = await api.get(`/analytics/program-evaluation?${params.toString()}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
-  return normalizeProgramEvaluation(body.data)
+  return normalizeProgramEvaluation(await resolveReport(body.data, cacheOnly))
 }
 
 export async function regenerateAnalysis(windows?: string[]): Promise<{ success: boolean; generatedAt: string }> {

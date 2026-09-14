@@ -17,15 +17,13 @@ _template_store: Optional[Any] = None
 
 def _get_store():
     """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
+    from program_store import ProgramStore as _PS
+    _store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
     return _store
 
 
@@ -38,14 +36,12 @@ def _store_for(pk: str | None):
 
 
 def _get_template_store():
-    global _template_store
-    if _template_store is None:
-        from template_store import TemplateStore
-        _template_store = TemplateStore(
-            table_name=os.environ.get("IF_TEMPLATES_TABLE_NAME", "if-health-templates"),
-            pk=os.environ.get("IF_TEMPLATES_LIBRARY_PK", "template_library"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
+    from template_store import TemplateStore
+    _template_store = TemplateStore(
+        table_name=os.environ.get("IF_TEMPLATES_TABLE_NAME", "if-health-templates"),
+        pk=os.environ.get("IF_TEMPLATES_LIBRARY_PK", "template_library"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
     return _template_store
 
 

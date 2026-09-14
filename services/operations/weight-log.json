@@ -1,0 +1,521 @@
+[
+  {
+    "name": "weight_log_get",
+    "domain": "weight-log",
+    "description": "Get the weight log for a program version, sorted newest first.",
+    "handler": "lambda.pod_weight.handlers.weight_log_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "$ref": "#/$defs/log",
+      "$defs": {
+        "log": {
+          "type": "object",
+          "required": [
+            "pk",
+            "sk",
+            "entries",
+            "updated_at"
+          ],
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "date",
+                  "kg"
+                ],
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "kg": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "updated_at": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_weight"
+    ]
+  },
+  {
+    "name": "weight_get_log",
+    "domain": "weight-log",
+    "description": "Legacy alias for weight_log_get.",
+    "handler": "lambda.pod_weight.handlers.weight_get_log.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "$ref": "#/$defs/log",
+      "$defs": {
+        "log": {
+          "type": "object",
+          "required": [
+            "pk",
+            "sk",
+            "entries",
+            "updated_at"
+          ],
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "date",
+                  "kg"
+                ],
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "kg": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "updated_at": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_weight"
+    ]
+  },
+  {
+    "name": "weight_log_add",
+    "domain": "weight-log",
+    "description": "Add or replace a weight entry by date.",
+    "handler": "lambda.pod_weight.handlers.weight_log_add.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "format": "date"
+            },
+            "kg": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "weight_kg": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "date"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "kg"
+              ]
+            },
+            {
+              "required": [
+                "weight_kg"
+              ]
+            }
+          ]
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "weight_kg": {
+          "type": "number"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "entry"
+          ]
+        },
+        {
+          "required": [
+            "date",
+            "weight_kg"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "$ref": "#/$defs/log",
+      "$defs": {
+        "log": {
+          "type": "object",
+          "required": [
+            "pk",
+            "sk",
+            "entries",
+            "updated_at"
+          ],
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "date",
+                  "kg"
+                ],
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "kg": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "updated_at": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_weight"
+    ]
+  },
+  {
+    "name": "weight_add_entry",
+    "domain": "weight-log",
+    "description": "Legacy alias for adding or replacing a weight entry by date.",
+    "handler": "lambda.pod_weight.handlers.weight_add_entry.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "format": "date"
+            },
+            "kg": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "weight_kg": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "date"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "kg"
+              ]
+            },
+            {
+              "required": [
+                "weight_kg"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "entry"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "$ref": "#/$defs/log",
+      "$defs": {
+        "log": {
+          "type": "object",
+          "required": [
+            "pk",
+            "sk",
+            "entries",
+            "updated_at"
+          ],
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "date",
+                  "kg"
+                ],
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "kg": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "updated_at": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_weight"
+    ]
+  },
+  {
+    "name": "weight_log_remove",
+    "domain": "weight-log",
+    "description": "Remove a weight entry by date.",
+    "handler": "lambda.pod_weight.handlers.weight_log_remove.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "$ref": "#/$defs/log",
+      "$defs": {
+        "log": {
+          "type": "object",
+          "required": [
+            "pk",
+            "sk",
+            "entries",
+            "updated_at"
+          ],
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "date",
+                  "kg"
+                ],
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "kg": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "updated_at": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_weight"
+    ]
+  },
+  {
+    "name": "weight_remove_entry",
+    "domain": "weight-log",
+    "description": "Legacy alias for removing a weight entry by date.",
+    "handler": "lambda.pod_weight.handlers.weight_remove_entry.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "$ref": "#/$defs/log",
+      "$defs": {
+        "log": {
+          "type": "object",
+          "required": [
+            "pk",
+            "sk",
+            "entries",
+            "updated_at"
+          ],
+          "properties": {
+            "pk": {
+              "type": "string"
+            },
+            "sk": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "date",
+                  "kg"
+                ],
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "kg": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "updated_at": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_weight"
+    ]
+  }
+]

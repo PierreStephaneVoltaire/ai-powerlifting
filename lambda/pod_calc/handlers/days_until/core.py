@@ -32,7 +32,7 @@ async def days_until(target_date: str, label: str = "target") -> dict:
 
     delta = (target - today).days
 
-    if delta > 0:
+    if delta >= 0:
         return {
             "label": label,
             "target_date": target_date,

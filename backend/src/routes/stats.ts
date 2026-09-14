@@ -5,10 +5,6 @@ import { cacheGet } from '../utils/cacheMiddleware'
 
 export const statsRouter = Router()
 
-// All three stats calls go through the MCP direct-tool-invoke path:
-//   POST /v1/chat/completions  X-Direct-Tool-Invoke: true
-// No custom FastAPI routes — the agent API is purely OpenAI-compatible + webhooks.
-
 statsRouter.get('/categories', async (req, res, next) => {
   try {
     const data = await invokeLambda('pod_analysis', { function: 'powerlifting_filter_categories', })

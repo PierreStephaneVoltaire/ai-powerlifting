@@ -3,7 +3,7 @@
 Schema (POWERLIFTING_GOALS_TABLE):
     - Goal rows:  pk=<user>, sk="GOAL#<id>"  -> StoredGoal (+ pk/sk)
 
-This mirrors backend goalsController.ts so the fission functions are thin async
+This mirrors backend goalsController.ts so the domain functions are thin async
 wrappers and the backend becomes a pure auth/pk router. The full replace
 reconciliation (query existing -> upsert incoming by id -> delete missing) lives
 here, not in the backend.
@@ -156,11 +156,10 @@ def normalize_goal(raw) -> Optional[dict]:
 
 
 def strip_stored_fields(g: dict) -> dict:
-    """Replicate goalsController.stripStoredFields: drop id, target_competition_ids,
-    created_at, updated_at and return the rest (the AthleteGoal shape)."""
+    """Return a stored goal without DynamoDB-only fields."""
     out = dict(g)
-    out.pop("id", None)
-    out.pop("target_competition_ids", None)
+    out.pop("pk", None)
+    out.pop("sk", None)
     out.pop("created_at", None)
     out.pop("updated_at", None)
     return out

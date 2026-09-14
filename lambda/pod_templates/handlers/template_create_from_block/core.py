@@ -1,24 +1,20 @@
 _store = None
-def _get_store():
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(table_name=os.environ.get("IF_HEALTH_TABLE_NAME","if-health"), pk=os.environ.get("HEALTH_PROGRAM_PK","operator"), region=os.environ.get("AWS_REGION","ca-central-1"))
+def _get_store(actor_pk):
+    import os
+    from program_store import ProgramStore as _PS
+    _store = _PS(table_name=os.environ.get("IF_HEALTH_TABLE_NAME","if-health"), pk=actor_pk, region=os.environ.get("AWS_REGION","ca-central-1"))
     return _store
 
 _template_store = None
 def _get_template_store():
-    global _template_store
-    if _template_store is None:
-        import os
-        from template_store import TemplateStore
-        _template_store = TemplateStore(table_name=os.environ.get("IF_TEMPLATES_TABLE_NAME","if-health-templates"), pk=os.environ.get("IF_TEMPLATES_LIBRARY_PK","template_library"), region=os.environ.get("AWS_REGION","ca-central-1"))
+    import os
+    from template_store import TemplateStore
+    _template_store = TemplateStore(table_name=os.environ.get("IF_TEMPLATES_TABLE_NAME","if-health-templates"), pk=os.environ.get("IF_TEMPLATES_LIBRARY_PK","template_library"), region=os.environ.get("AWS_REGION","ca-central-1"))
     return _template_store
 
 import copy, uuid
 def _template_actor(actor_pk):
-    return str(actor_pk or _get_store().pk)
+    return str(actor_pk or _get_store(actor_pk).pk)
 def _template_author(author, actor_pk):
     return str(author or actor_pk or _template_actor(actor_pk))
 def _template_days_per_week(sessions):
@@ -76,8 +72,8 @@ def _prepare_template_payload(template):
     return prepared
 
 async def template_create_from_block(name, program_sk=None, actor_pk=None, author=None):
-    from template_convert import convert_block_to_template
-    store=_get_store(); program=await store.get_program(); e1rm_map=program.get("current_maxes",{})
+    from .template_convert import convert_block_to_template
+    store=_get_store(actor_pk); store._selected_program_sk=program_sk; program=await store.get_program(); e1rm_map=program.get("current_maxes",{})
     template=convert_block_to_template(program, e1rm_map); template["meta"]["name"]=name
     ts=_get_template_store(); ra=_template_actor(actor_pk)
     sk=await ts.put_template(_prepare_template_payload(template), actor_pk=ra, author=_template_author(author,ra), published=False)

@@ -24,6 +24,7 @@ templateRouter.post('/imports', upload.single('file'), templateController.upload
 
 // GET /api/templates/imports/:jobId
 templateRouter.get('/imports/:jobId', templateController.getTemplateImport)
+templateRouter.post('/imports/:jobId/apply', templateController.applyTemplateImport)
 
 // GET /api/templates/:sk
 templateRouter.get('/:sk', templateController.getTemplate)

@@ -1,0 +1,558 @@
+[
+  {
+    "name": "video_library_get",
+    "domain": "videos",
+    "description": "Get the video library across sessions with optional exercise filter.",
+    "handler": "lambda.pod_videos.handlers.video_library_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Athlete partition key."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "default": "current",
+          "description": "Program version key suffix."
+        },
+        "exercise": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Filter videos by exercise_name."
+        },
+        "sort": {
+          "type": "string",
+          "enum": [
+            "newest",
+            "oldest",
+            "volume",
+            "weight"
+          ],
+          "default": "newest"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "videos",
+        "exercises"
+      ],
+      "properties": {
+        "videos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/library_item"
+          }
+        },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "video": {
+          "type": "object",
+          "required": [
+            "video_id",
+            "s3_key",
+            "uploaded_at"
+          ],
+          "properties": {
+            "video_id": {
+              "type": "string"
+            },
+            "s3_key": {
+              "type": "string"
+            },
+            "thumbnail_s3_key": {
+              "type": "string"
+            },
+            "video_url": {
+              "type": "string"
+            },
+            "thumbnail_url": {
+              "type": "string"
+            },
+            "exercise_name": {
+              "type": "string"
+            },
+            "set_number": {
+              "type": "number"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "uploaded_at": {
+              "type": "string"
+            },
+            "thumbnail_status": {
+              "enum": [
+                "pending",
+                "ready",
+                "failed"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "library_item": {
+          "type": "object",
+          "required": [
+            "video",
+            "session_date"
+          ],
+          "properties": {
+            "video": {
+              "$ref": "#/$defs/video"
+            },
+            "session_date": {
+              "type": "string"
+            },
+            "day": {},
+            "week_number": {
+              "type": [
+                "integer",
+                "number"
+              ]
+            },
+            "phase_name": {
+              "type": "string"
+            },
+            "exercise_sets": {
+              "type": "number"
+            },
+            "exercise_reps": {
+              "type": "number"
+            },
+            "exercise_kg": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "video_library_get"
+    ]
+  },
+  {
+    "name": "video_upload_presign",
+    "domain": "videos",
+    "description": "Create a direct S3 upload URL for a session video.",
+    "handler": "lambda.pod_videos.handlers.video_upload_presign.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1, "default": "current"},
+        "session_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "filename": {"type": "string", "minLength": 1},
+        "mimetype": {"type": "string", "enum": ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"]}
+      },
+      "required": ["session_date", "filename", "mimetype"],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": ["video_id", "s3_key", "upload_url", "upload_headers", "expires_in"],
+      "properties": {
+        "video_id": {"type": "string"},
+        "s3_key": {"type": "string"},
+        "upload_url": {"type": "string"},
+        "upload_headers": {"type": "object", "additionalProperties": {"type": "string"}},
+        "expires_in": {"type": "integer"}
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": []
+  },
+  {
+    "name": "video_upload_confirm",
+    "domain": "videos",
+    "description": "Verify a direct S3 video upload and attach it to a session.",
+    "handler": "lambda.pod_videos.handlers.video_upload_confirm.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1, "default": "current"},
+        "session_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "video_id": {"type": "string", "minLength": 1},
+        "s3_key": {"type": "string", "minLength": 1},
+        "exercise_name": {"type": "string"},
+        "set_number": {"type": "number"},
+        "notes": {"type": "string"}
+      },
+      "required": ["session_date", "video_id", "s3_key"],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": ["video_id", "s3_key", "uploaded_at", "thumbnail_status"],
+      "properties": {
+        "video_id": {"type": "string"},
+        "s3_key": {"type": "string"},
+        "thumbnail_s3_key": {"type": "string"},
+        "video_url": {"type": "string"},
+        "thumbnail_url": {"type": "string"},
+        "exercise_name": {"type": "string"},
+        "set_number": {"type": "number"},
+        "notes": {"type": "string"},
+        "uploaded_at": {"type": "string"},
+        "thumbnail_status": {"enum": ["pending", "ready", "failed"]}
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": []
+  },
+  {
+    "name": "video_remove",
+    "domain": "videos",
+    "description": "Remove a session video (S3 object + thumbnail) and detach from session.",
+    "handler": "lambda.pod_videos.handlers.video_remove.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Athlete partition key."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "default": "current",
+          "description": "Program version key suffix."
+        },
+        "session_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "video_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "session_date",
+        "video_id"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "removed"
+      ],
+      "properties": {
+        "removed": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "video_remove"
+    ]
+  },
+  {
+    "name": "video_update_metadata",
+    "domain": "videos",
+    "description": "Update metadata (exercise_name/set_number/notes) on a session video.",
+    "handler": "lambda.pod_videos.handlers.video_update_metadata.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Athlete partition key."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "default": "current",
+          "description": "Program version key suffix."
+        },
+        "session_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "video_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exercise_name": {
+          "type": "string"
+        },
+        "set_number": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_date",
+        "video_id"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "video_id",
+        "s3_key",
+        "uploaded_at"
+      ],
+      "properties": {
+        "video_id": {
+          "type": "string"
+        },
+        "s3_key": {
+          "type": "string"
+        },
+        "thumbnail_s3_key": {
+          "type": "string"
+        },
+        "video_url": {
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "type": "string"
+        },
+        "exercise_name": {
+          "type": "string"
+        },
+        "set_number": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "uploaded_at": {
+          "type": "string"
+        },
+        "thumbnail_status": {
+          "enum": [
+            "pending",
+            "ready",
+            "failed"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "video_update_metadata"
+    ]
+  },
+  {
+    "name": "video_update_thumbnail",
+    "domain": "videos",
+    "description": "Update a video's thumbnail s3 key and status.",
+    "handler": "lambda.pod_videos.handlers.video_update_thumbnail.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Athlete partition key."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "default": "current",
+          "description": "Program version key suffix."
+        },
+        "session_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "video_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "thumbnail_s3_key": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "failed"
+          ]
+        }
+      },
+      "required": [
+        "session_date",
+        "video_id",
+        "thumbnail_s3_key",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "video_id",
+        "thumbnail_s3_key",
+        "thumbnail_status"
+      ],
+      "properties": {
+        "video_id": {
+          "type": "string"
+        },
+        "thumbnail_s3_key": {
+          "type": "string"
+        },
+        "thumbnail_status": {
+          "enum": [
+            "ready",
+            "failed"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "video_update_thumbnail"
+    ]
+  },
+  {
+    "name": "video_upload",
+    "domain": "videos",
+    "description": "Upload a session video to S3 and attach it to a session.",
+    "handler": "lambda.pod_videos.handlers.video_upload.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Athlete partition key."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "default": "current",
+          "description": "Program version key suffix."
+        },
+        "session_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "file_b64": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mimetype": {
+          "type": "string",
+          "enum": [
+            "video/mp4",
+            "video/quicktime",
+            "video/webm",
+            "video/x-msvideo"
+          ]
+        },
+        "exercise_name": {
+          "type": "string"
+        },
+        "set_number": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_date",
+        "file_b64",
+        "filename",
+        "mimetype"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "video_id",
+        "s3_key",
+        "uploaded_at",
+        "thumbnail_status"
+      ],
+      "properties": {
+        "video_id": {
+          "type": "string"
+        },
+        "s3_key": {
+          "type": "string"
+        },
+        "thumbnail_s3_key": {
+          "type": "string"
+        },
+        "video_url": {
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "type": "string"
+        },
+        "exercise_name": {
+          "type": "string"
+        },
+        "set_number": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "uploaded_at": {
+          "type": "string"
+        },
+        "thumbnail_status": {
+          "enum": [
+            "pending",
+            "ready",
+            "failed"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "video_upload"
+    ]
+  }
+]

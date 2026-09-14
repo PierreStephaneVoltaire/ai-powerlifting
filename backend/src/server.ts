@@ -1,4 +1,8 @@
+import { operationScope } from './utils/operationScope'
 import express from 'express'
+import session from 'express-session'
+import { RedisStore } from 'connect-redis'
+import { createClient } from 'redis'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import pinoHttp from 'pino-http'
@@ -14,6 +18,7 @@ import { blockNotesRouter } from './routes/blockNotes'
 import { competitionsRouter } from './routes/competitions'
 import { videosRouter } from './routes/videos'
 import { analyticsRouter } from './routes/analytics'
+import { analyticsServiceRouter } from './routes/analyticsService'
 import { exportRouter } from './routes/export'
 import { importRouter } from './routes/import'
 import { templateRouter } from './routes/template'
@@ -26,6 +31,7 @@ import { federationsRouter } from './routes/federations'
 import { budgetRouter } from './routes/budget'
 import { setupRouter } from './routes/setup'
 import { grantsRouter } from './routes/grants'
+import { jobsRouter } from './routes/jobs'
 import { onboardingRouter } from './routes/onboarding'
 import { errorHandler } from './middleware/errorHandler'
 import { requireUserOptional, requireWriteAuth, resolvePk } from './middleware/auth'
@@ -35,6 +41,16 @@ const app = express()
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
 app.use(pinoHttp({ logger }))
+
+const sessionClient = createClient({ url: process.env.VALKEY_URL || process.env.REDIS_URL || 'redis://127.0.0.1:6379' })
+sessionClient.connect().catch((error) => logger.warn({ error }, 'Valkey session store unavailable'))
+app.use(session({
+  store: new RedisStore({ client: sessionClient }),
+  secret: process.env.SESSION_SECRET || process.env.JWT_SECRET || 'dev-session-secret-change-me',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true', maxAge: 7 * 24 * 60 * 60 * 1000 },
+}))
 
 app.use(cors({
   origin: FRONTEND_URL,
@@ -51,11 +67,13 @@ app.use('/api/auth', authRouter)
 
 app.use(requireUserOptional, resolvePk)
 app.use(requireWriteAuth)
+app.use((req, _res, next) => operationScope.run({ athlete: req.mapped_pk || "", person: req.actor_mapped_pk || req.mapped_pk || "" }, next))
 
 app.use('/api/settings', settingsRouter)
 app.use('/api/profiles', profilesRouter)
 app.use('/api/setup', setupRouter)
 app.use('/api/grants', grantsRouter)
+app.use('/api/jobs', jobsRouter)
 app.use('/api/onboarding', onboardingRouter)
 app.use('/api/programs', programsRouter)
 app.use('/api/goals', goalsRouter)
@@ -70,6 +88,7 @@ app.use('/api/diet-notes', dietNotesRouter)
 app.use('/api/block-notes', blockNotesRouter)
 app.use('/api/competitions', competitionsRouter)
 app.use('/api/videos', videosRouter)
+app.use('/api/analytics', analyticsServiceRouter)
 app.use('/api/analytics', analyticsRouter)
 app.use('/api/export', exportRouter)
 app.use('/api/import', importRouter)

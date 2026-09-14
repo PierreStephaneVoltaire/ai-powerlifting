@@ -616,7 +616,7 @@ export interface TemplateListEntry {
   updated_at: string
 }
 
-export type TemplateImportJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+export type TemplateImportJobStatus = 'queued' | 'starting' | 'running' | 'succeeded' | 'failed' | 'cancel_requested' | 'cancelled' | 'uncertain'
 
 export interface TemplateImportJob {
   job_id: string

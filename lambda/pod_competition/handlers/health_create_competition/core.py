@@ -6,16 +6,14 @@ logger = logging.getLogger(__name__)
 _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 def _get_store():
     """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
+    import os
+    from program_store import ProgramStore as _PS
+    _store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
     return _store
 
 
@@ -56,12 +54,17 @@ async def health_create_competition(args: dict | None = None, competition: dict 
     import copy
     if competition is None:
         competition = args.get("competition") if isinstance(args, dict) else None
+    if not isinstance(competition, dict):
+        raise ValueError("competition must be an object")
     pk = args.get("pk") if isinstance(args, dict) else None
     for field in ("name", "date", "federation"):
         if not competition.get(field):
             raise ValueError(f"competition.{field} is required")
 
-    datetime.strptime(competition["date"], "%Y-%m-%d")
+    try:
+        datetime.strptime(competition["date"], "%Y-%m-%d")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("competition.date must be YYYY-MM-DD") from exc
 
     store = _store_for(pk)
     program = await store.get_program()

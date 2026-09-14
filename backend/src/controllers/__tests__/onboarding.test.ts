@@ -170,12 +170,6 @@ function startFakeLambda(): Promise<http.Server> {
       req.on('end', () => {
         const body = buf ? JSON.parse(buf) : {}
         const route = (req.url || '').split('?')[0]
-        // The fission_server.py wrapper expects each handler to return
-        // either a `{ statusCode, body }` dict (which gets jsonified back out)
-        // or a plain JSON-serialisable value. The actual lambda handlers
-        // return `{statusCode: 200, body: json.dumps(settings_dict)}` and the
-        // backend's invokeLambda() unwraps that. So the HTTP body our fake
-        // emits is the same wire format the real fission server would emit.
         const respond = (status: number, payload: any) => {
           res.statusCode = status
           res.setHeader('Content-Type', 'application/json')

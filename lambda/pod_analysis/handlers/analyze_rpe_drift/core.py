@@ -10,29 +10,27 @@ import logging
 import math
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from importlib import import_module
 from statistics import median
 from typing import Any, Optional
 
-from scipy.stats import kendalltau, theilslopes
+_analytics = import_module("lambda.get_analysis_markdown.analytics")
+kendalltau = _analytics.kendalltau
+theilslopes = _analytics.theilslopes
 
 logger = logging.getLogger(__name__)
 
-_store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
-
-
 def _get_store():
-    """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
-    return _store
+    """Create the request-scoped ProgramStore."""
+    import os
+    from program_store import ProgramStore as _PS
+    store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
+    return store
 
 
 
@@ -228,8 +226,8 @@ async def analyze_rpe_drift(args: dict) -> dict:
         program, sessions, program_start = _get_program_and_sessions()
         return rpe_drift(sessions, args["exercise_name"], program_start, args.get("window_weeks", 4))
     """
-    store = _get_store()
-    program = await store.get_program()
+    supplied_program = args.get("program")
+    program = supplied_program if isinstance(supplied_program, dict) else await _get_store().get_program()
     sessions = program.get("sessions", [])
     program_start = program.get("meta", {}).get("program_start", "")
     phases = program.get("phases", [])

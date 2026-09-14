@@ -7,14 +7,13 @@ and a coach-facing note. Competition day is the absolute north star: mandatory
 comp-linked items are never suggested for cuts.
 """
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 from typing import Any
 
-import httpx
-
-from ai_config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
+from ai_config import ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
 from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -141,6 +140,8 @@ def _normalize_analysis(args: dict[str, Any], item_by_id: dict[str, dict[str, An
             continue
         item_id = str(raw.get("item_id", ""))
         item = item_by_id.get(item_id, {})
+        if item.get("priority_tier") == "MANDATORY" and (item.get("comp_linked") or item.get("competition_id")):
+            continue
         suggested_cuts.append({
             "item_id": item_id,
             "name": str(raw.get("name", item.get("name", ""))),
@@ -223,32 +224,10 @@ async def generate_budget_advisor(payload: dict[str, Any]) -> dict[str, Any]:
         len(items),
     )
 
-    if not OPENROUTER_API_KEY:
-        return _fallback_analysis(payload, "LLM API key not configured.")
-
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": ANALYSIS_MODEL,
-                    "thinking": {"type": "enabled", "budget_tokens": ANALYSIS_MODEL_THINKING_BUDGET},
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "tools": [_TOOL_SCHEMA],
-                    "tool_choice": "required",
-                },
-            )
-            if resp.status_code >= 400:
-                logger.error("[BudgetAdvisorAI] HTTP %s: %s", resp.status_code, resp.text[:2000])
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await completion({'model': ANALYSIS_MODEL, 'thinking': {'type': 'enabled', 'budget_tokens': ANALYSIS_MODEL_THINKING_BUDGET}, 'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': 'required'})
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

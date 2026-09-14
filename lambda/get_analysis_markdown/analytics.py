@@ -10,47 +10,42 @@ from __future__ import annotations
 
 import logging
 import math
+import sys
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from statistics import median
 from typing import Any, Literal, Optional
 
-from scipy.stats import kendalltau, theilslopes
+try:
+    from scipy.stats import kendalltau, theilslopes
+except ModuleNotFoundError:
+    from types import SimpleNamespace
 
-DOTS_COEFFICIENTS: dict[str, dict[str, float]] = {
-    "male": {
-        "a": -307.75076,
-        "b": 24.0900756,
-        "c": -0.1918759221,
-        "d": 0.0007391293,
-        "e": -0.000001093,
-    },
-    "female": {
-        "a": -57.96288,
-        "b": 13.6175032,
-        "c": -0.1126655495,
-        "d": 0.0005158568,
-        "e": -0.0000010706,
-    },
-}
+    def kendalltau(xs, ys, nan_policy=None):
+        pairs = [(x, y) for x, y in zip(xs, ys) if math.isfinite(x) and math.isfinite(y)]
+        concordant = discordant = 0
+        for index, (x, y) in enumerate(pairs):
+            for other_x, other_y in pairs[index + 1:]:
+                product = (other_x - x) * (other_y - y)
+                concordant += product > 0
+                discordant += product < 0
+        total = concordant + discordant
+        return SimpleNamespace(statistic=(concordant - discordant) / total if total else 0.0)
 
-_RPE_TABLE_PRIMARY: dict[tuple[int, int], float] = {
-    (1, 10): 1.000, (2, 10): 0.960, (3, 10): 0.930, (4, 10): 0.900,
-    (5, 10): 0.880, (6, 10): 0.860, (7, 10): 0.840, (8, 10): 0.820,
-    (9, 10): 0.800, (10, 10): 0.780,
-    (1, 9): 1.000, (2, 9): 0.940, (3, 9): 0.900, (4, 9): 0.870,
-    (5, 9): 0.845, (6, 9): 0.825, (7, 9): 0.805, (8, 9): 0.785,
-    (9, 9): 0.765, (10, 9): 0.745,
-    (1, 8): 1.000, (2, 8): 0.920, (3, 8): 0.875, (4, 8): 0.845,
-    (5, 8): 0.815, (6, 8): 0.795, (7, 8): 0.775, (8, 8): 0.755,
-    (9, 8): 0.735, (10, 8): 0.715,
-    (1, 7): 1.000, (2, 7): 0.900, (3, 7): 0.850, (4, 7): 0.820,
-    (5, 7): 0.795, (6, 7): 0.775, (7, 7): 0.755, (8, 7): 0.735,
-    (9, 7): 0.715, (10, 7): 0.695,
-    (1, 6): 1.000, (2, 6): 0.880, (3, 6): 0.830, (4, 6): 0.800,
-    (5, 6): 0.775, (6, 6): 0.755, (7, 6): 0.735, (8, 6): 0.715,
-    (9, 6): 0.695, (10, 6): 0.675,
-}
+    def theilslopes(ys, xs):
+        slopes = [(ys[j] - ys[i]) / (xs[j] - xs[i]) for i in range(len(xs)) for j in range(i + 1, len(xs)) if xs[j] != xs[i]]
+        slope = median(slopes) if slopes else 0.0
+        intercept = median([y - slope * x for x, y in zip(xs, ys)]) if xs else 0.0
+        return slope, intercept, slope, slope
+
+try:
+    from lift_calculations import DOTS_COEFFICIENTS as _DOTS_COEFFICIENTS, RPE_PERCENT as _RPE_PERCENT, calculate_dots as _calculate_dots, estimate_1rm as _estimate_1rm, estimate_1rm_value as _estimate_1rm_value
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lambda/layers/pl-core/python"))
+    from lift_calculations import DOTS_COEFFICIENTS as _DOTS_COEFFICIENTS, RPE_PERCENT as _RPE_PERCENT, calculate_dots as _calculate_dots, estimate_1rm as _estimate_1rm, estimate_1rm_value as _estimate_1rm_value
+
+DOTS_COEFFICIENTS = _DOTS_COEFFICIENTS
 
 INSUFFICIENT_DATA = {"status": "insufficient_data"}
 
@@ -151,14 +146,6 @@ _SPECIFICITY_BANDS: list[dict[str, Any]] = [
     },
 ]
 
-_CONSERVATIVE_REP_PCT: dict[int, float] = {
-    1: 1.000,
-    2: 0.955,
-    3: 0.925,
-    4: 0.898,
-    5: 0.875,
-}
-
 _PRIMARY_LIFT_NAMES: frozenset[str] = frozenset({"squat", "deadlift"})
 
 def _num(v: Any) -> float:
@@ -216,21 +203,7 @@ def _fit_quality(xs: list[float], ys: list[float], slope: float, intercept: floa
     return round(float(tau), 3), round(float(quality), 3)
 
 def _estimate_e1rm_from_set(weight_kg: float, reps: int, rpe: Any = None) -> float | None:
-    """Estimate 1RM from a single set using the same tables as the rest of the module."""
-    if rpe is not None:
-        try:
-            rpe_int = int(rpe)
-        except (ValueError, TypeError):
-            rpe_int = None
-        if rpe_int is not None and 1 <= reps <= 6 and 6 <= rpe_int <= 10:
-            pct = _RPE_TABLE_PRIMARY.get((reps, rpe_int))
-            if pct is not None:
-                return weight_kg / pct
-    elif 1 <= reps <= 5:
-        pct = _CONSERVATIVE_REP_PCT.get(reps)
-        if pct is not None:
-            return weight_kg / pct
-    return None
+    return _estimate_1rm_value(weight_kg, reps, rpe)
 
 def _ols(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
     n = len(xs)
@@ -409,15 +382,7 @@ def _best_primary_e1rm_for_sessions(w_sessions: list[dict]) -> Optional[float]:
             if kg <= 0 or reps <= 0:
                 continue
             rpe = session_rpe
-            e1rm = None
-            if rpe is not None and 1 <= reps <= 6 and 6 <= int(rpe) <= 10:
-                pct = _RPE_TABLE_PRIMARY.get((reps, int(rpe)))
-                if pct:
-                    e1rm = kg / pct
-            elif rpe is None and 1 <= reps <= 5:
-                pct = _CONSERVATIVE_REP_PCT.get(reps)
-                if pct:
-                    e1rm = kg / pct
+            e1rm = _estimate_1rm_value(kg, reps, rpe)
             if e1rm is not None and (best is None or e1rm > best):
                 best = e1rm
     return best
@@ -984,35 +949,10 @@ def _compute_dimensional_spike(
     return {"dimensions": dimensions, "composite": composite}
 
 def estimate_1rm(weight_kg: float, reps: int, rpe: Optional[int] = None) -> dict:
-    w = _num(weight_kg)
-    e1rm = None
-    method = None
-    rpe_based = None
-    if rpe is not None and 1 <= reps <= 6 and 6 <= int(rpe) <= 10:
-        pct = _RPE_TABLE_PRIMARY.get((reps, int(rpe)))
-        if pct is not None:
-            e1rm = round(w / pct, 1)
-            rpe_based = e1rm
-            method = "rpe_table"
-    elif rpe is None and 1 <= reps <= 5:
-        pct = _CONSERVATIVE_REP_PCT.get(reps)
-        if pct is not None:
-            e1rm = round(w / pct, 1)
-            method = "conservative"
-    return {"e1rm": e1rm, "method": method, "input_weight_kg": round(w, 1),
-            "epley": None, "brzycki": None, "rpe_based": rpe_based}
+    return _estimate_1rm(weight_kg, reps, rpe)
 
 def calculate_dots(total_kg: float, bodyweight_kg: float, sex: str) -> float:
-    sex_key = sex.lower()
-    if sex_key not in DOTS_COEFFICIENTS:
-        raise ValueError(f"Invalid sex: {sex!r}. Expected 'male' or 'female'.")
-    c = DOTS_COEFFICIENTS[sex_key]
-    bw = _num(bodyweight_kg)
-    total = _num(total_kg)
-    denom = c["a"] + c["b"]*bw + c["c"]*bw**2 + c["d"]*bw**3 + c["e"]*bw**4
-    if abs(denom) < 1e-12:
-        return 0.0
-    return round((500 / denom) * total, 2)
+    return _calculate_dots(total_kg, bodyweight_kg, sex)
 
 def progression_rate(
     sessions: list[dict],
@@ -1058,16 +998,7 @@ def progression_rate(
             reps = int(_num(ex.get("reps", 0)))
             if kg <= 0 or reps <= 0:
                 continue
-            e1rm = None
-            rpe = session_rpe
-            if rpe is not None and 1 <= reps <= 6 and 6 <= int(rpe) <= 10:
-                pct = _RPE_TABLE_PRIMARY.get((reps, int(rpe)))
-                if pct is not None:
-                    e1rm = kg / pct
-            elif rpe is None and 1 <= reps <= 5:
-                pct = _CONSERVATIVE_REP_PCT.get(reps)
-                if pct is not None:
-                    e1rm = kg / pct
+            e1rm = _estimate_1rm_value(kg, reps, session_rpe)
             if e1rm is not None:
                 week_e1rm.setdefault(eff_idx, []).append(e1rm)
 
@@ -1931,17 +1862,9 @@ def _estimate_maxes_from_sessions(
             if canonical is None:
                 continue
             rpe = session_rpe
-            e1rm = None
-            if rpe is not None and 1 <= reps <= 6 and 6 <= int(rpe) <= 10:
-                pct = _RPE_TABLE_PRIMARY.get((reps, int(rpe)))
-                if pct is not None:
-                    e1rm = kg / pct
-            elif rpe is None and 1 <= reps <= 5:
-                pct = _CONSERVATIVE_REP_PCT.get(reps)
-                if pct is not None:
-                    e1rm = kg / pct
+            e1rm = _estimate_1rm_value(kg, reps, session_rpe)
             if e1rm is not None:
-                all_estimates[canonical].append(round(e1rm, 1))
+                all_estimates[canonical].append(e1rm)
 
     result: dict[str, float] = {}
     for lift, vals in all_estimates.items():
@@ -2370,6 +2293,17 @@ def _lift_stimulus_coefficients(lift_profiles: list[dict] | None) -> dict[str, f
         raw_coeff = profile.get("stimulus_coefficient")
         coeffs[lift] = round(_clamp(_num(raw_coeff) if raw_coeff is not None else 1.0, 1.0, 2.0), 2)
     return coeffs
+
+def _lift_e1rm_multipliers(lift_profiles: list[dict] | None) -> dict[str, float]:
+    multipliers = {"squat": 1.0, "bench": 1.0, "deadlift": 1.0}
+    for profile in lift_profiles or []:
+        lift = str(profile.get("lift", "")).lower().strip()
+        if lift not in multipliers:
+            continue
+        value = _num(profile.get("e1rm_multiplier", 1.0))
+        if value > 0:
+            multipliers[lift] = value
+    return multipliers
 
 def compute_e1rm_multiplier_suggestions(
     program: dict,
@@ -4907,7 +4841,7 @@ def _planned_exercise_weight(ex: dict, current_maxes: dict[str, Any]) -> float |
         return None
 
     if 1 <= reps <= 6 and 6 <= rpe_int <= 10:
-        pct_from_table = _RPE_TABLE_PRIMARY.get((reps, rpe_int))
+        pct_from_table = _RPE_PERCENT.get(f"{reps}-{rpe_int}")
         if pct_from_table is not None:
             return round(current_max * pct_from_table, 3)
 

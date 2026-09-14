@@ -5,12 +5,13 @@ Schema (POWERLIFTING_BUDGET_TABLE):
     - Item rows:    pk=<user>, sk="ITEM#<id>"    -> BudgetItem (+ pk/sk)
 
 This module mirrors backend budgetController.ts + db/transforms.ts so the
-fission functions are thin async wrappers.
+domain functions are thin async wrappers.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
@@ -247,8 +248,7 @@ def _upcoming_one_time(items: list[dict]) -> list[dict]:
 
 
 def _new_item_id() -> str:
-    import time
-    return f"item-{int(time.time())}"
+    return f"item-{uuid.uuid4().hex}"
 
 
 class BudgetStore:

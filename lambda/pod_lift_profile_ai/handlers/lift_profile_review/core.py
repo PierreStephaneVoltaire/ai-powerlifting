@@ -14,5 +14,5 @@ def _run_async(coro):
 
 
 def lift_profile_review(args):
-    from lift_profile_ai import review_lift_profile
+    from .lift_profile_ai import review_lift_profile
     return _run_async(review_lift_profile(args["profile"]))

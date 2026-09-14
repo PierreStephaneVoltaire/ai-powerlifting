@@ -7,8 +7,10 @@ analysis bundle; correlation uses cached DynamoDB values only.
 from __future__ import annotations
 
 import asyncio
-import json
+import base64
 import logging
+import os
+import tempfile
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, Optional
@@ -18,18 +20,16 @@ logger = logging.getLogger(__name__)
 _store: Optional[Any] = None
 
 
-def _get_store():
+def _get_store(args):
     """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
+    import os
+    from program_store import ProgramStore as _PS
+    _store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=args["pk"],
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
     return _store
 
 
@@ -57,13 +57,13 @@ def _sanitize_decimals(obj: Any) -> Any:
     return obj
 
 
-def _get_glossary_sync(table_name: str) -> list[dict]:
+def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
     """Fetch glossary from DynamoDB for the active health partition."""
     import boto3
 
     dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
-    resp = table.get_item(Key={"pk": _get_store().pk, "sk": "glossary#v1"})
+    resp = table.get_item(Key={"pk": pk, "sk": "glossary#v1"})
     item = resp.get("Item")
     if not item:
         return []
@@ -147,7 +147,7 @@ def _scope_program_to_current_block(program: dict) -> dict:
     return scoped
 
 
-def _read_cached_correlation(weeks: int = 4) -> dict | None:
+def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
     """Return the cached correlation report for the current window, or None."""
     import boto3
     from .config import IF_HEALTH_TABLE_NAME
@@ -158,7 +158,7 @@ def _read_cached_correlation(weeks: int = 4) -> dict | None:
     cache_sk = f"corr_report#{window_start}_{weeks}w"
 
     table = boto3.resource("dynamodb", region_name="ca-central-1").Table(IF_HEALTH_TABLE_NAME)
-    item = table.get_item(Key={"pk": _get_store().pk, "sk": cache_sk}).get("Item")
+    item = table.get_item(Key={"pk": pk, "sk": cache_sk}).get("Item")
     if not item or not item.get("report"):
         return None
 
@@ -171,7 +171,7 @@ def _read_cached_correlation(weeks: int = 4) -> dict | None:
     return _sanitize_decimals(report)
 
 
-def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
+def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
     """Assemble the analysis bundle threaded into the XLSX export.
 
     Uses cached AI reports (no forced regeneration) and the pure weekly_analysis
@@ -182,7 +182,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
     from .config import IF_HEALTH_TABLE_NAME
     from .prompt_context import summarize_lift_profiles
 
-    store = _get_store()
     active_pk = store.pk
     cache_version = getattr(store, "_cache_version", None)
     version_token = f"v{int(cache_version):03d}" if isinstance(cache_version, int) and cache_version > 0 else ""
@@ -198,7 +197,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
     }
 
     try:
-        glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME)
+        glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME, active_pk)
     except Exception as e:
         logger.warning("export: glossary fetch failed (%s); continuing without it", e)
         glossary = []
@@ -275,7 +274,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict]) -> dict:
         logger.warning("export: weekly_analysis failed: %s", e)
 
     try:
-        bundle["correlation"] = _read_cached_correlation(weeks=effective_weeks)
+        bundle["correlation"] = _read_cached_correlation(active_pk, weeks=effective_weeks)
     except Exception as e:
         logger.warning("export: correlation cache read failed: %s", e)
 
@@ -292,14 +291,13 @@ def _normalize_export_format(format_value: str | None) -> str:
     raise ValueError(f"Unsupported export format: {format_value!r}. Use 'xlsx' or 'markdown'.")
 
 
-def _write_program_export(program: dict, sessions: list[dict], out_dir: str, format_value: str | None) -> tuple[str, str, str]:
-    import os
+def _write_program_export(program: dict, sessions: list[dict], store, out_dir: str, format_value: str | None) -> tuple[str, str, str]:
     from .export import build_program_markdown, build_program_xlsx
 
     export_format = _normalize_export_format(format_value)
     scoped_program = _scope_program_to_current_block(program)
     scoped_sessions = scoped_program["sessions"]
-    analysis = _build_analysis_bundle(program, sessions)
+    analysis = _build_analysis_bundle(program, sessions, store)
 
     if export_format == "markdown":
         filename = "program_history.md"
@@ -315,22 +313,12 @@ def _write_program_export(program: dict, sessions: list[dict], out_dir: str, for
     return filename, description, export_format
 
 
-def export_program_history(args: dict) -> str:
-    """Replicates _do_export from tools/health/tool.py."""
-    import os
-    from .config import SANDBOX_PATH
-
-    conversation_id = args.get("_conversation_id", "default")
-    out_dir = os.path.join(SANDBOX_PATH, conversation_id)
-    os.makedirs(out_dir, exist_ok=True)
-
-    program = _run_async(_get_store().get_program())
+def export_program_history(args: dict) -> dict:
+    store = _get_store(args)
+    program = _run_async(store.get_program())
     sessions = program.get("sessions", []) if isinstance(program, dict) else []
-    filename, description, export_format = _write_program_export(program, sessions, out_dir, args.get("format"))
-
-    payload = json.dumps({
-        "filename": filename,
-        "format": export_format,
-        "message": "Program history exported successfully.",
-    })
-    return f"{payload}\nFILES: {filename} ({description})"
+    with tempfile.TemporaryDirectory() as out_dir:
+        filename, _description, export_format = _write_program_export(program, sessions, store, out_dir, args.get("format"))
+        with open(os.path.join(out_dir, filename), "rb") as exported:
+            content_base64 = base64.b64encode(exported.read()).decode()
+    return {"filename": filename, "format": export_format, "content_base64": content_base64}

@@ -1,12 +1,11 @@
 """AI helpers for lift style profiles and INOL stimulus coefficients."""
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
-
-import httpx
 
 from ai_config import (
     ESTIMATE_MODEL,
@@ -15,8 +14,6 @@ from ai_config import (
     HEALTH_HELPER_MODEL,
     HEALTH_HELPER_MODEL_REASONING_EFFORT,
     HEALTH_HELPER_MODEL_VERBOSITY,
-    LLM_BASE_URL,
-    OPENROUTER_API_KEY,
 )
 from prompts.loader import load_system_prompt, render_prompt
 
@@ -308,33 +305,9 @@ async def _call_tool(
     reasoning_effort: str = ESTIMATE_MODEL_REASONING_EFFORT,
     verbosity: str = ESTIMATE_MODEL_VERBOSITY,
 ) -> dict[str, Any] | None:
-    if not OPENROUTER_API_KEY:
-        return None
-
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        resp = await client.post(
-            f"{LLM_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_msg},
-                ],
-                "reasoning": {
-                    "enabled": True,
-                    "effort": reasoning_effort,
-                },
-                "verbosity": verbosity,
-                "tools": [tool_schema],
-                "tool_choice": {"type": "function", "function": {"name": tool_name}},
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    resp = await completion({'model': model, 'messages': [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_msg}], 'reasoning': {'enabled': True, 'effort': reasoning_effort}, 'verbosity': verbosity, 'tools': [tool_schema], 'tool_choice': {'type': 'function', 'function': {'name': tool_name}}})
+    resp.raise_for_status()
+    data = resp.json()
 
     choices = data.get("choices", [])
     if not choices:

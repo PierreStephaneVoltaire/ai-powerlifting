@@ -956,6 +956,12 @@ export async function fetchTemplateImport(jobId: string): Promise<TemplateImport
   return res.data
 }
 
+export async function applyTemplateImport(jobId: string): Promise<TemplateImportJob> {
+  const res = await api.post(`/templates/imports/${encodeURIComponent(jobId)}/apply`)
+  await invalidateDomain('templates')
+  return res.data
+}
+
 // ─── Archive & e1RM ─────────────────────────────────────────────────────────
 
 export async function archiveProgram(version: string): Promise<void> {

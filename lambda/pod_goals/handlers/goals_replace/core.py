@@ -10,15 +10,13 @@ _store: Optional[Any] = None
 
 
 def _get_store():
-    global _store
-    if _store is None:
-        from _goals_store import GoalsStore as _GS
-        _store = _GS(
-            table_name=os.environ.get("POWERLIFTING_GOALS_TABLE", "if-powerlifting-goals"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[GoalsTools] GoalsStore initialised from env vars")
+    from _goals_store import GoalsStore as _GS
+    _store = _GS(
+        table_name=os.environ.get("POWERLIFTING_GOALS_TABLE", "if-powerlifting-goals"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[GoalsTools] GoalsStore initialised from env vars")
     return _store
 
 

@@ -15,6 +15,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 from .config import (
     AWS_REGION,
@@ -71,13 +72,12 @@ def list_competitions(args: dict) -> list[dict]:
     items: list[dict] = []
     last_key = None
     while True:
-        scan_kwargs = {
-            "FilterExpression": "begins_with(pk, :pfx) AND begins_with(sk, :sk_pfx)",
-            "ExpressionAttributeValues": {":pfx": pk, ":sk_pfx": "COMP#"},
+        query_kwargs = {
+            "KeyConditionExpression": Key("pk").eq(pk) & Key("sk").begins_with("COMP#"),
         }
         if last_key:
-            scan_kwargs["ExclusiveStartKey"] = last_key
-        response = table.scan(**scan_kwargs)
+            query_kwargs["ExclusiveStartKey"] = last_key
+        response = table.query(**query_kwargs)
         for raw in response.get("Items", []) or []:
             comp = _from_item(raw) or {}
             comp.pop("pk", None)
@@ -138,7 +138,14 @@ def complete_user_competition(args: dict) -> dict:
 
 
 async def health_list_competitions(args: dict) -> dict:
-    op = args.get("op") or "list"
+    op = args.get("op")
+    if not op:
+        if args.get("master_id") and args.get("patch") is not None:
+            op = "update"
+        elif args.get("master_id") and args.get("results") is not None:
+            op = "complete"
+        else:
+            op = "list"
     if op == "list":
         return {"competitions": list_competitions(args)}
     if op == "update":

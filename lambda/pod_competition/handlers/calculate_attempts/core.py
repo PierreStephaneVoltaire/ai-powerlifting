@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -10,16 +11,14 @@ _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 
 def _get_store():
     """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
+    import os
+    from program_store import ProgramStore as _PS
+    _store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
     return _store
 
 
@@ -55,6 +54,13 @@ async def calculate_attempts(
     valid_lifts = ["squat", "bench", "deadlift"]
     if lift not in valid_lifts:
         raise ValueError(f"Invalid lift: {lift}. Must be one of {valid_lifts}")
+    if not isinstance(opener_kg, (int, float)) or not math.isfinite(opener_kg) or opener_kg <= 0:
+        raise ValueError("opener_kg must be a positive number")
+    for name, value in (("j1_override", j1_override), ("j2_override", j2_override)):
+        if value is not None and (not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
+            raise ValueError(f"{name} must be a non-negative number")
+    if last_felt is not None and last_felt not in {"hard", "medium", "easy"}:
+        raise ValueError("last_felt must be hard, medium, or easy")
 
     store = _get_store()
     program = await store.get_program()

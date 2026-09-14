@@ -167,11 +167,14 @@ def update_video_metadata(
             updated = False
             for video in videos:
                 if video.get('video_id') == video_id:
-                    video['video_url'] = video_url
+                    if video_url:
+                        video['video_url'] = video_url
                     if video_s3_key:
                         video['s3_key'] = video_s3_key
-                    video['thumbnail_url'] = thumbnail_url
-                    video['thumbnail_s3_key'] = thumbnail_s3_key
+                    if thumbnail_url:
+                        video['thumbnail_url'] = thumbnail_url
+                    if thumbnail_s3_key:
+                        video['thumbnail_s3_key'] = thumbnail_s3_key
                     video['thumbnail_status'] = status
                     updated = True
                     break

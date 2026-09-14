@@ -9,4 +9,6 @@ async def session_patch(args: dict):
     date = args.get("date")
     index = args.get("index")
     patch = args.get("patch") or {}
+    if "id" in patch or "session_id" in patch:
+        raise ValueError("Session identity cannot be changed")
     return await store.patch_session(program_sk, date, patch, phases, index)

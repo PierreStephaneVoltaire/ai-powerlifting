@@ -4,14 +4,12 @@ Analyzes a template against an athlete's profile, competition timeline,
 and current metrics to produce a recommendation stance and suggestions.
 """
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 from typing import Any
 
-import httpx
-
-from ai_config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
 from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -74,29 +72,12 @@ async def generate_template_evaluate_report(
         "athlete_context": athlete_context
     }, indent=2)
 
-    logger.info(f"[TemplateEvaluateAI] model={ANALYSIS_MODEL} payload_chars={len(user_msg)}")
+    logger.info("[TemplateEvaluateAI] payload_chars=%s", len(user_msg))
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": ANALYSIS_MODEL,
-                    "thinking": {"type": "enabled", "budget_tokens": ANALYSIS_MODEL_THINKING_BUDGET},
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "tools": [_TOOL_SCHEMA],
-                    "tool_choice": {"type": "function", "function": {"name": "report_template_evaluation"}},
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await completion({'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'report_template_evaluation'}}})
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

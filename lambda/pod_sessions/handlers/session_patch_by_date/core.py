@@ -8,4 +8,6 @@ async def session_patch_by_date(args: dict):
     program_sk, phases = await resolve_context(store, args.get("program_sk"))
     date = args.get("date")
     patch = args.get("patch") or {}
+    if "id" in patch or "session_id" in patch:
+        raise ValueError("Session identity cannot be changed")
     return await store.patch_session(program_sk, date, patch, phases, None)

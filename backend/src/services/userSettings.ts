@@ -29,6 +29,8 @@ export interface TrainingMaxes {
 
 export interface UserSettings {
   pk: string
+  identity_provider?: 'discord' | 'authentik'
+  identity_sub?: string
   mapped_pk?: string
   username: string
   discord_id: string
@@ -218,6 +220,8 @@ function normalizeSettings(raw: Record<string, unknown>): UserSettings {
     sexRaw === 'male' || sexRaw === 'female' ? sexRaw : null
   return {
     pk,
+    ...(raw.identity_provider === 'discord' || raw.identity_provider === 'authentik' ? { identity_provider: raw.identity_provider } : {}),
+    ...(typeof raw.identity_sub === 'string' && raw.identity_sub ? { identity_sub: raw.identity_sub } : {}),
     ...(mappedPk ? { mapped_pk: mappedPk } : {}),
     username,
     discord_id: String(raw.discord_id || ''),
@@ -296,6 +300,16 @@ export async function getSettingsByMappedPk(mappedPk: string): Promise<UserSetti
   if (!result) return null
   const settings = normalizeSettings(result as Record<string, unknown>)
   cache.set(key, { settings, expires: Date.now() + CACHE_TTL_MS })
+  return settings
+}
+
+export async function getSettingsByIdentity(provider: 'discord' | 'authentik', sub: string): Promise<UserSettings | null> {
+  if (!sub.trim()) return null
+  const result = await invokeLambda('pod_user', { function: 'settings_get', identity_provider: provider, identity_sub: sub })
+  if (!result) return null
+  const settings = normalizeSettings(result as Record<string, unknown>)
+  if (settings.identity_provider !== provider || settings.identity_sub !== sub) return null
+  cache.set(`identity:${provider}:${sub}`, { settings, expires: Date.now() + CACHE_TTL_MS })
   return settings
 }
 
@@ -395,10 +409,6 @@ export async function proposeTag(
   return normalizeSettings(result as Record<string, unknown>)
 }
 
-// The initial user row is created on first Discord login via the Fission
-// `settings_create` tool (conditional put with attribute_not_exists(pk) + race
-// re-get). getSettings() above already routes to `settings_get`; this path was
-// the only remaining direct DynamoDB touch for user settings — now removed.
 export async function getOrCreateSettings(
   discordId: string,
   discordUsername: string,
@@ -425,6 +435,27 @@ export async function getOrCreateSettings(
   return settings
 }
 
+export async function getOrCreateSettingsForIdentity(
+  provider: 'discord' | 'authentik',
+  sub: string,
+  username: string,
+  avatarUrl: string | null,
+): Promise<UserSettings> {
+  const linked = await getSettingsByIdentity(provider, sub)
+  if (linked) return linked
+  const result = await invokeLambda('pod_user', {
+    function: 'settings_create',
+    identity_provider: provider,
+    identity_sub: sub,
+    discord_id: provider === 'discord' ? sub : '',
+    discord_username: username,
+    avatar_url: avatarUrl,
+  }) as { settings: Record<string, unknown>; created: boolean }
+  const settings = normalizeSettings({ ...result.settings, identity_provider: provider, identity_sub: sub })
+  cache.set(`identity:${provider}:${sub}`, { settings, expires: Date.now() + CACHE_TTL_MS })
+  return settings
+}
+
 export async function resolveMappedPk(
   discordId: string,
   discordUsername: string,
@@ -432,6 +463,15 @@ export async function resolveMappedPk(
 ): Promise<string> {
   const settings = await getOrCreateSettings(discordId, discordUsername, avatarUrl)
   return mappedPkForSettings(settings)
+}
+
+export async function resolveMappedPkForIdentity(
+  provider: 'discord' | 'authentik',
+  sub: string,
+  username: string,
+  avatarUrl: string | null,
+): Promise<string> {
+  return mappedPkForSettings(await getOrCreateSettingsForIdentity(provider, sub, username, avatarUrl))
 }
 
 // =============================================================================

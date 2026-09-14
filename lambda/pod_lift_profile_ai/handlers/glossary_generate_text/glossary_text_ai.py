@@ -1,13 +1,12 @@
 """Cheap AI prose generation for exercise glossary entries."""
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 import re
 
-import httpx
-
-from ai_config import GLOSSARY_TEXT_MODEL, LLM_BASE_URL, OPENROUTER_API_KEY
+from ai_config import GLOSSARY_TEXT_MODEL
 from prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
@@ -88,27 +87,9 @@ async def generate_glossary_text(
     user_msg = _build_user_message(exercise, lift_profiles=lift_profiles)
     logger.info("[GlossaryTextAI] model=%s payload_chars=%s", GLOSSARY_TEXT_MODEL, len(user_msg))
 
-    async with httpx.AsyncClient(timeout=45.0) as client:
-        resp = await client.post(
-            f"{LLM_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": GLOSSARY_TEXT_MODEL,
-                "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": user_msg},
-                ],
-                "temperature": 0.2,
-                "max_tokens": 700,
-                "tools": [_TOOL_SCHEMA],
-                "tool_choice": {"type": "function", "function": {"name": "generate_glossary_text"}},
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    resp = await completion({'model': GLOSSARY_TEXT_MODEL, 'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'temperature': 0.2, 'max_tokens': 700, 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'generate_glossary_text'}}})
+    resp.raise_for_status()
+    data = resp.json()
 
     choices = data.get("choices") or []
     if not choices:

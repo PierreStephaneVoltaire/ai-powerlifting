@@ -24,15 +24,13 @@ def _get_health_table():
 
 
 def _get_session_store():
-    global _session_store
-    if _session_store is None:
-        from session_store import SessionStore as _SS
-        _session_store = _SS(
-            table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-            source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-        )
+    from session_store import SessionStore as _SS
+    _session_store = _SS(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    )
     return _session_store
 
 

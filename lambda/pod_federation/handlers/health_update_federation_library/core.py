@@ -12,15 +12,13 @@ _federation_store: Optional[Any] = None
 
 
 def _get_federation_store():
-    global _federation_store
-    if _federation_store is None:
-        import os
-        from _federation_store import FederationStore
-        _federation_store = FederationStore(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
+    import os
+    from _federation_store import FederationStore
+    _federation_store = FederationStore(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
     return _federation_store
 
 

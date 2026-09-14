@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import { Alert, Button, Group, LoadingOverlay, Paper, Stack, Text, Title } from '@mantine/core'
 import { Upload } from 'lucide-react'
-import { fetchTemplateImport, uploadTemplateImport } from '../api/client'
+import { applyTemplateImport, fetchTemplateImport, uploadTemplateImport } from '../api/client'
+import { cancelJob } from '../api/jobs'
 import type { TemplateImportJob } from '@powerlifting/types'
 import { templateEditRoute } from '../utils/templateRoutes'
 import { useAuth } from '@/auth/AuthProvider'
@@ -14,6 +15,7 @@ export default function TemplateImportPage() {
   const [job, setJob] = useState<TemplateImportJob | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [applying, setApplying] = useState(false)
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles.length || readOnly) return
@@ -30,7 +32,7 @@ export default function TemplateImportPage() {
   }, [readOnly])
 
   useEffect(() => {
-    if (!job?.job_id || ['succeeded', 'failed'].includes(job.status)) return
+    if (!job?.job_id || ['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status)) return
     const timer = window.setInterval(async () => {
       try {
         setJob(await fetchTemplateImport(job.job_id))
@@ -40,6 +42,17 @@ export default function TemplateImportPage() {
     }, 3000)
     return () => window.clearInterval(timer)
   }, [job?.job_id, job?.status])
+
+  const cancel = async () => {
+    if (!job) return
+    try { setJob({ ...job, status: (await cancelJob(job.job_id)).status as TemplateImportJob['status'] }) } catch (err: any) { setError(err?.message ?? 'Cancellation failed') }
+  }
+
+  const apply = async () => {
+    if (!job) return
+    setApplying(true)
+    try { setJob(await applyTemplateImport(job.job_id)) } catch (err: any) { setError(err?.message ?? 'Template import apply failed') } finally { setApplying(false) }
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -80,7 +93,7 @@ export default function TemplateImportPage() {
           position: 'relative',
         }}
       >
-        <LoadingOverlay visible={uploading || Boolean(job && !['succeeded', 'failed'].includes(job.status))} />
+        <LoadingOverlay visible={uploading || applying || Boolean(job && !['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status))} />
         <input {...getInputProps()} />
         <Group justify="center" gap="md" style={{ minHeight: 140 }}>
           <Upload size={24} />
@@ -97,6 +110,8 @@ export default function TemplateImportPage() {
             <Text fw={500}>Status: {job.status}</Text>
             {job.filename && <Text size="sm" c="dimmed">{job.filename}</Text>}
             {job.error && <Alert color="red">{job.error}</Alert>}
+            {job && !['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status) && <Button variant="default" onClick={cancel}>Cancel</Button>}
+            {job.status === 'succeeded' && !job.template_sk && <Button onClick={apply} loading={applying}>Create template from import</Button>}
             {job.status === 'succeeded' && job.template_sk && (
               <Group>
                 <Button onClick={() => navigate(templateEditRoute(job.template_sk!))}>

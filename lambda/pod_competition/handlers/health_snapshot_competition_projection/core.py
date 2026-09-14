@@ -13,16 +13,14 @@ _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 
 def _get_store():
     """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
+    import os
+    from program_store import ProgramStore as _PS
+    _store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
     return _store
 
 
@@ -183,12 +181,11 @@ async def health_snapshot_competition_projection(
         if not allow_retrospective and args.get("allow_retrospective") is not None:
             allow_retrospective = args.get("allow_retrospective", False)
     pk = args.get("pk") if isinstance(args, dict) else None
-    _store_for(pk)
     snapshot_date = datetime.strptime(date, "%Y-%m-%d").date()
-    program, sk, _store = _load_program_version(version)
+    program, sk, _store = _load_program_version(version, pk)
     program, updated = _snapshot_competitions_in_program(program, snapshot_date, allow_retrospective=allow_retrospective)
     if updated:
-        _save_program_version(program, sk)
+        _save_program_version(program, sk, pk)
     return {
         "snapshot_date": snapshot_date.isoformat(),
         "updated": len(updated),

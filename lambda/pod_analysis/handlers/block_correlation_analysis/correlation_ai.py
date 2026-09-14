@@ -7,15 +7,13 @@ Only produces anatomically plausible correlations — exercises working muscles
 not involved in a given lift are excluded to avoid spurious correlations.
 """
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-import httpx
-
-from ai_config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
 from prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
@@ -246,26 +244,13 @@ async def generate_correlation_report(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"{LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": ANALYSIS_MODEL,
-                    "thinking": {"type": "enabled", "budget_tokens": ANALYSIS_MODEL_THINKING_BUDGET},
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "tools": [_TOOL_SCHEMA],
-                    "tool_choice": "required",
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await completion({
+            "messages": [{"role": "system", "content": _SYSTEM_PROMPT}, {"role": "user", "content": user_msg}],
+            "tools": [_TOOL_SCHEMA],
+            "tool_choice": "required",
+        })
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

@@ -1,0 +1,823 @@
+[
+  {
+    "name": "glossary_add",
+    "domain": "glossary",
+    "description": "Add a new glossary exercise term for a user. The term dict defines the exercise name, muscle groups, fatigue estimate, and other metadata.",
+    "handler": "lambda.pod_glossary.handlers.glossary_add.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "term": {
+          "type": "object",
+          "description": "Glossary term dict with exercise metadata.",
+          "required": [
+            "name"
+          ],
+          "additionalProperties": true
+        },
+        "exercise": {
+          "type": "object",
+          "description": "Legacy alias for the glossary term.",
+          "required": [
+            "name"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "term"
+          ]
+        },
+        {
+          "required": [
+            "exercise"
+          ]
+        }
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "added"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "glossary_list_terms",
+    "domain": "glossary",
+    "description": "List all glossary exercise terms for a user. Scans the templates table for rows with sk beginning with \"glossary#\" and flattens into a list of term summaries.",
+    "handler": "lambda.pod_glossary.handlers.glossary_list_terms.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "terms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "terms",
+        "count"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "glossary_set_e1rm",
+    "domain": "glossary",
+    "description": "Set the estimated 1-rep max (E1RM) for a glossary exercise by ID. The value is stored in kg; method describes how it was derived (e.g. \"epley\", \"brzycki\", \"direct\").",
+    "handler": "lambda.pod_glossary.handlers.glossary_set_e1rm.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "id": {
+          "type": "string",
+          "description": "Glossary exercise ID."
+        },
+        "value_kg": {
+          "type": "number",
+          "description": "E1RM value in kg."
+        },
+        "method": {
+          "type": "string",
+          "description": "Method used to derive the E1RM (e.g. \"epley\", \"brzycki\", \"direct\")."
+        }
+      },
+      "required": [
+        "id",
+        "value_kg"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "e1rm_set"
+        },
+        "id": {
+          "type": "string"
+        },
+        "value_kg": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "id",
+        "value_kg"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "glossary_update",
+    "domain": "glossary",
+    "description": "Update an existing glossary exercise term. The term dict replaces the exercise metadata for the given ID.",
+    "handler": "lambda.pod_glossary.handlers.glossary_update.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "term": {
+          "type": "object",
+          "description": "Updated glossary term dict.",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "fields": {
+          "type": "object",
+          "description": "Fields to merge into the existing term.",
+          "minProperties": 1,
+          "additionalProperties": true
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "id",
+            "term"
+          ]
+        },
+        {
+          "required": [
+            "id",
+            "fields"
+          ]
+        }
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "updated"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "exercise_upsert",
+    "domain": "glossary",
+    "description": "Upsert an exercise in the glossary. If the exercise ID exists, it is updated; otherwise a new entry is created.",
+    "handler": "lambda.pod_glossary.handlers.exercise_upsert.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "exercise": {
+          "type": "object",
+          "description": "Exercise dict with name, muscle groups, and other metadata.",
+          "required": [
+            "name"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "exercise"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "upserted"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "exercise_archive",
+    "domain": "glossary",
+    "description": "Archive a glossary exercise by ID. The exercise is hidden from default views but remains accessible.",
+    "handler": "lambda.pod_glossary.handlers.exercise_archive.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "id": {
+          "type": "string",
+          "description": "Exercise ID to archive."
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "archived"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "exercise_unarchive",
+    "domain": "glossary",
+    "description": "Unarchive a previously archived glossary exercise, restoring it to default views.",
+    "handler": "lambda.pod_glossary.handlers.exercise_unarchive.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "id": {
+          "type": "string",
+          "description": "Exercise ID to unarchive."
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "unarchived"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "exercise_remove",
+    "domain": "glossary",
+    "description": "Permanently remove a glossary exercise by ID. This is a hard delete \u2014 the exercise is removed from the table.",
+    "handler": "lambda.pod_glossary.handlers.exercise_remove.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "id": {
+          "type": "string",
+          "description": "Exercise ID to remove."
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "removed"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "id"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "exercise_search",
+    "domain": "glossary",
+    "description": "Search glossary exercises by substring across exercise name, muscle groups, and other text fields.",
+    "handler": "lambda.pod_glossary.handlers.exercise_search.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "query": {
+          "type": "string",
+          "description": "Search substring."
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "query",
+        "exercises"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "exercise_get_glossary",
+    "domain": "glossary",
+    "description": "Get the full glossary for a user \u2014 all exercises with their metadata, E1RM values, and muscle group assignments.",
+    "handler": "lambda.pod_glossary.handlers.exercise_get_glossary.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "glossary#v1"
+        },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pk",
+        "sk",
+        "exercises",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "exercise_set_e1rm",
+    "domain": "glossary",
+    "description": "Set the estimated 1-rep max for a specific glossary exercise by ID. Same as glossary_set_e1rm but accessed via the exercise namespace.",
+    "handler": "lambda.pod_glossary.handlers.exercise_set_e1rm.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "id": {
+          "type": "string",
+          "description": "Exercise ID."
+        },
+        "value_kg": {
+          "type": "number",
+          "description": "E1RM value in kg."
+        },
+        "method": {
+          "type": "string",
+          "description": "Method used to derive the E1RM."
+        }
+      },
+      "required": [
+        "id",
+        "value_kg"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "e1rm_set"
+        },
+        "id": {
+          "type": "string"
+        },
+        "value_kg": {
+          "type": "number"
+        },
+        "method": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "id",
+        "value_kg",
+        "method"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_glossary"
+    ]
+  },
+  {
+    "name": "glossary_estimate_e1rm",
+    "domain": "glossary",
+    "description": "glossary estimate e1rm",
+    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_estimate_e1rm.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "estimated",
+            "error"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "estimate": {
+          "type": "object",
+          "properties": {
+            "e1rm_kg": {
+              "type": "number"
+            },
+            "basis": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "e1rm_kg",
+            "basis"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "execution": "ai",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_lift_profile_ai"
+    ]
+  },
+  {
+    "name": "glossary_estimate_fatigue",
+    "domain": "glossary",
+    "description": "glossary estimate fatigue",
+    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_estimate_fatigue.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "fatigue_estimated"
+        },
+        "id": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "axial": {
+              "type": "number"
+            },
+            "neural": {
+              "type": "number"
+            },
+            "peripheral": {
+              "type": "number"
+            },
+            "systemic": {
+              "type": "number"
+            }
+          }
+        },
+        "fatigue_profile": {
+          "type": "object",
+          "properties": {
+            "axial": {
+              "type": "number"
+            },
+            "neural": {
+              "type": "number"
+            },
+            "peripheral": {
+              "type": "number"
+            },
+            "systemic": {
+              "type": "number"
+            }
+          }
+        },
+        "reasoning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "execution": "ai",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_lift_profile_ai"
+    ]
+  },
+  {
+    "name": "glossary_estimate_muscles",
+    "domain": "glossary",
+    "description": "glossary estimate muscles",
+    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_estimate_muscles.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "muscles_estimated"
+        },
+        "id": {
+          "type": "string"
+        },
+        "primary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "secondary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tertiary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reasoning": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "execution": "ai",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_lift_profile_ai"
+    ]
+  },
+  {
+    "name": "glossary_generate_text",
+    "domain": "glossary",
+    "description": "glossary generate text",
+    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_generate_text.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "exercise": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "lift_profiles": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "exercise"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "generated"
+        },
+        "description": {
+          "type": "string"
+        },
+        "how_to_perform": {
+          "type": "string"
+        },
+        "why_do_it": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "execution": "ai",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_lift_profile_ai"
+    ]
+  }
+]

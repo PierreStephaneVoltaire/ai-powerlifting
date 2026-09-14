@@ -85,20 +85,20 @@ export async function listBudgetItems(pk: string, filters?: BudgetItemFilters): 
 export async function createBudgetItem(pk: string, raw: unknown): Promise<BudgetItem> {
   const result = await invokeLambda('pod_budget', { function: 'budget_create_item',  pk, item: raw })
   if (!result) throw new AppError('Failed to create budget item', 500)
-  logger.info({ pk, module: 'budget', fn: 'createBudgetItem', itemId: (result as BudgetItem).id }, 'budget item created via Fission')
+  logger.info({ pk, module: 'budget', fn: 'createBudgetItem', itemId: (result as BudgetItem).id }, 'budget item created via domain service')
   return result as BudgetItem
 }
 
 export async function updateBudgetItem(pk: string, itemId: string, raw: unknown): Promise<BudgetItem> {
   const result = await invokeLambda('pod_budget', { function: 'budget_update_item',  pk, item_id: itemId, item: raw })
   if (!result) throw new AppError('Failed to update budget item', 500)
-  logger.info({ pk, module: 'budget', fn: 'updateBudgetItem', itemId }, 'budget item updated via Fission')
+  logger.info({ pk, module: 'budget', fn: 'updateBudgetItem', itemId }, 'budget item updated via domain service')
   return result as BudgetItem
 }
 
 export async function deleteBudgetItem(pk: string, itemId: string): Promise<void> {
   await invokeLambda('pod_budget', { function: 'budget_delete_item',  pk, item_id: itemId })
-  logger.info({ pk, module: 'budget', fn: 'deleteBudgetItem', itemId }, 'budget item deleted via Fission')
+  logger.info({ pk, module: 'budget', fn: 'deleteBudgetItem', itemId }, 'budget item deleted via domain service')
 }
 
 export async function markItemCut(pk: string, itemId: string, cut: boolean): Promise<BudgetItem> {
@@ -152,7 +152,7 @@ export async function putBudget(
     }
   }
 
-  logger.info({ pk, module: 'budget', fn: 'putBudget', itemCount: incomingById.size }, 'budget store replaced via Fission')
+  logger.info({ pk, module: 'budget', fn: 'putBudget', itemCount: incomingById.size }, 'budget store replaced via domain service')
 }
 
 export async function uploadItemPhoto(
@@ -253,7 +253,7 @@ export async function getBudgetAiAnalysis(
     competitions,
   }
 
-  logger.info({ pk, module: 'budget', fn: 'getBudgetAiAnalysis', refresh, itemCount: items.length }, 'budget AI analysis generating via Fission')
+  logger.info({ pk, module: 'budget', fn: 'getBudgetAiAnalysis', refresh, itemCount: items.length }, 'budget AI analysis generating via domain service')
 
   const result = (await invokeLambda('pod_budget', { function: 'budget_priority_timeline', ...payload })) as Partial<BudgetAiAnalysis>
 

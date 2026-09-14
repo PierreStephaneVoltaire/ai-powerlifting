@@ -28,6 +28,19 @@ def _resolve_pk(args: dict) -> str:
     return args.get("pk") or os.environ.get("HEALTH_PROGRAM_PK", "operator")
 
 
+def _resolve_program_sk(args: dict, pk: str) -> str:
+    program_sk = args.get("program_sk")
+    if program_sk and program_sk not in {"current", "program#current"}:
+        return str(program_sk)
+    from session_store import SessionStore
+    return SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    ).resolve_program_sk_sync()
+
+
 def _sanitize_decimals(obj):
     if isinstance(obj, Decimal):
         return float(obj) if obj % 1 > 0 else int(obj)
@@ -60,6 +73,7 @@ async def session_list(args: dict) -> dict:
     """
     table = _get_table()
     pk = _resolve_pk(args)
+    program_sk = _resolve_program_sk(args, pk)
     try:
         limit = int(args.get("limit", 50))
     except (TypeError, ValueError):
@@ -78,6 +92,8 @@ async def session_list(args: dict) -> dict:
                 query_kwargs["ExclusiveStartKey"] = last_key
             resp = table.query(**query_kwargs)
             for item in resp.get("Items", []) or []:
+                if item.get("program_sk") != program_sk:
+                    continue
                 item = _sanitize_decimals(item)
                 date = item.get("date") or ""
                 week = _to_int(item.get("week_number", 0))

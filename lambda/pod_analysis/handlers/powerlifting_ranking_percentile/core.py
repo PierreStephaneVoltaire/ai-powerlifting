@@ -30,7 +30,7 @@ _df_error: Optional[str] = None
 def _ensure_dataset_downloaded() -> None:
     """Download OpenPowerlifting CSVs from S3 to SANDBOX_PATH if not present.
 
-    Reads POWERLIFTING_S3_BUCKET (injected by the Fission function env when
+    Reads POWERLIFTING_S3_BUCKET (injected by the service environment when
     resources.yaml sets s3_read: true). Skips the download if the local cache
     already has any matching file, so cold start pays the cost exactly once
     per pod lifetime.

@@ -1,7 +1,17 @@
 from __future__ import annotations
+from .._shared.settings_normalize import (
+    SEX_VALUES,
+    ROLE_VALUES,
+    _to_float,
+    _normalize_role,
+    _normalize_roles,
+    _normalize_training_maxes,
+    _normalize_federations,
+)
 
 import asyncio
 import base64
+import binascii
 import logging
 import os
 import re
@@ -142,15 +152,7 @@ def _profile_avatar_key_from_url(value) -> Optional[str]:
         try:
             from urllib.parse import urlparse, unquote
 
-from .._shared.settings_normalize import (
-    SEX_VALUES,
-    ROLE_VALUES,
-    _to_float,
-    _normalize_role,
-    _normalize_roles,
-    _normalize_training_maxes,
-    _normalize_federations,
-)
+
             return unquote(urlparse(value).path).lstrip("/")
         except Exception:
             return None
@@ -178,12 +180,19 @@ async def settings_update_avatar(args: dict) -> dict:
         existing = _get_existing_sync(table, username)
         if not existing:
             raise ValueError("Settings not found")
-        body = base64.b64decode(file_b64) if file_b64 else b""
+        if mimetype not in MIME_EXT:
+            raise ValueError("Invalid file type")
+        try:
+            body = base64.b64decode(file_b64, validate=True) if file_b64 else b""
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Invalid base64 image") from exc
         if not body:
             raise ValueError("No profile picture provided")
+        if len(body) > 8 * 1024 * 1024:
+            raise ValueError("Profile picture is too large")
         avatar_id = str(uuid.uuid4())
         extension = _avatar_extension(mimetype, filename)
-        owner = _s3_safe_segment(args.get("mapped_pk") or existing["pk"])
+        owner = _s3_safe_segment(existing.get("mapped_pk") or args.get("mapped_pk") or existing["pk"])
         s3_key = f"profiles/{owner}/avatars/{avatar_id}.{extension}"
         s3.put_object(
             Bucket=bucket,

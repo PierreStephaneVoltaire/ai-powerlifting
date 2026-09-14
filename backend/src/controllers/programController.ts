@@ -1,21 +1,9 @@
 import { invokeLambda } from '../utils/lambda'
-import { AppError } from '../middleware/errorHandler'
 import { randomUUID } from 'crypto'
 import type { Program, ProgramListItem, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
 
-// Programs live in if-health. All DynamoDB work (program#current pointer,
-// in-place meta/phases/lift_profiles updates, archive/unarchive, list) lives in
-// the program_* Fission functions (layer pl_program / program_store). The
-// backend is a pure auth/pk router.
-//
-// No fork / no version handling — the frontend only operates on current. The
-// `version` param is kept in signatures (prefixed _version) so the route
-// compiles unchanged but is ignored; Fission resolves current internally.
-// batchCreateWeek + updatePlannedExercises compose the session_* fission tools
-// (sessions are a separate table / domain).
-
-export async function getProgram(pk: string, _version: string): Promise<Program> {
-  return (await invokeLambda('pod_training_program', { function: 'program_get',  pk })) as Program
+export async function getProgram(pk: string, version: string): Promise<Program> {
+  return (await invokeLambda('pod_training_program', { function: 'program_get',  pk, program_sk: version === "current" ? undefined : `program#${version}` })) as Program
 }
 
 export async function listPrograms(pk: string): Promise<ProgramListItem[]> {
@@ -24,65 +12,57 @@ export async function listPrograms(pk: string): Promise<ProgramListItem[]> {
 
 export async function updateMetaField(
   pk: string,
-  _version: string,
+  version: string,
   field: string,
   value: unknown,
 ): Promise<void> {
-  await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, field, value })
+  await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, program_sk: version === "current" ? undefined : `program#${version}`, field, value })
 }
 
 export async function updateBodyWeight(
   pk: string,
-  _version: string,
+  version: string,
   weightKg: number,
 ): Promise<void> {
-  // Two in-place meta updates — the route calls updateMetaField twice; keep the
-  // convenience wrapper delegating to the same fission tool.
-  await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, field: 'current_body_weight_kg', value: weightKg })
-  await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, field: 'current_body_weight_lb', value: weightKg * 2.20462 })
+  await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, program_sk: version === "current" ? undefined : `program#${version}`, field: 'current_body_weight_kg', value: weightKg })
+  await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, program_sk: version === "current" ? undefined : `program#${version}`, field: 'current_body_weight_lb', value: weightKg * 2.20462 })
 }
 
 export async function updatePhases(
   pk: string,
-  _version: string,
+  version: string,
   phases: Phase[],
   block?: string,
 ): Promise<void> {
-  await invokeLambda('pod_training_program', { function: 'program_update_phases',  pk, phases, block })
+  await invokeLambda('pod_training_program', { function: 'program_update_phases',  pk, program_sk: version === "current" ? undefined : `program#${version}`, phases, block })
 }
 
 export async function updateLiftProfiles(
   pk: string,
-  _version: string,
+  version: string,
   liftProfiles: LiftProfile[],
 ): Promise<void> {
-  await invokeLambda('pod_training_program', { function: 'program_update_lift_profiles',  pk, lift_profiles: liftProfiles })
+  await invokeLambda('pod_training_program', { function: 'program_update_lift_profiles',  pk, program_sk: version === "current" ? undefined : `program#${version}`, lift_profiles: liftProfiles })
 }
 
-export async function archiveProgram(pk: string, _version: string): Promise<void> {
-  await invokeLambda('pod_training_program', { function: 'program_archive',  pk })
+export async function archiveProgram(pk: string, version: string): Promise<void> {
+  await invokeLambda('pod_training_program', { function: 'program_archive',  pk, program_sk: version === "current" ? undefined : `program#${version}` })
 }
 
-export async function unarchiveProgram(pk: string, _version: string): Promise<void> {
-  await invokeLambda('pod_training_program', { function: 'program_unarchive',  pk })
+export async function unarchiveProgram(pk: string, version: string): Promise<void> {
+  await invokeLambda('pod_training_program', { function: 'program_unarchive',  pk, program_sk: version === "current" ? undefined : `program#${version}` })
 }
 
 export async function batchCreateWeek(
   pk: string,
-  _version: string,
+  version: string,
   weekNumber: number,
   weekLabel: string,
   days: Array<{ date: string; day: string }>,
   phase: string,
   exercises: PlannedExercise[],
 ): Promise<void> {
-  const result = (await invokeLambda('pod_sessions', { function: 'session_list',  pk })) as { sessions: Session[] }
-  const existingDates = new Set((result?.sessions || []).map((s) => s.date))
-  for (const day of days) {
-    if (existingDates.has(day.date)) {
-      throw new AppError(`Session with date ${day.date} already exists`, 400)
-    }
-  }
+  const result = (await invokeLambda('pod_sessions', { function: 'session_list',  pk, program_sk: version === "current" ? undefined : `program#${version}` })) as { sessions: Session[] }
   for (const day of days) {
     const session: Session = {
       id: randomUUID(),
@@ -100,34 +80,41 @@ export async function batchCreateWeek(
       body_weight_kg: null,
       block: 'current',
     }
-    await invokeLambda('pod_sessions', { function: 'session_create',  pk, session })
+    await invokeLambda('pod_sessions', { function: 'session_create',  pk, program_sk: version === "current" ? undefined : `program#${version}`, session })
   }
 }
 
 export async function updatePlannedExercises(
   pk: string,
-  _version: string,
+  version: string,
   date: string,
   index: number,
   plannedExercises: PlannedExercise[],
 ): Promise<void> {
-  // Read the session, sync exercises from planned for incomplete sessions, patch.
-  const existing = (await invokeLambda('pod_sessions', { function: 'session_get',  pk, date, index })) as Session
+  const existing = (await invokeLambda('pod_sessions', { function: 'session_get',  pk, program_sk: version === "current" ? undefined : `program#${version}`, date, index })) as Session
   const syncExercises = !existing.completed
-    ? plannedExercises.map((pe) => ({
+    ? plannedExercises.map((pe, exerciseIndex) => {
+        const prior = existing.exercises?.[exerciseIndex]
+        const priorRecord = prior as (typeof prior & { set_ids?: string[] }) | undefined
+        const priorSets = Array.isArray(priorRecord?.set_statuses) ? priorRecord.set_statuses : []
+        const setCount = pe.sets
+        return {
+        ...(prior || {}),
         name: pe.name,
         sets: pe.sets,
         reps: pe.reps,
         kg: pe.kg,
-        notes: '',
-        failed_sets: Array(pe.sets).fill(false),
-        set_statuses: Array(pe.sets).fill('pending'),
-        failed_set_reasons: Array.from({ length: pe.sets }, () => []),
-      }))
+        notes: priorRecord?.notes || '',
+        failed_sets: Array.from({ length: setCount }, (_, setIndex) => priorRecord?.failed_sets?.[setIndex] ?? false),
+        set_statuses: Array.from({ length: setCount }, (_, setIndex) => priorSets[setIndex] ?? 'pending'),
+        failed_set_reasons: Array.from({ length: setCount }, (_, setIndex) => priorRecord?.failed_set_reasons?.[setIndex] ?? []),
+        set_ids: Array.from({ length: setCount }, (_, setIndex) => priorRecord?.set_ids?.[setIndex] || randomUUID()),
+      }
+    })
     : existing.exercises
 
   await invokeLambda('pod_sessions', { function: 'session_patch', 
-    pk,
+    pk, program_sk: version === "current" ? undefined : `program#${version}`,
     date,
     index,
     patch: {

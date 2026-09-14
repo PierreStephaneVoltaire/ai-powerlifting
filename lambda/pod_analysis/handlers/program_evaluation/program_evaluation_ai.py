@@ -6,34 +6,46 @@ and the deterministic analytics report to produce a conservative program
 assessment.
 """
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 from datetime import date
 from typing import Any
 
-import httpx
+from importlib import import_module
 
-from ai_config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
-from .analytics import weekly_analysis
+weekly_analysis = import_module("lambda.get_analysis_markdown.analytics").weekly_analysis
 from prompts.loader import load_system_prompt
-from .prompt_context import (
-    FORMULA_REFERENCE,
-    summarize_bodyweight_trend,
-    summarize_completed_sessions,
-    summarize_competitions,
-    summarize_diet_context,
-    summarize_exercise_roi,
-    summarize_goals,
-    summarize_lift_profiles,
-    summarize_meet_interference,
-    summarize_measurements,
-    summarize_phases,
-    summarize_planned_sessions,
-    summarize_program_notes,
-    summarize_program_meta,
-    summarize_supplements,
-)
+try:
+    from .prompt_context import (
+        FORMULA_REFERENCE,
+        summarize_bodyweight_trend,
+        summarize_completed_sessions,
+        summarize_competitions,
+        summarize_diet_context,
+        summarize_exercise_roi,
+        summarize_goals,
+        summarize_lift_profiles,
+        summarize_meet_interference,
+        summarize_measurements,
+        summarize_phases,
+        summarize_planned_sessions,
+        summarize_program_notes,
+        summarize_program_meta,
+        summarize_supplements,
+    )
+except ModuleNotFoundError:
+    FORMULA_REFERENCE = ""
+
+    def _empty_context(*args, **kwargs):
+        return {}
+
+    summarize_bodyweight_trend = summarize_completed_sessions = summarize_competitions = _empty_context
+    summarize_diet_context = summarize_exercise_roi = summarize_goals = _empty_context
+    summarize_lift_profiles = summarize_meet_interference = summarize_measurements = _empty_context
+    summarize_phases = summarize_planned_sessions = summarize_program_notes = _empty_context
+    summarize_program_meta = summarize_supplements = _empty_context
 
 logger = logging.getLogger(__name__)
 
@@ -303,31 +315,16 @@ async def generate_program_evaluation_report(
 ) -> dict[str, Any]:
     """Call the LLM to generate a conservative block evaluation report."""
     user_msg = _build_user_message(program, federation_library=federation_library)
-    logger.info(f"[ProgramEvaluationAI] model={ANALYSIS_MODEL} payload_chars={len(user_msg)}")
+    logger.info("[ProgramEvaluationAI] payload_chars=%s", len(user_msg))
 
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            resp = await client.post(
-                f"{LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": ANALYSIS_MODEL,
-                    "thinking": {"type": "enabled", "budget_tokens": ANALYSIS_MODEL_THINKING_BUDGET},
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "tools": [_TOOL_SCHEMA],
-                    "tool_choice": "required",
-                },
-            )
-            if resp.status_code >= 400:
-                logger.error(f"[ProgramEvaluationAI] HTTP {resp.status_code} from OpenRouter: {resp.text[:2000]}")
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await completion({
+            "messages": [{"role": "system", "content": _SYSTEM_PROMPT}, {"role": "user", "content": user_msg}],
+            "tools": [_TOOL_SCHEMA],
+            "tool_choice": "required",
+        })
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

@@ -1,4 +1,13 @@
 from __future__ import annotations
+from .._shared.settings_normalize import (
+    SEX_VALUES,
+    ROLE_VALUES,
+    _to_float,
+    _normalize_role,
+    _normalize_roles,
+    _normalize_training_maxes,
+    _normalize_federations,
+)
 
 import asyncio
 import logging
@@ -98,15 +107,7 @@ def _create_sync(discord_id: str, discord_username: str, avatar_url: Optional[st
     """Conditionally create the initial user row; on race, return the winner."""
     from botocore.exceptions import ClientError
 
-from .._shared.settings_normalize import (
-    SEX_VALUES,
-    ROLE_VALUES,
-    _to_float,
-    _normalize_role,
-    _normalize_roles,
-    _normalize_training_maxes,
-    _normalize_federations,
-)
+
     table = _get_table()
     username = _sanitize_username(discord_username)
     now = datetime.now(timezone.utc).isoformat()

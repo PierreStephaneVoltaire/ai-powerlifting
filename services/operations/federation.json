@@ -1,0 +1,560 @@
+[
+  {
+    "name": "federation_master_list",
+    "domain": "federation",
+    "description": "List the global master federation directory.",
+    "handler": "lambda.pod_federation.handlers.federation_master_list.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "pk",
+          "sk",
+          "name",
+          "status",
+          "has_standards",
+          "standards",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "pk": {
+            "type": "string"
+          },
+          "sk": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "abbreviation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "website_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ]
+          },
+          "source_slug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_standards": {
+            "type": "boolean"
+          },
+          "standard_unit": {
+            "enum": [
+              "kg",
+              "dots",
+              null
+            ]
+          },
+          "standards": {
+            "type": "object"
+          },
+          "display_options": {
+            "type": "object"
+          },
+          "parent_federation_abbr": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "membership_group": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "federation_master_update",
+    "domain": "federation",
+    "description": "Update one master federation definition.",
+    "handler": "lambda.pod_federation.handlers.federation_master_update.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "master_id",
+        "updates"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "master_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updates": {
+          "type": "object",
+          "minProperties": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "success"
+      ],
+      "properties": {
+        "success": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "operator",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "federation_user_library_get",
+    "domain": "federation",
+    "description": "Get the authenticated athlete's federation library.",
+    "handler": "lambda.pod_federation.handlers.federation_user_library_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "updated_at",
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federations#v1"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "federation_user_library_set",
+    "domain": "federation",
+    "description": "Replace the authenticated athlete's federation library.",
+    "handler": "lambda.pod_federation.handlers.federation_user_library_set.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "updated_at",
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federations#v1"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "health_get_federation_library",
+    "domain": "federation",
+    "description": "Get the shared federation reference library.",
+    "handler": "lambda.pod_federation.handlers.health_get_federation_library.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "updated_at",
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federations#v1"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "health_update_federation_library",
+    "domain": "federation",
+    "description": "Replace the shared federation reference library.",
+    "handler": "lambda.pod_federation.handlers.health_update_federation_library.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "updated_at",
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federations#v1"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "federation_library_get",
+    "domain": "federation",
+    "description": "Get the AI per-user federation library.",
+    "handler": "lambda.pod_federation.handlers.federation_library_get.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "entries",
+        "updated_at"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federation_library#v1"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "federation_library_set",
+    "domain": "federation",
+    "description": "Replace the AI per-user federation library entries.",
+    "handler": "lambda.pod_federation.handlers.federation_library_set.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "entries"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "entries",
+        "updated_at"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federation_library#v1"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_federation"
+    ]
+  },
+  {
+    "name": "federation_list",
+    "domain": "federation",
+    "description": "Return the AI federation entries and standards summary.",
+    "handler": "lambda.pod_federation.handlers.federation_list.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "entries",
+        "qualification_standards",
+        "updated_at",
+        "count"
+      ],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_federation"
+    ]
+  }
+]

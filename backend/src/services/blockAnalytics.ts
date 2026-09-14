@@ -1,6 +1,8 @@
+import { estimateSetE1rmValue, calculateDots as sharedDots } from '../utils/calculations'
 import { logger } from '../utils/logger'
 import { invokeLambda } from '../utils/lambda'
 import { createHash } from 'crypto'
+import { readAnalysisRecord, writeAnalysisRecord } from './analysisRecords'
 import { CACHE_SCHEMA_VERSION } from './analysisCache'
 import type { AgeCategory, AthleteGoal, Competition, LiftResults, Program, Session, WeightEntry } from '@powerlifting/types'
 
@@ -379,27 +381,6 @@ export interface AiBlockComparisonResult {
 
 
 type InvokeTool = (toolName: string, args: Record<string, unknown>) => Promise<unknown>
-
-const RPE_TABLE_PRIMARY = new Map<string, number>([
-  ['1-10', 1.000], ['2-10', 0.960], ['3-10', 0.930], ['4-10', 0.900], ['5-10', 0.880], ['6-10', 0.860],
-  ['1-9', 1.000], ['2-9', 0.940], ['3-9', 0.900], ['4-9', 0.870], ['5-9', 0.845], ['6-9', 0.825],
-  ['1-8', 1.000], ['2-8', 0.920], ['3-8', 0.875], ['4-8', 0.845], ['5-8', 0.815], ['6-8', 0.795],
-  ['1-7', 1.000], ['2-7', 0.900], ['3-7', 0.850], ['4-7', 0.820], ['5-7', 0.795], ['6-7', 0.775],
-  ['1-6', 1.000], ['2-6', 0.880], ['3-6', 0.830], ['4-6', 0.800], ['5-6', 0.775], ['6-6', 0.755],
-])
-
-const CONSERVATIVE_REP_PCT: Record<number, number> = {
-  1: 1.000,
-  2: 0.955,
-  3: 0.925,
-  4: 0.898,
-  5: 0.875,
-}
-
-const DOTS_COEFFICIENTS = {
-  male: { a: -307.75076, b: 24.0900756, c: -0.1918759221, d: 0.0007391293, e: -0.000001093 },
-  female: { a: -57.96288, b: 13.6175032, c: -0.1126655495, d: 0.0005158568, e: -0.0000010706 },
-}
 
 const IPF_GL_COEFFICIENTS = {
   classic_powerlifting: {
@@ -930,13 +911,7 @@ function canonicalLift(name: string): 'squat' | 'bench' | 'deadlift' | null {
 }
 
 function estimateE1rm(kg: number | null | undefined, reps: number | null | undefined, rpe?: number | null): number | null {
-  if (!kg || !Number.isFinite(kg) || kg <= 0 || !reps || reps <= 0) return null
-  if (typeof rpe === 'number' && Number.isFinite(rpe)) {
-    const pct = RPE_TABLE_PRIMARY.get(`${Math.trunc(reps)}-${Math.trunc(rpe)}`)
-    return pct ? kg / pct : null
-  }
-  const pct = CONSERVATIVE_REP_PCT[Math.trunc(reps)]
-  return pct ? kg / pct : null
+  return kg != null && reps != null ? estimateSetE1rmValue(kg, reps, rpe) : null
 }
 
 function estimateBlockStrength(sessions: Session[], startDate: string, endDate: string, manualStartMaxes?: BlockStartMaxEntry | null): {
@@ -1001,11 +976,7 @@ function estimateBlockStrength(sessions: Session[], startDate: string, endDate: 
 }
 
 function calculateDots(totalKg: number, bodyweightKg: number, sex: 'male' | 'female'): number | null {
-  if (totalKg <= 0 || bodyweightKg <= 0) return null
-  const c = DOTS_COEFFICIENTS[sex]
-  const denominator = c.a + c.b * bodyweightKg + c.c * bodyweightKg ** 2 + c.d * bodyweightKg ** 3 + c.e * bodyweightKg ** 4
-  if (Math.abs(denominator) < 1e-12) return null
-  return Number(((500 / denominator) * totalKg).toFixed(2))
+  return totalKg > 0 && bodyweightKg > 0 ? sharedDots(totalKg, bodyweightKg, sex) : null
 }
 
 function calculateIpfGl(totalKg: number, bodyweightKg: number, sex: 'male' | 'female'): number | null {
@@ -1275,6 +1246,9 @@ export async function getOrCreateBlockAnalysisBundle(
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
 
+  const cacheKey = `native_block#${CACHE_SCHEMA_VERSION}#${blockKey}#${entry.sourceFingerprint}`
+  const saved = await readAnalysisRecord<BlockAnalysisBundle>(userPk, cacheKey)
+  if (saved) return { ...saved, cached: true }
   if (cacheOnly) return null
 
   logger.info({ userPk, blockKey, isCurrent: entry.isCurrent, weeks: entry.weekCount }, 'Computing block analysis')
@@ -1308,6 +1282,7 @@ export async function getOrCreateBlockAnalysisBundle(
     weekly,
     historical: makeHistoricalSummary(program, entry, weekly),
   }
+  await writeAnalysisRecord(userPk, cacheKey, bundle)
   return bundle
 }
 
@@ -1325,8 +1300,6 @@ export async function getOrCreateBlockProgramEvaluation(
   const rawEntry = blocks.find((block) => block.blockKey === blockKey)
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
-
-  if (cacheOnly) return null
 
   const analysisSessions = analysisSessionsForBlock(program, entry, { includeSyntheticCompetition: false })
   const completedWeeks = new Set(
@@ -1348,13 +1321,17 @@ export async function getOrCreateBlockProgramEvaluation(
   }
 
   const rawReport = recordFromUnknown(await invokeTool('block_program_evaluation', {
+    weeks: completedWeeks.size,
+    window_start: entry.startDate,
+    refresh,
+    cache_only: cacheOnly,
     program: buildBlockProgram(program, entry, goals, { normalizeToCurrent: true, includeSyntheticCompetition: false }),
     pk: userPk,
   }))
+  if (rawReport.generation_id || rawReport.cache_miss) return rawReport
   const generatedAt = new Date().toISOString()
   const report: Record<string, unknown> = {
     ...rawReport,
-    cached: false,
     generated_at: typeof rawReport.generated_at === 'string' && rawReport.generated_at
       ? rawReport.generated_at
       : generatedAt,
@@ -1380,13 +1357,13 @@ export async function getOrCreateBlockCorrelationReport(
   if (!rawEntry) return null
   const entry = analysisScopedBlockEntry(program, rawEntry)
 
-  if (cacheOnly) return null
-
   const programForBlock = buildBlockProgram(program, entry, goals, {
     normalizeToCurrent: true,
     includeSyntheticCompetition: false,
   })
   const report = recordFromUnknown(await invokeTool('block_correlation_analysis', {
+    refresh,
+    cache_only: cacheOnly,
     weeks: entry.weekCount,
     window_start: entry.startDate,
     program: programForBlock,
@@ -2052,6 +2029,8 @@ function stripRuntimeCacheMarkers(value: unknown): unknown {
     'cache_miss',
     'cacheStatus',
     'programEvaluationCacheStatus',
+    'generated_at',
+    'generatedAt',
   ])
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
@@ -2147,24 +2126,10 @@ export async function getOrCreateAiBlockComparison(
     contexts,
   )
   const selectedBlockKeys = deterministic.selectedBlockKeys
-  if (cacheOnly) {
-    return {
-      schemaVersion: CACHE_SCHEMA_VERSION,
-      generatedAt: new Date().toISOString(),
-      cached: false,
-      selectedBlockKeys,
-      sourceFingerprint,
-      report: {
-        insufficient_data: true,
-        insufficient_data_reason: 'No saved multi-block AI comparison exists for this block selection. Generate it to run AI analysis.',
-        cache_miss: true,
-      },
-      deterministic,
-    }
-  }
-
   const report = recordFromUnknown(await invokeTool('multi_block_comparison_analysis', {
-    payload,
+    refresh,
+    cache_only: cacheOnly,
+    payload: stripRuntimeCacheMarkers(payload),
     pk: userPk,
   }))
 

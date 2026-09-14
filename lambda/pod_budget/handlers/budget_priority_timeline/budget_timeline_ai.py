@@ -6,14 +6,13 @@ membership state from the caller and returns a purchase timeline that adheres to
 the monthly cap while prioritising competition deadlines.
 """
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
 from typing import Any
 
-import httpx
-
-from ai_config import LLM_BASE_URL, OPENROUTER_API_KEY, ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
+from ai_config import ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
 from prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -162,7 +161,7 @@ def _fallback_timeline(payload: dict[str, Any]) -> dict[str, Any]:
     grouped by month (YYYY-MM), without LLM reasoning."""
     config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
-    budget = _as_number(config.get("monthly_budget"))
+    budget = _as_number(config.get("monthly_cap"))
 
     by_month: dict[str, list[dict[str, Any]]] = {}
     for item in items:
@@ -176,8 +175,8 @@ def _fallback_timeline(payload: dict[str, Any]) -> dict[str, Any]:
             "item_id": str(item.get("id", "")),
             "name": str(item.get("name", "")),
             "category": str(item.get("category", "equipment")),
-            "priority": str(item.get("priority", "optional")) if item.get("priority") else "optional",
-            "suggested_date": start_date,
+            "priority": {"MANDATORY": "buy_now", "IMPORTANT": "buy_later"}.get(item.get("priority_tier"), "optional"),
+            "suggested_month": month,
             "cost": _as_number(item.get("cost")),
             "reason": "Scheduled on its configured start date (AI unavailable).",
         })
@@ -219,32 +218,10 @@ async def generate_budget_timeline(payload: dict[str, Any]) -> dict[str, Any]:
     user_msg = json.dumps(_sanitize(payload), indent=2, default=str)
     logger.info("[BudgetTimelineAI] model=%s payload_chars=%s items=%s", ANALYSIS_MODEL, len(user_msg), len(unpurchased))
 
-    if not OPENROUTER_API_KEY:
-        return _fallback_timeline(payload)
-
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": ANALYSIS_MODEL,
-                    "thinking": {"type": "enabled", "budget_tokens": ANALYSIS_MODEL_THINKING_BUDGET},
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "tools": [_TOOL_SCHEMA],
-                    "tool_choice": "required",
-                },
-            )
-            if resp.status_code >= 400:
-                logger.error("[BudgetTimelineAI] HTTP %s: %s", resp.status_code, resp.text[:2000])
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await completion({'model': ANALYSIS_MODEL, 'thinking': {'type': 'enabled', 'budget_tokens': ANALYSIS_MODEL_THINKING_BUDGET}, 'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': 'required'})
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

@@ -1,21 +1,18 @@
 """LLM-based 4-dimensional fatigue profile estimation for exercises.
 
-Uses OpenRouter to call an extended-thinking model with tool calling to get structured
-fatigue profile estimates (axial, neural, peripheral, systemic).
+Uses the domain execution runtime with tool calling to get structured fatigue profile
+estimates (axial, neural, peripheral, systemic).
 """
 from __future__ import annotations
+from services.ai import completion
 
 import json
 import logging
-
-import httpx
 
 from ai_config import (
     ESTIMATE_MODEL,
     ESTIMATE_MODEL_REASONING_EFFORT,
     ESTIMATE_MODEL_VERBOSITY,
-    LLM_BASE_URL,
-    OPENROUTER_API_KEY,
 )
 from prompts.loader import load_system_prompt, render_prompt
 
@@ -128,30 +125,9 @@ async def estimate_fatigue_profile(
     """
     try:
         user_msg = _build_user_message(exercise, program_meta=program_meta, lift_profiles=lift_profiles)
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"{LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": ESTIMATE_MODEL,
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "reasoning": {
-                        "enabled": True,
-                        "effort": ESTIMATE_MODEL_REASONING_EFFORT,
-                    },
-                    "verbosity": ESTIMATE_MODEL_VERBOSITY,
-                    "tools": [_TOOL_SCHEMA],
-                    "tool_choice": {"type": "function", "function": {"name": "estimate_fatigue_profile"}},
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await completion({'model': ESTIMATE_MODEL, 'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'reasoning': {'enabled': True, 'effort': ESTIMATE_MODEL_REASONING_EFFORT}, 'verbosity': ESTIMATE_MODEL_VERBOSITY, 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'estimate_fatigue_profile'}}})
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

@@ -4,6 +4,7 @@ import { invokeToolDirect } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 
 const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
+const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 function normalizeTemplateSk(sk: string): string {
   try {
@@ -180,15 +181,15 @@ export async function uploadTemplateImport(req: Request, res: Response) {
     throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
   }
 
-  const form = new FormData()
-  const blob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype || 'application/octet-stream' })
-  form.append('file', blob, req.file.originalname)
-  form.append('author_pk', req.mapped_pk)
-  form.append('author', req.user.username || req.mapped_pk)
-
-  const response = await fetch(`${IF_API_URL}/v1/health/template-imports`, {
+  const response = await fetch(`${IF_API_URL}/v1/jobs`, {
     method: 'POST',
-    body: form,
+    headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': req.mapped_pk },
+    body: JSON.stringify({
+      conversation_id: `template-import:${req.mapped_pk}`,
+      kind: 'domain',
+      payload: { domain: 'imports', athlete: req.mapped_pk, operation: 'import_parse_file', arguments: { base64_content: req.file.buffer.toString('base64'), filename: req.file.originalname, pk: req.mapped_pk } },
+      idempotency_key: `${req.mapped_pk}:${req.file.originalname}:${req.file.size}:${Date.now()}`,
+    }),
   })
   if (!response.ok) {
     const text = await response.text()
@@ -202,13 +203,41 @@ export async function getTemplateImport(req: Request, res: Response) {
   if (!req.user || req.readOnly || !req.mapped_pk) {
     throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
   }
-  const response = await fetch(
-    `${IF_API_URL}/v1/health/template-imports/${encodeURIComponent(req.params.jobId)}?actor_pk=${encodeURIComponent(req.mapped_pk)}`,
-  )
+  const response = await fetch(`${IF_API_URL}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, {
+    headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': req.mapped_pk },
+  })
   if (response.status === 404) throw new AppError('Template import job not found', 404)
   if (!response.ok) {
     const text = await response.text()
     throw new AppError(`Template import status failed: ${text}`, 502)
   }
-  res.json(await response.json())
+  const job: any = await response.json()
+  const result = job.result?.content
+  let parsedResult = result
+  if (typeof result === 'string') {
+    try { parsedResult = JSON.parse(result) } catch { parsedResult = result }
+  }
+  res.json({
+    job_id: job.job_id,
+    status: job.status,
+    filename: job.request?.payload?.arguments?.filename,
+    ...(parsedResult && typeof parsedResult === 'object' ? parsedResult : {}),
+    ...(job.error ? { error: job.error.message || String(job.error) } : {}),
+  })
+}
+
+export async function applyTemplateImport(req: Request, res: Response) {
+  if (!req.user || req.readOnly || !req.mapped_pk) throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
+  const response = await fetch(`${IF_API_URL}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, { headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': req.mapped_pk } })
+  if (!response.ok) throw new AppError('Template import job not found', response.status === 404 ? 404 : 502)
+  const job: any = await response.json()
+  if (job.status !== 'succeeded') throw new AppError(`Template import is ${job.status}`, 409, 'IMPORT_NOT_READY')
+  const raw = job.result?.content
+  let result: any = raw
+  if (typeof raw === 'string') { try { result = JSON.parse(raw) } catch { result = {} } }
+  const importId = result?.import_id || result?.id
+  if (!importId) throw new AppError('Template import result has no import id', 409, 'IMPORT_ID_MISSING')
+  const { merge_strategy, conflict_resolutions, start_date, glossary_overrides, confirmed_auto_adds } = req.body || {}
+  const applied = await invokeLambda('pod_import', { function: 'import_apply', import_id: importId, classification_override: 'template', author: req.user.username || req.mapped_pk, pk: req.mapped_pk, merge_strategy, conflict_resolutions, start_date, glossary_overrides, confirmed_auto_adds })
+  res.json({ ...result, ...applied, job_id: job.job_id, status: 'succeeded', filename: job.request?.payload?.arguments?.filename, template_sk: applied?.target_sk || applied?.template_sk || applied?.sk })
 }

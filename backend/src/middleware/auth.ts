@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-import { resolveMappedPk, getSettings as fetchSettings } from '../services/userSettings'
+import { resolveMappedPkForIdentity, getSettings as fetchSettings } from '../services/userSettings'
 import { AppError } from './errorHandler'
 import type { AuthIdentity, IdentityProvider } from '../auth/identity'
 import {
@@ -9,6 +9,10 @@ import {
   type AppRole,
 } from '../auth/identity'
 import { setAuthCookie } from '../auth/cookies'
+
+declare module 'express-session' {
+  interface SessionData { identity?: AuthToken }
+}
 
 declare global {
   namespace Express {
@@ -23,7 +27,6 @@ declare global {
           } | null)
       mapped_pk?: string
       actor_mapped_pk?: string
-      isAuthenticated?: boolean
       readOnly?: boolean
     }
   }
@@ -113,17 +116,24 @@ function legacyUserShape(token: AuthToken) {
 }
 
 export async function requireUserOptional(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  const sessionIdentity = req.session?.identity
+  if (sessionIdentity) {
+    const identity = tokenToIdentity(sessionIdentity)
+    req.user = { ...legacyUserShape(sessionIdentity), identity, actor_mapped_pk: 'operator' }
+    ;(req as any).isAuthenticated = true
+    return next()
+  }
   const token = req.cookies?.pl_auth
   if (!token) {
     req.user = null
-    req.isAuthenticated = false
+    ;(req as any).isAuthenticated = false
     return next()
   }
 
   const payload = verifyToken(token)
   if (!payload) {
     req.user = null
-    req.isAuthenticated = false
+    ;(req as any).isAuthenticated = false
     return next()
   }
 
@@ -133,7 +143,7 @@ export async function requireUserOptional(req: Request, _res: Response, next: Ne
     identity,
     actor_mapped_pk: 'operator',
   }
-  req.isAuthenticated = true
+  ;(req as any).isAuthenticated = true
   next()
 }
 
@@ -155,8 +165,9 @@ export async function resolvePk(req: Request, _res: Response, next: NextFunction
   }
 
   try {
-    const mappedPk = await resolveMappedPk(
-      req.user.discord_id,
+    const mappedPk = await resolveMappedPkForIdentity(
+      req.user.identity.provider,
+      req.user.identity.sub,
       req.user.username,
       req.user.avatar,
     )

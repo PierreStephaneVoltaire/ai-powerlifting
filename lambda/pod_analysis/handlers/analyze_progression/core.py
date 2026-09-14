@@ -10,59 +10,29 @@ import logging
 import math
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from importlib import import_module
 from statistics import median
 from typing import Any, Optional
 
-from scipy.stats import kendalltau, theilslopes
+_analytics = import_module("lambda.get_analysis_markdown.analytics")
+kendalltau = _analytics.kendalltau
+theilslopes = _analytics.theilslopes
 
 logger = logging.getLogger(__name__)
 
-_store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
-
-
 def _get_store():
-    """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
-    return _store
-
-
-
-_RPE_TABLE_PRIMARY: dict[tuple[int, int], float] = {
-    (1, 10): 1.000, (2, 10): 0.960, (3, 10): 0.930, (4, 10): 0.900,
-    (5, 10): 0.880, (6, 10): 0.860, (7, 10): 0.840, (8, 10): 0.820,
-    (9, 10): 0.800, (10, 10): 0.780,
-    (1, 9): 1.000, (2, 9): 0.940, (3, 9): 0.900, (4, 9): 0.870,
-    (5, 9): 0.845, (6, 9): 0.825, (7, 9): 0.805, (8, 9): 0.785,
-    (9, 9): 0.765, (10, 9): 0.745,
-    (1, 8): 1.000, (2, 8): 0.920, (3, 8): 0.875, (4, 8): 0.845,
-    (5, 8): 0.815, (6, 8): 0.795, (7, 8): 0.775, (8, 8): 0.755,
-    (9, 8): 0.735, (10, 8): 0.715,
-    (1, 7): 1.000, (2, 7): 0.900, (3, 7): 0.850, (4, 7): 0.820,
-    (5, 7): 0.795, (6, 7): 0.775, (7, 7): 0.755, (8, 7): 0.735,
-    (9, 7): 0.715, (10, 7): 0.695,
-    (1, 6): 1.000, (2, 6): 0.880, (3, 6): 0.830, (4, 6): 0.800,
-    (5, 6): 0.775, (6, 6): 0.755, (7, 6): 0.735, (8, 6): 0.715,
-    (9, 6): 0.695, (10, 6): 0.675,
-}
+    """Create the request-scoped ProgramStore."""
+    import os
+    from program_store import ProgramStore as _PS
+    store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
+    return store
 
 INSUFFICIENT_DATA = {"status": "insufficient_data"}
-
-_CONSERVATIVE_REP_PCT: dict[int, float] = {
-    1: 1.000,
-    2: 0.955,
-    3: 0.925,
-    4: 0.898,
-    5: 0.875,
-}
 
 _PRIMARY_LIFT_NAMES: frozenset[str] = frozenset({"squat", "deadlift"})
 
@@ -190,15 +160,7 @@ def _best_primary_e1rm_for_sessions(w_sessions: list[dict]) -> Optional[float]:
             if kg <= 0 or reps <= 0:
                 continue
             rpe = session_rpe
-            e1rm = None
-            if rpe is not None and 1 <= reps <= 6 and 6 <= int(rpe) <= 10:
-                pct = _RPE_TABLE_PRIMARY.get((reps, int(rpe)))
-                if pct:
-                    e1rm = kg / pct
-            elif rpe is None and 1 <= reps <= 5:
-                pct = _CONSERVATIVE_REP_PCT.get(reps)
-                if pct:
-                    e1rm = kg / pct
+            e1rm = _analytics._estimate_1rm_value(kg, reps, rpe)
             if e1rm is not None and (best is None or e1rm > best):
                 best = e1rm
     return best
@@ -315,3 +277,20 @@ def _detect_deloads(
             eff_idx += 1
 
     return results
+
+
+async def analyze_progression(args: dict) -> dict:
+    supplied_program = args.get("program")
+    if isinstance(supplied_program, dict):
+        program = supplied_program
+    else:
+        program = await _get_store().get_program()
+    progression_rate = _analytics.progression_rate
+
+    reference_date = _parse_date(args.get("reference_date") or args.get("ref_date", ""))
+    return progression_rate(
+        program.get("sessions", args.get("sessions", [])),
+        args["exercise_name"],
+        (program.get("meta") or {}).get("program_start", ""),
+        reference_date=reference_date,
+    )

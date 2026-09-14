@@ -3,24 +3,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import boto3
 
 logger = logging.getLogger(__name__)
 
-_table = None
-
-
 def _get_table():
-    global _table
-    if _table is None:
-        region = os.environ.get("AWS_REGION", "ca-central-1")
-        table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
-        _table = boto3.resource("dynamodb", region_name=region).Table(table_name)
-        logger.info("[MaxHistoryAdd] DynamoDB table initialised: %s", table_name)
-    return _table
+    region = os.environ.get("AWS_REGION", "ca-central-1")
+    table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
+    return boto3.resource("dynamodb", region_name=region).Table(table_name)
 
 
 def _resolve_pk(args: dict) -> str:
@@ -83,16 +76,25 @@ async def max_history_add(args: dict) -> dict:
 
     if not entry.get("date"):
         raise ValueError("entry.date (or args.date) is required (YYYY-MM-DD)")
+    try:
+        date.fromisoformat(str(entry["date"]))
+    except ValueError as exc:
+        raise ValueError("entry.date must be YYYY-MM-DD") from exc
+    if not any(entry.get(key) is not None for key in ("squat_kg", "bench_kg", "deadlift_kg")):
+        raise ValueError("At least one lift max is required")
+    if entry.get("total_kg") is None:
+        entry["total_kg"] = sum(entry.get(key, 0) or 0 for key in ("squat_kg", "bench_kg", "deadlift_kg"))
 
     def _sync():
-        history = _get_history_sync(table, pk, version)
-        entries = list(history.get("entries", []) or [])
-        entries.append(entry)
-        entries.sort(key=lambda e: str(e.get("date", "") or ""), reverse=True)
-        history["entries"] = entries
-        history["version"] = version
-        history["updated_at"] = datetime.now(timezone.utc).isoformat()
-        table.put_item(Item=_to_dynamo(history))
+        response = table.update_item(
+            Key={"pk": pk, "sk": _max_history_sk(version)},
+            UpdateExpression="SET entries = list_append(if_not_exists(entries, :empty), :entry), #version = :version, updated_at = :now",
+            ExpressionAttributeNames={"#version": "version"},
+            ExpressionAttributeValues={":empty": [], ":entry": _to_dynamo([entry]), ":version": version, ":now": datetime.now(timezone.utc).isoformat()},
+            ReturnValues="ALL_NEW",
+        )
+        history = response["Attributes"]
+        history["entries"].sort(key=lambda item: item["date"], reverse=True)
         return history
 
     result = await asyncio.get_running_loop().run_in_executor(None, _sync)

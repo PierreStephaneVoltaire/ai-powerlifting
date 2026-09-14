@@ -225,7 +225,6 @@ export default function GoalsPage() {
 
   async function handleSave() {
     try {
-      await api.updateGoals(goals)
       await updateGoals(goals)
       setHasChanges(false)
       pushToast({ message: 'Goals saved', type: 'success' })

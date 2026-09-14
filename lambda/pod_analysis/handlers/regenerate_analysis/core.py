@@ -11,40 +11,32 @@ import logging
 import time as _time
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-_store: Optional[Any] = None
-_glossary_store: Optional[Any] = None
-
-
 def _get_store():
-    """Lazily create and return the ProgramStore singleton."""
-    global _store
-    if _store is None:
-        import os
-        from program_store import ProgramStore as _PS
-        _store = _PS(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-        logger.info("[HealthTools] ProgramStore initialised from env vars")
-    return _store
+    """Create the request-scoped ProgramStore."""
+    import os
+    from program_store import ProgramStore as _PS
+    store = _PS(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    logger.info("[HealthTools] ProgramStore initialised from env vars")
+    return store
 
 
 def _get_glossary_store():
-    global _glossary_store
-    if _glossary_store is None:
-        import os
-        from glossary_store import GlossaryStore
-        _glossary_store = GlossaryStore(
-            table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-            pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-        )
-    return _glossary_store
+    import os
+    from glossary_store import GlossaryStore
+    store = GlossaryStore(
+        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+    )
+    return store
 
 
 def _run_async(coro):
@@ -155,7 +147,8 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     program = await store.get_program()
     pk = store.pk
     sessions = program.get("sessions", [])
-    glossary = _run_async(_get_glossary_store().get_glossary()) if hasattr(_get_glossary_store(), "get_glossary") else []
+    glossary_store = _get_glossary_store()
+    glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
 
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)

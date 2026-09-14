@@ -47,6 +47,8 @@ build {
   provisioner "shell" {
     inline = [
       "cd /workspace",
+      "test -d services/operations",
+      "test -f services/operations/program.json",
       "if [ -f package.json ] && grep -q '\"workspaces\"' package.json; then",
       "  npm ci || npm install",
       "  if [ -f packages/types/package.json ]; then npm run build --workspace=packages/types || true; fi",

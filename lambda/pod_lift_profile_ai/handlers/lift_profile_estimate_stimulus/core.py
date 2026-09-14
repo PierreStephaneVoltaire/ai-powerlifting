@@ -14,5 +14,5 @@ def _run_async(coro):
 
 
 def lift_profile_estimate_stimulus(args):
-    from lift_profile_ai import estimate_lift_profile_stimulus
+    from .lift_profile_ai import estimate_lift_profile_stimulus
     return _run_async(estimate_lift_profile_stimulus(args["profile"]))
