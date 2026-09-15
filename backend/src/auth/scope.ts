@@ -17,8 +17,11 @@ export function requireScope(scope: Scope, access: Access): RequestHandler {
 
 export function autoScopeForRoute(): RequestHandler {
   return async (req: Request, _res: Response, next: NextFunction) => {
-    const rule = findRouteRule(req.method as HttpMethod, req.path)
-    if (!rule) return next()
+    const rule = findRouteRule(req.method as HttpMethod, req.path, req.query)
+    if (!rule) {
+      if (req.path === '/api/profiles' || req.path.startsWith('/api/profiles/') || req.path.startsWith('/api/authored-notes/')) return next()
+      return next(new AppError('Unmapped route', 404, 'NOT_FOUND'))
+    }
     try {
       await authorizeScope(req, rule.scope, rule.access)
       next()

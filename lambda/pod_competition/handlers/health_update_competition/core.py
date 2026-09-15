@@ -47,28 +47,27 @@ async def health_update_competition(args: dict | None = None, date: str | None =
         if patch is None:
             patch = args.get("patch")
     pk = args.get("pk") if isinstance(args, dict) else None
+    expected_revision = args.get("expected_revision") if isinstance(args, dict) else None
+    idempotency_key = args.get("idempotency_key") if isinstance(args, dict) else None
     if not isinstance(date, str):
         raise ValueError("date is required")
     if not isinstance(patch, dict):
         raise ValueError("patch must be an object")
 
     store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
 
-    competitions = new_program.get("competitions", [])
-    comp_idx = None
-    for i, comp in enumerate(competitions):
-        if comp.get("date") == date:
-            comp_idx = i
-            break
-
-    if comp_idx is None:
+    def mutate(program: dict) -> dict:
+        competitions = program.get("competitions", [])
+        for comp in competitions:
+            if comp.get("date") == date:
+                comp.update(copy.deepcopy(patch))
+                return copy.deepcopy(comp)
         raise ValueError(f"Competition not found with date={date}")
 
-    for key, value in patch.items():
-        competitions[comp_idx][key] = value
-
-    await store._write_new_version(new_program, minor=True)
-
-    return competitions[comp_idx]
+    return await store.mutate_source(
+        "competition_update",
+        {"date": date, "patch": copy.deepcopy(patch)},
+        expected_revision,
+        idempotency_key,
+        mutate,
+    )

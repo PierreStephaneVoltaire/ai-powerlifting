@@ -2,8 +2,16 @@ import { invokeLambda } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 import type { Session, Exercise, SessionStatus, SessionWellness } from '@powerlifting/types'
 
-async function fetchCurrent(pk: string, date: string, index: number): Promise<Session> {
-  const session = await invokeLambda('pod_sessions', { function: 'session_get',  pk, date, index })
+export interface MutationEnvelope { expected_revision: number; idempotency_key: string; session_id?: string }
+export interface SessionMutationResult {
+  session?: Session
+  deleted?: string
+  revision?: number
+  success?: boolean
+}
+
+async function fetchCurrent(pk: string, date: string, index: number, session_id?: string): Promise<Session> {
+  const session = await invokeLambda('pod_sessions', { function: 'session_get',  pk, date, index, session_id })
   if (!session) throw new AppError(`Session at index ${index} not found`, 404)
   return session as Session
 }
@@ -12,8 +20,9 @@ export async function createSession(
   pk: string,
   _version: string,
   session: Session,
-): Promise<void> {
-  await invokeLambda('pod_sessions', { function: 'session_create',  pk, session })
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  return await invokeLambda('pod_sessions', { function: 'session_create',  pk, session, ...envelope }) as Session
 }
 
 export async function deleteSession(
@@ -21,8 +30,9 @@ export async function deleteSession(
   _version: string,
   date: string,
   index: number,
-): Promise<void> {
-  await invokeLambda('pod_sessions', { function: 'session_delete',  pk, date, index })
+  envelope: MutationEnvelope,
+): Promise<SessionMutationResult> {
+  return await invokeLambda('pod_sessions', { function: 'session_delete',  pk, date, index, ...envelope }) as SessionMutationResult
 }
 
 export async function getSession(
@@ -40,8 +50,9 @@ export async function updateSession(
   date: string,
   index: number,
   session: Session,
-): Promise<void> {
-  await invokeLambda('pod_sessions', { function: 'session_replace',  pk, date, index, session })
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  return await invokeLambda('pod_sessions', { function: 'session_replace',  pk, date, index, session, ...envelope }) as Session
 }
 
 export async function rescheduleSession(
@@ -51,8 +62,9 @@ export async function rescheduleSession(
   index: number,
   newDate: string,
   newDay: string,
-): Promise<void> {
-  await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { date: newDate, day: newDay } })
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  return await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { date: newDate, day: newDay }, ...envelope }) as Session
 }
 
 export async function completeSession(
@@ -61,9 +73,10 @@ export async function completeSession(
   date: string,
   index: number,
   data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | undefined },
-): Promise<void> {
-  const current = await fetchCurrent(pk, date, index)
-  await invokeLambda('pod_sessions', { function: 'session_patch', 
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  const current = await fetchCurrent(pk, date, index, envelope.session_id)
+  return await invokeLambda('pod_sessions', { function: 'session_patch',
     pk,
     date,
     index,
@@ -75,6 +88,7 @@ export async function completeSession(
       session_notes: data.notes ?? current.session_notes,
       wellness: data.wellness ?? current.wellness,
     },
+    ...envelope,
   })
 }
 
@@ -84,8 +98,9 @@ export async function updateSessionStatus(
   date: string,
   index: number,
   status: SessionStatus,
-): Promise<void> {
-  await invokeLambda('pod_sessions', { function: 'session_patch', 
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  return await invokeLambda('pod_sessions', { function: 'session_patch',
     pk,
     date,
     index,
@@ -93,6 +108,7 @@ export async function updateSessionStatus(
       status,
       completed: status === 'completed' || status === 'logged',
     },
+    ...envelope,
   })
 }
 
@@ -102,13 +118,15 @@ export async function addExercise(
   date: string,
   index: number,
   exercise: Exercise,
-): Promise<void> {
-  const current = await fetchCurrent(pk, date, index)
-  await invokeLambda('pod_sessions', { function: 'session_patch', 
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  const current = await fetchCurrent(pk, date, index, envelope.session_id)
+  return await invokeLambda('pod_sessions', { function: 'session_patch',
     pk,
     date,
     index,
     patch: { exercises: [...(current.exercises || []), exercise] },
+    ...envelope,
   })
 }
 
@@ -118,14 +136,15 @@ export async function removeExercise(
   date: string,
   index: number,
   exerciseIndex: number,
-): Promise<void> {
-  const current = await fetchCurrent(pk, date, index)
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  const current = await fetchCurrent(pk, date, index, envelope.session_id)
   const exercises = [...(current.exercises || [])]
   if (exerciseIndex < 0 || exerciseIndex >= exercises.length) {
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
   exercises.splice(exerciseIndex, 1)
-  await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { exercises } })
+  return await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { exercises }, ...envelope }) as Session
 }
 
 export async function updateExerciseField(
@@ -136,12 +155,13 @@ export async function updateExerciseField(
   exerciseIndex: number,
   field: keyof Exercise,
   value: unknown,
-): Promise<void> {
-  const current = await fetchCurrent(pk, date, index)
+  envelope: MutationEnvelope,
+): Promise<Session> {
+  const current = await fetchCurrent(pk, date, index, envelope.session_id)
   const exercises = [...(current.exercises || [])]
   if (exerciseIndex < 0 || exerciseIndex >= exercises.length) {
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
   ;(exercises[exerciseIndex] as any)[field] = value
-  await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { exercises } })
+  return await invokeLambda('pod_sessions', { function: 'session_patch',  pk, date, index, patch: { exercises }, ...envelope }) as Session
 }

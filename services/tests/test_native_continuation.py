@@ -23,7 +23,7 @@ def test_domain_ai_resumes_same_execution_without_nested_queue(monkeypatch):
     monkeypatch.setattr(execution, 'dispatch', handler)
 
     async def check():
-        pending = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a'}, 'athlete-a', 'job-a')
+        pending = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a')
         assert pending['status'] == 'needs_inference'
         with pytest.raises(execution.OperationError):
             await execution.resume(pending['execution_id'], 'job-b', 'athlete-a')
@@ -49,7 +49,7 @@ def test_nested_operation_uses_the_root_execution_for_native_inference(monkeypat
     monkeypatch.setattr(execution, 'dispatch', handler)
 
     async def check():
-        root = execution.DomainExecution(job_id='job-a', athlete='athlete-a')
+        root = execution.DomainExecution(job_id='job-a', athlete='athlete-a', person='person-a', operation='test_operation')
         root.future = asyncio.create_task(asyncio.sleep(60))
         execution.executions[root.execution_id] = root
         execution.job_executions[root.job_id] = root

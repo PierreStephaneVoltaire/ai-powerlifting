@@ -42,6 +42,7 @@ export default function VideoUploadModal({
   const [notes, setNotes] = useState('')
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
+  const [idempotencyKey, setIdempotencyKey] = useState(() => globalThis.crypto.randomUUID())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Reset all form state whenever the modal is closed so a second upload
@@ -54,6 +55,7 @@ export default function VideoUploadModal({
       setNotes('')
       setUploadProgress(0)
       setIsUploading(false)
+      setIdempotencyKey(globalThis.crypto.randomUUID())
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -124,10 +126,12 @@ export default function VideoUploadModal({
       const { video } = await uploadVideo(version, {
         file,
         sessionDate: session.date,
+        sessionId: session.id,
         exerciseName,
         setNumber,
         notes: notes || undefined,
         onProgress: setUploadProgress,
+        idempotencyKey,
       })
 
       pushToast({ message: 'Video uploaded successfully', type: 'success' })

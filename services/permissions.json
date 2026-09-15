@@ -1,0 +1,700 @@
+{
+  "access_context": {
+    "permission": "profile:read",
+    "public": true
+  },
+  "analysis_section": {
+    "permission": "analytics:write"
+  },
+  "analytics.block_evaluation": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "analytics.blocks_get": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "analytics.blocks_list": {
+    "permission": "analytics:read"
+  },
+  "analytics.blocks_regenerate": {
+    "permission": "analytics:write"
+  },
+  "analytics.bundle": {
+    "permission": "analytics:write"
+  },
+  "analytics.compare": {
+    "permission": "analytics:read"
+  },
+  "analytics.compare_ai": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "analytics.correlation": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "analytics.export": {
+    "permission": "analytics:read"
+  },
+  "analytics.manifest": {
+    "permission": "analytics:read"
+  },
+  "analytics.markdown": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "analytics.regenerate": {
+    "permission": "analytics:write"
+  },
+  "analytics.sections_get": {
+    "permission": "analytics:read"
+  },
+  "analytics.sections_invalidate": {
+    "permission": "analytics:write"
+  },
+  "analytics.sections_queue": {
+    "permission": "analytics:write"
+  },
+  "analytics.weekly": {
+    "permission": "analytics:read"
+  },
+  "analyze_powerlifting_stats": {
+    "permission": "analytics:read"
+  },
+  "analyze_progression": {
+    "permission": "analytics:read"
+  },
+  "analyze_rpe_drift": {
+    "permission": "analytics:read"
+  },
+  "block_correlation_analysis": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "block_notes_get": {
+    "permission": "program:read"
+  },
+  "block_notes_update": {
+    "permission": "program:write"
+  },
+  "block_program_evaluation": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "block_transition": {
+    "permission": "program:write"
+  },
+  "budget_advisor": {
+    "permission": "budget:write",
+    "cache_read": "budget:read"
+  },
+  "budget_create_item": {
+    "permission": "budget:write"
+  },
+  "budget_delete_item": {
+    "permission": "budget:write"
+  },
+  "budget_get_config": {
+    "permission": "budget:read"
+  },
+  "budget_get_summary": {
+    "permission": "budget:read"
+  },
+  "budget_list_items": {
+    "permission": "budget:read"
+  },
+  "budget_priority_timeline": {
+    "permission": "budget:write"
+  },
+  "budget_put_config": {
+    "permission": "budget:write"
+  },
+  "budget_update_item": {
+    "permission": "budget:write"
+  },
+  "calculate_attempts": {
+    "permission": "competition:read"
+  },
+  "calculate_dots": {
+    "permission": "calculations:read",
+    "public": true
+  },
+  "correlation_analysis": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "days_until": {
+    "permission": "calculations:read",
+    "public": true
+  },
+  "diet_notes_get": {
+    "permission": "program:read"
+  },
+  "diet_notes_update": {
+    "permission": "program:write"
+  },
+  "domain_resume": {
+    "permission": "analytics:write"
+  },
+  "estimate_1rm": {
+    "permission": "calculations:read",
+    "public": true
+  },
+  "exercise_archive": {
+    "permission": "glossary:write"
+  },
+  "exercise_get_glossary": {
+    "permission": "glossary:read"
+  },
+  "exercise_remove": {
+    "permission": "glossary:write"
+  },
+  "exercise_search": {
+    "permission": "glossary:read"
+  },
+  "exercise_set_e1rm": {
+    "permission": "glossary:write"
+  },
+  "exercise_unarchive": {
+    "permission": "glossary:write"
+  },
+  "exercise_upsert": {
+    "permission": "glossary:write"
+  },
+  "export_program_history": {
+    "permission": "program:read"
+  },
+  "export_program_markdown": {
+    "permission": "program:read"
+  },
+  "fatigue_profile_estimate": {
+    "permission": "lift-profiles:write"
+  },
+  "federation_library_get": {
+    "permission": "federation:read"
+  },
+  "federation_library_set": {
+    "permission": "federation:write"
+  },
+  "federation_list": {
+    "permission": "federation:read"
+  },
+  "federation_master_list": {
+    "permission": "federation:read",
+    "public": true
+  },
+  "federation_master_update": {
+    "permission": "operator:write"
+  },
+  "federation_user_library_get": {
+    "permission": "federation:read"
+  },
+  "federation_user_library_set": {
+    "permission": "federation:write"
+  },
+  "generation_status": {
+    "permission": "analytics:read"
+  },
+  "get_analysis_markdown": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "glossary_add": {
+    "permission": "glossary:write"
+  },
+  "glossary_estimate_e1rm": {
+    "permission": "glossary:write"
+  },
+  "glossary_estimate_fatigue": {
+    "permission": "glossary:write"
+  },
+  "glossary_estimate_muscles": {
+    "permission": "glossary:write"
+  },
+  "glossary_generate_text": {
+    "permission": "glossary:write"
+  },
+  "glossary_list_terms": {
+    "permission": "glossary:read"
+  },
+  "glossary_set_e1rm": {
+    "permission": "glossary:write"
+  },
+  "glossary_update": {
+    "permission": "glossary:write"
+  },
+  "goals_list": {
+    "permission": "goals:read"
+  },
+  "goals_replace": {
+    "permission": "goals:write"
+  },
+  "grant_check": {
+    "permission": "grants:read"
+  },
+  "grant_create": {
+    "permission": "grants:write"
+  },
+  "grant_list": {
+    "permission": "grants:read"
+  },
+  "grant_revoke": {
+    "permission": "grants:write"
+  },
+  "health_add_exercise": {
+    "permission": "sessions:write"
+  },
+  "health_complete_competition": {
+    "permission": "competition:write"
+  },
+  "health_complete_user_competition": {
+    "permission": "competition:write"
+  },
+  "health_create_competition": {
+    "permission": "competition:write"
+  },
+  "health_create_session": {
+    "permission": "sessions:write"
+  },
+  "health_delete_competition": {
+    "permission": "competition:write"
+  },
+  "health_delete_diet_note": {
+    "permission": "program:write"
+  },
+  "health_delete_session": {
+    "permission": "sessions:write"
+  },
+  "health_get_competition": {
+    "permission": "competition:read"
+  },
+  "health_get_current_maxes": {
+    "permission": "performance:read"
+  },
+  "health_get_diet_notes": {
+    "permission": "program:read"
+  },
+  "health_get_federation_library": {
+    "permission": "federation:read"
+  },
+  "health_get_goals": {
+    "permission": "goals:read"
+  },
+  "health_get_meta": {
+    "permission": "program:read"
+  },
+  "health_get_phases": {
+    "permission": "program:read"
+  },
+  "health_get_program": {
+    "permission": "program:read"
+  },
+  "health_get_session": {
+    "permission": "sessions:read"
+  },
+  "health_get_sessions_range": {
+    "permission": "sessions:read"
+  },
+  "health_get_supplements": {
+    "permission": "program:read"
+  },
+  "health_invalidate_program_cache": {
+    "permission": "program:write"
+  },
+  "health_list_competitions": {
+    "permission": "competition:read"
+  },
+  "health_new_version": {
+    "permission": "program:write"
+  },
+  "health_remove_exercise": {
+    "permission": "sessions:write"
+  },
+  "health_reschedule_session": {
+    "permission": "sessions:write"
+  },
+  "health_setup_initialize": {
+    "permission": "program:write"
+  },
+  "health_setup_status": {
+    "permission": "program:read"
+  },
+  "health_snapshot_competition_projection": {
+    "permission": "competition:write"
+  },
+  "health_suggest_e1rm_multipliers": {
+    "permission": "analytics:write"
+  },
+  "health_update_competition": {
+    "permission": "competition:write"
+  },
+  "health_update_current_maxes": {
+    "permission": "performance:write"
+  },
+  "health_update_diet_note": {
+    "permission": "program:write"
+  },
+  "health_update_federation_library": {
+    "permission": "federation:write"
+  },
+  "health_update_goals": {
+    "permission": "goals:write"
+  },
+  "health_update_meta": {
+    "permission": "program:write"
+  },
+  "health_update_phases": {
+    "permission": "program:write"
+  },
+  "health_update_session": {
+    "permission": "sessions:write"
+  },
+  "health_update_supplements": {
+    "permission": "program:write"
+  },
+  "health_update_user_competition": {
+    "permission": "competition:write"
+  },
+  "identity_resolve": {
+    "permission": "settings:write",
+    "internal_only": true
+  },
+  "import_apply": {
+    "permission": "imports:write"
+  },
+  "import_get_pending": {
+    "permission": "imports:read"
+  },
+  "import_list": {
+    "permission": "imports:read"
+  },
+  "import_list_pending": {
+    "permission": "imports:read"
+  },
+  "import_parse_file": {
+    "permission": "imports:write"
+  },
+  "import_reject": {
+    "permission": "imports:write"
+  },
+  "ipf_weight_classes": {
+    "permission": "calculations:read",
+    "public": true
+  },
+  "kg_to_lb": {
+    "permission": "calculations:read",
+    "public": true
+  },
+  "lb_to_kg": {
+    "permission": "calculations:read",
+    "public": true
+  },
+  "lift_profile_estimate_stimulus": {
+    "permission": "lift-profiles:write"
+  },
+  "lift_profile_review": {
+    "permission": "lift-profiles:write"
+  },
+  "lift_profile_rewrite": {
+    "permission": "lift-profiles:write"
+  },
+  "lift_profile_rewrite_and_estimate": {
+    "permission": "lift-profiles:write"
+  },
+  "master_copy_seed_user": {
+    "permission": "settings:write"
+  },
+  "max_history_add": {
+    "permission": "performance:write"
+  },
+  "max_history_get": {
+    "permission": "performance:read"
+  },
+  "max_target_get": {
+    "permission": "performance:read"
+  },
+  "max_target_update": {
+    "permission": "performance:write"
+  },
+  "multi_block_comparison_analysis": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "muscle_group_estimate": {
+    "permission": "lift-profiles:write"
+  },
+  "onboarding_status": {
+    "permission": "settings:read"
+  },
+  "pct_of_max": {
+    "permission": "calculations:read",
+    "public": true
+  },
+  "powerlifting_filter_categories": {
+    "permission": "analytics:read"
+  },
+  "powerlifting_ranking_percentile": {
+    "permission": "analytics:read"
+  },
+  "profile_get": {
+    "permission": "profile:read",
+    "public": true
+  },
+  "profile_get_current": {
+    "permission": "profile:read"
+  },
+  "profile_search": {
+    "permission": "profile:read",
+    "public": true
+  },
+  "program_archive": {
+    "permission": "program:write"
+  },
+  "program_evaluation": {
+    "permission": "analytics:write",
+    "cache_read": "analytics:read"
+  },
+  "program_get": {
+    "permission": "program:read"
+  },
+  "program_list": {
+    "permission": "program:read"
+  },
+  "program_list_full": {
+    "permission": "program:read"
+  },
+  "program_unarchive": {
+    "permission": "program:write"
+  },
+  "program_update_lift_profiles": {
+    "permission": "lift-profiles:write"
+  },
+  "program_update_meta_field": {
+    "permission": "program:write"
+  },
+  "program_update_phases": {
+    "permission": "program:write"
+  },
+  "regenerate_analysis": {
+    "permission": "analytics:write"
+  },
+  "session_create": {
+    "permission": "sessions:write"
+  },
+  "session_delete": {
+    "permission": "sessions:write"
+  },
+  "session_get": {
+    "permission": "sessions:read"
+  },
+  "session_list": {
+    "permission": "sessions:read"
+  },
+  "session_list_full": {
+    "permission": "sessions:read"
+  },
+  "session_patch": {
+    "permission": "sessions:write"
+  },
+  "session_patch_by_date": {
+    "permission": "sessions:write"
+  },
+  "session_replace": {
+    "permission": "sessions:write"
+  },
+  "session_replace_all": {
+    "permission": "sessions:write"
+  },
+  "settings_create": {
+    "permission": "settings:write",
+    "internal_only": true
+  },
+  "settings_get": {
+    "permission": "settings:read"
+  },
+  "settings_tag_add": {
+    "permission": "settings:write"
+  },
+  "settings_tag_approve": {
+    "permission": "operator:write"
+  },
+  "settings_tag_propose": {
+    "permission": "settings:write"
+  },
+  "settings_tag_remove": {
+    "permission": "settings:write"
+  },
+  "settings_update_age_class": {
+    "permission": "settings:write"
+  },
+  "settings_update_athlete_basics": {
+    "permission": "settings:write"
+  },
+  "settings_update_avatar": {
+    "permission": "settings:write"
+  },
+  "settings_update_nickname": {
+    "permission": "settings:write"
+  },
+  "settings_update_onboarding_profile": {
+    "permission": "settings:write"
+  },
+  "settings_update_profile": {
+    "permission": "settings:write"
+  },
+  "settings_update_ranking_location": {
+    "permission": "settings:write"
+  },
+  "settings_update_role": {
+    "permission": "settings:write"
+  },
+  "supplement_phases_get": {
+    "permission": "program:read"
+  },
+  "supplement_phases_update": {
+    "permission": "program:write"
+  },
+  "template_apply": {
+    "permission": "templates:read"
+  },
+  "template_apply_confirm": {
+    "permission": "templates:read"
+  },
+  "template_archive": {
+    "permission": "templates:write"
+  },
+  "template_copy": {
+    "permission": "templates:write"
+  },
+  "template_create_blank": {
+    "permission": "templates:write"
+  },
+  "template_create_from_block": {
+    "permission": "templates:write"
+  },
+  "template_create_from_payload": {
+    "permission": "templates:write"
+  },
+  "template_evaluate": {
+    "permission": "templates:write"
+  },
+  "template_get": {
+    "permission": "templates:read"
+  },
+  "template_list": {
+    "permission": "templates:read"
+  },
+  "template_publish": {
+    "permission": "templates:write"
+  },
+  "template_unarchive": {
+    "permission": "templates:write"
+  },
+  "template_unpublish": {
+    "permission": "templates:write"
+  },
+  "template_update": {
+    "permission": "templates:write"
+  },
+  "video_library_get": {
+    "permission": "videos:read"
+  },
+  "video_media_resolve": {
+    "permission": "videos:read"
+  },
+  "video_remove": {
+    "permission": "videos:write"
+  },
+  "video_update_metadata": {
+    "permission": "videos:write"
+  },
+  "video_upload_confirm": {
+    "permission": "videos:write",
+    "internal_only": true
+  },
+  "video_upload_presign": {
+    "permission": "videos:write",
+    "internal_only": true
+  },
+  "weekly_analysis": {
+    "permission": "analytics:read"
+  },
+  "weight_add_entry": {
+    "permission": "weight-log:write"
+  },
+  "weight_get_log": {
+    "permission": "weight-log:read"
+  },
+  "weight_log_add": {
+    "permission": "weight-log:write"
+  },
+  "weight_log_get": {
+    "permission": "weight-log:read"
+  },
+  "weight_log_remove": {
+    "permission": "weight-log:write"
+  },
+  "weight_remove_entry": {
+    "permission": "weight-log:write"
+  },
+  "profile_media_resolve": {
+    "permission": "profile:read",
+    "public": true
+  },
+  "tag_catalog_get": {
+    "permission": "profile:read",
+    "public": true
+  },
+  "relationship_request": {
+    "permission": "settings:write"
+  },
+  "relationship_respond": {
+    "permission": "settings:write"
+  },
+  "relationship_revoke": {
+    "permission": "grants:write"
+  },
+  "relationship_list": {
+    "permission": "settings:read"
+  },
+  "relationship_history": {
+    "permission": "settings:read"
+  },
+  "favorite": {
+    "permission": "settings:write"
+  },
+  "favorites": {
+    "permission": "settings:read"
+  },
+  "notifications": {
+    "permission": "settings:read"
+  },
+  "notifications_read": {
+    "permission": "settings:write"
+  },
+  "settings_publication_get": {
+    "permission": "settings:read"
+  },
+  "settings_publication_update": {
+    "permission": "settings:write"
+  },
+  "handler_context": {
+    "permission": "competition:read"
+  },
+  "note_list_private": {
+    "permission": "settings:read"
+  },
+  "note_save_private": {
+    "permission": "settings:write"
+  },
+  "note_list_attachments": {
+    "permission": "program:read"
+  },
+  "note_share": {
+    "permission": "program:write"
+  },
+  "note_detach": {
+    "permission": "grants:write"
+  }
+}

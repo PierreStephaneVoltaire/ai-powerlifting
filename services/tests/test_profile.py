@@ -154,3 +154,41 @@ def test_settings_get_default_is_contract_complete(monkeypatch):
     load_operations("profile")["settings_get"].validate_result(result)
     assert result["roles"] == []
     assert result["active_role"] == "athlete"
+
+
+def test_unachieved_targets_and_unknown_sex_are_not_profile_results():
+    from importlib import import_module
+    core = import_module('lambda.pod_user.handlers.profile_get.core')
+    assert core._resolved_lift({'meta': {'target_squat_kg': 300}}, 'squat') is None
+    settings = {'nickname': 'athlete', 'profile_visibility': 'public'}
+    result = core._build_profile(settings, None, {'current_maxes': {'squat': 100, 'bench': 100, 'deadlift': 100}, 'meta': {'current_body_weight_kg': 80}}, [])
+    assert result['summary']['dots'] is None
+
+
+def test_settings_update_role_aliases_reserved_roles_attribute(monkeypatch):
+    module = __import__(
+        "lambda.pod_user.handlers.settings_update_role.core",
+        fromlist=["settings_update_role"],
+    )
+
+    class Table:
+        name = "if-user"
+
+        def __init__(self):
+            self.item = {"pk": "lifter", "username": "lifter", "roles": []}
+            self.update = None
+
+        def get_item(self, **_kwargs):
+            return {"Item": dict(self.item)}
+
+        def update_item(self, **kwargs):
+            self.update = kwargs
+            self.item.update({"roles": kwargs["ExpressionAttributeValues"][":roles"], "active_role": kwargs["ExpressionAttributeValues"][":active"]})
+
+    table = Table()
+    monkeypatch.setattr(module, "_get_table", lambda: table)
+    result = asyncio.run(module.settings_update_role({"username": "lifter", "roles": ["athlete"], "active_role": "athlete"}))
+
+    assert result["roles"] == ["athlete"]
+    assert table.update["ExpressionAttributeNames"] == {"#roles": "roles"}
+    assert "#roles" in table.update["UpdateExpression"]

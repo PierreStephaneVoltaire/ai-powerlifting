@@ -13,7 +13,7 @@ interface VideoCardProps {
 export default function VideoCard({ item, onClick }: VideoCardProps) {
   const { unit } = useSettingsStore()
   const { video, session_date, day, week_number, phase_name, exercise_sets, exercise_reps, exercise_kg } = item
-  const thumbnailUrl = getMediaUrl(video.thumbnail_s3_key)
+  const thumbnailUrl = getMediaUrl(video.thumbnail_s3_key, item.athlete_pk)
   const hasThumbnail = !!thumbnailUrl && video.thumbnail_status === 'ready'
   const load = typeof exercise_kg === 'number' && exercise_kg > 0
     ? `${displayWeight(exercise_kg, unit)} x ${exercise_reps || '--'}`

@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 from decimal import Decimal
 from program_tool_helpers import get_store
+from competition_entries import with_competition_entries
 
 
 def _to_number(value):
@@ -73,6 +74,7 @@ def _coerce_current_maxes(program: dict) -> dict:
 async def program_get(args: dict):
     store = get_store(args)
     program = await store.get_program()
+    program = await asyncio.to_thread(with_competition_entries, program, store.pk)
     program_sk = await asyncio.get_running_loop().run_in_executor(
         None, store._current_program_sk_sync
     )

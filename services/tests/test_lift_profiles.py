@@ -86,6 +86,22 @@ def test_estimate_fallback_keeps_profile_result_shape():
     assert result["ready_for_estimate"] is False
 
 
+def test_lift_profile_update_normalizes_failure_nodes_and_angles():
+    core = importlib.import_module(
+        "lambda.pod_training_program.handlers.program_update_lift_profiles.core"
+    )
+    normalized = core.normalize_lift_profiles([{
+        "lift": "squat",
+        "failure_nodes": ["  hips rise  ", "HIPS RISE", "x" * 200] * 4,
+        "form_videos": {
+            "front": {"video_id": "front-1"},
+            "rear": {"video_id": "ignored"},
+        },
+    }])
+    assert normalized[0]["failure_nodes"] == ["hips rise", "x" * 160]
+    assert list(normalized[0]["form_videos"]) == ["front"]
+
+
 def test_exercise_ai_fallbacks_match_runtime_schemas(monkeypatch):
     operations = load_operations("lift-profiles")
     for name in ("fatigue_profile_estimate", "muscle_group_estimate"):

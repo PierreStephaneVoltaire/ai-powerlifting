@@ -19,7 +19,7 @@ def _run_async(coro):
 
 
 def _get_federation_store():
-    from federation_store import FederationStore
+    from ....pod_federation.handlers._federation_store import FederationStore
     return FederationStore(
         os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
         pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
@@ -43,7 +43,8 @@ def block_program_evaluation(args):
 
     federation_library = None
     try:
-        federation_library = args.get("_report_source", {}).get("federation_library") or _run_async(_get_federation_store().get_library())
+        source = args.get("_report_source", {})
+        federation_library = source["federation_library"] if "federation_library" in source else _run_async(_get_federation_store().get_library())
     except Exception as exc:
         logger.warning("block_program_evaluation: federation library unavailable: %s", exc)
 

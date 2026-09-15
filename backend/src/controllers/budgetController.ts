@@ -195,6 +195,15 @@ export async function uploadItemPhoto(
   return { photo_s3_key: s3Key }
 }
 
+export async function resolveItemPhoto(pk: string, key: string): Promise<string> {
+  const items = await listBudgetItems(pk)
+  const item = items.find(item => item.photo_s3_key === key)
+  if (!item || !key.startsWith(`budget/${s3SafeSegment(pk)}/${item.id}/`) || key.includes('..')) {
+    throw new AppError('Photo not found', 404)
+  }
+  return key
+}
+
 export async function deleteItemPhoto(pk: string, itemId: string): Promise<void> {
   const items = await listBudgetItems(pk)
   const item = items.find((i) => i.id === itemId)

@@ -42,16 +42,22 @@ async def health_delete_competition(args: dict | str | None = None, date: str | 
     if not isinstance(date, str):
         raise ValueError("date is required")
     pk = args.get("pk") if isinstance(args, dict) else None
+    expected_revision = args.get("expected_revision") if isinstance(args, dict) else None
+    idempotency_key = args.get("idempotency_key") if isinstance(args, dict) else None
     store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
 
-    competitions = new_program.get("competitions", [])
-    before = len(competitions)
-    new_program["competitions"] = [c for c in competitions if c.get("date") != date]
+    def mutate(program: dict) -> dict:
+        competitions = program.get("competitions", [])
+        before = len(competitions)
+        program["competitions"] = [c for c in competitions if c.get("date") != date]
+        if len(program["competitions"]) == before:
+            raise ValueError(f"Competition not found: {date}")
+        return {"deleted": date}
 
-    if len(new_program["competitions"]) == before:
-        raise ValueError(f"Competition not found: {date}")
-
-    await store._write_new_version(new_program, minor=True)
-    return {"deleted": date}
+    return await store.mutate_source(
+        "competition_delete",
+        {"date": date},
+        expected_revision,
+        idempotency_key,
+        mutate,
+    )

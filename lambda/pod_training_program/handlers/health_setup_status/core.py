@@ -31,23 +31,21 @@ def _store_for(pk: str | None):
 
 
 def _setup_current_program_sk(store) -> str | None:
-    pointer = store.table.get_item(Key={"pk": store.pk, "sk": store.POINTER_SK}).get("Item")
-    if pointer:
-        ref_sk = pointer.get("ref_sk") or "program#v001"
-        program = store.table.get_item(Key={"pk": store.pk, "sk": str(ref_sk)}).get("Item")
-        return str(ref_sk) if program else None
-
-    try:
-        from boto3.dynamodb.conditions import Key
-        result = store.table.query(
-            KeyConditionExpression=Key("pk").eq(store.pk) & Key("sk").begins_with(store.PROGRAM_SK_PREFIX),
-            Limit=1,
-        )
-        items = result.get("Items", [])
-        return str(items[0]["sk"]) if items else None
-    except Exception:
-        program = store.table.get_item(Key={"pk": store.pk, "sk": "program#v001"}).get("Item")
-        return "program#v001" if program else None
+    from boto3.dynamodb.conditions import Key
+    pointer = store.table.get_item(Key={"pk": store.pk, "sk": store.POINTER_SK}, ConsistentRead=True).get("Item")
+    if pointer and pointer.get("ref_sk"):
+        program = store.table.get_item(Key={"pk": store.pk, "sk": pointer["ref_sk"]}, ConsistentRead=True).get("Item")
+        if program and program.get("published", True) is not False:
+            return str(pointer["ref_sk"])
+    arguments = {"KeyConditionExpression": Key("pk").eq(store.pk) & Key("sk").begins_with(store.PROGRAM_SK_PREFIX), "ConsistentRead": True}
+    while True:
+        response = store.table.query(**arguments)
+        current = next((item for item in response.get("Items", []) if item.get("published", True) is not False), None)
+        if current:
+            return str(current["sk"])
+        if not response.get("LastEvaluatedKey"):
+            return None
+        arguments["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
 
 async def health_setup_status(args: dict | None = None) -> dict:

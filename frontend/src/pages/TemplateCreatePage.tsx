@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Stack, Group, Title, Text, TextInput, Textarea, Button, Alert } from '@mantine/core'
-import { createBlankTemplate } from '../api/client'
+import { createBlankTemplate, mutationEnvelope } from '../api/client'
 import { useAuth } from '@/auth/AuthProvider'
 import { templateEditRoute } from '../utils/templateRoutes'
 
@@ -27,7 +27,7 @@ export default function TemplateCreatePage() {
         description: form.description || undefined,
         estimated_weeks: form.estimated_weeks,
         days_per_week: form.days_per_week,
-      })
+      }, mutationEnvelope(0))
       navigate(templateEditRoute(sk))
     } catch (e: any) {
       setError(e?.message ?? 'Failed to create template')

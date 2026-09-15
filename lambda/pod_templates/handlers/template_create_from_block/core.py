@@ -71,10 +71,14 @@ def _prepare_template_payload(template):
     prepared["glossary_resolution"]={"resolved":sorted(resolved),"unresolved":sorted(unresolved),"auto_added":[],"resolution_status":"partial" if resolved and unresolved else ("unresolved" if unresolved else "resolved")}
     return prepared
 
-async def template_create_from_block(name, program_sk=None, actor_pk=None, author=None):
+async def template_create_from_block(name, program_sk=None, actor_pk=None, author=None, expected_revision=None, idempotency_key=None, athlete_pk=None):
     from .template_convert import convert_block_to_template
-    store=_get_store(actor_pk); store._selected_program_sk=program_sk; program=await store.get_program(); e1rm_map=program.get("current_maxes",{})
+    if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 0:
+        raise ValueError("expected_revision must be a nonnegative integer")
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise ValueError("idempotency_key must be a nonempty string")
+    store=_get_store(athlete_pk or actor_pk); store._selected_program_sk=program_sk; program=await store.get_program(); e1rm_map=program.get("current_maxes",{})
     template=convert_block_to_template(program, e1rm_map); template["meta"]["name"]=name
     ts=_get_template_store(); ra=_template_actor(actor_pk)
-    sk=await ts.put_template(_prepare_template_payload(template), actor_pk=ra, author=_template_author(author,ra), published=False)
+    sk=await ts.put_template(_prepare_template_payload(template), actor_pk=ra, author=_template_author(author,ra), published=False, expected_revision=expected_revision, idempotency_key=idempotency_key)
     return {"status":"created","sk":sk}

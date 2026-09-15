@@ -26,7 +26,7 @@ resource "aws_cloudfront_distribution" "this" {
     origin_access_control_id = aws_cloudfront_origin_access_control.this.id
   }
 
-  enabled         = true
+  enabled         = false
   is_ipv6_enabled = true
   price_class     = "PriceClass_100"
 

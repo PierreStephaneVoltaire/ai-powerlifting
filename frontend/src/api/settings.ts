@@ -1,11 +1,7 @@
-import axios from 'axios'
+import api from './http'
 import { cachedGet, invalidateDomain, invalidateDomains } from './cache'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
-})
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 export interface ProfileTag {
@@ -39,6 +35,8 @@ export interface UserSettings {
   tags: ProfileTag[]
   sex: 'male' | 'female' | null
   bodyweight_kg: number | null
+  maxes_date?: string
+  training_maxes_estimated?: Record<'squat' | 'bench' | 'deadlift', boolean>
   training_maxes: TrainingMaxes | null
   federations: string[]
   roles: AppRole[]
@@ -150,12 +148,6 @@ export async function addTag(tag: string): Promise<UserSettings> {
 
 export async function removeTag(tag: string): Promise<UserSettings> {
   const res = await api.delete<{ data: UserSettings }>(`/settings/tags/${encodeURIComponent(tag)}`)
-  await invalidateDomains(['settings', 'profile:current'])
-  return res.data.data
-}
-
-export async function approveTag(tag: string): Promise<UserSettings> {
-  const res = await api.post<{ data: UserSettings }>(`/settings/tags/${encodeURIComponent(tag)}/approve`)
   await invalidateDomains(['settings', 'profile:current'])
   return res.data.data
 }

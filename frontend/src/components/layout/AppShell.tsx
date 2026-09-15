@@ -1,5 +1,10 @@
 import { ReactNode, useEffect } from 'react'
 import { AppShell as MantineAppShell } from '@mantine/core'
+import { useLocation } from 'react-router-dom'
+import { useAuth } from '@/auth/AuthProvider'
+import AthleteContext from './AthleteContext'
+import ProgramDraftNotice from './ProgramDraftNotice'
+import OfflineQueueNotice from './OfflineQueueNotice'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import SettingsDrawer from './SettingsDrawer'
@@ -11,6 +16,11 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
+  const location = useLocation()
+  const { user } = useAuth()
+  const isLogin = location.pathname === '/login' || location.pathname === '/auth/callback'
+  const isInformational = location.pathname === '/about' || location.pathname.startsWith('/profiles') || (location.pathname === '/' && !user)
+
   useEffect(() => {
     const handleViewportChange = () => {
       const visualViewport = window.visualViewport
@@ -81,6 +91,7 @@ export default function AppShell({ children }: AppShellProps) {
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main
+        data-login-page={isLogin || undefined}
         pb={{
           base: 'calc(188px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px))',
           md: 140
@@ -88,6 +99,9 @@ export default function AppShell({ children }: AppShellProps) {
         style={{ flex: 1 }}
       >
         <ReadOnlyBanner />
+        {!isLogin && !isInformational && <AthleteContext />}
+        <ProgramDraftNotice />
+        <OfflineQueueNotice />
         {children}
       </MantineAppShell.Main>
 

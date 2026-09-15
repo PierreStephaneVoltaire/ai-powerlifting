@@ -8,6 +8,7 @@ import {
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { BlockNote } from '@powerlifting/types'
+import AuthoredNotes from '@/components/notes/AuthoredNotes'
 
 function todayString(): string {
   return new Date().toISOString().split('T')[0]
@@ -158,6 +159,7 @@ export default function NotesPage() {
 
   return (
     <Stack gap="md" className="if-mock-page">
+      <AuthoredNotes />
       <Group justify="space-between" align="flex-start" className="if-mock-header">
         <Box>
           <h1 className="if-mock-title">Notes</h1>

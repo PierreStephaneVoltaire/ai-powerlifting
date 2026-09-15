@@ -107,9 +107,8 @@ def test_grant_create_validation():
         "grantee_mapped_pk": "grantee-1",
         "grant_type": "handler",
     })
-    _assert(err is None, f"unexpected validation error: {err}")
-    _assert(grant["grant_type"] == "handler", f"bad grant_type: {grant['grant_type']}")
-    _assert(grant["scope"] == "read", f"bad scope: {grant['scope']}")
+    _assert(err == "competition_ties_required", f"unexpected validation result: {err}")
+    _assert(grant is None, "untied handler grant must not be created")
 
 
 def test_grant_check_self():

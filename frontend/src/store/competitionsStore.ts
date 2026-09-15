@@ -36,22 +36,24 @@ export const useCompetitionsStore = create<CompetitionsState>((set, get) => ({
   },
 
   patch: async (masterId, updates) => {
-    await api.patchUserCompetition(masterId, updates)
-    // Optimistic update
+    const current = get().competitions.find((competition) => competition.master_id === masterId)
+    if (!current) throw new Error('Competition is no longer loaded')
+    const updated = await api.patchUserCompetition(masterId, updates, api.mutationEnvelope((current as UserCompetition & { revision?: number }).revision ?? 0))
     set((state) => ({
       competitions: state.competitions.map((c) =>
-        c.master_id === masterId ? { ...c, ...updates } : c
+        c.master_id === masterId ? updated : c
       ),
     }))
   },
 
   complete: async (masterId, results, bodyWeightKg, postMeetReport) => {
-    await api.completeUserCompetition(masterId, results, bodyWeightKg, postMeetReport)
-    // Optimistic update
+    const current = get().competitions.find((competition) => competition.master_id === masterId)
+    if (!current) throw new Error('Competition is no longer loaded')
+    const updated = await api.completeUserCompetition(masterId, results, bodyWeightKg, api.mutationEnvelope((current as UserCompetition & { revision?: number }).revision ?? 0), postMeetReport)
     set((state) => ({
       competitions: state.competitions.map((c) =>
         c.master_id === masterId
-          ? { ...c, user_status: 'completed', results, body_weight_kg: bodyWeightKg, post_meet_report: postMeetReport ?? c.post_meet_report }
+          ? updated
           : c
       ),
     }))

@@ -1,9 +1,70 @@
 import importlib
+import copy
+import json
+from decimal import Decimal
 
 import pytest
+from botocore.exceptions import ClientError
 
 from services.contract import load_operations
 from services.dispatch import dispatch
+from session_store import SessionIdentityConflictError
+
+
+def test_competition_program_writers_validate_sessions_before_program_put(monkeypatch):
+    class Table:
+        def __init__(self):
+            self.puts = 0
+
+        def put_item(self, **_kwargs):
+            self.puts += 1
+
+    class Store:
+        pk = "athlete"
+
+        def __init__(self, table):
+            self.table = table
+
+        def invalidate_cache(self):
+            pass
+
+    class Sessions:
+        def _ensure_unique_session_ids(self, _sessions, _program_sk):
+            raise SessionIdentityConflictError("duplicate", 4, "Session identity duplicate occurs more than once")
+
+    table = Table()
+    store = Store(table)
+    session_module = importlib.import_module("session_store")
+    monkeypatch.setattr(session_module, "SessionStore", lambda **_kwargs: Sessions())
+    for module_name in (
+        "lambda.pod_competition.handlers.health_complete_competition.core",
+        "lambda.pod_competition.handlers.health_snapshot_competition_projection.core",
+    ):
+        module = importlib.import_module(module_name)
+        monkeypatch.setattr(module, "_get_table_and_pk", lambda: (table, "athlete", store))
+        with pytest.raises(SessionIdentityConflictError):
+            module._save_program_version({"sessions": [{"id": "duplicate"}, {"id": "duplicate"}]}, "program#v002")
+        assert table.puts == 0
+
+
+@pytest.mark.parametrize("operation", ["health_complete_competition", "health_snapshot_competition_projection"])
+def test_competition_wrapper_preserves_session_identity_conflict(monkeypatch, operation):
+    pod = importlib.import_module("lambda.pod_competition.handler")
+
+    class FailingHandler:
+        @staticmethod
+        def handler(_event, _context):
+            raise SessionIdentityConflictError("duplicate", 4, "Session identity duplicate occurs more than once")
+
+    original_import = pod.importlib.import_module
+    monkeypatch.setattr(
+        pod.importlib,
+        "import_module",
+        lambda name: FailingHandler if name == f"{operation}.handler" else original_import(name),
+    )
+    response = pod.handler({"function": operation}, None)
+    assert response["statusCode"] == 409
+    assert json.loads(response["body"])["code"] == "session_identity_conflict"
 
 
 class FakeProgramStore:
@@ -11,12 +72,23 @@ class FakeProgramStore:
 
     def __init__(self):
         self.program = {"competitions": []}
+        self.revision = 0
 
     async def get_program(self):
         return self.program
 
     async def _write_new_version(self, program, minor=True):
         self.program = program
+
+    async def mutate_source(self, operation, payload, expected_revision, idempotency_key, mutator):
+        if expected_revision != self.revision:
+            from program_store import ProgramRevisionConflictError
+            raise ProgramRevisionConflictError(expected_revision, self.revision, self.program)
+        updated = copy.deepcopy(self.program)
+        result = mutator(updated)
+        self.program = updated
+        self.revision += 1
+        return {**result, "revision": self.revision}
 
 
 def test_legacy_competition_round_trip_through_dispatch(monkeypatch):
@@ -32,13 +104,13 @@ def test_legacy_competition_round_trip_through_dispatch(monkeypatch):
         monkeypatch.setattr(module, "_get_store", lambda: store)
 
     operations = load_operations("competition")
-    created = dispatch(operations["health_create_competition"], {"pk": "athlete-1", "competition": {"name": "Meet", "date": "2026-10-01", "federation": "IPF"}})
+    created = dispatch(operations["health_create_competition"], {"pk": "athlete-1", "expected_revision": 0, "idempotency_key": "create", "competition": {"name": "Meet", "date": "2026-10-01", "federation": "IPF"}})
     assert created["date"] == "2026-10-01"
-    updated = dispatch(operations["health_update_competition"], {"pk": "athlete-1", "date": "2026-10-01", "patch": {"status": "completed"}})
+    updated = dispatch(operations["health_update_competition"], {"pk": "athlete-1", "date": "2026-10-01", "patch": {"status": "completed"}, "expected_revision": 1, "idempotency_key": "update"})
     assert updated["status"] == "completed"
     loaded = dispatch(operations["health_get_competition"], {"pk": "athlete-1", "date": "2026-10-01"})
     assert loaded["name"] == "Meet"
-    assert dispatch(operations["health_delete_competition"], {"pk": "athlete-1", "date": "2026-10-01"}) == {"deleted": "2026-10-01"}
+    assert dispatch(operations["health_delete_competition"], {"pk": "athlete-1", "date": "2026-10-01", "expected_revision": 2, "idempotency_key": "delete"}) == {"deleted": "2026-10-01", "revision": 3}
 
 
 def test_attempt_calculation_is_validated_and_structured(monkeypatch):
@@ -66,4 +138,65 @@ def test_user_competitions_use_a_partition_query(monkeypatch):
             raise AssertionError("user competition list must not scan the table")
 
     monkeypatch.setattr(module, "_get_table", lambda: Table())
-    assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet"}]
+    assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet", "revision": 0, "units": "kg"}]
+
+
+class FakeCompetitionTable:
+    name = "competitions"
+
+    def __init__(self):
+        self.items = {("athlete-1", "COMP#meet"): {"pk": "athlete-1", "sk": "COMP#meet", "master_id": "meet", "revision": Decimal("0"), "notes": ""}}
+        self.meta = type("Meta", (), {"client": self})()
+        self.fail_after_commit = False
+
+    def get_item(self, Key, ConsistentRead=False):
+        item = self.items.get(tuple(Key.values()))
+        return {"Item": copy.deepcopy(item)} if item is not None else {}
+
+    def transact_write_items(self, TransactItems):
+        update = TransactItems[0]["Update"]
+        key = tuple(update["Key"].values())
+        item = self.items[key]
+        expected = int(update["ExpressionAttributeValues"][":expected"])
+        if int(item.get("revision", 0)) != expected:
+            raise ClientError({"Error": {"Code": "TransactionCanceledException", "Message": "condition failed"}}, "TransactWriteItems")
+        item["revision"] = update["ExpressionAttributeValues"][":next"]
+        item["updated_at"] = update["ExpressionAttributeValues"][":updated"]
+        for name, field in update["ExpressionAttributeNames"].items():
+            if name.startswith("#") and name not in {"#pk", "#revision", "#updated_at"}:
+                value_key = f":value_{field}"
+                if value_key in update["ExpressionAttributeValues"]:
+                    item[field] = copy.deepcopy(update["ExpressionAttributeValues"][value_key])
+        marker = TransactItems[1]["Put"]["Item"]
+        self.items[(marker["pk"], marker["sk"])] = copy.deepcopy(marker)
+        if self.fail_after_commit:
+            self.fail_after_commit = False
+            raise ClientError({"Error": {"Code": "InternalServerError", "Message": "lost response"}}, "TransactWriteItems")
+
+
+def test_competition_cas_conflict_and_lost_response(monkeypatch):
+    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    table = FakeCompetitionTable()
+    monkeypatch.setattr(module, "_get_table", lambda: table)
+    first = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "first"}, "expected_revision": 0, "idempotency_key": "first"})
+    assert first["revision"] == 1
+    with pytest.raises(module.CompetitionConflictError) as conflict:
+        module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "lost"}, "expected_revision": 0, "idempotency_key": "second"})
+    assert conflict.value.current_revision == 1
+    table.fail_after_commit = True
+    replay = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "second"}, "expected_revision": 1, "idempotency_key": "second"})
+    assert replay["notes"] == "second"
+    assert replay["revision"] == 2
+
+
+def test_competition_idempotency_rejects_changed_payload_and_keeps_attempt_ids(monkeypatch):
+    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    table = FakeCompetitionTable()
+    monkeypatch.setattr(module, "_get_table", lambda: table)
+    report = {"attempts": [{"lift": "squat", "attempt_number": 1, "kg": 100, "result": "made"}]}
+    result = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"post_meet_report": report}, "expected_revision": 0, "idempotency_key": "report"})
+    attempt_id = result["post_meet_report"]["attempts"][0]["attempt_id"]
+    replay = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"post_meet_report": report}, "expected_revision": 1, "idempotency_key": "report"})
+    assert replay["post_meet_report"]["attempts"][0]["attempt_id"] == attempt_id
+    with pytest.raises(ValueError, match="different payload"):
+        module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "changed"}, "expected_revision": 1, "idempotency_key": "report"})

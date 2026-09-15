@@ -15,7 +15,12 @@ def _athlete_context(program):
         total = sum(float(value) for value in values)
         bodyweight = float(meta.get("current_body_weight_kg"))
         sex = {"m": "male", "male": "male", "f": "female", "female": "female"}.get(str(meta.get("sex") or "").lower())
-        from lift_calculations import calculate_dots
+        try:
+            from lift_calculations import calculate_dots
+        except ModuleNotFoundError:
+            import sys
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../layers/pl-core/python")))
+            from lift_calculations import calculate_dots
         dots_score = calculate_dots(total, bodyweight, sex) if sex else None
     except (TypeError, ValueError):
         dots_score = None

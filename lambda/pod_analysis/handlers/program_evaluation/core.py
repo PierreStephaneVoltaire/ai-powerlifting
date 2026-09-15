@@ -29,7 +29,7 @@ def _get_store():
 
 
 def _get_federation_store():
-    from federation_store import FederationStore
+    from ....pod_federation.handlers._federation_store import FederationStore
     return FederationStore(
         os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
         pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
@@ -59,8 +59,9 @@ def program_evaluation(args):
 
     store = _get_store()
     store.invalidate_cache()
-    program = args.get("_report_source", {}).get("program") or _run_async(store.get_program())
-    federation_library = args.get("_report_source", {}).get("federation_library") or _run_async(_get_federation_store().get_library())
+    source = args.get("_report_source", {})
+    program = source["program"] if "program" in source else _run_async(store.get_program())
+    federation_library = source["federation_library"] if "federation_library" in source else _run_async(_get_federation_store().get_library())
     active_pk = store.pk
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
 

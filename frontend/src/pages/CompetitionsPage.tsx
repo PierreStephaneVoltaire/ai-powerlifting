@@ -23,6 +23,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { calculateDots } from '@/utils/dots'
 import { fetchStatCategories } from '@/api/client'
+import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import type {
   UserCompetition,
   UserCompetitionUpdate,
@@ -77,6 +78,7 @@ function formatDateRange(comp: UserCompetition): string {
 function normalizeAttempt(raw: Partial<CompetitionAttempt> | undefined, lift: CompetitionLift, attempt_number: 1 | 2 | 3): CompetitionAttempt {
   const result = raw?.result === 'made' || raw?.result === 'missed' || raw?.result === 'not_taken' ? raw.result : 'not_taken'
   return {
+    attempt_id: raw?.attempt_id,
     lift, attempt_number,
     kg: typeof raw?.kg === 'number' && Number.isFinite(raw.kg) ? raw.kg : null,
     result,
@@ -145,6 +147,7 @@ const EMPTY_COMP: UserCompetition = {
   qualifying_standard_id: null, qualifying_total_kg: null,
   projected_at_t_minus_1w: null, projection_snapshot_date: null,
   notes: '', created_at: '', updated_at: '',
+  units: 'kg',
 }
 
 export default function CompetitionsPage() {
@@ -159,8 +162,8 @@ export default function CompetitionsPage() {
   const [datasetLoading, setDatasetLoading] = useState(false)
 
   const [showCompleteModal, setShowCompleteModal] = useState<string | null>(null)
-  const [completeForm, setCompleteForm] = useState<{ body_weight_kg: number; report: PostMeetReport }>({
-    body_weight_kg: 0, report: reportFromComp(EMPTY_COMP),
+  const [completeForm, setCompleteForm] = useState<{ body_weight_kg: number; unit: 'kg' | 'lb'; report: PostMeetReport }>({
+    body_weight_kg: 0, unit: 'kg', report: reportFromComp(EMPTY_COMP),
   })
 
   const [drafts, setDrafts] = useState<Record<string, UserCompetitionUpdate>>({})
@@ -239,7 +242,8 @@ export default function CompetitionsPage() {
   }
 
   function openCompleteModal(comp: UserCompetition) {
-    setCompleteForm({ body_weight_kg: comp.body_weight_kg ?? comp.weight_class_kg ?? 0, report: reportFromComp(comp) })
+    const unit = comp.units ?? 'kg'
+    setCompleteForm({ body_weight_kg: comp.body_weight_kg ?? comp.weight_class_kg ?? 0, unit, report: reportFromComp(comp) })
     setShowCompleteModal(comp.master_id)
   }
 
@@ -315,6 +319,7 @@ export default function CompetitionsPage() {
             const isCancelled = comp.cancelled
             const isAvailable = view.user_status === 'available'
             const isDisabled = isCancelled
+            const unit = view.units ?? 'kg'
             const isDirty = hasDraft(comp.master_id)
             const isSaving = savingId === comp.master_id
             const regLabel = effRegStatus === 'cancelled' ? 'Cancelled' : effRegStatus === 'closed' ? 'Closed' : effRegStatus === 'open' ? 'Open' : 'Unknown'
@@ -385,18 +390,19 @@ export default function CompetitionsPage() {
                       ) : null}
                     </SimpleGrid>
                     <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+                      <Select label="Entry units" value={unit} data={[{ value: 'kg', label: 'Kilograms' }, { value: 'lb', label: 'Pounds' }]} onChange={(v) => { if (v && !isDisabled) setDraft(comp.master_id, { units: v as 'kg' | 'lb' }) }} disabled={readOnly || isCancelled} allowDeselect={false} />
                       <Select label="Your Status" value={view.user_status} data={STATUS_OPTIONS} onChange={(v) => { if (v && !isDisabled) setDraft(comp.master_id, { user_status: v as UserCompetition['user_status'] }) }} disabled={readOnly || isCancelled} />
-                      <TextInput type="number" label="Weight Class (kg)" value={view.weight_class_kg ?? ''} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { weight_class_kg: e.currentTarget.value ? Number(e.currentTarget.value) : null }) }} disabled={readOnly || isCancelled} />
-                      {view.user_status === 'completed' && <TextInput type="number" label="Body Weight (kg)" value={view.body_weight_kg ?? ''} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { body_weight_kg: e.currentTarget.value ? Number(e.currentTarget.value) : null }) }} disabled={readOnly || isCancelled} />}
+                      <TextInput type="number" label={`Weight Class (${unit})`} value={view.weight_class_kg == null ? '' : toDisplayUnit(view.weight_class_kg, unit)} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { weight_class_kg: e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null }) }} disabled={readOnly || isCancelled} />
+                      {view.user_status === 'completed' && <TextInput type="number" label={`Body Weight (${unit})`} value={view.body_weight_kg == null ? '' : toDisplayUnit(view.body_weight_kg, unit)} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { body_weight_kg: e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null }) }} disabled={readOnly || isCancelled} />}
                       <Checkbox mt={30} label="Hotel required" checked={view.hotel_required} onChange={(event) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { hotel_required: event.currentTarget.checked }) }} disabled={readOnly || isCancelled} />
                     </SimpleGrid>
                     <Stack gap="xs">
-                      <Text size="xs" c="dimmed">{view.user_status === 'completed' ? 'Results (kg)' : 'Targets (kg)'}</Text>
+                      <Text size="xs" c="dimmed">{view.user_status === 'completed' ? `Results (${unit})` : `Targets (${unit})`}</Text>
                       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
                         {(['squat_kg', 'bench_kg', 'deadlift_kg', 'total_kg'] as const).map((lift) => (
-                          <TextInput key={lift} type="number" label={lift.replace('_kg', '')} value={view.user_status === 'completed' ? view.results?.[lift] || 0 : view.targets?.[lift] || 0} onChange={(e) => {
+                          <TextInput key={lift} type="number" label={lift.replace('_kg', '')} value={(() => { const value = view.user_status === 'completed' ? view.results?.[lift] : view.targets?.[lift]; return value == null ? '' : toDisplayUnit(value, unit) })()} onChange={(e) => {
                             if (readOnly || isCancelled) return
-                            const v = Number(e.currentTarget.value) || 0
+                            const v = e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : 0
                             const field = view.user_status === 'completed' ? 'results' : 'targets'
                             const currentField = view[field] || { squat_kg: 0, bench_kg: 0, deadlift_kg: 0, total_kg: 0 }
                             const newLifts = { squat_kg: currentField.squat_kg || 0, bench_kg: currentField.bench_kg || 0, deadlift_kg: currentField.deadlift_kg || 0, [lift]: v }
@@ -451,7 +457,7 @@ export default function CompetitionsPage() {
         <Stack gap="md">
           <Text size="sm" c="dimmed">Log the attempt card and meet-day context.</Text>
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-            <TextInput type="number" label="Body Weight at Weigh-in (kg)" value={completeForm.body_weight_kg} onChange={(e) => setCompleteForm((p) => ({ ...p, body_weight_kg: Number(e.currentTarget.value) || 0 }))} disabled={readOnly} />
+            <TextInput type="number" label={`Body Weight at Weigh-in (${completeForm.unit})`} value={toDisplayUnit(completeForm.body_weight_kg, completeForm.unit)} onChange={(e) => setCompleteForm((p) => ({ ...p, body_weight_kg: e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), p.unit) : 0 }))} disabled={readOnly} />
             <TextInput type="number" label="Sleep before meet (hours)" value={completeForm.report.sleep_hours ?? ''} onChange={(e) => updateCompleteReport({ sleep_hours: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })} disabled={readOnly} />
             <TextInput type="number" label="Attempt selection grade" value={completeForm.report.attempt_selection_grade ?? ''} onChange={(e) => updateCompleteReport({ attempt_selection_grade: e.currentTarget.value !== '' ? Math.max(1, Math.min(5, Math.round(Number(e.currentTarget.value)))) as 1 | 2 | 3 | 4 | 5 : null })} disabled={readOnly} />
           </SimpleGrid>
@@ -461,7 +467,7 @@ export default function CompetitionsPage() {
               <Paper key={attempt.lift + '-' + attempt.attempt_number} withBorder p="xs">
                 <Text size="xs" fw={500}>{LIFT_LABELS[attempt.lift]} {attempt.attempt_number}</Text>
                 <Group gap="xs" mt={4}>
-                  <TextInput type="number" placeholder="kg" value={attempt.kg ?? ''} onChange={(e) => updateCompleteAttempt(index, { kg: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })} size="xs" style={{ width: 70 }} disabled={readOnly} />
+                  <TextInput type="number" placeholder={completeForm.unit} value={attempt.kg == null ? '' : toDisplayUnit(attempt.kg, completeForm.unit)} onChange={(e) => updateCompleteAttempt(index, { kg: e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), completeForm.unit) : null })} size="xs" style={{ width: 70 }} disabled={readOnly} />
                   <Select value={attempt.result} data={ATTEMPT_RESULT_OPTIONS} onChange={(value) => updateCompleteAttempt(index, { result: (value || 'not_taken') as CompetitionAttemptResult })} size="xs" style={{ width: 100 }} disabled={readOnly} />
                 </Group>
               </Paper>

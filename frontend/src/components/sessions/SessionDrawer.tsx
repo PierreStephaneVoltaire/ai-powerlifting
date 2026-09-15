@@ -9,6 +9,8 @@ import { getDayOfWeek } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
+import { readDraft, removeDraftIfMatch, saveDraft, sessionDraftKey, legacySessionDraftKey, type Draft } from '@/api/drafts'
+import { requestPartition } from '@/api/context'
 import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal, AlertTriangle, Timer } from 'lucide-react'
 import {
   DndContext,
@@ -406,7 +408,7 @@ export default function SessionDrawer({
   onSaveSuccess,
   onDeleteSuccess,
 }: SessionDrawerProps) {
-  const { readOnly: authReadOnly } = useAuth()
+  const { readOnly: authReadOnly } = useAuth('sessions')
   const readOnly = readOnlyProp ?? authReadOnly
   const { program, version, updateSession, saveSession, deleteSession } = useProgramStore()
   const { unit } = useSettingsStore()
@@ -430,8 +432,11 @@ export default function SessionDrawer({
     isBarbell: boolean
   } | null>(null)
   const savedDateRef = useRef('')
+  const draftKeyRef = useRef('')
+  const draftPartitionRef = useRef('')
+  const draftWriteRef = useRef<Promise<Draft<Session> | undefined>>(Promise.resolve(undefined))
   const changeVersionRef = useRef(0)
-  const latestSaveRef = useRef<{ session: Session; version: number; notify: boolean; close: boolean } | null>(null)
+  const latestSaveRef = useRef<{ session: Session; version: number; notify: boolean; close: boolean; draftKey: string; partition: string; lookupDate: string } | null>(null)
   const saveInFlightRef = useRef(false)
 
   const markChanged = () => {
@@ -488,6 +493,10 @@ export default function SessionDrawer({
   useEffect(() => {
     if (hasChanges || isSaving) return
     if (session) {
+      let active = true
+      const partition = requestPartition()
+      const sessionId = session.id || ''
+      setLocalSession(null)
       const clone = JSON.parse(JSON.stringify(session)) as Session
       // Pre-populate exercises from planned_exercises for incomplete sessions
       if (!clone.completed && clone.exercises.length === 0 && (clone.planned_exercises?.length ?? 0) > 0) {
@@ -506,14 +515,54 @@ export default function SessionDrawer({
         ...withSetStatusFields(ex, clone.completed),
         id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       }))
-      setLocalSession(clone)
-      setOriginalDate(session.date)
-      savedDateRef.current = session.date
-      changeVersionRef.current = 0
-      setHasChanges(false)
-      setLastSavedAt(null)
+      const draftKey = sessionId ? sessionDraftKey(version, sessionId) : ''
+      const legacyKey = sessionId ? legacySessionDraftKey(version, session.date, sessionArrayIndex) : ''
+      draftKeyRef.current = draftKey
+      draftPartitionRef.current = partition
+      void Promise.all([
+        draftKey ? readDraft<Session>(draftKey, partition) : Promise.resolve(undefined),
+        legacyKey ? readDraft<Session>(legacyKey, partition) : Promise.resolve(undefined),
+      ]).then(([draft, legacyDraft]) => {
+        if (!active || requestPartition() !== partition) return
+        const legacy = legacyDraft?.value?.id === sessionId && legacyDraft.value.date === session.date ? legacyDraft : undefined
+        const restored = draft?.value?.id === sessionId ? draft : legacy
+        if (legacy && !draft && draftKey) {
+          const migration = draftWriteRef.current.then(() => saveDraft(draftKey, legacy.value, partition))
+          draftWriteRef.current = migration.catch(() => undefined)
+          void migration.then(() => removeDraftIfMatch(legacyKey, legacy, partition)).catch(() => {})
+        }
+        setLocalSession(restored ? {
+          ...restored.value,
+          exercises: restored.value.exercises.map((ex) => ({
+            ...withSetStatusFields(ex, restored.value.completed),
+            id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          })),
+        } : clone)
+        setOriginalDate(session.date)
+        savedDateRef.current = session.date
+        changeVersionRef.current = restored ? 1 : 0
+        setHasChanges(Boolean(restored))
+        setLastSavedAt(null)
+      }).catch(() => {
+        if (!active || requestPartition() !== partition) return
+        setLocalSession(clone)
+        setOriginalDate(session.date)
+        savedDateRef.current = session.date
+        changeVersionRef.current = 0
+        setHasChanges(false)
+        setLastSavedAt(null)
+      })
+      return () => { active = false }
     }
-  }, [hasChanges, isSaving, session])
+  }, [hasChanges, isSaving, session, sessionArrayIndex, version])
+
+  useEffect(() => {
+    if (!localSession || !hasChanges || !draftKeyRef.current) return
+    const key = draftKeyRef.current
+    const partition = draftPartitionRef.current
+    const write = draftWriteRef.current.then(() => saveDraft(key, localSession, partition))
+    draftWriteRef.current = write.catch(() => undefined)
+  }, [hasChanges, localSession])
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleSaveRef = useRef<((notify?: boolean, closeOnSuccess?: boolean) => Promise<void>) | null>(null)
@@ -551,6 +600,12 @@ export default function SessionDrawer({
   if (!session || !localSession || !program) return null
   const wellness = localSession.wellness
 
+  const enqueueDraft = (value: Session, key: string, partition: string) => {
+    const write = draftWriteRef.current.then(() => saveDraft(key, value, partition))
+    draftWriteRef.current = write.catch(() => undefined)
+    return write
+  }
+
   const flushLatestSave = async () => {
     if (saveInFlightRef.current) return
 
@@ -566,8 +621,10 @@ export default function SessionDrawer({
         shouldNotify = shouldNotify || job.notify
         shouldClose = shouldClose || job.close
 
-        const lookupDate = savedDateRef.current || originalDate || job.session.date
+        const lookupDate = job.lookupDate
+        const draft = job.draftKey ? await enqueueDraft(job.session, job.draftKey, job.partition) : undefined
         await saveSession(lookupDate, sessionArrayIndex, job.session)
+        if (draft) await removeDraftIfMatch(job.draftKey, draft, job.partition)
         savedDateRef.current = job.session.date
 
         if (job.version === changeVersionRef.current && !latestSaveRef.current) {
@@ -621,6 +678,9 @@ export default function SessionDrawer({
         version: changeVersionRef.current,
         notify,
         close: closeOnSuccess,
+        draftKey: draftKeyRef.current,
+        partition: draftPartitionRef.current,
+        lookupDate: savedDateRef.current || originalDate || sessionToSave.date,
       }
       await flushLatestSave()
     } catch (err) {
@@ -1152,6 +1212,9 @@ export default function SessionDrawer({
       version: changeVersionRef.current,
       notify: false,
       close: false,
+      draftKey: draftKeyRef.current,
+      partition: draftPartitionRef.current,
+      lookupDate: savedDateRef.current || originalDate || nextSession.date,
     }
     await flushLatestSave()
     pushToast({ message: 'Auto-regulation applied', type: 'success' })
@@ -1343,8 +1406,8 @@ export default function SessionDrawer({
             <Group gap="xs">
               <Film size={16} />
               <Text size="sm" fw={500}>Videos</Text>
-              {(session.videos?.length || 0) > 0 && (
-                <Text size="xs" c="dimmed" span>({session.videos?.length})</Text>
+              {(localSession.videos?.length || 0) > 0 && (
+                <Text size="xs" c="dimmed" span>({localSession.videos?.length})</Text>
               )}
             </Group>
               <Button
@@ -1359,8 +1422,18 @@ export default function SessionDrawer({
             </Button>
           </Group>
 
-          {session.videos && session.videos.length > 0 ? (
-            <VideoGrid session={session} />
+          {localSession.videos && localSession.videos.length > 0 ? (
+            <VideoGrid
+              session={localSession}
+              onVideoUpdated={(video) => setLocalSession((prev) => prev ? {
+                ...prev,
+                videos: (prev.videos || []).map((item) => item.video_id === video.video_id ? video : item),
+              } : prev)}
+              onVideoRemoved={(videoId) => setLocalSession((prev) => prev ? {
+                ...prev,
+                videos: (prev.videos || []).filter((item) => item.video_id !== videoId),
+              } : prev)}
+            />
           ) : (
             <Text size="xs" c="dimmed" py="md">
               No videos uploaded for this session
@@ -1455,7 +1528,7 @@ export default function SessionDrawer({
             color="red"
             onClick={async () => {
               if (confirm('Are you sure you want to delete this entire session? This cannot be undone.')) {
-                await deleteSession(localSession.date, sessionArrayIndex)
+                await deleteSession(localSession.date, sessionArrayIndex, localSession.id)
                 pushToast({ message: 'Session deleted successfully', type: 'success' })
                 onClose()
                 if (onDeleteSuccess) onDeleteSuccess()
@@ -1483,6 +1556,7 @@ export default function SessionDrawer({
             <Button
               variant="default"
               color="gray"
+              h={44}
               onClick={() => setDiscardIntent('reset')}
               disabled={!hasChanges || isSaving || readOnly}
               leftSection={<RotateCcw size={16} />}
@@ -1491,6 +1565,7 @@ export default function SessionDrawer({
               Discard
             </Button>
             <Button
+              h={44}
               onClick={() => void handleSave()}
               disabled={!hasChanges || isSaving || readOnly}
               loading={isSaving}
@@ -1500,6 +1575,7 @@ export default function SessionDrawer({
               Save
             </Button>
             <Button
+              h={44}
               variant={localSession.completed ? 'filled' : 'default'}
               onClick={toggleComplete}
               leftSection={<Check size={16} />}
@@ -1576,8 +1652,6 @@ export default function SessionDrawer({
               ...prev,
               videos: [...(prev.videos || []), video],
             }
-            // Update store so it's not lost on navigation
-            updateSession(prev.date, sessionArrayIndex, updated)
             return updated
           })
           setShowVideoUpload(false)

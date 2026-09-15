@@ -21,12 +21,12 @@ export default function VideoPlayerModal({ item, onClose, onDeleted, readOnly = 
 
   if (!item) return null
 
-  const { video, session_date, day, week_number, phase_name } = item
+  const { video, athlete_pk, session_date, session_id, day, week_number, phase_name } = item
 
   async function handleDelete() {
     if (readOnly) return
     try {
-      await api.removeSessionVideo(version, session_date, video.video_id)
+      await api.removeSessionVideo(version, session_date, video.video_id, session_id)
       pushToast({ message: 'Video deleted', type: 'success' })
       onDeleted?.()
       onClose()
@@ -58,7 +58,7 @@ export default function VideoPlayerModal({ item, onClose, onDeleted, readOnly = 
       <Box bg="black">
         <Box
           component="video"
-          src={getMediaUrl(video.s3_key)}
+          src={getMediaUrl(video.s3_key, athlete_pk)}
           controls
           autoPlay
           style={{ width: '100%', maxHeight: '70vh', display: 'block' }}

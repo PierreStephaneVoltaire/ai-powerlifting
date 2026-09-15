@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from importlib import import_module
+from competition_entries import with_competition_entries
 import os
 import tempfile
 from datetime import datetime, timedelta
@@ -233,7 +235,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
 
     try:
         if version_token:
-            max_history_item = _get_versioned_item_sync(IF_HEALTH_TABLE_NAME, active_pk, f"max_history#{version_token}")
+            max_history_item = _run_async(import_module("lambda.pod_maxes.handlers.max_history_get.core").max_history_get({"pk": active_pk, "version": version_token, "_access": getattr(store, "export_access", None) or {}}))
             bundle["max_history"] = (max_history_item or {}).get("entries", [])
         else:
             bundle["max_history"] = []
@@ -273,11 +275,18 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
         logger.warning("export: weekly_analysis failed: %s", e)
 
     try:
-        bundle["correlation"] = _read_cached_correlation(active_pk, weeks=effective_weeks)
+        if (getattr(store, "export_access", None) or {}).get("is_self"):
+            bundle["correlation"] = _read_cached_correlation(active_pk, weeks=effective_weeks)
     except Exception as e:
         logger.warning("export: correlation cache read failed: %s", e)
 
 
+    access = getattr(store, 'export_access', None)
+    if access:
+        allowed = set(access['permissions'])
+        for field, domain in {'weekly': 'analytics', 'correlation': 'analytics', 'program_evaluation': 'analytics', 'glossary': 'glossary', 'federation_library': 'federation', 'weight_log': 'weight-log', 'max_history': 'performance', 'lift_profiles': 'lift-profiles'}.items():
+            if f'{domain}:read' not in allowed:
+                bundle[field] = [] if field in ('weight_log', 'max_history', 'glossary', 'lift_profiles') else None
     return bundle
 
 
@@ -286,7 +295,12 @@ def export_program_markdown(args: Dict[str, Any]) -> dict:
     from .export import build_program_markdown
 
     store = _get_store(args)
-    program = _run_async(store.get_program())
+    program = with_competition_entries(_run_async(store.get_program()), store.pk)
+    from services.publication import program_view
+    access = args.get('_access')
+    if access:
+        program = program_view(program, access)
+    store.export_access = access
     sessions = program.get("sessions", []) if isinstance(program, dict) else []
     analysis = _build_analysis_bundle(program, sessions, store)
     scoped_program = _scope_program_to_current_block(program)

@@ -1,6 +1,10 @@
 import { invokeLambda } from '../utils/lambda'
-import { logger } from '../utils/logger'
 import type { Competition, LiftResults, PostMeetReport, UserCompetition, UserCompetitionUpdate } from '@powerlifting/types'
+
+export interface CompetitionMutationEnvelope {
+  expected_revision: number
+  idempotency_key: string
+}
 
 export async function getUserCompetitions(
   pk: string,
@@ -21,13 +25,14 @@ export async function patchUserCompetition(
   pk: string,
   masterId: string,
   updates: UserCompetitionUpdate,
+  envelope: CompetitionMutationEnvelope,
 ): Promise<UserCompetition> {
   return (await invokeLambda('pod_competition', {
-    function: 'health_list_competitions',
-    op: 'update',
+    function: 'health_update_user_competition',
     pk,
     master_id: masterId,
     patch: updates,
+    ...envelope,
   })) as UserCompetition
 }
 
@@ -36,16 +41,17 @@ export async function completeUserCompetition(
   masterId: string,
   results: LiftResults,
   bodyWeightKg: number,
+  envelope: CompetitionMutationEnvelope,
   postMeetReport?: PostMeetReport,
 ): Promise<UserCompetition> {
   return (await invokeLambda('pod_competition', {
-    function: 'health_list_competitions',
-    op: 'complete',
+    function: 'health_complete_user_competition',
     pk,
     master_id: masterId,
     results,
     body_weight_kg: bodyWeightKg,
     post_meet_report: postMeetReport,
+    ...envelope,
   })) as UserCompetition
 }
 
@@ -57,9 +63,11 @@ export async function updateCompetitions(
   pk: string,
   _version: string,
   competitions: Competition[],
-): Promise<void> {
+  envelope: CompetitionMutationEnvelope,
+): Promise<{ revision: number }> {
   const program = await invokeLambda('health_get_program', { pk })
   const existing = Array.isArray(program?.competitions) ? (program.competitions as Competition[]) : []
+  let revision = envelope.expected_revision
 
   for (const legacy of competitions) {
     const match = existing.find((c) => c.date === legacy.date)
@@ -71,8 +79,17 @@ export async function updateCompetitions(
       }
     }
     if (Object.keys(patch).length === 0) continue
-    await invokeLambda('pod_competition', { function: 'health_update_competition',  pk, date: legacy.date, patch })
+    const updated = await invokeLambda('pod_competition', {
+      function: 'health_update_competition',
+      pk,
+      date: legacy.date,
+      patch,
+      expected_revision: revision,
+      idempotency_key: `${envelope.idempotency_key}:${legacy.date}`,
+    })
+    if (typeof updated?.revision === 'number') revision = updated.revision
   }
+  return { revision }
 }
 
 export async function completeCompetition(
@@ -81,23 +98,9 @@ export async function completeCompetition(
   compDate: string,
   results: LiftResults,
   bodyWeightKg: number,
+  envelope: CompetitionMutationEnvelope,
   postMeetReport?: PostMeetReport,
 ): Promise<Competition> {
-  const compDateObj = new Date(`${compDate}T00:00:00Z`)
-  compDateObj.setUTCDate(compDateObj.getUTCDate() - 7)
-  const snapshotDate = compDateObj.toISOString().slice(0, 10)
-
-  try {
-    await invokeLambda('pod_competition', { function: 'health_snapshot_competition_projection', 
-      pk,
-      date: snapshotDate,
-      version,
-      allow_retrospective: true,
-    })
-  } catch (snapshotErr) {
-    logger.warn({ err: snapshotErr, pk, module: 'competition', fn: 'completeCompetition' }, 'failed to snapshot competition projection')
-  }
-
   return invokeLambda('pod_competition', { function: 'health_complete_competition', 
     pk,
     date: compDate,
@@ -106,5 +109,6 @@ export async function completeCompetition(
     post_meet_report: postMeetReport,
     version,
     allow_retrospective: true,
+    ...envelope,
   }) as Promise<Competition>
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Group,
   Stack,
@@ -11,6 +11,7 @@ import {
 } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { sessionRoute } from '@/utils/sessionRoute'
 import { phaseColor } from '@/utils/phases'
 import { format } from 'date-fns'
 import { findClosestSessionToToday, parseLocalDate } from '@/utils/dates'
@@ -39,18 +40,15 @@ function countUniqueExerciseNames(session: Session): number {
   return new Set(entries.map((exercise) => normalizeExerciseName(exercise.name))).size
 }
 
-function sessionRoute(session: Session, index: number): string {
-  return index >= 0 ? `/session/${session.date}/${index}` : `/session/${session.date}`
-}
-
 export default function CalendarPage() {
   const { readOnly } = useAuth()
   const { program, isLoading, needsSetup } = useProgramStore()
   const { defaultSessionsView } = useSettingsStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const agendaTargetRef = useRef<HTMLButtonElement | null>(null)
-  const hasScrolledAgendaRef = useRef(false)
+  const hasScrolledAgendaRef = useRef(typeof location.state?.restoreScrollY === 'number')
   const [showScrollTop, setShowScrollTop] = useState(false)
   const view = parseSessionView(searchParams.get('view')) || defaultSessionsView
   const calendarDate = parseDateParam(searchParams.get('date'))
@@ -106,11 +104,11 @@ export default function CalendarPage() {
   }
 
   const sessionsByDate = useMemo(() => {
-    const map = new Map<string, Session>()
+    const map = new Map<string, Session[]>()
     if (!program) return map
     for (const session of program.sessions) {
       if ((session.block ?? 'current') === block) {
-        map.set(session.date, session)
+        map.set(session.date, [...(map.get(session.date) ?? []), session])
       }
     }
     return map
@@ -175,6 +173,12 @@ export default function CalendarPage() {
     return () => window.clearTimeout(timeoutId)
   }, [closestAgendaSession, view])
 
+  useEffect(() => {
+    if (!program || isLoading || typeof location.state?.restoreScrollY !== 'number') return
+    const frame = requestAnimationFrame(() => window.scrollTo({ top: location.state.restoreScrollY }))
+    return () => cancelAnimationFrame(frame)
+  }, [program, isLoading, location.key])
+
   if (needsSetup) {
     return <SetupOnboarding compact />
   }
@@ -189,38 +193,8 @@ export default function CalendarPage() {
 
   const openSession = (session: Session) => {
     navigate(sessionRoute(session, program.sessions.indexOf(session)), {
-      state: { backTo: sessionsBackTo },
+      state: { backTo: sessionsBackTo, backScrollY: window.scrollY },
     })
-  }
-
-  const renderDay = (date: string) => {
-    const color = dateColorMap.get(date)
-    const session = sessionsByDate.get(date)
-
-    return (
-      <Stack gap={0} align="center" justify="center" style={{ minHeight: 40 }}>
-        <Text size="sm">{dayjs(date).date()}</Text>
-        {color && (
-          <Box
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              backgroundColor: session?.completed ? color : `${color}80`,
-              opacity: session?.completed ? 1 : 0.7,
-            }}
-          />
-        )}
-      </Stack>
-    )
-  }
-
-  const getDayProps = (date: string) => {
-    const session = sessionsByDate.get(date)
-    return {
-      onClick: () => session && openSession(session),
-      disabled: !session,
-    }
   }
 
   const renderSessionRow = (session: Session, compact = false) => {
@@ -237,7 +211,7 @@ export default function CalendarPage() {
         key={`${session.date}-${session.id ?? session.week_number}`}
         ref={session === closestAgendaSession ? agendaTargetRef : undefined}
         onClick={() => openSession(session)}
-        style={{ width: '100%' }}
+        style={{ width: '100%', minHeight: 44 }}
       >
         <div
           className="if-session-row"
@@ -298,41 +272,25 @@ export default function CalendarPage() {
               Week of {weekLabel}
             </div>
             <div className="if-calendar-grid">
-              {days.map((date) => {
-                const session = sessionsByDate.get(date)
-                const phase = session ? program.phases.find((p) => p.name === session.phase?.name) : undefined
-                const color = phase ? phaseColor(phase, program.phases) : '#94a3b8'
-                const previewExercises = session ? (session.exercises.length > 0 ? session.exercises : session.planned_exercises ?? []) : []
-                return (
-                  <button
-                    key={date}
-                    type="button"
-                    className="if-calendar-day"
-                    onClick={() => session && openSession(session)}
-                    disabled={!session}
-                    style={{
-                      background: 'transparent',
-                      borderLeft: session ? `3px solid ${color}` : undefined,
-                      cursor: session ? 'pointer' : 'default',
-                      opacity: session ? 1 : 0.35,
-                      textAlign: 'left',
-                    }}
-                  >
-                    <div className="if-mock-num" style={{ fontSize: 11, fontWeight: 500, marginBottom: 4 }}>{dayjs(date).date()}</div>
-                    {session && (
-                      <>
-                        <span className="if-phase-pill" style={{ background: `color-mix(in srgb, ${color} 22%, transparent)`, color, fontSize: 9 }}>
-                          {session.phase?.name || 'Unknown'}
-                        </span>
-                        <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {previewExercises[0]?.name || 'Rest Day'}{previewExercises.length > 1 ? ` +${previewExercises.length - 1}` : ''}
-                        </div>
-                        {session.completed && <Check size={11} style={{ color: 'var(--color-text-success)', display: 'block', marginTop: 4 }} />}
-                      </>
-                    )}
-                  </button>
-                )
-              })}
+              {days.map((date) => (
+                <div key={date} className="if-calendar-day">
+                  <div className="if-mock-num" style={{ fontSize: 11, marginBottom: 4 }}>{dayjs(date).date()}</div>
+                  {(sessionsByDate.get(date) ?? []).map((session, dayIndex) => {
+                    const phase = program.phases.find((p) => p.name === session.phase?.name)
+                    const color = phase ? phaseColor(phase, program.phases) : '#94a3b8'
+                    const exercises = session.exercises.length ? session.exercises : session.planned_exercises ?? []
+                    return (
+                      <UnstyledButton key={session.id ?? dayIndex} onClick={() => openSession(session)}
+                        aria-label={`Open ${session.phase?.name || 'training'} Session ${dayIndex + 1} on ${date}`}
+                        style={{ display: 'block', width: '100%', minHeight: 44, borderLeft: `3px solid ${color}`, padding: 4 }}>
+                        <Text size="xs" c={color}>{session.phase?.name || 'Session'}</Text>
+                        <Text size="xs" truncate>{exercises[0]?.name || 'Rest day'}</Text>
+                        {session.completed && <Check size={12} aria-label="Completed" />}
+                      </UnstyledButton>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         )

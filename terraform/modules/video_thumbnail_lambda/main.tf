@@ -65,11 +65,16 @@ resource "aws_iam_role_policy" "this" {
       },
       {
         Effect = "Allow"
-        Action = ["dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:GetItem"]
+        Action = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:GetItem"]
         Resource = [
           "arn:aws:dynamodb:${var.region}:*:table/${var.health_table_name}",
           "arn:aws:dynamodb:${var.region}:*:table/${var.sessions_table_name}",
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:PutItem", "dynamodb:GetItem"]
+        Resource = "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/if-powerlifting-notifications"
       },
     ]
   })
@@ -90,6 +95,10 @@ resource "aws_lambda_function" "this" {
   memory_size   = 2048
   timeout       = 900
 
+  ephemeral_storage {
+    size = 2048
+  }
+
   filename         = data.archive_file.lambda.output_path
   source_code_hash = data.archive_file.lambda.output_base64sha256
 
@@ -97,9 +106,10 @@ resource "aws_lambda_function" "this" {
 
   environment {
     variables = {
-      TABLE_NAME          = var.health_table_name
-      SESSIONS_TABLE_NAME = var.sessions_table_name
-      VIDEOS_BUCKET       = var.videos_bucket_id
+      TABLE_NAME                          = var.health_table_name
+      SESSIONS_TABLE_NAME                 = var.sessions_table_name
+      VIDEOS_BUCKET                       = var.videos_bucket_id
+      IF_POWERLIFTING_NOTIFICATIONS_TABLE = "if-powerlifting-notifications"
     }
   }
 

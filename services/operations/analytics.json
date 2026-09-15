@@ -17,6 +17,10 @@
           "description": "Maximum cache age before regeneration",
           "default": 72
         },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -25,30 +29,50 @@
       "required": []
     },
     "result_schema": {
-      "type": "object",
-      "required": [
-        "markdown",
-        "generated_at",
-        "cached"
-      ],
-      "properties": {
-        "markdown": {
-          "type": "string"
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "markdown",
+            "generated_at",
+            "cached"
+          ],
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            },
+            "dirty": {
+              "type": "boolean"
+            },
+            "regenerated": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
         },
-        "generated_at": {
-          "type": "string"
-        },
-        "cached": {
-          "type": "boolean"
-        },
-        "dirty": {
-          "type": "boolean"
-        },
-        "regenerated": {
-          "type": "boolean"
+        {
+          "type": "object",
+          "required": [
+            "cached",
+            "cache_miss"
+          ],
+          "properties": {
+            "cached": {
+              "const": false
+            },
+            "cache_miss": {
+              "const": true
+            }
+          },
+          "additionalProperties": true
         }
-      },
-      "additionalProperties": true
+      ]
     },
     "execution": "deterministic",
     "ownership": "athlete",
@@ -103,7 +127,10 @@
           "type": "object"
         },
         "alerts": {
-          "type": "object"
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
       },
       "additionalProperties": true
@@ -984,7 +1011,10 @@
           "type": "object"
         },
         "alerts": {
-          "type": "object"
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
       },
       "additionalProperties": true
@@ -1623,27 +1653,197 @@
     "result_schema": {
       "type": "object",
       "properties": {
-        "overview": {
+        "week": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "selected_week_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "selected_week_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "selected_week_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "window_start": {
+          "type": "string"
+        },
+        "window_end": {
+          "type": "string"
+        },
+        "selected_session_context": {
+          "type": "array"
+        },
+        "block": {
+          "type": "string"
+        },
+        "compliance": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "current_maxes": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "estimated_dots": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "estimated_dots_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "projections": {
+          "type": "array"
+        },
+        "projection_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "projection_calibration": {
           "type": "object"
         },
-        "fatigue_readiness": {
+        "attempt_selection": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "sessions_analyzed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deload_info": {
           "type": "object"
         },
-        "peaking": {
+        "fatigue_index": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fatigue_components": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "fatigue_dimensions": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "inol": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "acwr": {
           "type": "object"
         },
-        "workload": {
+        "ri_distribution": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "specificity_ratio": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "specificity_target_competition": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "volume_landmarks": {
           "type": "object"
+        },
+        "readiness_score": {
+          "type": "object"
+        },
+        "banister": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "monotony_strain": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "decoupling": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "taper_quality": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "peaking_timeline": {
+          "type": "object"
+        },
+        "lifts": {
+          "type": "object"
+        },
+        "exercise_stats": {
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "alerts": {
-          "type": "object"
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
-        "overview",
-        "fatigue_readiness",
-        "peaking",
-        "workload",
+        "week",
+        "block",
+        "lifts",
+        "fatigue_index",
+        "fatigue_components",
+        "compliance",
+        "current_maxes",
+        "estimated_dots",
+        "projections",
+        "projection_reason",
+        "flags",
+        "sessions_analyzed",
+        "exercise_stats",
         "alerts"
       ],
       "additionalProperties": true
@@ -1846,6 +2046,10 @@
           "minLength": 1
         },
         "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cacheOnly": {
           "type": "boolean",
           "default": false
         }
@@ -2635,6 +2839,10 @@
           "type": "boolean",
           "default": false
         },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        },
         "max_age_hours": {
           "type": "integer",
           "minimum": 1
@@ -2646,30 +2854,50 @@
       "additionalProperties": false
     },
     "result_schema": {
-      "type": "object",
-      "required": [
-        "markdown",
-        "generated_at",
-        "cached"
-      ],
-      "properties": {
-        "markdown": {
-          "type": "string"
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "markdown",
+            "generated_at",
+            "cached"
+          ],
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            },
+            "dirty": {
+              "type": "boolean"
+            },
+            "regenerated": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
         },
-        "generated_at": {
-          "type": "string"
-        },
-        "cached": {
-          "type": "boolean"
-        },
-        "dirty": {
-          "type": "boolean"
-        },
-        "regenerated": {
-          "type": "boolean"
+        {
+          "type": "object",
+          "required": [
+            "cached",
+            "cache_miss"
+          ],
+          "properties": {
+            "cached": {
+              "const": false
+            },
+            "cache_miss": {
+              "const": true
+            }
+          },
+          "additionalProperties": true
         }
-      },
-      "additionalProperties": true
+      ]
     },
     "execution": "deterministic",
     "ownership": "athlete",

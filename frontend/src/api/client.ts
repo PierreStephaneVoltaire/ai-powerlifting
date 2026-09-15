@@ -1,4 +1,5 @@
 import axios from 'axios'
+import api from './http'
 import {
   cachedGet,
   invalidateDomain,
@@ -6,6 +7,7 @@ import {
   patchSessionInCachedProgram,
   addSessionToCachedProgram,
   removeSessionFromCachedProgram,
+  updateProgramRevisionInCachedProgram,
 } from './cache'
 import type {
   Program,
@@ -14,6 +16,7 @@ import type {
   PlannedExercise,
   Exercise,
   MaxEntry,
+  MaxHistoryStore,
   WeightEntry,
   GlossaryExercise,
   ApiResponse,
@@ -50,18 +53,51 @@ import type {
   BudgetStore,
   BudgetTimeline,
   BudgetAiAnalysis,
+  BlockTransitionInput,
+  BlockTransitionResult,
 } from '@powerlifting/types'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
+
+
+
 
 function templatePath(sk: string, suffix = ''): string {
   return `/templates/${encodeURIComponent(sk)}${suffix}`
+}
+
+export interface MutationEnvelope {
+  expected_revision: number
+  idempotency_key: string
+  session_id?: string
+}
+
+export interface SessionMutationResult {
+  session?: Session
+  deleted?: string
+  revision?: number
+  success?: boolean
+}
+
+async function cacheSessionMutation(
+  version: string,
+  date: string,
+  index: number,
+  result: SessionMutationResult,
+  fallback?: Session,
+): Promise<Session | undefined> {
+  const session = result.session || fallback
+  if (session) await patchSessionInCachedProgram(`/programs/${version}`, date, index, () => session, session.id)
+  await updateProgramRevisionInCachedProgram(`/programs/${version}`, result.revision ?? session?.revision)
+  return session
+}
+
+export function mutationEnvelope(expected_revision: number, idempotency_key?: string, session_id?: string): MutationEnvelope {
+  return { expected_revision, idempotency_key: idempotency_key ?? globalThis.crypto.randomUUID(), ...(session_id ? { session_id } : {}) }
+}
+
+function requireMutationEnvelope(envelope?: MutationEnvelope): MutationEnvelope {
+  if (!envelope || !Number.isInteger(envelope.expected_revision) || envelope.expected_revision < 0 || !envelope.idempotency_key?.trim()) throw new Error('Mutation envelope requires expected_revision and idempotency_key')
+  return envelope
 }
 
 export function isApiNotFound(error: unknown): boolean {
@@ -85,6 +121,8 @@ export interface InitializeSetupInput {
   weekStartDay: WeekStartDay
   templateSk?: string
   maxes?: Record<string, number>
+  expected_revision: number
+  idempotency_key: string
 }
 
 export interface InitializeSetupResult {
@@ -104,7 +142,7 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
 }
 
 export async function initializeSetup(input: InitializeSetupInput): Promise<InitializeSetupResult> {
-  const res = await api.post<ApiResponse<InitializeSetupResult>>('/setup/initialize', input)
+  const res = await api.post<ApiResponse<InitializeSetupResult>>('/setup/initialize', { ...input, ...requireMutationEnvelope(input) })
   return res.data.data
 }
 
@@ -115,6 +153,12 @@ export async function fetchPrograms(): Promise<ProgramListItem[]> {
   return data.data
 }
 
+export async function transitionBlock(input: BlockTransitionInput): Promise<BlockTransitionResult> {
+  const response = await api.post<ApiResponse<BlockTransitionResult>>('/programs/current/blocks/transition', input)
+  await invalidateDomains(['programs', 'program:current', 'sessions:current', 'analytics'])
+  return response.data.data
+}
+
 export async function fetchProgram(version: string): Promise<Program> {
   const data = await cachedGet(api, `/programs/${version}`, [`program:${version}`, `sessions:${version}`])
   return data.data
@@ -123,10 +167,18 @@ export async function fetchProgram(version: string): Promise<Program> {
 export async function updateMetaField(
   version: string,
   field: string,
-  value: unknown
-): Promise<void> {
-  await api.put(`/programs/${version}/meta`, { field, value })
+  value: unknown,
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/programs/${version}/meta`, { field, value, ...requireMutationEnvelope(envelope) })
   await invalidateDomain(`program:${version}`)
+  return res.data.data
+}
+
+export async function updateMetaFields(version: string, updates: Record<string, unknown>, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/programs/${version}/meta`, { updates, ...requireMutationEnvelope(envelope) })
+  await invalidateDomain(`program:${version}`)
+  return res.data.data
 }
 
 export async function forkProgram(
@@ -144,24 +196,29 @@ export async function forkProgram(
 
 export async function createSession(
   version: string,
-  session: Partial<Session> & { date: string }
+  session: Partial<Session> & { date: string },
+  envelope?: MutationEnvelope,
 ): Promise<Session> {
-  const res = await api.post<ApiResponse<{ success: boolean; session: Session }>>(
+  const res = await api.post<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(
     `/sessions/${version}`,
-    session
+    { ...session, ...requireMutationEnvelope(envelope) }
   )
   const created = res.data.data.session
   await addSessionToCachedProgram(`/programs/${version}`, created)
+  await updateProgramRevisionInCachedProgram(`/programs/${version}`, res.data.data.revision ?? created.revision)
   return created
 }
 
 export async function deleteSession(
   version: string,
   date: string,
-  index: number
-): Promise<void> {
-  await api.delete(`/sessions/${version}/${date}/${index}`)
-  await removeSessionFromCachedProgram(`/programs/${version}`, date, index)
+  index: number,
+  envelope?: MutationEnvelope,
+): Promise<SessionMutationResult> {
+  const res = await api.delete<ApiResponse<SessionMutationResult>>(`/sessions/${version}/${date}/${index}`, { data: requireMutationEnvelope(envelope) })
+  await removeSessionFromCachedProgram(`/programs/${version}`, date, index, envelope?.session_id)
+  await updateProgramRevisionInCachedProgram(`/programs/${version}`, res.data.data.revision)
+  return res.data.data
 }
 
 export async function fetchSession(
@@ -179,19 +236,24 @@ export async function updateSession(
   version: string,
   date: string,
   index: number,
-  session: Session
-): Promise<void> {
-  await api.put(`/sessions/${version}/${date}/${index}`, session)
-  await patchSessionInCachedProgram(`/programs/${version}`, date, index, () => session)
+  session: Session,
+  envelope?: MutationEnvelope,
+): Promise<Session> {
+  const res = await api.put<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(`/sessions/${version}/${date}/${index}`, { ...session, ...requireMutationEnvelope(envelope) })
+  const result = res.data.data
+  const updated = result.session || session
+  await cacheSessionMutation(version, date, index, result, updated)
+  return updated
 }
 
 export async function updatePlannedExercises(
   version: string,
   date: string,
   index: number,
-  plannedExercises: PlannedExercise[]
+  plannedExercises: PlannedExercise[],
+  envelope?: MutationEnvelope,
 ): Promise<void> {
-  await api.put(`/programs/${version}/designer/${date}/${index}/planned-exercises`, { planned_exercises: plannedExercises })
+  await api.put(`/programs/${version}/designer/${date}/${index}/planned-exercises`, { planned_exercises: plannedExercises, ...requireMutationEnvelope(envelope) })
   await patchSessionInCachedProgram(`/programs/${version}`, date, index,
     (s) => ({ ...s, planned_exercises: plannedExercises }))
 }
@@ -201,32 +263,33 @@ export async function rescheduleSession(
   date: string,
   index: number,
   newDate: string,
-  newDay: string
-): Promise<void> {
-  await api.patch(`/sessions/${version}/${date}/${index}/reschedule`, {
+  newDay: string,
+  envelope?: MutationEnvelope,
+): Promise<Session> {
+  const res = await api.patch<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(`/sessions/${version}/${date}/${index}/reschedule`, {
     newDate,
     newDay,
+    ...requireMutationEnvelope(envelope),
   })
-  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
-    (s) => ({ ...s, date: newDate, day: newDay }))
+  const result = res.data.data
+  const updated = result.session || { date: newDate, day: newDay } as Session
+  await cacheSessionMutation(version, date, index, result, updated)
+  return updated
 }
 
 export async function completeSession(
   version: string,
   date: string,
   index: number,
-  data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | null }
-): Promise<void> {
-  await api.patch(`/sessions/${version}/${date}/${index}/complete`, data)
-  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
-    (s) => ({
-      ...s,
-      completed: true,
-      session_rpe: data.rpe ?? s.session_rpe,
-      body_weight_kg: data.bodyWeightKg ?? s.body_weight_kg,
-      session_notes: data.notes ?? s.session_notes,
-      wellness: data.wellness ?? s.wellness,
-    }))
+  data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | null },
+  envelope?: MutationEnvelope,
+): Promise<Session> {
+  const res = await api.patch<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(`/sessions/${version}/${date}/${index}/complete`, { ...data, ...requireMutationEnvelope(envelope) })
+  const result = res.data.data
+  const updated = result.session
+  if (!updated) throw new Error('Session completion response did not include the updated session')
+  await cacheSessionMutation(version, date, index, result, updated)
+  return updated
 }
 
 export async function draftSessionNotes(
@@ -276,11 +339,15 @@ export async function addExercise(
   version: string,
   date: string,
   index: number,
-  exercise: Exercise
-): Promise<void> {
-  await api.post(`/sessions/${version}/${date}/${index}/exercise`, exercise)
-  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
-    (s) => ({ ...s, exercises: [...s.exercises, exercise] }))
+  exercise: Exercise,
+  envelope?: MutationEnvelope,
+): Promise<Session> {
+  const res = await api.post<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(`/sessions/${version}/${date}/${index}/exercise`, { ...exercise, ...requireMutationEnvelope(envelope) })
+  const result = res.data.data
+  const updated = result.session
+  if (!updated) throw new Error('Exercise add response did not include the updated session')
+  await cacheSessionMutation(version, date, index, result, updated)
+  return updated
 }
 
 export async function updateExerciseField(
@@ -289,38 +356,40 @@ export async function updateExerciseField(
   index: number,
   exerciseIndex: number,
   field: keyof Exercise,
-  value: unknown
-): Promise<void> {
-  await api.patch(
+  value: unknown,
+  envelope?: MutationEnvelope,
+): Promise<Session> {
+  const res = await api.patch<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(
     `/sessions/${version}/${date}/${index}/exercise/${exerciseIndex}`,
-    { field, value }
+    { field, value, ...requireMutationEnvelope(envelope) }
   )
-  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
-    (s: any) => ({
-      ...s,
-      exercises: s.exercises.map((ex: any, i: number) => i === exerciseIndex ? { ...ex, [field]: value } : ex),
-    }))
+  const result = res.data.data
+  const updated = result.session
+  if (!updated) throw new Error('Exercise update response did not include the updated session')
+  await cacheSessionMutation(version, date, index, result, updated)
+  return updated
 }
 
 export async function removeExercise(
   version: string,
   date: string,
   index: number,
-  exerciseIndex: number
-): Promise<void> {
-  await api.delete(`/sessions/${version}/${date}/${index}/exercise/${exerciseIndex}`)
-  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
-    (s: any) => ({
-      ...s,
-      exercises: s.exercises.filter((_: any, i: number) => i !== exerciseIndex),
-    }))
+  exerciseIndex: number,
+  envelope?: MutationEnvelope,
+): Promise<Session> {
+  const res = await api.delete<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(`/sessions/${version}/${date}/${index}/exercise/${exerciseIndex}`, { data: requireMutationEnvelope(envelope) })
+  const result = res.data.data
+  const updated = result.session
+  if (!updated) throw new Error('Exercise removal response did not include the updated session')
+  await cacheSessionMutation(version, date, index, result, updated)
+  return updated
 }
 
 // ─── Maxes ───────────────────────────────────────────────────────────────────
 
 export async function fetchMaxes(version: string): Promise<{
   targets: { squat_kg: number; bench_kg: number; deadlift_kg: number; total_kg: number }
-  history: MaxEntry[]
+  history: MaxHistoryStore
 }> {
   const data = await cachedGet(api, `/maxes/${version}`, [`maxes:${version}`])
   return data.data
@@ -328,37 +397,45 @@ export async function fetchMaxes(version: string): Promise<{
 
 export async function updateTargetMaxes(
   version: string,
-  maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number }
-): Promise<void> {
-  await api.put(`/maxes/${version}`, maxes)
+  maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number },
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/maxes/${version}`, { ...maxes, ...requireMutationEnvelope(envelope) })
   await invalidateDomains([`maxes:${version}`, `program:${version}`])
+  return res.data.data
 }
 
 export async function updateBodyWeight(
   version: string,
-  weightKg: number
-): Promise<void> {
-  await api.put(`/programs/${version}/body-weight`, { weightKg })
+  weightKg: number,
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/programs/${version}/body-weight`, { weightKg, ...requireMutationEnvelope(envelope) })
   await invalidateDomains([`program:${version}`, `weight-log:${version}`])
+  return res.data.data
 }
 
 export async function updatePhases(
   version: string,
   phases: Phase[],
-  block?: string
-): Promise<void> {
-  const body: { phases: Phase[]; block?: string } = { phases }
+  block: string | undefined,
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const body: { phases: Phase[]; block?: string; expected_revision: number; idempotency_key: string } = { phases, ...requireMutationEnvelope(envelope) }
   if (block !== undefined) body.block = block
-  await api.put(`/programs/${version}/phases`, body)
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/programs/${version}/phases`, body)
   await invalidateDomain(`program:${version}`)
+  return res.data.data
 }
 
 export async function addMaxEntry(
   version: string,
-  entry: MaxEntry
-): Promise<void> {
-  await api.post(`/maxes/${version}/history`, entry)
+  entry: MaxEntry,
+  envelope: MutationEnvelope,
+): Promise<MaxHistoryStore> {
+  const response = await api.post<ApiResponse<MaxHistoryStore>>(`/maxes/${version}/history`, { ...entry, ...requireMutationEnvelope(envelope) })
   await invalidateDomain(`maxes:${version}`)
+  return response.data.data
 }
 
 // ─── Weight Log ──────────────────────────────────────────────────────────────
@@ -427,10 +504,12 @@ export async function fetchSupplementPhases(
 
 export async function updateSupplementPhases(
   version: string,
-  phases: SupplementPhase[]
-): Promise<void> {
-  await api.put(`/supplements/${version}`, { phases })
+  phases: SupplementPhase[],
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/supplements/${version}`, { phases, ...requireMutationEnvelope(envelope) })
   await invalidateDomain(`supplements:${version}`)
+  return res.data.data
 }
 
 // ─── Diet Notes ───────────────────────────────────────────────────────────────
@@ -442,10 +521,12 @@ export async function fetchDietNotes(version: string): Promise<DietNote[]> {
 
 export async function updateDietNotes(
   version: string,
-  dietNotes: DietNote[]
-): Promise<void> {
-  await api.put(`/diet-notes/${version}`, { dietNotes })
+  dietNotes: DietNote[],
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/diet-notes/${version}`, { dietNotes, ...requireMutationEnvelope(envelope) })
   await invalidateDomain(`diet-notes:${version}`)
+  return res.data.data
 }
 
 // ─── Block Notes ───────────────────────────────────────────────────────────────
@@ -457,10 +538,12 @@ export async function fetchBlockNotes(version: string): Promise<BlockNote[]> {
 
 export async function updateBlockNotes(
   version: string,
-  blockNotes: BlockNote[]
-): Promise<void> {
-  await api.put(`/block-notes/${version}`, { blockNotes })
+  blockNotes: BlockNote[],
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/block-notes/${version}`, { blockNotes, ...requireMutationEnvelope(envelope) })
   await invalidateDomain(`block-notes:${version}`)
+  return res.data.data
 }
 
 // ─── Goals ───────────────────────────────────────────────────────────────────
@@ -493,7 +576,7 @@ export async function updateFederationLibrary(
 // ─── Competitions ─────────────────────────────────────────────────────────────
 
 export async function fetchCompetitions(version: string): Promise<Competition[]> {
-  const data = await cachedGet(api, `/competitions/${version}`, [`competitions:${version}`])
+  const data = await cachedGet(api, `/competitions/${version}`, [`competitions:${version}`, 'program:current'])
   return data.data
 }
 
@@ -502,39 +585,45 @@ export async function fetchUserCompetitions(filters?: { country?: string; state?
   if (filters?.country) params.set('country', filters.country)
   if (filters?.state) params.set('state', filters.state)
   const qs = params.toString()
-  const data = await cachedGet(api, `/competitions${qs ? `?${qs}` : ''}`, ['competitions'])
+  const data = await cachedGet(api, `/competitions${qs ? `?${qs}` : ''}`, ['competitions', 'program:current'])
   return data.data
 }
 
 export async function patchUserCompetition(
   masterId: string,
   updates: UserCompetitionUpdate,
-): Promise<void> {
-  await api.patch(`/competitions/${masterId}`, updates)
-  await invalidateDomain('competitions')
+  envelope: MutationEnvelope,
+): Promise<UserCompetition> {
+  const res = await api.patch<ApiResponse<UserCompetition>>(`/competitions/${masterId}`, { ...updates, ...requireMutationEnvelope(envelope) })
+  await invalidateDomains(['competitions', 'program:current'])
+  return res.data.data
 }
 
 export async function completeUserCompetition(
   masterId: string,
   results: LiftResults,
   bodyWeightKg: number,
+  envelope: MutationEnvelope,
   postMeetReport?: PostMeetReport,
-): Promise<void> {
-  await api.post(`/competitions/${masterId}/complete`, { results, bodyWeightKg, postMeetReport })
-  await invalidateDomain('competitions')
+): Promise<UserCompetition> {
+  const res = await api.post<ApiResponse<UserCompetition>>(`/competitions/${masterId}/complete`, { results, bodyWeightKg, postMeetReport, ...requireMutationEnvelope(envelope) })
+  await invalidateDomains(['competitions', 'program:current'])
+  return res.data.data
 }
 
 export async function updateCompetitions(
   version: string,
-  competitions: Competition[]
-): Promise<void> {
-  await api.put(`/competitions/${version}`, { competitions })
-  await invalidateDomain(`competitions:${version}`)
+  competitions: Competition[],
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/competitions/${version}`, { competitions, ...requireMutationEnvelope(envelope) })
+  await invalidateDomains([`competitions:${version}`, 'program:current'])
+  return res.data.data
 }
 
 export async function migrateLastComp(version: string): Promise<Competition[]> {
   const res = await api.post<ApiResponse<Competition[]>>(`/competitions/${version}/migrate`)
-  await invalidateDomain(`competitions:${version}`)
+  await invalidateDomains([`competitions:${version}`, 'program:current'])
   return res.data.data
 }
 
@@ -543,13 +632,14 @@ export async function completeCompetition(
   date: string,
   results: LiftResults,
   bodyWeightKg: number,
-  postMeetReport?: PostMeetReport
+  envelope: MutationEnvelope,
+  postMeetReport?: PostMeetReport,
 ): Promise<Competition> {
   const res = await api.patch<ApiResponse<Competition>>(
     `/competitions/${version}/${date}/complete`,
-    { results, bodyWeightKg, postMeetReport }
+    { results, bodyWeightKg, postMeetReport, ...requireMutationEnvelope(envelope) }
   )
-  await invalidateDomain(`competitions:${version}`)
+  await invalidateDomains([`competitions:${version}`, 'program:current'])
   return res.data.data
 }
 
@@ -602,11 +692,12 @@ export async function updateSessionVideo(
   version: string,
   sessionDate: string,
   videoId: string,
-  updates: { exerciseName?: string; setNumber?: number; notes?: string }
+  updates: { exerciseName?: string; setNumber?: number; notes?: string },
+  sessionId?: string,
 ): Promise<SessionVideo> {
   const res = await api.patch<ApiResponse<SessionVideo>>(
     `/videos/${version}/${sessionDate}/${videoId}`,
-    updates
+    { ...updates, sessionId }
   )
   return res.data.data
 }
@@ -614,9 +705,10 @@ export async function updateSessionVideo(
 export async function removeSessionVideo(
   version: string,
   sessionDate: string,
-  videoId: string
+  videoId: string,
+  sessionId?: string,
 ): Promise<void> {
-  await api.delete(`/videos/${version}/${sessionDate}/${videoId}`)
+  await api.delete(`/videos/${version}/${sessionDate}/${videoId}`, { data: { sessionId } })
 }
 
 // ─── Lift Profiles ────────────────────────────────────────────────────────────
@@ -684,10 +776,12 @@ function normalizeLiftProfileReview(
 
 export async function updateLiftProfiles(
   version: string,
-  liftProfiles: LiftProfile[]
-): Promise<void> {
-  await api.put(`/programs/${version}/lift-profiles`, { liftProfiles })
+  liftProfiles: LiftProfile[],
+  envelope: MutationEnvelope,
+): Promise<{ revision?: number }> {
+  const res = await api.put<ApiResponse<{ revision?: number }>>(`/programs/${version}/lift-profiles`, { liftProfiles, ...requireMutationEnvelope(envelope) })
   await invalidateDomain(`program:${version}`)
+  return res.data.data
 }
 
 export async function reviewLiftProfile(profile: LiftProfile): Promise<LiftProfileReview> {
@@ -878,22 +972,24 @@ export async function fetchTemplate(sk: string): Promise<Template> {
   return { ...res.data, sk: res.data?.sk ?? sk }
 }
 
-export async function createTemplateFromBlock(name: string, program_sk?: string): Promise<{ sk: string }> {
-  const res = await api.post('/templates', { name, program_sk })
+export async function createTemplateFromBlock(name: string, program_sk: string | undefined, envelope: MutationEnvelope): Promise<{ sk: string; revision?: number }> {
+  const res = await api.post('/templates', { name, program_sk, ...requireMutationEnvelope(envelope) })
   return res.data
 }
 
-export async function copyTemplate(sk: string, newName: string): Promise<{ sk: string }> {
-  const res = await api.post(templatePath(sk, '/copy'), { new_name: newName })
+export async function copyTemplate(sk: string, newName: string, envelope: MutationEnvelope): Promise<{ sk: string; revision?: number }> {
+  const res = await api.post(templatePath(sk, '/copy'), { new_name: newName, ...requireMutationEnvelope(envelope) })
   return res.data
 }
 
-export async function archiveTemplate(sk: string): Promise<void> {
-  await api.patch(templatePath(sk, '/archive'))
+export async function archiveTemplate(sk: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.patch(templatePath(sk, '/archive'), requireMutationEnvelope(envelope))
+  return res.data
 }
 
-export async function unarchiveTemplate(sk: string): Promise<void> {
-  await api.patch(templatePath(sk, '/unarchive'))
+export async function unarchiveTemplate(sk: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.patch(templatePath(sk, '/unarchive'), requireMutationEnvelope(envelope))
+  return res.data
 }
 
 export async function evaluateTemplate(sk: string): Promise<AiTemplateEvaluation> {
@@ -905,6 +1001,8 @@ export async function applyTemplate(sk: string, body: {
   target: string;
   start_date?: string;
   week_start_day: WeekStartDay;
+  expected_revision: number;
+  idempotency_key: string;
 }): Promise<any> {
   const res = await api.post(templatePath(sk, '/apply'), body)
   return res.data
@@ -915,7 +1013,11 @@ export async function confirmApplyTemplate(sk: string, body: {
   start_date?: string;
   week_start_day: WeekStartDay;
   target?: string;
-}): Promise<{ program_sk: string }> {
+  block_id?: string;
+  block_name?: string;
+  expected_revision: number;
+  idempotency_key: string;
+}): Promise<{ program_sk: string; revision?: number }> {
   const res = await api.post(templatePath(sk, '/apply/confirm'), body)
   return res.data
 }
@@ -925,21 +1027,24 @@ export async function createBlankTemplate(body: {
   description?: string
   estimated_weeks?: number
   days_per_week?: number
-}): Promise<{ sk: string }> {
-  const res = await api.post('/templates/blank', body)
+}, envelope: MutationEnvelope): Promise<{ sk: string; revision?: number }> {
+  const res = await api.post('/templates/blank', { ...body, ...requireMutationEnvelope(envelope) })
   return res.data
 }
 
-export async function updateTemplate(sk: string, template: Template): Promise<void> {
-  await api.put(templatePath(sk), template)
+export async function updateTemplate(sk: string, template: Template, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.put<{ revision?: number }>(templatePath(sk), { ...template, ...requireMutationEnvelope(envelope) })
+  return res.data
 }
 
-export async function publishTemplate(sk: string): Promise<void> {
-  await api.post(templatePath(sk, '/publish'))
+export async function publishTemplate(sk: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.post<{ revision?: number }>(templatePath(sk, '/publish'), requireMutationEnvelope(envelope))
+  return res.data
 }
 
-export async function unpublishTemplate(sk: string): Promise<void> {
-  await api.post(templatePath(sk, '/unpublish'))
+export async function unpublishTemplate(sk: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.post<{ revision?: number }>(templatePath(sk, '/unpublish'), requireMutationEnvelope(envelope))
+  return res.data
 }
 
 export async function uploadTemplateImport(file: File): Promise<{ job_id: string; status: TemplateImportJob['status'] }> {
@@ -964,12 +1069,14 @@ export async function applyTemplateImport(jobId: string): Promise<TemplateImport
 
 // ─── Archive & e1RM ─────────────────────────────────────────────────────────
 
-export async function archiveProgram(version: string): Promise<void> {
-  await api.patch(`/programs/${version}/archive`)
+export async function archiveProgram(version: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.patch<ApiResponse<{ revision?: number }>>(`/programs/${version}/archive`, requireMutationEnvelope(envelope))
+  return res.data.data
 }
 
-export async function unarchiveProgram(version: string): Promise<void> {
-  await api.patch(`/programs/${version}/unarchive`)
+export async function unarchiveProgram(version: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
+  const res = await api.patch<ApiResponse<{ revision?: number }>>(`/programs/${version}/unarchive`, requireMutationEnvelope(envelope))
+  return res.data.data
 }
 
 export async function archiveExercise(id: string): Promise<void> {

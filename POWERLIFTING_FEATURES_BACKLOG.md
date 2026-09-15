@@ -5,6 +5,24 @@ obsolete Fission, second-environment, identity-choice, self-approved-tag and
 write-only-expiry requirements. Historical deployment records remain historical.
 See [implementation contracts](docs/BACKLOG_IMPLEMENTATION.md).
 
+## Login, landing and small-screen correction — 2026-09-15
+
+The operator reported that the guest entry experience did not meet the intended
+design. A dedicated landing page must show both Discord and Authentik login
+options; About remains a separate informational page. Read-only notices belong
+on relevant Athlete editing views, not Landing, Login, Search or About. Navigation
+and content must remain usable at iPhone SE widths, including 320 and 375 pixels.
+
+Implemented and deployed by Luna workers; final scoped Terra review accepted.
+Gateway `87403487…` and frontend `5bb25bdb…` are Ready. Actual Discord authorization
+dispatch, fresh Authentik login, public landing/navigation, banner scope, compact
+context and More navigation pass. Deployed Dashboard width is 320/320 and 375/375
+pixels after the grid fix. Workspace builds/typechecks, three Passport tests and
+39 local mocked browser assertions pass; mocked and deployed evidence remain
+separate. The earlier guest Search/About checks did not establish this correction.
+See [scoped evidence](../../deploy/rewrite/powerlifting-backlog/entry-mobile-correction.md)
+for exact viewports, image pins and limits.
+
 ## Delivery and evidence
 
 Use the existing sixteen typed HTTP/MCP services in `if-portals`, existing
@@ -16,33 +34,56 @@ The evidence columns are independent: code alone is not verification or
 production deployment. Existing screens/handlers do not establish acceptance of
 the requirements below. Local/mocked checks and deployed checks are separate.
 
+Current rollout, 2026-09-15: the operator explicitly approved apply and test.
+The API/foundation, relationship indexes, retention updates and media changes
+have been applied. After a reviewed OIDC transport/proxy correction, the gateway,
+all sixteen service candidates and the frontend candidate are deployed and
+Ready. Authenticated feature checks and their remaining limits are recorded
+individually below; readiness alone does not establish feature acceptance. See the current
+[deployment evidence](../../deploy/rewrite/powerlifting-backlog/deployment-evidence.md).
+Earlier dated statements that approval or deployment is pending are historical.
+The Cloudflare allowance upgrade remains pending, so the full 500 MiB test has
+not run.
+
 | Feature | Implementation | Verified | Deployed |
 | --- | --- | --- | --- |
-| FEAT-2.1 Form videos | In progress: media foundation | Pending | Pending |
-| FEAT-2.2 Failure nodes | Pending | Pending | Pending |
-| FEAT-3.1 Athlete basics | Existing partial flow; corrections pending | Pending | Pending |
-| FEAT-3.2 Profile creation | Existing partial flow; corrections pending | Pending | Pending |
-| FEAT-3.3 Multiple roles | Existing partial flow; corrections pending | Pending | Pending |
-| FEAT-4.1 Identity | In progress | Pending | Pending |
-| FEAT-4.2 Application permissions | In progress | Pending | Pending |
-| FEAT-5.1 Guest navigation | Pending acceptance | Pending | Pending |
-| FEAT-5.2 Athlete navigation | Pending acceptance | Pending | Pending |
-| FEAT-5.3 Coach navigation | Pending | Pending | Pending |
-| FEAT-5.4 Handler navigation | Pending | Pending | Pending |
-| FEAT-6.1 Public search | Existing partial search; corrections pending | Pending | Pending |
-| FEAT-6.2 Granted private search | Pending | Pending | Pending |
-| FEAT-6.3 Athlete context | Pending | Pending | Pending |
-| FEAT-6.4 Handler details | Pending | Pending | Pending |
-| FEAT-7.1 Relationship requests | Pending | Pending | Pending |
-| FEAT-7.2 Decisions/history | Pending | Pending | Pending |
-| FEAT-7.3 Grant expiry | Existing partial grants; corrections pending | Pending | Pending |
-| FEAT-7.4 Single Coach/Handler | Pending | Pending | Pending |
-| FEAT-8.1 Profile tags | Existing partial tags; corrections pending | Pending | Pending |
-| FEAT-8.2 Global catalog | Pending | Pending | Pending |
-| Block lifecycle | In progress | Pending | Pending |
-| Session/set integrity | In progress | Pending | Pending |
-| Offline editing and authored notes | Pending | Pending | Pending |
-| Backend upload and media access | In progress | Pending | Pending |
+| FEAT-2.1 Form videos | Backend upload and revisioned lift-slot processing implemented | Actual 180s ready / 181s failure, retry, notification dedup, removal/replay and successful replacement pass; native-domain max changes appear at the same portal URL and preserve recording; actual stale-completion race and deployed bar/unit guidance pass; 500 MiB awaits Cloudflare | Media, gateway credentials and Lambda fixes applied |
+| FEAT-2.2 Failure nodes | Implemented in Lift Profiles and permitted context | Live trim/dedup, ten-node acceptance, 11-node rejection and 160/161-character boundaries pass; per-set reasons preserved; exact nodes appear in Handler/Coach and native HTTP/MCP context; revoked Coach denied | Applied |
+| FEAT-3.1 Athlete basics | Method/auth fixes, dated estimated 1RMs and settings editor implemented | Genuine onboarding, staged incomplete-basics status, dated kg maxes/estimate flags, later basics edits and Coach-only training denial pass; exhaustive UI matrix not claimed | Applied |
+| FEAT-3.2 Profile creation | Resume/edit and explicit publication domains implemented | Actual profile/federation edits and restoration, browser profile save/restore and publication GET/update/replay/restore pass | Applied |
+| FEAT-3.3 Multiple roles | Role/context separation and role-specific onboarding implemented | Multiple roles, Coach-only and Handler-only normal onboarding pass; role/context restoration passes | Applied |
+| FEAT-4.1 Identity | Passport/openid-client, Valkey sessions and verified subject mapping implemented | Genuine Authentik login passes; forged identity and mismatched OAuth state rejected | Applied; preserved by gateway follow-ups |
+| FEAT-4.2 Application permissions | Shared Profile evaluator and operation map implemented | Private/public HTTP/MCP boundaries, grants, expiry and revocation pass; all 221 operations mapped; central Profile update closes delegated cached Block 200/404 with generation 403 | All sixteen services applied |
+| FEAT-5.1 Guest navigation | Demo/Search/About and context restoration implemented | Real guest Search/About, public profile and Go Back restoration pass | Frontend `a7aad69…` |
+| FEAT-5.2 Athlete navigation | Dashboard, training guards and role switching implemented | Actual dashboard landing, role/context, same-day Session navigation and scroll pass | Frontend `a7aad69…` |
+| FEAT-5.3 Coach navigation | Roster landing and effective-permission navigation implemented | Real Coach-only onboarding, browser roster landing, selected-Athlete access and profile editor save/restore pass | Applied |
+| FEAT-5.4 Handler navigation | Competition roster and permission-aware navigation implemented | Handler-only normal onboarding, roster landing and Athlete details pass | Applied |
+| FEAT-6.1 Public search | Approved tags, federation, role/name and twenty-result cursor implemented | Name/handle, federation, alphabetical 20+1 pagination and privacy pass; approved-tag AND/OR awaits operator access | Applied |
+| FEAT-6.2 Granted private search | Current grants and field filtering implemented | Granted reads, favorite isolation and revoked denial pass | Applied |
+| FEAT-6.3 Athlete context | Banner/switcher, guards and partitioned drafts implemented | Context restoration, delegated-cache removal, retained drafts/edits, revoked sync blocking and remaining public reads pass | Frontend `a7aad69…` |
+| FEAT-6.4 Handler details | Permitted profile, phase, maxes, tied Attempts and notes implemented | Actual Handler details include phase, maxes, tied competition, Attempts, notes and stored seven-day expiry | Applied |
+| FEAT-7.1 Relationship requests | Requests, cancellation, favorites and peer grants implemented | Request/replay/cancel/history/favorite checks pass | Applied with query indexes |
+| FEAT-7.2 Decisions/history | Approval, rejection, replacement, revocation and history implemented | Approval/replay/replacement/revocation, actual rejection/cancel and rejection-replay notification dedup pass | Applied |
+| FEAT-7.3 Grant expiry | Stored competition expiry and current-grant checks implemented | Expired/revoked access denied; stored date plus seven days verified | Applied |
+| FEAT-7.4 Single Coach/Handler | Transactional slot and confirmed replacement implemented | Distinct Coach and Handler approvals race 200/409; active-slot counts, confirmed replacement, old-Coach denial and independent peer read pass; created grants cleaned up | Applied |
+| FEAT-8.1 Profile tags | Global approval enforced; personal selections retained | Normalization/dedup and self-approval denial pass; positive approved pills/filters await operator access | Applied |
+| FEAT-8.2 Global catalog | Pending catalog, operator decisions and additive storage implemented | Genuine operator approval unavailable; full catalog migration acceptance incomplete | Dedicated table and handlers applied |
+| Block lifecycle | Stable identities, staged publication and complete/start-next/combined flows implemented | Sixteen transition checks and Template append/replace/new-Block preservation pass; exact HTTP/MCP new-Block replay creates no duplicate; changed payload rejected | Program/Templates `da1aca5…` |
+| Session/set integrity | Stable identities, logged-data preservation and duplicate/ambiguous-ID guards implemented | Typed 409/no-write, unique historical lookup, actual same-day navigation, stable exercise IDs, logged edits, 44px actions and scroll pass | Shared-store fixes applied; frontend `a7aad69…` |
+| Offline editing and authored notes | Partitioned queue/conflicts and private/shared note revisions implemented | Corrected browser queue checks, actual authorship, revocation/sync blocking and Attempt modal 409 with retained typed edit pass | Frontend `a7aad69…` and services applied |
+| Backend upload and media access | Existing multipart route, bounded transfer, idempotent confirmation and authorized media implemented | Real backend-only network/pipeline/retry/HEAD/Range/auth checks and concurrent stale-completion preservation pass; 500 MiB awaits Cloudflare | Gateway/services/Lambda/CloudFront changes applied |
+
+Evidence checkpoint: 2026-09-15 10:45 UTC. Applied records deployment; the
+verification column records actual coverage and limits. Final local service suite:
+**253 tests and 16 subtests passed**. Final live signed HTTP/MCP harness:
+**16/16 services, 22/22 checks**. Actual public native report generation, owner and
+exactly scoped delegate cache reuse, generation denial, max read/replay/restore,
+180/181-second processing, successful replacement and ordinary Program freshness
+pass separately. Fresh Terra accepted the final source/evidence review, including
+actual Handler/Coach/native Lift Profile context and deployed guidance controls.
+The remaining external tests are the Cloudflare 500 MiB upload and operator tag
+approval/catalog/approved-tag AND/OR acceptance. Exact pins and sanitized evidence are in the
+[release evidence](../../deploy/rewrite/powerlifting-backlog/deployment-evidence.md).
 
 ## Cross-cutting acceptance
 
@@ -293,7 +334,10 @@ sync retains drafts. Clear delegated caches when expiry/revocation is observed.
 Uploads, generation, relationship approval and publication remain online-only,
 while unsent form state is preserved.
 
-## Verification and rollout record
+## Historical verification and rollout record
+
+The dated preparation entries below are historical. The delivery table and
+linked deployment evidence above describe the current applied release.
 
 - 2026-09-14 baseline: `kubectl get deployments,pods,services`, Profile describe,
   Profile/portal logs, namespace events and AWS DynamoDB table listing inspected.
@@ -315,3 +359,214 @@ while unsent form state is preserved.
   Record image digests and compatible rollback before each deployment. Prune only
   disposable local build images after publication. No feature deployment is claimed
   by this baseline record.
+- 2026-09-14 local foundation checks: 20 Python checks passed for identity links,
+  signed HTTP/MCP authorization, operation-map coverage, media handlers and handler
+  imports; a separate avatar ownership check passed. Node checks passed for OIDC
+  endpoint confinement, HTTP byte ranges, Budget media ownership and same-day
+  Session routing. Workspace typechecks passed. These use mocked stores/network;
+  they are not deployed Authentik, browser, S3-processing or native acceptance.
+- Both Terraform roots validate. The root configuration reports pre-existing
+  undeclared-variable warnings; the nested media configuration validates cleanly.
+  New secrets, identity configuration, dedicated tag/notification tables and
+  disabling the retained CloudFront distribution are prepared only. No apply,
+  cache invalidation or deployment has been performed.
+
+- Additional local evidence: identity transactions now have tests capturing the
+  actual boto3 wire body; two transactions had double serialization, now fixed.
+  Onboarding saves profile basics and dated estimated max-history entries in one
+  transaction, with a wire-encoding check. The HTTP/MCP conflict test preserves
+  the current revision/record. Seventeen native continuation/import/generation/
+  onboarding checks passed; the broader 24-check identity/access selection passed.
+- Fresh reviews found fixed-key media output races and missing same-day edit/delete
+  selectors and processing-retry UI. Corrections are active; fifteen media checks
+  alone do not establish acceptance. The thumbnail IAM PutItem change is prepared.
+- Session writes now advance Program and Session revisions atomically, protecting
+  a concurrent Block transition from losing a log. The latest full service suite
+  passed 136 tests plus seven subtests under mocks/offline checks. Required client
+  mutation envelopes and Template target validation still need closure.
+- Losing publication attempts can leave hidden, unpublished staging records.
+  They are not visible Programs/Blocks; unique staging keys avoid overwriting a
+  published version. No cleanup or AWS deletion has been performed.
+- Global tags now use a separate pending/approved/rejected catalog and ignore legacy
+  approval flags. Two catalog checks and the workspace typecheck passed. The
+  repeatable migration only registers missing vocabulary as pending; it has not run.
+- Live read-only onboarding audit found the operator has existing Program maxes/
+  bodyweight but no settings-level Athlete basics. Migration must preserve those
+  records and must not invent missing sex or other personal facts. The personal
+  training gate and migration remain pending together.
+
+
+### Profile, publication and context integration evidence (local)
+
+- Focused profile/avatar/publication/search/onboarding/access suite: 14 passed.
+  Covers private/public avatar mapping, current grants, tag approval removal,
+  cursor pages, nested domain filtering and unknown-sex/unachieved-target handling.
+- Explicit publication settings use expected revision and idempotency. History
+  exports retain all Blocks; current-Block Markdown remains separately available.
+- Current roles and selected Athlete are separate browser controls. Direct routes
+  and navigation use the same permission mapping. IndexedDB Program drafts belong
+  to the original Person/Athlete and retain original revisions when restored.
+- Online cache reads contact the API. Visibility/online/30-second refresh and
+  401/403 events recheck access and clear changed cache partitions.
+- Terraform fmt/validate passed for the prepared relationship inbox/sent/roster
+  indexes and dedicated tables (existing variable/deprecation warnings remain).
+- Terra's relationship review found approval-expiry/replay/UI defects; these
+  remain in progress. Current shared workspace typecheck is waiting for training
+  mutation caller integration. No live browser/Authentik/DynamoDB acceptance or
+  deployment is claimed by these checks.
+
+
+### Notes, Block UI and gateway integration evidence (local)
+
+- The full service regression run reached 153 passing tests and one registered
+  handler import failure. Relative relationship-handler imports fixed that
+  failure; the subsequent handler-import check passed.
+- Seven gateway forwarding checks passed, including current operation permission
+  denial before dispatch. Gateway and service boundaries call the same Profile
+  evaluator. Metadata writes check their additional domain; legacy competition
+  write variants require write permission despite their read-shaped operation name.
+- Six focused access/Handler/import checks passed. Handler context limits Entries
+  to current relationship ties and uses the existing Analysis max estimator.
+  Profile and Handler views now render permitted failure nodes and form recordings.
+- Authored-note storage has seven passing checks for atomic private saves,
+  immutable attachments, actor/payload-bound retries and conflicts. Private notes
+  have their own authenticated route after delegated access ends. Fresh Terra
+  review found no note defect in this pass; deployed acceptance is still pending.
+- Fresh Terra relationship review found a legacy slotless-grant roster mismatch.
+  Luna is aligning roster and access behavior and adding distinct-request races.
+- Block UI now offers a Template or Program designer and independent Block rename.
+  Required Program/Template mutation callers and end-to-end acceptance are active.
+- Media worker reports 31 local checks passing for replacement, notification,
+  media preservation and CAS. Fresh final review and real S3 processing remain
+  pending. Prepared Lambda configuration adds notification PutItem/GetItem access
+  and 2 GiB temporary storage; nested Terraform validation passed. DynamoDB
+  transaction IAM uses the underlying item permissions, per [AWS documentation](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html).
+- Offline queue/synchronization implementation is active. Current evidence does
+  not yet establish offline acceptance. No deployment or Terraform apply occurred.
+
+### Continued integration evidence (local, 2026-09-14)
+
+- Fresh Terra review found form-media confirmation/playback were missing the
+  lift-profile domain check. Profile now resolves the stored media allocation
+  and rechecks both video and lift-profile permissions for confirmation, reads,
+  metadata edits and removal. Read-only copied allocations cannot be confirmed;
+  Session removal retries succeed after a lost response. Focused access/media
+  suites: **25 passed**. These are local tests, not deployed processing evidence.
+- Offline queue is mounted. Mutation identity stays attached to the original
+  Person/Athlete through IndexedDB waits; cross-partition retries cannot shadow
+  each other. The conflict dialog permits explicit review and resubmission at
+  the reported server revision. `node scripts/test_offline_queue_browser.mjs`
+  passed **12 checks in Chromium with simulated server responses**, including
+  lost response replay, conflicts, revocation/cache removal, retained drafts and
+  late responses after a context switch. This is not Authentik/live acceptance.
+- Frontend typecheck passes after removing the obsolete onboarding publication
+  checkbox contract and selecting explicit settings/Session write permissions.
+- A full service test run passed **170 tests and 9 subtests**, with one failing
+  outbound relationship grantee assertion. Luna corrected that regression and
+  the relationship suite passed **12 tests**. Fresh Terra review then identified
+  legacy-grant replacement, terminal replay, inbound replacement controls and
+  concurrent-approval HTTP conflict gaps; those corrections remain in progress.
+- Fresh Terra review identified Template result-schema/revision errors, copy
+  retry duplication and index concurrency defects. Luna applied fixes and
+  reported **22 tests and 16 subtests**; fresh verification is in progress.
+- Performance target and lift-profile operation contracts now require mutation
+  envelopes. The legacy current-max update uses the shared Program CAS helper.
+  Focused performance/lift-profile tests: **11 passed**.
+- Read-only cluster inspection confirms all sixteen existing Powerlifting domain
+  Deployments and the current portal backend/frontend have one ready replica.
+  They retain the earlier deployed images; this backlog work is not deployed.
+
+
+### Continued review and acceptance (local, 2026-09-14)
+
+- The full local domain-service suite passed **187 tests and 16 subtests** before
+  the latest setup, Template, and source-access revisions. Workspace typechecks
+  and the required workspace build passed. These checks do not establish deployed
+  browser, Authentik, native Codex, or processing acceptance.
+- Current Competition Entries are joined into Program reads, Analysis, max history,
+  Handler estimates, and training exports without rewriting Program snapshots or
+  duplicating legacy results. Tied grants filter both list envelopes and derived
+  competition-history rows. Focused export/access/report/performance checks passed
+  **22 tests**. Handler views retain stable Attempt IDs and Entry display units.
+- Program source mutations invalidate Analysis caches, use actual DynamoDB error
+  codes for revision conflicts, and recover lost-response deletion retries before
+  reapplying the edit. Reused keys are bound to their operation and payload.
+  Program/Block/Template checks passed **23 tests and 16 subtests**.
+- Whole-Program patches and Template application now check the affected domains.
+  Restricted tied grants use individual Competition Entry operations for changes.
+  The access-context result schema includes the evaluator's complete fields.
+  Focused permission/transport/projection checks passed **10 tests**.
+- Fresh Terra review accepted the relationship expiry-slot correction and the
+  migrated request records consumed by roster/context switching. Read-only review
+  checks passed **20 nested migration/relationship tests** and **7 copy-helper
+  tests**; the review found missing Template and author-original copy plans plus
+  an unchecked manual ownership map. Copy/migration tooling remains unaccepted
+  until those findings are resolved; no copy or migration has run.
+- Fresh Terra review rejected initial setup staging and identified partial-set,
+  whole-metadata, Template index, copy-identity, and retry gaps. Luna has added
+  **8 new Program integrity tests** and applied further corrections. Fresh closure
+  review and Template corrections remain pending.
+- Saved generation references and native job reads now carry source access
+  requirements and recheck current domains and Competition ties. Report/source
+  and native-continuation tests passed **20 tests**; fresh security review remains
+  pending. Legacy saved results without source requirements remain readable by
+  their Athlete and need regeneration before delegated reads.
+- No backlog image has been deployed, no Terraform apply has run, and no AWS
+  resources have been deleted. Full 500 MiB upload acceptance still awaits the
+  Cloudflare request allowance upgrade.
+
+### Source privacy and integration follow-up (local, 2026-09-14)
+
+- Fresh Terra setup/source review found filtered empty federation data could
+  reload the private library during report generation. All three affected report
+  handlers now distinguish an absent source key from an intentionally empty
+  value. Source assembly skips unpermitted federation reads and imports the
+  existing Federation store. Thirteen focused source/generation checks passed.
+- The full service suite passed 210 tests and 16 subtests; workspace production
+  build passed. These are local checks, with mocked storage/native HTTP.
+- Additional Program version checks preserve skipped set records, allow editable
+  metadata while rejecting Block/version ledgers and identity fields, and load
+  the current Program before retry replay. The focused Program/setup/Block suite
+  passed 29 tests and three subtests after these changes.
+- Handler details now bind rendered data/errors to Person, selected Athlete and
+  permissions, including the render before an effect runs on context changes.
+  Local browser acceptance is still in progress.
+- The current architecture document now describes native continuations, scoped
+  report references and atomic publication; obsolete OpenRouter/slash-command
+  execution and budget-cache claims were removed. Historical deployment records
+  remain historical.
+- Saved foundation plan: `/tmp/powerlifting-backlog-foundation.tfplan`, eight
+  targeted resources, no deletions. It adds two protected tables, relationship
+  indexes and principal/session configuration. Secret values remain private.
+  Review/approval and all applies remain pending; no deployment is claimed.
+
+### Final release evidence (local, 2026-09-14)
+
+- The latest nested service suite passed **223 tests**. Root access/tool checks
+  passed **8 tests**. Accepted Session HTTP/MCP identity and partition evidence,
+  Accepted Markdown source/cache checks and **8 rollout tests** are recorded in
+  the release package. Terra manually reviewed all **21 features**. The recovered Analytics
+  rollback child image is `ACTIVE` in the existing ECR repository.
+- Frontend AuthoredNotes source and frontend candidate are Terra accepted. Social
+  review is closed: **18 scenario checks plus
+  aggregate** include the mounted regression, with all eight state outcomes
+  verified and no unhandled, browser, or expected-response errors. Local offline
+  checks passed (**25 checks**); live revocation/conflict acceptance remains
+  pending. The
+  frontend candidate was built and published to the existing ECR repository with
+  an immutable digest, Terra accepted it, and it is enabled in the bounded
+  rollout manifest. Terra’s final closure covered frontend repository/digest and
+  live-container checks, candidate/rollback pins, eight mocked tests, the
+  self-test, the default 18-patch dry-run, and the frontend rollback dry-run.
+  Deployment approval and deployed acceptance remain pending.
+- Workspace typecheck and production build passed. The final package records the
+  candidate and live rollback digests, source hashes, temporary recipe changes,
+  regenerated targeted API/foundation plan, refreshed zero-change Authentik review
+  and media plan, and sanitized approval commands. No apply, rollout, invalidation,
+  or AWS deletion occurred. The disposable Analytics scan container was stopped
+  gracefully and auto-removed; its local candidate image was then removed by exact
+  ID. OCI rollback archives and node containerd images were preserved.
+- Cloudflare request allowance upgrade remains pending, so full **500 MiB** media
+  acceptance remains pending. Candidates are accepted for the coordinated
+  rollout after required Terraform approval; deployed acceptance and the full
+  500 MiB test remain pending afterward.

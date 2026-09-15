@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { getPublication, updatePublication } from '../controllers/publicationController'
 import multer from 'multer'
 import { getSettingsHandler, updateAvatarHandler, updateNicknameHandler, updateProfileHandler, updateRankingLocationHandler, updateAgeClassHandler, addTagHandler, removeTagHandler, approveTagHandler, proposeTagHandler } from '../controllers/settingsController'
 
@@ -30,3 +31,6 @@ settingsRouter.post('/tags', addTagHandler)
 settingsRouter.delete('/tags/:tag', removeTagHandler)
 settingsRouter.post('/tags/:tag/approve', approveTagHandler)
 settingsRouter.post('/tags/propose', proposeTagHandler)
+
+settingsRouter.get('/publication', getPublication)
+settingsRouter.put('/publication', updatePublication)

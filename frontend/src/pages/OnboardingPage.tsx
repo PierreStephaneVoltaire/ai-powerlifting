@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Alert,
   Badge,
@@ -34,6 +34,8 @@ import { fetchFederations } from '@/api/client'
 import type { AppRole, UserSettings } from '@/api/settings'
 import { getSettings } from '@/api/settings'
 import type { MasterFederation } from '@powerlifting/types'
+import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
+import { readDraft, removeDraft, saveDraft } from '@/api/drafts'
 
 const ROLE_OPTIONS: { value: AppRole; label: string; description: string }[] = [
   {
@@ -44,12 +46,12 @@ const ROLE_OPTIONS: { value: AppRole; label: string; description: string }[] = [
   {
     value: 'coach',
     label: 'Coach',
-    description: 'Work with one or more athletes (grants come later).',
+    description: 'Support Athletes who grant you training access.',
   },
   {
     value: 'handler',
     label: 'Handler / support',
-    description: 'Log sessions or meals on behalf of an athlete (grants come later).',
+    description: 'Support Athletes on competition day with their permission.',
   },
 ]
 
@@ -59,12 +61,14 @@ const SEX_OPTIONS = [
 ]
 
 const VISIBILITY_OPTIONS = [
-  { value: 'private', label: 'Private (only you)' },
-  { value: 'public', label: 'Public (visible to other signed-in users)' },
+  { value: 'private', label: 'Private (you and people you grant access)' },
+  { value: 'public', label: 'Public (visible to everyone)' },
 ]
 
 export default function OnboardingPage() {
   const navigate = useNavigate()
+  const [search] = useSearchParams()
+  const editing = search.get('edit') === '1'
   const { user, signOut } = useAuth()
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,17 +82,24 @@ export default function OnboardingPage() {
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [visibility, setVisibility] = useState<'private' | 'public'>('private')
-  const [publicSummary, setPublicSummary] = useState(false)
   const [federations, setFederations] = useState<string[]>([])
   const [federationLibrary, setFederationLibrary] = useState<MasterFederation[]>([])
 
-  const [sex, setSex] = useState<'male' | 'female'>('male')
+  const [sex, setSex] = useState<'male' | 'female' | ''>('')
   const [country, setCountry] = useState('')
   const [region, setRegion] = useState('')
   const [bodyweight, setBodyweight] = useState<number | string>('')
   const [squat, setSquat] = useState<number | string>('')
   const [bench, setBench] = useState<number | string>('')
   const [deadlift, setDeadlift] = useState<number | string>('')
+  const [maxesDate, setMaxesDate] = useState(new Date().toLocaleDateString('en-CA'))
+  const [estimated, setEstimated] = useState({ squat: false, bench: false, deadlift: false })
+  const formDraft = { active, roles, activeRole, displayName, bio, visibility, federations, sex, country, region, bodyweight, squat, bench, deadlift, maxesDate, estimated }
+  type FormDraft = typeof formDraft
+
+  useEffect(() => {
+    if (!loading && user) void saveDraft('onboarding-form', formDraft).catch(() => setError('Your browser could not preserve this form. Keep this page open.'))
+  }, [loading, user, JSON.stringify(formDraft)])
 
   useEffect(() => {
     let cancelled = false
@@ -102,13 +113,16 @@ export default function OnboardingPage() {
         if (cancelled) return
         setStatus(s)
         setFederationLibrary(feds)
+        if (s.prefill?.bodyweight_kg) setBodyweight(s.prefill.bodyweight_kg)
+        if (s.prefill?.training_maxes) {
+          setSquat(s.prefill.training_maxes.squat_kg ?? '')
+          setBench(s.prefill.training_maxes.bench_kg ?? '')
+          setDeadlift(s.prefill.training_maxes.deadlift_kg ?? '')
+        }
         if (settings) {
           if (settings.display_name) setDisplayName(settings.display_name)
           if (settings.bio) setBio(settings.bio)
           if (settings.profile_visibility) setVisibility(settings.profile_visibility)
-          if (settings.public_training_summary_enabled !== undefined) {
-            setPublicSummary(settings.public_training_summary_enabled)
-          }
           if (settings.federations?.length) setFederations(settings.federations)
           if (settings.sex) setSex(settings.sex)
           if (settings.bodyweight_kg) setBodyweight(settings.bodyweight_kg)
@@ -117,12 +131,15 @@ export default function OnboardingPage() {
             setBench(settings.training_maxes.bench_kg)
             setDeadlift(settings.training_maxes.deadlift_kg)
           }
+          if (settings.maxes_date) setMaxesDate(settings.maxes_date)
+          if (settings.training_maxes_estimated) setEstimated(settings.training_maxes_estimated)
           if (settings.ranking_country) setCountry(settings.ranking_country)
           if (settings.ranking_region) setRegion(settings.ranking_region)
         }
         if (s.state.roles.length > 0) setRoles(s.state.roles)
         if (s.state.active_role) setActiveRole(s.state.active_role)
-        if (s.next_step === 'role') setActive(0)
+        if (editing) setActive(search.get('step') === 'basics' && s.state.roles.includes('athlete') ? 2 : 0)
+        else if (s.next_step === 'role') setActive(0)
         else if (s.next_step === 'profile') setActive(1)
         else if (s.next_step === 'athlete_basics') setActive(2)
         else setActive(2)
@@ -131,6 +148,15 @@ export default function OnboardingPage() {
           setError(err instanceof Error ? err.message : 'Failed to load onboarding status')
         }
       } finally {
+        const draft = await readDraft<FormDraft>('onboarding-form').catch(() => undefined)
+        if (cancelled) return
+        if (draft) {
+          const value = draft.value
+          setActive(value.active); setRoles(value.roles); setActiveRole(value.activeRole)
+          setDisplayName(value.displayName); setBio(value.bio); setVisibility(value.visibility); setFederations(value.federations)
+          setSex(value.sex); setCountry(value.country); setRegion(value.region); setBodyweight(value.bodyweight)
+          setSquat(value.squat); setBench(value.bench); setDeadlift(value.deadlift); setMaxesDate(value.maxesDate); setEstimated(value.estimated)
+        }
         if (!cancelled) setLoading(false)
       }
     }
@@ -140,7 +166,7 @@ export default function OnboardingPage() {
     }
   }, [])
 
-  const showAthleteStep = roles.includes('athlete') || (status?.state.roles ?? []).includes('athlete')
+  const showAthleteStep = roles.includes('athlete')
   const athleteRequired = showAthleteStep
   const totalRequiredSteps = 2 + (athleteRequired ? 1 : 0)
 
@@ -149,9 +175,9 @@ export default function OnboardingPage() {
     let c = 0
     if (status.state.roles.length > 0) c += 1
     if (status.state.profile_complete) c += 1
-    if (status.has_athlete_basics) c += 1
+    if (showAthleteStep && status.has_athlete_basics) c += 1
     return c
-  }, [status])
+  }, [status, showAthleteStep])
 
   const progressPct = totalRequiredSteps > 0 ? Math.round((completedCount / totalRequiredSteps) * 100) : 0
 
@@ -209,7 +235,6 @@ export default function OnboardingPage() {
         display_name: displayName.trim(),
         bio: bio.trim(),
         profile_visibility: visibility,
-        public_training_summary_enabled: publicSummary,
         federations,
       })
       applySettings(next)
@@ -227,7 +252,8 @@ export default function OnboardingPage() {
             ? { ...prev, state: { ...prev.state, profile_complete: true }, next_step: 'done', is_onboarded: true }
             : prev,
         )
-        navigate('/')
+        await removeDraft('onboarding-form')
+        window.location.assign('/')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save profile')
@@ -237,6 +263,7 @@ export default function OnboardingPage() {
   }
 
   async function handleBasicsNext() {
+    if (!sex) { setError('Select sex for competition calculations.'); return }
     if (!country.trim()) {
       setError('Country is required.')
       return
@@ -262,12 +289,15 @@ export default function OnboardingPage() {
         region: region.trim() || null,
         bodyweight_kg: bw,
         training_maxes: { squat_kg: sq, bench_kg: be, deadlift_kg: dl },
+        maxes_date: maxesDate,
+        training_maxes_estimated: estimated,
       })
       applySettings(next)
       setStatus((prev) =>
         prev ? { ...prev, has_athlete_basics: true, next_step: 'done', is_onboarded: true } : prev,
       )
-      navigate('/')
+      await removeDraft('onboarding-form')
+      window.location.assign('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save athlete basics')
     } finally {
@@ -283,7 +313,7 @@ export default function OnboardingPage() {
     )
   }
 
-  if (status?.is_onboarded || status?.next_step === 'done') {
+  if (!editing && (status?.is_onboarded || status?.next_step === 'done')) {
     return (
       <Center maw={640} mx="auto" mt="xl" px="md">
         <Paper p="xl" radius="md" shadow="sm" w="100%">
@@ -332,7 +362,7 @@ export default function OnboardingPage() {
         <Stack gap="md">
           <Group justify="space-between" wrap="wrap" align="center">
             <Stack gap={2}>
-              <Title order={2}>Welcome to NoLift Training</Title>
+              <Title order={2}>{editing ? 'Edit your profile and basics' : 'Welcome to NoLift Training'}</Title>
               <Text c="dimmed" size="sm">
                 Tell us a bit about yourself so we can set up the right tools.
               </Text>
@@ -391,8 +421,6 @@ export default function OnboardingPage() {
                 setBio={setBio}
                 visibility={visibility}
                 setVisibility={setVisibility}
-                publicSummary={publicSummary}
-                setPublicSummary={setPublicSummary}
                 federations={federations}
                 setFederations={setFederations}
                 federationOptions={fedOptions}
@@ -435,6 +463,11 @@ export default function OnboardingPage() {
                   setDeadlift={setDeadlift}
                   disabled={submitting}
                 />
+                <TextInput type="date" label="1RM reference date" value={maxesDate} onChange={event => setMaxesDate(event.currentTarget.value)} max={new Date().toLocaleDateString('en-CA')} required mt="md" />
+                <Text size="sm" mt="md">Identify any estimated 1RMs:</Text>
+                <Group mt="xs">
+                  {(['squat', 'bench', 'deadlift'] as const).map(lift => <Checkbox key={lift} label={lift[0].toUpperCase() + lift.slice(1)} checked={estimated[lift]} onChange={event => { const checked = event.currentTarget.checked; setEstimated(previous => ({ ...previous, [lift]: checked })) }} disabled={submitting} />)}
+                </Group>
                 <Group justify="space-between" mt="lg">
                   <Button
                     variant="subtle"
@@ -513,6 +546,10 @@ function RoleStep(props: {
                 background: checked ? 'var(--mantine-color-teal-light)' : undefined,
               }}
               onClick={() => toggle(opt.value)}
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              aria-pressed={checked}
+              onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(opt.value) } }}
             >
               <Group justify="space-between" align="flex-start" wrap="nowrap">
                 <Stack gap={2}>
@@ -545,8 +582,6 @@ function ProfileStep(props: {
   setBio: (v: string) => void
   visibility: 'private' | 'public'
   setVisibility: (v: 'private' | 'public') => void
-  publicSummary: boolean
-  setPublicSummary: (v: boolean) => void
   federations: string[]
   setFederations: (v: string[]) => void
   federationOptions: { value: string; label: string }[]
@@ -559,8 +594,6 @@ function ProfileStep(props: {
     setBio,
     visibility,
     setVisibility,
-    publicSummary,
-    setPublicSummary,
     federations,
     setFederations,
     federationOptions,
@@ -598,12 +631,7 @@ function ProfileStep(props: {
         allowDeselect={false}
         disabled={disabled}
       />
-      <Checkbox
-        label="Share a public summary of my training (weekly tonnage, top sets)"
-        checked={publicSummary}
-        onChange={(e) => setPublicSummary(e.currentTarget.checked)}
-        disabled={disabled}
-      />
+      <Text size="sm" c="dimmed">Training stays private until you select domains in Profile publication settings.</Text>
       <MultiSelect
         label="Federations you compete in"
         description="Used to pick your weight class — no matter where you compete."
@@ -625,8 +653,8 @@ function ProfileStep(props: {
 }
 
 function AthleteBasicsStep(props: {
-  sex: 'male' | 'female'
-  setSex: (v: 'male' | 'female') => void
+  sex: 'male' | 'female' | ''
+  setSex: (v: 'male' | 'female' | '') => void
   country: string
   setCountry: (v: string) => void
   region: string
@@ -641,6 +669,9 @@ function AthleteBasicsStep(props: {
   setDeadlift: (v: number | string) => void
   disabled: boolean
 }) {
+  const [unit, setUnit] = useState<'kg' | 'lb'>('kg')
+  const display = (value: number | string) => typeof value === 'number' ? toDisplayUnit(value, unit) : value
+  const kilograms = (value: number | string) => value === '' ? '' : fromDisplayUnit(Number(value), unit)
   const {
     sex,
     setSex,
@@ -693,28 +724,30 @@ function AthleteBasicsStep(props: {
           disabled={disabled}
         />
       </Group>
+      <Select label="Weight units" value={unit} data={[{ value: 'kg', label: 'Kilograms' }, { value: 'lb', label: 'Pounds' }]} onChange={value => setUnit(value === 'lb' ? 'lb' : 'kg')} allowDeselect={false} disabled={disabled} />
       <NumberInput
-        label="Bodyweight (kg)"
+        label={`Bodyweight (${unit})`}
         description="Current bodyweight, used for weight-class lookup."
-        value={bodyweight}
-        onChange={(v) => setBodyweight(v)}
-        min={30}
-        max={300}
+        value={display(bodyweight)}
+        onChange={(v) => setBodyweight(kilograms(v))}
+        min={toDisplayUnit(30, unit)}
+        max={toDisplayUnit(300, unit)}
         decimalScale={1}
         step={0.1}
         required
         disabled={disabled}
       />
       <Text size="sm" fw={500} mt="sm">
-        Training maxes (kg) — your most recent working sets
+        Best-known current 1RMs ({unit})
       </Text>
+      <Text size="sm" c="dimmed">Enter the most you believe you can lift for one repetition today. Estimates are welcome; identify them below.</Text>
       <Group grow>
         <NumberInput
           label="Squat"
-          value={squat}
-          onChange={(v) => setSquat(v)}
-          min={20}
-          max={600}
+          value={display(squat)}
+          onChange={(v) => setSquat(kilograms(v))}
+          min={toDisplayUnit(20, unit)}
+          max={toDisplayUnit(600, unit)}
           step={2.5}
           decimalScale={1}
           required
@@ -722,10 +755,10 @@ function AthleteBasicsStep(props: {
         />
         <NumberInput
           label="Bench"
-          value={bench}
-          onChange={(v) => setBench(v)}
-          min={20}
-          max={600}
+          value={display(bench)}
+          onChange={(v) => setBench(kilograms(v))}
+          min={toDisplayUnit(20, unit)}
+          max={toDisplayUnit(600, unit)}
           step={2.5}
           decimalScale={1}
           required
@@ -733,10 +766,10 @@ function AthleteBasicsStep(props: {
         />
         <NumberInput
           label="Deadlift"
-          value={deadlift}
-          onChange={(v) => setDeadlift(v)}
-          min={20}
-          max={600}
+          value={display(deadlift)}
+          onChange={(v) => setDeadlift(kilograms(v))}
+          min={toDisplayUnit(20, unit)}
+          max={toDisplayUnit(600, unit)}
           step={2.5}
           decimalScale={1}
           required
@@ -746,4 +779,3 @@ function AthleteBasicsStep(props: {
     </Stack>
   )
 }
-

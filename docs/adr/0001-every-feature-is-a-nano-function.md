@@ -4,7 +4,9 @@ Date: 2026-07-02
 
 ## Status
 
-Accepted
+Historical; superseded by the sixteen HTTP/MCP domain services documented in
+[ARCHITECTURE.md](../ARCHITECTURE.md). The original decision below is retained as
+a historical record. New work uses the existing services and native Codex runtime.
 
 ## Context
 

@@ -1,10 +1,6 @@
-import axios from 'axios'
+import api from './http'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
-})
+
 
 export type JobStatus = 'queued' | 'starting' | 'running' | 'succeeded' | 'failed' | 'cancel_requested' | 'cancelled' | 'uncertain' | 'cancel_requested' | 'cancelled' | 'uncertain'
 export type Job = { job_id: string; status: JobStatus; result?: { content?: string | Record<string, unknown> }; error?: { code?: string; message?: string } }

@@ -166,6 +166,8 @@ function weekStartForBlock(program: Program, block = 'current'): WeekStartDay {
   const blockValue = block || 'current'
   const stored = program.meta?.block_week_start_days?.[blockValue]
   if (stored) return normalizeWeekStartDay(stored, 'Monday')
+  const blockRecord = (program.meta?.blocks ?? []).find((candidate) => String(candidate?.id ?? candidate?.block_id ?? '') === blockValue)
+  if (blockRecord?.week_start_day) return normalizeWeekStartDay(blockRecord.week_start_day, 'Monday')
   return 'Monday'
 }
 
@@ -241,7 +243,8 @@ export function isIsoDate(value: string | undefined): value is string {
 
 export function buildAnalysisWindows(program: Program, asOfDate: string): Record<AnalysisWindowKey, AnalysisWindow> {
   const sessions = program.sessions ?? []
-  const programStart = program.meta?.program_start || sessions.find((session) => (session.block ?? 'current') === 'current')?.date || asOfDate
+  const currentBlock = (program.meta?.blocks ?? []).find((candidate) => candidate?.status === 'active')
+  const programStart = currentBlock?.start_date || program.meta?.program_start || sessions.find((session) => (session.block ?? 'current') === 'current')?.date || asOfDate
   const weekStartDay = weekStartForBlock(program, 'current')
   const currentWeek = resolveCurrentWeek(program, asOfDate, programStart, weekStartDay)
   const windows = {} as Record<AnalysisWindowKey, AnalysisWindow>

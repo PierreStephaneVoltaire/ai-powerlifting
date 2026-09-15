@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import LiftProfileContext from '@/components/lift-profiles/LiftProfileContext'
+import ProfileFavorite from '@/components/settings/ProfileFavorite'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Avatar, Badge, Button, Group, Loader, Paper, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
+import { Alert, Avatar, Badge, Button, Group, Loader, MultiSelect, Paper, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { ArrowLeft, Calendar, Film, Search, User, Users } from 'lucide-react'
-import { fetchProfile, searchProfiles, type PublicProfile } from '@/api/profiles'
+import { fetchProfile, searchProfilePage, type ProfileSearchInput, type PublicProfile } from '@/api/profiles'
+import { fetchFederations } from '@/api/client'
+import api from '@/api/http'
 import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { resolveAvatarUrl } from '@/utils/media'
@@ -11,6 +15,8 @@ import VideoCard from '@/components/videos/VideoCard'
 import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
 import { sortVideos, VIDEO_SORTS, type VideoSort } from '@/utils/videoSort'
 import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
+import { listFavoritesApi, setFavoriteApi } from '@/api/relationships'
+import { useAuth } from '@/auth/AuthProvider'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -62,27 +68,51 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
 }
 
 export default function ProfilesPage() {
-  const { pushToast } = useUiStore()
+  const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [profiles, setProfiles] = useState<PublicProfile[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [tags, setTags] = useState<string[]>([])
+  const [tagMode, setTagMode] = useState<'and' | 'or'>('and')
+  const [federations, setFederations] = useState<string[]>([])
+  const [role, setRole] = useState<'athlete' | 'coach' | null>(null)
+  const [tagOptions, setTagOptions] = useState<string[]>([])
+  const [federationOptions, setFederationOptions] = useState<{ value: string; label: string }[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [favorites, setFavorites] = useState<string[]>([])
+  const activeSearch = useRef<ProfileSearchInput>({})
+  const requestNumber = useRef(0)
 
-  const runSearch = async (nextQuery = query) => {
+  const runSearch = async (nextQuery = query, append = false) => {
+    const request = ++requestNumber.current
     setLoading(true)
+    setError('')
+    if (!append) activeSearch.current = { query: nextQuery, tags, federations, tag_mode: tagMode, ...(role ? { role } : {}) }
     try {
-      setProfiles(await searchProfiles(nextQuery))
+      const page = await searchProfilePage({ ...activeSearch.current, ...(append && nextCursor ? { cursor: nextCursor } : {}) })
+      if (request !== requestNumber.current) return
+      setProfiles(previous => append ? [...previous, ...page.profiles] : page.profiles)
+      setNextCursor(page.next_cursor)
     } catch {
-      pushToast({ message: 'Profile search failed', type: 'error' })
+      if (request === requestNumber.current) setError('Profile search failed. Please retry.')
     } finally {
-      setLoading(false)
+      if (request === requestNumber.current) setLoading(false)
     }
   }
 
   useEffect(() => {
     runSearch('')
-    // Run once on mount. Manual searches use the current input value.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    Promise.all([api.get('/profiles/tags'), fetchFederations()]).then(([catalog, library]) => {
+      setTagOptions(catalog.data.data.filter((tag: { status: string }) => tag.status === 'approved').map((tag: { tag: string }) => tag.tag))
+      setFederationOptions(library.map(federation => ({ value: federation.pk, label: federation.abbreviation || federation.name })))
+    }).catch(() => setError('Search filters could not be loaded. Reload the page to retry.'))
   }, [])
+
+  useEffect(() => {
+    if (!user) { setFavorites([]); return }
+    void listFavoritesApi().then(result => setFavorites(result.favorites.map(item => item.athlete_mapped_pk))).catch(() => setFavorites([]))
+  }, [user?.sub])
 
   return (
     <Stack gap="md">
@@ -92,7 +122,7 @@ export default function ProfilesPage() {
             <Users size={22} />
             <Text component="h1" className="if-page-title">Profiles</Text>
           </Group>
-          <Text className="if-page-subtitle">Find public lifter profiles. Private profiles are hidden unless they are yours.</Text>
+          <Text className="if-page-subtitle">Find public Athletes and Coaches, plus private profiles you have permission to view.</Text>
         </Stack>
       </div>
 
@@ -101,7 +131,7 @@ export default function ProfilesPage() {
           <TextInput
             leftSection={<Search size={16} />}
             label="Search"
-            placeholder="Nickname, display name, or bio"
+            placeholder="Handle or display name"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -113,7 +143,15 @@ export default function ProfilesPage() {
             Search
           </Button>
         </Group>
+        <Group align="end" mt="md">
+          <MultiSelect label="Federations" data={federationOptions} searchable value={federations} onChange={setFederations} />
+          <MultiSelect label="Approved tags" data={tagOptions} searchable value={tags} onChange={setTags} />
+          <Select label="Role" placeholder="Athletes and Coaches" clearable data={[{ value: 'athlete', label: 'Athlete' }, { value: 'coach', label: 'Coach' }]} value={role} onChange={value => setRole(value as 'athlete' | 'coach' | null)} />
+          <Stack gap={4}><Text size="sm">Match tags</Text><SegmentedControl value={tagMode} onChange={value => setTagMode(value as 'and' | 'or')} data={[{ value: 'and', label: 'All' }, { value: 'or', label: 'Any' }]} /></Stack>
+        </Group>
       </Paper>
+      {user && <Paper p="md" radius="md" withBorder className="if-card"><Group justify="space-between"><Text fw={600}>Private favorites</Text><Text size="xs" c="dimmed">Only you can see these IDs. Favorites grant no access.</Text></Group>{favorites.length === 0 ? <Text size="sm" c="dimmed" mt="sm">No favorites yet.</Text> : <Stack gap="xs" mt="sm">{favorites.map(athlete => <Group key={athlete} justify="space-between"><code>{athlete}</code><Button size="xs" variant="subtle" onClick={() => void setFavoriteApi(athlete, 'remove').then(() => setFavorites(items => items.filter(item => item !== athlete)))}>Remove</Button></Group>)}</Stack>}</Paper>}
+      {error && <Alert color="red">{error} <Button variant="subtle" onClick={() => runSearch()}>Retry</Button></Alert>}
 
       {loading && profiles.length === 0 ? (
         <Group justify="center" py="xl">
@@ -127,9 +165,10 @@ export default function ProfilesPage() {
         </SimpleGrid>
       ) : (
         <Paper p="xl" radius="md" withBorder className="if-card">
-          <Text c="var(--text-secondary)" ta="center">No public profiles found.</Text>
+          <Text c="var(--text-secondary)" ta="center">No profiles match these filters.</Text>
         </Paper>
       )}
+      {nextCursor && <Button loading={loading} onClick={() => runSearch(query, true)}>Show twenty more</Button>}
     </Stack>
   )
 }
@@ -226,7 +265,7 @@ export function PublicProfilePage() {
                   {profile.is_self && <Badge size="xs">You</Badge>}
                 </Group>
                 <Group gap="xs">
-                  <span className="if-pill if-pill-info">Public profile</span>
+                  <span className="if-pill if-pill-info">{profile.profile_visibility === 'public' ? 'Public profile' : 'Granted private profile'}</span>
                 </Group>
                 <Text size="sm" c="var(--text-secondary)">
                   {profile.federation || 'Federation unset'} - {profile.weight_class_kg || '--'} kg
@@ -241,6 +280,7 @@ export function PublicProfilePage() {
                 )}
               </Stack>
             </Group>
+            {!profile.is_self && <ProfileFavorite athlete={profile.athlete_pk} />}
             {profile.is_self && (
               <Button component={Link} to="/profile" variant="light" leftSection={<User size={16} />}>
                 Edit
@@ -254,6 +294,8 @@ export function PublicProfilePage() {
           )}
         </Stack>
       </Paper>
+
+      <LiftProfileContext profiles={profile.lift_profiles} athlete={profile.athlete_pk} />
 
       <SimpleGrid cols={{ base: 2, xs: 3, md: 6 }} spacing="xs">
         {profileMetrics.map((metric) => (

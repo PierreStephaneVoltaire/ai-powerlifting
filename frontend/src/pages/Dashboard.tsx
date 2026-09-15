@@ -5,7 +5,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { useCompetitionsStore } from '@/store/competitionsStore'
-import { fetchWeightLog, updateMetaField, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, fetchRankingPercentile, type LiftProfileReview, type RankingPercentileResult, type RankingPercentileCard } from '@/api/client'
+import { fetchWeightLog, updateMetaField, mutationEnvelope, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, fetchRankingPercentile, type LiftProfileReview, type RankingPercentileResult, type RankingPercentileCard } from '@/api/client'
 import {
   fetchAnalysisManifest,
   fetchAnalysisSection,
@@ -16,6 +16,7 @@ import {
 } from '@/api/analytics'
 import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
 import { getSettings } from '@/api/settings'
+import { sessionRoute } from '@/utils/sessionRoute'
 import { daysUntil, formatDateShort } from '@/utils/dates'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
@@ -631,11 +632,11 @@ export default function Dashboard() {
     }
 
     try {
-      await Promise.all([
-        updateMetaField(version, 'height_cm', height),
-        updateMetaField(version, 'arm_wingspan_cm', wingspan),
-        updateMetaField(version, 'leg_length_cm', legLength),
-      ])
+      let revision = useProgramStore.getState().program?.meta.revision ?? 0
+      for (const [field, value] of [['height_cm', height], ['arm_wingspan_cm', wingspan], ['leg_length_cm', legLength]] as const) {
+        const result = await updateMetaField(version, field, value, mutationEnvelope(revision))
+        revision = result.revision ?? revision
+      }
       await useProgramStore.getState().loadProgram(version)
       pushToast({ message: 'Measurements updated', type: 'success' })
       setEditingMeasurements(false)
@@ -876,10 +877,10 @@ export default function Dashboard() {
           className="if-mock-card"
           data-testid="dashboard-next-workout"
           style={nextWorkout ? { cursor: 'pointer', textDecoration: 'none', color: 'inherit', display: 'block' } : undefined}
-          onClick={nextWorkout ? () => navigate(`/session/${nextWorkout.date}`) : undefined}
+          onClick={nextWorkout ? () => navigate(sessionRoute(nextWorkout, program.sessions.indexOf(nextWorkout)), { state: { backTo: '/', backScrollY: window.scrollY } }) : undefined}
           role={nextWorkout ? 'link' : undefined}
           tabIndex={nextWorkout ? 0 : undefined}
-          onKeyDown={nextWorkout ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/session/${nextWorkout.date}`) } } : undefined}
+          onKeyDown={nextWorkout ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(sessionRoute(nextWorkout, program.sessions.indexOf(nextWorkout)), { state: { backTo: '/', backScrollY: window.scrollY } }) } } : undefined}
         >
           <div className="if-mock-card-label"><Dumbbell size={12} /> Next workout</div>
           {nextWorkout ? (() => {

@@ -1,14 +1,12 @@
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { createReadStream } from 'fs'
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { createReadStream, statSync } from 'fs'
 import { invokeLambda } from '../utils/lambda'
-import type { SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
+import type { LiftProfileVideoAngle, SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
 
 export interface VideoUploadPresign {
   video_id: string
   s3_key: string
-  upload_url: string
-  upload_headers: Record<string, string>
-  expires_in: number
+  metadata: Record<string, string>
 }
 
 const videosBucket = process.env.VIDEOS_BUCKET || 'powerlifting-session-videos'
@@ -24,29 +22,23 @@ export async function uploadSessionVideo(
   exerciseName?: string,
   setNumber?: number,
   notes?: string,
+  idempotencyKey?: string,
+  sessionId?: string,
+  lift?: 'squat' | 'bench' | 'deadlift',
+  angle?: LiftProfileVideoAngle,
+  targetRevision?: number,
 ): Promise<SessionVideo> {
-  const presign = await presignSessionVideo(pk, version, sessionDate, filename, mimeType)
-  const metadata = Object.fromEntries(
-    Object.entries(presign.upload_headers)
-      .filter(([key]) => key.toLowerCase().startsWith('x-amz-meta-'))
-      .map(([key, value]) => [key.slice('x-amz-meta-'.length), value]),
-  )
+  const expectedSize = statSync(filePath).size
+  const presign = await presignSessionVideo(pk, version, sessionDate, filename, mimeType, idempotencyKey, expectedSize, sessionId, lift, angle, targetRevision)
   await s3Client.send(new PutObjectCommand({
     Bucket: videosBucket,
     Key: presign.s3_key,
     Body: createReadStream(filePath),
     ContentType: mimeType,
-    Metadata: metadata,
+    ContentLength: expectedSize,
+    Metadata: presign.metadata,
   }))
-  return confirmSessionVideo(pk, version, sessionDate, presign.video_id, presign.s3_key, exerciseName, setNumber, notes)
-}
-
-export async function headMedia(key: string) {
-  return s3Client.send(new HeadObjectCommand({ Bucket: videosBucket, Key: key }))
-}
-
-export async function getMedia(key: string, range?: string) {
-  return s3Client.send(new GetObjectCommand({ Bucket: videosBucket, Key: key, ...(range ? { Range: range } : {}) }))
+  return confirmSessionVideo(pk, version, sessionDate, presign.video_id, presign.s3_key, exerciseName, setNumber, notes, undefined, idempotencyKey, sessionId, lift, angle, targetRevision)
 }
 
 export async function presignSessionVideo(
@@ -55,6 +47,12 @@ export async function presignSessionVideo(
   sessionDate: string,
   filename: string,
   mimeType: string,
+  idempotencyKey?: string,
+  expectedSize?: number,
+  sessionId?: string,
+  lift?: 'squat' | 'bench' | 'deadlift',
+  angle?: LiftProfileVideoAngle,
+  targetRevision?: number,
 ): Promise<VideoUploadPresign> {
   return (await invokeLambda('video_upload_presign', {
     pk,
@@ -62,6 +60,12 @@ export async function presignSessionVideo(
     session_date: sessionDate,
     filename,
     mimetype: mimeType,
+    idempotency_key: idempotencyKey,
+    expected_size: expectedSize,
+    session_id: sessionId,
+    lift,
+    angle,
+    target_revision: targetRevision,
   })) as VideoUploadPresign
 }
 
@@ -74,6 +78,12 @@ export async function confirmSessionVideo(
   exerciseName?: string,
   setNumber?: number,
   notes?: string,
+  expectedSize?: number,
+  idempotencyKey?: string,
+  sessionId?: string,
+  lift?: 'squat' | 'bench' | 'deadlift',
+  angle?: LiftProfileVideoAngle,
+  targetRevision?: number,
 ): Promise<SessionVideo> {
   return (await invokeLambda('video_upload_confirm', {
     pk,
@@ -84,7 +94,17 @@ export async function confirmSessionVideo(
     exercise_name: exerciseName,
     set_number: setNumber,
     notes,
+    expected_size: expectedSize,
+    idempotency_key: idempotencyKey,
+    session_id: sessionId,
+    lift,
+    angle,
+    target_revision: targetRevision,
   })) as SessionVideo
+}
+
+export async function resolveMedia(pk: string, key: string): Promise<string> {
+  return String(await invokeLambda('video_media_resolve', { pk, s3_key: key }))
 }
 
 export async function removeSessionVideo(
@@ -92,31 +112,14 @@ export async function removeSessionVideo(
   version: string,
   sessionDate: string,
   videoId: string,
+  sessionId?: string,
 ): Promise<void> {
   await invokeLambda('video_remove', {
     pk,
     version,
     session_date: sessionDate,
     video_id: videoId,
-  })
-}
-
-export async function updateVideoThumbnail(
-  pk: string,
-  version: string,
-  sessionDate: string,
-  videoId: string,
-  _thumbnailUrl: string,
-  thumbnailS3Key: string,
-  status: 'ready' | 'failed',
-): Promise<void> {
-  await invokeLambda('video_update_thumbnail', {
-    pk,
-    version,
-    session_date: sessionDate,
-    video_id: videoId,
-    thumbnail_s3_key: thumbnailS3Key,
-    status,
+    session_id: sessionId,
   })
 }
 
@@ -140,6 +143,7 @@ export async function updateSessionVideoMetadata(
   sessionDate: string,
   videoId: string,
   updates: { exerciseName?: string; setNumber?: number; notes?: string },
+  sessionId?: string,
 ): Promise<SessionVideo> {
   return (await invokeLambda('video_update_metadata', {
     pk,
@@ -149,5 +153,6 @@ export async function updateSessionVideoMetadata(
     exercise_name: updates.exerciseName,
     set_number: updates.setNumber,
     notes: updates.notes,
+    session_id: sessionId,
   })) as SessionVideo
 }

@@ -8,8 +8,9 @@ working — this file is only layout + operating rules.
 
 - `frontend/` — React + Vite app
 - `backend/` — Express API (Node)
-- `lambda/` — ~94 health-tool nano-functions (one HTTP route each) + `pl_authorizer`
-  + `tool_registry`, behind an API Gateway gated by `X-Internal-Token`. See ADR-0001.
+- `services/` — sixteen typed HTTP/MCP domain services; manifests in `operations/`.
+- `lambda/` — retained domain handlers and storage helpers, plus the S3 video worker.
+  ADR-0001 records the historical nano-function architecture.
 - `terraform/` — AWS-only (Lambdas, S3, API Gateway, SSM). Applied separately from
   the root infra.
 

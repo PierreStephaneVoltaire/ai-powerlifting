@@ -122,6 +122,14 @@
           "type": "number"
         },
         "post_meet_report": {},
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -154,6 +162,14 @@
         "patch": {
           "type": "object"
         },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -161,7 +177,9 @@
       },
       "required": [
         "master_id",
-        "patch"
+        "patch",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -194,6 +212,14 @@
           "type": "number"
         },
         "post_meet_report": {},
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -202,7 +228,9 @@
       "required": [
         "master_id",
         "results",
-        "body_weight_kg"
+        "body_weight_kg",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -235,6 +263,14 @@
           "type": "number"
         },
         "post_meet_report": {},
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
         "version": {
           "type": "string"
         },
@@ -249,7 +285,9 @@
       "required": [
         "date",
         "results",
-        "body_weight_kg"
+        "body_weight_kg",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -274,13 +312,23 @@
         "competition": {
           "type": "object"
         },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
         "pk": {
           "type": "string",
           "minLength": 1
         }
       },
       "required": [
-        "competition"
+        "competition",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -311,13 +359,23 @@
           "type": "string",
           "minLength": 10
         },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
         "pk": {
           "type": "string",
           "minLength": 1
         }
       },
       "required": [
-        "date"
+        "date",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -444,6 +502,14 @@
         "patch": {
           "type": "object"
         },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -451,7 +517,9 @@
       },
       "required": [
         "date",
-        "patch"
+        "patch",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },

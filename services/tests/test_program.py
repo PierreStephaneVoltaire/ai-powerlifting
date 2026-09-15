@@ -89,3 +89,62 @@ class ProgramContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_source_mutations_replay_deletes_invalidate_analysis_and_report_real_conflicts():
+    import asyncio
+    import copy
+    from types import SimpleNamespace
+    import pytest
+    from botocore.exceptions import ClientError
+    from services.dispatch import dispatch
+    from program_store import ProgramStore, ProgramRevisionConflictError
+
+    class Table:
+        def __init__(self):
+            self.items = {
+                "program#current": {"pk": "athlete", "sk": "program#current", "ref_sk": "program#v001", "revision": 0},
+                "program#v001": {"pk": "athlete", "sk": "program#v001", "meta": {"revision": 0}, "competitions": [{"date": "2026-09-01"}]},
+            }
+            self.meta = SimpleNamespace(client=self)
+            self.transactions = 0
+            self.conflict = False
+
+        def get_item(self, Key, **kwargs):
+            item = self.items.get(Key["sk"])
+            return {"Item": copy.deepcopy(item)} if item else {}
+
+        def transact_write_items(self, TransactItems):
+            self.transactions += 1
+            if self.conflict:
+                self.items["program#current"]["revision"] = 2
+                self.items["program#v001"]["meta"]["revision"] = 2
+                raise ClientError({"Error": {"Code": "TransactionCanceledException"}}, "TransactWriteItems")
+            for action in TransactItems:
+                if "Put" in action:
+                    item = action["Put"]["Item"]
+                    self.items[item["sk"]] = copy.deepcopy(item)
+                else:
+                    self.items[action["Update"]["Key"]["sk"]]["revision"] = action["Update"]["ExpressionAttributeValues"][":next"]
+            raise TimeoutError("Response lost after the committed transaction")
+
+    store = ProgramStore("if-health", "athlete")
+    store._table = table = Table()
+    invalidations = []
+    store._invalidate_analysis_cache = lambda: invalidations.append(store.pk)
+    def remove(program):
+        return {"removed": program["competitions"].pop()["date"]}
+    def mutate(operation, key, revision=0):
+        return asyncio.run(store.mutate_source(operation, {"date": "2026-09-01"}, revision, key, remove))
+    assert mutate("delete_competition", "delete-once")["revision"] == 1
+    assert mutate("delete_competition", "delete-once")["revision"] == 1
+    assert table.transactions == 1
+    assert invalidations == ["athlete"]
+    with pytest.raises(ValueError, match="different operation"):
+        mutate("complete_competition", "delete-once")
+    table.items["program#v001"]["competitions"] = [{"date": "2026-09-01"}]
+    table.conflict = True
+    with pytest.raises(ProgramRevisionConflictError) as error:
+        mutate("delete_competition", "racing-delete", 1)
+    assert error.value.current_revision == 2
+    assert invalidations == ["athlete"]

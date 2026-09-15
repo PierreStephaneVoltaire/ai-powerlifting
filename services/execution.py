@@ -10,6 +10,7 @@ import httpx
 
 from .ai import DomainExecution, answer, current_execution
 from .dispatch import OperationError, dispatch
+from .principal import principal_token
 
 
 executions: dict[str, DomainExecution] = {}
@@ -17,10 +18,12 @@ job_executions: dict[str, DomainExecution] = {}
 
 
 async def submit(operation, arguments, athlete, person):
+    arguments = dict(arguments)
     generation = None
     store = None
     if operation.name in REPORTS:
         source = await report_source(arguments, athlete, operation.name)
+        arguments = {key: value for key, value in arguments.items() if key not in {'_access', '_person_pk', '_if_job_id'}}
         generation_id = fingerprint(operation.name, arguments, source)
         if source:
             arguments = {**arguments, "_report_source": source}
@@ -30,12 +33,18 @@ async def submit(operation, arguments, athlete, person):
             if record and record["status"] == "succeeded":
                 return await asyncio.to_thread(store.result, record)
             return {"cached": False, "cache_miss": True, "generation_id": generation_id, "status": (record or {}).get("status", "missing")}
-        generation, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, person or athlete, bool(arguments.get("refresh")))
+        if not person:
+            raise OperationError(401, "invalid_principal", "Verified acting Person required")
+        generation, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, person, bool(arguments.get("refresh")), (source or {}).get('access_requirements'))
         if not created:
             if generation["status"] == "succeeded":
                 result = await asyncio.to_thread(store.result, generation)
                 return {**result, "cached": True} if isinstance(result, dict) else result
             return {"generation_id": generation_id, "job_id": generation.get("job_id"), "status": generation["status"]}
+    else:
+        arguments = {key: value for key, value in arguments.items() if key not in {'_access', '_person_pk', '_if_job_id'}}
+    if not person:
+        raise OperationError(401, "invalid_principal", "Verified acting Person required")
     if generation:
         arguments = {**arguments, "refresh": True, "cache_only": False}
     key = f"{generation['generation_id']}:{generation['attempt']}" if generation else uuid.uuid4().hex
@@ -43,7 +52,7 @@ async def submit(operation, arguments, athlete, person):
         async with httpx.AsyncClient(timeout=40) as client:
             response = await client.post(
                 os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs",
-                headers={"X-Internal-Token": os.environ["INTERNAL_API_TOKEN"], "X-Person-Pk": person or athlete},
+                headers={"X-Internal-Token": os.environ["INTERNAL_API_TOKEN"], "X-Person-Pk": person, "X-PL-Principal": principal_token(person, athlete, operation.name)},
                 json={"conversation_id": f"powerlifting:{athlete}:{key}", "kind": "domain", "payload": {"domain": operation.domain, "operation": operation.name, "arguments": arguments, "athlete": athlete, **({"generation_id": generation["generation_id"], "generation_attempt": int(generation["attempt"])} if generation else {})}, "idempotency_key": key},
             )
             if response.is_error:
@@ -73,13 +82,16 @@ async def start(operation, arguments, athlete, job_id):
             record = await asyncio.to_thread(store.get, generation_id)
             result = await asyncio.to_thread(store.result, record) if record and record["status"] == "succeeded" else {"cached": False, "cache_miss": True}
             return {"status": "succeeded", "result": result}
-        record, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, arguments.get("_person_pk") or athlete, bool(arguments.get("refresh")))
+        record, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, arguments.get("_person_pk") or athlete, bool(arguments.get("refresh")), (source or {}).get('access_requirements'))
         if not created:
             result = await asyncio.to_thread(store.result, record) if record["status"] == "succeeded" else {"generation_id": generation_id, "status": record["status"]}
             return {"status": "succeeded", "result": result}
         arguments = {**arguments, "_generation_id": generation_id, "_generation_attempt": int(record["attempt"]), "refresh": True}
         await asyncio.to_thread(store.update, generation_id, expected_attempt=record["attempt"], job_id=job_id)
-    execution = DomainExecution(job_id=job_id, athlete=athlete)
+    person = arguments.get("_person_pk")
+    if not isinstance(person, str) or not person:
+        raise OperationError(401, "invalid_principal", "Verified acting Person required")
+    execution = DomainExecution(job_id=job_id, athlete=athlete, person=person, operation=operation.name)
     execution.generation_id = arguments.get("_generation_id")
     execution.generation_attempt = arguments.get("_generation_attempt")
     executions[execution.execution_id] = execution

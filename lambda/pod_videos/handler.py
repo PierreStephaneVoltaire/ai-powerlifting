@@ -16,10 +16,9 @@ _ROUTING = {
     "video_library_get": "video_library_get",
     "video_remove": "video_remove",
     "video_update_metadata": "video_update_metadata",
-    "video_update_thumbnail": "video_update_thumbnail",
-    "video_upload": "video_upload",
     "video_upload_presign": "video_upload_presign",
     "video_upload_confirm": "video_upload_confirm",
+    "video_media_resolve": "video_media_resolve",
 }
 
 

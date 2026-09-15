@@ -90,6 +90,7 @@ def summarize_lift_profiles(lift_profiles: list[dict[str, Any]] | None) -> list[
             "volume_tolerance": profile.get("volume_tolerance") or "moderate",
             "e1rm_multiplier": profile.get("e1rm_multiplier", 1.0),
             "stimulus_coefficient": profile.get("stimulus_coefficient", 1.0),
+            "failure_nodes": profile.get("failure_nodes") or [],
         })
     return ordered
 

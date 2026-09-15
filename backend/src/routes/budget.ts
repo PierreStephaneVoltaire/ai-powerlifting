@@ -4,6 +4,7 @@ import * as budgetController from '../controllers/budgetController'
 import * as competitionController from '../controllers/competitionController'
 import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { BudgetCategory, BudgetPriorityTier } from '@powerlifting/types'
+import { serveStoredMedia } from '../utils/serveMedia'
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -18,6 +19,13 @@ const upload = multer({
 })
 
 export const budgetRouter = Router()
+
+budgetRouter.get(/^\/media\/(.+)$/, async (req, res, next) => {
+  try {
+    const key = await budgetController.resolveItemPhoto(req.mapped_pk!, req.params[0])
+    await serveStoredMedia(req, res, process.env.BUDGET_MEDIA_BUCKET || 'powerlifting-budget-media', key)
+  } catch (error) { next(error) }
+})
 
 
 budgetRouter.get('/config', async (req, res, next) => {

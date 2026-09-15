@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from services.dispatch import OperationError
+
 
 def call_node(operation: str, args: dict[str, Any]) -> Any:
     url = os.environ.get("ANALYTICS_NODE_URL", "http://127.0.0.1:8091").rstrip("/")
@@ -20,6 +22,9 @@ def call_node(operation: str, args: dict[str, Any]) -> Any:
     payload = {key: value for key, value in args.items() if key not in {"_if_job_id", "_person_pk"}}
     response = httpx.post(f"{url}/internal/analytics/operations/{operation}", headers=headers, json=payload, timeout=900)
     if response.status_code >= 400:
+        if response.status_code == 404 and operation in {'analytics.blocks_get', 'analytics.correlation'}:
+            detail = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+            raise OperationError(404, 'cache_miss', str(detail.get('error') or 'Analytics report cache miss'))
         raise RuntimeError(response.text or f"Analytics sidecar returned {response.status_code}")
     if response.headers.get("content-type", "").startswith("application/json"):
         value = response.json()

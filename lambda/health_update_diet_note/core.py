@@ -36,7 +36,6 @@ async def health_update_diet_note(args: dict | None = None, date: str | None = N
     Returns:
         Updated diet note object {date, notes}
     """
-    import copy
 
     if isinstance(args, dict):
         if date is None:
@@ -46,26 +45,4 @@ async def health_update_diet_note(args: dict | None = None, date: str | None = N
     pk = args.get("pk") if isinstance(args, dict) else None
 
     store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    diet_notes = new_program.get("diet_notes", [])
-
-    note_idx = None
-    for i, note in enumerate(diet_notes):
-        if note.get("date") == date:
-            note_idx = i
-            break
-
-    new_note = {"date": date, "notes": notes}
-
-    if note_idx is not None:
-        diet_notes[note_idx] = new_note
-    else:
-        diet_notes.append(new_note)
-
-    new_program["diet_notes"] = diet_notes
-
-    await store._write_new_version(new_program, minor=True)
-
-    return new_note
+    return await store.upsert_diet_note(date, notes, args.get("expected_revision"), args.get("idempotency_key"))

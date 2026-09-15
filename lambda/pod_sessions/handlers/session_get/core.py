@@ -10,6 +10,7 @@ async def session_get(args: dict):
     program_sk, phases = await resolve_context(store, args.get("program_sk"))
     date = args.get("date")
     index = args.get("index")
+    session_id = args.get("session_id")
     loop = asyncio.get_running_loop()
-    item = await loop.run_in_executor(None, lambda: store._find_item_sync(program_sk, date, index))
+    item = await loop.run_in_executor(None, lambda: store._find_item_sync(program_sk, date, index, session_id))
     return _public_session(item, phases)

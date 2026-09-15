@@ -2,6 +2,14 @@ import { Router } from 'express'
 import * as blockNotesController from '../controllers/blockNotesController'
 import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { BlockNote } from '@powerlifting/types'
+import { AppError } from '../middleware/errorHandler'
+
+function mutationEnvelope(body: unknown): { expected_revision: number; idempotency_key: string } {
+  const input = body && typeof body === 'object' ? body as Record<string, unknown> : {}
+  if (typeof input.expected_revision !== 'number' || !Number.isInteger(input.expected_revision) || input.expected_revision < 0) throw new AppError('expected_revision must be a nonnegative integer', 400)
+  if (typeof input.idempotency_key !== 'string' || !input.idempotency_key.trim()) throw new AppError('idempotency_key must be a nonempty string', 400)
+  return { expected_revision: input.expected_revision, idempotency_key: input.idempotency_key }
+}
 
 export const blockNotesRouter = Router({ mergeParams: true })
 
@@ -25,12 +33,13 @@ blockNotesRouter.put('/:version', invalidateAfter((req) => [`block-notes:${req.p
       })
     }
 
-    await blockNotesController.updateBlockNotes(
+    const result = await blockNotesController.updateBlockNotes(
       req.mapped_pk!,
       req.params.version,
-      blockNotes as BlockNote[]
+      blockNotes as BlockNote[],
+      mutationEnvelope(req.body),
     )
-    res.json({ data: { success: true }, error: null })
+    res.json({ data: result, error: null })
   } catch (err) {
     next(err)
   }

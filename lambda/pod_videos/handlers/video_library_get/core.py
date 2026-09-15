@@ -1,8 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+from decimal import Decimal
 
 from .._video_store import context, get_health_table, get_session_store, resolve_pk, sort_items, strip_none
+
+
+def _sanitize_decimals(value):
+    if isinstance(value, Decimal):
+        return float(value) if value % 1 else int(value)
+    if isinstance(value, dict):
+        return {key: _sanitize_decimals(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_decimals(item) for item in value]
+    return value
 
 
 async def video_library_get(args: dict) -> dict:
@@ -38,7 +49,9 @@ async def video_library_get(args: dict) -> dict:
                     exercises.add(exercise_name)
                 items.append({
                     "video": video,
+                    "athlete_pk": pk,
                     "session_date": session.get("date"),
+                    "session_id": session.get("id") or session.get("session_id"),
                     "day": session.get("day"),
                     "week_number": session.get("week_number"),
                     "phase_name": (session.get("phase") or {}).get("name", ""),
@@ -46,6 +59,7 @@ async def video_library_get(args: dict) -> dict:
                     "exercise_reps": match.get("reps") if match else 0,
                     "exercise_kg": match.get("kg") if match else None,
                 })
-        return {"videos": [strip_none(item) for item in sort_items(items, sort)], "exercises": sorted(exercises)}
+        result = {"videos": [strip_none(item) for item in sort_items(items, sort)], "exercises": sorted(exercises)}
+        return _sanitize_decimals(result)
 
     return await asyncio.to_thread(read)

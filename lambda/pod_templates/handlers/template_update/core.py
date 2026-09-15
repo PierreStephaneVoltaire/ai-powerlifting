@@ -132,8 +132,7 @@ def _prepare_template_payload(template):
     }
     return prepared
 
-async def template_update(sk, template, actor_pk=None):
+async def template_update(sk, template, actor_pk=None, expected_revision=None, idempotency_key=None):
     prepared = _prepare_template_payload(template)
     ts = _get_template_store()
-    await ts.update_template(sk, prepared, actor_pk=_template_actor(actor_pk))
-    return {"status": "updated", "sk": sk}
+    return await ts.update_template(sk, prepared, actor_pk=_template_actor(actor_pk), expected_revision=expected_revision, idempotency_key=idempotency_key)

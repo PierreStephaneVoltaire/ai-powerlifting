@@ -57,6 +57,8 @@ async def health_create_competition(args: dict | None = None, competition: dict 
     if not isinstance(competition, dict):
         raise ValueError("competition must be an object")
     pk = args.get("pk") if isinstance(args, dict) else None
+    expected_revision = args.get("expected_revision") if isinstance(args, dict) else None
+    idempotency_key = args.get("idempotency_key") if isinstance(args, dict) else None
     for field in ("name", "date", "federation"):
         if not competition.get(field):
             raise ValueError(f"competition.{field} is required")
@@ -65,14 +67,6 @@ async def health_create_competition(args: dict | None = None, competition: dict 
         datetime.strptime(competition["date"], "%Y-%m-%d")
     except (TypeError, ValueError) as exc:
         raise ValueError("competition.date must be YYYY-MM-DD") from exc
-
-    store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    competitions = new_program.setdefault("competitions", [])
-    if any(c.get("date") == competition["date"] for c in competitions):
-        raise ValueError(f"Competition already exists on {competition['date']}")
 
     new_comp = {
         "name": competition["name"],
@@ -86,8 +80,20 @@ async def health_create_competition(args: dict | None = None, competition: dict 
         "targets": competition.get("targets", {}),
         "notes": competition.get("notes", ""),
     }
-    competitions.append(new_comp)
-    competitions.sort(key=lambda c: c.get("date", ""))
+    store = _store_for(pk)
 
-    await store._write_new_version(new_program, minor=True)
-    return new_comp
+    def mutate(program: dict) -> dict:
+        competitions = program.setdefault("competitions", [])
+        if any(c.get("date") == new_comp["date"] for c in competitions):
+            raise ValueError(f"Competition already exists on {new_comp['date']}")
+        competitions.append(copy.deepcopy(new_comp))
+        competitions.sort(key=lambda c: c.get("date", ""))
+        return copy.deepcopy(new_comp)
+
+    return await store.mutate_source(
+        "competition_create",
+        {"competition": new_comp},
+        expected_revision,
+        idempotency_key,
+        mutate,
+    )

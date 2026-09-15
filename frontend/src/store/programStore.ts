@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Program, Session, Exercise, Phase, MaxEntry, WeightEntry, ProgramListItem, SupplementPhase, DietNote, BlockNote, Competition, SessionVideo, LiftResults, LiftProfile, Sex, AthleteGoal, PostMeetReport, WeekStartDay } from '@powerlifting/types'
 import * as api from '@/api/client'
+import { requestPartition } from '@/api/context'
 
 interface ProgramState {
   program: Program | null
@@ -21,7 +22,7 @@ interface ProgramState {
   loadVersions: () => Promise<void>
   setActiveSession: (date: string | null, index: number | null) => void
   createSession: (session: Partial<Session> & { date: string }) => Promise<Session>
-  deleteSession: (date: string, index: number) => Promise<void>
+  deleteSession: (date: string, index: number, sessionId?: string) => Promise<void>
   updateSession: (date: string, index: number, session: Session) => void
   updateExercise: (
     date: string,
@@ -32,11 +33,11 @@ interface ProgramState {
   ) => void
   addExercise: (date: string, index: number, exercise: Exercise) => void
   removeExercise: (date: string, index: number, exerciseIndex: number) => void
-  rescheduleSession: (date: string, index: number, newDate: string, newDay: string) => Promise<void>
+  rescheduleSession: (date: string, index: number, newDate: string, newDay: string, sessionId?: string) => Promise<void>
   markComplete: (
     date: string,
     index: number,
-    data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: Session['wellness'] }
+    data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: Session['wellness'] }, sessionId?: string
   ) => Promise<void>
   saveSession: (date: string, index: number, session?: Session) => Promise<Session>
   updateMaxes: (maxes: {
@@ -93,11 +94,14 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   activeSessionIndex: null,
 
   loadProgram: async (version) => {
+    const partition = requestPartition()
     set({ isLoading: true, error: null })
     try {
       const program = await api.fetchProgram(version)
+      if (requestPartition() !== partition) return
       set({ program, version, isLoading: false, needsSetup: false })
     } catch (e) {
+      if (requestPartition() !== partition) return
       if (version === 'current' && api.isApiNotFound(e)) {
         set({ program: null, version, isLoading: false, needsSetup: true, error: null })
         return
@@ -107,7 +111,9 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   loadSetupStatus: async () => {
+    const partition = requestPartition()
     const status = await api.fetchSetupStatus()
+    if (requestPartition() !== partition) return status
     set({
       setupStatus: status,
       needsSetup: status.needsSetup,
@@ -124,12 +130,15 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   loadVersions: async () => {
+    const partition = requestPartition()
     try {
       const versions = await api.fetchPrograms()
+      if (requestPartition() !== partition) return
       // Sort by version number descending (newest first)
       versions.sort((a, b) => b.version.localeCompare(a.version))
       set({ versions })
     } catch (e) {
+      if (requestPartition() !== partition) return
       console.error('Failed to load versions:', e)
     }
   },
@@ -137,17 +146,17 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   setActiveSession: (date, index) => set({ activeSessionDate: date, activeSessionIndex: index }),
 
   createSession: async (sessionData) => {
-    const { version } = get()
-    const session = await api.createSession(version, sessionData)
+    const { version, program } = get()
+    const session = await api.createSession(version, sessionData, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     // Reload program to get updated sessions with derived fields
     await get().loadProgram(version)
     return session
   },
 
-  deleteSession: async (date, index) => {
-    const { version } = get()
-    await api.deleteSession(version, date, index)
+  deleteSession: async (date, index, sessionId) => {
+    const { version, program } = get()
+    await api.deleteSession(version, date, index, api.mutationEnvelope(program?.meta.revision ?? 0, undefined, sessionId || program?.sessions[index]?.id))
 
     // Reload to get correct indices after deletion
     await get().loadProgram(version)
@@ -199,26 +208,26 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       return { program: { ...state.program, sessions }, isDirty: true }
     }),
 
-  rescheduleSession: async (date, index, newDate, newDay) => {
+  rescheduleSession: async (date, index, newDate, newDay, sessionId) => {
     const { version, program } = get()
     if (!program) return
 
-    await api.rescheduleSession(version, date, index, newDate, newDay)
+    const updated = await api.rescheduleSession(version, date, index, newDate, newDay, api.mutationEnvelope(program.meta.revision ?? 0, undefined, sessionId || program.sessions[index]?.id))
 
     // Update local state
     set((state) => {
       if (!state.program) return state
       const sessions = [...state.program.sessions]
       if (index >= 0 && index < sessions.length) {
-        sessions[index] = { ...sessions[index], date: newDate, day: newDay }
+        sessions[index] = updated
       }
-      return { program: { ...state.program, sessions } }
+      return { program: { ...state.program, sessions, meta: { ...state.program.meta, revision: updated.revision ?? state.program.meta.revision } } }
     })
   },
 
-  markComplete: async (date, index, data) => {
-    const { version } = get()
-    await api.completeSession(version, date, index, data)
+  markComplete: async (date, index, data, sessionId) => {
+    const { version, program } = get()
+    const updated = await api.completeSession(version, date, index, data, api.mutationEnvelope(program?.meta.revision ?? 0, undefined, sessionId || program?.sessions[index]?.id))
 
     // Sync body weight to weight log if provided
     if (data.bodyWeightKg) {
@@ -232,15 +241,10 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       const sessions = [...state.program.sessions]
       if (index >= 0 && index < sessions.length) {
         sessions[index] = {
-          ...sessions[index],
-          completed: true,
-          session_rpe: data.rpe ?? sessions[index].session_rpe,
-          body_weight_kg: data.bodyWeightKg ?? sessions[index].body_weight_kg,
-          session_notes: data.notes ?? sessions[index].session_notes,
-          wellness: data.wellness ?? sessions[index].wellness,
+          ...updated,
         }
       }
-      return { program: { ...state.program, sessions } }
+      return { program: { ...state.program, sessions, meta: { ...state.program.meta, revision: updated.revision ?? state.program.meta.revision } } }
     })
   },
 
@@ -251,7 +255,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     const session = sessionOverride ?? program.sessions[index]
     if (!session) throw new Error(`Cannot save session at index ${index}: session not found`)
 
-    await api.updateSession(version, date, index, session)
+    const updated = await api.updateSession(version, date, index, session, api.mutationEnvelope(program.meta.revision ?? 0, undefined, session.id))
 
     // Sync body weight to weight log if present
     if (session.body_weight_kg != null) {
@@ -264,16 +268,16 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       if (!state.program) return { isDirty: false }
       const sessions = [...state.program.sessions]
       if (index >= 0 && index < sessions.length) {
-        sessions[index] = session
+        sessions[index] = updated
       }
-      return { program: { ...state.program, sessions }, isDirty: false }
+      return { program: { ...state.program, sessions, meta: { ...state.program.meta, revision: updated.revision ?? state.program.meta.revision } }, isDirty: false }
     })
-    return session
+    return updated
   },
 
   updateMaxes: async (maxes) => {
-    const { version } = get()
-    await api.updateTargetMaxes(version, maxes)
+    const { version, program } = get()
+    const result = await api.updateTargetMaxes(version, maxes, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -286,6 +290,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
             target_bench_kg: maxes.bench_kg,
             target_dl_kg: maxes.deadlift_kg,
             target_total_kg: maxes.squat_kg + maxes.bench_kg + maxes.deadlift_kg,
+            revision: result.revision ?? state.program.meta.revision,
           },
         },
       }
@@ -293,8 +298,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   updateBodyWeight: async (weightKg: number) => {
-    const { version } = get()
-    await api.updateBodyWeight(version, weightKg)
+    const { version, program } = get()
+    const result = await api.updateBodyWeight(version, weightKg, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -305,6 +310,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
             ...state.program.meta,
             current_body_weight_kg: weightKg,
             current_body_weight_lb: weightKg * 2.20462,
+            revision: result.revision ?? state.program.meta.revision,
           },
         },
       }
@@ -312,8 +318,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   updatePhases: async (phases: Phase[], block?: string) => {
-    const { version } = get()
-    await api.updatePhases(version, phases, block)
+    const { version, program } = get()
+    const result = await api.updatePhases(version, phases, block, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -330,6 +336,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         program: {
           ...state.program,
           phases: nextPhases,
+          meta: { ...state.program.meta, revision: result.revision ?? state.program.meta.revision },
         },
       }
     })
@@ -353,23 +360,23 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   archiveProgram: async () => {
-    const { version } = get()
-    await api.archiveProgram(version)
+    const { version, program } = get()
+    await api.archiveProgram(version, api.mutationEnvelope(program?.meta.revision ?? 0))
     await get().loadVersions()
     await get().loadProgram(version)
   },
 
   unarchiveProgram: async () => {
-    const { version } = get()
-    await api.unarchiveProgram(version)
+    const { version, program } = get()
+    await api.unarchiveProgram(version, api.mutationEnvelope(program?.meta.revision ?? 0))
     await get().loadVersions()
     await get().loadProgram(version)
   },
 
   // Supplements
   updateSupplementPhases: async (phases) => {
-    const { version } = get()
-    await api.updateSupplementPhases(version, phases)
+    const { version, program } = get()
+    const result = await api.updateSupplementPhases(version, phases, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -377,6 +384,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         program: {
           ...state.program,
           supplement_phases: phases,
+          meta: { ...state.program.meta, revision: result.revision ?? state.program.meta.revision },
         },
       }
     })
@@ -384,8 +392,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Lift Profiles
   updateLiftProfiles: async (liftProfiles: LiftProfile[]) => {
-    const { version } = get()
-    await api.updateLiftProfiles(version, liftProfiles)
+    const { version, program } = get()
+    const result = await api.updateLiftProfiles(version, liftProfiles, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -393,6 +401,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         program: {
           ...state.program,
           lift_profiles: liftProfiles,
+          meta: { ...state.program.meta, revision: result.revision ?? state.program.meta.revision },
         },
       }
     })
@@ -400,8 +409,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Sex
   setSex: async (sex: Sex) => {
-    const { version } = get()
-    await api.updateMetaField(version, 'sex', sex)
+    const { version, program } = get()
+    const result = await api.updateMetaField(version, 'sex', sex, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -411,6 +420,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
           meta: {
             ...state.program.meta,
             sex,
+            revision: result.revision ?? state.program.meta.revision,
           },
         },
       }
@@ -424,8 +434,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       current: day,
     }
 
-    await api.updateMetaField(version, 'program_week_start_day', day)
-    await api.updateMetaField(version, 'block_week_start_days', nextBlockWeekStarts)
+    const result = await api.updateMetaFields(version, { program_week_start_day: day, block_week_start_days: nextBlockWeekStarts }, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -436,6 +445,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
             ...state.program.meta,
             program_week_start_day: day,
             block_week_start_days: nextBlockWeekStarts,
+            revision: result.revision ?? state.program.meta.revision,
           },
         },
       }
@@ -444,8 +454,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Diet Notes
   updateDietNotes: async (dietNotes) => {
-    const { version } = get()
-    await api.updateDietNotes(version, dietNotes)
+    const { version, program } = get()
+    const result = await api.updateDietNotes(version, dietNotes, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -453,6 +463,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         program: {
           ...state.program,
           diet_notes: dietNotes,
+          meta: { ...state.program.meta, revision: result.revision ?? state.program.meta.revision },
         },
       }
     })
@@ -460,8 +471,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Block Notes
   updateBlockNotes: async (blockNotes) => {
-    const { version } = get()
-    await api.updateBlockNotes(version, blockNotes)
+    const { version, program } = get()
+    const result = await api.updateBlockNotes(version, blockNotes, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -471,6 +482,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
           meta: {
             ...state.program.meta,
             block_notes: blockNotes,
+            revision: result.revision ?? state.program.meta.revision,
           },
         },
       }
@@ -479,8 +491,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Competitions
   updateCompetitions: async (competitions) => {
-    const { version } = get()
-    await api.updateCompetitions(version, competitions)
+    const { version, program } = get()
+    const result = await api.updateCompetitions(version, competitions, api.mutationEnvelope(program?.meta.revision ?? 0))
 
     set((state) => {
       if (!state.program) return state
@@ -488,6 +500,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         program: {
           ...state.program,
           competitions,
+          meta: { ...state.program.meta, revision: result.revision ?? state.program.meta.revision },
         },
       }
     })
@@ -509,8 +522,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   completeCompetition: async (date, results, bodyWeightKg, postMeetReport) => {
-    const { version } = get()
-    const updatedCompetition = await api.completeCompetition(version, date, results, bodyWeightKg, postMeetReport)
+    const { version, program } = get()
+    const updatedCompetition = await api.completeCompetition(version, date, results, bodyWeightKg, api.mutationEnvelope(program?.meta.revision ?? 0), postMeetReport)
 
     set((state) => {
       if (!state.program) return state
@@ -523,6 +536,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         program: {
           ...state.program,
           competitions,
+          meta: { ...state.program.meta, revision: (updatedCompetition as Competition & { revision?: number }).revision ?? state.program.meta.revision },
         },
       }
     })

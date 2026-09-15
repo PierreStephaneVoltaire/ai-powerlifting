@@ -3,28 +3,39 @@
 Software and technical deep-dive for the powerlifting portal. For the math, see
 [`FORMULAS.md`](./FORMULAS.md). 
 
-## High-level request flow
+## Current request flow
 
-The backend is intentionally a **thin transport layer**. Most serious analytics
-and AI work does not run in the Node process — it is delegated to the IF Agent
-API's health tools.
+Powerlifting runs in the existing `if-portals` namespace as sixteen domain
+Services/Deployments. The operation manifests in `services/operations/*.json`
+define typed HTTP and MCP operations. The Express gateway and native Specialists
+use these same domain handlers. Retained DynamoDB/S3 stores hold the data.
+Fission and direct chat-based tool invocation are retired.
 
 ```mermaid
 flowchart LR
-  Page[React page] --> Route[Express route]
-  Route --> Invoke[invokeToolDirect]
-  Invoke -->|X-Direct-Tool-Invoke: true| Api[IF API\n/v1/chat/completions]
-  Api --> Tool[tools/health/tool.py]
-  Tool --> Det[deterministic analytics module]
-  Tool --> Ai[AI module *_ai.py]
-  Det --> Json[JSON]
-  Ai --> Json
-  Json --> Page
+  Browser --> Gateway[Express gateway]
+  Gateway --> Service[16 typed HTTP/MCP services]
+  Specialist[Native Codex Specialist] --> Service
+  Service --> Store[DynamoDB and S3]
+  Service --> Runtime[Existing IF native runtime]
+  Runtime --> Specialist
+  Gateway --> Profile[Profile permission evaluator]
+  Service --> Profile
 ```
 
-The same health tools are exposed to the **Discord agent**, which is why every
-web feature is also reachable through Discord — the UI is one of two interfaces
-into the same tools.
+The deployed gateway uses Passport/openid-client to validate
+Authentik OIDC; existing Valkey stores server-side sessions. Short-lived signed
+principals bind acting Person, selected Athlete and operation. The Profile
+service evaluates current application permissions with PyCasbin. See ADR-0002
+and ADR-0003. These are implementation contracts; the backlog records what has
+actually been tested and deployed.
+
+Video upload keeps the existing multipart gateway endpoint. A single request
+spools the file with a 500 MiB bound; the backend sends bytes to S3 and confirms
+through the existing storage operations. Media reads use authorized `/api` GET,
+HEAD and Range endpoints. The retained CloudFront distribution is disabled and its cache invalidation
+is complete. The distribution and buckets remain in place. There is no browser S3 upload, chunk
+protocol, second environment or second inference host.
 
 ## Analysis page: the four computation paths
 
@@ -58,17 +69,15 @@ flowchart TB
    `fatigue_readiness`, `peaking`, `workload`, `alerts`.
 2. **Frontend-local derivations** — computed in-browser from program data,
    glossary, and the weight log (e.g. local e1RM/DOTS/IPF GL trend cards).
-3. **Cache-only-by-default AI reports** — correlation analysis, full-block
-   program evaluation, and the budget AI advisor load from cache; explicit
-   Generate/Refresh buttons (`refresh=true`, `cacheOnly=false`) produce new AI
-   output. The budget advisor uses a shorter 48h cache TTL (vs the 7-day window
-   for program analytics) because budget data changes frequently.
+3. **Cache-only-by-default AI reports** — correlation analysis and full-block
+   program evaluation load saved references; explicit Generate/Refresh actions
+   produce new AI output. Read-only misses return a missing-cache response.
 4. **Block / lifetime analytics** — `blockAnalytics.ts` powers the Past Blocks and
    Lifetime Compare tabs.
 
-Important consequence: the top max card (frontend-derived) can legitimately
-*differ* from the backend `current_maxes` used by projections and INOL. This is
-documented, not a bug.
+Max comparisons must use the same method and date range. Historical window
+maxima and current Estimated 1RMs have different meanings; for an identical
+method and range, the shared lift calculations are authoritative.
 
 ## Data model
 
@@ -87,9 +96,12 @@ erDiagram
   GLOSSARY ||--o{ GLOSSARY_EXERCISE : "defines"
   GLOSSARY_EXERCISE ||--|| FATIGUE_PROFILE : "carries"
   LIFT_PROFILE ||--|| STIMULUS_COEFFICIENT : "tuned by AI"
-  USER ||--|| MAPPED_PK : "resolves to"
-  USER ||--o{ COMPETITION : "prepares for"
-  COMPETITION ||--|| LIFT_RESULTS : "completed with"
+  PERSON ||--o| ATHLETE : "has role"
+  PERSON ||--o{ GRANT : "receives"
+  ATHLETE ||--o{ COMPETITION_ENTRY : "owns"
+  COMPETITION_EVENT ||--o{ COMPETITION_ENTRY : "anchors"
+  COMPETITION_ENTRY ||--o{ ATTEMPT : "records"
+  COMPETITION_ENTRY ||--o| LIFT_RESULTS : "completed with"
   WEIGHT_LOG ||--o{ WEIGHT_ENTRY : "stores"
   MAX_HISTORY ||--o{ MAX_ENTRY : "stores"
 ```
@@ -100,32 +112,40 @@ erDiagram
 |-------|---------|---------|
 | `if-health` | DynamoDB | Program document, glossary, max history, weight log, analysis cache refs, AI report caches (ROI/program-eval) |
 | `if-sessions` | DynamoDB | Sessions (separate from program; merged by version in `programController.getProgram()`) |
-| `if-user` | DynamoDB | Identity/profile mapping, `mapped_pk`, Discord identity, profile visibility |
+| `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
 | `if-powerlifting-analysis-cache` | DynamoDB | Pre-computed window/section/job/block/markdown analytics (7-day TTL) |
-| `if-powerlifting-user-competitions` | DynamoDB | User-scoped competition records |
+| `if-powerlifting-user-competitions` | DynamoDB | Independent Athlete-owned Competition Entries and Attempts |
 | `if-powerlifting-master-competitions` | DynamoDB | Master competition directory |
 | `if-powerlifting-master-federations` | DynamoDB | Federation library + qualification standards |
+| `if-powerlifting-tags` | DynamoDB | Global operator-reviewed vocabulary |
+| `if-powerlifting-notifications` | DynamoDB | Durable Person inbox and event deduplication |
+| `if-powerlifting-requests` | DynamoDB | Relationships, role slots, favorites, indexed inbox/roster |
 | `if-powerlifting-goals` | DynamoDB | Athlete goals |
 | `if-powerlifting-budget` | DynamoDB | Budget items + config |
 | `powerlifting-session-videos` | S3 | Lift videos (+ thumbnails, + processed) |
 | `powerlifting-budget-media` | S3 | Budget item photos |
 | `video-thumbnail-generator` | Lambda | S3-triggered ffmpeg thumbnail generation |
 
-### `mapped_pk` flow
+### Person and selected Athlete
 
-```mermaid
-flowchart LR
-  Req[Incoming request] --> Auth{Authenticated?}
-  Auth -- no --> Op[mapped_pk = "operator"\nreadOnly = true\nread-only]
-  Auth -- yes --> Load[load/create if-user record]
-  Load --> Resolve[resolve mapped_pk || pk]
-  Resolve --> Store[req.mapped_pk]
-  Store --> Use[used as pk for\nif-health, if-sessions,\nanalysis cache writes]
-```
+The guest landing page presents both Discord and Authentik sign-in actions.
+Search and About remain separate public pages with navigation back to Home and
+Sign in. Discord starts the existing Authentik Discord source, carrying the
+trusted Passport-generated OIDC authorization URL as its continuation; Authentik
+starts the normal OIDC flow. Both finish through the same verified issuer/subject
+and server-side session handling.
 
-Anonymous requests resolve to `operator` and are read-only. Authenticated users
-load/create an `if-user` record and use `mapped_pk || pk`. `mapped_pk` exists
-only when the user's training data should be redirected to a different partition.
+Passport and openid-client verify Authentik's issuer and subject. Valkey stores
+server-side login sessions. The identity pointer resolves a stable Person in
+`if-user`; `mapped_pk` preserves that Person's existing Athlete partition.
+`X-Selected-Athlete-Pk` changes the requested Athlete, never the acting Person.
+The Profile service recomputes effective permissions for each HTTP/MCP operation.
+Anonymous requests have only explicitly published access; the default operator
+selector grants nothing by itself.
+
+Read-only notices follow the current route's domain permissions and are absent
+from informational/public navigation pages. On small screens the selected
+Athlete and active role stay visible while Change expands the context controls.
 
 ### Storage conventions
 
@@ -140,6 +160,21 @@ only when the user's training data should be redirected to a different partition
 federation/class context, bodyweight, targets, attempt defaults, anthropometrics,
 manual maxes, per-block start maxes, program history, template lineage, and
 `sex` for DOTS/IPF GL.
+
+### Block and version publication
+
+Blocks have stable identities and editable names. Complete, Start next and the
+combined transition require an expected Program revision and idempotency key.
+Completing a Block preserves unfinished Session statuses. A new Block captures
+its dates, week-start preference and confirmed start maxes, with weeks reset to
+one. Template targets preserve logged work and independent Competition Entries.
+
+Setup and version changes stage a unique unpublished Program and its Sessions
+before an atomic pointer/publication transaction. Failed staging remains hidden;
+retries publish one complete result. Conditional revisions reject stale edits.
+Template items and their shared index update atomically, with actor-bound retry
+records. Known ownership migrations and fixture copies are additive, conditional
+and repeatable; copied operator media references remain read-only.
 
 ### Sessions and sets
 
@@ -182,60 +217,53 @@ flowchart TB
   tooling; the Weekly tab reads sections instead.
 - AI correlation and program-evaluation reports cache separately and only
   regenerate on explicit refresh (never via the main regenerate endpoint).
-- Program-evaluation cache keys include a `block_notes_fingerprint`; session
-  changes do **not** invalidate it (block-note changes do, via the fingerprint).
-- Past-block exports render only already-cached material — they do not pull
-  full session history.
+- Native report references use a fingerprint of their permitted source snapshot
+  and window. Source writes invalidate derived caches. Persisted requirements
+  record the source domains and Competition Entry scope; every reference/job
+  read checks them against current permissions. Legacy results without source
+  requirements are readable only by the Athlete until regenerated.
+- Filtered empty source fields remain empty during generation; handlers cannot
+  reload private data as a fallback. Read-only cache misses never start inference.
+- Historical exports preserve archived Program/Session data and merge independent
+  Competition Entries through the same read projection. Exporting does not
+  generate a missing AI report.
 
 ## AI execution model
 
-The portal **never** calls OpenRouter from the browser or backend feature
-routes. AI requests go through the IF Agent API. Specialist flows use IF
-slash-specialist commands (e.g. `/powerlifting_coach`), so model selection,
-specialist prompts, tool access, and context injection stay inside the IF
-agent layer.
+The gateway calls the typed domain operation. AI operations submit a domain job
+through the existing IF API and native Codex worker. A retained handler requests
+inference through `services.ai`; its continuation yields a structured challenge.
+The existing native Specialist answers it, and `domain_resume` validates the
+response before the handler continues. There is no separate model queue,
+OpenRouter fallback, Fission service or second Codex host.
 
 ```mermaid
 flowchart LR
-  FE[Frontend] -->|/api/analytics/...| BE[Express]
-  BE -->|invokeToolDirect| IF[IF Agent API]
-  IF -->|specialist flow| Spec[/powerlifting_coach\nspecialist + scoped MCPs/]
-  Spec --> Model[OpenRouter model]
-  Model --> Out[structured JSON]
-  Out --> BE --> FE
+  Browser --> Gateway
+  Gateway --> Domain[Typed domain operation]
+  Domain --> Job[Existing IF domain job]
+  Job --> Worker[Existing native Codex worker]
+  Worker --> Specialist[Native Specialist]
+  Specialist --> Resume[Validated domain continuation]
+  Resume --> Result[Persisted result and reference]
+  Result --> Gateway
 ```
-### Current model variables
 
-| Variable | Used by |
-|----------|---------|
-| `ANALYSIS_MODEL` (+ `..._THINKING_BUDGET`) | correlation, program evaluation, template evaluation, import parsing, budget advisor |
-| `ESTIMATE_MODEL` (+ `..._REASONING_EFFORT`, `..._VERBOSITY`) | fatigue estimation, muscle-group estimation, lift-profile estimate flows, accessory e1RM backfill |
-| `HEALTH_HELPER_MODEL` | session note drafting, auto-regulation, lift-profile rewrite cleanup |
-| `MODEL_ROUTER_MODEL` | lightweight routing |
-| `GLOSSARY_TEXT_MODEL` | glossary text generation |
-### Budget AI advisor (BUD-05)
+The acting Person and selected Athlete remain distinct throughout submission,
+continuation and result reads. The Profile service checks current grants; saved
+job results also require access to the domains and competition ties used in
+their source. Report deduplication and import review/apply retain their existing
+native contracts. Environment variables left in retained AI helpers do not
+select a separate inference provider.
 
-The Budget page's AI Advisor tab follows the same `invokeToolDirect → IF Agent
-API → specialist tool` pattern as every other AI surface, so it is reachable
-from both the web UI and the Discord agent (multi-interface by default).
+### Budget analysis
 
-- **Endpoint** — `POST /api/budget/ai-analysis?refresh=true|false`. The Express
-  route fetches the athlete's `BudgetConfig`, all `BudgetItem`s, and their
-  upcoming competitions, assembles a structured context payload, and calls
-  `invokeToolDirect('budget_advisor', payload)`.
-- **Agent tool** — `budget_advisor` (`tools/health/budget_advisor_ai.py` +
-  `prompts/budget_advisor_system.j2`), registered in `tools/health/tool.py`.
-  Stateless: receives the assembled context and returns structured JSON
-  (Section 1–5 schema: overall assessment, locked-in mandatory items, suggested
-  cuts, gaps, coach note). Competition day is the north star — mandatory
-  comp-linked items are never suggested for cuts.
-- **Cache** — results are cached in `if-powerlifting-analysis-cache` under
-  `budget_ai_advisor#v1` with a **48h TTL** (shorter than the 7-day program
-  analytics window, since budget data changes frequently). Cache-only by
-  default; `refresh=true` regenerates and re-caches. A coach (read-only) can
-  read the cache but cannot trigger regeneration.
-- **"Mark as cut"** — toggles a `cut_by_ai` flag on the item
-  (`PATCH /api/budget/items/:id/cut`); the item is not deleted, just shown with
+The current Budget gateway builds permitted Budget items/configuration and
+Competition Entries, then calls `budget_priority_timeline` for its deterministic
+advice. `budget_advisor` remains a separate typed native AI operation. The current
+gateway does not implement the old documented 48-hour advisor cache; this
+architecture document does not claim that historical behavior is deployed.
+
 ### Budget UX conventions
 
 - **Currency** is a profile-level setting (`settingsStore.currency`, default
@@ -250,41 +278,52 @@ from both the web UI and the Discord agent (multi-interface by default).
   expense form is single-column on mobile and the date-precision control is a
   dropdown rather than a two-segment control. The collapsed mobile item row hides
   the cost column (shown on expand instead) to keep rows scannable.
-  a strikethrough in the Items tab.
 
 
-## Authentication
+## Authentication and publication
 
-Discord OAuth2. `LoginPage` starts the flow; `AuthCallbackPage` verifies the
-session via `GET /api/auth/me` (httpOnly cookie). `GET /api/auth/me` returns
-`user`, `mapped_pk`, and `readOnly`.
+Authentik remains the identity provider. Application permissions use the Profile
+service's PyCasbin evaluator, independent of Authentik's internal RBAC. Every
+operation has an explicit permission map and an operation-bound signed principal.
+Verified provider subjects preserve existing Person/Athlete mappings; names and
+email cannot link accounts. Only an Athlete administers their grants.
 
-Profile/settings routes: `GET /api/settings`, `PUT /api/settings/nickname`
-(`[a-z0-9_-]{2,32}`), `PUT /api/settings/profile`, `POST /api/settings/avatar`,
-`GET /api/profiles/search?q=`, `GET /api/profiles/:nickname`.
+Profiles are private by default. Public baseline fields are display name, avatar,
+federations and currently approved tags. The Athlete explicitly publishes other
+domains through revisioned publication settings. Program, Session, export and
+media reads apply current domain permissions. A browser role selector does not
+issue grants. Browser caches and drafts use Person/Athlete partitions; online
+cached reads contact the service and observed access changes clear the partition.
+
+Ordinary Program reads fetch current domain state. They do not use the gateway's
+former seven-day GET cache, so native domain mutations appear at the same portal
+URL immediately. Derived report caches retain their source fingerprints, current
+permission checks and write invalidation; offline drafts remain in IndexedDB.
 
 ## Video pipeline
 
-```mermaid
-flowchart LR
-  Up[Frontend upload\nPOST /api/videos/:version/:date] --> PutS3[PUT S3 videos/key.ext]
-  PutS3 --> Patch[patch Session.videos[]\nthumbnail_status=pending]
-  PutS3 -->|S3 ObjectCreated| Lam[video-thumbnail Lambda]
-  Lam -->|ffmpeg| Thumb[generate thumbnail]
-  Lam -->|PATCH /api/videos/.../thumbnail| Patch2[thumbnail_status=ready|failed]
-  Play[Browser] -->|GET /api/videos/media/{path}| Proxy[S3 media proxy + Range support]
-```
+The browser sends one multipart request to the existing
+`POST /api/videos/:version/:date` route. The backend spools the file with bounded
+memory, transfers bytes to S3 and confirms the stored allocation. Storage upload
+URLs never reach the browser. Interrupted transfers retry the ordinary request.
 
-- Accepted MIME: `video/mp4`, `video/quicktime`, `video/webm`, `video/x-msvideo`.
-- Backend upload limit 500 MB. S3 key: `videos/<sessionDate>/<videoId>.<ext>`.
-- No computer-vision analysis is performed today.
+The existing S3-triggered worker transcodes and thumbnails videos. Media registry
+records bind Athlete, Program version, Session ID, media ID and processing
+revision. Generated objects include the revision so stale workers cannot overwrite
+newer bytes. The browser reads authorized `/api` endpoints with GET, HEAD and
+Range support. The retained CloudFront distribution is disabled and its cache
+invalidation is complete; the buckets and distribution remain in place.
+
+The video limit remains 500 MiB. Lift demonstrations additionally allow at most
+three minutes. Cloudflare's request allowance must be upgraded before accepting
+the full file size; chunking and browser-direct fallback are excluded.
 
 ## Current rough edges
 
 Deliberate or temporary mismatches to be aware of (not all are bugs to fix):
 
-1. The top max card prefers local RPE-table/conservative-percent trend maxima and
-   falls back to backend `current_maxes` — they can differ.
+1. Max cards need an explicit method and date range when comparing historical
+   achieved loads with current estimates.
 2. `attempt_selection` is computed but not rendered on the Analysis page.
 3. Program-evaluation gating differs between frontend (≥4 completed sessions)
    and backend (≥4 completed weeks).

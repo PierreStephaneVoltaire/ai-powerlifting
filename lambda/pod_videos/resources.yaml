@@ -20,7 +20,6 @@ input_schema:
       - video_library_get
       - video_remove
       - video_update_metadata
-      - video_update_thumbnail
-      - video_upload
+      - video_media_resolve
   required:
   - function

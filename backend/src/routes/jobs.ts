@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppError } from '../middleware/errorHandler'
+import { principalToken } from '../auth/principal'
 
 const router = Router()
 const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
@@ -19,22 +20,28 @@ function forward(path: (req: Request) => string, method: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!INTERNAL_API_TOKEN) throw new AppError('Internal gateway is not configured', 503)
-      if (!req.isAuthenticated && !process.env.POWERLIFTING_TEST_MAPPED_PK) throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
+      if (!req.isAuthenticated()) throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
+      const athlete = req.mapped_pk || ''
+      const person = req.actor_mapped_pk || ''
+      if (!athlete || !person) throw new AppError('Authenticated Person and Athlete scope required', 401, 'AUTH_REQUIRED')
       let body = req.body || {}
+      let principalOperation = 'domain_job_read'
       if (method === 'POST' && path(req) === '/v1/jobs') {
         if (body.kind !== 'domain' || !body.payload || typeof body.payload.operation !== 'string' || typeof body.payload.domain !== 'string') {
           throw new AppError('A domain operation is required', 422)
         }
-        checkScope(body.payload.arguments, req.mapped_pk || '')
+        checkScope(body.payload.arguments, athlete)
+        principalOperation = body.payload.operation
         body = {
-          kind: 'domain', conversation_id: `powerlifting:${req.mapped_pk}`,
+          kind: 'domain', conversation_id: `powerlifting:${athlete}`,
           idempotency_key: body.idempotency_key, priority: 0,
-          payload: { domain: body.payload.domain, operation: body.payload.operation, arguments: body.payload.arguments || {}, athlete: req.mapped_pk },
+          payload: { domain: body.payload.domain, operation: body.payload.operation, arguments: body.payload.arguments || {}, athlete },
         }
       }
+      if (method === 'POST' && path(req).endsWith('/cancel')) principalOperation = 'domain_job_cancel'
       const response = await fetch(`${IF_API_URL}${path(req)}`, {
         method,
-        headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': req.actor_mapped_pk || req.mapped_pk || '' },
+        headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person, 'X-PL-Principal': principalToken(principalOperation, { athlete, person }) },
         ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
       })
       const text = await response.text()

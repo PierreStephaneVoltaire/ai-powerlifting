@@ -33,8 +33,9 @@ class FakeProgramStore:
     async def get_program(self):
         return self.program
 
-    async def _write_new_version(self, program, minor=False):
+    async def _write_new_version(self, program, minor=False, expected_revision=None, idempotency_key=None):
         self.saved = program
+        return program
 
 
 class FakeGlossaryStore:
@@ -57,7 +58,7 @@ class TemplateContractTests(unittest.TestCase):
         handler = importlib.import_module("lambda.pod_templates.handlers.template_create_blank.handler")
         store = FakeTemplateStore()
         with patch.object(module, "_get_template_store", return_value=store):
-            result = handler.handler({"name": "Strength", "pk": "athlete-1"}, None)
+            result = handler.handler({"name": "Strength", "pk": "athlete-1", "expected_revision": 0, "idempotency_key": "create-strength"}, None)
         body = json.loads(result["body"])
         self.assertEqual(body, {"status": "created", "sk": "template#1"})
         self.assertEqual(store.templates["template#1"]["meta"]["name"], "Strength")
@@ -69,9 +70,38 @@ class TemplateContractTests(unittest.TestCase):
         program_store = FakeProgramStore()
         template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}, "phases": [], "sessions": []}
         with patch.object(apply_core, "_get_template_store", return_value=template_store), patch.object(apply_core, "_get_store", return_value=program_store), patch.object(apply_core, "_get_glossary_store", return_value=FakeGlossaryStore()):
-            result = apply_handler.handler({"sk": "template#1", "start_date": "2026-09-14"}, None)
+            result = apply_handler.handler({"sk": "template#1", "start_date": "2026-09-14", "expected_revision": 0, "idempotency_key": "template-apply"}, None)
         self.assertEqual(json.loads(result["body"])["status"], "applied")
         self.assertEqual(program_store.saved["meta"]["template_lineage"]["applied_template_sk"], "template#1")
+
+    def test_template_mutations_require_revision_and_idempotency_envelope(self):
+        operations = load_operations("templates")
+        for name, payload in {
+            "template_apply": {"sk": "template#1"},
+            "template_apply_confirm": {"sk": "template#1"},
+        }.items():
+            with self.subTest(name=name):
+                with self.assertRaises(ValidationError):
+                    operations[name].validate_input(payload)
+
+    def test_template_mutation_results_require_authoritative_revision(self):
+        operations = load_operations("templates")
+        results = {
+            "template_archive": {"status": "archived", "sk": "template#1", "revision": 1},
+            "template_unarchive": {"status": "unarchived", "sk": "template#1", "revision": 2},
+            "template_publish": {"status": "published", "sk": "template#1", "revision": 3},
+            "template_unpublish": {"status": "unpublished", "sk": "template#1", "revision": 4},
+            "template_update": {"status": "updated", "sk": "template#1", "revision": 5},
+            "template_copy": {"status": "copied", "new_sk": "template#2", "revision": 0},
+            "template_apply_confirm": {"status": "applied", "program_version": "v002", "program_sk": "program#v002", "revision": 6},
+        }
+        for name, result in results.items():
+            with self.subTest(name=name):
+                operations[name].validate_result(result)
+                missing = dict(result)
+                missing.pop("revision")
+                with self.assertRaises(ValidationError):
+                    operations[name].validate_result(missing)
 
     def test_evaluate_uses_program_competition_context(self):
         core = importlib.import_module("lambda.pod_templates.handlers.template_evaluate.core")

@@ -1,5 +1,9 @@
 import { useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
+import { Alert, Button, Center, Loader, Stack, Title } from '@mantine/core'
+import { routePermission } from '@/auth/routes'
+import { RelationshipRoster } from '@/components/settings/RelationshipRoster'
+import { RelationshipInbox } from '@/components/settings/RelationshipInbox'
 import { useProgramStore } from '@/store/programStore'
 import { AuthProvider, useAuth } from '@/auth/AuthProvider'
 import AppShell from '@/components/layout/AppShell'
@@ -20,7 +24,9 @@ import GoalsPage from '@/pages/GoalsPage'
 import FederationsPage from '@/pages/FederationsPage'
 import BudgetPage from '@/pages/BudgetPage'
 import VideosPage from '@/pages/VideosPage'
+import AthleteDetailsPage from '@/pages/AthleteDetailsPage'
 import AboutPage from '@/pages/AboutPage'
+import LandingPage, { PublicLayout } from '@/pages/LandingPage'
 import ImportWizardPage from '@/pages/ImportWizardPage'
 import TemplateLibraryPage from '@/pages/TemplateLibraryPage'
 import TemplateDetailPage from '@/pages/TemplateDetailPage'
@@ -29,6 +35,7 @@ import TemplateEditPage from '@/pages/TemplateEditPage'
 import TemplateImportPage from '@/pages/TemplateImportPage'
 import RankingsPage from '@/pages/RankingsPage'
 import NotesPage from '@/pages/NotesPage'
+import AuthoredNotes from '@/components/notes/AuthoredNotes'
 import ProfilesPage, { PublicProfilePage } from '@/pages/ProfilesPage'
 import ProfilePage from '@/pages/ProfilePage'
 import LogPage from '@/pages/LogPage'
@@ -55,21 +62,26 @@ export default function App() {
 
 function AppContent() {
   const { loadProgram, reset } = useProgramStore()
-  const { mapped_pk, loading } = useAuth()
+  const { user, person_pk, mapped_pk, loading, permissions } = useAuth()
+  const location = useLocation()
+  const permission = routePermission(location.pathname)
 
   useEffect(() => {
     if (loading) return
     reset()
-    loadProgram('current').catch(console.error)
-  }, [loading, mapped_pk, loadProgram, reset])
+    if (permissions.includes('program:read')) loadProgram('current').catch(console.error)
+  }, [loading, person_pk, mapped_pk, permissions, loadProgram, reset])
 
-  return (
-    <AppShell>
-      <Routes>
+  if (loading) return <Center mih="100vh"><Loader aria-label="Loading your access" /></Center>
+
+  const content = permission && !permissions.includes(permission) ? <Alert title="This view needs access" color="orange"><Stack><span>Choose an Athlete you can access, or complete your Athlete basics before personal training.</span><Button component={Link} to="/onboarding">Edit onboarding</Button><Button component={Link} to="/profiles" variant="default">Search profiles</Button></Stack></Alert> : <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/athlete" element={<AthleteDetailsPage />} />
+        <Route path="/roster" element={<RosterPage />} />
+        <Route path="/inbox" element={<RelationshipInbox />} />
         <Route path="/lift-profiles/:lift" element={<LiftProfilePage />} />
         <Route path="/calendar" element={<Navigate to="/sessions" replace />} />
         <Route path="/sessions" element={<CalendarPage />} />
@@ -86,6 +98,7 @@ function AppContent() {
         <Route path="/rankings" element={<RankingsPage />} />
         <Route path="/log" element={<LogPage />} />
         <Route path="/notes" element={<NotesPage />} />
+        <Route path="/my-notes" element={<AuthoredNotes />} />
         <Route path="/supplements" element={<SupplementsPage />} />
         <Route path="/biometrics" element={<BiometricsPage />} />
         <Route path="/diet" element={<BiometricsPage />} />
@@ -113,6 +126,19 @@ function AppContent() {
         <Route path="/designer/templates/:sk" element={<TemplateDetailPage />} />
         <Route path="/about" element={<AboutPage />} />
       </Routes>
-    </AppShell>
-  )
+  const publicRoute = !user && (/^\/(login|about|profiles)(\/|$)/.test(location.pathname) || location.pathname === '/')
+  return publicRoute ? <PublicLayout>{content}</PublicLayout> : <AppShell key={`${person_pk}:${mapped_pk}`}>{content}</AppShell>
+}
+
+function RosterPage() {
+  const { user } = useAuth()
+  return <Stack><Title order={2}>{user?.active_role === 'handler' ? 'Competition-day roster' : 'Athlete roster'}</Title><RelationshipRoster /></Stack>
+}
+
+function Landing() {
+  const { user, is_onboarded } = useAuth()
+  if (!user) return <LandingPage />
+  if (!is_onboarded) return <Navigate to="/onboarding" replace />
+  if (user.active_role === 'coach' || user.active_role === 'handler') return <RosterPage />
+  return <Dashboard />
 }

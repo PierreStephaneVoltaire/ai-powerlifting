@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime
 from typing import Any, Optional
+from session_store import require_mutation_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +64,17 @@ async def health_reschedule_session(args: dict | None = None, old_date: str | No
         if new_date is None:
             new_date = args.get("new_date")
     pk = args.get("pk") if isinstance(args, dict) else None
+    session_id = args.get("session_id") if isinstance(args, dict) else None
+    expected_revision, idempotency_key = require_mutation_envelope(
+        args.get("expected_revision") if isinstance(args, dict) else None,
+        args.get("idempotency_key") if isinstance(args, dict) else None,
+    )
     datetime.strptime(old_date, "%Y-%m-%d")
     datetime.strptime(new_date, "%Y-%m-%d")
 
     store = _store_for(pk)
     program = await store.get_program()
-    table, active_pk, _ = _get_table_and_pk()
+    table, active_pk = store.table, store.pk
     program_sk = _resolve_program_sk(table, active_pk, "current")
     from session_store import SessionStore
     session_store = SessionStore(
@@ -84,6 +90,10 @@ async def health_reschedule_session(args: dict | None = None, old_date: str | No
         old_date,
         {"date": new_date},
         program.get("phases", []),
+        None,
+        expected_revision,
+        idempotency_key,
+        session_id=session_id,
     )
     store.invalidate_cache()
     return updated

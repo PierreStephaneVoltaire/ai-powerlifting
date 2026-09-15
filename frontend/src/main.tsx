@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigationType } from 'react-router-dom'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { MantineProvider, createTheme, type CSSVariablesResolver } from '@mantine/core'
@@ -55,10 +55,11 @@ const cssVariablesResolver: CSSVariablesResolver = () => ({
 })
 
 function ScrollToTop() {
-  const { pathname } = useLocation()
+  const { pathname, state } = useLocation()
+  const navigation = useNavigationType()
   useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [pathname])
+    if (navigation !== 'POP' && typeof state?.restoreScrollY !== 'number') window.scrollTo(0, 0)
+  }, [pathname, navigation, state])
   return null
 }
 

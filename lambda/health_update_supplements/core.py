@@ -35,25 +35,10 @@ async def health_update_supplements(args: dict | None = None, patch: dict | None
     Returns:
         Updated {supplements: [...], supplement_phases: [...]}
     """
-    import copy
 
     if patch is None:
         patch = args.get("patch") if isinstance(args, dict) else None
     pk = args.get("pk") if isinstance(args, dict) else None
 
     store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    if "supplements" in patch:
-        new_program["supplements"] = patch["supplements"]
-
-    if "supplement_phases" in patch:
-        new_program["supplement_phases"] = patch["supplement_phases"]
-
-    await store._write_new_version(new_program, minor=True)
-
-    return {
-        "supplements": new_program.get("supplements", []),
-        "supplement_phases": new_program.get("supplement_phases", []),
-    }
+    return await store.update_supplements(patch, args.get("expected_revision"), args.get("idempotency_key"))

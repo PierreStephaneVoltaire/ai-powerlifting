@@ -262,7 +262,7 @@
   {
     "name": "profile_search",
     "domain": "profile",
-    "description": "Search visible profiles by nickname, display name, bio, or approved tag.",
+    "description": "Search public Athlete/Coach profiles and currently granted private profiles with approved tag and federation filters.",
     "handler": "lambda.pod_user.handlers.profile_search.handler",
     "input_schema": {
       "type": "object",
@@ -272,6 +272,40 @@
         },
         "viewer_username": {
           "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          }
+        },
+        "federations": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "tag_mode": {
+          "enum": [
+            "and",
+            "or"
+          ]
+        },
+        "role": {
+          "enum": [
+            "athlete",
+            "coach"
+          ]
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 2048
         }
       },
       "additionalProperties": false
@@ -298,6 +332,12 @@
             ],
             "additionalProperties": true
           }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
@@ -333,6 +373,16 @@
             "string",
             "null"
           ]
+        },
+        "identity_provider": {
+          "enum": [
+            "discord",
+            "authentik"
+          ]
+        },
+        "identity_sub": {
+          "type": "string",
+          "minLength": 1
         },
         "pk": {
           "type": "string",
@@ -399,6 +449,16 @@
       "properties": {
         "username": {
           "type": "string"
+        },
+        "identity_provider": {
+          "enum": [
+            "discord",
+            "authentik"
+          ]
+        },
+        "identity_sub": {
+          "type": "string",
+          "minLength": 1
         },
         "mapped_pk": {
           "type": "string",
@@ -870,6 +930,25 @@
                 }
               },
               "additionalProperties": false
+            },
+            "maxes_date": {
+              "type": "string",
+              "format": "date"
+            },
+            "training_maxes_estimated": {
+              "type": "object",
+              "properties": {
+                "squat": {
+                  "type": "boolean"
+                },
+                "bench": {
+                  "type": "boolean"
+                },
+                "deadlift": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -1084,7 +1163,7 @@
   {
     "name": "settings_tag_add",
     "domain": "profile",
-    "description": "Add an approved tag to the authenticated user's profile.",
+    "description": "Select an approved tag or request new vocabulary for operator review.",
     "handler": "lambda.pod_user.handlers.settings_tag_add.handler",
     "input_schema": {
       "type": "object",
@@ -1106,6 +1185,9 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "approved": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -1200,13 +1282,14 @@
   {
     "name": "settings_tag_approve",
     "domain": "profile",
-    "description": "Approve a proposed tag on the authenticated user's profile.",
+    "description": "Operator decision on a global tag catalog entry.",
     "handler": "lambda.pod_user.handlers.settings_tag_approve.handler",
     "input_schema": {
       "type": "object",
       "required": [
-        "username",
-        "tag"
+        "tag",
+        "expected_revision",
+        "idempotency_key"
       ],
       "properties": {
         "username": {
@@ -1222,6 +1305,21 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "decision": {
+          "enum": [
+            "approved",
+            "rejected"
+          ]
         }
       },
       "additionalProperties": false
@@ -1229,25 +1327,25 @@
     "result_schema": {
       "type": "object",
       "required": [
-        "pk",
-        "username",
-        "tags"
+        "tag",
+        "status",
+        "revision"
       ],
       "properties": {
-        "pk": {
+        "tag": {
           "type": "string"
         },
-        "username": {
-          "type": "string"
+        "status": {
+          "enum": [
+            "approved",
+            "rejected"
+          ]
         },
-        "tags": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
+        "revision": {
+          "type": "integer"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "execution": "deterministic",
     "ownership": "person",
@@ -1258,7 +1356,7 @@
   {
     "name": "settings_tag_propose",
     "domain": "profile",
-    "description": "Propose a tag for another profile.",
+    "description": "Request a global tag for the authenticated profile, pending operator approval.",
     "handler": "lambda.pod_user.handlers.settings_tag_propose.handler",
     "input_schema": {
       "type": "object",
@@ -1372,6 +1470,34 @@
         },
         "has_athlete_basics": {
           "type": "boolean"
+        },
+        "prefill": {
+          "type": "object",
+          "properties": {
+            "bodyweight_kg": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "training_maxes": {
+              "type": "object",
+              "properties": {
+                "squat_kg": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "bench_kg": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "deadlift_kg": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -2239,5 +2365,1622 @@
     "legacy": [
       "pod_user"
     ]
+  },
+  {
+    "name": "identity_resolve",
+    "domain": "profile",
+    "description": "Resolve a verified gateway identity to a stable Person and settings record.",
+    "handler": "lambda.pod_user.handlers.identity_resolve.handler",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "issuer",
+        "provider",
+        "sub"
+      ],
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "enum": [
+            "discord",
+            "authentik"
+          ]
+        },
+        "sub": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "avatar_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discord_subjects": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]{1,32}$"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "settings",
+        "created"
+      ],
+      "properties": {
+        "settings": {
+          "type": "object",
+          "required": [
+            "pk",
+            "username",
+            "roles",
+            "profile_complete",
+            "identity_issuer",
+            "identity_provider",
+            "identity_sub"
+          ],
+          "additionalProperties": true
+        },
+        "created": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": [
+      "pod_user"
+    ]
+  },
+  {
+    "name": "access_context",
+    "domain": "profile",
+    "description": "Read current permissions for the authenticated Person and selected Athlete.",
+    "handler": "services.access_store",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "person_pk",
+        "athlete_pk",
+        "own_athlete_pk",
+        "settings_pk",
+        "is_self",
+        "permissions",
+        "granted_permissions",
+        "competition_scope"
+      ],
+      "properties": {
+        "person_pk": {
+          "type": "string"
+        },
+        "athlete_pk": {
+          "type": "string"
+        },
+        "own_athlete_pk": {
+          "type": "string"
+        },
+        "settings_pk": {
+          "type": "string"
+        },
+        "is_self": {
+          "type": "boolean"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "granted_permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "athlete_display_name": {
+          "type": "string"
+        },
+        "competition_scope": {
+          "type": "object",
+          "properties": {
+            "read": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "write": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "read",
+            "write"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public",
+    "legacy": []
+  },
+  {
+    "name": "profile_media_resolve",
+    "domain": "profile",
+    "description": "Resolve the selected permitted Profile avatar to a storage key.",
+    "handler": "services.profile_media",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "s3_key": {
+          "type": "string",
+          "pattern": "^profiles/",
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "s3_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "s3_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "s3_key"
+      ],
+      "additionalProperties": false
+    },
+    "ownership": "athlete",
+    "execution": "deterministic",
+    "legacy": []
+  },
+  {
+    "name": "tag_catalog_get",
+    "domain": "profile",
+    "description": "List approved global tags; the operator can also review pending and rejected entries.",
+    "handler": "services.tag_catalog",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "include_pending": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "tags"
+      ],
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "tag",
+              "status",
+              "revision"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "public"
+  },
+  {
+    "name": "relationship_request",
+    "domain": "profile",
+    "description": "relationship request",
+    "handler": "lambda.pod_user.handlers.relationship_request.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "athlete_mapped_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "recipient_person_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "relationship_type": {
+          "enum": [
+            "coach",
+            "handler",
+            "peer"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "tied_competition_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 280
+        },
+        "replace_current_relationship_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "athlete_mapped_pk",
+        "recipient_person_pk",
+        "relationship_type",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "relationship_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "cancelled",
+            "revoked",
+            "replaced"
+          ]
+        },
+        "athlete_mapped_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "athlete_person_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "recipient_person_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "relationship_type": {
+          "enum": [
+            "coach",
+            "handler",
+            "peer"
+          ]
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tied_competition_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "relationship_id",
+        "state",
+        "athlete_mapped_pk",
+        "athlete_person_pk",
+        "recipient_person_pk",
+        "relationship_type",
+        "permissions",
+        "tied_competition_ids"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "relationship_respond",
+    "domain": "profile",
+    "description": "relationship respond",
+    "handler": "lambda.pod_user.handlers.relationship_respond.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "relationship_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "action": {
+          "enum": [
+            "approve",
+            "reject",
+            "cancel"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "scope": {
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "tied_competition_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "replace_current_relationship_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "relationship_id",
+        "action",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "relationship_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "cancelled",
+            "revoked",
+            "replaced"
+          ]
+        },
+        "athlete_mapped_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "athlete_person_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "recipient_person_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "relationship_type": {
+          "enum": [
+            "coach",
+            "handler",
+            "peer"
+          ]
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tied_competition_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "relationship_id",
+        "state",
+        "athlete_mapped_pk",
+        "athlete_person_pk",
+        "recipient_person_pk",
+        "relationship_type",
+        "permissions",
+        "tied_competition_ids"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "relationship_revoke",
+    "domain": "profile",
+    "description": "relationship revoke",
+    "handler": "lambda.pod_user.handlers.relationship_revoke.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "relationship_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "relationship_id",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "relationship_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "cancelled",
+            "revoked",
+            "replaced"
+          ]
+        },
+        "athlete_mapped_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "athlete_person_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "recipient_person_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "relationship_type": {
+          "enum": [
+            "coach",
+            "handler",
+            "peer"
+          ]
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tied_competition_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "relationship_id",
+        "state",
+        "athlete_mapped_pk",
+        "athlete_person_pk",
+        "recipient_person_pk",
+        "relationship_type",
+        "permissions",
+        "tied_competition_ids"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": []
+  },
+  {
+    "name": "relationship_list",
+    "domain": "profile",
+    "description": "relationship list",
+    "handler": "lambda.pod_user.handlers.relationship_list.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "sent": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "relationship_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected",
+                  "cancelled",
+                  "revoked",
+                  "replaced"
+                ]
+              },
+              "athlete_mapped_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "athlete_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "recipient_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "relationship_type": {
+                "enum": [
+                  "coach",
+                  "handler",
+                  "peer"
+                ]
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tied_competition_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "expires_at": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "updated_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "relationship_id",
+              "state",
+              "athlete_mapped_pk",
+              "athlete_person_pk",
+              "recipient_person_pk",
+              "relationship_type",
+              "permissions",
+              "tied_competition_ids"
+            ]
+          }
+        },
+        "received": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "relationship_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected",
+                  "cancelled",
+                  "revoked",
+                  "replaced"
+                ]
+              },
+              "athlete_mapped_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "athlete_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "recipient_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "relationship_type": {
+                "enum": [
+                  "coach",
+                  "handler",
+                  "peer"
+                ]
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tied_competition_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "expires_at": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "updated_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "relationship_id",
+              "state",
+              "athlete_mapped_pk",
+              "athlete_person_pk",
+              "recipient_person_pk",
+              "relationship_type",
+              "permissions",
+              "tied_competition_ids"
+            ]
+          }
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "relationship_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected",
+                  "cancelled",
+                  "revoked",
+                  "replaced"
+                ]
+              },
+              "athlete_mapped_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "athlete_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "recipient_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "relationship_type": {
+                "enum": [
+                  "coach",
+                  "handler",
+                  "peer"
+                ]
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tied_competition_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "expires_at": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "updated_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "relationship_id",
+              "state",
+              "athlete_mapped_pk",
+              "athlete_person_pk",
+              "recipient_person_pk",
+              "relationship_type",
+              "permissions",
+              "tied_competition_ids"
+            ]
+          }
+        }
+      },
+      "required": [
+        "sent",
+        "received",
+        "history"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "relationship_history",
+    "domain": "profile",
+    "description": "relationship history",
+    "handler": "lambda.pod_user.handlers.relationship_history.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "relationship_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected",
+                  "cancelled",
+                  "revoked",
+                  "replaced"
+                ]
+              },
+              "athlete_mapped_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "athlete_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "recipient_person_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "relationship_type": {
+                "enum": [
+                  "coach",
+                  "handler",
+                  "peer"
+                ]
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tied_competition_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "expires_at": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "updated_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "relationship_id",
+              "state",
+              "athlete_mapped_pk",
+              "athlete_person_pk",
+              "recipient_person_pk",
+              "relationship_type",
+              "permissions",
+              "tied_competition_ids"
+            ]
+          }
+        }
+      },
+      "required": [
+        "items"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "favorite",
+    "domain": "profile",
+    "description": "favorite",
+    "handler": "lambda.pod_user.handlers.favorite.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "athlete_mapped_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "action": {
+          "enum": [
+            "add",
+            "remove"
+          ]
+        }
+      },
+      "required": [
+        "athlete_mapped_pk",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "athlete_mapped_pk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "athlete_mapped_pk"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "favorites",
+    "domain": "profile",
+    "description": "favorites",
+    "handler": "lambda.pod_user.handlers.favorites.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "favorites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "athlete_mapped_pk": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "athlete_mapped_pk"
+            ]
+          }
+        }
+      },
+      "required": [
+        "favorites"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "notifications",
+    "domain": "profile",
+    "description": "notifications",
+    "handler": "lambda.pod_user.handlers.notifications.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "notifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "notification_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "created_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "read_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "payload": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "notification_id",
+              "kind",
+              "created_at",
+              "read_at",
+              "payload"
+            ]
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "notifications",
+        "total"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "notifications_read",
+    "domain": "profile",
+    "description": "notifications read",
+    "handler": "lambda.pod_user.handlers.notifications_read.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "notification_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "notification_ids"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "marked": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "marked"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "settings_publication_get",
+    "domain": "profile",
+    "description": "Read own publication settings",
+    "handler": "services.publication",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "domains",
+        "revision"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "settings_publication_update",
+    "domain": "profile",
+    "description": "Publish selected Athlete domains while public; private data remains inaccessible",
+    "handler": "services.publication",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "domains": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "profile",
+              "program",
+              "sessions",
+              "competition",
+              "federation",
+              "glossary",
+              "goals",
+              "budget",
+              "calculations",
+              "performance",
+              "weight-log",
+              "templates",
+              "imports",
+              "lift-profiles",
+              "analytics",
+              "videos"
+            ]
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "domains",
+        "expected_revision",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "domains",
+        "revision"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "person",
+    "legacy": []
+  },
+  {
+    "name": "handler_context",
+    "domain": "profile",
+    "description": "Permitted Athlete context, current Block/Phase, canonical estimated maxes and tied Competition Entries/Attempts",
+    "handler": "services.handler_context",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object"
+        },
+        "block": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "phase": {
+          "type": [
+            "object",
+            "string",
+            "null"
+          ]
+        },
+        "estimated_maxes": {
+          "type": "object"
+        },
+        "competitions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "profile",
+        "block",
+        "phase",
+        "estimated_maxes",
+        "competitions",
+        "notes"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": []
+  },
+  {
+    "name": "note_list_private",
+    "domain": "profile",
+    "description": "List private originals owned by the acting Person.",
+    "handler": "lambda.pod_authored_notes.handlers.note_list_private.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "person"
+  },
+  {
+    "name": "note_save_private",
+    "domain": "profile",
+    "description": "Save a revision of an author-owned private original.",
+    "handler": "lambda.pod_authored_notes.handlers.note_save_private.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "note_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "text",
+        "expected_revision",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "note": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "note"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "person"
+  },
+  {
+    "name": "note_list_attachments",
+    "domain": "profile",
+    "description": "Read permitted attributed note attachments.",
+    "handler": "lambda.pod_authored_notes.handlers.note_list_attachments.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "context_domain": {
+          "enum": [
+            "program",
+            "sessions",
+            "competition"
+          ]
+        },
+        "context_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "context_domain"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "attachments",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "note_share",
+    "domain": "profile",
+    "description": "Explicitly attach a private note revision while the author has permission.",
+    "handler": "lambda.pod_authored_notes.handlers.note_share.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "note_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wanted_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "context_domain": {
+          "enum": [
+            "program",
+            "sessions",
+            "competition"
+          ]
+        },
+        "context_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_attachment_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "note_id",
+        "wanted_revision",
+        "context_domain",
+        "expected_attachment_revision",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "attachment": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "attachment"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "note_detach",
+    "domain": "profile",
+    "description": "Allow the owning Athlete to remove a note attachment.",
+    "handler": "lambda.pod_authored_notes.handlers.note_detach.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "attachment_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_attachment_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "attachment_id",
+        "expected_attachment_revision",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "attachment_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detached": {
+          "const": true
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "attachment_id",
+        "detached",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
   }
 ]

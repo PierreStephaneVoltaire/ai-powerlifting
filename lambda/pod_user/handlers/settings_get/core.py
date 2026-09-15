@@ -132,6 +132,7 @@ def _normalize_settings(raw: dict) -> dict:
     mapped_pk = raw.get("mapped_pk")
     settings = {
         "pk": pk,
+        **({"identity_provider": raw["identity_provider"], "identity_sub": str(raw["identity_sub"])} if raw.get("identity_provider") in ("discord", "authentik") and raw.get("identity_sub") else {}),
         "username": username,
         "discord_id": str(raw.get("discord_id") or ""),
         "discord_username": discord_username,
@@ -156,6 +157,8 @@ def _normalize_settings(raw: dict) -> dict:
         "sex": raw.get("sex") if raw.get("sex") in SEX_VALUES else None,
         "bodyweight_kg": _to_float(raw.get("bodyweight_kg")),
         "training_maxes": _normalize_training_maxes(raw.get("training_maxes")),
+        "maxes_date": raw.get("maxes_date"),
+        "training_maxes_estimated": {lift: (raw.get("training_maxes_estimated") or {}).get(lift) is True for lift in ("squat", "bench", "deadlift")},
         "federations": _normalize_federations(raw.get("federations")),
         "roles": _normalize_roles(raw.get("roles")),
         "active_role": _normalize_role(raw.get("active_role")) or ((_normalize_roles(raw.get("roles")) or ["athlete"])[0]),
@@ -191,6 +194,16 @@ def _get_settings_by_mapped_pk_sync(table, mapped_pk: str) -> Optional[dict]:
         return None
     return _normalize_settings(_sanitize_decimals(items[0]))
 
+def _get_settings_by_identity_sync(table, provider: str, sub: str) -> Optional[dict]:
+    items = table.scan(FilterExpression=Attr("identity_provider").eq(provider) & Attr("identity_sub").eq(sub), Limit=1).get("Items") or []
+    if items:
+        return _normalize_settings(_sanitize_decimals(items[0]))
+    if provider == "discord":
+        items = table.scan(FilterExpression=Attr("discord_id").eq(sub), Limit=1).get("Items") or []
+        if items:
+            return _normalize_settings(_sanitize_decimals(items[0]))
+    return None
+
 
 async def settings_get(args: dict) -> dict:
     """Get user settings by discord username or mapped pk.
@@ -203,8 +216,14 @@ async def settings_get(args: dict) -> dict:
     table = _get_table()
     username = args.get("username")
     mapped_pk = args.get("mapped_pk")
+    identity_provider = args.get("identity_provider")
+    identity_sub = args.get("identity_sub")
 
     def _sync():
+        if identity_provider in ("discord", "authentik") and isinstance(identity_sub, str) and identity_sub:
+            settings = _get_settings_by_identity_sync(table, identity_provider, identity_sub)
+            if settings:
+                return settings
         if username:
             settings = _get_settings_by_username_sync(table, username)
             if settings:

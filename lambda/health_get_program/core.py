@@ -41,4 +41,7 @@ async def health_get_program(args: dict | None = None) -> dict:
     """
     pk = args.get("pk") if isinstance(args, dict) else None
     store = _store_for(pk)
-    return await store.get_program()
+    import asyncio
+    from competition_entries import with_competition_entries
+    program = await store.get_program()
+    return await asyncio.to_thread(with_competition_entries, program, store.pk)

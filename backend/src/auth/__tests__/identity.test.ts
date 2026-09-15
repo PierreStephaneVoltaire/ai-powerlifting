@@ -32,6 +32,7 @@ function mkIdentity(
   }> = {},
 ) {
   return {
+    issuer: 'https://discord.com',
     provider: 'discord' as const,
     sub: '1',
     username: 'u',

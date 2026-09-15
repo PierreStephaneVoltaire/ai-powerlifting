@@ -6,5 +6,4 @@ async def program_unarchive(args: dict):
     sk = args.get("program_sk")
     if not sk:
         sk = store._current_program_sk_sync()
-    await store.unarchive(sk)
-    return {"success": True}
+    return await store.unarchive(sk, args.get("expected_revision"), args.get("idempotency_key"))

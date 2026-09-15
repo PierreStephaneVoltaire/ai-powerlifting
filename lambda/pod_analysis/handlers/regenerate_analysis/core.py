@@ -145,6 +145,8 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     store = _get_store()
     store.invalidate_cache()
     program = await store.get_program()
+    from competition_entries import with_competition_entries
+    program = await asyncio.to_thread(with_competition_entries, program, store.pk)
     pk = store.pk
     sessions = program.get("sessions", [])
     glossary_store = _get_glossary_store()

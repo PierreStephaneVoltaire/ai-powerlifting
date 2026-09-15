@@ -38,5 +38,10 @@ async def resolve_context(store, program_sk: Optional[str] = None):
     operates on current — no version handling)."""
     if not program_sk or program_sk in {"current", "program#current"}:
         program_sk = await store.resolve_program_sk()
+    source_table = getattr(store, "source_table", None)
+    if source_table is not None:
+        source = source_table.get_item(Key={"pk": store._pk, "sk": program_sk}).get("Item")
+        if source and source.get("published", True) is False:
+            raise ValueError("Program version is unpublished")
     phases = await store.load_phases(program_sk)
     return program_sk, phases

@@ -4,7 +4,8 @@ import { unlink } from 'fs/promises'
 import type { NextFunction, Request, Response } from 'express'
 import * as videoController from '../controllers/videoController'
 import { isVideoSort } from '../utils/videoSort'
-import type { VideoSort } from '@powerlifting/types'
+import { serveStoredMedia } from '../utils/serveMedia'
+import type { LiftProfileVideoAngle, VideoSort } from '@powerlifting/types'
 
 export const videosRouter = Router({ mergeParams: true })
 const maxVideoBytes = 500 * 1024 * 1024
@@ -40,10 +41,16 @@ videosRouter.post('/:version/:sessionDate', receiveVideo, async (req, res, next)
   if (req.file) {
     try {
       if (!videoMimeTypes.includes(req.file.mimetype)) return res.status(400).json({ data: null, error: 'Invalid video MIME type' })
+      const sessionId = req.body.sessionId || req.get('X-Session-Id') || undefined
       const video = await videoController.uploadSessionVideo(
         req.mapped_pk!, req.params.version, req.params.sessionDate, req.file.path, req.file.originalname,
         req.file.mimetype, req.body.exerciseName || undefined,
         req.body.setNumber ? Number(req.body.setNumber) : undefined, req.body.notes || undefined,
+      req.get('Idempotency-Key') || req.body.idempotencyKey || undefined,
+        sessionId,
+        req.body.lift || undefined,
+        req.body.angle as LiftProfileVideoAngle | undefined,
+        req.body.targetRevision ? Number(req.body.targetRevision) : undefined,
       )
       return res.json({ data: video, error: null })
     } catch (err) {
@@ -52,45 +59,15 @@ videosRouter.post('/:version/:sessionDate', receiveVideo, async (req, res, next)
       await unlink(req.file.path).catch(() => undefined)
     }
   }
-  try {
-    const { filename, mimetype } = (req.body || {}) as { filename?: string; mimetype?: string }
-    if (!filename || !mimetype) {
-      return res.status(400).json({ data: null, error: 'filename and mimetype are required' })
-    }
-    if (!videoMimeTypes.includes(mimetype)) {
-      return res.status(400).json({ data: null, error: 'Invalid video MIME type' })
-    }
-    const result = await videoController.presignSessionVideo(
-      req.mapped_pk!,
-      req.params.version,
-      req.params.sessionDate,
-      filename,
-      mimetype,
-    )
-    res.json({ data: result, error: null })
-  } catch (err) {
-    next(err)
-  }
+  res.status(400).json({ data: null, error: 'file is required' })
 })
 
 async function serveMedia(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) {
   try {
     const key = req.params[0]
     if (!key || key.includes('..')) return res.status(400).end()
-    const head = await videoController.headMedia(key)
-    const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
-    const object = req.method === 'HEAD' ? null : await videoController.getMedia(key, range)
-    res.status(range && object ? 206 : 200)
-    if (head.ContentType) res.type(head.ContentType)
-    if (head.ContentLength !== undefined && !range) res.setHeader('Content-Length', String(head.ContentLength))
-    if (head.ETag) res.setHeader('ETag', head.ETag)
-    if (head.LastModified) res.setHeader('Last-Modified', head.LastModified.toUTCString())
-    if (object?.ContentRange) res.setHeader('Content-Range', object.ContentRange)
-    if (object?.ContentLength !== undefined) res.setHeader('Content-Length', String(object.ContentLength))
-    if (object?.Body && req.method !== 'HEAD') {
-      for await (const chunk of object.Body as AsyncIterable<Uint8Array>) res.write(chunk)
-    }
-    res.end()
+    const resolved = await videoController.resolveMedia(req.mapped_pk!, key)
+    await serveStoredMedia(req, res, process.env.VIDEOS_BUCKET || 'powerlifting-session-videos', resolved)
   } catch (err) {
     next(err)
   }
@@ -101,12 +78,18 @@ videosRouter.head(/^\/media\/(.+)$/, serveMedia)
 
 videosRouter.post('/:version/:sessionDate/confirm', async (req, res, next) => {
   try {
-    const { videoId, s3Key, exerciseName, setNumber, notes } = (req.body || {}) as {
+      const { videoId, s3Key, exerciseName, setNumber, notes, expectedSize, idempotencyKey, sessionId, lift, angle, targetRevision } = (req.body || {}) as {
       videoId?: string
       s3Key?: string
       exerciseName?: string
       setNumber?: number
       notes?: string
+      expectedSize?: number
+      idempotencyKey?: string
+      sessionId?: string
+      lift?: 'squat' | 'bench' | 'deadlift'
+      angle?: LiftProfileVideoAngle
+      targetRevision?: number
     }
     if (!videoId || !s3Key) {
       return res.status(400).json({ data: null, error: 'videoId and s3Key are required' })
@@ -120,6 +103,12 @@ videosRouter.post('/:version/:sessionDate/confirm', async (req, res, next) => {
       exerciseName || undefined,
       typeof setNumber === 'number' ? setNumber : undefined,
       notes || undefined,
+      typeof expectedSize === 'number' ? expectedSize : undefined,
+      idempotencyKey || req.get('Idempotency-Key') || undefined,
+      sessionId || req.get('X-Session-Id') || undefined,
+      lift,
+      angle,
+      typeof targetRevision === 'number' ? targetRevision : undefined,
     )
     res.json({ data: video, error: null })
   } catch (err) {
@@ -134,6 +123,7 @@ videosRouter.delete('/:version/:sessionDate/:videoId', async (req, res, next) =>
       req.params.version,
       req.params.sessionDate,
       req.params.videoId,
+      ((req.body || {}) as { sessionId?: string }).sessionId || req.get('X-Session-Id') || undefined,
     )
     res.json({ data: { success: true }, error: null })
   } catch (err) {
@@ -158,32 +148,9 @@ videosRouter.patch('/:version/:sessionDate/:videoId', async (req, res, next) => 
         setNumber: typeof setNumber === 'number' ? setNumber : undefined,
         notes,
       },
+      ((req.body || {}) as { sessionId?: string }).sessionId || req.get('X-Session-Id') || undefined,
     )
     res.json({ data: video, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-videosRouter.patch('/:version/:sessionDate/:videoId/thumbnail', async (req, res, next) => {
-  try {
-    const { thumbnailUrl, thumbnailS3Key, status } = req.body || {}
-    if (!thumbnailUrl || !thumbnailS3Key || !status) {
-      return res.status(400).json({
-        data: null,
-        error: 'Missing thumbnailUrl, thumbnailS3Key, or status in request body',
-      })
-    }
-    await videoController.updateVideoThumbnail(
-      req.mapped_pk!,
-      req.params.version,
-      req.params.sessionDate,
-      req.params.videoId,
-      thumbnailUrl,
-      thumbnailS3Key,
-      status,
-    )
-    res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)
   }

@@ -72,6 +72,8 @@ def _get_program_and_sessions(refresh_program: bool = False):
     if refresh_program:
         store.invalidate_cache()
     program = _run_async(store.get_program())
+    from competition_entries import with_competition_entries
+    program = with_competition_entries(program, store.pk)
     sessions = program.get("sessions", [])
     program_start = program.get("meta", {}).get("program_start", "")
     return program, sessions, program_start

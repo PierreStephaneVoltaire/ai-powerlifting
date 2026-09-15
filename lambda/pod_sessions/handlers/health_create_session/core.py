@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime
 from typing import Any, Optional
+from session_store import require_mutation_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,10 @@ async def health_create_session(
         if not session_notes:
             session_notes = args.get("session_notes", "")
     pk = args.get("pk") if isinstance(args, dict) else None
+    expected_revision, idempotency_key = require_mutation_envelope(
+        args.get("expected_revision") if isinstance(args, dict) else None,
+        args.get("idempotency_key") if isinstance(args, dict) else None,
+    )
     datetime.strptime(date, "%Y-%m-%d")
 
     store = _store_for(pk)
@@ -105,6 +110,12 @@ async def health_create_session(
         pk=active_pk,
         region=os.environ.get("AWS_REGION", "ca-central-1"),
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-    ).create_session(program_sk, new_session, program.get("phases", []))
+    ).create_session(
+        program_sk,
+        new_session,
+        program.get("phases", []),
+        expected_revision,
+        idempotency_key,
+    )
     store.invalidate_cache()
     return created

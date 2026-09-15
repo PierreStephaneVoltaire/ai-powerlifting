@@ -1,6 +1,6 @@
-import { Button, Center, Stack, Text, Paper, Group, Divider } from '@mantine/core'
-import { useAuth } from '@/auth/AuthProvider'
+import { Center, Stack, Text, Paper } from '@mantine/core'
 import { useSearchParams } from 'react-router-dom'
+import LoginOptions from '@/components/auth/LoginOptions'
 
 const DISCORD_ERROR_MESSAGES: Record<string, string> = {
   no_code: 'Discord authorization code was not received.',
@@ -24,14 +24,13 @@ function formatError(error: string | null): string {
 }
 
 export default function LoginPage() {
-  const { signInDiscord, signInAuthentik } = useAuth()
   const [searchParams] = useSearchParams()
   const error = searchParams.get('error')
   const errorMessage = formatError(error)
 
   return (
-    <Center h="100dvh">
-      <Paper shadow="sm" p="xl" radius="md" w={400}>
+    <Center mih="calc(100dvh - 60px)" py="md">
+      <Paper shadow="sm" p={{ base: 'md', sm: 'xl' }} radius="md" w="100%" maw={400}>
         <Stack align="center" gap="lg">
           <Text size="xl" fw={700}>NoLift Training</Text>
 
@@ -41,30 +40,7 @@ export default function LoginPage() {
             </Text>
           )}
 
-          <Group style={{ width: '100%' }}>
-            <Button
-              size="lg"
-              onClick={signInDiscord}
-              style={{ flex: 1 }}
-              data-testid="signin-discord"
-            >
-              Sign in with Discord
-            </Button>
-          </Group>
-
-          <Divider label="or" labelPosition="center" style={{ width: '100%' }} />
-
-          <Group style={{ width: '100%' }}>
-            <Button
-              size="lg"
-              variant="default"
-              onClick={signInAuthentik}
-              style={{ flex: 1 }}
-              data-testid="signin-authentik"
-            >
-              Sign in with email (Authentik)
-            </Button>
-          </Group>
+          <LoginOptions />
 
           <Text size="xs" c="dimmed">
             Sign in to access your personal training data.
@@ -76,4 +52,3 @@ export default function LoginPage() {
     </Center>
   )
 }
-

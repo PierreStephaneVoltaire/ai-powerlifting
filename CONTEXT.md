@@ -11,43 +11,35 @@ anchor everything else.
 
 ## People & Roles
 
-**Person** — The human behind a login. A Person holds the Athlete role on their
-own data and may additionally hold Coach or Handler grants on other Athletes'
-data — one human can be all three at once (e.g. an operator who competes,
-coaches a teammate, and handles another at their meet). Switching role changes
-which context the Person is acting in, not who they are.
+**Person** — The human behind a verified login. A Person may select one or more
+Athlete, Coach and Handler roles. A Coach-only or Handler-only Person can finish
+profile onboarding without creating personal training data. Active role is the
+purpose of the current view; selected Athlete is the owner of the records being
+viewed. Neither selection grants permission.
 
-**Athlete** — The owning role. The Athlete is the one who trains and prepares
-for Competition Events, and the Athlete's data (Program, Sessions, Analysis,
-Budget, Competitions, etc.) belongs to the Athlete. The Athlete has full read
-and write to their own data and the full app. Today the portal serves the
-Athlete only. *The Athlete is the only role with its own screens and data.*
+**Athlete** — The role that owns a Program, Sessions, Attempts and other personal
+training records. Personal training requires Athlete basics. Only the Athlete
+administers grants on their records.
 
-> Ownership invariant: all training data belongs to the Athlete. A Coach or
-> Handler never owns data; they act on an Athlete's data under a grant the
-> Athlete issues, and writes they make become the Athlete's data.
+**Coach** — A Person offering ongoing training collaboration. A Coach works on
+an Athlete's records under a Coach grant and uses a roster to select Athletes.
 
-**Coach** and **Handler** are not peer roles to Athlete; they are **grant-types**
-— named bundles of granular read/write permissions that an Athlete issues to
-another Person. Both are tied to one or more specific Competition Events the
-Athlete chooses at grant time (a block can target multiple competitions). A
-grant ends when the Athlete revokes it, or when all tied competitions have
-passed — expiry is `max(tied competition dates) + 7 days`. An Athlete has at
-most one active Coach grant and one active Handler grant at a time. Grants are
-between distinct Persons (an Athlete already has total access to their own data,
-so self-granting a Coach or Handler bundle grants nothing).
+**Handler** — A Person supporting an Athlete around competition day. A Handler
+works under a Handler grant and uses a competition-day roster.
 
-**Coach grant** — The broader bundle: scoped read and write on the Athlete's
-training data, used for cycle-long collaboration. A Person holding a Coach grant
-operates inside the Athlete's screens on the Athlete's data, plus a roster page
-listing the Athletes they currently coach. *Planned (roadmap).*
+**Grant** — Permission issued by an Athlete to a distinct Person. Coach grants
+default to broad training reads and writes. Handler grants default to
+competition-day writes and read-only training context. The Athlete may explicitly
+choose additional domains. Both require tied Competition Entries and expire
+seven days after the latest stored tied competition date. An Athlete has at most
+one active Coach and one active Handler. A separate peer grant confers only
+specified reads; a favorite is private and confers no access.
 
-**Handler grant** — The narrower, comp-day bundle: read on Sessions and Budget,
-read and write on Competitions and Attempt Selection, plus comp-day tools
-(timers, notes, equipment and rule checklists) and the block data needed as
-context for modifying attempts. A Person holding a Handler grant operates inside
-a trimmed, comp-day-focused view, plus a roster page listing the Athletes they
-currently handle. *Planned (roadmap).*
+**Authored note** — Words owned by the Person who wrote them. A private original
+is separate from an attributed revision attached to an Athlete's record. The
+Athlete may remove the attachment but cannot rewrite another Person's words.
+An authorized author may explicitly publish a new shared revision. Programs,
+Sessions and Attempts remain Athlete-owned even when a delegate edits them.
 
 ## Competition
 

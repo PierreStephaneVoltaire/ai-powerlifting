@@ -23,6 +23,12 @@ requires write permission.
 
 ## Consequences
 
-Existing Discord records can continue through their verified Discord subject
-while Authentik records use their verified Authentik subject. No migration is
-performed by guessing from usernames or email addresses.
+Existing Authentik subject mappings, including the operator, are preserved.
+Legacy accounts need an explicit verified subject link; a shared display name
+or email address cannot establish it. Ambiguous links fail closed.
+
+The public OIDC issuer remains the authority even when server-side discovery,
+token exchange and key retrieval travel through the internal Authentik Service.
+Short-lived signed operation principals bind the acting Person, selected
+Athlete and operation at HTTP/MCP boundaries. The internal API token alone is
+insufficient to impersonate a Person.

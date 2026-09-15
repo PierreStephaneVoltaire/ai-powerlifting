@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any, Optional
+from session_store import SessionIdentityConflictError, SessionRevisionConflictError, require_mutation_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,22 @@ def _store_for(pk: str | None):
     return store
 
 
+def _select_session(program: dict, date: str, session_id: str | None) -> dict:
+    all_sessions = program.get("sessions", [])
+    revision = int((program.get("meta") or {}).get("revision", 0))
+    if session_id:
+        for session in all_sessions:
+            if str(session.get("id") or session.get("session_id") or "") == session_id:
+                return session
+        raise SessionIdentityConflictError(session_id, revision)
+    sessions = [session for session in all_sessions if session.get("date") == date]
+    if len(sessions) == 1:
+        return sessions[0]
+    if len(sessions) > 1:
+        raise SessionRevisionConflictError(revision, revision, None)
+    raise ValueError(f"Session not found with date={date}")
+
+
 def _resolve_program_sk(table, pk: str, version: str) -> str:
     if version == "current":
         pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
@@ -62,7 +79,7 @@ def _resolve_phase(session: dict, phases: list[dict]) -> dict:
     return phases[0] if phases else {}
 
 
-async def health_get_session(date: str, pk: str | None = None) -> dict:
+async def health_get_session(date: str, pk: str | None = None, session_id: str | None = None) -> dict:
     """Load a single session by date.
 
     Args:
@@ -80,13 +97,10 @@ async def health_get_session(date: str, pk: str | None = None) -> dict:
     phases = program.get("phases", [])
     sessions = program.get("sessions", [])
 
-    for session in sessions:
-        if session.get("date") == date:
-            session_copy = dict(session)
-            session_copy["phase"] = _resolve_phase(session, phases)
-            return session_copy
-
-    raise ValueError(f"Session not found with date={date}")
+    session = _select_session(program, date, session_id)
+    session_copy = dict(session)
+    session_copy["phase"] = _resolve_phase(session, phases)
+    return session_copy
 
 
 async def health_add_exercise(args: dict | None = None, date: str | None = None, exercise: dict | None = None) -> dict:
@@ -108,14 +122,19 @@ async def health_add_exercise(args: dict | None = None, date: str | None = None,
         if exercise is None:
             exercise = args.get("exercise")
     pk = args.get("pk") if isinstance(args, dict) else None
+    session_id = args.get("session_id") if isinstance(args, dict) else None
+    expected_revision, idempotency_key = require_mutation_envelope(
+        args.get("expected_revision") if isinstance(args, dict) else None,
+        args.get("idempotency_key") if isinstance(args, dict) else None,
+    )
     if not exercise.get("name"):
         raise ValueError("exercise.name is required")
 
     store = _store_for(pk)
     program = await store.get_program()
-    table, active_pk, _ = _get_table_and_pk()
+    table, active_pk = store.table, store.pk
     program_sk = _resolve_program_sk(table, active_pk, "current")
-    session = await health_get_session(date, pk)
+    session = await health_get_session(date, pk, session_id)
     exercises = list(session.get("exercises") or [])
     exercises.append(exercise)
     from session_store import SessionStore
@@ -124,6 +143,6 @@ async def health_add_exercise(args: dict | None = None, date: str | None = None,
         pk=active_pk,
         region=os.environ.get("AWS_REGION", "ca-central-1"),
         source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-    ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []))
+    ).patch_session(program_sk, date, {"exercises": exercises}, program.get("phases", []), None, expected_revision, idempotency_key, session_id=session_id)
     store.invalidate_cache()
     return {"date": date, "exercises": updated.get("exercises", [])}

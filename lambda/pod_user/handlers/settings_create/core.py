@@ -13,11 +13,13 @@ import asyncio
 import logging
 import os
 import re
+import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
+from boto3.dynamodb.conditions import Attr
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ def _normalize_settings(raw: dict) -> dict:
     nickname = str(raw.get("nickname") or username)
     pk = str(raw.get("pk") or username)
     avatar = raw.get("avatar_url")
-    return {
+    result = {
         "pk": pk,
         "username": username,
         "discord_id": str(raw.get("discord_id") or ""),
@@ -93,6 +95,10 @@ def _normalize_settings(raw: dict) -> dict:
         "created_at": str(raw.get("created_at") or datetime.now(timezone.utc).isoformat()),
         "updated_at": str(raw.get("updated_at") or datetime.now(timezone.utc).isoformat()),
     }
+    if raw.get("identity_provider") in ("discord", "authentik") and raw.get("identity_sub"):
+        result["identity_provider"] = raw["identity_provider"]
+        result["identity_sub"] = str(raw["identity_sub"])
+    return result
 
 
 def _get_by_pk_sync(table, pk: str) -> Optional[dict]:
@@ -103,16 +109,26 @@ def _get_by_pk_sync(table, pk: str) -> Optional[dict]:
     return _normalize_settings(_sanitize_decimals(item))
 
 
-def _create_sync(discord_id: str, discord_username: str, avatar_url: Optional[str]):
+def _create_sync(discord_id: str, discord_username: str, avatar_url: Optional[str], identity_provider: Optional[str], identity_sub: Optional[str]):
     """Conditionally create the initial user row; on race, return the winner."""
     from botocore.exceptions import ClientError
 
 
     table = _get_table()
     username = _sanitize_username(discord_username)
+    if identity_provider and identity_sub:
+        existing = table.scan(
+            FilterExpression=Attr("identity_provider").eq(identity_provider) & Attr("identity_sub").eq(identity_sub),
+            Limit=1,
+        ).get("Items") or []
+        if existing:
+            return {"settings": _normalize_settings(_sanitize_decimals(existing[0])), "created": False}
+        if table.get_item(Key={"pk": username}).get("Item"):
+            username = _sanitize_username(f"{username}_{hashlib.sha256(identity_sub.encode()).hexdigest()[:8]}")
     now = datetime.now(timezone.utc).isoformat()
     default = {
         "pk": username,
+        **({"identity_provider": identity_provider, "identity_sub": identity_sub} if identity_provider and identity_sub else {}),
         "username": username,
         "discord_id": str(discord_id or ""),
         "discord_username": str(discord_username or ""),
@@ -166,5 +182,5 @@ async def settings_create(args: dict) -> dict:
     discord_username = args.get("discord_username") or ""
     avatar_url = args.get("avatar_url")
     return await asyncio.get_running_loop().run_in_executor(
-        None, lambda: _create_sync(discord_id, discord_username, avatar_url)
+        None, lambda: _create_sync(discord_id, discord_username, avatar_url, args.get("identity_provider"), args.get("identity_sub"))
     )

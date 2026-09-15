@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Avatar,
   Button,
@@ -50,7 +51,7 @@ export default function SettingsDrawer() {
     currency, setCurrency,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
-  const { user, loading, readOnly, signInDiscord, signInAuthentik, signOut, age_class: authAgeClass } = useAuth()
+  const { user, loading, readOnly, signInDiscord, signInAuthentik, signOut, age_class: authAgeClass } = useAuth('settings')
 
   const isOpen = drawerOpen && drawerType === 'settings'
   const effectiveSex = program?.meta?.sex ?? sex
@@ -183,9 +184,10 @@ export default function SettingsDrawer() {
                 </Avatar>
                 <Stack gap={0}>
                   <Text size="sm" fw={600}>{user.username}</Text>
-                  <Text size="xs" c="dimmed">Discord User</Text>
+                  <Text size="xs" c="dimmed">Signed in</Text>
                 </Stack>
               </Group>
+              <Button component={Link} to="/onboarding?edit=1" variant="light" onClick={closeDrawer}>Edit roles, basics and federations</Button>
               <Button
                 variant="light"
                 color="red"
@@ -207,7 +209,7 @@ export default function SettingsDrawer() {
                 fullWidth
                 data-testid="settings-signin-discord"
               >
-                Sign in with discord
+                Sign in with Discord
               </Button>
               <Button
                 variant="default"
@@ -217,7 +219,7 @@ export default function SettingsDrawer() {
                 fullWidth
                 data-testid="settings-signin-authentik"
               >
-                Sign in with sso
+                Sign in with Authentik
               </Button>
             </Stack>
           )}

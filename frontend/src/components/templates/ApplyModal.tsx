@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Modal, Select, Button, Stack, Group } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { applyTemplate } from '../../api/client'
@@ -19,18 +19,26 @@ export const ApplyModal: React.FC<Props> = ({ opened, onClose, sk, onApply }) =>
   const [weekStartDay, setWeekStartDay] = useState<WeekStartDay>('Monday')
   const [loading, setLoading] = useState(false)
   const { program } = useProgramStore()
+  const idempotencyKey = useRef('')
 
   useEffect(() => {
-    if (opened) setWeekStartDay(weekStartForBlock(program, 'current'))
+    if (opened) {
+      setWeekStartDay(weekStartForBlock(program, 'current'))
+      idempotencyKey.current = ''
+    }
   }, [opened, program])
 
   const handleSubmit = async () => {
     setLoading(true)
     try {
+      if (!program) throw new Error('Load the current program before applying a template')
+      if (!idempotencyKey.current) idempotencyKey.current = globalThis.crypto.randomUUID()
       const res = await applyTemplate(sk, {
         target,
         start_date: startDate || undefined,
         week_start_day: weekStartDay,
+        expected_revision: program.meta.revision ?? 0,
+        idempotency_key: idempotencyKey.current,
       })
       onApply(res)
     } catch (err) {

@@ -868,11 +868,20 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
     const sourceFingerprint = blockSourceFingerprint(program, block, sorted, phases, scopedCompetitions, scopedGoals)
     const dataQualityFlags = buildDataQualityFlags(program, sorted, startDate, endDate, linkedCompetition, blockKey)
     const results = linkedCompetition?.competition.results
+    const blockRecord = (program.meta?.blocks ?? []).find((candidate) => {
+      const candidateId = candidate?.id ?? candidate?.block_id
+      return String(candidateId ?? '') === block
+    })
+    const label = typeof blockRecord?.name === 'string' && blockRecord.name.trim()
+      ? blockRecord.name.trim()
+      : typeof blockRecord?.label === 'string' && blockRecord.label.trim() && blockRecord.label !== 'current'
+        ? blockRecord.label.trim()
+        : block === DEFAULT_BLOCK ? 'Current' : block
 
     const entry: ProgramBlockIndexEntry = {
       blockKey,
       block,
-      label: block === DEFAULT_BLOCK ? 'Current' : block,
+      label,
       isCurrent: block === DEFAULT_BLOCK,
       startDate,
       endDate,

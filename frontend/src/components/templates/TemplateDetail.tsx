@@ -6,7 +6,7 @@ import { SessionGrid } from './SessionGrid'
 import { EvaluationPanel } from './EvaluationPanel'
 import { ApplyModal } from './ApplyModal'
 import { MaxResolutionGate } from './MaxResolutionGate'
-import { confirmApplyTemplate, publishTemplate, unpublishTemplate } from '../../api/client'
+import { confirmApplyTemplate, mutationEnvelope, publishTemplate, unpublishTemplate } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
 import { templateEditRoute } from '../../utils/templateRoutes'
 import { useAuth } from '@/auth/AuthProvider'
@@ -24,14 +24,14 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
   const [applyData, setApplyData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { mapped_pk } = useAuth()
+  const { person_pk } = useAuth()
   const resolvedTemplateSk = template.sk || templateSk
-  const canEdit = !readOnly && Boolean(resolvedTemplateSk) && template.meta.author_pk === mapped_pk
+  const canEdit = !readOnly && Boolean(resolvedTemplateSk) && template.meta.author_pk === person_pk
 
   const handleApply = async (res: any) => {
     if (res.missing_maxes && res.missing_maxes.length > 0) {
       setMissingMaxes(res.missing_maxes)
-      setApplyData(res)
+      setApplyData({ ...res, confirmKey: globalThis.crypto.randomUUID() })
       setApplyModalOpened(false)
     } else {
       if (!resolvedTemplateSk) return
@@ -41,6 +41,8 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
           start_date: res.start_date,
           week_start_day: res.week_start_day,
           target: res.target,
+          expected_revision: res.expected_revision,
+          idempotency_key: res.idempotency_key,
         })
         navigate(`/designer/sessions?version=${applied.program_sk}`)
       } finally {
@@ -54,9 +56,9 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
     setLoading(true)
     try {
       if (template.meta.published === false) {
-        await publishTemplate(resolvedTemplateSk)
+        await publishTemplate(resolvedTemplateSk, mutationEnvelope((template.meta as any).revision ?? 0))
       } else {
-        await unpublishTemplate(resolvedTemplateSk)
+        await unpublishTemplate(resolvedTemplateSk, mutationEnvelope((template.meta as any).revision ?? 0))
       }
       onRefresh()
     } finally {
@@ -73,6 +75,8 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         start_date: applyData.start_date,
         week_start_day: applyData.week_start_day,
         target: applyData.target,
+        expected_revision: applyData.expected_revision,
+        idempotency_key: applyData.confirmKey,
       })
       navigate(`/designer/sessions?version=${res.program_sk}`)
     } catch (err) {

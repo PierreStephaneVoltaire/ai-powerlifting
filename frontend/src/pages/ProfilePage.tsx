@@ -1,3 +1,5 @@
+import PublicationSettings from '@/components/settings/PublicationSettings'
+import ProfileTags from '@/components/settings/ProfileTags'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -19,7 +21,7 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core'
-import { AlertCircle, Calendar, Check, Film, Plus, Save, Tag as TagIcon, Upload, User, X } from 'lucide-react'
+import { AlertCircle, Calendar, Check, Film, Plus, Save, Upload, User, X } from 'lucide-react'
 import {
   getSettings,
   isValidProfileAvatarType,
@@ -28,9 +30,6 @@ import {
   updateNickname,
   updateProfile,
   uploadProfileAvatar,
-  addTag,
-  removeTag,
-  approveTag,
   type UserSettings,
 } from '@/api/settings'
 import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
@@ -123,7 +122,7 @@ function metricTestId(label: string): string {
 }
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, readOnly } = useAuth()
+  const { user, loading: authLoading, readOnly } = useAuth('settings')
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
   const { pushToast } = useUiStore()
@@ -144,8 +143,6 @@ export default function ProfilePage() {
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarProgress, setAvatarProgress] = useState(0)
   const [ageClass, setAgeClass] = useState<AgeCategory>('open')
-  const [newTag, setNewTag] = useState('')
-  const [tagSaving, setTagSaving] = useState(false)
 
   // The page renders one of two video grids (own-videos when signed in,
   // public-videos when reading someone else's profile). Both grids feed
@@ -360,47 +357,6 @@ export default function ProfilePage() {
       pushToast({ message: 'Profile update failed', type: 'error' })
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleAddTag() {
-    const tag = newTag.trim().toLowerCase().replace(/\s+/g, '-')
-    if (!tag || !settings || tagSaving) return
-    setTagSaving(true)
-    try {
-      const updated = await addTag(tag)
-      setSettings(updated)
-      setNewTag('')
-    } catch {
-      pushToast({ message: 'Failed to add tag', type: 'error' })
-    } finally {
-      setTagSaving(false)
-    }
-  }
-
-  async function handleRemoveTag(tag: string) {
-    if (!settings || tagSaving) return
-    setTagSaving(true)
-    try {
-      const updated = await removeTag(tag)
-      setSettings(updated)
-    } catch {
-      pushToast({ message: 'Failed to remove tag', type: 'error' })
-    } finally {
-      setTagSaving(false)
-    }
-  }
-
-  async function handleApproveTag(tag: string) {
-    if (!settings || tagSaving) return
-    setTagSaving(true)
-    try {
-      const updated = await approveTag(tag)
-      setSettings(updated)
-    } catch {
-      pushToast({ message: 'Failed to approve tag', type: 'error' })
-    } finally {
-      setTagSaving(false)
     }
   }
 
@@ -636,60 +592,8 @@ export default function ProfilePage() {
                   {program?.meta.practicing_for ? ` - ${program.meta.practicing_for}` : ''}
                 </Text>
 
-                <Stack gap={4}>
-                  <Group gap={4} wrap="wrap" align="center">
-                    <TagIcon size={14} color="var(--text-muted)" />
-                    <Text size="xs" c="var(--text-muted)">Tags</Text>
-                    {(settings?.tags || []).filter((t) => t.approved).map((t) => (
-                      <Badge key={t.tag} variant="light" size="sm" pr={4}
-                        rightSection={
-                          <button type="button" onClick={() => handleRemoveTag(t.tag)} disabled={tagSaving || readOnly}
-                            style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                            <X size={12} />
-                          </button>
-                        }
-                      >
-                        {t.tag}
-                      </Badge>
-                    ))}
-                    {(settings?.tags || []).filter((t) => !t.approved).map((t) => (
-                      <Badge key={t.tag} variant="dot" color="orange" size="sm" pr={4}
-                        rightSection={
-                          <Group gap={2}>
-                            <button type="button" onClick={() => handleApproveTag(t.tag)} disabled={tagSaving || readOnly}
-                              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                              <Check size={12} />
-                            </button>
-                            <button type="button" onClick={() => handleRemoveTag(t.tag)} disabled={tagSaving || readOnly}
-                              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                              <X size={12} />
-                            </button>
-                          </Group>
-                        }
-                      >
-                        {t.tag}
-                      </Badge>
-                    ))}
-                  </Group>
-                  {!readOnly && (
-                    <Group gap={4}>
-                      <TextInput
-                        size="xs"
-                        placeholder="Add a tag…"
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.currentTarget.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag() } }}
-                        disabled={tagSaving || !settings}
-                        maxLength={30}
-                        w={140}
-                      />
-                      <Button size="xs" variant="light" leftSection={<Plus size={12} />} onClick={handleAddTag}
-                        disabled={tagSaving || !newTag.trim() || !settings}>
-                        Add
-                      </Button>
-                    </Group>
-                  )}
-                </Stack>
+                <ProfileTags settings={settings} onChange={setSettings} />
+                <PublicationSettings />
               </Stack>
             </Group>
           </Group>

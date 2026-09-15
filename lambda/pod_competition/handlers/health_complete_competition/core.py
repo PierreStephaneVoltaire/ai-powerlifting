@@ -73,15 +73,17 @@ def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None
     sessions = item.pop("sessions", [])
     item["pk"] = active_pk
     item["sk"] = sk
+    from session_store import SessionStore
+    session_store = SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    )
+    if isinstance(sessions, list):
+        session_store._ensure_unique_session_ids(sessions, sk)
     table.put_item(Item=_floats_to_decimals(item))
     if isinstance(sessions, list):
-        from session_store import SessionStore
-        session_store = SessionStore(
-            table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
-            pk=active_pk,
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-            source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-        )
         session_store.replace_program_sessions_sync(
             sk,
             sessions,
@@ -242,14 +244,41 @@ async def health_complete_competition(
         if post_meet_report is None:
             post_meet_report = args.get("post_meet_report")
     pk = args.get("pk") if isinstance(args, dict) else None
-    program, sk, _store = _load_program_version(version, pk)
-    updated_comp = _complete_competition_in_program(
-        program,
-        date,
-        results,
-        body_weight_kg,
-        allow_retrospective=allow_retrospective,
-        post_meet_report=post_meet_report,
+    expected_revision = args.get("expected_revision") if isinstance(args, dict) else None
+    idempotency_key = args.get("idempotency_key") if isinstance(args, dict) else None
+    store = _store_for(pk)
+    sessions: list[dict] = []
+    source_sk = None
+    if hasattr(store, "_source_snapshot_sync"):
+        source = store._source_snapshot_sync()
+        source_sk = source[2]
+        sessions = store._get_session_store().list_sessions_sync(
+            source_sk,
+            source[0].get("phases", []) if isinstance(source[0].get("phases"), list) else [],
+        )
+
+    def mutate(program: dict) -> dict:
+        if sessions:
+            program["sessions"] = sessions
+        return copy.deepcopy(_complete_competition_in_program(
+            program,
+            date,
+            results,
+            body_weight_kg,
+            allow_retrospective=allow_retrospective,
+            post_meet_report=post_meet_report,
+        ))
+
+    return await store.mutate_source(
+        "competition_complete",
+        {
+            "date": date,
+            "results": results,
+            "body_weight_kg": body_weight_kg,
+            "post_meet_report": post_meet_report,
+            "version": version,
+        },
+        expected_revision,
+        idempotency_key,
+        mutate,
     )
-    _save_program_version(program, sk, pk)
-    return updated_comp

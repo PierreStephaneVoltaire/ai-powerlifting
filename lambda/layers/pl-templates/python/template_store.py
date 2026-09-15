@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -10,6 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,22 @@ class TemplateNotFoundError(Exception):
 
 class TemplatePermissionError(Exception):
     """Raised when an actor cannot mutate a template."""
+
+
+class TemplateRevisionConflictError(Exception):
+    def __init__(self, expected_revision: int, current_revision: int, current_record: dict | None = None):
+        self.expected_revision = expected_revision
+        self.current_revision = current_revision
+        self.current_record = current_record
+        super().__init__(f"revision conflict: expected {expected_revision}, current {current_revision}")
+
+
+def require_mutation_envelope(expected_revision: Any, idempotency_key: Any) -> tuple[int, str]:
+    if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 0:
+        raise ValueError("expected_revision must be a nonnegative integer")
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise ValueError("idempotency_key must be a nonempty string")
+    return expected_revision, idempotency_key
 
 class TemplateStore:
     """DynamoDB-backed store for global training templates."""
@@ -117,12 +136,92 @@ class TemplateStore:
             "updated_at": updated_at or self._now(),
         }))
 
+    def _transaction_canceled(self, exc: Exception) -> bool:
+        return isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") == "TransactionCanceledException"
+
+    def _write_template_index_sync(self, template: dict, *, expected_revision: int | None = None, marker: dict | None = None) -> None:
+        for _ in range(5):
+            response = self.table.get_item(Key={"pk": self._pk, "sk": self.INDEX_SK}, ConsistentRead=True)
+            current = response.get("Item") or {}
+            if not current:
+                current = self.table.get_item(Key={"pk": self._pk, "sk": self.LEGACY_INDEX_SK}, ConsistentRead=True).get("Item") or {}
+            summaries = [item for item in current.get("templates", []) if item.get("sk") != template.get("sk")]
+            summaries.append(self._summary(template))
+            summaries.sort(key=lambda item: str(item.get("created_at") or ""))
+            revision = int(current.get("index_revision", 0))
+            index = self._floats_to_decimals({"pk": self._pk, "sk": self.INDEX_SK, "templates": summaries, "updated_at": template.get("meta", {}).get("updated_at") or self._now(), "index_revision": revision + 1})
+            index_condition = "attribute_not_exists(#pk) OR #index_revision = :revision"
+            values = {":revision": revision}
+            template_write = {"Put": {"TableName": self._table_name, "Item": self._floats_to_decimals(template)}}
+            if expected_revision is None:
+                template_write["Put"].update({"ConditionExpression": "attribute_not_exists(#pk)", "ExpressionAttributeNames": {"#pk": "pk"}})
+            else:
+                template_write["Put"].update({"ConditionExpression": "attribute_exists(#pk) AND (attribute_not_exists(#meta.#revision) OR #meta.#revision = :expected)", "ExpressionAttributeNames": {"#pk": "pk", "#meta": "meta", "#revision": "revision"}, "ExpressionAttributeValues": {":expected": expected_revision}})
+            index_write = {"Put": {"TableName": self._table_name, "Item": index, "ConditionExpression": index_condition, "ExpressionAttributeNames": {"#pk": "pk", "#index_revision": "index_revision"}, "ExpressionAttributeValues": values}}
+            writes = [template_write, index_write]
+            if marker:
+                marker_write = {"Put": {"TableName": self._table_name, "Item": self._floats_to_decimals(marker), "ConditionExpression": "attribute_not_exists(#pk)", "ExpressionAttributeNames": {"#pk": "pk"}}}
+                writes.append(marker_write)
+            try:
+                self.table.meta.client.transact_write_items(TransactItems=writes)
+                return
+            except ClientError as exc:
+                if not self._transaction_canceled(exc):
+                    raise
+        raise TemplateRevisionConflictError(expected_revision or 0, int(current.get("index_revision", 0)), None)
+
     def _upsert_index_summary_sync(self, summary: dict[str, Any]) -> None:
-        templates = self._read_index_sync()
-        next_templates = [t for t in templates if t.get("sk") != summary.get("sk")]
-        next_templates.append(summary)
-        next_templates.sort(key=lambda t: str(t.get("created_at") or ""))
-        self._write_index_sync(next_templates, str(summary.get("updated_at") or self._now()))
+        for _ in range(5):
+            response = self.table.get_item(Key={"pk": self._pk, "sk": self.INDEX_SK}, ConsistentRead=True)
+            current = response.get("Item") or {}
+            if not current:
+                current = self.table.get_item(Key={"pk": self._pk, "sk": self.LEGACY_INDEX_SK}, ConsistentRead=True).get("Item") or {}
+            templates = list(current.get("templates") or [])
+            next_templates = [t for t in templates if t.get("sk") != summary.get("sk")]
+            next_templates.append(summary)
+            next_templates.sort(key=lambda t: str(t.get("created_at") or ""))
+            revision = int(current.get("index_revision", 0))
+            item = self._floats_to_decimals({
+                "pk": self._pk,
+                "sk": self.INDEX_SK,
+                "templates": next_templates,
+                "updated_at": str(summary.get("updated_at") or self._now()),
+                "index_revision": revision + 1,
+            })
+            try:
+                self.table.meta.client.transact_write_items(TransactItems=[{
+                    "Put": {
+                        "TableName": self._table_name,
+                        "Item": item,
+                        "ConditionExpression": "attribute_not_exists(#pk) OR (attribute_not_exists(#index_revision) AND :expected = :zero) OR #index_revision = :expected",
+                        "ExpressionAttributeNames": {"#pk": "pk", "#index_revision": "index_revision"},
+                        "ExpressionAttributeValues": {":expected": self._floats_to_decimals(revision), ":zero": self._floats_to_decimals(0)},
+                    }
+                }])
+                return
+            except ClientError as exc:
+                if not self._transaction_canceled(exc):
+                    raise
+        raise TemplateRevisionConflictError(0, 0, None)
+
+    def _conditional_put_sync(self, template: dict, expected_revision: int, current: dict) -> None:
+        item = self._floats_to_decimals({**template, "pk": self._pk, "sk": template["sk"]})
+        try:
+            self.table.meta.client.transact_write_items(TransactItems=[{
+                "Put": {
+                    "TableName": self._table_name,
+                    "Item": item,
+                    "ConditionExpression": "attribute_exists(#pk) AND (attribute_not_exists(#meta.#revision) OR #meta.#revision = :expected)",
+                    "ExpressionAttributeNames": {"#pk": "pk", "#meta": "meta", "#revision": "revision"},
+                    "ExpressionAttributeValues": {":expected": self._floats_to_decimals(expected_revision)},
+                }
+            }])
+        except ClientError as exc:
+            latest = self.get_template_sync(str(template["sk"]), actor_pk=current.get("meta", {}).get("author_pk"), include_hidden=True) or current
+            revision = int((latest.get("meta") or {}).get("revision", 0))
+            if self._transaction_canceled(exc):
+                raise TemplateRevisionConflictError(expected_revision, revision, latest) from exc
+            raise
 
     def list_templates_sync(self, include_archived: bool = False, actor_pk: str | None = None) -> list[dict[str, Any]]:
         templates = self._read_index_sync()
@@ -162,7 +261,28 @@ class TemplateStore:
         published: bool = False,
         import_job_id: str | None = None,
         sk: str | None = None,
+        expected_revision: int | None = None,
+        idempotency_key: str | None = None,
+        _idempotency_payload_hash: str | None = None,
     ) -> str:
+        payload_hash = _idempotency_payload_hash or hashlib.sha256(json.dumps({
+            "template": template,
+            "actor_pk": actor_pk,
+            "author": author,
+            "published": published,
+            "import_job_id": import_job_id,
+        }, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
+        if idempotency_key is not None:
+            require_mutation_envelope(expected_revision, idempotency_key)
+            marker_sk = f"template-idempotency#{hashlib.sha256(idempotency_key.encode()).hexdigest()[:32]}"
+            marker = self.table.get_item(Key={"pk": self._pk, "sk": marker_sk}, ConsistentRead=True).get("Item")
+            if marker:
+                if marker.get("payload_hash") != payload_hash:
+                    raise ValueError("idempotency key was used with a different payload")
+                existing = self.get_template_sync(str(marker["template_sk"]), include_hidden=True)
+                if existing:
+                    self._upsert_index_summary_sync(self._summary(existing))
+                return str(marker["template_sk"])
         now = self._now()
         new_sk = sk or self._new_template_sk()
         template_item = copy.deepcopy(template)
@@ -184,11 +304,20 @@ class TemplateStore:
         meta.setdefault("author", meta.get("author_pk") or "operator")
         if import_job_id:
             meta["import_job_id"] = import_job_id
+        meta.setdefault("revision", 0)
 
         template_item["pk"] = self._pk
         template_item["sk"] = new_sk
-        self.table.put_item(Item=self._floats_to_decimals(template_item))
-        self._upsert_index_summary_sync(self._summary(template_item))
+        marker_item = None
+        if idempotency_key:
+            marker_item = {"pk": self._pk, "sk": marker_sk, "entity_type": "template_idempotency", "template_sk": new_sk, "payload_hash": payload_hash}
+        try:
+            self._write_template_index_sync(template_item, marker=marker_item)
+        except (ClientError, TemplateRevisionConflictError) as exc:
+            marker = self.table.get_item(Key={"pk": self._pk, "sk": marker_sk}, ConsistentRead=True).get("Item") if idempotency_key else None
+            if marker and marker.get("payload_hash") == payload_hash:
+                return str(marker["template_sk"])
+            raise
         return new_sk
 
     async def put_template(
@@ -200,6 +329,9 @@ class TemplateStore:
         published: bool = False,
         import_job_id: str | None = None,
         sk: str | None = None,
+        expected_revision: int | None = None,
+        idempotency_key: str | None = None,
+        _idempotency_payload_hash: str | None = None,
     ) -> str:
         return await asyncio.get_running_loop().run_in_executor(
             None,
@@ -210,10 +342,14 @@ class TemplateStore:
                 published=published,
                 import_job_id=import_job_id,
                 sk=sk,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+                _idempotency_payload_hash=_idempotency_payload_hash,
             ),
         )
 
-    def update_template_sync(self, sk: str, template: dict, *, actor_pk: str | None = None) -> None:
+    def update_template_sync(self, sk: str, template: dict, *, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        require_mutation_envelope(expected_revision, idempotency_key)
         existing = self.get_template_sync(sk, actor_pk=actor_pk)
         if not existing:
             raise TemplateNotFoundError(f"Template not found: {sk}")
@@ -223,12 +359,25 @@ class TemplateStore:
         template_item = copy.deepcopy(template)
         incoming_meta = template_item.setdefault("meta", {})
         existing_meta = existing.get("meta") if isinstance(existing.get("meta"), dict) else {}
+        revision = int(existing_meta.get("revision", 0))
+        payload_hash = hashlib.sha256(json.dumps(template, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
+        prior = (existing_meta.get("idempotency") or {}).get(idempotency_key) if isinstance(existing_meta.get("idempotency"), dict) else None
+        if prior:
+            if prior.get("payload_hash") != payload_hash:
+                raise ValueError("idempotency key was used with a different payload")
+            self._upsert_index_summary_sync(self._summary(existing)) if existing else None
+            return copy.deepcopy(prior["result"])
+        if revision != expected_revision:
+            raise TemplateRevisionConflictError(expected_revision, revision, existing)
 
         incoming_meta["created_at"] = existing_meta.get("created_at", now)
         incoming_meta["updated_at"] = now
         incoming_meta["author_pk"] = existing_meta.get("author_pk")
         incoming_meta["author"] = existing_meta.get("author")
         incoming_meta["published"] = bool(existing_meta.get("published", True))
+        incoming_meta["revision"] = revision + 1
+        incoming_meta["idempotency"] = dict(existing_meta.get("idempotency") or {})
+        incoming_meta["idempotency"][idempotency_key] = {"payload_hash": payload_hash, "result": {"status": "updated", "sk": sk, "revision": revision + 1}}
         if existing_meta.get("published_at"):
             incoming_meta["published_at"] = existing_meta.get("published_at")
         else:
@@ -238,68 +387,110 @@ class TemplateStore:
 
         template_item["pk"] = self._pk
         template_item["sk"] = sk
-        self.table.put_item(Item=self._floats_to_decimals(template_item))
-        self._upsert_index_summary_sync(self._summary(template_item))
+        self._write_template_index_sync(template_item, expected_revision=expected_revision)
+        return {"status": "updated", "sk": sk, "revision": revision + 1}
 
-    async def update_template(self, sk: str, template: dict, *, actor_pk: str | None = None) -> None:
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.update_template_sync(sk, template, actor_pk=actor_pk)
+    async def update_template(self, sk: str, template: dict, *, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, lambda: self.update_template_sync(sk, template, actor_pk=actor_pk, expected_revision=expected_revision, idempotency_key=idempotency_key)
         )
 
-    def _set_archived_sync(self, sk: str, archived: bool, actor_pk: str | None) -> None:
+    def _set_archived_sync(self, sk: str, archived: bool, actor_pk: str | None, expected_revision: int | None, idempotency_key: str | None) -> dict:
+        require_mutation_envelope(expected_revision, idempotency_key)
         template = self.get_template_sync(sk, actor_pk=actor_pk)
         if not template:
             raise TemplateNotFoundError(f"Template not found: {sk}")
         self._assert_owner(template, actor_pk)
         meta = template.setdefault("meta", {})
+        revision = int(meta.get("revision", 0))
+        result = {"status": "archived" if archived else "unarchived", "sk": sk, "revision": revision + 1}
+        payload_hash = hashlib.sha256(json.dumps({"archived": archived}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        prior = (meta.get("idempotency") or {}).get(idempotency_key) if isinstance(meta.get("idempotency"), dict) else None
+        if prior:
+            if prior.get("payload_hash") != payload_hash:
+                raise ValueError("idempotency key was used with a different payload")
+            self._upsert_index_summary_sync(self._summary(template))
+            return copy.deepcopy(prior["result"])
+        if revision != expected_revision:
+            raise TemplateRevisionConflictError(expected_revision, revision, template)
         meta["archived"] = archived
+        meta["revision"] = revision + 1
+        meta.setdefault("idempotency", {})[idempotency_key] = {"payload_hash": payload_hash, "result": result}
         meta["updated_at"] = self._now()
-        self.table.put_item(Item=self._floats_to_decimals({**template, "pk": self._pk, "sk": sk}))
-        self._upsert_index_summary_sync(self._summary(template))
+        self._write_template_index_sync({**template, "pk": self._pk, "sk": sk}, expected_revision=expected_revision)
+        return result
 
-    def archive_template_sync(self, sk: str, actor_pk: str | None = None) -> None:
-        self._set_archived_sync(sk, True, actor_pk)
+    def archive_template_sync(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        return self._set_archived_sync(sk, True, actor_pk, expected_revision, idempotency_key)
 
-    async def archive_template(self, sk: str, actor_pk: str | None = None) -> None:
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.archive_template_sync(sk, actor_pk)
+    async def archive_template(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, lambda: self.archive_template_sync(sk, actor_pk, expected_revision, idempotency_key)
         )
 
-    def unarchive_template_sync(self, sk: str, actor_pk: str | None = None) -> None:
-        self._set_archived_sync(sk, False, actor_pk)
+    def unarchive_template_sync(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        return self._set_archived_sync(sk, False, actor_pk, expected_revision, idempotency_key)
 
-    async def unarchive_template(self, sk: str, actor_pk: str | None = None) -> None:
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.unarchive_template_sync(sk, actor_pk)
+    async def unarchive_template(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, lambda: self.unarchive_template_sync(sk, actor_pk, expected_revision, idempotency_key)
         )
 
-    def set_published_sync(self, sk: str, published: bool, actor_pk: str | None = None) -> None:
+    def set_published_sync(self, sk: str, published: bool, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        require_mutation_envelope(expected_revision, idempotency_key)
         template = self.get_template_sync(sk, actor_pk=actor_pk)
         if not template:
             raise TemplateNotFoundError(f"Template not found: {sk}")
         self._assert_owner(template, actor_pk)
         now = self._now()
         meta = template.setdefault("meta", {})
+        revision = int(meta.get("revision", 0))
+        result = {"status": "published" if published else "unpublished", "sk": sk, "revision": revision + 1}
+        payload_hash = hashlib.sha256(json.dumps({"published": published}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        prior = (meta.get("idempotency") or {}).get(idempotency_key) if isinstance(meta.get("idempotency"), dict) else None
+        if prior:
+            if prior.get("payload_hash") != payload_hash:
+                raise ValueError("idempotency key was used with a different payload")
+            self._upsert_index_summary_sync(self._summary(template))
+            return copy.deepcopy(prior["result"])
+        if revision != expected_revision:
+            raise TemplateRevisionConflictError(expected_revision, revision, template)
         meta["published"] = published
+        meta["revision"] = revision + 1
+        meta.setdefault("idempotency", {})[idempotency_key] = {"payload_hash": payload_hash, "result": result}
         meta["updated_at"] = now
         if published:
             meta["published_at"] = now
         else:
             meta.pop("published_at", None)
-        self.table.put_item(Item=self._floats_to_decimals({**template, "pk": self._pk, "sk": sk}))
-        self._upsert_index_summary_sync(self._summary(template))
+        self._write_template_index_sync({**template, "pk": self._pk, "sk": sk}, expected_revision=expected_revision)
+        return result
 
-    async def set_published(self, sk: str, published: bool, actor_pk: str | None = None) -> None:
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.set_published_sync(sk, published, actor_pk)
+    async def set_published(self, sk: str, published: bool, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, lambda: self.set_published_sync(sk, published, actor_pk, expected_revision, idempotency_key)
         )
 
-    def copy_template_sync(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None) -> str:
+    def copy_template_sync(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> str:
+        require_mutation_envelope(expected_revision, idempotency_key)
         if not actor_pk:
             raise TemplatePermissionError("Template copy requires a signed-in author")
         template = self.get_template_sync(sk, actor_pk=actor_pk)
         if not template:
             raise TemplateNotFoundError(f"Template not found: {sk}")
+        marker_sk = f"template-copy-idempotency#{hashlib.sha256(f'{sk}:{new_name}'.encode()).hexdigest()[:32]}"
+        payload_hash = hashlib.sha256(json.dumps({"source_sk": sk, "new_name": new_name, "actor_pk": str(actor_pk), "author": author, "expected_revision": expected_revision, "idempotency_key": idempotency_key}, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
+        marker = self.table.get_item(Key={"pk": self._pk, "sk": marker_sk}, ConsistentRead=True).get("Item")
+        if marker:
+            if marker.get("payload_hash") != payload_hash or marker.get("actor_pk") != str(actor_pk):
+                raise ValueError("idempotency key was used with a different payload")
+            result = self.get_template_sync(str(marker["template_sk"]), actor_pk=actor_pk, include_hidden=True)
+            if not result:
+                raise TemplatePermissionError("Template copy result is not owned by the actor")
+            return str(marker["template_sk"])
+        source_revision = int((template.get("meta") or {}).get("revision", 0))
+        if source_revision != expected_revision:
+            raise TemplateRevisionConflictError(expected_revision, source_revision, template)
 
         new_template = copy.deepcopy(template)
         meta = new_template.setdefault("meta", {})
@@ -312,13 +503,33 @@ class TemplateStore:
         meta["published"] = False
         meta["author_pk"] = actor_pk
         meta["author"] = author or actor_pk
+        meta["revision"] = 0
+        meta.pop("idempotency", None)
+        meta.pop("template_apply_idempotency", None)
         new_template.pop("pk", None)
         new_template.pop("sk", None)
-        return self.put_template_sync(new_template, actor_pk=actor_pk, author=author, published=False)
+        now = self._now()
+        meta["created_at"] = now
+        meta["updated_at"] = now
+        new_sk = f"{self.TEMPLATE_SK_PREFIX}copy-{hashlib.sha256(f'{sk}:{new_name}'.encode()).hexdigest()[:32]}"
+        marker_item = {"pk": self._pk, "sk": marker_sk, "entity_type": "template_copy_idempotency", "template_sk": new_sk, "payload_hash": payload_hash, "actor_pk": str(actor_pk)}
+        try:
+            self._write_template_index_sync(new_template | {"pk": self._pk, "sk": new_sk}, marker=marker_item)
+        except (ClientError, TemplateRevisionConflictError) as exc:
+            if not self._transaction_canceled(exc):
+                marker = self.table.get_item(Key={"pk": self._pk, "sk": marker_sk}, ConsistentRead=True).get("Item")
+                if marker and marker.get("payload_hash") == payload_hash and marker.get("actor_pk") == str(actor_pk):
+                    return str(marker["template_sk"])
+                raise
+            marker = self.table.get_item(Key={"pk": self._pk, "sk": marker_sk}, ConsistentRead=True).get("Item")
+            if marker and marker.get("payload_hash") == payload_hash and marker.get("actor_pk") == str(actor_pk):
+                return str(marker["template_sk"])
+            raise
+        return new_sk
 
-    async def copy_template(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None) -> str:
+    async def copy_template(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> str:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.copy_template_sync(sk, new_name, actor_pk=actor_pk, author=author)
+            None, lambda: self.copy_template_sync(sk, new_name, actor_pk=actor_pk, author=author, expected_revision=expected_revision, idempotency_key=idempotency_key)
         )
 
     def create_import_job_sync(self, record: dict[str, Any]) -> str:

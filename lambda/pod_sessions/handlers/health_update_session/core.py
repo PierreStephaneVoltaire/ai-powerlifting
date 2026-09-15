@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Optional
+from session_store import require_mutation_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +57,14 @@ async def health_update_session(args: dict | None = None, date_str: str | None =
     if isinstance(args, dict):
         if date_str is None:
             date_str = args.get("date") or args.get("date_str")
-        if patch is None:
+    if patch is None:
             patch = args.get("patch")
     pk = args.get("pk") if isinstance(args, dict) else None
+    session_id = args.get("session_id") if isinstance(args, dict) else None
+    expected_revision, idempotency_key = require_mutation_envelope(
+        args.get("expected_revision") if isinstance(args, dict) else None,
+        args.get("idempotency_key") if isinstance(args, dict) else None,
+    )
     try:
         datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
@@ -70,7 +76,13 @@ async def health_update_session(args: dict | None = None, date_str: str | None =
         raise ValueError(f"Unknown patch keys: {unknown_keys}. Allowed: {allowed_keys}")
 
     store = _store_for(pk)
-    updated_program = await store.update_session(date_str, patch)
+    updated_program = await store.update_session(
+        date_str,
+        patch,
+        expected_revision,
+        idempotency_key,
+        session_id,
+    )
     if patch.get("completed") is True:
         try:
             from cache_invalidation import mark_markdown_export_dirty
@@ -85,7 +97,7 @@ async def health_update_session(args: dict | None = None, date_str: str | None =
 
     sessions = updated_program.get("sessions", [])
     for session in sessions:
-        if session.get("date") == date_str:
+        if (session_id and str(session.get("id") or session.get("session_id") or "") == session_id) or (not session_id and session.get("date") == date_str):
             return session
 
     raise RuntimeError(f"Session update succeeded but session not found: {date_str}")

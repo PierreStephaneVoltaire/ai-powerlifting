@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from session_store import SessionIdentityConflictError, SessionRevisionConflictError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,22 @@ def _store_for(pk: str | None):
     return store
 
 
+def _select_session(program: dict, date: str, session_id: str | None) -> dict:
+    all_sessions = program.get("sessions", [])
+    revision = int((program.get("meta") or {}).get("revision", 0))
+    if session_id:
+        for session in all_sessions:
+            if str(session.get("id") or session.get("session_id") or "") == session_id:
+                return session
+        raise SessionIdentityConflictError(session_id, revision)
+    sessions = [session for session in all_sessions if session.get("date") == date]
+    if len(sessions) == 1:
+        return sessions[0]
+    if len(sessions) > 1:
+        raise SessionRevisionConflictError(revision, revision, None)
+    raise ValueError(f"Session not found with date={date}")
+
+
 async def health_get_session(args: dict | str | None = None, date: str | None = None) -> dict:
     """Load a single session by date.
 
@@ -62,17 +79,13 @@ async def health_get_session(args: dict | str | None = None, date: str | None = 
     """
     if date is None:
         date = args.get("date") if isinstance(args, dict) else args
+    session_id = args.get("session_id") if isinstance(args, dict) else None
     pk = args.get("pk") if isinstance(args, dict) else None
     store = _store_for(pk)
     program = await store.get_program()
 
     phases = program.get("phases", [])
-    sessions = program.get("sessions", [])
-
-    for session in sessions:
-        if session.get("date") == date:
-            session_copy = dict(session)
-            session_copy["phase"] = _resolve_phase(session, phases)
-            return session_copy
-
-    raise ValueError(f"Session not found with date={date}")
+    session = _select_session(program, date, session_id)
+    session_copy = dict(session)
+    session_copy["phase"] = _resolve_phase(session, phases)
+    return session_copy

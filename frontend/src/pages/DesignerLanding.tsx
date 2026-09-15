@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom'
 import { Card, SimpleGrid, Text, UnstyledButton, Group, Stack } from '@mantine/core'
 import { GitBranch, ClipboardList, BookOpen, Trophy, Import, Target, Shield } from 'lucide-react'
+import BlockTransitionPanel from '@/components/BlockTransitionPanel'
 
 export default function DesignerLanding() {
   return (
     <Stack gap="md">
       <Text size="xl" fw={700}>Program Designer</Text>
+      <BlockTransitionPanel />
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
         <UnstyledButton component={Link} to="/designer/phases">

@@ -1,3 +1,5 @@
+import { useAuth } from '@/auth/AuthProvider'
+import { routePermission } from '@/auth/routes'
 import { useLocation, NavLink as RouterNavLink } from 'react-router-dom'
 import {
   NavLink,
@@ -20,6 +22,10 @@ import {
   BookOpen,
   User,
   Wallet,
+  Search,
+  Users,
+  Trophy,
+  Inbox,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -43,6 +49,11 @@ const DESKTOP_NAV_ITEMS: NavItem[] = [
   { to: '/log', icon: BookOpen, label: 'Log', activePaths: ['/log', '/notes', '/supplements', '/biometrics', '/diet'] },
   { to: '/tools', icon: Wrench, label: 'Tools', activePaths: ['/tools', '/rankings'] },
   { to: '/profile', icon: User, label: 'Profile' },
+  { to: '/profiles', icon: Search, label: 'Search' },
+  { to: '/roster', icon: Users, label: 'Roster' },
+  { to: '/inbox', icon: Inbox, label: 'Inbox' },
+  { to: '/my-notes', icon: Inbox, label: 'My notes' },
+  { to: '/designer/competitions', icon: Trophy, label: 'Competitions' },
   { to: '/about', icon: Info, label: 'About' },
 ]
 
@@ -58,6 +69,11 @@ const MOBILE_MORE_ITEMS: NavItem[] = [
   { to: '/budget', icon: Wallet, label: 'Budget' },
   { to: '/tools', icon: Wrench, label: 'Tools', activePaths: ['/tools', '/rankings'] },
   { to: '/profile', icon: User, label: 'Profile' },
+  { to: '/profiles', icon: Search, label: 'Search' },
+  { to: '/roster', icon: Users, label: 'Roster' },
+  { to: '/inbox', icon: Inbox, label: 'Inbox' },
+  { to: '/my-notes', icon: Inbox, label: 'My notes' },
+  { to: '/designer/competitions', icon: Trophy, label: 'Competitions' },
   { to: '/about', icon: Info, label: 'About' },
 ]
 
@@ -72,6 +88,8 @@ function isActiveItem(item: NavItem, pathname: string): boolean {
 
 function DesktopSidebar() {
   const location = useLocation()
+  const { permissions } = useAuth()
+  const visible = (item: NavItem) => !routePermission(item.to) || permissions.includes(routePermission(item.to)!)
 
   return (
     <Box
@@ -80,7 +98,7 @@ function DesktopSidebar() {
     >
       <ScrollArea offsetScrollbars style={{ minHeight: 0, flex: 1 }}>
         <Stack gap={4} p={12}>
-          {DESKTOP_NAV_ITEMS.map((item) => {
+          {DESKTOP_NAV_ITEMS.filter(visible).map((item) => {
             const { to, icon: Icon, label } = item
             const isActive = isActiveItem(item, location.pathname)
 
@@ -113,6 +131,8 @@ function DesktopSidebar() {
 
 function MobileMoreMenu() {
   const location = useLocation()
+  const { permissions } = useAuth()
+  const visible = (item: NavItem) => !routePermission(item.to) || permissions.includes(routePermission(item.to)!)
   const isMoreActive = MOBILE_MORE_ITEMS.some((item) => isActiveItem(item, location.pathname))
 
   return (
@@ -124,12 +144,13 @@ function MobileMoreMenu() {
           data-testid="mobile-nav-more"
           style={{
             display: 'flex',
+            flex: '1 1 0',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             gap: 3,
             minHeight: 48,
-            minWidth: 56,
+            minWidth: 0,
             padding: '6px 4px',
             borderRadius: 8,
             color: isMoreActive ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -141,8 +162,8 @@ function MobileMoreMenu() {
         </UnstyledButton>
       </Menu.Target>
 
-      <Menu.Dropdown>
-        {MOBILE_MORE_ITEMS.map((item) => {
+      <Menu.Dropdown style={{ maxHeight: 'calc(var(--app-viewport-height, 100dvh) - 96px)', overflowY: 'auto' }}>
+        {MOBILE_MORE_ITEMS.filter(visible).map((item) => {
           const { to, icon: Icon, label } = item
           const isActive = isActiveItem(item, location.pathname)
 
@@ -165,10 +186,12 @@ function MobileMoreMenu() {
 
 function MobileSidebar() {
   const location = useLocation()
+  const { permissions } = useAuth()
+  const visible = (item: NavItem) => !routePermission(item.to) || permissions.includes(routePermission(item.to)!)
 
   return (
     <Group justify="space-around" wrap="nowrap" p={6} style={{ height: '100%' }}>
-      {MOBILE_MAIN_ITEMS.map((item) => {
+      {MOBILE_MAIN_ITEMS.filter(visible).map((item) => {
         const { to, icon: Icon, label } = item
         const isActive = isActiveItem(item, location.pathname)
 
@@ -183,12 +206,13 @@ function MobileSidebar() {
             data-testid={`mobile-nav-${label.toLowerCase()}`}
             style={{
               display: 'flex',
+              flex: '1 1 0',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 3,
               minHeight: 48,
-              minWidth: 56,
+              minWidth: 0,
               padding: '6px 4px',
               borderRadius: 8,
               color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',

@@ -16,7 +16,7 @@ export function cacheGet(domains: string[] | ((req: Request) => string[])) {
   ): Promise<void> {
     if (!CACHEABLE_METHODS.has(req.method)) return next()
     const mappedPk = req.mapped_pk
-    if (!mappedPk) return next()
+    if (!mappedPk || !req.user || mappedPk !== (req.settings?.mapped_pk || req.settings?.pk)) return next()
 
     const resolvedDomains = typeof domains === 'function' ? domains(req) : domains
     if (resolvedDomains.length === 0) return next()

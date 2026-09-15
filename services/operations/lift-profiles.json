@@ -675,12 +675,71 @@
         },
         "lift_profiles": {
           "type": "array",
-          "description": "Full lift_profiles array to write."
+          "description": "Full lift_profiles array to write.",
+          "items": {
+            "$ref": "#/$defs/liftProfile"
+          }
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
         }
       },
       "required": [
-        "lift_profiles"
-      ]
+        "lift_profiles",
+        "expected_revision",
+        "idempotency_key"
+      ],
+      "$defs": {
+        "liftProfile": {
+          "type": "object",
+          "properties": {
+            "lift": {
+              "type": "string",
+              "enum": [
+                "squat",
+                "bench",
+                "deadlift"
+              ]
+            },
+            "failure_nodes": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "string",
+                "maxLength": 160
+              }
+            },
+            "form_videos": {
+              "type": "object",
+              "properties": {
+                "front": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "side": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "diagonal": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "lift"
+          ],
+          "additionalProperties": true
+        }
+      }
     },
     "result_schema": {
       "type": "object",

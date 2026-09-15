@@ -38,6 +38,25 @@ def _sanitize_decimals(obj):
     return obj
 
 
+def _version_from_item(item: dict) -> int:
+    value = (item.get("meta") or {}).get("version")
+    if value is not None and value != "":
+        try:
+            parsed = int(value)
+            if parsed:
+                return parsed
+        except (TypeError, ValueError):
+            pass
+    sk = str(item.get("sk", ""))
+    if "#v" not in sk:
+        return 0
+    prefix = sk.split("#v", 1)[1].split("-", 1)[0]
+    try:
+        return int(prefix or 0)
+    except ValueError:
+        return 0
+
+
 async def program_list(args: dict) -> dict:
     """List program versions for a user, newest first.
 
@@ -69,8 +88,7 @@ async def program_list(args: dict) -> dict:
                 summaries.append(
                     {
                         "sk": item.get("sk"),
-                        "version": int(meta.get("version", 0) or 0)
-                        or (int(item.get("sk", "program#v").split("#v")[-1] or 0) if "#v" in str(item.get("sk", "")) else 0),
+                        "version": _version_from_item(item),
                         "name": meta.get("name", ""),
                         "description": meta.get("description", ""),
                         "estimated_weeks": meta.get("estimated_weeks"),

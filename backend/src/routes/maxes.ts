@@ -25,6 +25,9 @@ maxesRouter.get('/:version', cacheGet((req) => [`maxes:${req.params.version}`]),
 maxesRouter.put('/:version', invalidateAfter((req) => [`maxes:${req.params.version}`, `program:${req.params.version}`]), async (req, res, next) => {
   try {
     const { squat_kg, bench_kg, deadlift_kg } = req.body
+    if (!Number.isInteger(req.body?.expected_revision) || req.body.expected_revision < 0 || typeof req.body?.idempotency_key !== 'string' || !req.body.idempotency_key.trim()) {
+      return res.status(400).json({ data: null, error: 'expected_revision and idempotency_key are required' })
+    }
 
     if (
       typeof squat_kg !== 'number' ||
@@ -37,12 +40,12 @@ maxesRouter.put('/:version', invalidateAfter((req) => [`maxes:${req.params.versi
       })
     }
 
-    await maxController.updateTargetMaxes(req.mapped_pk!, req.params.version, {
+    const result = await maxController.updateTargetMaxes(req.mapped_pk!, req.params.version, {
       squat_kg,
       bench_kg,
       deadlift_kg,
-    })
-    res.json({ data: { success: true }, error: null })
+    }, { expected_revision: req.body.expected_revision, idempotency_key: req.body.idempotency_key })
+    res.json({ data: result, error: null })
   } catch (err) {
     next(err)
   }
@@ -51,7 +54,10 @@ maxesRouter.put('/:version', invalidateAfter((req) => [`maxes:${req.params.versi
 // POST /api/maxes/:version/history - Add to max history
 maxesRouter.post('/:version/history', invalidateAfter((req) => [`maxes:${req.params.version}`]), async (req, res, next) => {
   try {
-    const entry = req.body as MaxEntry
+    const { expected_revision, idempotency_key, ...entry } = req.body
+    if (!Number.isInteger(expected_revision) || expected_revision < 0 || typeof idempotency_key !== 'string' || !idempotency_key.trim()) {
+      return res.status(400).json({ data: null, error: 'expected_revision and idempotency_key are required' })
+    }
 
     if (!entry.date) {
       return res.status(400).json({
@@ -60,8 +66,8 @@ maxesRouter.post('/:version/history', invalidateAfter((req) => [`maxes:${req.par
       })
     }
 
-    await maxController.addMaxEntry(req.mapped_pk!, req.params.version, entry)
-    res.json({ data: { success: true }, error: null })
+    const history = await maxController.addMaxEntry(req.mapped_pk!, req.params.version, entry as MaxEntry, { expected_revision, idempotency_key })
+    res.json({ data: history, error: null })
   } catch (err) {
     next(err)
   }

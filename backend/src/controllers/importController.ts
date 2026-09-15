@@ -55,6 +55,7 @@ export async function applyImport(req: Request, res: Response) {
     })
     res.json(result)
   } catch (err: any) {
+    if (err instanceof AppError) throw err
     throw new AppError(`Apply failed: ${err.message}`, 502)
   }
 }

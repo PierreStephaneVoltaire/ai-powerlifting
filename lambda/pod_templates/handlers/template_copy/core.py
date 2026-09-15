@@ -132,8 +132,11 @@ def _prepare_template_payload(template):
     }
     return prepared
 
-async def template_copy(sk, new_name, actor_pk=None, author=None):
+async def template_copy(sk, new_name, actor_pk=None, author=None, expected_revision=None, idempotency_key=None):
     ts = _get_template_store()
     resolved_actor = _template_actor(actor_pk)
-    new_sk = await ts.copy_template(sk, new_name, actor_pk=resolved_actor, author=_template_author(author, resolved_actor))
-    return {"status": "copied", "new_sk": new_sk}
+    from template_store import TemplateRevisionConflictError, require_mutation_envelope
+    require = require_mutation_envelope
+    require(expected_revision, idempotency_key)
+    new_sk = await ts.copy_template(sk, new_name, actor_pk=resolved_actor, author=_template_author(author, resolved_actor), expected_revision=expected_revision, idempotency_key=idempotency_key)
+    return {"status": "copied", "new_sk": new_sk, "revision": 0}

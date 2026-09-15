@@ -42,6 +42,15 @@ input_schema:
       - grant_revoke
       - grant_list
       - grant_check
+      - relationship_request
+      - relationship_respond
+      - relationship_revoke
+      - relationship_list
+      - relationship_history
+      - favorite
+      - favorites
+      - notifications
+      - notifications_read
     nickname: &id001
       type: string
       description: The nickname of the profile to fetch.

@@ -41,6 +41,15 @@ _ROUTING = {
     "grant_revoke": "grant_revoke",
     "grant_list": "grant_list",
     "grant_check": "grant_check",
+    "relationship_request": "relationship_request",
+    "relationship_respond": "relationship_respond",
+    "relationship_revoke": "relationship_revoke",
+    "relationship_list": "relationship_list",
+    "relationship_history": "relationship_history",
+    "favorite": "favorite",
+    "favorites": "favorites",
+    "notifications": "notifications",
+    "notifications_read": "notifications_read",
 }
 
 

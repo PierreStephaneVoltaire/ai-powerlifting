@@ -5,6 +5,7 @@ Returns cached markdown export, regenerating only when stale or dirty.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time as _time
@@ -127,6 +128,69 @@ def _scope_program_to_current_block(program: dict) -> dict:
     return scoped
 
 
+def _shared_cache_allowed(args: Dict[str, Any]) -> bool:
+    access = args.get("_access")
+    return not isinstance(access, dict) or bool(access.get("is_self"))
+
+
+def _markdown_source_requirements(args: Dict[str, Any]) -> dict:
+    from services.source_access import read_requirements
+    requirements = read_requirements(args.get("_access") or {})
+    requirements["permissions"] = [
+        permission for permission in requirements.get("permissions", [])
+        if permission != "analytics:read"
+    ]
+    competition_ids = requirements.get("competition_ids")
+    if isinstance(competition_ids, list):
+        requirements["competition_ids"] = sorted(competition_ids)
+    return requirements
+
+
+def _markdown_cache_key(args: Dict[str, Any]) -> str:
+    if _shared_cache_allowed(args):
+        return "current"
+    requirements = _markdown_source_requirements(args)
+    digest = hashlib.sha256(json.dumps(requirements, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return f"current#scope#{digest}"
+
+
+def _authorize_markdown_cache(cached: dict | None, args: Dict[str, Any]) -> None:
+    if _shared_cache_allowed(args):
+        return
+    from services.source_access import authorize_source
+    authorize_source((cached or {}).get("access_requirements"), args.get("_access") or {})
+
+
+def _visible_program(program: dict, args: Dict[str, Any]) -> dict:
+    access = args.get("_access")
+    if not isinstance(access, dict) or access.get("is_self"):
+        return program
+    from services.publication import program_view
+    visible = program_view(program, access)
+    permissions = set(access.get("permissions", []))
+    from services.access import META_DOMAINS
+    allowed_meta = {"program_name", "blocks"}
+    for domain, fields in META_DOMAINS.items():
+        if f"{domain}:read" in permissions:
+            allowed_meta.update(fields)
+    if "profile:read" in permissions:
+        allowed_meta.add("sex")
+    if "program:read" in permissions:
+        allowed_meta.update({"program_start", "version_label", "training_notes", "change_log", "block_notes", "program_week_start_day", "block_week_start_days"})
+    visible["meta"] = {key: value for key, value in (visible.get("meta") or {}).items() if key in allowed_meta}
+    settings = visible.get("settings")
+    if isinstance(settings, dict):
+        visible["settings"] = {"sex": settings["sex"]} if "profile:read" in permissions and "sex" in settings else {}
+    return visible
+
+
+def _markdown_export_sex(program: dict, args: Dict[str, Any]) -> str:
+    access = args.get("_access")
+    if isinstance(access, dict) and not access.get("is_self") and "profile:read" not in access.get("permissions", []):
+        return "undisclosed"
+    return str((program.get("meta") or {}).get("sex") or (program.get("settings") or {}).get("sex") or "male").lower()
+
+
 async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     """Regenerate deterministic current-block analysis caches and markdown export.
 
@@ -144,10 +208,17 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     store = _get_store()
     store.invalidate_cache()
     program = await store.get_program()
+    from competition_entries import with_competition_entries
+    program = await asyncio.to_thread(with_competition_entries, program, store.pk)
+    program = _visible_program(program, args)
     pk = store.pk
     sessions = program.get("sessions", [])
-    glossary_store = _get_glossary_store()
-    glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
+    access = args.get("_access") or {}
+    if _shared_cache_allowed(args) or "glossary:read" in access.get("permissions", []):
+        glossary_store = _get_glossary_store()
+        glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
+    else:
+        glossary = []
 
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
@@ -199,7 +270,8 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
                 "expires_at": expires_at,
                 "payload": payload_str,
             }
-            table.put_item(Item=_floats_to_decimals(item))
+            if _shared_cache_allowed(args):
+                table.put_item(Item=_floats_to_decimals(item))
         except Exception as exc:
             errors.append(f"window {window_key}: {exc}")
 
@@ -208,7 +280,7 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
         analysis_bundle = {
             "weekly": block_analysis_result or {},
             "pk": pk,
-            "sex": str((program.get("meta") or {}).get("sex") or "male").lower(),
+            "sex": _markdown_export_sex(program, args),
         }
         with tempfile.TemporaryDirectory() as directory:
             out_path = os.path.join(directory, "program.md")
@@ -223,12 +295,13 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
                 "expires_at": expires_at,
                 "payload": json.dumps({"markdown": markdown}),
             }
-            table.put_item(Item=_floats_to_decimals(md_item))
-            try:
-                from cache_invalidation import clear_markdown_export_dirty
-                clear_markdown_export_dirty(pk, ANALYSIS_CACHE_TABLE_NAME, AWS_REGION)
-            except Exception:
-                pass
+            if _shared_cache_allowed(args):
+                table.put_item(Item=_floats_to_decimals(md_item))
+                try:
+                    from cache_invalidation import clear_markdown_export_dirty
+                    clear_markdown_export_dirty(pk, ANALYSIS_CACHE_TABLE_NAME, AWS_REGION)
+                except Exception:
+                    pass
     except Exception as exc:
         errors.append(f"markdown_export: {exc}")
 
@@ -258,6 +331,13 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     cache_pk = f"analysis#{pk}"
     max_age_hours = int(args.get("max_age_hours") or 72)
     force_refresh = bool(args.get("refresh") or args.get("force_refresh"))
+    cache_only = bool(args.get("cache_only"))
+    shared_cache_allowed = _shared_cache_allowed(args)
+    cache_key = _markdown_cache_key(args)
+    if shared_cache_allowed:
+        source_requirements = None
+    else:
+        source_requirements = _markdown_source_requirements(args)
 
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
@@ -277,14 +357,21 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         from analysis_cache import AnalysisCacheStore
 
-        cache_store = AnalysisCacheStore(
-            table_name=ANALYSIS_CACHE_TABLE_NAME,
-            pk=pk,
-            region=AWS_REGION,
-        )
-        cached = cache_store.get_markdown_cache("current")
+        cache_store = AnalysisCacheStore(table_name=ANALYSIS_CACHE_TABLE_NAME, pk=pk, region=AWS_REGION)
+        cached = cache_store.get_markdown_cache(cache_key)
         dirty = cache_store.get_markdown_dirty("current")
         generated_at_dt = _parse_generated_at(cached.get("generated_at") if cached else None)
+        if cached:
+            _authorize_markdown_cache(cached, args)
+        if cache_only:
+            if cached and cached.get("markdown"):
+                return {
+                    "markdown": cached["markdown"],
+                    "generated_at": cached.get("generated_at", ""),
+                    "cached": True,
+                    "dirty": bool(dirty),
+                }
+            return {"cached": False, "cache_miss": True}
         fresh_enough = (
             generated_at_dt is not None
             and (datetime.now(timezone.utc) - generated_at_dt).total_seconds() <= max_age_hours * 3600
@@ -297,30 +384,46 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
                 "dirty": False,
             }
 
-        regen = _run_async(_regenerate_analysis({"pk": pk}))
-        refreshed = cache_store.get_markdown_cache("current")
-        if refreshed and refreshed.get("markdown"):
-            cache_store.clear_markdown_dirty("current")
-            return {
-                "markdown": refreshed["markdown"],
-                "generated_at": refreshed.get("generated_at", regen.get("generated_at", "")),
-                "cached": False,
-                "dirty": False,
-                "regenerated": True,
-            }
+        if shared_cache_allowed:
+            regen = _run_async(_regenerate_analysis(args))
+            refreshed = cache_store.get_markdown_cache(cache_key)
+            if refreshed:
+                _authorize_markdown_cache(refreshed, args)
+            if refreshed and refreshed.get("markdown"):
+                cache_store.clear_markdown_dirty("current")
+                return {
+                    "markdown": refreshed["markdown"],
+                    "generated_at": refreshed.get("generated_at", regen.get("generated_at", "")),
+                    "cached": False,
+                    "dirty": False,
+                    "regenerated": True,
+                }
     except Exception as exc:
+        from services.dispatch import OperationError
+        if isinstance(exc, OperationError):
+            raise
         logging.getLogger(__name__).warning("get_analysis_markdown cache path failed: %s", exc)
+
+    if cache_only:
+        return {"cached": False, "cache_miss": True}
 
     store.invalidate_cache()
     program = _run_async(store.get_program())
+    from competition_entries import with_competition_entries
+    program = with_competition_entries(program, store.pk)
+    program = _visible_program(program, args)
     sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
     today_iso = datetime.utcnow().date().isoformat()
     current_week = max(
         (int(s.get("week_number", 0)) for s in sessions if s.get("week_number")),
         default=1,
     )
-    glossary_store = _get_glossary_store()
-    glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
+    access = args.get("_access") or {}
+    if _shared_cache_allowed(args) or "glossary:read" in access.get("permissions", []):
+        glossary_store = _get_glossary_store()
+        glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
+    else:
+        glossary = []
     analysis = _build_sectioned_week_analysis(
         program,
         sessions,
@@ -333,7 +436,7 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     analysis_bundle = {
         "weekly": analysis,
         "pk": pk,
-        "sex": str((program.get("meta") or {}).get("sex") or "male").lower(),
+        "sex": _markdown_export_sex(program, args),
     }
     with tempfile.TemporaryDirectory() as directory:
         out_path = os.path.join(directory, "program.md")
@@ -344,6 +447,21 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     generated_at = datetime.utcnow().isoformat() + "Z"
     expires_at = int(_time.time()) + 7 * 86400
     try:
+        if not shared_cache_allowed:
+            try:
+                from analysis_cache import AnalysisCacheStore
+                AnalysisCacheStore(table_name=ANALYSIS_CACHE_TABLE_NAME, pk=pk, region=AWS_REGION).put_markdown_cache(markdown, cache_key, access_requirements=source_requirements)
+                return {"markdown": markdown, "generated_at": generated_at, "cached": False}
+            except Exception:
+                table.put_item(Item=_floats_to_decimals({
+                    "pk": cache_pk,
+                    "sk": f"markdown_export#{cache_key}",
+                    "generated_at": generated_at,
+                    "expires_at": expires_at,
+                    "access_requirements": source_requirements,
+                    "payload": json.dumps({"markdown": markdown}),
+                }))
+                return {"markdown": markdown, "generated_at": generated_at, "cached": False}
         table.put_item(Item=_floats_to_decimals({
             "pk": cache_pk,
             "sk": "markdown_export#current",

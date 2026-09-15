@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express'
 import { analyticsRouter } from './routes/analytics'
 import { operationScope } from './utils/operationScope'
+import { blocksGetPath } from './analyticsOperationPaths'
 
 const app = express()
 const port = Number(process.env.ANALYTICS_NODE_PORT || 8091)
@@ -26,8 +27,9 @@ const operationPaths: Record<string, (args: Record<string, unknown>) => { method
   'analytics.weekly': args => ({ method: 'GET', path: `/analysis/weekly?weeks=${encodeURIComponent(String(args.weeks || 1))}&block=${encodeURIComponent(String(args.block || 'current'))}&windowStart=${encodeURIComponent(String(args.windowStart || ''))}&windowEnd=${encodeURIComponent(String(args.windowEnd || ''))}&refDate=${encodeURIComponent(String(args.refDate || ''))}&weekStart=${encodeURIComponent(String(args.weekStart || ''))}&weekEnd=${encodeURIComponent(String(args.weekEnd || ''))}` }),
   'analytics.bundle': args => ({ method: 'GET', path: `/analysis/weekly-bundle?asOfDate=${encodeURIComponent(String(args.asOfDate || ''))}&refresh=${args.refresh === true}` }),
   'analytics.regenerate': args => ({ method: 'POST', path: '/analysis/regenerate', body: args }),
+  'analytics.markdown': args => ({ method: 'GET', path: `/analysis/markdown?refresh=${args.refresh === true}&cacheOnly=${args.cache_only === true}` }),
   'analytics.blocks_list': () => ({ method: 'GET', path: '/blocks' }),
-  'analytics.blocks_get': args => ({ method: 'GET', path: `/blocks/${encodeURIComponent(String(args.blockKey || ''))}/analysis?refresh=${args.refresh === true}` }),
+  'analytics.blocks_get': args => ({ method: 'GET', path: blocksGetPath(args) }),
   'analytics.blocks_regenerate': args => ({ method: 'POST', path: `/blocks/${encodeURIComponent(String(args.blockKey || ''))}/regenerate`, body: args }),
   'analytics.block_evaluation': args => ({ method: 'GET', path: `/blocks/${encodeURIComponent(String(args.blockKey || ''))}/program-evaluation?refresh=${args.refresh === true}&cacheOnly=${args.cacheOnly === true}` }),
   'analytics.correlation': args => ({ method: 'GET', path: `/blocks/${encodeURIComponent(String(args.blockKey || ''))}/correlation?refresh=${args.refresh === true}&cacheOnly=${args.cacheOnly === true}` }),

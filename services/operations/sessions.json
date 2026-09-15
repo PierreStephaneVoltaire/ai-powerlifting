@@ -18,10 +18,20 @@
         "session": {
           "type": "object",
           "description": "Full session object with date, day, week_number, exercises, session_notes."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "session"
+        "session",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -57,11 +67,26 @@
         "index": {
           "type": "integer",
           "description": "Zero-based index for same-day session ordinals."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
-        "index"
+        "index",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -105,6 +130,11 @@
         "index": {
           "type": "integer",
           "description": "Zero-based index for same-day session ordinals."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
         }
       },
       "required": [
@@ -247,15 +277,30 @@
           "type": "integer",
           "description": "Zero-based index for same-day session ordinals."
         },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
+        },
         "patch": {
           "type": "object",
           "description": "Dict with session fields to update. Allowed keys: completed, session_rpe, body_weight_kg, exercises, session_notes, day, week_number."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
         "index",
-        "patch"
+        "patch",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -288,14 +333,29 @@
           "type": "string",
           "description": "Session date (YYYY-MM-DD)."
         },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
+        },
         "patch": {
           "type": "object",
           "description": "Dict with session fields to update."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
-        "patch"
+        "patch",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -332,15 +392,30 @@
           "type": "integer",
           "description": "Zero-based index for same-day session ordinals."
         },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
+        },
         "session": {
           "type": "object",
           "description": "Full session object to write."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
         "index",
-        "session"
+        "session",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -372,10 +447,20 @@
         "sessions": {
           "type": "array",
           "description": "Full array of session objects to write."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "sessions"
+        "sessions",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -415,11 +500,26 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
-        "exercise"
+        "exercise",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -463,11 +563,26 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
-        "exercise_index"
+        "exercise_index",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -523,12 +638,22 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
         "day",
-        "week_number"
+        "week_number",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -556,10 +681,25 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "date"
+        "date",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -587,6 +727,11 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
         }
       },
       "required": [
@@ -661,11 +806,26 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "old_date",
-        "new_date"
+        "new_date",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -697,11 +857,26 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
-        "patch"
+        "patch",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {

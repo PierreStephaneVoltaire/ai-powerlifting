@@ -1,5 +1,6 @@
 import { invokeLambda } from '../utils/lambda'
 import type { Phase, Session } from '@powerlifting/types'
+import type { MutationEnvelope } from '../controllers/sessionController'
 
 
 export function transformVideo(video: any): any {
@@ -16,8 +17,9 @@ export async function createSession(
   programSk: string,
   session: Session,
   _phases?: Phase[],
+  envelope?: MutationEnvelope,
 ): Promise<Session> {
-  return (await invokeLambda('pod_sessions', { function: 'session_create',  pk, program_sk: programSk, session })) as Session
+  return (await invokeLambda('pod_sessions', { function: 'session_create',  pk, program_sk: programSk, session, ...envelope })) as Session
 }
 
 export async function patchSessionAt(
@@ -27,8 +29,9 @@ export async function patchSessionAt(
   index: number,
   patch: Partial<Session>,
   _phases?: Phase[],
+  envelope?: MutationEnvelope,
 ): Promise<Session> {
-  return (await invokeLambda('pod_sessions', { function: 'session_patch',  pk, program_sk: programSk, date, index, patch })) as Session
+  return (await invokeLambda('pod_sessions', { function: 'session_patch',  pk, program_sk: programSk, date, index, patch, ...envelope })) as Session
 }
 
 export async function patchSessionByDate(
@@ -37,8 +40,9 @@ export async function patchSessionByDate(
   date: string,
   patch: Partial<Session>,
   _phases?: Phase[],
+  envelope?: MutationEnvelope,
 ): Promise<Session> {
-  return (await invokeLambda('pod_sessions', { function: 'session_patch_by_date',  pk, program_sk: programSk, date, patch })) as Session
+  return (await invokeLambda('pod_sessions', { function: 'session_patch_by_date',  pk, program_sk: programSk, date, patch, ...envelope })) as Session
 }
 
 export async function replaceProgramSessions(
@@ -46,6 +50,7 @@ export async function replaceProgramSessions(
   programSk: string,
   sessions: Session[],
   _phases?: Phase[],
+  envelope?: MutationEnvelope,
 ): Promise<void> {
-  await invokeLambda('pod_sessions', { function: 'session_replace_all',  pk, program_sk: programSk, sessions })
+  await invokeLambda('pod_sessions', { function: 'session_replace_all',  pk, program_sk: programSk, sessions, ...envelope })
 }

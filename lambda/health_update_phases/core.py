@@ -38,7 +38,6 @@ async def health_update_phases(args: dict | None = None, phases: list[dict] | No
     Raises:
         ValueError: If any phase is missing required fields
     """
-    import copy
     if phases is None:
         phases = args.get("phases") if isinstance(args, dict) else None
     pk = args.get("pk") if isinstance(args, dict) else None
@@ -47,9 +46,4 @@ async def health_update_phases(args: dict | None = None, phases: list[dict] | No
             raise ValueError(f"phases[{i}].name is required")
 
     store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
-    new_program["phases"] = phases
-
-    await store._write_new_version(new_program, minor=True)
-    return phases
+    return await store.update_phases(phases, None, args.get("expected_revision"), args.get("idempotency_key"))

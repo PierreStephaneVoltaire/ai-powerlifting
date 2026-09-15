@@ -8,6 +8,7 @@ import {
   Group,
   Loader,
   Modal,
+  MultiSelect,
   Select,
   Stack,
   Text,
@@ -21,11 +22,12 @@ import { useAuth } from '@/auth/AuthProvider'
 import {
   type Grant,
   type GrantType,
-  type GrantScope,
-  createGrantApi,
   listGrantsApi,
-  revokeGrantApi,
 } from '@/api/grants'
+import { createRelationshipRequestApi, listRelationshipsApi, revokeRelationshipApi, type RelationshipRequest } from '@/api/relationships'
+import { searchProfiles, type PublicProfile } from '@/api/profiles'
+import { fetchUserCompetitions } from '@/api/client'
+import { RelationshipInbox } from '@/components/settings/RelationshipInbox'
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '\u2014'
@@ -43,7 +45,7 @@ function isActiveGrant(g: Grant): boolean {
 }
 
 export function GrantsPanel() {
-  const { user, mapped_pk, readOnly } = useAuth()
+  const { user, mapped_pk, own_athlete_pk, readOnly } = useAuth()
   const [grants, setGrants] = useState<Grant[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,21 +53,28 @@ export function GrantsPanel() {
   const [submitting, setSubmitting] = useState(false)
 
   const [granteeInput, setGranteeInput] = useState('')
-  const [granteeNickname, setGranteeNickname] = useState('')
-  const [grantType, setGrantType] = useState<GrantType>('coach')
-  const [scope, setScope] = useState<GrantScope>('read')
+  const [grantType, setGrantType] = useState<GrantType | 'peer'>(user?.active_role === 'handler' ? 'handler' : 'coach')
   const [tiedCompetitionIds, setTiedCompetitionIds] = useState('')
   const [note, setNote] = useState('')
+  const [profiles, setProfiles] = useState<PublicProfile[]>([])
+  const [selectedProfile, setSelectedProfile] = useState<PublicProfile | null>(null)
+  const [competitions, setCompetitions] = useState<Array<{ master_id: string; name: string; start_date: string; user_status: string }>>([])
+  const [replacementId, setReplacementId] = useState<string | null>(null)
+  const [currentRelationships, setCurrentRelationships] = useState<RelationshipRequest[]>([])
 
-  const canManage = Boolean(user) && !readOnly
+  const isAthleteOwner = Boolean(user?.roles.includes('athlete') && mapped_pk === own_athlete_pk)
+  const canManage = isAthleteOwner && !readOnly
+  const canRequest = Boolean(user) && !readOnly && Boolean(user?.active_role)
 
   const load = async () => {
     if (!user) return
     setLoading(true)
     setError(null)
     try {
-      const result = await listGrantsApi({ athlete_mapped_pk: mapped_pk, include_inactive: true })
+      if (!isAthleteOwner) { setGrants([]); return }
+      const [result, relationships] = await Promise.all([listGrantsApi({ athlete_mapped_pk: mapped_pk, include_inactive: true }), listRelationshipsApi()])
       setGrants(result.active.concat(result.inactive))
+      setCurrentRelationships(relationships.history.filter(item => item.active && item.state === 'approved' && item.relationship_type !== 'peer'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load grants')
     } finally {
@@ -76,7 +85,23 @@ export function GrantsPanel() {
   useEffect(() => {
     if (user) load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.sub, mapped_pk])
+  }, [user?.sub, mapped_pk, isAthleteOwner])
+
+  useEffect(() => {
+    if (!isAthleteOwner && (user?.active_role === 'coach' || user?.active_role === 'handler')) setGrantType(user.active_role)
+  }, [isAthleteOwner, user?.active_role])
+
+  useEffect(() => {
+    if (granteeInput.trim().length < 2) { setProfiles([]); return }
+    let active = true
+    void searchProfiles(granteeInput.trim()).then(result => { if (active) setProfiles(result.filter(profile => profile.athlete_pk !== mapped_pk && (isAthleteOwner ? true : profile.roles?.includes('athlete')))) }).catch(() => { if (active) setProfiles([]) })
+    return () => { active = false }
+  }, [granteeInput, mapped_pk, isAthleteOwner])
+
+  useEffect(() => {
+    if (!opened || !isAthleteOwner) return
+    void fetchUserCompetitions().then(setCompetitions).catch(() => setCompetitions([]))
+  }, [opened, isAthleteOwner])
 
   const submit = async () => {
     setSubmitting(true)
@@ -86,29 +111,22 @@ export function GrantsPanel() {
         .split(',')
         .map(s => s.trim())
         .filter(Boolean)
-      let grantee_mapped_pk = granteeInput.trim()
-      let grantee_discord_id: string | undefined
-      let grantee_authentik_sub: string | undefined
-      if (grantee_mapped_pk.startsWith('discord:')) {
-        grantee_discord_id = grantee_mapped_pk.slice('discord:'.length)
-      } else if (grantee_mapped_pk.startsWith('authentik:')) {
-        grantee_authentik_sub = grantee_mapped_pk.slice('authentik:'.length)
-      }
-      await createGrantApi({
-        athlete_mapped_pk: mapped_pk,
-        grantee_mapped_pk,
-        grantee_nickname: granteeNickname.trim() || undefined,
-        grantee_discord_id,
-        grantee_authentik_sub,
-        grant_type: grantType,
-        scope,
-        tied_competition_ids: tied.length ? tied : undefined,
+      if (!selectedProfile) throw new Error('Select a verified profile')
+      const athlete = isAthleteOwner ? mapped_pk : selectedProfile.athlete_pk
+      await createRelationshipRequestApi({
+        athlete_mapped_pk: athlete,
+        recipient_person_pk: selectedProfile.person_pk || selectedProfile.athlete_pk,
+        relationship_type: grantType,
+        scope: grantType === 'peer' ? 'read' : 'write',
+        tied_competition_ids: isAthleteOwner ? tied : [],
+        ...(replacementId ? { replace_current_relationship_id: replacementId } : {}),
         note: note.trim() || undefined,
       })
       close()
       setGranteeInput('')
-      setGranteeNickname('')
+      setSelectedProfile(null)
       setTiedCompetitionIds('')
+      setReplacementId(null)
       setNote('')
       await load()
     } catch (err) {
@@ -122,7 +140,9 @@ export function GrantsPanel() {
     if (!window.confirm(`Revoke ${g.grant_type} grant for ${g.grantee_mapped_pk}?`)) return
     setError(null)
     try {
-      await revokeGrantApi({ athlete_mapped_pk: g.athlete_mapped_pk, sk: g.sk })
+      const relationshipId = (g as Grant & { relationship_id?: string }).relationship_id
+      if (!relationshipId) throw new Error('This legacy grant must be migrated before it can be revoked')
+      await revokeRelationshipApi(relationshipId)
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to revoke grant')
@@ -133,6 +153,10 @@ export function GrantsPanel() {
     () => [...grants].sort((a, b) => b.created_at.localeCompare(a.created_at)),
     [grants],
   )
+  const activeReplacement = [
+    ...sorted.filter(grant => isActiveGrant(grant) && grant.grant_type === grantType && (grant as Grant & { relationship_id?: string }).relationship_id).map(grant => ({ id: String((grant as Grant & { relationship_id?: string }).relationship_id), label: `${grant.grantee_nickname || grant.grantee_mapped_pk} (${formatDate(grant.expires_at)})` })),
+    ...currentRelationships.filter(item => item.relationship_type === grantType).map(item => ({ id: item.relationship_id, label: `${item.recipient_person_pk} (${formatDate(item.expires_at)})` })),
+  ]
 
   if (!user) {
     return (
@@ -146,7 +170,7 @@ export function GrantsPanel() {
     <Stack gap="md">
       <Group justify="space-between" align="center">
         <Title order={4}>Grants (coaches &amp; handlers)</Title>
-        {canManage && (
+        {canRequest && (
           <Button leftSection={<UserPlus size={16} />} onClick={open} data-testid="open-grant-modal">
             New grant
           </Button>
@@ -157,6 +181,8 @@ export function GrantsPanel() {
         Grant a coach or handler time-bound access to your training data. Grants auto-expire;
         you can revoke them at any time.
       </Text>
+
+      <RelationshipInbox />
 
       {error && (
         <Alert color="red" onClose={() => setError(null)} withCloseButton>
@@ -224,44 +250,34 @@ export function GrantsPanel() {
       <Modal opened={opened} onClose={close} title="New grant" size="md">
         <Stack>
           <TextInput
-            label="Grantee mapped pk (or discord:/authentik: sub)"
-            placeholder="discord:1234567890 or authentik:abc-def or coach_username"
+            label={isAthleteOwner ? 'Search for a verified Coach or Handler' : 'Search for an Athlete to invite'}
+            placeholder="Display name or handle"
             value={granteeInput}
             onChange={(e) => setGranteeInput(e.currentTarget.value)}
             required
             data-testid="grant-grantee-input"
           />
-          <TextInput
-            label="Grantee nickname (optional)"
-            value={granteeNickname}
-            onChange={(e) => setGranteeNickname(e.currentTarget.value)}
-          />
+          {profiles.length > 0 && <Select label="Verified profile" data={profiles.map(profile => ({ value: profile.athlete_pk, label: `${profile.display_name} (${profile.nickname})` }))} value={selectedProfile?.athlete_pk || null} onChange={value => setSelectedProfile(profiles.find(profile => profile.athlete_pk === value) || null)} />}
           <Select
             label="Grant type"
-            data={[
+            data={isAthleteOwner ? [
               { value: 'coach', label: 'Coach (read-only access to programming)' },
               { value: 'handler', label: "Handler (can edit sessions on the athlete's behalf)" },
-            ]}
+              { value: 'peer', label: 'Peer (selected read-only domains)' },
+            ] : [{ value: user?.active_role || 'coach', label: `${user?.active_role || 'coach'} invitation` }]}
             value={grantType}
-            onChange={(v) => setGrantType((v as GrantType) ?? 'coach')}
+            onChange={(v) => setGrantType((v as GrantType | 'peer') ?? 'coach')}
             allowDeselect={false}
           />
-          <Select
-            label="Scope"
-            data={[
-              { value: 'read', label: 'Read' },
-              { value: 'write', label: 'Write' },
-            ]}
-            value={scope}
-            onChange={(v) => setScope((v as GrantScope) ?? 'read')}
-            allowDeselect={false}
-          />
-          <TextInput
-            label="Tied competition IDs (comma-separated, optional)"
-            placeholder="ipf-worlds-2026,wpc-bench-2026"
-            value={tiedCompetitionIds}
-            onChange={(e) => setTiedCompetitionIds(e.currentTarget.value)}
-          />
+          {isAthleteOwner && <MultiSelect
+            label="Tied competition entries"
+            placeholder="Select competition entries"
+            value={tiedCompetitionIds.split(',').filter(Boolean)}
+            onChange={(value) => setTiedCompetitionIds(value.join(','))}
+            data={competitions.map(competition => ({ value: competition.master_id, label: `${competition.name} (${competition.start_date})` }))}
+            searchable
+          />}
+          {isAthleteOwner && activeReplacement.length > 0 && <Select label="Replace current relationship (Athlete confirmation)" placeholder="Select the relationship to replace" data={activeReplacement.map(item => ({ value: item.id, label: item.label }))} value={replacementId} onChange={setReplacementId} clearable />}
           <Textarea
             label="Note (optional)"
             value={note}
@@ -271,8 +287,8 @@ export function GrantsPanel() {
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={close}>Cancel</Button>
-            <Button onClick={submit} loading={submitting} disabled={!granteeInput.trim()}>
-              Create grant
+            <Button onClick={submit} loading={submitting} disabled={!selectedProfile || (isAthleteOwner && grantType !== 'peer' && !tiedCompetitionIds)}>
+              {isAthleteOwner ? 'Send request' : 'Invite Athlete'}
             </Button>
           </Group>
         </Stack>

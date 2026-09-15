@@ -1,258 +1,118 @@
-import { Request, Response, NextFunction } from 'express'
-import jwt from 'jsonwebtoken'
-import { resolveMappedPkForIdentity, getSettings as fetchSettings } from '../services/userSettings'
+import type { Express, Request, Response, NextFunction } from 'express'
+import session from 'express-session'
+import passport from 'passport'
+import { RedisStore } from 'connect-redis'
+import { createClient } from 'redis'
+import { discovery, randomState } from 'openid-client'
+import { Strategy, type VerifyFunction } from 'openid-client/passport'
+import { getOrCreateSettingsForIdentity } from '../services/userSettings'
+import { groupsFromSettings, type AuthIdentity } from '../auth/identity'
+import { operationScope } from '../utils/operationScope'
 import { AppError } from './errorHandler'
-import type { AuthIdentity, IdentityProvider } from '../auth/identity'
-import {
-  groupsFromSettings,
-  isAppRole,
-  type AppRole,
-} from '../auth/identity'
-import { setAuthCookie } from '../auth/cookies'
 
-declare module 'express-session' {
-  interface SessionData { identity?: AuthToken }
+
+declare global { namespace Express { interface User {
+  discord_id: string; username: string; avatar: string | null; actor_mapped_pk: string; identity: AuthIdentity
+} interface Request {
+  mapped_pk?: string; actor_mapped_pk?: string; readOnly?: boolean; settings?: import('../services/userSettings').UserSettings
+} } }
+
+const issuer = process.env.AUTHENTIK_ISSUER_URL
+const clientId = process.env.AUTHENTIK_CLIENT_ID
+const clientSecret = process.env.AUTHENTIK_CLIENT_SECRET
+const callbackURL = process.env.AUTHENTIK_REDIRECT_URI
+
+export function isAuthentikEnabled(): boolean { return Boolean(issuer && clientId && clientSecret && callbackURL) }
+
+class AuthentikStrategy extends Strategy {
+  override authorizationRequestParams(req: Request, options: Parameters<Strategy['authorizationRequestParams']>[1]): URLSearchParams {
+    const params = super.authorizationRequestParams(req, options)
+    const result = params instanceof URLSearchParams ? params : new URLSearchParams(params)
+    if (!result.has('state')) result.set('state', randomState())
+    return result
+  }
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?:
-        | ({
-            discord_id: string
-            username: string
-            avatar: string | null
-            actor_mapped_pk: string
-            identity: AuthIdentity
-          } | null)
-      mapped_pk?: string
-      actor_mapped_pk?: string
-      readOnly?: boolean
+export async function configureAuthentication(app: Express): Promise<void> {
+  if (!isAuthentikEnabled()) throw new Error('Authentik OIDC is not configured')
+  const oidcIssuer = issuer!
+  const oidcClientId = clientId!
+  const oidcSecret = clientSecret!
+  const oidcCallback = callbackURL!
+  app.set('trust proxy', 1)
+  const redis = createClient({ url: process.env.VALKEY_URL || 'redis://pl-valkey:6379' })
+  redis.on('error', (error) => console.error('Session store error', error))
+  await redis.connect()
+  app.use(session({
+    store: new RedisStore({ client: redis, prefix: 'if:session:' }),
+    secret: process.env.SESSION_SECRET || (() => { throw new Error('SESSION_SECRET is required') })(),
+    resave: false, saveUninitialized: false,
+    cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true', maxAge: 7 * 24 * 60 * 60 * 1000 },
+  }))
+  const config = await discovery(new URL(oidcIssuer), oidcClientId, oidcSecret)
+  const verifyIdentity: VerifyFunction = async (tokens, verified) => {
+    const claims = tokens.claims()
+    if (!claims?.sub) return verified(new Error('OIDC subject missing'))
+    const fallback = `authentik_${claims.sub}`
+    const username = String(claims.preferred_username || fallback).toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32) || fallback
+    const identity: AuthIdentity = {
+      issuer: claims.iss, provider: 'authentik', sub: String(claims.sub), username,
+      discord_subjects: Array.isArray(claims.discord_subjects) ? claims.discord_subjects.filter((value): value is string => typeof value === 'string' && /^\d{1,32}$/.test(value)) : [],
+      display_name: String(claims.name || claims.preferred_username || username), avatar: typeof claims.picture === 'string' ? claims.picture : null,
+      groups: Array.isArray(claims.groups) ? claims.groups.map(String) : [], roles: Array.isArray(claims.roles) ? claims.roles.map(String) : [],
+      email: typeof claims.email === 'string' ? claims.email : null,
     }
+    await getOrCreateSettingsForIdentity(identity.provider, identity.sub, identity.username, identity.avatar, identity.discord_subjects)
+    verified(null, identityUser(identity))
   }
+  passport.use('authentik', new AuthentikStrategy({ config, callbackURL: oidcCallback, scope: 'openid profile email groups roles powerlifting_identity' }, verifyIdentity))
+  passport.serializeUser((user: Express.User, done) => done(null, user.identity))
+  passport.deserializeUser((identity: AuthIdentity, done) => done(null, identity.issuer === issuer ? identityUser(identity) : false))
+  app.use(passport.initialize())
+  app.use(passport.session())
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
-const JWT_EXPIRY = '7d'
-const TEST_MAPPED_PK_RE = /^[A-Za-z0-9:_#-]{1,128}$/
-
-function testMappedPkOverride(): string | null {
-  const override = process.env.POWERLIFTING_TEST_MAPPED_PK?.trim()
-  if (!override) return null
-  if (!TEST_MAPPED_PK_RE.test(override)) {
-    throw new Error('Invalid POWERLIFTING_TEST_MAPPED_PK')
-  }
-  return override
-}
-
-export interface AuthToken {
-  provider: IdentityProvider
-  sub: string
-  username: string
-  display_name: string
-  avatar: string | null
-  groups: string[]
-  roles: string[]
-  email?: string | null
-  // Self-declared app role (settings.roles / settings.active_role). Not
-  // present for tokens issued before the role onboarding shipped.
-  active_role?: AppRole | null
-  // Backwards-compat field for code paths that still read `payload.discord_id`.
-  discord_id: string
-}
-
-export function signToken(payload: AuthToken): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY })
-}
-
-export function verifyToken(token: string): AuthToken | null {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as Partial<AuthToken>
-    if (!decoded || typeof decoded !== 'object') return null
-    if (!decoded.provider) decoded.provider = 'discord'
-    if (!decoded.sub) decoded.sub = decoded.discord_id || ''
-    if (!decoded.username) return null
-    if (!Array.isArray(decoded.groups)) decoded.groups = []
-    if (!Array.isArray(decoded.roles)) decoded.roles = []
-    return decoded as AuthToken
-  } catch {
-    return null
-  }
-}
-
-export function signState(): string {
-  return jwt.sign({ t: Date.now() }, JWT_SECRET, { expiresIn: '10m' })
-}
-
-export function verifyState(state: string): boolean {
-  try {
-    jwt.verify(state, JWT_SECRET)
-    return true
-  } catch {
-    return false
-  }
-}
-
-export function tokenToIdentity(token: AuthToken): AuthIdentity {
-  return {
-    provider: token.provider,
-    sub: token.sub,
-    username: token.username,
-    display_name: token.display_name || token.username,
-    avatar: token.avatar ?? null,
-    groups: token.groups ?? [],
-    roles: token.roles ?? [],
-    active_role: isAppRole(token.active_role) ? token.active_role : null,
-    email: token.email ?? null,
-  }
-}
-
-function legacyUserShape(token: AuthToken) {
-  return {
-    discord_id: token.provider === 'discord' ? token.sub : token.discord_id || '',
-    username: token.username,
-    avatar: token.avatar ?? null,
-  }
-}
+function identityUser(identity: AuthIdentity) { return { discord_id: identity.provider === 'discord' ? identity.sub : '', username: identity.username, avatar: identity.avatar, actor_mapped_pk: '', identity } }
 
 export async function requireUserOptional(req: Request, _res: Response, next: NextFunction): Promise<void> {
-  const sessionIdentity = req.session?.identity
-  if (sessionIdentity) {
-    const identity = tokenToIdentity(sessionIdentity)
-    req.user = { ...legacyUserShape(sessionIdentity), identity, actor_mapped_pk: 'operator' }
-    ;(req as any).isAuthenticated = true
-    return next()
-  }
-  const token = req.cookies?.pl_auth
-  if (!token) {
-    req.user = null
-    ;(req as any).isAuthenticated = false
-    return next()
-  }
-
-  const payload = verifyToken(token)
-  if (!payload) {
-    req.user = null
-    ;(req as any).isAuthenticated = false
-    return next()
-  }
-
-  const identity = tokenToIdentity(payload)
-  req.user = {
-    ...legacyUserShape(payload),
-    identity,
-    actor_mapped_pk: 'operator',
-  }
-  ;(req as any).isAuthenticated = true
+  const identity = req.user?.identity
+  req.user = identity ? identityUser(identity) : undefined
   next()
 }
 
 export async function resolvePk(req: Request, _res: Response, next: NextFunction): Promise<void> {
-  const testMappedPk = testMappedPkOverride()
-  if (testMappedPk) {
-    req.mapped_pk = testMappedPk
-    req.actor_mapped_pk = testMappedPk
-    req.readOnly = false
-    if (req.user) req.user.actor_mapped_pk = testMappedPk
-    return next()
-  }
-
-  if (!req.user) {
-    req.mapped_pk = 'operator'
-    req.actor_mapped_pk = 'operator'
-    req.readOnly = true
-    return next()
-  }
-
   try {
-    const mappedPk = await resolveMappedPkForIdentity(
-      req.user.identity.provider,
-      req.user.identity.sub,
-      req.user.username,
-      req.user.avatar,
-    )
-    req.mapped_pk = mappedPk
-    req.actor_mapped_pk = mappedPk
-    req.readOnly = false
-    req.user.actor_mapped_pk = mappedPk
-  } catch (err) {
-    console.error('Failed to resolve PK for user', req.user.discord_id, err)
-    return next(new AppError('Failed to resolve authenticated user settings', 500, 'AUTH_CONTEXT_FAILED'))
-  }
-
-  next()
+    const mediaAthlete = req.path.includes('/media/') && ['GET', 'HEAD'].includes(req.method) && typeof req.query.athlete === 'string' ? req.query.athlete : undefined
+    const selected = req.get('X-Selected-Athlete-Pk') || mediaAthlete
+    if (selected && !/^[A-Za-z0-9:_#-]{1,128}$/.test(selected)) throw new AppError('Invalid Athlete selector', 400)
+    if (!req.user) {
+      req.mapped_pk = selected || 'operator'
+      req.actor_mapped_pk = ''
+      req.readOnly = true
+    } else {
+      const identity = req.user.identity
+      const settings = await getOrCreateSettingsForIdentity(identity.provider, identity.sub, identity.username, identity.avatar, identity.discord_subjects)
+      req.settings = settings
+      req.actor_mapped_pk = settings.pk
+      req.mapped_pk = selected || settings.mapped_pk || settings.pk
+      req.readOnly = false
+      req.user.actor_mapped_pk = settings.pk
+      req.user.username = settings.username
+      req.user.identity = { ...identity, username: settings.username, ...groupsFromSettings(identity.groups, identity.roles, settings.roles, settings.active_role) }
+    }
+    operationScope.run({ athlete: req.mapped_pk || '', person: req.actor_mapped_pk || '' }, next)
+  } catch (error) { next(error instanceof AppError ? error : new AppError('Failed to resolve authenticated identity', 503, 'AUTH_CONTEXT_FAILED')) }
 }
 
 export function requireWriteAuth(req: Request, _res: Response, next: NextFunction): void {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-    return next()
-  }
-
-  const readOnlySafePost = req.method === 'POST' && [
-    '/api/analytics/analysis/sections/queue',
-    '/api/analytics/block-comparison/ai',
-    '/api/analytics/budget/timeline',
-    '/api/budget/ai-analysis',
-  ].includes(req.path)
-
-  if (readOnlySafePost) {
-    return next()
-  }
-
-  if (testMappedPkOverride()) {
-    return next()
-  }
-
-  if (!req.user) {
-    return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
-  }
-  if (req.readOnly) {
-    return next(new AppError('Read-only access: writes are not permitted', 403, 'READ_ONLY'))
-  }
-
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
+  if (!req.user) return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
+  if (req.readOnly) return next(new AppError('Read-only access: writes are not permitted', 403, 'READ_ONLY'))
   next()
 }
 
 export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
-  if (testMappedPkOverride()) {
-    return next()
-  }
-
-  if (req.readOnly || !req.user) {
-    return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
-  }
-
-  if (req.mapped_pk !== 'operator') {
-    return next(new AppError('Admin access required', 403, 'ADMIN_REQUIRED'))
-  }
-
+  if (req.readOnly || !req.user) return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
+  if (req.settings?.mapped_pk !== 'operator') return next(new AppError('Admin access required', 403, 'ADMIN_REQUIRED'))
   next()
-}
-
-/**
- * Re-sign the user's JWT with the latest `groups`, `roles`, and `active_role`
- * claims derived from their settings record. Used by the login callbacks and
- * by the onboarding endpoint after a role / profile / athlete-basics change so
- * the next request sees fresh claims without forcing a re-login.
- */
-export async function reissueTokenFromSettings(
-  res: Response,
-  currentToken: AuthToken,
-  username: string,
-): Promise<AuthToken> {
-  const settings = await fetchSettings(username).catch(() => null)
-  const merged = groupsFromSettings(
-    currentToken.groups ?? [],
-    currentToken.roles ?? [],
-    settings?.roles,
-    settings?.active_role,
-  )
-  const nextToken: AuthToken = {
-    ...currentToken,
-    groups: merged.groups,
-    roles: merged.roles,
-    active_role: merged.active_role,
-  }
-  setAuthCookie(res, signToken(nextToken))
-  return nextToken
 }

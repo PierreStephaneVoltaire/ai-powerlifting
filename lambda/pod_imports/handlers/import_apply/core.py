@@ -148,6 +148,9 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
         raise ValueError(f"Import not found: {import_id}")
     if pending.get("status") != "awaiting_review":
         raise ValueError(f"Import {import_id} has already been {pending.get('status')}; do not replay this mutation")
+    actor = args.get('_person_pk')
+    if (args.get('classification_override') or pending.get('import_type')) == 'template' and not actor:
+        raise ValueError('Verified acting Person required to author a Template')
     now = datetime.now(timezone.utc).isoformat()
     claim_id = uuid.uuid4().hex
     try:
@@ -182,8 +185,8 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
             })
             target_sk = await _get_template_store().put_template(
                 template,
-                actor_pk=pk,
-                author=args.get("author") or pk,
+                actor_pk=actor,
+                author=args.get("author") or actor,
                 published=False,
                 import_job_id=import_id,
             )

@@ -51,11 +51,13 @@ async def health_new_version(args: dict | None = None, change_reason: str | None
             patches = args.get("patches")
     pk = args.get("pk") if isinstance(args, dict) else None
     store = _store_for(pk)
-    updated_program = await store.new_version(patches, change_reason)
+    payload = args or {}
+    updated_program = await store.new_version(patches or [], change_reason or "", payload.get("expected_revision"), payload.get("idempotency_key"))
 
     version_label = updated_program.get("meta", {}).get("version_label", "unknown")
 
     return {
         "new_version": version_label,
         "change_reason": change_reason,
+        "revision": updated_program.get("meta", {}).get("revision"),
     }

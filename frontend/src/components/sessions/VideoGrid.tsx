@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   SimpleGrid,
   ActionIcon,
@@ -13,24 +13,30 @@ import {
   Select,
   TextInput,
 } from '@mantine/core'
-import { Play, Trash2, Loader2, Film, AlertCircle, Save } from 'lucide-react'
+import { Play, Trash2, Loader2, Film, AlertCircle, Save, RotateCcw } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useProgramStore } from '@/store/programStore'
 import * as api from '@/api/client'
 import { getMediaUrl } from '@/utils/media'
+import { uploadVideo, isValidVideoType, MAX_VIDEO_SIZE, formatFileSize } from '@/utils/s3'
 import VideoPlayer from './VideoPlayer'
 import type { Session, SessionVideo } from '@powerlifting/types'
 
 interface VideoGridProps {
   session: Session
+  onVideoUpdated?: (video: SessionVideo) => void
+  onVideoRemoved?: (videoId: string) => void
 }
 
-export default function VideoGrid({ session }: VideoGridProps) {
+export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: VideoGridProps) {
   const { pushToast } = useUiStore()
   const { version, removeSessionVideo, updateSessionVideo } = useProgramStore()
   const [playingVideo, setPlayingVideo] = useState<SessionVideo | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [retryingId, setRetryingId] = useState<string | null>(null)
+  const retryInputRef = useRef<HTMLInputElement>(null)
+  const retryVideoRef = useRef<SessionVideo | null>(null)
 
   // Editable fields mirrored from the currently selected video. Kept in sync
   // whenever the modal target changes so the form always reflects the video
@@ -77,8 +83,9 @@ export default function VideoGrid({ session }: VideoGridProps) {
     setDeletingId(video.video_id)
 
     try {
-      await api.removeSessionVideo(version, session.date, video.video_id)
+      await api.removeSessionVideo(version, session.date, video.video_id, session.id)
       removeSessionVideo(session.date, video.video_id)
+      onVideoRemoved?.(video.video_id)
       pushToast({ message: 'Video deleted', type: 'success' })
       if (playingVideo?.video_id === video.video_id) {
         setPlayingVideo(null)
@@ -99,8 +106,9 @@ export default function VideoGrid({ session }: VideoGridProps) {
         exerciseName: editExercise,
         setNumber: editSetNumber,
         notes: editNotes,
-      })
+      }, session.id)
       updateSessionVideo(session.date, playingVideo.video_id, updated)
+      onVideoUpdated?.(updated)
       // Reflect the saved values in the modal's own state.
       setPlayingVideo(updated)
       pushToast({ message: 'Video details updated', type: 'success' })
@@ -112,12 +120,57 @@ export default function VideoGrid({ session }: VideoGridProps) {
     }
   }
 
+  function chooseRetryFile(video: SessionVideo) {
+    retryVideoRef.current = video
+    retryInputRef.current?.click()
+  }
+
+  async function handleRetryFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    const video = retryVideoRef.current
+    event.target.value = ''
+    if (!file || !video?.idempotency_key) {
+      pushToast({ message: 'This upload cannot be retried until its original request is restored', type: 'error' })
+      return
+    }
+    if (!isValidVideoType(file)) {
+      pushToast({ message: 'Invalid file type. Please use MP4, MOV, or WebM.', type: 'error' })
+      return
+    }
+    if (file.size > MAX_VIDEO_SIZE) {
+      pushToast({ message: `File too large. Maximum size is ${formatFileSize(MAX_VIDEO_SIZE)}.`, type: 'error' })
+      return
+    }
+    setRetryingId(video.video_id)
+    try {
+      const { video: updated } = await uploadVideo(version, {
+        file,
+        sessionDate: session.date,
+        sessionId: session.id,
+        exerciseName: video.exercise_name,
+        setNumber: video.set_number,
+        notes: video.notes,
+        idempotencyKey: video.idempotency_key,
+      })
+      updateSessionVideo(session.date, video.video_id, updated)
+      onVideoUpdated?.(updated)
+      setPlayingVideo(updated)
+      pushToast({ message: 'Video retry submitted', type: 'success' })
+    } catch (err) {
+      console.error('Video retry failed:', err)
+      pushToast({ message: 'Failed to retry video', type: 'error' })
+    } finally {
+      setRetryingId(null)
+    }
+  }
+
   if (videos.length === 0) {
     return null
   }
 
   return (
     <>
+      <input ref={retryInputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo" onChange={handleRetryFile} style={{ display: 'none' }} />
       <SimpleGrid cols={{ base: 2, md: 3, lg: 4 }} spacing="sm">
         {videos.map((video) => (
           <Box
@@ -188,6 +241,19 @@ export default function VideoGrid({ session }: VideoGridProps) {
                 >
                   <Trash2 size={16} />
                 </ActionIcon>
+                {video.thumbnail_status === 'failed' && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="blue"
+                    size="sm"
+                    onClick={() => chooseRetryFile(video)}
+                    loading={retryingId === video.video_id}
+                    disabled={retryingId === video.video_id}
+                    aria-label="Retry video processing"
+                  >
+                    <RotateCcw size={16} />
+                  </ActionIcon>
+                )}
               </Box>
             </Box>
           </Box>

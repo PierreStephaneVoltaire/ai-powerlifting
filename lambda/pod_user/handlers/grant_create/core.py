@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 MAPPED_PK_RE = re.compile(r"^[A-Za-z0-9:_#-]{1,128}$")
 NICKNAME_RE = re.compile(r"^[a-z0-9_-]{2,32}$")
 EXPIRY_TAIL_DAYS = 7  # Grant expires max(tied competition dates) + this many days.
-TIE_DURATION_DEFAULT_DAYS = 60  # for open-ended grants (no tied competitions)
 
 
 def _validate_args(args: dict) -> tuple[Optional[str], Optional[dict]]:
@@ -61,6 +60,10 @@ def _validate_args(args: dict) -> tuple[Optional[str], Optional[dict]]:
 
     tied_competition_ids = [str(c) for c in tied_competition_ids if str(c).strip()][:32]
 
+    if grant_type in ("coach", "handler") and not tied_competition_ids:
+        return "competition_ties_required", None
+    if tied_competition_ids and any(identifier not in tied_competition_dates for identifier in tied_competition_ids):
+        return "invalid_tied_competition_dates", None
     if tied_competition_dates:
         latest = None
         for d in tied_competition_dates.values():
@@ -76,7 +79,7 @@ def _validate_args(args: dict) -> tuple[Optional[str], Optional[dict]]:
             return "invalid_tied_competition_dates", None
         expires_at_dt = latest + timedelta(days=EXPIRY_TAIL_DAYS)
     else:
-        expires_at_dt = datetime.now(timezone.utc) + timedelta(days=TIE_DURATION_DEFAULT_DAYS)
+        return "competition_ties_required", None
 
     now = _now_iso()
     grant = {
@@ -98,6 +101,13 @@ def _validate_args(args: dict) -> tuple[Optional[str], Optional[dict]]:
         "last_edited_by": created_by,
         "created_at": now,
         "updated_at": now,
+        "entity": "grant",
+        "state": "approved",
+        "permissions": [
+            f"{domain}:{action}"
+            for domain in ("profile", "program", "sessions", "competition", "federation", "glossary", "goals", "budget", "calculations", "performance", "weight-log", "templates", "imports", "lift-profiles", "analytics", "videos")
+            for action in (("read", "write") if scope == "write" else ("read",))
+        ],
     }
     grant["sk"] = build_sk(grantee_mapped_pk, now, grant_type)
     return None, grant
@@ -112,31 +122,4 @@ async def grant_create(args: dict) -> dict:
     Returns the persisted grant. Raises ValueError on validation failure or on
     GRANT_LIMIT_REACHED when an active grant of the same type already exists.
     """
-    err, grant = _validate_args(args)
-    if err:
-        raise ValueError(err)
-
-    table = _get_table()
-
-    def _check_existing():
-        pk = grant["pk"]
-        existing = table.query(KeyConditionExpression=Key("pk").eq(pk))["Items"]
-        for item in existing:
-            norm = normalize_grant(item)
-            if norm["grant_type"] == grant["grant_type"] and is_active(norm):
-                return norm
-        return None
-
-    existing = await asyncio.get_running_loop().run_in_executor(None, _check_existing)
-    if existing:
-        return {
-            "error": "GRANT_LIMIT_REACHED",
-            "message": f"An active {grant['grant_type']} grant already exists for this athlete.",
-            "existing": existing,
-        }
-
-    def _put():
-        table.put_item(Item=_to_dynamo(grant))
-
-    await asyncio.get_running_loop().run_in_executor(None, _put)
-    return normalize_grant(grant)
+    raise ValueError("direct_grant_creation_retired_use_relationship_request")

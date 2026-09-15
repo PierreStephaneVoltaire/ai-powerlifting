@@ -8,7 +8,6 @@ import {
   updateAgeClass,
   addTag,
   removeTag,
-  approveTag,
   proposeTag,
   validateNickname,
   invalidateCache,
@@ -19,11 +18,11 @@ import { AppError } from '../middleware/errorHandler'
 
 export async function getSettingsHandler(req: Request, res: Response): Promise<void> {
   let settings = null
-  if (req.user?.username) {
-    settings = await getSettings(req.user.username)
+  if (req.actor_mapped_pk) {
+    settings = await getSettings(req.actor_mapped_pk!)
   }
-  if (!settings && req.mapped_pk) {
-    settings = await getSettingsByMappedPk(req.mapped_pk)
+  if (!settings && req.settings?.mapped_pk) {
+    settings = await getSettingsByMappedPk(req.settings!.mapped_pk!)
   }
   if (!settings) {
     if (!req.user) {
@@ -65,8 +64,8 @@ export async function updateNicknameHandler(req: Request, res: Response): Promis
     throw new AppError('Invalid nickname: must be 2-32 chars, lowercase alphanumeric, hyphens, underscores only', 400)
   }
 
-  const settings = await updateNickname(req.user.username, nickname)
-  invalidateCache(req.user.username)
+  const settings = await updateNickname(req.actor_mapped_pk!, nickname)
+  invalidateCache(req.actor_mapped_pk!)
   res.json({ data: settings })
 }
 
@@ -92,7 +91,7 @@ export async function updateProfileHandler(req: Request, res: Response): Promise
     throw new AppError('public_training_summary_enabled must be a boolean', 400)
   }
 
-  const settings = await updateProfile(req.user.username, {
+  const settings = await updateProfile(req.actor_mapped_pk!, {
     profile_visibility: profile_visibility as ProfileVisibility | undefined,
     display_name,
     bio,
@@ -114,7 +113,7 @@ export async function updateRankingLocationHandler(req: Request, res: Response):
     throw new AppError('ranking_region must be a string or null', 400)
   }
 
-  const settings = await updateRankingLocation(req.user.username, {
+  const settings = await updateRankingLocation(req.actor_mapped_pk!, {
     ranking_country: ranking_country ?? null,
     ranking_region: ranking_region ?? null,
   })
@@ -131,7 +130,7 @@ export async function updateAgeClassHandler(req: Request, res: Response): Promis
     throw new AppError('age_class must be a string or null', 400)
   }
 
-  const settings = await updateAgeClass(req.user.username, {
+  const settings = await updateAgeClass(req.actor_mapped_pk!, {
     age_class: typeof age_class === 'string' ? (age_class as never) : null,
   })
   res.json({ data: settings })
@@ -142,7 +141,7 @@ const TAG_RE = /^[a-z0-9_-]{1,30}$/
 
 function normalizeTagInput(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
-  const tag = raw.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30)
+  const tag = raw.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, '-')
   return TAG_RE.test(tag) ? tag : null
 }
 
@@ -156,8 +155,8 @@ export async function addTagHandler(req: Request, res: Response): Promise<void> 
     throw new AppError('Invalid tag: must be 1-30 chars, lowercase alphanumeric, hyphens, underscores only', 400)
   }
 
-  const settings = await addTag(req.user.username, tag)
-  invalidateCache(req.user.username)
+  const settings = await addTag(req.actor_mapped_pk!, tag)
+  invalidateCache(req.actor_mapped_pk!)
   res.json({ data: settings })
 }
 
@@ -171,8 +170,8 @@ export async function removeTagHandler(req: Request, res: Response): Promise<voi
     throw new AppError('Invalid tag', 400)
   }
 
-  const settings = await removeTag(req.user.username, tag)
-  invalidateCache(req.user.username)
+  const settings = await removeTag(req.actor_mapped_pk!, tag)
+  invalidateCache(req.actor_mapped_pk!)
   res.json({ data: settings })
 }
 
@@ -186,9 +185,8 @@ export async function approveTagHandler(req: Request, res: Response): Promise<vo
     throw new AppError('Invalid tag', 400)
   }
 
-  const settings = await approveTag(req.user.username, tag)
-  invalidateCache(req.user.username)
-  res.json({ data: settings })
+  const result = await invokeLambda('settings_tag_approve', { ...req.body, tag })
+  res.json({ data: result })
 }
 
 export async function proposeTagHandler(req: Request, res: Response): Promise<void> {
@@ -205,7 +203,7 @@ export async function proposeTagHandler(req: Request, res: Response): Promise<vo
     throw new AppError('Invalid tag: must be 1-30 chars, lowercase alphanumeric, hyphens, underscores only', 400)
   }
 
-  const settings = await proposeTag(req.user.username, target_nickname, normalizedTag)
+  const settings = await proposeTag(req.actor_mapped_pk!, target_nickname, normalizedTag)
   res.json({ data: settings })
 }
 
@@ -221,13 +219,13 @@ export async function updateAvatarHandler(req: Request, res: Response): Promise<
 
   const fileB64 = Buffer.from(file.buffer).toString('base64')
   const settings = await invokeLambda('pod_user', { function: 'settings_update_avatar', 
-    username: req.user.username,
+    username: req.actor_mapped_pk!,
     mapped_pk: req.mapped_pk,
     file_b64: fileB64,
     mimetype: file.mimetype,
     filename: file.originalname,
   })
 
-  invalidateCache(req.user.username)
+  invalidateCache(req.actor_mapped_pk!)
   res.json({ data: settings })
 }

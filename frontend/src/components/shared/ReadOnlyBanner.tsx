@@ -1,11 +1,15 @@
 import { Alert, Text } from '@mantine/core'
 import { useAuth } from '@/auth/AuthProvider'
+import { routePermission } from '@/auth/routes'
+import { useLocation } from 'react-router-dom'
 import { Eye } from 'lucide-react'
 
 export default function ReadOnlyBanner() {
-  const { readOnly } = useAuth()
+  const location = useLocation()
+  const { mapped_pk, permissions, readOnly } = useAuth()
+  const permission = routePermission(location.pathname)
 
-  if (!readOnly) return null
+  if (!mapped_pk || !permission || !permissions.includes(permission) || !readOnly) return null
 
   return (
     <Alert

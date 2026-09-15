@@ -221,6 +221,9 @@ operations:
         patch:
           type: object
           description: Dict with session fields to update.
+        session_id:
+          type: string
+          minLength: 1
       required: []
   session_replace:
     description: Full replace of a session at a specific date and index. Overwrites
@@ -267,6 +270,9 @@ operations:
       properties:
         date: *id007
         exercise: *id008
+        session_id:
+          type: string
+          minLength: 1
       required:
       - date
       - exercise
@@ -280,6 +286,9 @@ operations:
           type: string
           description: Session date (YYYY-MM-DD).
         exercise_index: *id009
+        session_id:
+          type: string
+          minLength: 1
       required:
       - date
       - exercise_index
@@ -309,6 +318,9 @@ operations:
         date:
           type: string
           description: Session date (YYYY-MM-DD).
+        session_id:
+          type: string
+          minLength: 1
       required:
       - date
   health_get_session:
@@ -320,6 +332,9 @@ operations:
         date:
           type: string
           description: Session date (YYYY-MM-DD).
+        session_id:
+          type: string
+          minLength: 1
       required:
       - date
   health_get_sessions_range:
@@ -341,6 +356,9 @@ operations:
       properties:
         old_date: *id016
         new_date: *id017
+        session_id:
+          type: string
+          minLength: 1
       required:
       - old_date
       - new_date
@@ -355,6 +373,9 @@ operations:
           type: string
           description: Session date (YYYY-MM-DD).
         patch: *id018
+        session_id:
+          type: string
+          minLength: 1
       required:
       - date
       - patch

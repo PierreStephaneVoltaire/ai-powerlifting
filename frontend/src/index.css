@@ -130,7 +130,6 @@
     color: var(--text-primary);
     font-family: 'DM Sans', sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
-    overflow-x: hidden;
   }
 }
 
@@ -1217,7 +1216,50 @@
   z-index: 30;
 }
 
+.if-athlete-context-toggle {
+  display: none;
+}
+
 @media (max-width: 639px) {
+  .if-athlete-context-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .if-athlete-context-controls {
+    display: none;
+  }
+
+  .if-athlete-context-controls.is-expanded {
+    display: block;
+  }
+
+  body:has([data-testid="signin-authentik"]) .mantine-Button-label {
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    text-align: center;
+    white-space: normal;
+  }
+
+  [data-login-page] {
+    padding-bottom: 0 !important;
+  }
+
+  [data-login-page] .mantine-Center-root {
+    height: calc(var(--app-viewport-height, 100dvh) - 60px) !important;
+  }
+
+  [data-login-page] .mantine-Paper-root {
+    max-width: 100%;
+  }
+
+  [data-login-page] .mantine-Button-label {
+    line-height: 1.25;
+    text-align: center;
+    white-space: normal;
+  }
+
   .if-session-action-bar {
     bottom: calc(68px + env(safe-area-inset-bottom, 0px) + var(--app-browser-bottom-overlap, 0px));
     box-shadow: 0 -10px 24px color-mix(in srgb, #000 18%, transparent);
@@ -1366,6 +1408,10 @@
   .if-dashboard-row-mid,
   .if-dashboard-row-bottom {
     grid-template-columns: 1fr;
+  }
+
+  .if-dashboard-row > .if-mock-card {
+    min-width: 0;
   }
 
   .if-dashboard-row-bottom .if-mock-card:last-child > div:last-child {

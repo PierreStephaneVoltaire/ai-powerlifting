@@ -1,3 +1,5 @@
+import { principalToken } from '../auth/principal'
+import { AppError } from '../middleware/errorHandler'
 import { operationScope } from './operationScope'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
@@ -18,9 +20,9 @@ function serviceUrl(domain: string): string {
   return SERVICE_BASE_URL ? `${SERVICE_BASE_URL.replace(/\/$/, '')}/${domain}` : `http://pl-${domain}.if-portals.svc.cluster.local:8000`
 }
 
-export async function pollJob(jobId: string, operation: string, person: string): Promise<any> {
+export async function pollJob(jobId: string, operation: string, person: string, athlete?: string): Promise<any> {
   for (let attempt = 0; attempt < 1800; attempt += 1) {
-    const response = await fetch(`${IF_API_URL}/v1/jobs/${encodeURIComponent(jobId)}/result`, { headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person } })
+    const response = await fetch(`${IF_API_URL}/v1/jobs/${encodeURIComponent(jobId)}/result`, { headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person, ...(athlete ? { 'X-PL-Principal': principalToken('domain_job_read', { athlete, person }) } : {}) } })
     if (response.status === 202) { await new Promise((done) => setTimeout(done, 500)); continue }
     if (!response.ok) throw new Error(`Job error ${response.status} for ${operation}: ${await response.text()}`)
     const body: any = await response.json()
@@ -42,20 +44,40 @@ export async function invokeLambda(functionName: string, args: Record<string, un
   const payload = { ...args }
   delete payload.function
   const scope = operationScope.getStore()
-  const pk = String(scope?.athlete || payload.pk || payload.user_pk || payload.mapped_pk || payload.athlete_mapped_pk || payload.grantee_mapped_pk || payload.username || payload.discord_username || '')
-  const person = String(scope?.person || payload.actor_mapped_pk || payload.person_pk || payload.created_by || payload.revoked_by || pk)
+  if (!scope) throw new AppError('Authenticated operation context required', 401, 'AUTH_REQUIRED')
+  const pk = scope.athlete
+  const person = scope.person
+  const principal = principalToken(operation.name, scope)
+  const access = await fetch(`${serviceUrl('profile')}/internal/access`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-PL-Principal': principal },
+    body: JSON.stringify({ operation: operation.name, arguments: payload }),
+  })
+  if (!access.ok) {
+    const body = await access.json().catch(() => ({})) as { detail?: { code?: string; message?: string } }
+    throw new AppError(body.detail?.message || 'Operation permission denied', access.status, body.detail?.code || 'NOT_PERMITTED')
+  }
   const response = await fetch(`${serviceUrl(operation.domain)}/operations/${encodeURIComponent(operation.name)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, ...(pk ? { 'X-Athlete-Pk': pk } : {}), ...(person ? { 'X-Person-Pk': person } : {}), ...(scope?.ifJobId ? { 'X-IF-Turn-Id': scope.ifJobId, 'X-PL-Nested-Operation': 'true' } : {}) },
+    headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-PL-Principal': principal, ...(pk ? { 'X-Athlete-Pk': pk } : {}), ...(person ? { 'X-Person-Pk': person } : {}), ...(scope?.ifJobId ? { 'X-IF-Turn-Id': scope.ifJobId, 'X-PL-Nested-Operation': 'true' } : {}) },
     body: JSON.stringify(payload),
   })
-  if (!response.ok) throw new Error(`Powerlifting service error ${response.status} for ${functionName}: ${await response.text()}`)
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { detail?: { code?: string; message?: string; current_revision?: number; current_record?: unknown } }
+    const detail = typeof body.detail === 'object' ? body.detail : {}
+    const error = new AppError(detail.message || `Operation ${functionName} failed`, response.status, detail.code)
+    Object.assign(error, { current_revision: detail.current_revision, current_record: detail.current_record })
+    throw error
+  }
   const result: any = await response.json()
-  return result?.job_id && waitForResult ? pollJob(result.job_id, requestedName, person) : result
+  return result?.job_id && waitForResult ? pollJob(result.job_id, requestedName, person, pk) : result
 }
 
 export async function readGeneration(generationId: string, athlete: string): Promise<any> {
-  const response = await fetch(`${serviceUrl('analytics')}/generations/${encodeURIComponent(generationId)}`, { headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Athlete-Pk': athlete } })
+  const scope = operationScope.getStore()
+  if (!scope || scope.athlete !== athlete) throw new AppError('Authenticated scope required', 401)
+  const principal = principalToken('generation_status', scope)
+  const response = await fetch(`${serviceUrl('analytics')}/generations/${encodeURIComponent(generationId)}`, { headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Athlete-Pk': athlete, 'X-Person-Pk': scope.person, 'X-PL-Principal': principal } })
   if (!response.ok) throw new Error(`Generation status failed ${response.status}: ${await response.text()}`)
   return response.json()
 }

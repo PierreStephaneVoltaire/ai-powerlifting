@@ -277,12 +277,10 @@ def _resolved_lift(program: dict, lift: str) -> Optional[float]:
     meta = program.get("meta") or {}
     current_maxes = program.get("current_maxes") or {}
     manual_maxes = meta.get("manual_maxes") or {}
-    target_key = {"squat": "target_squat_kg", "bench": "target_bench_kg", "deadlift": "target_dl_kg"}[lift]
     return (
         _positive_number(current_maxes.get(lift))
         or _positive_number(manual_maxes.get(lift))
         or _best_session_lift(program, lift)
-        or _positive_number(meta.get(target_key))
     )
 
 
@@ -299,6 +297,7 @@ def _video_library_items(sessions: list[dict]) -> list[dict]:
         for video in session.get("videos") or []:
             items.append({
                 "video": video,
+                "session_id": session.get('id') or session.get('session_id'),
                 "session_date": session.get("date"),
                 "day": session.get("day"),
                 "week_number": session.get("week_number"),
@@ -333,8 +332,8 @@ def _build_profile(settings: dict, viewer_username: Optional[str], program: Opti
         or _latest_bodyweight(program)
         or _positive_number((meta.get("last_comp") or {}).get("body_weight_kg"))
     )
-    sex = "female" if meta.get("sex") == "female" else "male"
-    dots = _calculate_dots(total, bodyweight, sex) if total is not None and bodyweight is not None else None
+    sex = meta.get("sex") or settings.get("sex")
+    dots = _calculate_dots(total, bodyweight, sex) if total is not None and bodyweight is not None and sex in ("male", "female") else None
     video_items = _video_library_items(sessions)
     return {
         **base,
@@ -367,29 +366,5 @@ def _get_settings_by_nickname_sync(user_table, nickname: str, viewer_username: O
 
 
 async def profile_get(args: dict) -> dict:
-    """Build a public profile by nickname.
-
-    Args:
-        args: dict with required `nickname` and optional `viewer_username`
-              (requesting user for visibility checks).
-    """
-    user_table = _get_user_table()
-    health_table = _get_health_table()
-    session_table = _get_session_table()
-    nickname = args.get("nickname") or ""
-    viewer_username = args.get("viewer_username")
-
-    def _sync():
-        settings = _get_settings_by_nickname_sync(user_table, nickname, viewer_username)
-        if not settings:
-            return None
-        pk = _mapped_pk_for_settings(settings)
-        program_sk = _resolve_program_sk_sync(health_table, pk, "current")
-        program = _load_program_sync(health_table, pk, program_sk)
-        sessions = _load_sessions_sync(session_table, pk, program_sk) if program else []
-        return _build_profile(settings, viewer_username, program, sessions)
-
-    result = await asyncio.get_running_loop().run_in_executor(None, _sync)
-    if result is None:
-        raise ValueError("Profile not found")
-    return result
+    from services.profile_views import get_by_handle
+    return await asyncio.to_thread(get_by_handle, args)

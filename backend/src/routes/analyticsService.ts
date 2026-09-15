@@ -9,6 +9,7 @@ function todayIso(): string {
 }
 
 function statusFor(error: unknown): number {
+  if (typeof (error as { statusCode?: unknown })?.statusCode === 'number') return (error as { statusCode: number }).statusCode
   const match = String(error).match(/service error (\d+)/i)
   return match ? Number(match[1]) : 502
 }
@@ -91,11 +92,13 @@ analyticsServiceRouter.post('/analysis/regenerate', async (req: Request, res: Re
 
 analyticsServiceRouter.get('/analysis/markdown', async (req: Request, res: Response) => {
   try {
+    const cacheOnly = req.readOnly === true || req.query.cacheOnly === 'true' || req.query.cache_only === 'true'
     const result = await invokeAnalyticsOperation<{ markdown?: string; generated_at?: string; cached?: boolean }>('analytics.markdown', req.mapped_pk!, {
-      refresh: req.query.refresh === 'true',
+      refresh: req.readOnly ? false : req.query.refresh === 'true',
+      cache_only: cacheOnly,
       max_age_hours: Number(req.query.maxAgeHours) || undefined,
     })
-    if (!result.markdown) { res.status(502).json({ data: null, error: 'Markdown export returned empty content' }); return }
+    if (!result.markdown) { res.status(404).json({ data: null, error: 'Markdown export cache miss' }); return }
     res.json({ data: { markdown: result.markdown, generatedAt: result.generated_at ?? new Date().toISOString(), cached: result.cached ?? false }, error: null })
   } catch (error) { failed(res, error, 'Markdown export error') }
 })
@@ -121,7 +124,7 @@ analyticsServiceRouter.get('/blocks', async (req: Request, res: Response) => {
 })
 
 analyticsServiceRouter.get('/blocks/:blockKey/analysis', async (req: Request, res: Response) => {
-  try { res.json({ data: await invokeAnalyticsOperation('analytics.blocks_get', req.mapped_pk!, { blockKey: req.params.blockKey, refresh: req.query.refresh === 'true' }), error: null }) }
+  try { res.json({ data: await invokeAnalyticsOperation('analytics.blocks_get', req.mapped_pk!, { blockKey: req.params.blockKey, refresh: req.query.refresh === 'true', cacheOnly: req.readOnly || req.query.cacheOnly === 'true' }), error: null }) }
   catch (error) { failed(res, error, 'Block analysis error') }
 })
 

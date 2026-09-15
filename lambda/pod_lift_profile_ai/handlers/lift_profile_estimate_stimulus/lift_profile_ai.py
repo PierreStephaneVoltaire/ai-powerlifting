@@ -120,6 +120,7 @@ def _profile_payload(profile: dict[str, Any]) -> str:
         "primary_muscle": profile.get("primary_muscle", ""),
         "volume_tolerance": profile.get("volume_tolerance", "moderate"),
         "stimulus_coefficient": profile.get("stimulus_coefficient"),
+        "failure_nodes": profile.get("failure_nodes") or [],
     }
     return json.dumps(keep, indent=2)
 

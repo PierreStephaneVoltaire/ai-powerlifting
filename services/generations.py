@@ -4,6 +4,7 @@ import json
 import os
 import time
 from datetime import date
+from importlib import import_module
 
 import boto3
 import httpx
@@ -11,6 +12,8 @@ from fastapi.encoders import jsonable_encoder
 from botocore.exceptions import ClientError
 
 from .dispatch import OperationError
+from .principal import principal_token
+from .source_access import authorize_source, read_requirements
 
 REPORTS = {"correlation_analysis", "program_evaluation", "block_correlation_analysis", "block_program_evaluation", "multi_block_comparison_analysis"}
 TERMINAL = {"succeeded", "failed", "cancelled", "uncertain"}
@@ -32,13 +35,13 @@ class GenerationStore:
     def get(self, generation_id):
         return self.table.get_item(Key=self.key(generation_id), ConsistentRead=True).get("Item")
 
-    def reserve(self, generation_id, operation, owner, retry=False):
+    def reserve(self, generation_id, operation, owner, retry=False, requirements=None):
         current = self.get(generation_id)
         if current and not (retry and current["status"] in {"failed", "cancelled", "uncertain"}):
             return current, False
         attempt = int((current or {}).get("attempt", 0)) + 1
         record = {**self.key(generation_id), "generation_id": generation_id, "source_fingerprint": generation_id, "operation": operation,
-                  "owner": owner, "status": "starting", "attempt": attempt, "updated_at": int(time.time())}
+                  "owner": owner, "status": "starting", "attempt": attempt, "updated_at": int(time.time()), "access_requirements": requirements}
         try:
             condition = "attribute_not_exists(pk)" if current is None else "#status=:previous AND attempt=:attempt"
             options = {} if current is None else {"ExpressionAttributeNames": {"#status": "status"}, "ExpressionAttributeValues": {":previous": current["status"], ":attempt": current["attempt"]}}
@@ -80,10 +83,12 @@ class GenerationStore:
 
 
 async def report_source(arguments, athlete, operation=""):
-    source = {}
+    source = {'access_requirements': read_requirements(arguments.get('_access') or {})}
     if "program_evaluation" in operation:
-        from federation_store import FederationStore
-        source["federation_library"] = await FederationStore(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk=athlete, region=os.getenv("AWS_REGION", "ca-central-1")).get_library()
+        source["federation_library"] = []
+        if 'federation:read' in arguments.get('_access', {}).get('permissions', []):
+            FederationStore = import_module('lambda.pod_federation.handlers._federation_store').FederationStore
+            source["federation_library"] = await FederationStore(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk=athlete, region=os.getenv("AWS_REGION", "ca-central-1")).get_library()
     if isinstance(arguments.get("program"), dict):
         return jsonable_encoder(source) or None
     from program_store import ProgramStore
@@ -93,19 +98,24 @@ async def report_source(arguments, athlete, operation=""):
         store = ProgramStore(table_name=os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk=athlete, region=os.getenv("AWS_REGION", "ca-central-1"))
         store.invalidate_cache()
         program = await store.get_program()
+        from competition_entries import with_competition_entries
+        from .publication import program_view
+        program = await asyncio.to_thread(with_competition_entries, program, athlete)
+        program = program_view(program, arguments.get('_access') or {})
         return jsonable_encoder({**source, "program": program, "date": arguments.get("ref_date") or arguments.get("asOfDate") or date.today().isoformat()})
     finally:
         current_athlete.reset(token)
 
 
-async def status(generation_id, athlete):
+async def status(generation_id, athlete, person, access):
     store = GenerationStore(athlete)
     record = await asyncio.to_thread(store.get, generation_id)
     if not record:
         raise OperationError(404, "not_found", "Report generation not found")
-    if record["status"] not in TERMINAL and record.get("job_id"):
+    authorize_source(record.get('access_requirements'), access)
+    if person and record["status"] not in TERMINAL and record.get("job_id"):
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs/" + record["job_id"], headers={"X-Internal-Token": os.environ["INTERNAL_API_TOKEN"], "X-Person-Pk": record["owner"]})
+            response = await client.get(os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs/" + record["job_id"], headers={"X-Internal-Token": os.environ["INTERNAL_API_TOKEN"], "X-Person-Pk": person, "X-PL-Principal": principal_token(person, athlete, "domain_job_read")})
             response.raise_for_status()
             job = response.json()
         if job["status"] in TERMINAL:

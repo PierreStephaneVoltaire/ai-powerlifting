@@ -243,7 +243,10 @@ class AnalysisCacheStore:
             markdown = data.get("markdown", "") if isinstance(data, dict) else str(data)
             if not markdown:
                 return None
-            return {"markdown": markdown, "generated_at": item.get("generated_at", "")}
+            result = {"markdown": markdown, "generated_at": item.get("generated_at", "")}
+            if "access_requirements" in item:
+                result["access_requirements"] = item["access_requirements"]
+            return result
         except Exception as exc:
             logger.error("[AnalysisCacheStore] get_markdown_cache failed: %s", exc)
             return None
@@ -278,11 +281,13 @@ class AnalysisCacheStore:
         markdown: str,
         block_key: str = "current",
         ttl_days: int = CURRENT_BLOCK_TTL_DAYS,
+        access_requirements: Optional[dict] = None,
     ) -> None:
         """Write markdown export to cache. Past blocks (non-'current') never expire."""
         sk = f"markdown_export#{block_key}"
-        effective_ttl = ttl_days if block_key == "current" else None
+        effective_ttl = ttl_days if block_key == "current" or block_key.startswith("current#scope#") else None
+        extra_fields = {"access_requirements": access_requirements} if access_requirements is not None else None
         try:
-            self._put_json_item(sk, {"markdown": markdown}, ttl_days=effective_ttl)
+            self._put_json_item(sk, {"markdown": markdown}, ttl_days=effective_ttl, extra_fields=extra_fields)
         except Exception as exc:
             logger.error("[AnalysisCacheStore] put_markdown_cache failed: %s", exc)

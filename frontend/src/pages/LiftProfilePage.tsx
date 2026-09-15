@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Sparkles, RotateCcw } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Film, RotateCcw, Save, Sparkles, Trash2, Upload } from 'lucide-react'
 import {
   Alert,
   Badge,
@@ -30,12 +30,15 @@ import {
   rewriteLiftProfile,
   type LiftProfileReview,
 } from '@/api/client'
-import type { LiftProfile } from '@powerlifting/types'
+import type { LiftProfile, LiftProfileVideoAngle } from '@powerlifting/types'
 import { toDisplayUnit } from '@/utils/units'
 import { useAuth } from '@/auth/AuthProvider'
+import { formatFileSize, isValidVideoType, MAX_VIDEO_SIZE, uploadVideo } from '@/utils/s3'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 const PROFILE_ESTIMATE_READY_SCORE = 55
+const FORM_ANGLES: LiftProfileVideoAngle[] = ['front', 'side', 'diagonal']
+const FORM_ANGLE_LABELS: Record<LiftProfileVideoAngle, string> = { front: 'Front', side: 'Side', diagonal: 'Diagonal' }
 
 export interface MultiplierSuggestion {
   lift: string
@@ -85,7 +88,23 @@ function normalizeProfile(profile: LiftProfile): LiftProfile {
     ...profile,
     stimulus_coefficient: Math.max(1, Math.min(2, profile.stimulus_coefficient ?? 1)),
     e1rm_multiplier: Number(clampedMultiplier.toFixed(2)),
+    failure_nodes: normalizeFailureNodes(profile.failure_nodes),
+    form_videos: profile.form_videos,
   }
+}
+
+function normalizeFailureNodes(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  return value.reduce<string[]>((nodes, item) => {
+    const node = String(item ?? '').trim().slice(0, 160)
+    const marker = node.toLocaleLowerCase()
+    if (node && !seen.has(marker) && nodes.length < 10) {
+      seen.add(marker)
+      nodes.push(node)
+    }
+    return nodes
+  }, [])
 }
 
 function mergeProfiles(profiles: LiftProfile[] | undefined, replacement: LiftProfile): LiftProfile[] {
@@ -109,7 +128,7 @@ export default function LiftProfilePage() {
   const { readOnly } = useAuth()
   const { lift: liftParam } = useParams<{ lift: string }>()
   const navigate = useNavigate()
-  const { program, updateLiftProfiles } = useProgramStore()
+  const { program, version, updateLiftProfiles } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
 
@@ -130,6 +149,11 @@ export default function LiftProfilePage() {
   const [rewriting, setRewriting] = useState(false)
   const [estimating, setEstimating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [failureNode, setFailureNode] = useState('')
+  const [barWeight, setBarWeight] = useState('20')
+  const [barUnit, setBarUnit] = useState<'kg' | 'lb'>('kg')
+  const [uploadingAngle, setUploadingAngle] = useState<LiftProfileVideoAngle | null>(null)
+  const uploadInput = useRef<HTMLInputElement>(null)
 
   const runReview = async (profile: LiftProfile, showError = true) => {
     setReviewing(true)
@@ -166,6 +190,75 @@ export default function LiftProfilePage() {
   const updateDraft = (updates: Partial<LiftProfile>, resetReview = true) => {
     setDraft((current) => current ? normalizeProfile({ ...current, ...updates }) : current)
     if (resetReview) setReview(null)
+  }
+
+  const addFailureNode = () => {
+    if (!draft || !failureNode.trim()) return
+    updateDraft({ failure_nodes: normalizeFailureNodes([...(draft.failure_nodes ?? []), failureNode]) })
+    setFailureNode('')
+  }
+
+  const removeFailureNode = (node: string) => {
+    if (!draft) return
+    updateDraft({ failure_nodes: draft.failure_nodes?.filter((item) => item !== node) ?? [] })
+  }
+
+  const chooseFormVideo = (angle: LiftProfileVideoAngle) => {
+    setUploadingAngle(angle)
+    uploadInput.current?.click()
+  }
+
+  const uploadFormVideo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    const angle = uploadingAngle
+    event.target.value = ''
+    if (!file || !angle || !lift || !draft) return
+    if (!isValidVideoType(file)) {
+      pushToast({ message: 'Invalid file type. Please use MP4, MOV, or WebM.', type: 'error' })
+      return
+    }
+    if (file.size > MAX_VIDEO_SIZE) {
+      pushToast({ message: `File too large. Maximum size is ${formatFileSize(MAX_VIDEO_SIZE)}.`, type: 'error' })
+      return
+    }
+    const existing = draft.form_videos?.[angle]
+    if (existing?.video_id && !globalThis.confirm(`Replace the existing ${FORM_ANGLE_LABELS[angle].toLowerCase()} recording?`)) return
+    setUploadingAngle(angle)
+    const targetRevision = program?.revision ?? program?.meta.revision ?? 0
+    try {
+      const retrySameFile = existing?.processing_status === 'failed'
+        && existing?.source_filename === file.name
+        && existing?.source_size === file.size
+      const idempotencyKey = retrySameFile ? existing?.idempotency_key : undefined
+      const result = await uploadVideo(version, {
+        file,
+        sessionDate: new Date().toISOString().slice(0, 10),
+        lift,
+        angle,
+        targetRevision,
+        idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
+      })
+      const pending = {
+        ...(existing ?? result.video),
+        ...(!existing ? result.video : {}),
+        lift,
+        angle,
+        pending_media_id: result.video.video_id,
+        target_revision: targetRevision,
+        processing_status: 'pending' as const,
+        thumbnail_status: 'pending' as const,
+        source_filename: file.name,
+        source_size: file.size,
+      }
+      const next = normalizeProfile({ ...draft, form_videos: { ...(draft.form_videos ?? {}), [angle]: pending } })
+      setDraft(next)
+      await updateLiftProfiles(mergeProfiles(program?.lift_profiles, next))
+      pushToast({ message: `${FORM_ANGLE_LABELS[angle]} recording is processing`, type: 'success' })
+    } catch (error) {
+      pushToast({ message: 'Form video upload failed; retry the file', type: 'error' })
+    } finally {
+      setUploadingAngle(null)
+    }
   }
 
   const runRewrite = async () => {
@@ -405,6 +498,99 @@ export default function LiftProfilePage() {
                 placeholder={lift === 'squat' ? 'Quad dominant' : lift === 'bench' ? 'Tricep dominant' : 'Glute dominant'}
                 disabled={readOnly}
               />
+            </Stack>
+          </Paper>
+
+          <Paper withBorder p="md">
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <Stack gap={0}>
+                  <Text fw={600}>Failure nodes</Text>
+                  <Text size="xs" c="dimmed">Optional reminders for where this lift usually breaks down.</Text>
+                </Stack>
+                <Badge variant="light">{draft.failure_nodes?.length ?? 0}/10</Badge>
+              </Group>
+              <Group align="flex-end" wrap="nowrap">
+                <TextInput
+                  label="Add a node"
+                  value={failureNode}
+                  maxLength={160}
+                  onChange={(event) => setFailureNode(event.currentTarget.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addFailureNode() } }}
+                  placeholder="Hips rise out of the hole"
+                  disabled={readOnly || (draft.failure_nodes?.length ?? 0) >= 10}
+                  style={{ flex: 1 }}
+                />
+                <Button onClick={addFailureNode} disabled={readOnly || !failureNode.trim() || (draft.failure_nodes?.length ?? 0) >= 10}>Add</Button>
+              </Group>
+              {(draft.failure_nodes?.length ?? 0) > 0 ? (
+                <Group gap="xs">
+                  {draft.failure_nodes?.map((node) => (
+                    <Badge key={node} variant="light" rightSection={
+                      <ActionIcon size="xs" variant="transparent" color="red" onClick={() => removeFailureNode(node)} disabled={readOnly} aria-label={`Remove ${node}`}>
+                        <Trash2 size={12} />
+                      </ActionIcon>
+                    }>{node}</Badge>
+                  ))}
+                </Group>
+              ) : (
+                <Text size="sm" c="dimmed">No failure nodes recorded yet.</Text>
+              )}
+            </Stack>
+          </Paper>
+
+          <Paper withBorder p="md">
+            <Stack gap="sm">
+              <input ref={uploadInput} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo" onChange={uploadFormVideo} hidden />
+              <Stack gap={0}>
+                <Text fw={600}>Form recordings</Text>
+                <Text size="xs" c="dimmed">Optional three-minute recordings. Show the full lift and leave space around the bar.</Text>
+              </Stack>
+              <SimpleGrid cols={{ base: 1, sm: 3 }}>
+                {FORM_ANGLES.map((angle) => {
+                  const video = draft.form_videos?.[angle]
+                  const status = video?.processing_status ?? video?.thumbnail_status
+                  return (
+                    <Paper key={angle} withBorder p="sm">
+                      <Stack gap="xs">
+                        <Group justify="space-between">
+                          <Text fw={500}>{FORM_ANGLE_LABELS[angle]}</Text>
+                          {status === 'failed' ? <AlertCircle size={16} color="var(--mantine-color-red-6)" /> : <Film size={16} />}
+                        </Group>
+                        <Text size="xs" c="dimmed">
+                          {status === 'pending' || status === 'processing' ? 'Processing…' : status === 'failed' ? 'Processing failed' : video?.video_id ? 'Ready' : 'No recording'}
+                        </Text>
+                        {video?.failure && <Text size="xs" c="red">{video.failure}</Text>}
+                        <Button size="compact-sm" variant="light" leftSection={<Upload size={14} />} onClick={() => chooseFormVideo(angle)} disabled={readOnly || uploadingAngle !== null} loading={uploadingAngle === angle}>
+                          {video?.video_id ? 'Replace' : 'Upload'}
+                        </Button>
+                      </Stack>
+                    </Paper>
+                  )
+                })}
+              </SimpleGrid>
+            </Stack>
+          </Paper>
+
+          <Paper withBorder p="md">
+            <Stack gap="sm">
+              <Group justify="space-between" align="flex-end">
+                <Stack gap={0}>
+                  <Text fw={600}>Warm-up red-plate guide</Text>
+                  <Text size="xs" c="dimmed">Advisory only; it updates when your current max changes.</Text>
+                </Stack>
+                <Group gap="xs" align="flex-end">
+                  <TextInput label="Bar" type="number" min={0} step={0.5} value={barWeight} onChange={(event) => setBarWeight(event.currentTarget.value)} w={90} />
+                  <SegmentedControl size="xs" data={['kg', 'lb']} value={barUnit} onChange={(value) => setBarUnit(value as 'kg' | 'lb')} />
+                </Group>
+              </Group>
+              {rawMax > 0 && (() => {
+                const enteredBar = Number(barWeight)
+                const barKg = Number.isFinite(enteredBar) && enteredBar >= 0 ? barUnit === 'kg' ? enteredBar : enteredBar / 2.2046226218 : 20
+                const platesPerSide = Math.max(0, Math.floor((rawMax - barKg) / 50))
+                const recommendedKg = platesPerSide < 2 ? barKg : barKg + (platesPerSide - 1) * 50
+                return <Text size="sm">For a {toDisplayUnit(rawMax, unit).toFixed(1)} {unit} max: <b>{platesPerSide < 2 ? 'empty bar' : `${toDisplayUnit(recommendedKg, unit).toFixed(1)} ${unit}`}</b> ({platesPerSide < 2 ? 0 : platesPerSide - 1} red plate{platesPerSide - 1 === 1 ? '' : 's'} per side).</Text>
+              })()}
             </Stack>
           </Paper>
 

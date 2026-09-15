@@ -40,7 +40,6 @@ async def health_update_meta(args: dict | None = None, updates: dict | None = No
     Raises:
         ValueError: If unknown fields are passed
     """
-    import copy
     if updates is None:
         updates = args.get("updates") if isinstance(args, dict) else None
     if updates is None:
@@ -56,12 +55,4 @@ async def health_update_meta(args: dict | None = None, updates: dict | None = No
         raise ValueError(f"Unknown meta fields: {unknown}. Allowed: {allowed}")
 
     store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    meta = new_program.setdefault("meta", {})
-    for key, value in updates.items():
-        meta[key] = value
-
-    await store._write_new_version(new_program, minor=True)
-    return meta
+    return await store.update_meta_fields(updates, args.get("expected_revision"), args.get("idempotency_key"))

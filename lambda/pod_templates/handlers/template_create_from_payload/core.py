@@ -132,9 +132,13 @@ def _prepare_template_payload(template):
     }
     return prepared
 
-async def template_create_from_payload(template, actor_pk=None, author=None, published=False, import_job_id=None):
+async def template_create_from_payload(template, actor_pk=None, author=None, published=False, import_job_id=None, expected_revision=None, idempotency_key=None):
+    if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 0:
+        raise ValueError("expected_revision must be a nonnegative integer")
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise ValueError("idempotency_key must be a nonempty string")
     resolved_actor = _template_actor(actor_pk)
     prepared = _prepare_template_payload(template)
     ts = _get_template_store()
-    sk = await ts.put_template(prepared, actor_pk=resolved_actor, author=_template_author(author, resolved_actor), published=published, import_job_id=import_job_id)
+    sk = await ts.put_template(prepared, actor_pk=resolved_actor, author=_template_author(author, resolved_actor), published=published, import_job_id=import_job_id, expected_revision=expected_revision, idempotency_key=idempotency_key)
     return {"status": "created", "sk": sk}

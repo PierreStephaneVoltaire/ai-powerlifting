@@ -135,10 +135,13 @@ def test_apply_template_writes_owned_template_with_import_lineage(monkeypatch):
     monkeypatch.setattr(apply, "_get_import_store", lambda pk: imports)
     monkeypatch.setattr(apply, "_get_template_store", lambda: templates)
 
-    result = asyncio.run(apply.import_apply({"pk": "athlete-1", "import_id": "import-2", "author": "Ari"}))
+    with pytest.raises(ValueError, match='Verified acting Person'):
+        asyncio.run(apply.import_apply({'pk': 'athlete-1', 'import_id': 'import-2', 'actor_pk': 'forged'}))
+    assert imports.pending['status'] == 'awaiting_review'
+    result = asyncio.run(apply.import_apply({"pk": "athlete-1", "_person_pk": "coach-person", "import_id": "import-2", "author": "Ari"}))
 
     assert result == {"status": "applied", "target_sk": "template#new"}
-    assert templates.kwargs == {"actor_pk": "athlete-1", "author": "Ari", "published": False, "import_job_id": "import-2"}
+    assert templates.kwargs == {"actor_pk": "coach-person", "author": "Ari", "published": False, "import_job_id": "import-2"}
     assert templates.template["sessions"][0]["exercises"][0]["load_value"] == 0.75
 
 

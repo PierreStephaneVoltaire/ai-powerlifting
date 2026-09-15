@@ -1,42 +1,42 @@
 import { invokeLambda } from '../utils/lambda'
 import type { MaxEntry, MaxHistoryStore } from '@powerlifting/types'
 
+type MutationEnvelope = { expected_revision: number; idempotency_key: string }
+
 export async function getMaxHistory(pk: string, version: string): Promise<MaxHistoryStore> {
   const result = await invokeLambda('pod_maxes', { function: 'max_history_get',  pk, version })
   return {
     pk,
     sk: `max_history#${version}`,
     entries: Array.isArray(result?.entries) ? result.entries : [],
+    revision: Number(result?.revision || 0),
     updated_at: result?.updated_at || new Date().toISOString(),
   }
 }
 
-export async function addMaxEntry(pk: string, version: string, entry: MaxEntry): Promise<void> {
-  await invokeLambda('pod_maxes', { function: 'max_history_add', 
+export async function addMaxEntry(pk: string, version: string, entry: MaxEntry, envelope: MutationEnvelope): Promise<MaxHistoryStore> {
+  return await invokeLambda('pod_maxes', { function: 'max_history_add',
     pk,
     version,
-    date: entry.date,
-    squat_kg: entry.squat_kg,
-    bench_kg: entry.bench_kg,
-    deadlift_kg: entry.deadlift_kg,
-    total_kg: entry.total_kg,
-    bodyweight_kg: entry.bodyweight_kg,
-    context: entry.context,
-  })
+    entry,
+    ...envelope,
+  }) as MaxHistoryStore
 }
 
 export async function updateTargetMaxes(
   pk: string,
   version: string,
-  maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number }
-): Promise<void> {
-  await invokeLambda('pod_maxes', { function: 'max_target_update', 
+  maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number },
+  envelope: { expected_revision: number; idempotency_key: string },
+): Promise<Record<string, unknown>> {
+  return await invokeLambda('pod_maxes', { function: 'max_target_update',
     pk,
     version,
     squat_kg: maxes.squat_kg,
     bench_kg: maxes.bench_kg,
     deadlift_kg: maxes.deadlift_kg,
-  })
+    ...envelope,
+  }) as Record<string, unknown>
 }
 
 export async function getTargetMaxes(pk: string, version: string): Promise<{

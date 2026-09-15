@@ -34,6 +34,8 @@ export function weekStartForBlock(program: Program | null | undefined, block = '
   const blockValue = block || 'current'
   const stored = program?.meta?.block_week_start_days?.[blockValue]
   if (isWeekStartDay(stored)) return stored
+  const blockRecord = program?.meta?.blocks?.find((candidate) => String(candidate.id ?? candidate.block_id ?? '') === blockValue)
+  if (isWeekStartDay(blockRecord?.week_start_day)) return blockRecord.week_start_day
   return 'Monday'
 }
 

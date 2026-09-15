@@ -7,23 +7,88 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "pk": {"type": "string"},
-        "action": {"enum": ["complete", "start_next", "complete_and_start"]},
-        "block_id": {"type": "string", "minLength": 1},
-        "name": {"type": "string"},
-        "start_date": {"type": "string"},
-        "week_start_day": {"type": "string"},
-        "start_maxes_kg": {"type": "object", "additionalProperties": {"type": "number"}},
-        "expected_revision": {"type": "integer", "minimum": 0},
-        "idempotency_key": {"type": "string", "minLength": 1}
+        "pk": {
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "complete",
+            "start_next",
+            "complete_and_start",
+            "rename"
+          ]
+        },
+        "block_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "current_name": {
+          "type": "string"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "week_start_day": {
+          "type": "string"
+        },
+        "start_maxes_kg": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "next_program": {
+          "type": "object",
+          "properties": {
+            "phases": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        }
       },
-      "required": ["action", "block_id", "expected_revision", "idempotency_key"],
+      "required": [
+        "action",
+        "block_id",
+        "expected_revision",
+        "idempotency_key"
+      ],
       "additionalProperties": true
     },
-    "result_schema": {"type": "object", "required": ["action", "block_id", "revision"], "additionalProperties": true},
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "action",
+        "block_id",
+        "revision"
+      ],
+      "additionalProperties": true
+    },
     "execution": "deterministic",
     "ownership": "athlete",
-    "legacy": ["pod_training_program"]
+    "legacy": [
+      "pod_training_program"
+    ]
   },
   {
     "name": "health_delete_diet_note",
@@ -40,10 +105,20 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "date"
+        "date",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -208,11 +283,21 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "date",
-        "notes"
+        "notes",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -240,10 +325,20 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "updates"
+        "updates",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -274,10 +369,20 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "phases"
+        "phases",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -304,10 +409,20 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "patch"
+        "patch",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -425,9 +540,20 @@
         "program_sk": {
           "type": "string",
           "description": "Program sort key to archive."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
-      "required": []
+      "required": [
+        "expected_revision",
+        "idempotency_key"
+      ]
     },
     "result_schema": {
       "type": "object",
@@ -454,9 +580,20 @@
         "program_sk": {
           "type": "string",
           "description": "Program sort key to unarchive."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
-      "required": []
+      "required": [
+        "expected_revision",
+        "idempotency_key"
+      ]
     },
     "result_schema": {
       "type": "object",
@@ -490,11 +627,21 @@
         },
         "value": {
           "description": "The new value for the field. Type depends on the field being updated."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "field",
-        "value"
+        "value",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -530,10 +677,20 @@
         "block": {
           "type": "string",
           "description": "Optional block key to update a single block within phases instead of replacing all."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "phases"
+        "phases",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -594,10 +751,20 @@
         "block_notes": {
           "type": "array",
           "description": "Full array of block note dicts to write."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "block_notes"
+        "block_notes",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -660,10 +827,20 @@
           "items": {
             "type": "object"
           }
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "notes"
+        "notes",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -724,10 +901,20 @@
         "phases": {
           "type": "array",
           "description": "Full array of supplement phase dicts to write."
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "phases"
+        "phases",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -832,11 +1019,21 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "change_reason",
-        "patches"
+        "patches",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {
@@ -884,12 +1081,22 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "mode",
         "start_date",
-        "week_start_day"
+        "week_start_day",
+        "expected_revision",
+        "idempotency_key"
       ]
     },
     "result_schema": {

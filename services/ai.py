@@ -18,6 +18,8 @@ current_execution = contextvars.ContextVar("domain_execution", default=None)
 class DomainExecution:
     job_id: str
     athlete: str
+    person: str = ""
+    operation: str = ""
     execution_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     challenge: dict[str, Any] | None = None
     response: dict[str, Any] | None = None

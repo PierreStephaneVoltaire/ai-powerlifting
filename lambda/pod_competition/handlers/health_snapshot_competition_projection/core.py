@@ -73,15 +73,17 @@ def _save_program_version(program: dict, sk: str, pk: str | None = None) -> None
     sessions = item.pop("sessions", [])
     item["pk"] = active_pk
     item["sk"] = sk
+    from session_store import SessionStore
+    session_store = SessionStore(
+        table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+        pk=active_pk,
+        region=os.environ.get("AWS_REGION", "ca-central-1"),
+        source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+    )
+    if isinstance(sessions, list):
+        session_store._ensure_unique_session_ids(sessions, sk)
     table.put_item(Item=_floats_to_decimals(item))
     if isinstance(sessions, list):
-        from session_store import SessionStore
-        session_store = SessionStore(
-            table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
-            pk=active_pk,
-            region=os.environ.get("AWS_REGION", "ca-central-1"),
-            source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-        )
         session_store.replace_program_sessions_sync(
             sk,
             sessions,

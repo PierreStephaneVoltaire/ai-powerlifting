@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
@@ -14,7 +14,7 @@ import {
 } from '@mantine/core'
 import { AlertCircle, BookOpen, CalendarDays, Dumbbell, LogIn, PencilRuler } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
-import { fetchTemplates } from '@/api/client'
+import { fetchTemplates, mutationEnvelope } from '@/api/client'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import type { TemplateListEntry, WeekStartDay } from '@powerlifting/types'
@@ -46,7 +46,7 @@ interface SetupOnboardingProps {
 
 export default function SetupOnboarding({ compact = false }: SetupOnboardingProps) {
   const navigate = useNavigate()
-  const { user, readOnly, signIn } = useAuth()
+  const { user, readOnly, signIn } = useAuth('settings')
   const { initializeSetup, loadProgram, loadVersions } = useProgramStore()
   const { pushToast } = useUiStore()
   const [programName, setProgramName] = useState('Getting Started')
@@ -57,6 +57,7 @@ export default function SetupOnboarding({ compact = false }: SetupOnboardingProp
   const [missingMaxes, setMissingMaxes] = useState<string[]>([])
   const [maxValues, setMaxValues] = useState<Record<string, string>>({})
   const [loadingMode, setLoadingMode] = useState<'blank' | 'manual_sessions' | 'template' | null>(null)
+  const setupKeys = useRef<Record<string, string>>({})
 
   useEffect(() => {
     if (readOnly) return
@@ -98,6 +99,7 @@ export default function SetupOnboarding({ compact = false }: SetupOnboardingProp
         weekStartDay,
         ...(mode === 'template' && templateSk ? { templateSk } : {}),
         ...(Object.keys(maxPayload).length > 0 ? { maxes: maxPayload } : {}),
+        ...mutationEnvelope(0, setupKeys.current[mode] ?? (setupKeys.current[mode] = globalThis.crypto.randomUUID())),
       })
 
       if (result.status === 'gate_blocked') {

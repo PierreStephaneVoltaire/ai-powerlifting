@@ -10,6 +10,16 @@ def test_trusted_scope_overrides_empty_pk_and_rejects_other_athlete():
         authorize(operation, {"pk": "athlete-b"}, "athlete-a", "person-a")
 
 
+def test_template_actor_is_person_separate_from_selected_athlete():
+    operation = load_operations('templates')['template_copy']
+    payload = {'sk': 'template#source', 'new_name': 'Copy', 'expected_revision': 2, 'idempotency_key': 'copy', 'actor_pk': 'person-a'}
+    scoped = authorize(operation, payload, 'athlete-a', 'person-a')
+    operation.validate_input(scoped)
+    assert scoped['actor_pk'] == 'person-a' and scoped['pk'] == 'athlete-a'
+    with pytest.raises(OperationError):
+        authorize(operation, {**payload, 'actor_pk': 'athlete-a'}, 'athlete-a', 'person-a')
+
+
 def test_program_store_does_not_retarget_another_request(monkeypatch):
     import program_tool_helpers
     first = program_tool_helpers.get_store({"pk": "athlete-a", "program_sk": "program#v001"})

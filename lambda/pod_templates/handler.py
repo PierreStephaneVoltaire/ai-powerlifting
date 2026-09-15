@@ -54,5 +54,7 @@ def handler(event, context):
             return {"statusCode": 200, "body": result}
         return {"statusCode": 200, "body": json.dumps(result, default=_json_default)}
     except Exception as exc:
+        if hasattr(exc, "current_revision"):
+            return {"statusCode": 409, "body": json.dumps({"code": getattr(exc, "code", "conflict"), "expected_revision": exc.expected_revision, "current_revision": exc.current_revision, "current_record": exc.current_record}, default=_json_default)}
         logger.exception("[pod_templates] error in function=%s", fn_name)
         return {"statusCode": 500, "body": json.dumps({"error": str(exc)})}

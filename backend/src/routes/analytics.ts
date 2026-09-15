@@ -492,14 +492,17 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
 analyticsRouter.get('/analysis/markdown', async (req, res) => {
   try {
     const pk = req.mapped_pk!
+    const cacheOnly = req.readOnly === true || req.query.cacheOnly === 'true' || req.query.cache_only === 'true'
 
     const markdownResult = await invokeLambda('get_analysis_markdown', {
       pk,
+      refresh: req.readOnly ? false : req.query.refresh === 'true',
+      cache_only: cacheOnly,
     }) as { markdown?: string; generated_at?: string; cached?: boolean } | null
 
     const markdown = markdownResult?.markdown ?? ''
     if (!markdown) {
-      return res.status(502).json({ data: null, error: 'Markdown export returned empty content' })
+      return res.status(404).json({ data: null, error: 'Markdown export cache miss' })
     }
     
     return res.json({ 
@@ -576,23 +579,25 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
     const isCurrent = blockEntry?.isCurrent ?? (blockKey === 'current')
 
     const refresh = req.query.refresh === 'true'
+    const cacheOnly = req.readOnly === true || req.query.cacheOnly === 'true' || req.query.cache_only === 'true'
 
     if (isCurrent) {
-      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, false)
+      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, cacheOnly)
       if (!bundle) {
         return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
       }
       return res.json({ data: bundle, error: null })
     }
 
-    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, false)
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, cacheOnly)
     if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
     }
     res.json({ data: bundle, error: null })
   } catch (err) {
     logger.error({ err, blockKey: req.params.blockKey }, 'Block analysis error')
-    res.status(502).json({ data: null, error: `Block analysis error: ${err}` })
+    const statusCode = typeof (err as { statusCode?: unknown })?.statusCode === 'number' ? (err as { statusCode: number }).statusCode : 502
+    res.status(statusCode).json({ data: null, error: `Block analysis error: ${err}` })
   }
 })
 
@@ -725,6 +730,10 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
       {
         ...currentStartMaxes,
         [block.blockKey]: startMaxes,
+      },
+      {
+        expected_revision: Number(req.body?.expected_revision),
+        idempotency_key: String(req.body?.idempotency_key || ''),
       },
     )
 

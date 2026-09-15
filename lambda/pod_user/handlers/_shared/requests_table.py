@@ -107,6 +107,13 @@ def normalize_grant(item: dict) -> dict:
         "last_edited_by": str(raw.get("last_edited_by") or ""),
         "created_at": str(raw.get("created_at") or ""),
         "updated_at": str(raw.get("updated_at") or ""),
+        "entity": str(raw.get("entity") or "grant"),
+        "state": str(raw.get("state") or "approved"),
+        "relationship_id": str(raw.get("relationship_id") or ""),
+        "athlete_person_pk": str(raw.get("athlete_person_pk") or ""),
+        "grantee_person_pk": str(raw.get("grantee_person_pk") or ""),
+        "permissions": list(raw.get("permissions") or []),
+        "tied_competition_dates": dict(raw.get("tied_competition_dates") or {}),
     }
 
 

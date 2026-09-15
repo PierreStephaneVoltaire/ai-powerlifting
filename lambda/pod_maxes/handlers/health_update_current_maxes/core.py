@@ -36,29 +36,17 @@ async def health_update_current_maxes(
     Raises:
         ValueError: If no fields provided
     """
-    import copy
-    if isinstance(args, dict):
-        if squat_kg is None:
-            squat_kg = args.get("squat_kg")
-        if bench_kg is None:
-            bench_kg = args.get("bench_kg")
-        if deadlift_kg is None:
-            deadlift_kg = args.get("deadlift_kg")
-    pk = args.get("pk") if isinstance(args, dict) else None
-    if squat_kg is None and bench_kg is None and deadlift_kg is None:
+    values = dict(args or {})
+    updates = {
+        lift: values.get(f"{lift}_kg", supplied)
+        for lift, supplied in (("squat", squat_kg), ("bench", bench_kg), ("deadlift", deadlift_kg))
+        if values.get(f"{lift}_kg", supplied) is not None
+    }
+    if not updates:
         raise ValueError("At least one max must be provided")
-
-    store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    maxes = new_program.setdefault("current_maxes", {})
-    if squat_kg is not None:
-        maxes["squat"] = squat_kg
-    if bench_kg is not None:
-        maxes["bench"] = bench_kg
-    if deadlift_kg is not None:
-        maxes["deadlift"] = deadlift_kg
-
-    await store._write_new_version(new_program, minor=True)
-    return maxes
+    store = _store_for(values.get("pk"))
+    def mutate(program):
+        maxes = program.setdefault("current_maxes", {})
+        maxes.update(updates)
+        return dict(maxes)
+    return await store.mutate_source("current_maxes", updates, values.get("expected_revision"), values.get("idempotency_key"), mutate)

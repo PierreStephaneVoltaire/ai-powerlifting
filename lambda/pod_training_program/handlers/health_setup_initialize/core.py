@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
+import json
 import logging
 import os
 import re
@@ -79,24 +81,7 @@ def _valid_iso_date(value: str) -> bool:
     except ValueError:
         return False
 
-def _setup_current_program_sk(store) -> str | None:
-    pointer = store.table.get_item(Key={"pk": store.pk, "sk": store.POINTER_SK}).get("Item")
-    if pointer:
-        ref_sk = pointer.get("ref_sk") or "program#v001"
-        program = store.table.get_item(Key={"pk": store.pk, "sk": str(ref_sk)}).get("Item")
-        return str(ref_sk) if program else None
-
-    try:
-        from boto3.dynamodb.conditions import Key
-        result = store.table.query(
-            KeyConditionExpression=Key("pk").eq(store.pk) & Key("sk").begins_with(store.PROGRAM_SK_PREFIX),
-            Limit=1,
-        )
-        items = result.get("Items", [])
-        return str(items[0]["sk"]) if items else None
-    except Exception:
-        program = store.table.get_item(Key={"pk": store.pk, "sk": "program#v001"}).get("Item")
-        return "program#v001" if program else None
+from ..health_setup_status.core import _setup_current_program_sk
 
 async def health_setup_status(args: dict | None = None) -> dict:
     """Return first-class setup state for the active health data partition."""
@@ -186,10 +171,9 @@ def _positive_maxes(maxes: dict | None) -> dict[str, float]:
             out[str(key)] = number
     return out
 
-def _setup_template(sk: str) -> dict | None:
-    active_pk = _get_store().pk
+def _setup_template(sk: str, actor_pk: str | None = None) -> dict | None:
     template_store = _get_template_store()
-    return template_store.get_template_sync(sk, actor_pk=active_pk)
+    return template_store.get_template_sync(sk, actor_pk=actor_pk)
 
 def _setup_missing_maxes(template: dict, maxes: dict[str, float]) -> list[str]:
     missing = []
@@ -286,6 +270,27 @@ def _setup_program(
             },
             "program_week_start_day": week_start_day,
             "block_week_start_days": {"current": week_start_day},
+            "blocks": [{
+                "id": "current",
+                "block_id": "current",
+                "label": "current",
+                "name": (program_name or "").strip() or "Getting Started",
+                "status": "active",
+                "start_week": 1,
+                "end_week": max([int(phase.get("end_week", 1)) for phase in _setup_phases(template)] + [1]),
+                "start_date": start_date,
+                "week_start_day": week_start_day,
+                "start_maxes_kg": {
+                    "squat_kg": squat or None,
+                    "bench_kg": bench or None,
+                    "deadlift_kg": deadlift or None,
+                    "total_kg": total or None,
+                    "source": "manual",
+                    "updated_at": now,
+                },
+            }],
+            "current_block_id": "current",
+            "revision": 1,
         },
         "phases": _setup_phases(template),
         "sessions": _setup_concretize_template(template, maxes, start_date, week_start_day) if template else [],
@@ -311,30 +316,54 @@ def _setup_program(
         }
     return program
 
-def _write_initial_program_sync(store, program: dict) -> None:
+def _write_initial_program_sync(store, program: dict, marker_sk: str, payload_hash: str, result: dict) -> None:
+    stage_sk = f"program#v001-{uuid.uuid4().hex}"
+    result["programSk"] = stage_sk
     program_item = copy.deepcopy(program)
     sessions = program_item.pop("sessions", [])
-    store.table.put_item(
-        Item=_floats_to_decimals(program_item),
-        ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
-    )
+    program_item["sk"] = stage_sk
+    program_item["published"] = False
+    if isinstance(sessions, list):
+        session_store = store._get_session_store()
+        if hasattr(session_store, "_ensure_unique_session_ids"):
+            session_store._ensure_unique_session_ids(sessions, stage_sk)
+    store.table.put_item(Item=_floats_to_decimals(program_item), ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)")
     if isinstance(sessions, list) and sessions:
-        store._get_session_store().replace_program_sessions_sync(
-            "program#v001",
-            sessions,
-            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+        session_store = store._get_session_store()
+        session_store.replace_program_sessions_sync(
+            stage_sk, sessions, program.get("phases", []) if isinstance(program.get("phases"), list) else [], bump_program_revision=False,
         )
-    store.table.put_item(
-        Item={
-            "pk": store.pk,
-            "sk": store.POINTER_SK,
-            "version": 1,
-            "ref_sk": "program#v001",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        },
-        ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)",
-    )
+    now = datetime.now(timezone.utc).isoformat()
+    marker = {
+        "pk": store.pk, "sk": marker_sk, "entity_type": "setup_idempotency",
+        "payload_hash": payload_hash, "result": result,
+    }
+    store.table.meta.client.transact_write_items(TransactItems=[
+        {"Put": {"TableName": store._table_name, "Item": _floats_to_decimals({
+            "pk": store.pk, "sk": store.POINTER_SK, "version": 1,
+            "ref_sk": stage_sk, "revision": 1, "updated_at": now,
+        }), "ConditionExpression": "attribute_not_exists(#pk)", "ExpressionAttributeNames": {"#pk": "pk"}}},
+        {"Put": {"TableName": store._table_name, "Item": _floats_to_decimals(marker), "ConditionExpression": "attribute_not_exists(#pk)", "ExpressionAttributeNames": {"#pk": "pk"}}},
+        {"Update": {"TableName": store._table_name, "Key": {"pk": store.pk, "sk": stage_sk}, "UpdateExpression": "SET #published = :published", "ConditionExpression": "attribute_exists(#pk) AND #published = :unpublished", "ExpressionAttributeNames": {"#pk": "pk", "#published": "published"}, "ExpressionAttributeValues": {":published": True, ":unpublished": False}}},
+    ])
     store.invalidate_cache()
+
+
+def _setup_idempotency_marker(store, idempotency_key: str) -> str:
+    digest = hashlib.sha256(idempotency_key.encode()).hexdigest()[:32]
+    return f"setup-idempotency#{digest}"
+
+
+def _setup_payload_hash(mode, start_date, week_start_day, program_name, template_sk, maxes) -> str:
+    payload = {
+        "mode": mode,
+        "start_date": start_date,
+        "week_start_day": week_start_day,
+        "program_name": program_name,
+        "template_sk": template_sk,
+        "maxes": maxes or {},
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
 
 async def health_setup_initialize(
     args: dict | None = None,
@@ -344,6 +373,8 @@ async def health_setup_initialize(
     program_name: str | None = None,
     template_sk: str | None = None,
     maxes: dict | None = None,
+    expected_revision: int | None = None,
+    idempotency_key: str | None = None,
 ) -> dict:
     """Initialize a no-data user's first training block for the active partition."""
     if isinstance(args, dict):
@@ -359,6 +390,14 @@ async def health_setup_initialize(
             template_sk = args.get("template_sk")
         if maxes is None:
             maxes = args.get("maxes")
+        if expected_revision is None:
+            expected_revision = args.get("expected_revision")
+        if idempotency_key is None:
+            idempotency_key = args.get("idempotency_key")
+    from program_store import require_mutation_envelope
+    require_mutation_envelope(expected_revision, idempotency_key)
+    if expected_revision != 0:
+        raise ValueError("setup expected_revision must be 0")
     pk = args.get("pk") if isinstance(args, dict) else None
     if mode not in {"blank", "manual_sessions", "template"}:
         raise ValueError("INVALID_SETUP_MODE: mode must be blank, manual_sessions, or template")
@@ -368,6 +407,16 @@ async def health_setup_initialize(
         raise ValueError("INVALID_WEEK_START_DAY: week_start_day must be a weekday name")
 
     store = _store_for(pk)
+    marker_sk = _setup_idempotency_marker(store, idempotency_key)
+    payload_hash = _setup_payload_hash(mode, start_date, week_start_day, program_name, template_sk, maxes)
+    prior_marker = await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: store.table.get_item(Key={"pk": store.pk, "sk": marker_sk}, ConsistentRead=True).get("Item"),
+    )
+    if prior_marker:
+        if prior_marker.get("payload_hash") != payload_hash:
+            raise ValueError("idempotency key was used with a different payload")
+        return copy.deepcopy(prior_marker.get("result") or {})
     status = await health_setup_status(args)
     if status["hasCurrentProgram"]:
         raise ValueError("ALREADY_INITIALIZED: Current program already exists")
@@ -377,7 +426,7 @@ async def health_setup_initialize(
     if mode == "template":
         if not template_sk:
             raise ValueError("TEMPLATE_REQUIRED: template_sk is required for template setup")
-        template = _setup_template(template_sk)
+        template = _setup_template(template_sk, (args or {}).get("_person_pk") if isinstance(args, dict) else None)
         if not template:
             raise ValueError("TEMPLATE_NOT_FOUND: Template not found")
         missing = _setup_missing_maxes(template, positive_maxes)
@@ -401,19 +450,31 @@ async def health_setup_initialize(
         template_sk,
     )
 
+    result = {
+        "status": "initialized", "mode": mode, "programSk": "program#v001",
+        "sessionCount": len(program.get("sessions") or []), "revision": 1,
+    }
     try:
         await asyncio.get_running_loop().run_in_executor(
             None,
-            lambda: _write_initial_program_sync(store, program),
+            lambda: _write_initial_program_sync(store, program, marker_sk, payload_hash, result),
         )
     except Exception as exc:
-        if exc.__class__.__name__ == "ConditionalCheckFailedException":
-            raise ValueError("ALREADY_INITIALIZED: Current program already exists") from exc
+        marker = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: store.table.get_item(Key={"pk": store.pk, "sk": marker_sk}, ConsistentRead=True).get("Item"),
+        )
+        if marker:
+            if marker.get("payload_hash") != payload_hash:
+                raise ValueError("idempotency key was used with a different payload") from exc
+            store.invalidate_cache()
+            return copy.deepcopy(marker.get("result") or {})
+        if getattr(exc, "response", {}).get("Error", {}).get("Code") == "TransactionCanceledException":
+            pointer = store.table.get_item(Key={"pk": store.pk, "sk": store.POINTER_SK}, ConsistentRead=True).get("Item")
+            if pointer:
+                from program_store import ProgramRevisionConflictError
+                record = store.table.get_item(Key={"pk": store.pk, "sk": pointer["ref_sk"]}, ConsistentRead=True).get("Item")
+                raise ProgramRevisionConflictError(0, int(pointer.get("revision", 1)), record) from exc
         raise
 
-    return {
-        "status": "initialized",
-        "mode": mode,
-        "programSk": "program#v001",
-        "sessionCount": len(program.get("sessions") or []),
-    }
+    return result

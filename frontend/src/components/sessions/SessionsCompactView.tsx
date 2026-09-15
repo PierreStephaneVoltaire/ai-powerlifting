@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { findClosestSessionToToday, groupSessionsByWeek, formatDateShort, getDayOfWeek } from '@/utils/dates'
+import { sessionRoute } from '@/utils/sessionRoute'
 import { displayWeight } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { normalizeExerciseName } from '@/utils/volume'
@@ -31,12 +32,13 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
-  const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set())
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(() => new Set(location.state?.expandedWeeks ?? []))
   const [showAddModal, setShowAddModal] = useState(false)
   const [newDate, setNewDate] = useState<string>('')
   const compactTargetRef = useRef<HTMLButtonElement | null>(null)
-  const hasScrolledCompactRef = useRef(false)
+  const hasScrolledCompactRef = useRef(typeof location.state?.restoreScrollY === 'number')
 
   const availableBlocks = useMemo(() => {
     if (!program) return ['current']
@@ -122,8 +124,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
       pushToast({ message: 'Session created', type: 'success' })
       setShowAddModal(false)
       setNewDate('')
-      navigate(createdIndex >= 0 ? `/session/${createdSession.date}/${createdIndex}` : `/session/${createdSession.date}`, {
-        state: { backTo },
+      navigate(sessionRoute(createdSession, createdIndex), {
+        state: { backTo, backScrollY: window.scrollY, expandedWeeks: [...expandedWeeks] },
       })
     } catch {
       pushToast({ message: 'Failed to create session', type: 'error' })
@@ -324,8 +326,8 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
                         key={`${session.date}-${session.id ?? session.week_number}`}
                         ref={session === closestSession ? compactTargetRef : undefined}
                         component="button"
-                        onClick={() => navigate(program.sessions.indexOf(session) >= 0 ? `/session/${session.date}/${program.sessions.indexOf(session)}` : `/session/${session.date}`, {
-                          state: { backTo },
+                        onClick={() => navigate(sessionRoute(session, program.sessions.indexOf(session)), {
+                          state: { backTo, backScrollY: window.scrollY, expandedWeeks: [...expandedWeeks] },
                         })}
                         data-testid={`session-list-row-${session.date}`}
                         style={{

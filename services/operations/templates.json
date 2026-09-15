@@ -14,7 +14,11 @@
           "type": "string"
         },
         "target": {
-          "enum": ["new_block", "append", "replace_incomplete"]
+          "enum": [
+            "new_block",
+            "append",
+            "replace_incomplete"
+          ]
         },
         "block_id": {
           "type": "string"
@@ -28,10 +32,20 @@
         },
         "week_start_day": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "sk"
+        "sk",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -130,17 +144,31 @@
           "type": "string"
         },
         "target": {
-          "enum": ["new_block", "append", "replace_incomplete"]
+          "enum": [
+            "new_block",
+            "append",
+            "replace_incomplete"
+          ]
         },
         "block_id": {
           "type": "string"
         },
         "block_name": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "sk"
+        "sk",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -149,7 +177,8 @@
       "required": [
         "status",
         "program_version",
-        "program_sk"
+        "program_sk",
+        "revision"
       ],
       "properties": {
         "status": {
@@ -166,6 +195,10 @@
             "string",
             "null"
           ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": true
@@ -189,10 +222,20 @@
         },
         "sk": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "sk"
+        "sk",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -200,7 +243,8 @@
       "type": "object",
       "required": [
         "status",
-        "sk"
+        "sk",
+        "revision"
       ],
       "properties": {
         "status": {
@@ -208,6 +252,10 @@
         },
         "sk": {
           "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false
@@ -235,11 +283,21 @@
         "new_name": {
           "type": "string",
           "minLength": 1
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "sk",
-        "new_name"
+        "new_name",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -247,7 +305,8 @@
       "type": "object",
       "required": [
         "status",
-        "new_sk"
+        "new_sk",
+        "revision"
       ],
       "properties": {
         "status": {
@@ -255,6 +314,10 @@
         },
         "new_sk": {
           "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false
@@ -291,10 +354,20 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 7
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "name"
+        "name",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -337,10 +410,20 @@
         },
         "program_sk": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "name"
+        "name",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -388,10 +471,20 @@
         },
         "import_job_id": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "template"
+        "template",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -645,10 +738,20 @@
         },
         "sk": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "sk"
+        "sk",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -656,7 +759,8 @@
       "type": "object",
       "required": [
         "status",
-        "sk"
+        "sk",
+        "revision"
       ],
       "properties": {
         "status": {
@@ -664,6 +768,10 @@
         },
         "sk": {
           "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false
@@ -687,10 +795,20 @@
         },
         "sk": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "sk"
+        "sk",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -698,7 +816,8 @@
       "type": "object",
       "required": [
         "status",
-        "sk"
+        "sk",
+        "revision"
       ],
       "properties": {
         "status": {
@@ -706,6 +825,10 @@
         },
         "sk": {
           "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false
@@ -729,10 +852,20 @@
         },
         "sk": {
           "type": "string"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "sk"
+        "sk",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -740,7 +873,8 @@
       "type": "object",
       "required": [
         "status",
-        "sk"
+        "sk",
+        "revision"
       ],
       "properties": {
         "status": {
@@ -748,6 +882,10 @@
         },
         "sk": {
           "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false
@@ -774,11 +912,21 @@
         },
         "template": {
           "type": "object"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "sk",
-        "template"
+        "template",
+        "expected_revision",
+        "idempotency_key"
       ],
       "additionalProperties": true
     },
@@ -786,7 +934,8 @@
       "type": "object",
       "required": [
         "status",
-        "sk"
+        "sk",
+        "revision"
       ],
       "properties": {
         "status": {
@@ -794,6 +943,10 @@
         },
         "sk": {
           "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false

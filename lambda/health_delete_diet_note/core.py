@@ -36,20 +36,8 @@ async def health_delete_diet_note(args: dict | str | None = None, date: str | No
     Raises:
         ValueError: If diet note not found
     """
-    import copy
     if date is None:
         date = args.get("date") if isinstance(args, dict) else args
     pk = args.get("pk") if isinstance(args, dict) else None
     store = _store_for(pk)
-    program = await store.get_program()
-    new_program = copy.deepcopy(program)
-
-    notes = new_program.get("diet_notes", [])
-    before = len(notes)
-    new_program["diet_notes"] = [n for n in notes if n.get("date") != date]
-
-    if len(new_program["diet_notes"]) == before:
-        raise ValueError(f"Diet note not found: {date}")
-
-    await store._write_new_version(new_program, minor=True)
-    return {"deleted": date}
+    return await store.delete_diet_note(date, args.get("expected_revision"), args.get("idempotency_key"))

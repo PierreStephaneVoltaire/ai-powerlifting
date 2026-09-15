@@ -75,6 +75,21 @@ async def session_list(args: dict) -> dict:
     pk = _resolve_pk(args)
     program_sk = _resolve_program_sk(args, pk)
     try:
+        from session_store import SessionStore
+        source_table = SessionStore(
+            table_name=os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+            pk=pk,
+            region=os.environ.get("AWS_REGION", "ca-central-1"),
+            source_table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
+        ).source_table
+        source = source_table.get_item(Key={"pk": pk, "sk": program_sk}).get("Item")
+        if source and source.get("published", True) is False:
+            raise ValueError("Program version is unpublished")
+    except ValueError:
+        raise
+    except Exception:
+        pass
+    try:
         limit = int(args.get("limit", 50))
     except (TypeError, ValueError):
         limit = 50
@@ -100,6 +115,8 @@ async def session_list(args: dict) -> dict:
                 block = item.get("block", "current") or "current"
                 items.append(
                     {
+                        "id": item.get("session_id") or item.get("id"),
+                        "session_id": item.get("session_id") or item.get("id"),
                         "sk": item.get("sk"),
                         "date": date,
                         "week_number": week,
@@ -109,13 +126,14 @@ async def session_list(args: dict) -> dict:
                         "status": item.get("status", ""),
                         "completed": bool(item.get("completed", False)),
                         "exercise_count": len(item.get("exercises", []) or []),
+                        "same_day_ordinal": _to_int(item.get("same_day_ordinal", 0)),
                     }
                 )
             last_key = resp.get("LastEvaluatedKey")
             if not last_key:
                 break
         items.sort(
-            key=lambda s: (str(s.get("date", "")), str(s.get("sk", ""))),
+            key=lambda s: (str(s.get("date", "")), s.get("same_day_ordinal", 0), str(s.get("sk", ""))),
             reverse=True,
         )
         return {

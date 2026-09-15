@@ -6,6 +6,8 @@ export interface AuthGroups {
 }
 
 export interface AuthIdentity {
+  issuer: string
+  discord_subjects?: string[]
   provider: IdentityProvider
   sub: string
   username: string

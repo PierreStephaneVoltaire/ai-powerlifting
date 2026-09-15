@@ -1,3 +1,4 @@
+import { operationScope } from '../utils/operationScope'
 import { invokeLambda } from '../utils/lambda'
 import { seedMasterCopiesForNewUser } from './masterCopy'
 import type { AgeCategory, Role } from '@powerlifting/types'
@@ -47,6 +48,8 @@ export interface UserSettings {
   tags: ProfileTag[]
   sex: 'male' | 'female' | null
   bodyweight_kg: number | null
+  maxes_date?: string
+  training_maxes_estimated?: Record<'squat' | 'bench' | 'deadlift', boolean>
   training_maxes: TrainingMaxes | null
   federations: string[]
   roles: Role[]
@@ -239,6 +242,8 @@ function normalizeSettings(raw: Record<string, unknown>): UserSettings {
     sex,
     bodyweight_kg: normalizePositiveNumber(raw.bodyweight_kg),
     training_maxes: normalizeTrainingMaxes(raw.training_maxes),
+    maxes_date: typeof raw.maxes_date === 'string' ? raw.maxes_date : undefined,
+    training_maxes_estimated: Object.fromEntries(['squat', 'bench', 'deadlift'].map(lift => [lift, (raw.training_maxes_estimated as Record<string, unknown> | undefined)?.[lift] === true])) as Record<'squat' | 'bench' | 'deadlift', boolean>,
     federations: normalizeFederations(raw.federations),
     roles,
     active_role: deriveActiveRole(roles, raw.active_role),
@@ -387,15 +392,6 @@ export async function removeTag(discordUsername: string, tag: string): Promise<U
   return normalizeSettings(result as Record<string, unknown>)
 }
 
-export async function approveTag(discordUsername: string, tag: string): Promise<UserSettings> {
-  const result = await invokeLambda('pod_user', { function: 'settings_tag_approve',
-    username: discordUsername,
-    tag,
-  })
-  invalidateCache(discordUsername)
-  return normalizeSettings(result as Record<string, unknown>)
-}
-
 export async function proposeTag(
   proposerUsername: string,
   targetNickname: string,
@@ -440,20 +436,15 @@ export async function getOrCreateSettingsForIdentity(
   sub: string,
   username: string,
   avatarUrl: string | null,
+  discordSubjects: string[] = [],
 ): Promise<UserSettings> {
-  const linked = await getSettingsByIdentity(provider, sub)
-  if (linked) return linked
-  const result = await invokeLambda('pod_user', {
-    function: 'settings_create',
-    identity_provider: provider,
-    identity_sub: sub,
-    discord_id: provider === 'discord' ? sub : '',
-    discord_username: username,
-    avatar_url: avatarUrl,
-  }) as { settings: Record<string, unknown>; created: boolean }
-  const settings = normalizeSettings({ ...result.settings, identity_provider: provider, identity_sub: sub })
-  cache.set(`identity:${provider}:${sub}`, { settings, expires: Date.now() + CACHE_TTL_MS })
-  return settings
+  const issuer = process.env.AUTHENTIK_ISSUER_URL || ''
+  if (!issuer || provider !== 'authentik') throw new Error('Verified Authentik identity required')
+  const identity = { issuer, provider, sub, discord_subjects: discordSubjects }
+  const result = await operationScope.run({ athlete: '', person: '', identity }, () => invokeLambda('identity_resolve', {
+    ...identity, display_name: username, avatar_url: avatarUrl,
+  })) as { settings: Record<string, unknown>; created: boolean }
+  return normalizeSettings(result.settings)
 }
 
 export async function resolveMappedPk(
@@ -535,6 +526,8 @@ export interface UpdateAthleteBasicsInput {
   region: string | null
   bodyweight_kg: number
   training_maxes: TrainingMaxes
+  maxes_date?: string
+  training_maxes_estimated?: Record<'squat' | 'bench' | 'deadlift', boolean>
 }
 
 const MIN_BODYWEIGHT_KG = 30
@@ -588,12 +581,20 @@ function validateAthleteBasics(input: unknown): UpdateAthleteBasicsInput {
   if (deadlift === null || deadlift < MIN_LIFT_KG || deadlift > MAX_LIFT_KG) {
     throw new ValidationError(`deadlift_kg must be between ${MIN_LIFT_KG} and ${MAX_LIFT_KG}`)
   }
+  if (obj.maxes_date !== undefined && (typeof obj.maxes_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(obj.maxes_date) || Number.isNaN(Date.parse(obj.maxes_date)) || new Date(obj.maxes_date).toISOString().slice(0, 10) !== obj.maxes_date || obj.maxes_date > new Date().toISOString().slice(0, 10))) {
+    throw new ValidationError('maxes_date must be a valid date today or earlier')
+  }
+  if (obj.training_maxes_estimated !== undefined && (!obj.training_maxes_estimated || typeof obj.training_maxes_estimated !== 'object' || Array.isArray(obj.training_maxes_estimated) || Object.entries(obj.training_maxes_estimated).some(([lift, value]) => !['squat', 'bench', 'deadlift'].includes(lift) || typeof value !== 'boolean'))) {
+    throw new ValidationError('Estimated maxes must identify squat, bench or deadlift with booleans')
+  }
   return {
     sex: obj.sex,
     country,
     region,
     bodyweight_kg: bw,
     training_maxes: { squat_kg: squat, bench_kg: bench, deadlift_kg: deadlift },
+    maxes_date: obj.maxes_date as string | undefined,
+    training_maxes_estimated: obj.training_maxes_estimated as UpdateAthleteBasicsInput['training_maxes_estimated'],
   }
 }
 

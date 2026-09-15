@@ -1,12 +1,8 @@
-import axios from 'axios'
+import api from './http'
 import type { AppRole, TrainingMaxes, UserSettings } from './settings'
 import { invalidateDomain, invalidateDomains } from './cache'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
-})
+
 
 export type OnboardingStep = 'role' | 'profile' | 'athlete_basics' | 'done' | null
 
@@ -20,6 +16,7 @@ export interface OnboardingStatus {
     profile_complete: boolean
   }
   has_athlete_basics: boolean
+  prefill?: { bodyweight_kg?: number; training_maxes?: Partial<TrainingMaxes> }
 }
 
 export async function getOnboardingStatus(): Promise<OnboardingStatus> {
@@ -33,13 +30,13 @@ export interface AthleteBasicsInput {
   region: string | null
   bodyweight_kg: number
   training_maxes: TrainingMaxes
+  maxes_date?: string
+  training_maxes_estimated?: Record<'squat' | 'bench' | 'deadlift', boolean>
 }
 
 export async function submitAthleteBasics(input: AthleteBasicsInput): Promise<UserSettings> {
   const res = await api.put<{ data: UserSettings }>('/onboarding/athlete-basics', input)
   await invalidateDomains(['settings', 'profile:current', 'onboarding'])
-  // Federation table reads can now resolve weight classes against the user's
-  // bodyweight, so drop the cached federation list.
   await invalidateDomain('federations:master')
   return res.data.data
 }
@@ -48,7 +45,6 @@ export interface OnboardingProfileInput {
   display_name: string
   bio: string
   profile_visibility: 'private' | 'public'
-  public_training_summary_enabled: boolean
   federations: string[]
 }
 

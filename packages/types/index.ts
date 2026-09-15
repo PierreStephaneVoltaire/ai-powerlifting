@@ -1,5 +1,19 @@
+export interface AccessContext {
+  person_pk: string
+  athlete_pk: string
+  own_athlete_pk: string
+  settings_pk: string
+  is_self: boolean
+  permissions: string[]
+  granted_permissions: string[]
+  athlete_display_name?: string
+  competition_scope: { read: string[] | null; write: string[] | null }
+}
 
 export interface ProgramMeta {
+  revision?: number
+  current_block_id?: string | null
+  blocks?: TrainingBlock[]
   program_name: string
   program_start: string         // YYYY-MM-DD
   comp_date: string             // YYYY-MM-DD
@@ -61,6 +75,42 @@ export type WeekStartDay =
   | 'Friday'
   | 'Saturday'
   | 'Sunday'
+
+export interface TrainingBlock {
+  id: string
+  block_id?: string
+  label?: string
+  name: string
+  status: 'active' | 'completed'
+  start_date?: string
+  completed_at?: string
+  start_week?: number
+  end_week?: number
+  week_start_day?: WeekStartDay
+  start_maxes_kg?: Record<string, number>
+}
+
+export interface BlockTransitionInput {
+  action: 'complete' | 'start_next' | 'complete_and_start' | 'rename'
+  block_id: string
+  expected_revision: number
+  idempotency_key: string
+  name?: string
+  current_name?: string
+  start_date?: string
+  week_start_day?: WeekStartDay
+  start_maxes_kg?: Record<string, number>
+  next_program?: { phases: Phase[]; sessions: Session[] }
+}
+
+export interface BlockTransitionResult {
+  action: BlockTransitionInput['action']
+  block_id: string
+  next_block_id: string | null
+  revision: number
+  program: Program
+  warning?: string
+}
 
 export interface TemplateLineage {
   applied_template_sk: string
@@ -233,6 +283,7 @@ export type CompetitionMissReason =
   | 'equipment_issue'
 
 export interface CompetitionAttempt {
+  attempt_id?: string
   lift: CompetitionLift
   attempt_number: 1 | 2 | 3
   kg: number | null
@@ -267,6 +318,7 @@ export interface BetweenCompPlan {
 
 export interface Exercise {
   id?: string
+  set_ids?: string[]
   name: string
   sets: number
   reps: number
@@ -299,6 +351,7 @@ export type LoadType = LoadSource
 
 export interface PlannedExercise {
   id?: string
+  set_ids?: string[]
   name: string
   sets: number
   reps: number
@@ -321,6 +374,8 @@ export interface SessionWellness {
 }
 
 export interface Session {
+  revision?: number
+  block_id?: string
   id?: string
   date: string              // YYYY-MM-DD
   day: string               // 'Friday' etc
@@ -353,13 +408,17 @@ export interface SessionVideo {
   set_number?: number
   notes?: string
   uploaded_at: string
+  session_id?: string
+  idempotency_key?: string
   thumbnail_status?: 'pending' | 'ready' | 'failed'
 }
 
 
 export interface VideoLibraryItem {
   video: SessionVideo
+  athlete_pk?: string
   session_date: string
+  session_id?: string
   day: string
   week_number: number
   phase_name: string
@@ -377,6 +436,7 @@ export type VideoSort = 'newest' | 'oldest' | 'volume' | 'weight'
 
 
 export interface Program {
+  revision?: number
   pk: string
   sk: string
   meta: ProgramMeta
@@ -422,6 +482,22 @@ export interface LiftProfile {
   stimulus_coefficient_updated_at?: string
   inol_low_threshold?: number
   inol_high_threshold?: number
+  failure_nodes?: string[]
+  form_videos?: Partial<Record<LiftProfileVideoAngle, LiftProfileVideo>>
+}
+
+export type LiftProfileVideoAngle = 'front' | 'side' | 'diagonal'
+
+export interface LiftProfileVideo extends SessionVideo {
+  lift: LiftProfile['lift']
+  angle: LiftProfileVideoAngle
+  target_revision?: number
+  pending_media_id?: string
+  pending_s3_key?: string
+  processing_status?: 'pending' | 'processing' | 'ready' | 'failed'
+  failure?: string
+  source_filename?: string
+  source_size?: number
 }
 
 export interface Supplement {
@@ -442,6 +518,8 @@ export interface SupplementPhase {
 
 
 export interface MaxEntry {
+  id?: string
+  entry_id?: string
   date: string
   squat_kg: number | null
   bench_kg: number | null
@@ -727,6 +805,7 @@ export interface MaxHistoryStore {
   pk: string
   sk: string
   entries: MaxEntry[]
+  revision: number
   updated_at: string
 }
 
@@ -820,6 +899,8 @@ export interface MasterCompetition {
 }
 
 export interface UserCompetition {
+  revision?: number
+  units?: 'kg' | 'lb'
   master_id: string
   name: string
   start_date: string
@@ -1105,6 +1186,7 @@ export interface StoredGoal extends AthleteGoal {
 }
 
 export interface UserCompetitionUpdate {
+  units?: 'kg' | 'lb'
   user_status?: 'available' | 'optional' | 'confirmed' | 'completed' | 'skipped'
   weight_class_kg?: number | null
   body_weight_kg?: number | null
@@ -1393,4 +1475,33 @@ export interface OnboardingStatus {
   next_step: 'role' | 'profile' | 'athlete_basics' | 'done' | null
   state: OnboardingState
   has_athlete_basics: boolean
+}
+
+export type NoteContextDomain = 'program' | 'sessions' | 'competition'
+
+export interface PrivateNote {
+  note_id: string
+  text: string
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export interface NoteAttachment {
+  attachment_id: string
+  note_id: string
+  text: string
+  revision: number
+  source_revision: number
+  author_person_pk: string
+  context_domain: NoteContextDomain
+  context_id?: string
+  attached_at: string
+}
+
+export interface NoteMutation {
+  note_id: string
+  text: string
+  expected_revision: number
+  idempotency_key: string
 }

@@ -132,7 +132,6 @@ def _prepare_template_payload(template):
     }
     return prepared
 
-async def template_unpublish(sk, actor_pk=None):
+async def template_unpublish(sk, actor_pk=None, expected_revision=None, idempotency_key=None):
     ts = _get_template_store()
-    await ts.set_published(sk, False, actor_pk=_template_actor(actor_pk))
-    return {"status": "unpublished", "sk": sk}
+    return await ts.set_published(sk, False, actor_pk=_template_actor(actor_pk), expected_revision=expected_revision, idempotency_key=idempotency_key)

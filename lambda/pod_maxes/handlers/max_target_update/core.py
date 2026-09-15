@@ -57,7 +57,6 @@ async def max_target_update(args: dict) -> dict:
               and `squat_kg`, `bench_kg`, `deadlift_kg` (numbers).
               `total_kg` is recomputed as the sum of the three lifts.
     """
-    table = _get_table()
     pk = _resolve_pk(args)
     version = args.get("version") or "current"
     try:
@@ -71,37 +70,24 @@ async def max_target_update(args: dict) -> dict:
             "squat_kg, bench_kg, deadlift_kg must be numeric"
         ) from exc
     total = squat + bench + dl
-    now = datetime.now(timezone.utc).isoformat()
-
-    def _sync():
-        sk = _resolve_program_sk_sync(table, pk, version)
-        table.update_item(
-            Key={"pk": pk, "sk": sk},
-            UpdateExpression=(
-                "SET #meta.target_squat_kg = :squat, "
-                "#meta.target_bench_kg = :bench, "
-                "#meta.target_dl_kg = :dl, "
-                "#meta.target_total_kg = :total, "
-                "#meta.updated_at = :now"
-            ),
-            ExpressionAttributeNames={"#meta": "meta"},
-            ExpressionAttributeValues={
-                ":squat": Decimal(str(squat)),
-                ":bench": Decimal(str(bench)),
-                ":dl": Decimal(str(dl)),
-                ":total": Decimal(str(total)),
-                ":now": now,
-            },
-        )
-        return {
-            "version": version,
-            "sk": sk,
-            "squat_kg": squat,
-            "bench_kg": bench,
-            "deadlift_kg": dl,
-            "total_kg": total,
-            "updated_at": now,
-        }
-
-    result = await asyncio.get_running_loop().run_in_executor(None, _sync)
-    return _sanitize_decimals(result)
+    from program_store import ProgramStore
+    store = ProgramStore(os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"), pk, os.environ.get("AWS_REGION", "ca-central-1"))
+    if version != "current":
+        store._selected_program_sk = f"program#{version}"
+    committed = await store.update_meta_fields({
+        "target_squat_kg": squat,
+        "target_bench_kg": bench,
+        "target_dl_kg": dl,
+        "target_total_kg": total,
+    }, args.get("expected_revision"), args.get("idempotency_key"))
+    meta = committed.get("meta") or {}
+    return _sanitize_decimals({
+        "version": version,
+        "sk": committed["sk"],
+        "squat_kg": meta.get("target_squat_kg"),
+        "bench_kg": meta.get("target_bench_kg"),
+        "deadlift_kg": meta.get("target_dl_kg"),
+        "total_kg": meta.get("target_total_kg"),
+        "updated_at": committed["updated_at"],
+        "revision": committed.get("revision"),
+    })

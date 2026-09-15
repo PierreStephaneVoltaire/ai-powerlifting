@@ -17,9 +17,22 @@ resource "aws_ecr_lifecycle_policy" "keep_5" {
   repository = "${var.repository_prefix}-${each.value}"
 
   policy = jsonencode({
-    rules = [
-      {
+    rules = concat(
+      each.value == "powerlifting-app-backend" ? [{
         rulePriority = 1
+        description  = "Retain tagged portal images"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 999
+        }
+        action = {
+          type = "expire"
+        }
+      }] : [],
+      [{
+        rulePriority = each.value == "powerlifting-app-backend" ? 2 : 1
         description  = "Keep last 5 images"
         selection = {
           tagStatus   = "any"
@@ -29,7 +42,7 @@ resource "aws_ecr_lifecycle_policy" "keep_5" {
         action = {
           type = "expire"
         }
-      }
-    ]
+      }]
+    )
   })
 }

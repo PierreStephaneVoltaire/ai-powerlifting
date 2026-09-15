@@ -166,8 +166,9 @@ async def settings_update_role(args: dict) -> dict:
         now = datetime.now(timezone.utc).isoformat()
         table.update_item(
             Key={"pk": existing["pk"]},
-            UpdateExpression="SET roles = :roles, active_role = :active, updated_at = :now",
+            UpdateExpression="SET #roles = :roles, active_role = :active, updated_at = :now",
             ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeNames={"#roles": "roles"},
             ExpressionAttributeValues={
                 ":roles": new_roles,
                 ":active": active_role,
