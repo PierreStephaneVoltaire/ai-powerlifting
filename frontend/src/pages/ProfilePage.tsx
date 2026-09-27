@@ -1,5 +1,3 @@
-import PublicationSettings from '@/components/settings/PublicationSettings'
-import ProfileTags from '@/components/settings/ProfileTags'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -13,7 +11,6 @@ import {
   Loader,
   Paper,
   Progress,
-  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -48,7 +45,6 @@ import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
 import type { Session, VideoLibraryItem } from '@powerlifting/types'
 import { AGE_CATEGORY_OPTIONS, type AgeCategory } from '@powerlifting/types'
 
-type ProfileVisibility = UserSettings['profile_visibility']
 type LiftFilter = 'all' | 'squat' | 'bench' | 'deadlift'
 
 const LIFT_FILTERS: Array<{ value: LiftFilter; label: string }> = [
@@ -131,7 +127,6 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nickname, setNickname] = useState('')
-  const [profileVisibility, setProfileVisibility] = useState<ProfileVisibility>('private')
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [publicProfile, setPublicProfile] = useState<PublicProfile | null>(null)
@@ -168,7 +163,6 @@ export default function ProfilePage() {
         if (cancelled) return
         setSettings(nextSettings)
         setNickname(nextSettings.nickname)
-        setProfileVisibility(nextSettings.profile_visibility)
         setDisplayName(nextSettings.display_name)
         setBio(nextSettings.bio)
         setAgeClass(nextSettings.age_class)
@@ -336,7 +330,7 @@ export default function ProfilePage() {
       }
 
       nextSettings = await updateProfile({
-        profile_visibility: profileVisibility,
+        profile_visibility: settings.profile_visibility,
         display_name: displayName,
         bio,
       })
@@ -347,7 +341,6 @@ export default function ProfilePage() {
 
       setSettings(nextSettings)
       setNickname(nextSettings.nickname)
-      setProfileVisibility(nextSettings.profile_visibility)
       setDisplayName(nextSettings.display_name)
       setBio(nextSettings.bio)
       setAgeClass(nextSettings.age_class)
@@ -583,8 +576,8 @@ export default function ProfilePage() {
                     @{nickname || settings?.nickname}
                   </Text>
                   <span className="if-pill if-pill-success">Discord connected</span>
-                  <span className={`if-pill ${profileVisibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
-                    {profileVisibility}
+                  <span className={`if-pill ${settings?.profile_visibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
+                    {settings?.profile_visibility || 'private'}
                   </span>
                 </Group>
                 <Text size="sm" c="var(--text-secondary)">
@@ -592,8 +585,6 @@ export default function ProfilePage() {
                   {program?.meta.practicing_for ? ` - ${program.meta.practicing_for}` : ''}
                 </Text>
 
-                <ProfileTags settings={settings} onChange={setSettings} />
-                <PublicationSettings />
               </Stack>
             </Group>
           </Group>
@@ -616,21 +607,6 @@ export default function ProfilePage() {
               data-testid="profile-display-name"
             />
           </SimpleGrid>
-
-          <Box>
-            <Text size="sm" fw={500} mb={6}>Visibility</Text>
-            <SegmentedControl
-              value={profileVisibility}
-              onChange={(value) => setProfileVisibility(value as ProfileVisibility)}
-              data={[
-                { label: 'Private', value: 'private' },
-                { label: 'Public', value: 'public' },
-              ]}
-              className="if-segmented"
-              disabled={readOnly || loading || !settings}
-              fullWidth
-            />
-          </Box>
 
           <Textarea
             label="Bio"

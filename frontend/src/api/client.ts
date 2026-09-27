@@ -561,7 +561,7 @@ export async function updateGoals(goals: AthleteGoal[]): Promise<void> {
 // ─── Federations ─────────────────────────────────────────────────────────────
 
 export async function fetchFederationLibrary(): Promise<FederationLibrary> {
-  const data = await cachedGet(api, '/federations', ['federations'])
+  const data = await cachedGet(api, '/federations?format=library', ['federations'])
   return data.data
 }
 

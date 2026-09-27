@@ -439,8 +439,9 @@ export async function getOrCreateSettingsForIdentity(
   discordSubjects: string[] = [],
 ): Promise<UserSettings> {
   const issuer = process.env.AUTHENTIK_ISSUER_URL || ''
-  if (!issuer || provider !== 'authentik') throw new Error('Verified Authentik identity required')
-  const identity = { issuer, provider, sub, discord_subjects: discordSubjects }
+  if (!issuer) throw new Error('Verified OIDC identity required')
+  const identityIssuer = provider === 'authentik' ? issuer : 'https://discord.com'
+  const identity = { issuer: identityIssuer, provider, sub, discord_subjects: discordSubjects }
   const result = await operationScope.run({ athlete: '', person: '', identity }, () => invokeLambda('identity_resolve', {
     ...identity, display_name: username, avatar_url: avatarUrl,
   })) as { settings: Record<string, unknown>; created: boolean }

@@ -164,7 +164,7 @@ def test_template_apply_confirm_replays_before_changed_current_block_and_canonic
 
     class Store:
         def __init__(self):
-            self.program = {"meta": {"revision": 4, "version_label": "1.0", "blocks": [{"id": "current", "status": "active"}]}, "current_maxes": {}, "sessions": []}
+            self.program = {"meta": {"revision": 4, "version_label": "1.0", "blocks": [{"id": "current", "status": "active"}]}, "current_maxes": {}, "sessions": [{"id": "external-session", "date": "2026-09-01", "status": "completed"}]}
             self.marker = None
 
         async def get_program(self):
@@ -175,11 +175,12 @@ def test_template_apply_confirm_replays_before_changed_current_block_and_canonic
                 return None
             if self.marker["hash"] != payload_hash:
                 raise ValueError("idempotency key was used with a different payload")
-            return {"result": copy.deepcopy(self.marker["result"]), "program": copy.deepcopy(self.program), "template_preserved_sessions": 0}
+            return {"result": copy.deepcopy(self.marker["result"]), "program": copy.deepcopy(self.program), "template_preserved_sessions": len(self.program["sessions"])}
 
         async def block_transition(self, action, block_id, **kwargs):
             assert action == "complete_and_start"
             assert block_id == "current"
+            self.program["sessions"] = self.program["sessions"] + kwargs["next_program"]["sessions"]
             next_id = "block-once"
             self.program["meta"] = {"revision": 5, "version_label": "2.0", "blocks": [{"id": "current", "status": "completed"}, {"id": next_id, "status": "active"}], "current_block_id": next_id}
             result = {"next_block_id": next_id, "revision": 5}
@@ -196,6 +197,7 @@ def test_template_apply_confirm_replays_before_changed_current_block_and_canonic
     assert first == second
     assert json.loads(first["body"])["revision"] == 5
     assert len(store.program["meta"]["blocks"]) == 2
+    assert any(item["id"] == "external-session" for item in store.program["sessions"])
     reordered = {**event, "backfilled_maxes": {"bench": 120, "squat": 100}}
     assert handler.handler(reordered, None) == second
     changed = {**event, "block_name": "Different"}

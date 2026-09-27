@@ -23,8 +23,9 @@ flowchart LR
   Service --> Profile
 ```
 
-The deployed gateway uses Passport/openid-client to validate
-Authentik OIDC; existing Valkey stores server-side sessions. Short-lived signed
+The gateway authentication contract keeps direct Discord login alongside
+Authentik OIDC through Passport/openid-client; existing Valkey stores server-side
+sessions. The backlog records deployment verification for each provider. Short-lived signed
 principals bind acting Person, selected Athlete and operation. The Profile
 service evaluates current application permissions with PyCasbin. See ADR-0002
 and ADR-0003. These are implementation contracts; the backlog records what has
@@ -32,9 +33,8 @@ actually been tested and deployed.
 
 Video upload keeps the existing multipart gateway endpoint. A single request
 spools the file with a 500 MiB bound; the backend sends bytes to S3 and confirms
-through the existing storage operations. Media reads use authorized `/api` GET,
-HEAD and Range endpoints. The retained CloudFront distribution is disabled and its cache invalidation
-is complete. The distribution and buckets remain in place. There is no browser S3 upload, chunk
+through the existing storage operations. Media reads go through CloudFront (ADR 0004):
+thumbnails unsigned, full videos via 72-hour signed URLs issued by `/api`. There is no browser S3 upload, chunk
 protocol, second environment or second inference host.
 
 ## Analysis page: the four computation paths
@@ -130,12 +130,14 @@ erDiagram
 
 The guest landing page presents both Discord and Authentik sign-in actions.
 Search and About remain separate public pages with navigation back to Home and
-Sign in. Discord starts the existing Authentik Discord source, carrying the
-trusted Passport-generated OIDC authorization URL as its continuation; Authentik
-starts the normal OIDC flow. Both finish through the same verified issuer/subject
-and server-side session handling.
+Sign in. Discord uses the existing application client and configured
+`DISCORD_REDIRECT_URI` at `/api/auth/discord/callback`; Authentik uses its separate
+OIDC flow and `/api/auth/authentik/callback`. The Discord button must not be
+rerouted through Authentik's Discord source. Both use verified provider subjects
+and the shared server-side session store.
 
-Passport and openid-client verify Authentik's issuer and subject. Valkey stores
+Passport and openid-client verify Authentik's issuer and subject. Direct Discord
+login obtains its verified subject from Discord's authenticated user API. Valkey stores
 server-side login sessions. The identity pointer resolves a stable Person in
 `if-user`; `mapped_pk` preserves that Person's existing Athlete partition.
 `X-Selected-Athlete-Pk` changes the requested Athlete, never the acting Person.
@@ -144,8 +146,9 @@ Anonymous requests have only explicitly published access; the default operator
 selector grants nothing by itself.
 
 Read-only notices follow the current route's domain permissions and are absent
-from informational/public navigation pages. On small screens the selected
-Athlete and active role stay visible while Change expands the context controls.
+from informational/public navigation pages. Existing navigation carries Athlete
+context; the operator rejected a duplicated top context strip. Browser Back from
+another Athlete's view must restore the previous context, including on small screens.
 
 ### Storage conventions
 
@@ -282,7 +285,7 @@ architecture document does not claim that historical behavior is deployed.
 
 ## Authentication and publication
 
-Authentik remains the identity provider. Application permissions use the Profile
+Authentik remains available alongside direct Discord login. Application permissions use the Profile
 service's PyCasbin evaluator, independent of Authentik's internal RBAC. Every
 operation has an explicit permission map and an operation-bound signed principal.
 Verified provider subjects preserve existing Person/Athlete mappings; names and
@@ -294,6 +297,13 @@ domains through revisioned publication settings. Program, Session, export and
 media reads apply current domain permissions. A browser role selector does not
 issue grants. Browser caches and drafts use Person/Athlete partitions; online
 cached reads contact the service and observed access changes clear the partition.
+
+The selected role determines the current view: Athlete dashboard, Coach roster
+or Handler competition-day roster. Multiple memberships do not combine those
+screens. Profile/privacy, relationships and inbox are grouped in Settings;
+page/display preferences stay in their separate drawer. Tag selection uses
+approved pills and one plus-modal search/request field. Pending requests retain
+their association and show submission feedback; a pill appears after approval.
 
 Ordinary Program reads fetch current domain state. They do not use the gateway's
 former seven-day GET cache, so native domain mutations appear at the same portal
@@ -310,9 +320,8 @@ URLs never reach the browser. Interrupted transfers retry the ordinary request.
 The existing S3-triggered worker transcodes and thumbnails videos. Media registry
 records bind Athlete, Program version, Session ID, media ID and processing
 revision. Generated objects include the revision so stale workers cannot overwrite
-newer bytes. The browser reads authorized `/api` endpoints with GET, HEAD and
-Range support. The retained CloudFront distribution is disabled and its cache
-invalidation is complete; the buckets and distribution remain in place.
+newer bytes. The browser loads thumbnails directly from CloudFront and plays videos
+through signed CloudFront URLs that `/api` issues after authorization (ADR 0004).
 
 The video limit remains 500 MiB. Lift demonstrations additionally allow at most
 three minutes. Cloudflare's request allowance must be upgraded before accepting

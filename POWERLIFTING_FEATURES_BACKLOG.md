@@ -5,7 +5,78 @@ obsolete Fission, second-environment, identity-choice, self-approved-tag and
 write-only-expiry requirements. Historical deployment records remain historical.
 See [implementation contracts](docs/BACKLOG_IMPLEMENTATION.md).
 
-## Login, landing and small-screen correction — 2026-09-15
+## Profile setup corrections — 2026-09-15
+
+Profile creation and later editing must offer federation options from the existing
+master federation catalog, including for a Person whose personal library is empty.
+No library population/import is a prerequisite. Preserve canonical federation
+identifiers and existing selections. This reported FEAT-3.2 regression is corrected;
+earlier profile-edit acceptance did not establish empty-library dropdown behavior.
+Remove the manual "Identify any estimated 1RMs" prompt and
+checkboxes from onboarding and later basics editing. Estimated 1RMs derive from
+logged training through the existing calculation path; do not invent estimates
+for a Person with no data or rewrite historical estimate metadata. This latest
+operator direction supersedes the earlier manual estimate-identification UI.
+Luna owns implementation and rollout; Terra reviews source and deployed checks
+in the existing environment.
+
+The operator also requires removal of the redundant top Athlete-context strip;
+use existing navigation and normal Back behavior instead. Back from another
+Athlete must restore the previous context. Archived Blocks must not display the
+generic active label "Current". Production audit found all 453 unique Sessions
+intact under v020: 407 have completed status and 46 remain planned, spanning May
+2023 through August 2026. The pointer incorrectly selected empty v021. A reviewed,
+conditional pointer-only repair restored v020, retaining allocation version 21
+and both Program records. Independent hashes confirm every Session and both
+Programs are unchanged. There are 41 retained video references across ten
+Sessions and 196 Competition Entries. Normal operator browser verification is
+still unavailable. See [recovery evidence](../../deploy/rewrite/powerlifting-backlog/production-visibility-recovery.json).
+Navigation and label changes must not rewrite training records.
+
+The latest UI correction requires distinct Athlete, Coach and Handler views
+selected after login; membership in multiple roles must not combine their screens.
+Profile, privacy, relationship/roster management and inbox belong in a dedicated
+Settings page. Page/display preferences stay in the existing page-settings drawer.
+Athlete profiles do not contain Coach rosters. Tags use selected pills and a plus
+modal for approved choices or pending requests, without duplicate entry controls.
+Competition loading must follow the current Person/Athlete context and reject
+late responses from earlier contexts. These corrections are implemented, deployed
+and accepted by Terra within the explicit evidence limits below.
+
+Deployment checkpoint, 2026-09-16: frontend `b9d2ac18…` generation 14, Federation
+service `97de3419…` generation 12 and analytics reports `2f9ea229…` in deployment
+generation 22 are Ready. All 18 portal Deployments are Ready; gateway/login and
+protected IF runtimes remain unchanged. Normal Authentik checks pass for Settings
+at 320/375 pixels, mobile navigation, separate Coach selection/roster, pending tags,
+Competition rendering and routed analytics. A Coach with an empty personal library
+sees all 23 master Federation options in the live profile form. Archived labels
+are corrected in the actual reports sidecar; its compiled hash matches review.
+Workspace builds/typechecks and focused Federation (5), Block-index (2), Template
+(8) and ProgramStore transition (14) checks pass, including empty-next-Block
+preservation of external Sessions. Mocked context/tag checks remain separately
+identified. Operator browser/video playback remains unverified; storage integrity
+is established by the recovery evidence. See [scoped release](../../deploy/rewrite/powerlifting-backlog/profile-ui-release.json)
+and [final review](../../deploy/rewrite/powerlifting-backlog/profile-ui-terra-review.md).
+
+## Discord login correction — 2026-09-15
+
+The operator reported an invalid redirect URI. Live inspection confirmed that
+the Discord button changed the callback to
+`https://auth.nolift.training/source/oauth/callback/discord/`, whereas the
+existing gateway config uses `https://dev.nolift.training/api/auth/discord/callback`.
+The earlier authorization-dispatch check did not establish a usable Discord login.
+
+Luna restored direct Discord login through maintained Passport OAuth2 alongside
+Authentik; Terra accepted source and deployed checks. Gateway `b688e943…` is Ready
+at generation 31. Four real-strategy tests and workspace typecheck/build pass.
+An independent browser observes the original Discord client/callback without an
+invalid-redirect message before consent; fabricated state is rejected. Fresh
+Authentik login completes and `/api/auth/me` returns 200. The deployed compiled
+auth module matches reviewed source. Full live Discord identity completion
+remains unverified because Discord consent was unavailable.
+See [correction evidence](../../deploy/rewrite/powerlifting-backlog/discord-login-correction.md).
+
+## Prior login, landing and small-screen correction — 2026-09-15
 
 The operator reported that the guest entry experience did not meet the intended
 design. A dedicated landing page must show both Discord and Authentik login
@@ -13,7 +84,8 @@ options; About remains a separate informational page. Read-only notices belong
 on relevant Athlete editing views, not Landing, Login, Search or About. Navigation
 and content must remain usable at iPhone SE widths, including 320 and 375 pixels.
 
-Implemented and deployed by Luna workers; final scoped Terra review accepted.
+The earlier correction was implemented and deployed by Luna workers and passed
+its scoped Terra review; its Discord acceptance is superseded by the repair above.
 Gateway `87403487…` and frontend `5bb25bdb…` are Ready. Actual Discord authorization
 dispatch, fresh Authentik login, public landing/navigation, banner scope, compact
 context and More navigation pass. Deployed Dashboard width is 320/320 and 375/375
@@ -165,14 +237,19 @@ native Specialist context include them. Nodes are optional and never block train
 
 Fix the HTTP-method mismatch and Discord-only identity check. Resume the first
 incomplete step. Athlete basics require positive bodyweight and best-known current
-1RMs (identified estimates allowed), sex for competition calculations, valid country
+1RMs, sex for competition calculations, valid country
 and subdivision. Store kg, seed dated max history and allow later editing. Personal
 training requires the Athlete role and completed basics; Coach-only/Handler-only
 Persons do profile onboarding without inventing Athlete maxes.
+Do not ask the Person to classify entered 1RMs as estimated. The existing canonical
+calculation derives Estimated 1RMs automatically from logged training; a Person
+with no training data has no generated estimate. Preserve historical metadata.
 
 ### FEAT-3.2 — Profile creation
 
 Require a display name, allow optional multiple federations and default private.
+Populate federation choices from the existing master federation catalog even
+before the Person's own library has any records.
 Keep a stable handle distinct from display name and retain avatars. Allow later
 editing of basics/federations/publication. Public/private changes do not silently
 revoke explicit grants. Expose only permitted fields, including to guests.
@@ -209,7 +286,8 @@ separate from Coach/Handler relations. Current grants are checked on every actio
 ### FEAT-5.1 — Guest navigation
 
 Preserve demo presentation with Search, About and role/sign-in entry points.
-Browsing a public profile shows a Go back banner that restores the prior context.
+Browser Back from a public profile restores the prior context; do not add a
+redundant top banner.
 
 ### FEAT-5.2 — Athlete navigation
 
@@ -218,8 +296,8 @@ is the Athlete landing page. Keep training unavailable until Athlete basics exis
 
 ### FEAT-5.3 — Coach navigation
 
-Coach roster is the landing page. Provide an Athlete switcher and obvious persistent
-context banner. Athlete tools follow effective permissions. Own training requires
+Coach roster is the landing page. Keep Athlete context in existing navigation
+without a redundant top strip. Athlete tools follow effective permissions. Own training requires
 switching to an onboarded Athlete context. Preserve prior context on return.
 
 ### FEAT-5.4 — Handler navigation
@@ -248,8 +326,9 @@ Search actions and cards respect current publication and grants.
 ### FEAT-6.3 — Athlete context
 
 Separate acting Person, active role and selected Athlete. All requests/caches/drafts
-stay with their original Person/Athlete. Switcher/banner identify the selected
-Athlete and restore previous context reliably. Guard routes alongside navigation.
+stay with their original Person/Athlete. Existing navigation identifies the
+selected Athlete; browser Back restores previous context reliably. Do not add a
+duplicated context strip above every page. Guard routes alongside navigation.
 
 ### FEAT-6.4 — Handler details
 

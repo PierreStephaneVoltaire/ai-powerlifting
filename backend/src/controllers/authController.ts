@@ -5,45 +5,23 @@ import { evaluateRbac } from '../auth/rbac'
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
-function configuredAuthentikOrigin(): string {
-  return process.env.AUTHENTIK_ISSUER_URL ? new URL(process.env.AUTHENTIK_ISSUER_URL).origin : ''
-}
-export function discordSourceRedirect(url: string, origin = configuredAuthentikOrigin()): string | null {
-  return origin && url.startsWith(`${origin}/application/o/authorize/`)
-    ? `${origin}/source/oauth/login/discord/?next=${encodeURIComponent(url)}`
-    : null
-}
-export function discordLogin(req: Request, res: Response, next: (error?: unknown) => void): void {
-  const setHeader = res.setHeader.bind(res)
-  const end = res.end.bind(res) as Response['end']
-  const restore = () => {
-    res.setHeader = setHeader
-    res.end = end
-  }
-  res.setHeader = ((name, value) => {
-    const headerValue = typeof value === 'string' && name.toLowerCase() === 'location' ? discordSourceRedirect(value) || value : value
-    return setHeader(name, headerValue)
-  }) as Response['setHeader']
-  res.end = ((...args) => {
-    restore()
-    return (end as (...values: unknown[]) => Response)(...args)
-  }) as Response['end']
-  passport.authenticate('authentik')(req, res, (error?: unknown) => {
-    restore()
-    next(error)
-  })
-}
+export const discordLogin = passport.authenticate('discord')
 export const authentikLogin = passport.authenticate('authentik')
-const callback = passport.authenticate('authentik', { failureRedirect: `${FRONTEND_URL}/login?error=auth_failed` })
-export const discordCallback = [callback, (_req: Request, res: Response) => res.redirect(FRONTEND_URL)]
-export const authentikCallback = discordCallback
+const discordCallback = passport.authenticate('discord', { failureRedirect: `${FRONTEND_URL}/login?error=auth_failed` })
+const authentikCallback = passport.authenticate('authentik', { failureRedirect: `${FRONTEND_URL}/login?error=auth_failed` })
+export const discordCallbackRoute = [discordCallback, (_req: Request, res: Response) => res.redirect(FRONTEND_URL)]
+export const authentikCallbackRoute = [authentikCallback, (_req: Request, res: Response) => res.redirect(FRONTEND_URL)]
 
 export function listProviders(_req: Request, res: Response): void {
-  res.json({ discord: { enabled: isAuthentikConfigured() }, authentik: { enabled: isAuthentikConfigured() } })
+  res.json({ discord: { enabled: isDiscordConfigured() }, authentik: { enabled: isAuthentikConfigured() } })
 }
 
 function isAuthentikConfigured(): boolean {
   return Boolean(process.env.AUTHENTIK_ISSUER_URL && process.env.AUTHENTIK_CLIENT_ID && process.env.AUTHENTIK_CLIENT_SECRET && process.env.AUTHENTIK_REDIRECT_URI)
+}
+
+function isDiscordConfigured(): boolean {
+  return Boolean(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET && process.env.DISCORD_REDIRECT_URI)
 }
 
 export async function getMe(req: Request, res: Response): Promise<void> {

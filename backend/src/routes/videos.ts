@@ -5,6 +5,7 @@ import type { NextFunction, Request, Response } from 'express'
 import * as videoController from '../controllers/videoController'
 import { isVideoSort } from '../utils/videoSort'
 import { serveStoredMedia } from '../utils/serveMedia'
+import { isPublicMediaKey, mediaCdnConfig, publicMediaUrl, signedMediaUrl } from '../utils/mediaCdn'
 import type { LiftProfileVideoAngle, VideoSort } from '@powerlifting/types'
 
 export const videosRouter = Router({ mergeParams: true })
@@ -66,7 +67,16 @@ async function serveMedia(req: import('express').Request, res: import('express')
   try {
     const key = req.params[0]
     if (!key || key.includes('..')) return res.status(400).end()
+    const cdn = mediaCdnConfig()
+    if (cdn && isPublicMediaKey(key)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400')
+      return res.redirect(302, publicMediaUrl(cdn, key))
+    }
     const resolved = await videoController.resolveMedia(req.mapped_pk!, key)
+    if (cdn) {
+      res.setHeader('Cache-Control', 'private, max-age=3600')
+      return res.redirect(302, signedMediaUrl(cdn, resolved))
+    }
     await serveStoredMedia(req, res, process.env.VIDEOS_BUCKET || 'powerlifting-session-videos', resolved)
   } catch (err) {
     next(err)

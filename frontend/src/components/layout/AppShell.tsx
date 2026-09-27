@@ -2,7 +2,6 @@ import { ReactNode, useEffect } from 'react'
 import { AppShell as MantineAppShell } from '@mantine/core'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthProvider'
-import AthleteContext from './AthleteContext'
 import ProgramDraftNotice from './ProgramDraftNotice'
 import OfflineQueueNotice from './OfflineQueueNotice'
 import Sidebar from './Sidebar'
@@ -19,7 +18,6 @@ export default function AppShell({ children }: AppShellProps) {
   const location = useLocation()
   const { user } = useAuth()
   const isLogin = location.pathname === '/login' || location.pathname === '/auth/callback'
-  const isInformational = location.pathname === '/about' || location.pathname.startsWith('/profiles') || (location.pathname === '/' && !user)
 
   useEffect(() => {
     const handleViewportChange = () => {
@@ -99,7 +97,6 @@ export default function AppShell({ children }: AppShellProps) {
         style={{ flex: 1 }}
       >
         <ReadOnlyBanner />
-        {!isLogin && !isInformational && <AthleteContext />}
         <ProgramDraftNotice />
         <OfflineQueueNotice />
         {children}

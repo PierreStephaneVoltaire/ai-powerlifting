@@ -152,7 +152,7 @@ class FederationStore:
         total = cls._to_finite_number(raw.get("qualifying_total", raw.get("total")))
         wc = raw.get("weight_class")
         cat = raw.get("category")
-        return {
+        result = {
             "id": eid,
             "sex": cls._pick_sex(raw.get("sex")),
             "age_class": cls._pick_age_category(raw.get("age_class")),
@@ -254,7 +254,7 @@ class FederationStore:
         region = f.get("region")
         created = f.get("created_at")
         updated = f.get("updated_at")
-        return {
+        result = {
             "pk": f.get("pk") if isinstance(f.get("pk"), str) else "",
             "sk": f.get("sk") if isinstance(f.get("sk"), str) else "",
             "name": f.get("name") if isinstance(f.get("name"), str) else "",
@@ -272,6 +272,11 @@ class FederationStore:
             "created_at": created if (isinstance(created, str) and created) else cls._now_iso(),
             "updated_at": updated if (isinstance(updated, str) and updated) else cls._now_iso(),
         }
+        if result["display_options"] is None:
+            result.pop("display_options")
+        if result["membership_group"] is None:
+            result.pop("membership_group")
+        return result
 
     # ─── Per-user federation#v1 library (if-health) ─────────────────────────────
 
@@ -311,15 +316,13 @@ class FederationStore:
     # ─── Master federation directory (POWERLIFTING_USER_FEDERATIONS_TABLE) ───────
 
     def list_master_federations_sync(self) -> list:
-        """Query the master federations table (pk=operator) and normalize each item."""
-        from boto3.dynamodb.conditions import Key
         items = []
         last_key = None
         while True:
-            kwargs = {"KeyConditionExpression": Key("pk").eq(self.FEDERATIONS_PK)}
+            kwargs = {}
             if last_key:
                 kwargs["ExclusiveStartKey"] = last_key
-            resp = self.master_table.query(**kwargs)
+            resp = self.master_table.scan(**kwargs)
             items.extend(resp.get("Items", []))
             last_key = resp.get("LastEvaluatedKey")
             if not last_key:

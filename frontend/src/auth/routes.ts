@@ -1,6 +1,6 @@
 export function routePermission(path: string): string | null {
   if (/^\/(login|auth|onboarding|about|profiles)(\/|$)/.test(path) || path === '/') return null
-  if (/^\/(profile|roster|inbox|my-notes)(\/|$)/.test(path)) return 'settings:read'
+  if (/^\/(settings|profile|roster|inbox|my-notes)(\/|$)/.test(path)) return 'settings:read'
   if (/^\/(sessions|calendar|session|list)(\/|$)/.test(path)) return 'sessions:read'
   if (path === '/athlete') return 'competition:read'
   if (path.startsWith('/lift-profiles')) return 'lift-profiles:read'

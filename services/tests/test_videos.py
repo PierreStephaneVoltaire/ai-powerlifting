@@ -92,6 +92,9 @@ class FakeStore:
     def list_sessions_sync(self, program_sk, phases):
         return self.sessions
 
+    def list_sessions_on_date_sync(self, program_sk, date_value, phases):
+        return [session for session in self.sessions if session.get("date") == date_value]
+
     def patch_session_sync(self, program_sk, date, patch, phases):
         self.patches.append((program_sk, date, patch))
         self.sessions[0].update(patch)
@@ -490,6 +493,22 @@ def test_media_resolve_rejects_a_forged_thumbnail_key():
             "pk": "athlete-1", "session_date": "2026-09-13",
             "s3_key": "thumbnails/2026-09-13/other-video.jpg",
         }))
+
+
+def test_media_resolve_reads_only_the_media_session_date():
+    core = _core("video_media_resolve")
+    store = FakeStore()
+    store.health_table = FakeHealthTable()
+    register_media(store.health_table)
+
+    def full_scan(program_sk, phases):
+        raise AssertionError("media resolve must not scan every session")
+
+    store.list_sessions_sync = full_scan
+    _patch_core(core, store)
+    assert asyncio.run(core.video_media_resolve({
+        "pk": "athlete-1", "s3_key": "thumbnails/2026-09-13/vid-1.jpg",
+    })) == "thumbnails/2026-09-13/vid-1.jpg"
 
 
 def test_media_resolve_supports_revisioned_processed_keys():

@@ -23,9 +23,9 @@ import {
   User,
   Wallet,
   Search,
-  Users,
-  Trophy,
   Inbox,
+  Trophy,
+  Settings,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -49,9 +49,8 @@ const DESKTOP_NAV_ITEMS: NavItem[] = [
   { to: '/log', icon: BookOpen, label: 'Log', activePaths: ['/log', '/notes', '/supplements', '/biometrics', '/diet'] },
   { to: '/tools', icon: Wrench, label: 'Tools', activePaths: ['/tools', '/rankings'] },
   { to: '/profile', icon: User, label: 'Profile' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/profiles', icon: Search, label: 'Search' },
-  { to: '/roster', icon: Users, label: 'Roster' },
-  { to: '/inbox', icon: Inbox, label: 'Inbox' },
   { to: '/my-notes', icon: Inbox, label: 'My notes' },
   { to: '/designer/competitions', icon: Trophy, label: 'Competitions' },
   { to: '/about', icon: Info, label: 'About' },
@@ -69,9 +68,8 @@ const MOBILE_MORE_ITEMS: NavItem[] = [
   { to: '/budget', icon: Wallet, label: 'Budget' },
   { to: '/tools', icon: Wrench, label: 'Tools', activePaths: ['/tools', '/rankings'] },
   { to: '/profile', icon: User, label: 'Profile' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/profiles', icon: Search, label: 'Search' },
-  { to: '/roster', icon: Users, label: 'Roster' },
-  { to: '/inbox', icon: Inbox, label: 'Inbox' },
   { to: '/my-notes', icon: Inbox, label: 'My notes' },
   { to: '/designer/competitions', icon: Trophy, label: 'Competitions' },
   { to: '/about', icon: Info, label: 'About' },

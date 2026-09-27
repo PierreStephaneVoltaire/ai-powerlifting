@@ -1,11 +1,11 @@
-import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
-import { Alert, Button, Center, Loader, Stack, Title } from '@mantine/core'
+import { Alert, Button, Center, Loader, Select, Stack, Title } from '@mantine/core'
+import { useEffect, useState } from 'react'
 import { routePermission } from '@/auth/routes'
 import { RelationshipRoster } from '@/components/settings/RelationshipRoster'
 import { RelationshipInbox } from '@/components/settings/RelationshipInbox'
 import { useProgramStore } from '@/store/programStore'
-import { AuthProvider, useAuth } from '@/auth/AuthProvider'
+import { AuthProvider, useAuth, type ActiveRole } from '@/auth/AuthProvider'
 import AppShell from '@/components/layout/AppShell'
 import Dashboard from '@/pages/Dashboard'
 import CalendarPage from '@/pages/CalendarPage'
@@ -25,6 +25,7 @@ import FederationsPage from '@/pages/FederationsPage'
 import BudgetPage from '@/pages/BudgetPage'
 import VideosPage from '@/pages/VideosPage'
 import AthleteDetailsPage from '@/pages/AthleteDetailsPage'
+import SettingsPage from '@/pages/SettingsPage'
 import AboutPage from '@/pages/AboutPage'
 import LandingPage, { PublicLayout } from '@/pages/LandingPage'
 import ImportWizardPage from '@/pages/ImportWizardPage'
@@ -114,6 +115,7 @@ function AppContent() {
         <Route path="/tools/attempts" element={<AttemptSelector />} />
         <Route path="/videos" element={<VideosPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/profiles" element={<ProfilesPage />} />
         <Route path="/profiles/:nickname" element={<PublicProfilePage />} />
         <Route path="/designer/import" element={<ImportWizardPage />} />
@@ -136,9 +138,15 @@ function RosterPage() {
 }
 
 function Landing() {
-  const { user, is_onboarded } = useAuth()
+  const { user, person_pk, is_onboarded, selectRole } = useAuth()
+  const viewKey = person_pk ? `nolift-role-view:${person_pk}` : ''
+  const [view, setView] = useState<string | null>(null)
+  const [choice, setChoice] = useState<ActiveRole | null>(user?.active_role || null)
+  useEffect(() => { setView(viewKey ? sessionStorage.getItem(viewKey) : null) }, [viewKey])
+  useEffect(() => { setChoice(user?.active_role || null) }, [user?.active_role])
   if (!user) return <LandingPage />
   if (!is_onboarded) return <Navigate to="/onboarding" replace />
+  if (user.roles.length > 1 && !view) return <Stack maw={480} mx="auto"><Title order={2}>Choose your NoLift view</Title><Select label="View" data={user.roles.map(role => ({ value: role, label: role[0].toUpperCase() + role.slice(1) }))} value={choice} onChange={value => setChoice(value as ActiveRole)} allowDeselect={false} /><Button onClick={() => { if (choice) { selectRole(choice); if (viewKey) sessionStorage.setItem(viewKey, choice); setView(choice) } }} disabled={!choice}>Continue</Button></Stack>
   if (user.active_role === 'coach' || user.active_role === 'handler') return <RosterPage />
   return <Dashboard />
 }

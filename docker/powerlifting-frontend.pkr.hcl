@@ -24,7 +24,7 @@ variable "api_url" {
 variable "cloudfront_media_base_url" {
   type        = string
   default     = ""
-  description = "CloudFront distribution base URL (https://<domain>) used as VITE_CLOUDFRONT_MEDIA_BASE_URL for CSP media-src injection at build time"
+  description = "CloudFront distribution base URL (https://<domain>) used as VITE_CLOUDFRONT_MEDIA_BASE_URL so thumbnails load from the CDN"
 }
 
 source "docker" "powerlifting_frontend" {

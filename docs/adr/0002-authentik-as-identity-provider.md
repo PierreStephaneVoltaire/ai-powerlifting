@@ -1,6 +1,6 @@
 # ADR 0002 — Authentik identity and application permissions
 
-Date: 2026-07-02. Clarified: 2026-09-14.
+Date: 2026-07-02. Clarified: 2026-09-15.
 
 ## Status
 
@@ -9,10 +9,16 @@ Per-operation acceptance evidence belongs in POWERLIFTING_FEATURES_BACKLOG.md.
 
 ## Decision
 
-Keep Authentik as the identity provider. The gateway uses Passport and
+Keep Authentik alongside the existing direct Discord login. The gateway uses Passport and
 openid-client to validate OIDC login and retains the verified issuer and subject
 in server-side sessions in the existing Valkey. Provider subjects identify
 Persons; display names and email addresses never link accounts.
+
+Discord retains its configured application client and `DISCORD_REDIRECT_URI` at
+`/api/auth/discord/callback`. Its identity is the Discord user ID obtained through
+the authorized provider API. The Authentik Discord source must not replace this
+entry point or change its callback. Both providers use Passport and the same
+Valkey session store; Authentik retains its separate OIDC callback.
 
 Authentik's internal RBAC governs its own administration and authentication
 flows. It does not implement the portal's Athlete grants. The Profile service
@@ -29,7 +35,8 @@ updates enforce one active Coach and one active Handler per Athlete.
 ## Consequences
 
 Identity, selected Athlete and permissions are separate concepts. Revocation
-and expiry affect the next operation, including reads of cached reports/media.
+and expiry affect the next operation, including reads of cached reports;
+media delivery follows ADR 0004.
 Coach/Handler note originals remain author-owned; shared attributed revisions
 are attachments that the Athlete may remove but cannot rewrite.
 

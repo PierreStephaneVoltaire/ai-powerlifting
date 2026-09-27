@@ -151,7 +151,7 @@ const EMPTY_COMP: UserCompetition = {
 }
 
 export default function CompetitionsPage() {
-  const { readOnly, ranking_country, ranking_region, loading: authLoading } = useAuth()
+  const { readOnly, ranking_country, ranking_region, loading: authLoading, person_pk, mapped_pk } = useAuth()
   const { competitions, isLoading, loadAll, patch, complete } = useCompetitionsStore()
   const { pushToast } = useUiStore()
   const { sex } = useSettingsStore()
@@ -191,7 +191,7 @@ export default function CompetitionsPage() {
   useEffect(() => {
     if (authLoading) return
     loadAll({ country: rankingCountry ?? undefined, state: selectedState ?? undefined })
-  }, [authLoading, rankingCountry, selectedState, loadAll])
+  }, [authLoading, person_pk, mapped_pk, rankingCountry, selectedState, loadAll])
 
   const stateOptions = useMemo(() => {
     if (!rankingCountry || !categories) return []
@@ -201,7 +201,7 @@ export default function CompetitionsPage() {
 
   const handleSearch = useCallback(() => {
     loadAll({ country: rankingCountry ?? undefined, state: selectedState ?? undefined })
-  }, [rankingCountry, selectedState, loadAll])
+  }, [person_pk, mapped_pk, rankingCountry, selectedState, loadAll])
 
   function setDraft(masterId: string, updates: UserCompetitionUpdate) {
     setDrafts((prev) => ({ ...prev, [masterId]: { ...(prev[masterId] || {}), ...updates } }))

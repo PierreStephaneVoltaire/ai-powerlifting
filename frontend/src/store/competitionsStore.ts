@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import type { UserCompetition, UserCompetitionUpdate, LiftResults, PostMeetReport } from '@powerlifting/types'
 import * as api from '@/api/client'
+import { requestPartition } from '@/api/context'
+import { canApplyCompetitionRequest } from './competitionRequestGuard'
+
+let latestLoadRequest = 0
 
 interface CompetitionsState {
   competitions: UserCompetition[]
@@ -21,13 +25,15 @@ export const useCompetitionsStore = create<CompetitionsState>((set, get) => ({
   error: null,
 
   loadAll: async (filters?: { country?: string; state?: string }) => {
+    const partition = requestPartition()
+    const request = ++latestLoadRequest
     const f = filters ?? get().filters
     set({ isLoading: true, error: null, filters: f })
     try {
       const competitions = await api.fetchUserCompetitions(f)
-      set({ competitions, isLoading: false })
+      if (canApplyCompetitionRequest(partition, request, requestPartition(), latestLoadRequest)) set({ competitions, isLoading: false })
     } catch (error) {
-      set({ error: String(error), isLoading: false })
+      if (canApplyCompetitionRequest(partition, request, requestPartition(), latestLoadRequest)) set({ error: String(error), isLoading: false })
     }
   },
 

@@ -399,6 +399,18 @@ function blockKeyFor(block: string): string {
   return `block_${createHash('sha1').update(block).digest('hex').slice(0, 14)}`
 }
 
+export function resolveCurrentBlockId(program: Program): string | null {
+  if (Object.prototype.hasOwnProperty.call(program.meta ?? {}, 'current_block_id')) {
+    return program.meta?.current_block_id == null ? null : normalizeBlock(program.meta.current_block_id)
+  }
+  if (Array.isArray(program.meta?.blocks)) {
+    const active = program.meta.blocks.find((item) => item?.status === 'active')
+    const activeId = active?.id ?? active?.block_id
+    return typeof activeId === 'string' && activeId.trim() ? normalizeBlock(activeId) : null
+  }
+  return DEFAULT_BLOCK
+}
+
 
 
 
@@ -844,6 +856,7 @@ function buildDataQualityFlags(
 
 export async function buildCurrentProgramBlockIndex(userPk: string, program: Program, allGoals?: AthleteGoal[]): Promise<ProgramBlockIndexEntry[]> {
   const goals = allGoals ?? (userPk ? await loadGoals(userPk) : [])
+  const currentBlockId = resolveCurrentBlockId(program)
   const groups = new Map<string, Session[]>()
   for (const session of program.sessions ?? []) {
     const block = normalizeBlock(session.block)
@@ -872,17 +885,19 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
       const candidateId = candidate?.id ?? candidate?.block_id
       return String(candidateId ?? '') === block
     })
-    const label = typeof blockRecord?.name === 'string' && blockRecord.name.trim()
+    const customLabel = typeof blockRecord?.name === 'string' && blockRecord.name.trim() && blockRecord.name.trim().toLowerCase() !== 'current'
       ? blockRecord.name.trim()
-      : typeof blockRecord?.label === 'string' && blockRecord.label.trim() && blockRecord.label !== 'current'
+      : typeof blockRecord?.label === 'string' && blockRecord.label.trim() && blockRecord.label.trim().toLowerCase() !== 'current'
         ? blockRecord.label.trim()
-        : block === DEFAULT_BLOCK ? 'Current' : block
+        : ''
+    const isCurrent = currentBlockId !== null && block === currentBlockId
+    const label = customLabel || (isCurrent ? 'Current' : (startDate || `Block ${block}`))
 
     const entry: ProgramBlockIndexEntry = {
       blockKey,
       block,
       label,
-      isCurrent: block === DEFAULT_BLOCK,
+      isCurrent,
       startDate,
       endDate,
       weekStart,
@@ -1257,7 +1272,7 @@ export async function getOrCreateBlockAnalysisBundle(
 
   const cacheKey = `native_block#${CACHE_SCHEMA_VERSION}#${blockKey}#${entry.sourceFingerprint}`
   const saved = await readAnalysisRecord<BlockAnalysisBundle>(userPk, cacheKey)
-  if (saved) return { ...saved, cached: true }
+  if (saved) return { ...saved, block: { ...saved.block, label: entry.label, isCurrent: entry.isCurrent }, cached: true }
   if (cacheOnly) return null
 
   logger.info({ userPk, blockKey, isCurrent: entry.isCurrent, weeks: entry.weekCount }, 'Computing block analysis')

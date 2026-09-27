@@ -182,6 +182,26 @@ def test_complete_and_start_preserves_history_resets_numbering_and_sessions():
     assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v") and item.get("published", True) is not False]) == 2
 
 
+def test_empty_new_block_template_preserves_external_session_rows():
+    store, _, sessions_store = make_store()
+    result = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        expected_revision=4,
+        idempotency_key="empty-template-1",
+        name="Empty next block",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
+        next_program={"phases": [], "sessions": []},
+    )
+    preserved = next(session for session in result["program"]["sessions"] if session["id"] == "logged")
+    assert preserved["session_notes"] == "kept"
+    assert preserved["completed"] is True
+    assert sessions_store.sessions["program#v007"][0]["id"] == "logged"
+
+
 def test_retry_is_idempotent_and_creates_one_archive_and_next_block():
     store, table, _ = make_store()
     args = {

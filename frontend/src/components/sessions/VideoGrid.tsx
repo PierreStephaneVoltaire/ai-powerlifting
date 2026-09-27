@@ -205,6 +205,8 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
                   component="img"
                   src={getMediaUrl(video.thumbnail_s3_key)}
                   alt={video.exercise_name || 'Video thumbnail'}
+                  loading="lazy"
+                  decoding="async"
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (

@@ -26,7 +26,7 @@ export default function VideoCard({ item, onClick }: VideoCardProps) {
       <Box className="if-video-tile">
         <Box className="if-video-thumb">
           {hasThumbnail ? (
-            <Box component="img" src={thumbnailUrl} alt={video.exercise_name} />
+            <Box component="img" src={thumbnailUrl} alt={video.exercise_name} loading="lazy" decoding="async" />
           ) : (
             <Box style={{ alignItems: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <Play size={28} />

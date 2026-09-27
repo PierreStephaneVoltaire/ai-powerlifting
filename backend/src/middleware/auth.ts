@@ -1,10 +1,11 @@
 import type { Express, Request, Response, NextFunction } from 'express'
 import session from 'express-session'
 import passport from 'passport'
+import OAuth2Strategy from 'passport-oauth2'
 import { RedisStore } from 'connect-redis'
 import { createClient } from 'redis'
 import { discovery, randomState } from 'openid-client'
-import { Strategy, type VerifyFunction } from 'openid-client/passport'
+import { Strategy as AuthentikPassportStrategy, type AuthenticateOptions, type VerifyFunction } from 'openid-client/passport'
 import { getOrCreateSettingsForIdentity } from '../services/userSettings'
 import { groupsFromSettings, type AuthIdentity } from '../auth/identity'
 import { operationScope } from '../utils/operationScope'
@@ -17,20 +18,44 @@ declare global { namespace Express { interface User {
   mapped_pk?: string; actor_mapped_pk?: string; readOnly?: boolean; settings?: import('../services/userSettings').UserSettings
 } } }
 
+
 const issuer = process.env.AUTHENTIK_ISSUER_URL
 const clientId = process.env.AUTHENTIK_CLIENT_ID
 const clientSecret = process.env.AUTHENTIK_CLIENT_SECRET
 const callbackURL = process.env.AUTHENTIK_REDIRECT_URI
+const discordClientId = process.env.DISCORD_CLIENT_ID
+const discordClientSecret = process.env.DISCORD_CLIENT_SECRET
+const discordCallbackURL = process.env.DISCORD_REDIRECT_URI
 
 export function isAuthentikEnabled(): boolean { return Boolean(issuer && clientId && clientSecret && callbackURL) }
-
-class AuthentikStrategy extends Strategy {
-  override authorizationRequestParams(req: Request, options: Parameters<Strategy['authorizationRequestParams']>[1]): URLSearchParams {
-    const params = super.authorizationRequestParams(req, options)
-    const result = params instanceof URLSearchParams ? params : new URLSearchParams(params)
-    if (!result.has('state')) result.set('state', randomState())
-    return result
+export function isDiscordEnabled(): boolean { return Boolean(discordClientId && discordClientSecret && discordCallbackURL) }
+class DiscordStrategy extends OAuth2Strategy {
+  name = 'discord'
+  userProfile(accessToken: string, done: (error?: unknown, profile?: unknown) => void): void {
+    fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bearer ${accessToken}` } }).then(async response => {
+      if (!response.ok) throw new Error(`Discord user lookup failed: ${response.status}`)
+      done(null, await response.json())
+    }).catch(error => done(error))
   }
+}
+
+type DiscordVerify = OAuth2Strategy.VerifyFunction<unknown>
+
+export function createDiscordStrategy(verify: DiscordVerify): OAuth2Strategy {
+  const configuredClientId = process.env.DISCORD_CLIENT_ID
+  const configuredSecret = process.env.DISCORD_CLIENT_SECRET
+  const configuredCallback = process.env.DISCORD_REDIRECT_URI
+  if (!configuredClientId || !configuredSecret || !configuredCallback) throw new Error('Discord OAuth2 is not configured')
+  return new DiscordStrategy({ authorizationURL: 'https://discord.com/api/oauth2/authorize', tokenURL: 'https://discord.com/api/oauth2/token', clientID: configuredClientId, clientSecret: configuredSecret, callbackURL: configuredCallback, scope: 'identify', state: true, pkce: true, sessionKey: 'oauth2:discord' }, verify)
+}
+
+export function discordIdentityFromProfile(profile: unknown): AuthIdentity | null {
+  if (!profile || typeof profile !== 'object') return null
+  const user = profile as { id?: unknown; username?: unknown; global_name?: unknown; avatar?: unknown }
+  if (typeof user.id !== 'string' || !/^\d{1,32}$/.test(user.id) || typeof user.username !== 'string' || !user.username) return null
+  const displayName = typeof user.global_name === 'string' && user.global_name ? user.global_name : user.username
+  const avatar = typeof user.avatar === 'string' && user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null
+  return { issuer: 'https://discord.com', provider: 'discord', sub: user.id, username: user.username, display_name: displayName, avatar, discord_subjects: [user.id], groups: [], roles: [], email: null }
 }
 
 export async function configureAuthentication(app: Express): Promise<void> {
@@ -50,6 +75,14 @@ export async function configureAuthentication(app: Express): Promise<void> {
     cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true', maxAge: 7 * 24 * 60 * 60 * 1000 },
   }))
   const config = await discovery(new URL(oidcIssuer), oidcClientId, oidcSecret)
+  class AuthentikStrategy extends AuthentikPassportStrategy {
+    authorizationRequestParams<TOptions extends AuthenticateOptions>(req: Request, options: TOptions): URLSearchParams {
+      const params = super.authorizationRequestParams(req, options)
+      const result = params instanceof URLSearchParams ? params : new URLSearchParams(params)
+      if (!result.has('state')) result.set('state', randomState())
+      return result
+    }
+  }
   const verifyIdentity: VerifyFunction = async (tokens, verified) => {
     const claims = tokens.claims()
     if (!claims?.sub) return verified(new Error('OIDC subject missing'))
@@ -62,14 +95,32 @@ export async function configureAuthentication(app: Express): Promise<void> {
       groups: Array.isArray(claims.groups) ? claims.groups.map(String) : [], roles: Array.isArray(claims.roles) ? claims.roles.map(String) : [],
       email: typeof claims.email === 'string' ? claims.email : null,
     }
-    await getOrCreateSettingsForIdentity(identity.provider, identity.sub, identity.username, identity.avatar, identity.discord_subjects)
-    verified(null, identityUser(identity))
+    try {
+      await getOrCreateSettingsForIdentity(identity.provider, identity.sub, identity.username, identity.avatar, identity.discord_subjects)
+      verified(null, identityUser(identity))
+    } catch (error) { verified(error as Error) }
   }
   passport.use('authentik', new AuthentikStrategy({ config, callbackURL: oidcCallback, scope: 'openid profile email groups roles powerlifting_identity' }, verifyIdentity))
+  if (isDiscordEnabled()) {
+    passport.use('discord', createDiscordStrategy(async (_accessToken: string, _refreshToken: string, profile: unknown, verified: (error?: Error | null, user?: Express.User | false) => void) => {
+      try {
+        const identity = discordIdentityFromProfile(profile)
+        if (!identity) return verified(new Error('Invalid Discord identity'))
+        await getOrCreateSettingsForIdentity(identity.provider, identity.sub, identity.username, identity.avatar, identity.discord_subjects)
+        verified(null, identityUser(identity))
+      } catch (error) { verified(error as Error) }
+    }))
+  }
   passport.serializeUser((user: Express.User, done) => done(null, user.identity))
-  passport.deserializeUser((identity: AuthIdentity, done) => done(null, identity.issuer === issuer ? identityUser(identity) : false))
+  passport.deserializeUser((identity: AuthIdentity, done) => done(null, isValidIdentity(identity) ? identityUser(identity) : false))
   app.use(passport.initialize())
   app.use(passport.session())
+}
+
+export function isValidIdentity(identity: unknown): identity is AuthIdentity {
+  if (!identity || typeof identity !== 'object') return false
+  const value = identity as Partial<AuthIdentity>
+  return (value.provider === 'discord' && value.issuer === 'https://discord.com' || value.provider === 'authentik' && value.issuer === issuer) && typeof value.sub === 'string' && typeof value.username === 'string' && typeof value.display_name === 'string' && (value.avatar === null || typeof value.avatar === 'string') && Array.isArray(value.groups) && Array.isArray(value.roles)
 }
 
 function identityUser(identity: AuthIdentity) { return { discord_id: identity.provider === 'discord' ? identity.sub : '', username: identity.username, avatar: identity.avatar, actor_mapped_pk: '', identity } }

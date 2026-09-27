@@ -9,8 +9,28 @@ data "aws_cloudfront_cache_policy" "caching_optimized" {
   name = "Managed-CachingOptimized"
 }
 
-data "aws_cloudfront_origin_request_policy" "all_viewer_except_host_header" {
-  name = "Managed-AllViewerExceptHostHeader"
+resource "aws_cloudfront_response_headers_policy" "immutable_thumbnails" {
+  name = "${var.distribution_name}-immutable-thumbnails"
+
+  custom_headers_config {
+    items {
+      header   = "Cache-Control"
+      value    = "public, max-age=31536000, immutable"
+      override = true
+    }
+  }
+}
+
+resource "aws_cloudfront_response_headers_policy" "signed_videos" {
+  name = "${var.distribution_name}-signed-videos"
+
+  custom_headers_config {
+    items {
+      header   = "Cache-Control"
+      value    = "private, max-age=${var.video_url_ttl_seconds}"
+      override = true
+    }
+  }
 }
 
 resource "aws_cloudfront_distribution" "this" {
@@ -26,29 +46,41 @@ resource "aws_cloudfront_distribution" "this" {
     origin_access_control_id = aws_cloudfront_origin_access_control.this.id
   }
 
-  enabled         = false
+  enabled         = true
   is_ipv6_enabled = true
   price_class     = "PriceClass_100"
 
   ordered_cache_behavior {
-    path_pattern             = "budget/*"
-    target_origin_id         = var.budget_media_origin_id
-    viewer_protocol_policy   = "https-only"
-    allowed_methods          = ["GET", "HEAD"]
-    cached_methods           = ["GET", "HEAD"]
-    compress                 = true
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+    path_pattern               = "thumbnails/*"
+    target_origin_id           = var.session_videos_origin_id
+    viewer_protocol_policy     = "https-only"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.immutable_thumbnails.id
+  }
+
+  ordered_cache_behavior {
+    path_pattern           = "budget/*"
+    target_origin_id       = var.budget_media_origin_id
+    viewer_protocol_policy = "https-only"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    trusted_key_groups     = [aws_cloudfront_key_group.media.id]
   }
 
   default_cache_behavior {
-    target_origin_id         = var.session_videos_origin_id
-    viewer_protocol_policy   = "https-only"
-    allowed_methods          = ["GET", "HEAD"]
-    cached_methods           = ["GET", "HEAD"]
-    compress                 = true
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host_header.id
+    target_origin_id           = var.session_videos_origin_id
+    viewer_protocol_policy     = "https-only"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.signed_videos.id
+    trusted_key_groups         = [aws_cloudfront_key_group.media.id]
   }
 
   restrictions {

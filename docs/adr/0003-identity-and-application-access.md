@@ -1,6 +1,6 @@
 # ADR 0003 — Verified identity and application access
 
-Date: 2026-09-14
+Date: 2026-09-14. Clarified: 2026-09-15.
 
 ## Status
 
@@ -8,9 +8,11 @@ Accepted
 
 ## Decision
 
-The authenticated Person is identified only by the verified OIDC issuer and
-subject. Authentik is used through Passport/openid-client and the backend keeps
-the resulting identity in a Valkey-backed server-side session. Username, email,
+The authenticated Person is identified only by a verified provider subject:
+Authentik's OIDC issuer and subject, or the user ID returned by Discord's
+authenticated identity API. Authentik uses Passport/openid-client, while direct
+Discord login retains its existing application callback. The backend keeps
+both identities in Valkey-backed Passport sessions. Username, email,
 display name, and avatar are presentation data and never link accounts.
 
 The selected Athlete is a separate storage partition. Every operation has an

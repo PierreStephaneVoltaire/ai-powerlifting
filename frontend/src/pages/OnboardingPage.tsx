@@ -5,7 +5,6 @@ import {
   Badge,
   Button,
   Center,
-  Checkbox,
   Group,
   Loader,
   MultiSelect,
@@ -33,6 +32,7 @@ import {
 import { fetchFederations } from '@/api/client'
 import type { AppRole, UserSettings } from '@/api/settings'
 import { getSettings } from '@/api/settings'
+import { onboardingStepFor } from './onboardingStep'
 import type { MasterFederation } from '@powerlifting/types'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { readDraft, removeDraft, saveDraft } from '@/api/drafts'
@@ -84,6 +84,7 @@ export default function OnboardingPage() {
   const [visibility, setVisibility] = useState<'private' | 'public'>('private')
   const [federations, setFederations] = useState<string[]>([])
   const [federationLibrary, setFederationLibrary] = useState<MasterFederation[]>([])
+  const [federationCatalogError, setFederationCatalogError] = useState(false)
 
   const [sex, setSex] = useState<'male' | 'female' | ''>('')
   const [country, setCountry] = useState('')
@@ -108,7 +109,10 @@ export default function OnboardingPage() {
         const [s, settings, feds] = await Promise.all([
           getOnboardingStatus(),
           getSettings().catch(() => null),
-          fetchFederations().catch(() => [] as MasterFederation[]),
+          fetchFederations().catch(() => {
+            setFederationCatalogError(true)
+            return [] as MasterFederation[]
+          }),
         ])
         if (cancelled) return
         setStatus(s)
@@ -138,11 +142,7 @@ export default function OnboardingPage() {
         }
         if (s.state.roles.length > 0) setRoles(s.state.roles)
         if (s.state.active_role) setActiveRole(s.state.active_role)
-        if (editing) setActive(search.get('step') === 'basics' && s.state.roles.includes('athlete') ? 2 : 0)
-        else if (s.next_step === 'role') setActive(0)
-        else if (s.next_step === 'profile') setActive(1)
-        else if (s.next_step === 'athlete_basics') setActive(2)
-        else setActive(2)
+        setActive(onboardingStepFor(s.next_step, s.state.active_role || s.state.roles[0], editing, search.get('step') === 'basics'))
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load onboarding status')
@@ -155,7 +155,7 @@ export default function OnboardingPage() {
           setActive(value.active); setRoles(value.roles); setActiveRole(value.activeRole)
           setDisplayName(value.displayName); setBio(value.bio); setVisibility(value.visibility); setFederations(value.federations)
           setSex(value.sex); setCountry(value.country); setRegion(value.region); setBodyweight(value.bodyweight)
-          setSquat(value.squat); setBench(value.bench); setDeadlift(value.deadlift); setMaxesDate(value.maxesDate); setEstimated(value.estimated)
+          setSquat(value.squat); setBench(value.bench); setDeadlift(value.deadlift); setMaxesDate(value.maxesDate)
         }
         if (!cancelled) setLoading(false)
       }
@@ -166,7 +166,7 @@ export default function OnboardingPage() {
     }
   }, [])
 
-  const showAthleteStep = roles.includes('athlete')
+  const showAthleteStep = activeRole === 'athlete'
   const athleteRequired = showAthleteStep
   const totalRequiredSteps = 2 + (athleteRequired ? 1 : 0)
 
@@ -238,7 +238,7 @@ export default function OnboardingPage() {
         federations,
       })
       applySettings(next)
-      const stillAthlete = (next.roles ?? roles).includes('athlete')
+      const stillAthlete = (next.active_role ?? activeRole) === 'athlete'
       if (stillAthlete) {
         setStatus((prev) =>
           prev
@@ -424,6 +424,7 @@ export default function OnboardingPage() {
                 federations={federations}
                 setFederations={setFederations}
                 federationOptions={fedOptions}
+                federationCatalogError={federationCatalogError}
                 disabled={submitting}
               />
               <Group justify="space-between" mt="lg">
@@ -464,10 +465,6 @@ export default function OnboardingPage() {
                   disabled={submitting}
                 />
                 <TextInput type="date" label="1RM reference date" value={maxesDate} onChange={event => setMaxesDate(event.currentTarget.value)} max={new Date().toLocaleDateString('en-CA')} required mt="md" />
-                <Text size="sm" mt="md">Identify any estimated 1RMs:</Text>
-                <Group mt="xs">
-                  {(['squat', 'bench', 'deadlift'] as const).map(lift => <Checkbox key={lift} label={lift[0].toUpperCase() + lift.slice(1)} checked={estimated[lift]} onChange={event => { const checked = event.currentTarget.checked; setEstimated(previous => ({ ...previous, [lift]: checked })) }} disabled={submitting} />)}
-                </Group>
                 <Group justify="space-between" mt="lg">
                   <Button
                     variant="subtle"
@@ -585,6 +582,7 @@ function ProfileStep(props: {
   federations: string[]
   setFederations: (v: string[]) => void
   federationOptions: { value: string; label: string }[]
+  federationCatalogError: boolean
   disabled: boolean
 }) {
   const {
@@ -597,6 +595,7 @@ function ProfileStep(props: {
     federations,
     setFederations,
     federationOptions,
+    federationCatalogError,
     disabled,
   } = props
   return (
@@ -636,16 +635,14 @@ function ProfileStep(props: {
         label="Federations you compete in"
         description="Used to pick your weight class — no matter where you compete."
         placeholder={
-          federationOptions.length
-            ? 'Pick one or more'
-            : 'Federations will appear here once the library is populated'
+          federationOptions.length ? 'Pick one or more' : federationCatalogError ? 'Federation directory unavailable' : 'No active federations found'
         }
         data={federationOptions}
         value={federations}
         onChange={setFederations}
         searchable
         clearable
-        disabled={disabled}
+        disabled={disabled || federationCatalogError}
         maxValues={20}
       />
     </Stack>

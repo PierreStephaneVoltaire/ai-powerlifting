@@ -5,6 +5,7 @@ import { checkSession, clearCache, clearDelegatedCachedRecords, readVerifiedIden
 import { requestPartition, setRequestAthlete, setRequestPerson } from '@/api/context'
 import { resumeMutations } from '@/api/drafts'
 import { synchronizeOfflineQueue } from '@/api/offlineQueue'
+import { shouldRestoreOwnContext } from './contextRestore'
 
 export type IdentityProvider = 'discord' | 'authentik'
 export type ActiveRole = 'athlete' | 'coach' | 'handler'
@@ -69,6 +70,7 @@ async function getMe(athlete?: string) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const location = useLocation()
   const [state, setState] = useState<AuthState>(empty)
   const stateRef = useRef(state)
   const [loading, setLoading] = useState(true)
@@ -125,6 +127,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })().catch(() => { setRequestPerson(''); setRequestAthlete('operator'); setState(empty) }).finally(() => setLoading(false))
   }, [accept])
+  useEffect(() => {
+    const current = stateRef.current
+    if (!current.user || !shouldRestoreOwnContext(location.pathname, current.mapped_pk, current.own_athlete_pk)) return
+    const ticket = ++sequence.current
+    void (async () => {
+      const data = await getMe()
+      await accept(data, ticket)
+      await resumeMutations(requestPartition())
+      await synchronizeOfflineQueue()
+    })().catch(() => {})
+  }, [accept, location.pathname])
   const refreshAccess = useCallback(async () => {
     if (!navigator.onLine || refreshing.current) return
     refreshing.current = true

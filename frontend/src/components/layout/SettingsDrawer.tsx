@@ -21,7 +21,6 @@ import { LogIn, LogOut } from 'lucide-react'
 import { AGE_CATEGORY_OPTIONS, type Sex, type WeekStartDay } from '@powerlifting/types'
 import { getSettings, updateAgeClass, updateRankingLocation } from '@/api/settings'
 import { fetchStatCategories } from '@/api/client'
-import { GrantsPanel } from '@/components/settings/GrantsPanel'
 
 const themeOptions: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -223,11 +222,6 @@ export default function SettingsDrawer() {
               </Button>
             </Stack>
           )}
-        </div>
-
-        <div>
-          <SectionLabel>Grants</SectionLabel>
-          <GrantsPanel />
         </div>
 
         {/* Theme */}

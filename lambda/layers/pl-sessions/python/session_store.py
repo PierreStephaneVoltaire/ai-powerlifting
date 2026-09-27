@@ -283,6 +283,11 @@ class SessionStore:
     def list_sessions_sync(self, program_sk: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
         return [_public_session(item, phases) for item in self._query_items_sync(program_sk)]
 
+    def list_sessions_on_date_sync(self, program_sk: str, date_value: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
+        if not date_value:
+            return []
+        return [_public_session(item, phases) for item in self._query_items_sync(program_sk, date_prefix=date_value)]
+
     def _same_day_ordinal_sync(self, program_sk: str, date_value: str) -> int:
         return len(self._query_items_sync(program_sk, date_prefix=date_value)) + 1
 

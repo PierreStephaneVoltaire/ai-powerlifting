@@ -32,3 +32,9 @@ variable "budget_media_origin_id" {
   type        = string
   description = "Origin ID for the budget media bucket (e.g. \"powerlifting-budget-media\")."
 }
+
+variable "video_url_ttl_seconds" {
+  type        = number
+  default     = 259200
+  description = "Lifetime of signed full-video URLs; browsers may cache a signed response for this long."
+}

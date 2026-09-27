@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 from unittest.mock import patch
 
 from jsonschema import ValidationError
@@ -56,6 +57,32 @@ class FederationContractTests(unittest.TestCase):
         with patch.object(module.boto3, "resource", return_value=Resource()):
             store.master_table
         self.assertEqual(names, ["if-powerlifting-master-federations"])
+
+    def test_master_store_scans_hash_only_catalog_and_keeps_ids(self):
+        module = __import__("lambda.pod_federation.handlers._federation_store", fromlist=["FederationStore"])
+
+        class MasterTable:
+            def __init__(self):
+                self.calls = []
+
+            def scan(self, **kwargs):
+                self.calls.append(kwargs)
+                if len(self.calls) == 1:
+                    return {"Items": [{"pk": "FED#one", "name": "One"}], "LastEvaluatedKey": {"pk": "FED#one"}}
+                return {"Items": [{"pk": "FED#two", "name": "Two"}]}
+
+        store = module.FederationStore.__new__(module.FederationStore)
+        table = MasterTable()
+        store._master_table_obj = table
+        result = asyncio.run(store.list_master_federations())
+        self.assertEqual([item["pk"] for item in result], ["FED#one", "FED#two"])
+        self.assertEqual(table.calls, [{}, {"ExclusiveStartKey": {"pk": "FED#one"}}])
+
+    def test_master_shape_without_optional_values_validates(self):
+        module = __import__("lambda.pod_federation.handlers._federation_store", fromlist=["FederationStore"])
+        item = module.FederationStore._normalize_federation({"pk": "FED#one", "name": "One"})
+        load_operations("federation")["federation_master_list"].validate_result([item])
+        self.assertEqual(item["pk"], "FED#one")
 
 
 if __name__ == "__main__":

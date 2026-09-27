@@ -8,6 +8,29 @@ browser-to-storage uploads, account lifecycle features, or Postgres migration.
 
 ## Shared boundaries
 
+- Select the active Athlete, Coach or Handler view after login when multiple
+  roles are available. Keep their screens separate; Person membership alone
+  does not add Coach tools to an Athlete profile or require Athlete basics in
+  a Coach view. Role-choice persistence is scoped to the authenticated Person.
+- Profile/privacy, relationships/roster management and inbox live in Settings.
+  Page/display preferences remain separate in the page-settings drawer. Tags
+  use approved selected pills and one plus-modal search/request field. Pending
+  requests retain their association and show submission feedback; pills appear
+  after approval. Settings restores the Person's own context before loading private
+  profile controls. Competition responses are bound to the originating context.
+- Profile creation and editing obtain federation choices from the existing master
+  federation catalog, independently of the Person's personal library. Preserve
+  canonical identifiers and saved selections; no import or library-population
+  step is required before selecting competition federations.
+- Onboarding and later basics editing do not ask a Person to flag estimated
+  1RMs. Known starting maxes remain editable; automatic Estimated 1RMs come from
+  the existing logged-training calculation. No data means no generated estimate.
+  Preserve historical estimate metadata when removing the manual controls.
+- Remove the redundant top Athlete-context strip. Use existing navigation and
+  restore the previous Athlete context on browser Back. An archived Block must
+  have a historical label rather than the generic active label "Current".
+  Visibility fixes must preserve production Programs, Sessions and history.
+
 - Guest entry has a dedicated landing page with both Discord and Authentik
   login options. About is separate. Authenticated entry retains onboarding and
   role-specific dashboard/roster routing. Read-only notices describe relevant
@@ -17,6 +40,10 @@ browser-to-storage uploads, account lifecycle features, or Postgres migration.
 - Identity is an authenticated Person, resolved from verified provider issuer
   and subject. The selected Athlete is a separate storage partition. Usernames,
   email and display names cannot establish identity or account linkage.
+- Authentik is additional to direct Discord login. Preserve the Discord client
+  and configured `/api/auth/discord/callback`; do not reroute the Discord button
+  through Authentik's source callback. Verify both callback/session paths, not
+  just arrival at a provider authorization URL.
 - The Profile service evaluates application permissions with PyCasbin and
   current stored grants/publication settings. Every HTTP/MCP operation has an
   explicit permission; unmapped operations fail closed. The gateway uses the
@@ -71,7 +98,15 @@ acceptance waits for the Cloudflare allowance upgrade; no upload fallback.
 Protected IF API/targeted Terraform changes require a concrete reviewed operator
 approval. Portal service updates are already authorized by the supplied plan.
 
-## Applied entry and mobile correction — 2026-09-15
+## Applied Discord callback repair — 2026-09-15
+
+Gateway `b688e943…`, generation 31, restores direct Discord login with the original
+client/callback alongside Authentik. Source and live Terra gates pass, including
+actual Passport strategy tests, invalid-state rejection, the deployed authorization
+URL and a fresh successful Authentik login. Discord consent/identity completion
+remains unverified. See [repair evidence](../../../deploy/rewrite/powerlifting-backlog/discord-login-correction.md).
+
+## Prior entry and mobile correction — 2026-09-15
 
 Both login choices, the dedicated guest landing, informational-page banner
 suppression and small-screen navigation/context are deployed. Gateway `87403487…`

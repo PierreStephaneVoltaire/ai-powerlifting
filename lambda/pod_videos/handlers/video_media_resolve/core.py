@@ -39,7 +39,7 @@ async def video_media_resolve(args: dict) -> str:
             ):
                 raise ValueError("Media key is not attached to this lift profile")
             return key
-        for session in store.list_sessions_sync(program_sk, phases):
+        for session in store.list_sessions_on_date_sync(program_sk, str(media.get("session_date") or ""), phases):
             if str(session.get("id") or session.get("session_id") or "") != str(media.get("session_id")):
                 continue
             for video in session.get("videos") or []:
