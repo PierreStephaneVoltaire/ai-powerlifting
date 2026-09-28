@@ -9,7 +9,6 @@ import { MaxResolutionGate } from './MaxResolutionGate'
 import { confirmApplyTemplate, mutationEnvelope, publishTemplate, unpublishTemplate } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
 import { templateEditRoute } from '../../utils/templateRoutes'
-import { useAuth } from '@/auth/AuthProvider'
 
 interface Props {
   template: Template
@@ -24,9 +23,8 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
   const [applyData, setApplyData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { person_pk } = useAuth()
   const resolvedTemplateSk = template.sk || templateSk
-  const canEdit = !readOnly && Boolean(resolvedTemplateSk) && template.meta.author_pk === person_pk
+  const canEdit = !readOnly && Boolean(resolvedTemplateSk) && template.is_owner === true
 
   const handleApply = async (res: any) => {
     if (res.missing_maxes && res.missing_maxes.length > 0) {

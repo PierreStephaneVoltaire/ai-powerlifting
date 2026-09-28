@@ -98,17 +98,27 @@ def unwrap(result: Any) -> Any:
     return result
 
 
+def owner_aliases(arguments: dict[str, Any]) -> frozenset[str]:
+    access = arguments.get('_access') or {}
+    person = str(arguments.get('_person_pk') or access.get('person_pk') or '')
+    if not person:
+        return frozenset()
+    return frozenset(value for value in (person, str(access.get('settings_pk') or ''), str(access.get('own_athlete_pk') or '')) if value)
+
+
 def dispatch(operation: Operation, arguments: dict[str, Any]) -> Any:
     operation.validate_input({key: value for key, value in arguments.items() if not key.startswith("_")})
     package_root = ROOT / "lambda" / operation.handler.split(".")[1] / "handlers"
     if package_root.is_dir() and str(package_root) not in sys.path:
         sys.path.insert(0, str(package_root))
-    from storage_scope import current_athlete
+    from storage_scope import current_athlete, current_owner_aliases
     token = current_athlete.set(arguments.get("pk") if operation.ownership != "public" else None)
+    aliases_token = current_owner_aliases.set(owner_aliases(arguments))
     try:
         module = importlib.import_module(operation.handler)
         result = unwrap(module.handler(arguments, None))
     finally:
+        current_owner_aliases.reset(aliases_token)
         current_athlete.reset(token)
     if isinstance(result, str):
         try:

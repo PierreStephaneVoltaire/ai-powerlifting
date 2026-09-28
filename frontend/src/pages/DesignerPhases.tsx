@@ -238,7 +238,7 @@ export default function DesignerPhases() {
               <TextInput
                 type="number"
                 value={phaseForm.start_week || 1}
-                onChange={(e) => setPhaseForm(p => ({ ...p, start_week: Number(e.currentTarget.value) }))}
+                onChange={(e) => { const raw = e.currentTarget.value; setPhaseForm(p => ({ ...p, start_week: Number(raw) })) }}
                 size="sm"
                 disabled={readOnly}
               />
@@ -248,7 +248,7 @@ export default function DesignerPhases() {
               <TextInput
                 type="number"
                 value={phaseForm.end_week || 4}
-                onChange={(e) => setPhaseForm(p => ({ ...p, end_week: Number(e.currentTarget.value) }))}
+                onChange={(e) => { const raw = e.currentTarget.value; setPhaseForm(p => ({ ...p, end_week: Number(raw) })) }}
                 size="sm"
                 disabled={readOnly}
               />
@@ -276,7 +276,7 @@ export default function DesignerPhases() {
               <TextInput
                 type="number"
                 value={phaseForm.target_rpe_min ?? ''}
-                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
+                onChange={(e) => { const raw = e.currentTarget.value; setPhaseForm(p => ({ ...p, target_rpe_min: raw === '' ? undefined : Number(raw) })) }}
                 size="sm"
                 step={0.5}
                 disabled={readOnly}
@@ -287,7 +287,7 @@ export default function DesignerPhases() {
               <TextInput
                 type="number"
                 value={phaseForm.target_rpe_max ?? ''}
-                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
+                onChange={(e) => { const raw = e.currentTarget.value; setPhaseForm(p => ({ ...p, target_rpe_max: raw === '' ? undefined : Number(raw) })) }}
                 size="sm"
                 step={0.5}
                 disabled={readOnly}
@@ -298,7 +298,7 @@ export default function DesignerPhases() {
               <TextInput
                 type="number"
                 value={phaseForm.days_per_week ?? ''}
-                onChange={(e) => setPhaseForm(p => ({ ...p, days_per_week: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
+                onChange={(e) => { const raw = e.currentTarget.value; setPhaseForm(p => ({ ...p, days_per_week: raw === '' ? undefined : Number(raw) })) }}
                 size="sm"
                 disabled={readOnly}
               />

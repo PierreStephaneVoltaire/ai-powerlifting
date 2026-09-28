@@ -605,6 +605,8 @@ class ProgramStore:
                 block = next((item for item in blocks if str(item.get("id") or item.get("block_id")) == str(block_id)), None)
                 if block is None:
                     raise ValueError("block_id must identify an existing block")
+                if block.get("status") == "completed" and self._is_reserved_block_name(name):
+                    raise ValueError("an archived block cannot be named current")
                 block["name"] = name.strip()
                 block["label"] = name.strip()
                 return {"action": action, "block_id": block_id, "name": block["name"]}
@@ -618,6 +620,8 @@ class ProgramStore:
             raise ValueError("block_id and idempotency_key are required")
         if action in {"start_next", "complete_and_start"}:
             self._validate_transition_start(start_date, week_start_day, start_maxes_kg)
+        if action in {"complete", "complete_and_start"} and self._is_reserved_block_name(current_name):
+            raise ValueError("an archived block cannot be named current")
         plan = self._validate_next_program(next_program)
         self.invalidate_cache()
         program = copy.deepcopy(await self.get_program())
@@ -682,7 +686,7 @@ class ProgramStore:
         phases = [copy.deepcopy(p) for p in (program.get("phases") or []) if isinstance(p, dict)]
         sessions = [copy.deepcopy(s) for s in (program.get("sessions") or []) if isinstance(s, dict)]
         source_id = str(source.get("id") or source.get("block_id"))
-        archive_id = source_id if source_id != "current" else f"block-{hashlib.sha256(f'{source_id}:archive:{idempotency_key}'.encode()).hexdigest()[:16]}"
+        archive_id = source_id if source_id != "current" else self._archive_block_id(current_name or source.get("name"), blocks, phases, sessions, idempotency_key)
         if action in {"complete", "complete_and_start"}:
             start_maxes = meta.setdefault("block_start_maxes", {})
             if not any(block_key in start_maxes for block_key in (source_id, "current")):
@@ -703,7 +707,9 @@ class ProgramStore:
             source["block_id"] = archive_id
             if isinstance(current_name, str) and current_name.strip():
                 source["name"] = current_name.strip()
-            source["label"] = source.get("name") or source.get("label") or archive_id
+            if self._is_reserved_block_name(source.get("name")):
+                source["name"] = archive_id
+            source["label"] = source["name"] or archive_id
             source["status"] = "completed"
             source["archived"] = True
             source["completed_at"] = datetime.now(timezone.utc).isoformat()
@@ -911,6 +917,21 @@ class ProgramStore:
             "week_start_day": week_starts.get("current") or meta.get("program_week_start_day"),
             "start_maxes_kg": copy.deepcopy(block_starts.get("current") or program.get("current_maxes", {})),
         }
+
+    @staticmethod
+    def _is_reserved_block_name(name: Any) -> bool:
+        return isinstance(name, str) and re.sub(r"[^a-z0-9]+", " ", name.lower()).strip() in {"current", "current block"}
+
+    @staticmethod
+    def _archive_block_id(name: Any, blocks: list[dict], phases: list[dict], sessions: list[dict], idempotency_key: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", str(name or "").lower()).strip("-")[:48].strip("-")
+        if not slug or ProgramStore._is_reserved_block_name(slug):
+            return f"block-{hashlib.sha256(f'current:archive:{idempotency_key}'.encode()).hexdigest()[:16]}"
+        taken = {str(item.get(key)) for item in [*blocks, *phases, *sessions] for key in ("id", "block_id", "block") if item.get(key)}
+        candidate, suffix = slug, 2
+        while candidate in taken:
+            candidate, suffix = f"{slug}-{suffix}", suffix + 1
+        return candidate
 
     @staticmethod
     def _remap_block_meta(meta: dict, source_id: str, archive_id: str) -> None:

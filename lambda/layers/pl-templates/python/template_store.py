@@ -89,16 +89,25 @@ class TemplateStore:
             return True
         return bool(meta.get("published"))
 
+    @staticmethod
+    def _owner_ids(actor_pk: str | None) -> frozenset[str]:
+        if not actor_pk:
+            return frozenset()
+        from storage_scope import current_owner_aliases
+        aliases = current_owner_aliases.get()
+        return aliases if str(actor_pk) in aliases else frozenset({str(actor_pk)})
+
+    def _owns(self, template_or_summary: dict[str, Any], actor_pk: str | None) -> bool:
+        meta = template_or_summary.get("meta") if isinstance(template_or_summary.get("meta"), dict) else template_or_summary
+        author_pk = str(meta.get("author_pk") or "")
+        return bool(author_pk) and author_pk in self._owner_ids(actor_pk)
+
     def _visible(self, template_or_summary: dict[str, Any], actor_pk: str | None) -> bool:
         meta = template_or_summary.get("meta") if isinstance(template_or_summary.get("meta"), dict) else template_or_summary
-        if self._is_published_meta(meta):
-            return True
-        return bool(actor_pk and str(meta.get("author_pk") or "") == str(actor_pk))
+        return self._is_published_meta(meta) or self._owns(template_or_summary, actor_pk)
 
     def _assert_owner(self, template: dict[str, Any], actor_pk: str | None) -> None:
-        meta = template.get("meta") if isinstance(template.get("meta"), dict) else {}
-        author_pk = str(meta.get("author_pk") or "")
-        if not actor_pk or not author_pk or author_pk != str(actor_pk):
+        if not self._owns(template, actor_pk):
             raise TemplatePermissionError("Template mutation requires the original author")
 
     def _summary(self, template_item: dict[str, Any]) -> dict[str, Any]:
@@ -225,7 +234,7 @@ class TemplateStore:
 
     def list_templates_sync(self, include_archived: bool = False, actor_pk: str | None = None) -> list[dict[str, Any]]:
         templates = self._read_index_sync()
-        visible = [t for t in templates if self._visible(t, actor_pk)]
+        visible = [{**t, "is_owner": self._owns(t, actor_pk)} for t in templates if self._visible(t, actor_pk)]
         if not include_archived:
             visible = [t for t in visible if not t.get("archived", False)]
         visible.sort(key=lambda t: str(t.get("updated_at") or ""), reverse=True)
@@ -286,6 +295,7 @@ class TemplateStore:
         now = self._now()
         new_sk = sk or self._new_template_sk()
         template_item = copy.deepcopy(template)
+        template_item.pop("is_owner", None)
         meta = template_item.setdefault("meta", {})
 
         meta.setdefault("created_at", now)
@@ -357,6 +367,7 @@ class TemplateStore:
 
         now = self._now()
         template_item = copy.deepcopy(template)
+        template_item.pop("is_owner", None)
         incoming_meta = template_item.setdefault("meta", {})
         existing_meta = existing.get("meta") if isinstance(existing.get("meta"), dict) else {}
         revision = int(existing_meta.get("revision", 0))
@@ -580,10 +591,7 @@ class TemplateStore:
         item = dict(resp["Item"])
         if include_hidden:
             return item
-        author_pk = str(item.get("author_pk") or "")
-        if actor_pk and author_pk == str(actor_pk):
-            return item
-        return None
+        return item if self._owns(item, actor_pk) else None
 
     async def get_import_job(
         self,

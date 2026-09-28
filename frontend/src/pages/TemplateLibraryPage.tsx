@@ -8,7 +8,7 @@ import type { TemplateListEntry } from '@powerlifting/types'
 import { useAuth } from '@/auth/AuthProvider'
 
 export default function TemplateLibraryPage() {
-  const { readOnly, person_pk } = useAuth()
+  const { readOnly } = useAuth()
   const [templates, setTemplates] = useState<TemplateListEntry[]>([])
   const [view, setView] = useState<string | null>('published')
   const [loading, setLoading] = useState(true)
@@ -59,13 +59,13 @@ export default function TemplateLibraryPage() {
       </Tabs>
 
       {templates.filter(tpl => {
-        if (view === 'drafts') return tpl.published === false && tpl.author_pk === person_pk
+        if (view === 'drafts') return tpl.published === false && tpl.is_owner === true
         if (view === 'published') return tpl.published !== false
         return true
       }).length > 0 ? (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
           {templates.filter(tpl => {
-            if (view === 'drafts') return tpl.published === false && tpl.author_pk === person_pk
+            if (view === 'drafts') return tpl.published === false && tpl.is_owner === true
             if (view === 'published') return tpl.published !== false
             return true
           }).map(tpl => (

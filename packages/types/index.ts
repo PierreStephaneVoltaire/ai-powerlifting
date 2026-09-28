@@ -600,6 +600,7 @@ export interface Template {
   sessions: TemplateSession[]
   glossary_resolution: GlossaryResolution
   required_maxes: string[] // glossary_ids
+  is_owner?: boolean
 }
 
 export interface TemplateMeta {
@@ -692,6 +693,7 @@ export interface TemplateListEntry {
   import_job_id?: string
   created_at: string
   updated_at: string
+  is_owner?: boolean
 }
 
 export type TemplateImportJobStatus = 'queued' | 'starting' | 'running' | 'succeeded' | 'failed' | 'cancel_requested' | 'cancelled' | 'uncertain'

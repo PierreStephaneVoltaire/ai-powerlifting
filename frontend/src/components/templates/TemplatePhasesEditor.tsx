@@ -135,7 +135,7 @@ export function TemplatePhasesEditor({ phases, onChange, disabled }: Props) {
               <TextInput
                 type="number"
                 value={phaseForm.week_start || 1}
-                onChange={(e) => setPhaseForm(p => ({ ...p, week_start: Number(e.currentTarget.value) || 1 }))}
+                onChange={(e) => { const val = Number(e.currentTarget.value) || 1; setPhaseForm(p => ({ ...p, week_start: val })) }}
                 size="sm"
                 disabled={disabled}
               />
@@ -145,7 +145,7 @@ export function TemplatePhasesEditor({ phases, onChange, disabled }: Props) {
               <TextInput
                 type="number"
                 value={phaseForm.week_end || 4}
-                onChange={(e) => setPhaseForm(p => ({ ...p, week_end: Number(e.currentTarget.value) || 1 }))}
+                onChange={(e) => { const val = Number(e.currentTarget.value) || 1; setPhaseForm(p => ({ ...p, week_end: val })) }}
                 size="sm"
                 disabled={disabled}
               />
@@ -158,7 +158,7 @@ export function TemplatePhasesEditor({ phases, onChange, disabled }: Props) {
               <TextInput
                 type="number"
                 value={phaseForm.target_rpe_min ?? ''}
-                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
+                onChange={(e) => { const raw = e.currentTarget.value; setPhaseForm(p => ({ ...p, target_rpe_min: raw === '' ? undefined : Number(raw) })) }}
                 size="sm"
                 step={0.5}
                 disabled={disabled}
@@ -169,7 +169,7 @@ export function TemplatePhasesEditor({ phases, onChange, disabled }: Props) {
               <TextInput
                 type="number"
                 value={phaseForm.target_rpe_max ?? ''}
-                onChange={(e) => setPhaseForm(p => ({ ...p, target_rpe_max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) }))}
+                onChange={(e) => { const raw = e.currentTarget.value; setPhaseForm(p => ({ ...p, target_rpe_max: raw === '' ? undefined : Number(raw) })) }}
                 size="sm"
                 step={0.5}
                 disabled={disabled}

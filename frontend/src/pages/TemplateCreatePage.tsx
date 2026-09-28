@@ -82,13 +82,13 @@ export default function TemplateCreatePage() {
           type="number"
           label="Estimated Weeks"
           value={form.estimated_weeks}
-          onChange={(e) => setForm(f => ({ ...f, estimated_weeks: Number(e.currentTarget.value) || 4 }))}
+          onChange={(e) => { const raw = e.currentTarget.value; setForm(f => ({ ...f, estimated_weeks: Number(raw) || 4 })) }}
         />
         <TextInput
           type="number"
           label="Days Per Week"
           value={form.days_per_week}
-          onChange={(e) => setForm(f => ({ ...f, days_per_week: Number(e.currentTarget.value) || 3 }))}
+          onChange={(e) => { const raw = e.currentTarget.value; setForm(f => ({ ...f, days_per_week: Number(raw) || 3 })) }}
         />
       </Stack>
 

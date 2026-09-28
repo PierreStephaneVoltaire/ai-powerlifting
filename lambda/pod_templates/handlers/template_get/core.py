@@ -137,4 +137,4 @@ async def template_get(sk, actor_pk=None):
     tpl = await ts.get_template(sk, actor_pk=actor_pk)
     if not tpl:
         raise ValueError(f"Template not found: {sk}")
-    return tpl
+    return {**tpl, "is_owner": ts._owns(tpl, actor_pk)}

@@ -102,7 +102,7 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose, disab
         <TextInput
           label="Label"
           value={editing.label}
-          onChange={(e) => setEditing(s => s ? { ...s, label: e.currentTarget.value } : s)}
+          onChange={(e) => { const raw = e.currentTarget.value; setEditing(s => s ? { ...s, label: raw } : s) }}
           disabled={disabled}
         />
         <Group gap="xs" grow>
@@ -110,20 +110,20 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose, disab
             type="number"
             label="Week Number"
             value={editing.week_number}
-            onChange={(e) => setEditing(s => s ? { ...s, week_number: Number(e.currentTarget.value) || 1 } : s)}
+            onChange={(e) => { const raw = e.currentTarget.value; setEditing(s => s ? { ...s, week_number: Number(raw) || 1 } : s) }}
             disabled={disabled}
           />
           <TextInput
             label="Day of Week"
             value={editing.day_of_week}
-            onChange={(e) => setEditing(s => s ? { ...s, day_of_week: e.currentTarget.value } : s)}
+            onChange={(e) => { const raw = e.currentTarget.value; setEditing(s => s ? { ...s, day_of_week: raw } : s) }}
             disabled={disabled}
           />
           <TextInput
             type="number"
             label="Day Index"
             value={editing.day_index}
-            onChange={(e) => setEditing(s => s ? { ...s, day_index: Number(e.currentTarget.value) } : s)}
+            onChange={(e) => { const raw = e.currentTarget.value; setEditing(s => s ? { ...s, day_index: Number(raw) } : s) }}
             disabled={disabled}
           />
         </Group>

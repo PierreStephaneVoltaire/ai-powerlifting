@@ -432,3 +432,30 @@ def test_transition_rejects_session_log_written_after_staging():
     assert table.items[("athlete-1", "program#current")]["ref_sk"] == "program#v007"
     staged = [item for item in table.items.values() if item.get("published") is False]
     assert len(staged) == 1
+
+
+def test_complete_archives_current_block_under_name_slug():
+    store, _table, _sessions = make_store()
+
+    result = transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="archive-1", current_name="Sunny Daze + APEX Prep")
+
+    meta = result["program"]["meta"]
+    archived = meta["blocks"][0]
+    assert archived["id"] == "sunny-daze-apex-prep"
+    assert archived["name"] == archived["label"] == "Sunny Daze + APEX Prep"
+    assert archived["status"] == "completed"
+    assert meta["current_block_id"] is None
+    assert {session["block"] for session in result["program"]["sessions"]} == {"sunny-daze-apex-prep"}
+
+
+@pytest.mark.parametrize("name", ["current", "Current Block", " CURRENT "])
+def test_archived_block_cannot_be_named_current(name):
+    store, _table, _sessions = make_store()
+
+    with pytest.raises(ValueError, match="cannot be named current"):
+        transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="archive-2", current_name=name)
+
+    archived = transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="archive-3")
+    archive_id = archived["program"]["meta"]["blocks"][0]["id"]
+    with pytest.raises(ValueError, match="cannot be named current"):
+        transition(store, action="rename", block_id=archive_id, expected_revision=5, idempotency_key="rename-1", name=name)
