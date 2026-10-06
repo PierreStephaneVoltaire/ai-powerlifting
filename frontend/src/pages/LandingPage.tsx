@@ -1,8 +1,7 @@
-import { Activity, Search, ShieldCheck } from 'lucide-react'
-import { Button, Center, Container, Group, Paper, Stack, Text, Title, Box } from '@mantine/core'
+import { Activity, Info, Search, ShieldCheck, User } from 'lucide-react'
+import { Button, Center, Container, Group, Paper, SimpleGrid, Stack, Text, Title, Box } from '@mantine/core'
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import LoginOptions from '@/components/auth/LoginOptions'
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   return (
@@ -31,6 +30,8 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   )
 }
 
+const EXAMPLE_HANDLE = 'failure'
+
 export default function LandingPage() {
   return (
     <Center mih="calc(100dvh - 60px)" py="md">
@@ -51,26 +52,50 @@ export default function LandingPage() {
             </Text>
           </Stack>
 
-          <Paper withBorder shadow="sm" radius="md" p={{ base: 'md', sm: 'lg' }}>
-            <Stack gap="sm">
-              <Text fw={700}>Sign in to continue</Text>
-              <LoginOptions compact />
-              <Group gap="xs" align="flex-start" wrap="nowrap">
-                <ShieldCheck size={16} color="var(--accent-blue)" style={{ flex: '0 0 auto', marginTop: 2 }} />
-                <Text size="xs" c="dimmed">
-                  Personal training data stays private and separate from public profiles.
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Paper withBorder shadow="sm" radius="md" p={{ base: 'md', sm: 'lg' }}>
+              <Stack gap="sm" h="100%">
+                <Group gap="xs">
+                  <Search size={18} color="var(--accent-blue)" />
+                  <Text fw={700}>Search profiles</Text>
+                </Group>
+                <Text size="sm" c="dimmed" style={{ flex: 1 }}>
+                  Browse public Athletes and Coaches by name, federation, role, or tag.
                 </Text>
-              </Group>
-            </Stack>
-          </Paper>
+                <Group gap="xs">
+                  <Button component={Link} to="/profiles" leftSection={<Search size={15} />}>
+                    Search
+                  </Button>
+                  <Button component={Link} to={`/profiles?q=${EXAMPLE_HANDLE}`} variant="default" leftSection={<User size={15} />}>
+                    Example: @{EXAMPLE_HANDLE}
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
 
-          <Group justify="center" gap="xs">
-            <Button component={Link} to="/profiles" variant="subtle" size="sm" leftSection={<Search size={15} />}>
-              Search profiles
-            </Button>
-            <Button component={Link} to="/about" variant="subtle" size="sm">
-              About NoLift
-            </Button>
+            <Paper withBorder shadow="sm" radius="md" p={{ base: 'md', sm: 'lg' }}>
+              <Stack gap="sm" h="100%">
+                <Group gap="xs">
+                  <Info size={18} color="var(--accent-blue)" />
+                  <Text fw={700}>About NoLift</Text>
+                </Group>
+                <Text size="sm" c="dimmed" style={{ flex: 1 }}>
+                  A meet-prep notebook: programs, sessions, attempts, and competition planning anchored to your next meet.
+                </Text>
+                <Group gap="xs">
+                  <Button component={Link} to="/about" variant="default">
+                    Learn more
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
+          </SimpleGrid>
+
+          <Group gap="xs" justify="center" wrap="nowrap">
+            <ShieldCheck size={16} color="var(--accent-blue)" style={{ flex: '0 0 auto' }} />
+            <Text size="xs" c="dimmed">
+              Personal training data stays private unless an Athlete publishes it.
+            </Text>
           </Group>
         </Stack>
       </Container>

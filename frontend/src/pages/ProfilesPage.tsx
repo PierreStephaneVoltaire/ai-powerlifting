@@ -1,7 +1,7 @@
 import LiftProfileContext from '@/components/lift-profiles/LiftProfileContext'
 import ProfileFavorite from '@/components/settings/ProfileFavorite'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, Avatar, Badge, Button, Group, Loader, MultiSelect, Paper, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { ArrowLeft, Calendar, Film, Search, User, Users } from 'lucide-react'
 import { fetchProfile, searchProfilePage, type ProfileSearchInput, type PublicProfile } from '@/api/profiles'
@@ -69,14 +69,18 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
 
 export default function ProfilesPage() {
   const { user } = useAuth()
-  const [query, setQuery] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [query, setQuery] = useState(() => searchParams.get('q') || '')
   const [profiles, setProfiles] = useState<PublicProfile[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [tags, setTags] = useState<string[]>([])
-  const [tagMode, setTagMode] = useState<'and' | 'or'>('and')
-  const [federations, setFederations] = useState<string[]>([])
-  const [role, setRole] = useState<'athlete' | 'coach' | null>(null)
+  const [tags, setTags] = useState<string[]>(() => searchParams.getAll('tag'))
+  const [tagMode, setTagMode] = useState<'and' | 'or'>(() => searchParams.get('tag_mode') === 'or' ? 'or' : 'and')
+  const [federations, setFederations] = useState<string[]>(() => searchParams.getAll('federation'))
+  const [role, setRole] = useState<'athlete' | 'coach' | null>(() => {
+    const value = searchParams.get('role')
+    return value === 'athlete' || value === 'coach' ? value : null
+  })
   const [tagOptions, setTagOptions] = useState<string[]>([])
   const [federationOptions, setFederationOptions] = useState<{ value: string; label: string }[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -88,7 +92,16 @@ export default function ProfilesPage() {
     const request = ++requestNumber.current
     setLoading(true)
     setError('')
-    if (!append) activeSearch.current = { query: nextQuery, tags, federations, tag_mode: tagMode, ...(role ? { role } : {}) }
+    if (!append) {
+      activeSearch.current = { query: nextQuery, tags, federations, tag_mode: tagMode, ...(role ? { role } : {}) }
+      const params = new URLSearchParams()
+      if (nextQuery) params.set('q', nextQuery)
+      for (const tag of tags) params.append('tag', tag)
+      for (const federation of federations) params.append('federation', federation)
+      if (role) params.set('role', role)
+      if (tagMode === 'or') params.set('tag_mode', 'or')
+      setSearchParams(params, { replace: true })
+    }
     try {
       const page = await searchProfilePage({ ...activeSearch.current, ...(append && nextCursor ? { cursor: nextCursor } : {}) })
       if (request !== requestNumber.current) return
@@ -102,7 +115,10 @@ export default function ProfilesPage() {
   }
 
   useEffect(() => {
-    runSearch('')
+    runSearch()
+  }, [tags, federations, role, tagMode])
+
+  useEffect(() => {
     Promise.all([api.get('/profiles/tags'), fetchFederations()]).then(([catalog, library]) => {
       setTagOptions(catalog.data.data.filter((tag: { status: string }) => tag.status === 'approved').map((tag: { tag: string }) => tag.tag))
       setFederationOptions(library.map(federation => ({ value: federation.pk, label: federation.abbreviation || federation.name })))
