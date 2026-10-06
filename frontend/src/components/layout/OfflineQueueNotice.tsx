@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Group, Modal, Stack, Text, Textarea } from '@mantine/core'
-import { listMutations, removeMutation, resolveMutation, resumeMutations, type PendingMutation } from '@/api/drafts'
+import { listMutations, removeMutation, resolveMutation, type PendingMutation } from '@/api/drafts'
 import { synchronizeOfflineQueue } from '@/api/offlineQueue'
 import { requestPartition } from '@/api/context'
 
@@ -12,33 +12,22 @@ function content(record: PendingMutation): Record<string, unknown> {
 
 export default function OfflineQueueNotice() {
   const [records, setRecords] = useState<PendingMutation[]>([])
-  const [online, setOnline] = useState(() => navigator.onLine)
   const [editing, setEditing] = useState<PendingMutation | null>(null)
   const [changes, setChanges] = useState('')
   const [error, setError] = useState('')
   const refresh = useCallback(() => { void loadQueue().then(setRecords).catch(() => {}) }, [])
   useEffect(() => {
     refresh()
-    const changed = () => refresh()
-    const connected = () => { setOnline(true); refresh() }
-    const disconnected = () => setOnline(false)
-    window.addEventListener('powerlifting-queue-changed', changed)
-    window.addEventListener('online', connected)
-    window.addEventListener('offline', disconnected)
+    window.addEventListener('powerlifting-queue-changed', refresh)
+    window.addEventListener('online', refresh)
     return () => {
-      window.removeEventListener('powerlifting-queue-changed', changed)
-      window.removeEventListener('online', connected)
-      window.removeEventListener('offline', disconnected)
+      window.removeEventListener('powerlifting-queue-changed', refresh)
+      window.removeEventListener('online', refresh)
     }
   }, [refresh])
   const conflicts = records.filter(record => record.status === 'conflict')
-  const queued = records.filter(record => record.status !== 'conflict')
-  if (!records.length && online && !editing) return null
+  if (!conflicts.length && !editing) return null
   return <Stack gap="xs" mb="md">
-    {!online && <Alert color="yellow" title="Offline">Your known Athlete context and saved drafts remain available. Revisioned training changes will sync after this Person is reauthorized.</Alert>}
-    {queued.length > 0 && <Alert color="blue" title={`${queued.length} change${queued.length === 1 ? '' : 's'} waiting to sync`}>
-      <Group><Text size="sm">Saved in this browser for the selected Person and Athlete.</Text>{online && <Button size="xs" onClick={() => { void resumeMutations().then(synchronizeOfflineQueue).then(refresh) }}>Sync now</Button>}</Group>
-    </Alert>}
     {conflicts.map(record => <Alert key={record.id} color="orange" title="A saved change needs review">
       <Text size="sm">This record changed on the server. Compare your saved changes with the current record before deciding what to keep.</Text>
       <details><summary>Show differences</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify({ local: content(record), server: record.conflict?.current_record }, null, 2)}</pre></details>

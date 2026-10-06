@@ -2,7 +2,6 @@ import { ReactNode, useEffect } from 'react'
 import { AppShell as MantineAppShell } from '@mantine/core'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthProvider'
-import ProgramDraftNotice from './ProgramDraftNotice'
 import OfflineQueueNotice from './OfflineQueueNotice'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
@@ -97,7 +96,6 @@ export default function AppShell({ children }: AppShellProps) {
         style={{ flex: 1 }}
       >
         <ReadOnlyBanner />
-        <ProgramDraftNotice />
         <OfflineQueueNotice />
         {children}
       </MantineAppShell.Main>

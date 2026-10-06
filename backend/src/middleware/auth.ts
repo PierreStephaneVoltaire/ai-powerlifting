@@ -5,6 +5,7 @@ import OAuth2Strategy from 'passport-oauth2'
 import { RedisStore } from 'connect-redis'
 import { createClient } from 'redis'
 import { discovery, randomState } from 'openid-client'
+import { logger } from '../utils/logger'
 import { Strategy as AuthentikPassportStrategy, type AuthenticateOptions, type VerifyFunction } from 'openid-client/passport'
 import { getOrCreateSettingsForIdentity } from '../services/userSettings'
 import { groupsFromSettings, type AuthIdentity } from '../auth/identity'
@@ -74,7 +75,6 @@ export async function configureAuthentication(app: Express): Promise<void> {
     resave: false, saveUninitialized: false,
     cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true', maxAge: 7 * 24 * 60 * 60 * 1000 },
   }))
-  const config = await discovery(new URL(oidcIssuer), oidcClientId, oidcSecret)
   class AuthentikStrategy extends AuthentikPassportStrategy {
     authorizationRequestParams<TOptions extends AuthenticateOptions>(req: Request, options: TOptions): URLSearchParams {
       const params = super.authorizationRequestParams(req, options)
@@ -100,7 +100,18 @@ export async function configureAuthentication(app: Express): Promise<void> {
       verified(null, identityUser(identity))
     } catch (error) { verified(error as Error) }
   }
-  passport.use('authentik', new AuthentikStrategy({ config, callbackURL: oidcCallback, scope: 'openid profile email groups roles powerlifting_identity' }, verifyIdentity))
+  const registerAuthentik = async (attempt = 1): Promise<void> => {
+    try {
+      const config = await discovery(new URL(oidcIssuer), oidcClientId, oidcSecret)
+      passport.use('authentik', new AuthentikStrategy({ config, callbackURL: oidcCallback, scope: 'openid profile email groups roles powerlifting_identity' }, verifyIdentity))
+      logger.info({ attempt }, 'Authentik OIDC discovery succeeded')
+    } catch (error) {
+      const delay = Math.min(300_000, 5_000 * 2 ** Math.min(attempt - 1, 6))
+      logger.warn({ error, attempt, retry_in_ms: delay }, 'Authentik OIDC discovery failed; API continues without Authentik login')
+      setTimeout(() => void registerAuthentik(attempt + 1), delay).unref()
+    }
+  }
+  void registerAuthentik()
   if (isDiscordEnabled()) {
     passport.use('discord', createDiscordStrategy(async (_accessToken: string, _refreshToken: string, profile: unknown, verified: (error?: Error | null, user?: Express.User | false) => void) => {
       try {
