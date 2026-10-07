@@ -487,11 +487,12 @@ export default function SessionDrawer({
     return lookup
   }, [glossary])
 
-  // Initialize local state when the backing session changes. While local edits
-  // are dirty or saving, keep the editor snapshot instead of replaying an older
-  // store update over it.
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+  const sessionIdentity = session ? `${version}:${session.id || session.date}:${sessionArrayIndex}` : ''
+
   useEffect(() => {
-    if (hasChanges || isSaving) return
+    const session = sessionRef.current
     if (session) {
       let active = true
       const partition = requestPartition()
@@ -554,7 +555,7 @@ export default function SessionDrawer({
       })
       return () => { active = false }
     }
-  }, [hasChanges, isSaving, session, sessionArrayIndex, version])
+  }, [sessionIdentity])
 
   useEffect(() => {
     if (!localSession || !hasChanges || !draftKeyRef.current) return
@@ -628,7 +629,6 @@ export default function SessionDrawer({
         savedDateRef.current = job.session.date
 
         if (job.version === changeVersionRef.current && !latestSaveRef.current) {
-          setLocalSession(job.session)
           setOriginalDate(job.session.date)
           setHasChanges(false)
           setLastSavedAt(new Date())
