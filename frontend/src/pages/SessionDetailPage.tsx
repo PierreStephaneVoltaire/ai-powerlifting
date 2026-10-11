@@ -10,7 +10,13 @@ export default function SessionDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { program, isLoading } = useProgramStore()
+  const routeSession = searchParams.get('session')
+  const hasProgram = useProgramStore(s => s.program !== null)
+  const sessionIndex = useProgramStore(s => s.program && date ? sessionIndexForRoute(s.program.sessions, date, index, routeSession) : -1)
+  const sessionKey = useProgramStore(s => {
+    const session = sessionIndex >= 0 ? s.program?.sessions[sessionIndex] : undefined
+    return session ? `${s.version}:${session.id || session.date}:${sessionIndex}` : null
+  })
   const fallbackBackTo = location.pathname.startsWith('/list/') ? '/sessions?view=Compact' : '/sessions'
   const backTo = typeof location.state === 'object' && location.state && 'backTo' in location.state
     ? String((location.state as { backTo?: string }).backTo || fallbackBackTo)
@@ -18,7 +24,7 @@ export default function SessionDetailPage() {
 
   const goBack = () => navigate(backTo, { state: { restoreScrollY: location.state?.backScrollY, expandedWeeks: location.state?.expandedWeeks } })
 
-  if (isLoading || !program) {
+  if (!hasProgram) {
     return (
       <Center mih="50vh">
         <Loader />
@@ -39,15 +45,13 @@ export default function SessionDetailPage() {
     )
   }
 
-  const sessionIndex = sessionIndexForRoute(program.sessions, date, index, searchParams.get('session'))
-  const session = sessionIndex >= 0 ? program.sessions[sessionIndex] : null
-
-  if (!session) {
+  if (!sessionKey) {
+    const sessions = useProgramStore.getState().program?.sessions ?? []
     return (
       <Alert color="yellow" variant="light" title="Session not found">
         <Stack gap="xs">
           <Text size="sm">Choose a Session for {date}, or return to the calendar.</Text>
-          {!searchParams.get('session') && program.sessions.map((candidate, candidateIndex) => candidate.date === date && (
+          {!routeSession && sessions.map((candidate, candidateIndex) => candidate.date === date && (
             <Button key={candidate.id ?? candidateIndex} mih={44} variant="default"
               onClick={() => navigate(sessionRoute(candidate, candidateIndex), { replace: true, state: location.state })}>
               {candidate.phase?.name || 'Session'} · {candidateIndex + 1}
@@ -64,10 +68,10 @@ export default function SessionDetailPage() {
   return (
     <Stack gap="md" maw={1040} mx="auto" w="100%">
       <SessionDrawer
+        key={sessionKey}
         isOpen
         onClose={goBack}
         onDeleteSuccess={goBack}
-        session={session}
         sessionIndex={sessionIndex}
         sessionArrayIndex={sessionIndex}
         mode="page"

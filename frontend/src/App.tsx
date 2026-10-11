@@ -62,16 +62,18 @@ export default function App() {
 }
 
 function AppContent() {
-  const { loadProgram, reset } = useProgramStore()
+  const loadProgram = useProgramStore(s => s.loadProgram)
+  const reset = useProgramStore(s => s.reset)
   const { user, person_pk, mapped_pk, loading, permissions } = useAuth()
   const location = useLocation()
   const permission = routePermission(location.pathname)
+  const canReadProgram = permissions.includes('program:read')
 
   useEffect(() => {
     if (loading) return
     reset()
-    if (permissions.includes('program:read')) loadProgram('current').catch(console.error)
-  }, [loading, person_pk, mapped_pk, permissions, loadProgram, reset])
+    if (canReadProgram) loadProgram('current').catch(console.error)
+  }, [loading, person_pk, mapped_pk, canReadProgram, loadProgram, reset])
 
   if (loading) return <Center mih="100vh"><Loader aria-label="Loading your access" /></Center>
 

@@ -181,7 +181,6 @@ function exerciseDragId(exercise: Exercise, index: number): string {
 interface SessionDrawerProps {
   isOpen: boolean
   onClose: () => void
-  session: Session | null
   sessionIndex: number
   sessionArrayIndex: number
   mode?: 'drawer' | 'page'
@@ -401,7 +400,6 @@ function SortableExerciseItem({
 export default function SessionDrawer({
   isOpen,
   onClose,
-  session,
   sessionArrayIndex,
   mode = 'drawer',
   readOnly: readOnlyProp,
@@ -410,9 +408,13 @@ export default function SessionDrawer({
 }: SessionDrawerProps) {
   const { readOnly: authReadOnly } = useAuth('sessions')
   const readOnly = readOnlyProp ?? authReadOnly
-  const { program, version, updateSession, saveSession, deleteSession } = useProgramStore()
-  const { unit } = useSettingsStore()
-  const { pushToast } = useUiStore()
+  const version = useProgramStore(s => s.version)
+  const saveSession = useProgramStore(s => s.saveSession)
+  const deleteSession = useProgramStore(s => s.deleteSession)
+  const phases = useProgramStore(s => s.program?.phases)
+  const unit = useSettingsStore(s => s.unit)
+  const pushToast = useUiStore(s => s.pushToast)
+  const [baseline, setBaseline] = useState<Session | null>(null)
   const [localSession, setLocalSession] = useState<Session | null>(null)
   const [originalDate, setOriginalDate] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
@@ -487,17 +489,14 @@ export default function SessionDrawer({
     return lookup
   }, [glossary])
 
-  const sessionRef = useRef(session)
-  sessionRef.current = session
-  const sessionIdentity = session ? `${version}:${session.id || session.date}:${sessionArrayIndex}` : ''
-
   useEffect(() => {
-    const session = sessionRef.current
+    const session = useProgramStore.getState().program?.sessions[sessionArrayIndex]
     if (session) {
       let active = true
       const partition = requestPartition()
       const sessionId = session.id || ''
       setLocalSession(null)
+      setBaseline(session)
       const clone = JSON.parse(JSON.stringify(session)) as Session
       // Pre-populate exercises from planned_exercises for incomplete sessions
       if (!clone.completed && clone.exercises.length === 0 && (clone.planned_exercises?.length ?? 0) > 0) {
@@ -555,7 +554,7 @@ export default function SessionDrawer({
       })
       return () => { active = false }
     }
-  }, [sessionIdentity])
+  }, [version, sessionArrayIndex])
 
   useEffect(() => {
     if (!localSession || !hasChanges || !draftKeyRef.current) return
@@ -569,7 +568,7 @@ export default function SessionDrawer({
   const handleSaveRef = useRef<((notify?: boolean, closeOnSuccess?: boolean) => Promise<void>) | null>(null)
 
   useEffect(() => {
-    if (readOnly || !hasChanges || !session || !localSession || !program) return
+    if (readOnly || !hasChanges || !localSession) return
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
     }
@@ -582,7 +581,7 @@ export default function SessionDrawer({
         autoSaveTimerRef.current = null
       }
     }
-  }, [hasChanges, localSession, program, session])
+  }, [hasChanges, localSession])
 
   useEffect(() => {
     if (!hasChanges && !isSaving) return
@@ -596,9 +595,9 @@ export default function SessionDrawer({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasChanges, isSaving])
 
-  const phaseColorValue = session && program ? phaseColor(session.phase, program.phases) : 'var(--mantine-color-gray-6)'
+  const phaseColorValue = baseline && phases ? phaseColor(baseline.phase, phases) : 'var(--mantine-color-gray-6)'
 
-  if (!session || !localSession || !program) return null
+  if (!baseline || !localSession) return null
   const wellness = localSession.wellness
 
   const enqueueDraft = (value: Session, key: string, partition: string) => {
@@ -624,7 +623,8 @@ export default function SessionDrawer({
 
         const lookupDate = job.lookupDate
         const draft = job.draftKey ? await enqueueDraft(job.session, job.draftKey, job.partition) : undefined
-        await saveSession(lookupDate, sessionArrayIndex, job.session)
+        const saved = await saveSession(lookupDate, sessionArrayIndex, job.session)
+        setBaseline(saved)
         if (draft) await removeDraftIfMatch(job.draftKey, draft, job.partition)
         savedDateRef.current = job.session.date
 
@@ -697,7 +697,7 @@ export default function SessionDrawer({
   handleSaveRef.current = handleSave
 
   const handleDiscard = () => {
-    const clone = JSON.parse(JSON.stringify(session)) as Session
+    const clone = JSON.parse(JSON.stringify(baseline)) as Session
     clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
     setLocalSession(clone)
     changeVersionRef.current = 0
@@ -1641,7 +1641,7 @@ export default function SessionDrawer({
 
       {/* Video Upload Modal */}
       <VideoUploadModal
-        session={session}
+        session={baseline}
         isOpen={showVideoUpload}
         onClose={() => setShowVideoUpload(false)}
         onUploaded={(video: SessionVideo) => {

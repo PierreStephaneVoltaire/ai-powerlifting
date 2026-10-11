@@ -29,8 +29,10 @@ interface VideoGridProps {
 }
 
 export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: VideoGridProps) {
-  const { pushToast } = useUiStore()
-  const { version, removeSessionVideo, updateSessionVideo } = useProgramStore()
+  const pushToast = useUiStore(s => s.pushToast)
+  const version = useProgramStore(s => s.version)
+  const removeSessionVideo = useProgramStore(s => s.removeSessionVideo)
+  const updateSessionVideo = useProgramStore(s => s.updateSessionVideo)
   const [playingVideo, setPlayingVideo] = useState<SessionVideo | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
