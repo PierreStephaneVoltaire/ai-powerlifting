@@ -40,6 +40,7 @@ interface ProgramState {
     data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: Session['wellness'] }, sessionId?: string
   ) => Promise<void>
   saveSession: (date: string, index: number, session?: Session) => Promise<Session>
+  persistSession: (date: string, index: number, session: Session, revision: number) => Promise<Session>
   updateMaxes: (maxes: {
     squat_kg: number
     bench_kg: number
@@ -255,14 +256,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     const session = sessionOverride ?? program.sessions[index]
     if (!session) throw new Error(`Cannot save session at index ${index}: session not found`)
 
-    const updated = await api.updateSession(version, date, index, session, api.mutationEnvelope(program.meta.revision ?? 0, undefined, session.id))
-
-    // Sync body weight to weight log if present
-    if (session.body_weight_kg != null) {
-      api.addWeightEntry(version, { date: session.date, kg: session.body_weight_kg }).catch((e) =>
-        console.error('Failed to sync body weight to weight log:', e)
-      )
-    }
+    const updated = await get().persistSession(date, index, session, program.meta.revision ?? 0)
 
     set((state) => {
       if (!state.program) return { isDirty: false }
@@ -272,6 +266,17 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       }
       return { program: { ...state.program, sessions, meta: { ...state.program.meta, revision: updated.revision ?? state.program.meta.revision } }, isDirty: false }
     })
+    return updated
+  },
+
+  persistSession: async (date, index, session, revision) => {
+    const { version } = get()
+    const updated = await api.updateSession(version, date, index, session, api.mutationEnvelope(revision, undefined, session.id))
+    if (session.body_weight_kg != null) {
+      api.addWeightEntry(version, { date: session.date, kg: session.body_weight_kg }).catch((e) =>
+        console.error('Failed to sync body weight to weight log:', e)
+      )
+    }
     return updated
   },
 

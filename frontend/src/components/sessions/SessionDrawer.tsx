@@ -409,7 +409,7 @@ export default function SessionDrawer({
   const { readOnly: authReadOnly } = useAuth('sessions')
   const readOnly = readOnlyProp ?? authReadOnly
   const version = useProgramStore(s => s.version)
-  const saveSession = useProgramStore(s => s.saveSession)
+  const persistSession = useProgramStore(s => s.persistSession)
   const deleteSession = useProgramStore(s => s.deleteSession)
   const phases = useProgramStore(s => s.program?.phases)
   const unit = useSettingsStore(s => s.unit)
@@ -440,6 +440,11 @@ export default function SessionDrawer({
   const changeVersionRef = useRef(0)
   const latestSaveRef = useRef<{ session: Session; version: number; notify: boolean; close: boolean; draftKey: string; partition: string; lookupDate: string } | null>(null)
   const saveInFlightRef = useRef(false)
+  const flushRef = useRef<Promise<void>>(Promise.resolve())
+  const revisionRef = useRef(0)
+  const savedSessionRef = useRef<Session | null>(null)
+  const savedAnythingRef = useRef(false)
+  const pendingSaveRef = useRef(false)
 
   const markChanged = () => {
     changeVersionRef.current += 1
@@ -490,8 +495,11 @@ export default function SessionDrawer({
   }, [glossary])
 
   useEffect(() => {
-    const session = useProgramStore.getState().program?.sessions[sessionArrayIndex]
+    const program = useProgramStore.getState().program
+    const session = program?.sessions[sessionArrayIndex]
     if (session) {
+      revisionRef.current = program?.meta.revision ?? 0
+      savedSessionRef.current = session
       let active = true
       const partition = requestPartition()
       const sessionId = session.id || ''
@@ -572,7 +580,9 @@ export default function SessionDrawer({
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
     }
+    pendingSaveRef.current = true
     autoSaveTimerRef.current = setTimeout(() => {
+      pendingSaveRef.current = false
       void handleSaveRef.current?.(false, false)
     }, 1500)
     return () => {
@@ -582,6 +592,15 @@ export default function SessionDrawer({
       }
     }
   }, [hasChanges, localSession])
+
+  useEffect(() => () => {
+    const pending = pendingSaveRef.current ? handleSaveRef.current?.(false, false) : undefined
+    void Promise.resolve(pending).then(() => flushRef.current).finally(() => {
+      if (!savedAnythingRef.current) return
+      const { loadProgram, version: currentVersion } = useProgramStore.getState()
+      void loadProgram(currentVersion)
+    })
+  }, [])
 
   useEffect(() => {
     if (!hasChanges && !isSaving) return
@@ -607,8 +626,13 @@ export default function SessionDrawer({
   }
 
   const flushLatestSave = async () => {
-    if (saveInFlightRef.current) return
+    if (saveInFlightRef.current) return flushRef.current
+    const flush = runSaveQueue()
+    flushRef.current = flush
+    return flush
+  }
 
+  const runSaveQueue = async () => {
     saveInFlightRef.current = true
     setIsSaving(true)
     let shouldNotify = false
@@ -623,8 +647,10 @@ export default function SessionDrawer({
 
         const lookupDate = job.lookupDate
         const draft = job.draftKey ? await enqueueDraft(job.session, job.draftKey, job.partition) : undefined
-        const saved = await saveSession(lookupDate, sessionArrayIndex, job.session)
-        setBaseline(saved)
+        const saved = await persistSession(lookupDate, sessionArrayIndex, job.session, revisionRef.current)
+        revisionRef.current = saved.revision ?? revisionRef.current
+        savedSessionRef.current = saved
+        savedAnythingRef.current = true
         if (draft) await removeDraftIfMatch(job.draftKey, draft, job.partition)
         savedDateRef.current = job.session.date
 
@@ -697,8 +723,9 @@ export default function SessionDrawer({
   handleSaveRef.current = handleSave
 
   const handleDiscard = () => {
-    const clone = JSON.parse(JSON.stringify(baseline)) as Session
+    const clone = JSON.parse(JSON.stringify(savedSessionRef.current ?? baseline)) as Session
     clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
+    pendingSaveRef.current = false
     setLocalSession(clone)
     changeVersionRef.current = 0
     setHasChanges(false)
