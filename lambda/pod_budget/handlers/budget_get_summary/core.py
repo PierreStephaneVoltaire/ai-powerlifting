@@ -23,4 +23,4 @@ async def budget_get_summary(args: dict) -> dict:
     store = _get_store()
     pk = args.get("pk") or os.environ.get("HEALTH_PROGRAM_PK", "operator")
     month = args.get("month") or datetime.now(timezone.utc).isoformat()[:7]
-    return await store.get_summary(pk, month)
+    return await store.get_summary(pk, month, args.get("block_id"))

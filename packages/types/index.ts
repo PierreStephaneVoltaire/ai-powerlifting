@@ -127,6 +127,7 @@ export interface ChangeLogEntry {
 }
 
 export interface BlockNote {
+  block_id?: string
   date: string
   notes: string
   updated_at: string
@@ -222,6 +223,7 @@ export interface FederationLibrary {
 
 
 export interface Competition {
+  block_id?: string
   name: string
   date: string
   federation: string
@@ -456,6 +458,7 @@ export interface Program {
 }
 
 export interface DietNote {
+  block_id?: string
   date: string
   notes: string
   avg_daily_calories?: number
@@ -501,11 +504,13 @@ export interface LiftProfileVideo extends SessionVideo {
 }
 
 export interface Supplement {
+  block_id?: string
   name: string
   dose: string
 }
 
 export interface SupplementPhase {
+  block_id?: string
   phase: number
   phase_name: string
   notes: string
@@ -531,6 +536,7 @@ export interface MaxEntry {
 
 
 export interface WeightEntry {
+  block_id?: string
   date: string
   kg: number
 }
@@ -1294,6 +1300,7 @@ export type BudgetDatePrecision = 'exact' | 'month'
 export const BUDGET_DATE_PRECISION_VALUES: ReadonlyArray<BudgetDatePrecision> = ['exact', 'month']
 
 export interface BudgetItem {
+  block_id?: string
   id: string
   user_pk: string
   name: string
@@ -1317,6 +1324,7 @@ export interface BudgetItem {
 }
 
 export interface BudgetConfig {
+  block_id?: string
   user_pk: string
   monthly_cap: number
   currency: string

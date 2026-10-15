@@ -1,8 +1,8 @@
 import { invokeLambda } from '../utils/lambda'
 import type { WeightEntry, WeightLogStore } from '@powerlifting/types'
 
-export async function getWeightLog(pk: string, version: string): Promise<WeightLogStore> {
-  const result = await invokeLambda('pod_weight', { function: 'weight_log_get',  pk, version })
+export async function getWeightLog(pk: string, version: string, blockId?: string): Promise<WeightLogStore> {
+  const result = await invokeLambda('pod_weight', { function: 'weight_log_get', pk, version, ...(blockId ? { block_id: blockId } : {}) })
   return {
     pk,
     sk: `weight_log#${version}`,

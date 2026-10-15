@@ -23,6 +23,8 @@ import boto3
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
+from block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id, in_block, scope_program, stamp
+
 logger = logging.getLogger(__name__)
 
 class ProgramNotFoundError(Exception):
@@ -703,6 +705,7 @@ class ProgramStore:
                     session["block"] = archive_id
                     session["block_id"] = archive_id
             self._remap_block_meta(meta, source_id, archive_id)
+            self._archive_block_records(program, source_id, archive_id)
             source["id"] = archive_id
             source["block_id"] = archive_id
             if isinstance(current_name, str) and current_name.strip():
@@ -934,6 +937,22 @@ class ProgramStore:
         return candidate
 
     @staticmethod
+    def _replace_active_block_records(program: dict, field: str, incoming: list) -> list:
+        active = current_block_id(program)
+        kept = [copy.deepcopy(item) for item in (program.get(field) or []) if isinstance(item, dict) and not in_block(item, active, active)]
+        replaced = [stamp(copy.deepcopy(item), program) for item in incoming if isinstance(item, dict) and in_block(item, active, active)]
+        return kept + replaced
+
+    @staticmethod
+    def _archive_block_records(program: dict, source_id: str, archive_id: str) -> None:
+        for field in BLOCK_SCOPED_RECORD_FIELDS:
+            for record in program.get(field) or []:
+                if isinstance(record, dict) and in_block(record, source_id, source_id):
+                    record["block_id"] = archive_id
+                    if "block" in record:
+                        record["block"] = archive_id
+
+    @staticmethod
     def _remap_block_meta(meta: dict, source_id: str, archive_id: str) -> None:
         for field in ("block_start_maxes", "block_week_start_days"):
             values = meta.get(field)
@@ -1136,6 +1155,7 @@ class ProgramStore:
             "ref_sk": new_sk,
             "updated_at": now,
             "revision": current_revision + 1,
+            "current_block_id": current_block_id(program),
         }
         
         logger.debug(f"[ProgramStore] Updating pointer to version={new_version_int}")
@@ -1421,8 +1441,8 @@ class ProgramStore:
             raise ValueError("diet_notes must be a list")
 
         def mutate(program):
-            program["diet_notes"] = copy.deepcopy(notes)
-            return {"success": True, "diet_notes": copy.deepcopy(notes)}
+            program["diet_notes"] = self._replace_active_block_records(program, "diet_notes", notes)
+            return {"success": True, "diet_notes": scope_program(program)["diet_notes"]}
 
         return await self.mutate_source("diet_notes_update", {"diet_notes": notes}, expected_revision, idempotency_key, mutate)
 
@@ -1444,8 +1464,9 @@ class ProgramStore:
             for key, value in patch.items():
                 if not isinstance(value, list):
                     raise ValueError(f"{key} must be a list")
-                program[key] = copy.deepcopy(value)
-            return {key: copy.deepcopy(program.get(key, [])) for key in ("supplements", "supplement_phases")}
+                program[key] = self._replace_active_block_records(program, key, value)
+            scoped = scope_program(program)
+            return {key: copy.deepcopy(scoped.get(key, [])) for key in ("supplements", "supplement_phases")}
 
         return await self.mutate_source("supplements_update", {"patch": patch}, expected_revision, idempotency_key, mutate)
 
@@ -1454,27 +1475,29 @@ class ProgramStore:
 
     async def upsert_diet_note(self, note_date: str, notes: str, expected_revision: int, idempotency_key: str) -> dict:
         def mutate(program):
+            active = current_block_id(program)
             items = [copy.deepcopy(item) for item in (program.get("diet_notes") or []) if isinstance(item, dict)]
-            item = {"date": note_date, "notes": notes}
+            item = {"date": note_date, "notes": notes, "block_id": active}
             for index, existing in enumerate(items):
-                if existing.get("date") == note_date:
+                if existing.get("date") == note_date and in_block(existing, active, active):
                     items[index] = item
                     break
             else:
                 items.append(item)
             program["diet_notes"] = items
-            return {"success": True, "note": item, "diet_notes": items}
+            return {"success": True, "note": item, "diet_notes": scope_program(program)["diet_notes"]}
 
         return await self.mutate_source("diet_note_upsert", {"date": note_date, "notes": notes}, expected_revision, idempotency_key, mutate)
 
     async def delete_diet_note(self, note_date: str, expected_revision: int, idempotency_key: str) -> dict:
         def mutate(program):
+            active = current_block_id(program)
             notes = [copy.deepcopy(item) for item in (program.get("diet_notes") or []) if isinstance(item, dict)]
-            updated = [item for item in notes if item.get("date") != note_date]
+            updated = [item for item in notes if not (item.get("date") == note_date and in_block(item, active, active))]
             if len(updated) == len(notes):
                 raise ValueError(f"Diet note not found: {note_date}")
             program["diet_notes"] = updated
-            return {"deleted": note_date, "diet_notes": updated}
+            return {"deleted": note_date, "diet_notes": scope_program(program)["diet_notes"]}
 
         return await self.mutate_source("diet_note_delete", {"date": note_date}, expected_revision, idempotency_key, mutate)
 

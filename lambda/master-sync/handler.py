@@ -81,6 +81,9 @@ def _build_merged(user_pk, user_sk, master_record, master_fields, is_insert):
     if is_insert and "user_status" not in merged:
         merged["user_status"] = "available"
 
+    if merged.get("user_status", "available") != "available" and merged.get("start_date"):
+        merged["entry_date"] = merged["start_date"]
+
     return merged
 
 

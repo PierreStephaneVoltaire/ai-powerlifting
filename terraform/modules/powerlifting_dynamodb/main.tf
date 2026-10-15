@@ -67,6 +67,18 @@ resource "aws_dynamodb_table" "if_powerlifting_user_competitions" {
     type = "S"
   }
 
+  attribute {
+    name = "entry_date"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "entries-by-date"
+    hash_key        = "pk"
+    range_key       = "entry_date"
+    projection_type = "ALL"
+  }
+
   lifecycle {
     prevent_destroy = true
   }

@@ -1,6 +1,8 @@
 from __future__ import annotations
 import logging
 from typing import Optional
+
+from block_scope import scope_program
 logger = logging.getLogger(__name__)
 _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 def _get_store():
@@ -33,8 +35,9 @@ async def health_get_supplements(args: dict | None = None) -> dict:
     pk = args.get("pk") if isinstance(args, dict) else None
     store = _store_for(pk)
     program = await store.get_program()
+    scoped = scope_program(program, args.get("block_id") if isinstance(args, dict) else None)
 
     return {
-        "supplements": program.get("supplements", []),
-        "supplement_phases": program.get("supplement_phases", []),
+        "supplements": scoped.get("supplements", []),
+        "supplement_phases": scoped.get("supplement_phases", []),
     }

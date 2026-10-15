@@ -12,6 +12,10 @@
         },
         "version": {
           "type": "string"
+        },
+        "block_id": {
+          "type": "string",
+          "description": "Training block id; defaults to the active block."
         }
       },
       "additionalProperties": false
@@ -84,6 +88,10 @@
         },
         "version": {
           "type": "string"
+        },
+        "block_id": {
+          "type": "string",
+          "description": "Training block id; defaults to the active block."
         }
       },
       "additionalProperties": false

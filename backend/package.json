@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:forwarding": "node --import tsx --test src/utils/forwarding.test.ts",
     "test:media": "node --import tsx --test src/utils/mediaCdn.test.ts src/utils/serveMedia.test.ts",
+    "test:block-scope": "node --import tsx --test src/utils/blockScope.test.ts",
     "seed:glossary": "tsx src/scripts/seedGlossary.ts",
     "backfill:planned": "tsx src/scripts/backfillPlanned.ts",
     "set:week-start": "tsx src/scripts/setCurrentWeekStart.ts"

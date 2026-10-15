@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Any, Optional
+from block_scope import current_block_id
 logger = logging.getLogger(__name__)
 _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 def _get_store():
@@ -86,6 +87,7 @@ async def health_create_competition(args: dict | None = None, competition: dict 
         competitions = program.setdefault("competitions", [])
         if any(c.get("date") == new_comp["date"] for c in competitions):
             raise ValueError(f"Competition already exists on {new_comp['date']}")
+        new_comp["block_id"] = current_block_id(program)
         competitions.append(copy.deepcopy(new_comp))
         competitions.sort(key=lambda c: c.get("date", ""))
         return copy.deepcopy(new_comp)

@@ -150,6 +150,10 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "block_id": {
+          "type": "string",
+          "description": "Training block id; defaults to the active block."
         }
       },
       "required": []
@@ -250,6 +254,10 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "block_id": {
+          "type": "string",
+          "description": "Training block id; defaults to the active block."
         }
       },
       "required": []
@@ -735,7 +743,7 @@
   {
     "name": "block_notes_update",
     "domain": "program",
-    "description": "Replace the block notes array for a program version. This is a full replace \u2014 send the complete array of block note dicts.",
+    "description": "Replace the block notes array for a program version. This is a full replace — send the complete array of block note dicts.",
     "handler": "lambda.pod_training_program.handlers.block_notes_update.handler",
     "input_schema": {
       "type": "object",
@@ -809,7 +817,7 @@
   {
     "name": "diet_notes_update",
     "domain": "program",
-    "description": "Replace the diet notes array for a program version. Full replace \u2014 send the complete array of note dicts.",
+    "description": "Replace the diet notes array for a program version. Full replace — send the complete array of note dicts.",
     "handler": "lambda.pod_training_program.handlers.diet_notes_update.handler",
     "input_schema": {
       "type": "object",
@@ -885,7 +893,7 @@
   {
     "name": "supplement_phases_update",
     "domain": "program",
-    "description": "Replace the supplement phases array for a program version. Full replace \u2014 send the complete array of phase dicts.",
+    "description": "Replace the supplement phases array for a program version. Full replace — send the complete array of phase dicts.",
     "handler": "lambda.pod_training_program.handlers.supplement_phases_update.handler",
     "input_schema": {
       "type": "object",
@@ -930,7 +938,7 @@
   {
     "name": "export_program_history",
     "domain": "program",
-    "description": "Export the full training program history to Excel (.xlsx) or Markdown (.md) format. Returns a download URL or file content. AI section calls (program_evaluation) are intentionally omitted from the analysis bundle; correlation uses cached DynamoDB values only.",
+    "description": "Export one training block (default: the active block), optionally limited to an analysis window, to Excel (.xlsx) or Markdown (.md) format. Returns a download URL or file content. AI section calls (program_evaluation) are intentionally omitted from the analysis bundle; correlation uses cached DynamoDB values only.",
     "handler": "lambda.pod_training_program.handlers.export_program_history.handler",
     "input_schema": {
       "type": "object",
@@ -938,6 +946,26 @@
         "format": {
           "type": "string",
           "description": "Export format: \"xlsx\" or \"md\"."
+        },
+        "block": {
+          "type": "string",
+          "description": "Block id to export, or \"current\" (default) for the active block."
+        },
+        "window_start": {
+          "type": "string",
+          "description": "Inclusive YYYY-MM-DD start of the selected analysis window."
+        },
+        "window_end": {
+          "type": "string",
+          "description": "Inclusive YYYY-MM-DD end of the selected analysis window."
+        },
+        "week_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "week_end": {
+          "type": "integer",
+          "minimum": 1
         },
         "pk": {
           "type": "string",
@@ -978,7 +1006,7 @@
   {
     "name": "export_program_markdown",
     "domain": "program",
-    "description": "Generate a markdown export of the current program and return its content as a string. Includes phases, sessions, meta, and analysis sections (deterministic only \u2014 AI sections excluded).",
+    "description": "Generate a markdown export of the current program and return its content as a string. Includes phases, sessions, meta, and analysis sections (deterministic only — AI sections excluded).",
     "handler": "lambda.pod_training_program.handlers.export_program_markdown.handler",
     "input_schema": {
       "type": "object",

@@ -19,9 +19,15 @@ from typing import Any, Optional
 import boto3
 from boto3.dynamodb.conditions import Key
 
+from block_scope import active_block_id_for, scope_entries
+
 logger = logging.getLogger(__name__)
 
 CONFIG_SK = "CONFIG#budget"
+
+
+def config_sk(block_id: str) -> str:
+    return f"{CONFIG_SK}#{block_id}"
 ITEM_PREFIX = "ITEM#"
 
 CATEGORY_VALUES = (
@@ -112,7 +118,7 @@ def normalize_budget_item_from_store(stored, pk: str) -> dict:
     purchased_date = _trim_to_null(r.get("purchased_date"))
     recurrence = _normalize_recurrence(r.get("recurrence"))
     competition_id = r.get("competition_id") if isinstance(r.get("competition_id"), str) and r.get("competition_id") else None
-    return {
+    item = {
         "id": r.get("id") if isinstance(r.get("id"), str) and r.get("id") else "",
         "user_pk": r.get("user_pk") if isinstance(r.get("user_pk"), str) and r.get("user_pk") else pk,
         "name": r.get("name") if isinstance(r.get("name"), str) else "",
@@ -134,6 +140,9 @@ def normalize_budget_item_from_store(stored, pk: str) -> dict:
         "created_at": r.get("created_at") if isinstance(r.get("created_at"), str) and r.get("created_at") else datetime.now(timezone.utc).isoformat(),
         "updated_at": r.get("updated_at") if isinstance(r.get("updated_at"), str) and r.get("updated_at") else datetime.now(timezone.utc).isoformat(),
     }
+    if isinstance(r.get("block_id"), str) and r.get("block_id"):
+        item["block_id"] = r["block_id"]
+    return item
 
 
 def normalize_budget_item_input(raw, pk: str, item_id: str, existing: Optional[dict], now: str, existing_created_at: Optional[str] = None) -> dict:
@@ -150,7 +159,7 @@ def normalize_budget_item_input(raw, pk: str, item_id: str, existing: Optional[d
     competition_id = _trim_to_null(r.get("competition_id")) if isinstance(r.get("competition_id"), str) else ((existing.get("competition_id") if existing else None))
     comp_linked = r.get("comp_linked") if isinstance(r.get("comp_linked"), bool) else (competition_id is not None)
     start_date = r.get("start_date").strip() if isinstance(r.get("start_date"), str) and r.get("start_date").strip() else ((existing.get("start_date") if existing else None) or _default_start_date(precision))
-    return {
+    item = {
         "id": item_id,
         "user_pk": pk,
         "name": r.get("name") if isinstance(r.get("name"), str) else ((existing.get("name") if existing else "") or ""),
@@ -172,6 +181,9 @@ def normalize_budget_item_input(raw, pk: str, item_id: str, existing: Optional[d
         "created_at": existing_created_at or (existing.get("created_at") if existing else now),
         "updated_at": now,
     }
+    if existing and existing.get("block_id"):
+        item["block_id"] = existing["block_id"]
+    return item
 
 
 def normalize_budget_config_from_store(raw, pk: str) -> dict:
@@ -274,7 +286,14 @@ class BudgetStore:
             self._table = boto3.resource("dynamodb", region_name=self._region).Table(self._table_name)
         return self._table
 
-    def _query_items_sync(self, pk: str) -> list[dict]:
+    def _active_block_id(self, pk: str) -> str:
+        return active_block_id_for(pk)
+
+    def _query_items_sync(self, pk: str, block_id: Optional[str] = None) -> list[dict]:
+        active = self._active_block_id(pk)
+        return scope_entries(self._query_all_items_sync(pk), block_id or active, active)
+
+    def _query_all_items_sync(self, pk: str) -> list[dict]:
         items: list[dict] = []
         last_key = None
         while True:
@@ -288,25 +307,25 @@ class BudgetStore:
                 break
         return [_sanitize_decimals(i) for i in items]
 
-    def get_config_sync(self, pk: str) -> dict:
-        resp = self.table.get_item(Key={"pk": pk, "sk": CONFIG_SK})
+    def get_config_sync(self, pk: str, block_id: Optional[str] = None) -> dict:
+        resp = self.table.get_item(Key={"pk": pk, "sk": config_sk(block_id or self._active_block_id(pk))})
         return normalize_budget_config_from_store(_sanitize_decimals(resp.get("Item")), pk)
 
-    async def get_config(self, pk: str) -> dict:
-        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.get_config_sync(pk))
+    async def get_config(self, pk: str, block_id: Optional[str] = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.get_config_sync(pk, block_id))
 
     def put_config_sync(self, pk: str, raw) -> dict:
         now = datetime.now(timezone.utc).isoformat()
         config = normalize_budget_config_from_store(raw, pk)
         config["updated_at"] = now
-        self.table.put_item(Item=_to_dynamo({"pk": pk, "sk": CONFIG_SK, "config": config, "updated_at": now}))
+        self.table.put_item(Item=_to_dynamo({"pk": pk, "sk": config_sk(self._active_block_id(pk)), "config": config, "updated_at": now}))
         return config
 
     async def put_config(self, pk: str, raw) -> dict:
         return await asyncio.get_running_loop().run_in_executor(None, lambda: self.put_config_sync(pk, raw))
 
-    def list_items_sync(self, pk: str, filters: Optional[dict] = None) -> list[dict]:
-        stored = self._query_items_sync(pk)
+    def list_items_sync(self, pk: str, filters: Optional[dict] = None, block_id: Optional[str] = None) -> list[dict]:
+        stored = self._query_items_sync(pk, block_id)
         items = [normalize_budget_item_from_store(_strip_stored(s), pk) for s in stored]
         if not filters:
             return items
@@ -324,12 +343,12 @@ class BudgetStore:
             out.append(it)
         return out
 
-    async def list_items(self, pk: str, filters: Optional[dict] = None) -> list[dict]:
-        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.list_items_sync(pk, filters))
+    async def list_items(self, pk: str, filters: Optional[dict] = None, block_id: Optional[str] = None) -> list[dict]:
+        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.list_items_sync(pk, filters, block_id))
 
     def create_item_sync(self, pk: str, raw) -> dict:
         now = datetime.now(timezone.utc).isoformat()
-        item = normalize_budget_item_input(raw, pk, _new_item_id(), None, now)
+        item = {**normalize_budget_item_input(raw, pk, _new_item_id(), None, now), "block_id": self._active_block_id(pk)}
         self.table.put_item(Item=_to_dynamo({**item, "pk": pk, "sk": f"{ITEM_PREFIX}{item['id']}"}))
         return item
 
@@ -359,9 +378,9 @@ class BudgetStore:
     async def delete_item(self, pk: str, item_id: str) -> None:
         await asyncio.get_running_loop().run_in_executor(None, lambda: self.delete_item_sync(pk, item_id))
 
-    def get_summary_sync(self, pk: str, month: str) -> dict:
-        config = self.get_config_sync(pk)
-        stored = self._query_items_sync(pk)
+    def get_summary_sync(self, pk: str, month: str, block_id: Optional[str] = None) -> dict:
+        config = self.get_config_sync(pk, block_id)
+        stored = self._query_items_sync(pk, block_id)
         items = [normalize_budget_item_from_store(_strip_stored(s), pk) for s in stored]
         return {
             "monthly_cap": config.get("monthly_cap"),
@@ -372,5 +391,5 @@ class BudgetStore:
             "upcoming_one_time": _upcoming_one_time(items),
         }
 
-    async def get_summary(self, pk: str, month: str) -> dict:
-        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.get_summary_sync(pk, month))
+    async def get_summary(self, pk: str, month: str, block_id: Optional[str] = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.get_summary_sync(pk, month, block_id))

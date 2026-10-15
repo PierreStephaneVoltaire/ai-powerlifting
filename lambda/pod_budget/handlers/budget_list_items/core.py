@@ -29,5 +29,5 @@ async def budget_list_items(args: dict) -> dict:
         filters["category"] = args.get("category")
     if args.get("priority") is not None:
         filters["priority"] = args.get("priority")
-    items = await store.list_items(pk, filters or None)
+    items = await store.list_items(pk, filters or None, args.get("block_id"))
     return {"items": items}

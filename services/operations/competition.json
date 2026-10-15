@@ -133,6 +133,10 @@
         "pk": {
           "type": "string",
           "minLength": 1
+        },
+        "block_id": {
+          "type": "string",
+          "description": "Training block id; defaults to the active block."
         }
       },
       "additionalProperties": true

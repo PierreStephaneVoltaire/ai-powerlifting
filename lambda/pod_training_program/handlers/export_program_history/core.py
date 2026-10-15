@@ -11,7 +11,9 @@ import base64
 import logging
 from importlib import import_module
 from competition_entries import with_competition_entries
+from block_scope import ACTIVE, current_block_id, in_block, resolve_block_id, scope_entries, scope_program
 import os
+import re
 import tempfile
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -120,33 +122,47 @@ def _build_sectioned_analysis(
     return result
 
 
-def _build_sectioned_week_analysis(
-    program: dict,
-    sessions: list[dict],
-    glossary: list[dict] | None,
-    *,
-    week_start: int,
-    week_end: int,
-    ref_date: str,
-) -> dict:
-    return _build_sectioned_analysis(
-        program,
-        sessions,
-        glossary,
-        weeks=max(1, week_end - week_start + 1),
-        block="current",
-        week_start=week_start,
-        week_end=week_end,
-        ref_date=ref_date,
-    )
+def _session_in_window(session: dict, window: dict) -> bool:
+    week_start, week_end = window.get("week_start"), window.get("week_end")
+    if week_start is not None and week_end is not None:
+        week = int(session.get("week_number") or 0)
+        return int(week_start) <= week <= int(week_end)
+    date = str(session.get("date") or "")[:10]
+    if window.get("window_start") and date < window["window_start"]:
+        return False
+    if window.get("window_end") and date > window["window_end"]:
+        return False
+    return True
 
 
-def _scope_program_to_current_block(program: dict) -> dict:
-    """Return a shallow copy of program with phases and sessions filtered to the current block only."""
-    scoped = dict(program)
-    scoped["phases"] = [p for p in program.get("phases", []) if (p.get("block") or "current") == "current"]
-    scoped["sessions"] = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
-    return scoped
+def _scope_export_program(program: dict, block: str | None, window: dict) -> tuple[dict, str]:
+    target = resolve_block_id(program, block)
+    scoped = scope_program(program, target)
+    scoped["sessions"] = [s for s in scoped.get("sessions", []) if _session_in_window(s, window)]
+    session_block = ACTIVE if target == current_block_id(program) else target
+    return scoped, session_block
+
+
+def _block_date_range(program: dict, block: str | None) -> tuple[str | None, str | None]:
+    target = resolve_block_id(program, block)
+    active = current_block_id(program)
+    session_dates = [(str(s.get("date"))[:10], in_block(s, target, active)) for s in program.get("sessions", []) if s.get("date")]
+    block_dates = sorted(date for date, inside in session_dates if inside)
+    if not block_dates:
+        return None, None
+    if target == active:
+        return block_dates[0], None
+    following = sorted(date for date, inside in session_dates if not inside and date > block_dates[-1])
+    return block_dates[0], following[0] if following else None
+
+
+def _export_window(args: dict) -> dict:
+    window = {key: args.get(key) for key in ("window_start", "window_end", "week_start", "week_end")}
+    window = {key: value for key, value in window.items() if value not in (None, "")}
+    for key in ("week_start", "week_end"):
+        if key in window:
+            window[key] = int(window[key])
+    return window
 
 
 def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
@@ -173,7 +189,7 @@ def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
     return _sanitize_decimals(report)
 
 
-def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
+def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, session_block: str = ACTIVE, window: dict | None = None) -> dict:
     """Assemble the analysis bundle threaded into the XLSX export.
 
     Uses cached AI reports (no forced regeneration) and the pure weekly_analysis
@@ -244,39 +260,45 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
         logger.warning("export: max history fetch failed (%s); continuing without it", e)
         bundle["max_history"] = []
 
-    try:
-        block_sessions = [s for s in sessions if s.get("block", "current") == "current" and s.get("date")]
-        if not block_sessions:
-            effective_weeks = 4
-        else:
-            block_sessions.sort(key=lambda x: x["date"])
-            first = datetime.fromisoformat(block_sessions[0]["date"][:10])
-            last = datetime.fromisoformat(block_sessions[-1]["date"][:10])
-            diff_days = abs((last - first).days)
-            effective_weeks = max(int((diff_days / 7) + 0.999), 4)
-    except Exception as e:
-        logger.warning("export: effective_weeks calculation failed: %s", e)
-        effective_weeks = 4
+    dated_sessions = sorted((s for s in sessions if s.get("date")), key=lambda x: x["date"])
+    if dated_sessions:
+        first = datetime.fromisoformat(dated_sessions[0]["date"][:10])
+        last = datetime.fromisoformat(dated_sessions[-1]["date"][:10])
+        effective_weeks = max(int((abs((last - first).days) / 7) + 0.999), 1)
+    else:
+        effective_weeks = 1
 
     try:
-        current_sessions = [s for s in sessions if (s.get("block") or "current") == "current"]
-        current_week = max(
-            (int(s.get("week_number", 0)) for s in current_sessions if s.get("week_number")),
-            default=effective_weeks,
-        )
-        bundle["weekly"] = _build_sectioned_week_analysis(
-            program,
-            current_sessions,
-            glossary,
-            week_start=max(1, current_week - effective_weeks + 1),
-            week_end=current_week,
-            ref_date=datetime.utcnow().date().isoformat(),
-        )
+        if window:
+            bundle["weekly"] = _build_sectioned_analysis(
+                program,
+                sessions,
+                glossary,
+                weeks=effective_weeks,
+                block=session_block,
+                window_start=window.get("window_start"),
+                window_end=window.get("window_end"),
+                week_start=window.get("week_start"),
+                week_end=window.get("week_end"),
+                ref_date=window.get("window_end") or datetime.utcnow().date().isoformat(),
+            )
+        else:
+            weeks = [int(s["week_number"]) for s in sessions if s.get("week_number")]
+            bundle["weekly"] = _build_sectioned_analysis(
+                program,
+                sessions,
+                glossary,
+                weeks=effective_weeks,
+                block=session_block,
+                week_start=min(weeks, default=1),
+                week_end=max(weeks, default=1),
+                ref_date=(dated_sessions[-1]["date"][:10] if dated_sessions else datetime.utcnow().date().isoformat()),
+            )
     except Exception as e:
         logger.warning("export: weekly_analysis failed: %s", e)
 
     try:
-        if (getattr(store, "export_access", None) or {}).get("is_self"):
+        if session_block == ACTIVE and (getattr(store, "export_access", None) or {}).get("is_self"):
             bundle["correlation"] = _read_cached_correlation(active_pk, weeks=effective_weeks)
     except Exception as e:
         logger.warning("export: correlation cache read failed: %s", e)
@@ -300,39 +322,60 @@ def _normalize_export_format(format_value: str | None) -> str:
     raise ValueError(f"Unsupported export format: {format_value!r}. Use 'xlsx' or 'markdown'.")
 
 
-def _write_program_export(program: dict, sessions: list[dict], store, out_dir: str, format_value: str | None) -> tuple[str, str, str]:
+def _export_filename(program: dict, session_block: str, window: dict, extension: str) -> str:
+    block_label = "current" if session_block == ACTIVE else session_block
+    if window.get("week_start") is not None and window.get("week_end") is not None:
+        span = f"_W{window['week_start']}-W{window['week_end']}"
+    elif window.get("window_start") or window.get("window_end"):
+        span = f"_{window.get('window_start', '')}_{window.get('window_end', '')}"
+    else:
+        span = ""
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", f"program_{block_label}{span}.{extension}")
+
+
+def _write_program_export(program: dict, session_block: str, window: dict, store, out_dir: str, format_value: str | None) -> tuple[str, str, str]:
     from .export import build_program_markdown, build_program_xlsx
 
     export_format = _normalize_export_format(format_value)
-    scoped_program = program
-    scoped_sessions = scoped_program["sessions"]
-    analysis = _build_analysis_bundle(program, sessions, store)
+    analysis = _build_analysis_bundle(program, program.get("sessions", []), store, session_block=session_block, window=window)
+    active = current_block_id(program)
+    target = active if session_block == ACTIVE else session_block
+    if isinstance(analysis.get("weight_log"), list):
+        analysis["weight_log"] = _entries_in_window(scope_entries(analysis["weight_log"], target, active), program)
+    if isinstance(analysis.get("max_history"), list):
+        analysis["max_history"] = _entries_in_window(analysis["max_history"], program)
 
     if export_format == "markdown":
-        filename = "program_history.md"
-        description = "Markdown export of training history"
-        out_path = os.path.join(out_dir, filename)
-        build_program_markdown(scoped_program, out_path, analysis=analysis, export_context=analysis)
-        return filename, description, export_format
+        filename = _export_filename(program, session_block, window, "md")
+        build_program_markdown(program, os.path.join(out_dir, filename), analysis=analysis, export_context=analysis)
+        return filename, "Markdown export of training history", export_format
 
-    filename = "program_history.xlsx"
-    description = "Excel export of training history"
-    out_path = os.path.join(out_dir, filename)
-    build_program_xlsx(scoped_program, out_path, analysis=analysis, export_context=analysis)
-    return filename, description, export_format
+    filename = _export_filename(program, session_block, window, "xlsx")
+    build_program_xlsx(program, os.path.join(out_dir, filename), analysis=analysis, export_context=analysis)
+    return filename, "Excel export of training history", export_format
+
+
+def _entries_in_window(entries: list[dict], program: dict) -> list[dict]:
+    dates = sorted(str(s.get("date") or "")[:10] for s in program.get("sessions", []) if s.get("date"))
+    if not dates:
+        return []
+    return [e for e in entries if dates[0] <= str(e.get("date") or "")[:10] <= dates[-1]]
 
 
 def export_program_history(args: dict) -> dict:
     store = _get_store(args)
-    program = with_competition_entries(_run_async(store.get_program()), store.pk)
+    program = _run_async(store.get_program())
+    start, end = _block_date_range(program, args.get("block"))
+    program = with_competition_entries(program, store.pk, start=start, end=end)
     from services.publication import program_view
     access = args.get('_access')
     if access:
         program = program_view(program, access)
     store.export_access = access
-    sessions = program.get("sessions", []) if isinstance(program, dict) else []
+    window = _export_window(args)
+    scoped, session_block = _scope_export_program(program, args.get("block"), window)
     with tempfile.TemporaryDirectory() as out_dir:
-        filename, _description, export_format = _write_program_export(program, sessions, store, out_dir, args.get("format"))
+        filename, _description, export_format = _write_program_export(scoped, session_block, window, store, out_dir, args.get("format"))
         with open(os.path.join(out_dir, filename), "rb") as exported:
             content_base64 = base64.b64encode(exported.read()).decode()
     return {"filename": filename, "format": export_format, "content_base64": content_base64}

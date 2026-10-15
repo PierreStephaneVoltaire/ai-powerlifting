@@ -9,6 +9,7 @@ import {
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { DietNote } from '@powerlifting/types'
+import { recordsInBlock } from '@/utils/blockScope'
 
 function parseDateString(ds: string): Date | null {
   if (!ds) return null
@@ -34,7 +35,7 @@ export default function BiometricsPage() {
 
   useEffect(() => {
     if (program?.diet_notes) {
-      const sorted = [...program.diet_notes].sort((a, b) => b.date.localeCompare(a.date))
+      const sorted = recordsInBlock(program.diet_notes, program).sort((a, b) => b.date.localeCompare(a.date))
       setNotes(sorted)
     }
   }, [program])

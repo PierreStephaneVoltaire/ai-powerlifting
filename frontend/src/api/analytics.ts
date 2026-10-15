@@ -944,6 +944,17 @@ export async function fetchBlockAnalysis(blockKey: string, refresh = false): Pro
   return body.data
 }
 
+export function programExportUrl(format: 'xlsx' | 'markdown', window?: AnalysisWindow | null): string {
+  const params = new URLSearchParams({ block: 'current' })
+  if (window) {
+    params.set('window_start', window.start)
+    params.set('window_end', window.end)
+    params.set('week_start', String(window.weekStart))
+    params.set('week_end', String(window.weekEnd))
+  }
+  return `/api/export/${format}?${params.toString()}`
+}
+
 export function blockAnalysisExportUrl(blockKey: string, format: 'xlsx' | 'markdown'): string {
   return `/api/analytics/blocks/${encodeURIComponent(blockKey)}/export/${format}`
 }

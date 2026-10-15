@@ -138,7 +138,25 @@ def test_user_competitions_use_a_partition_query(monkeypatch):
             raise AssertionError("user competition list must not scan the table")
 
     monkeypatch.setattr(module, "_get_table", lambda: Table())
+    monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
     assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet", "revision": 0, "units": "kg"}]
+
+
+def test_user_competitions_show_directory_and_selected_block_participation(monkeypatch):
+    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+
+    class Table:
+        def query(self, **_kwargs):
+            return {"Items": [
+                {"pk": "a", "sk": "COMP#dir", "name": "Directory meet", "user_status": "available", "start_date": "2026-12-01"},
+                {"pk": "a", "sk": "COMP#old", "name": "2025 Provincials", "user_status": "completed", "block_id": "block-2025", "start_date": "2025-03-01"},
+                {"pk": "a", "sk": "COMP#new", "name": "2026 Nationals", "user_status": "confirmed", "block_id": "block-new", "start_date": "2026-11-01"},
+            ]}
+
+    monkeypatch.setattr(module, "_get_table", lambda: Table())
+    monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
+    assert [c["name"] for c in module.list_competitions({"pk": "a"})] == ["2026 Nationals", "Directory meet"]
+    assert [c["name"] for c in module.list_competitions({"pk": "a", "block_id": "block-2025"})] == ["2025 Provincials", "Directory meet"]
 
 
 class FakeCompetitionTable:
@@ -167,6 +185,9 @@ class FakeCompetitionTable:
                 value_key = f":value_{field}"
                 if value_key in update["ExpressionAttributeValues"]:
                     item[field] = copy.deepcopy(update["ExpressionAttributeValues"][value_key])
+        if " REMOVE " in update["UpdateExpression"]:
+            for name in update["UpdateExpression"].split(" REMOVE ", 1)[1].split(", "):
+                item.pop(update["ExpressionAttributeNames"][name.strip()], None)
         marker = TransactItems[1]["Put"]["Item"]
         self.items[(marker["pk"], marker["sk"])] = copy.deepcopy(marker)
         if self.fail_after_commit:
@@ -200,3 +221,21 @@ def test_competition_idempotency_rejects_changed_payload_and_keeps_attempt_ids(m
     assert replay["post_meet_report"]["attempts"][0]["attempt_id"] == attempt_id
     with pytest.raises(ValueError, match="different payload"):
         module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "changed"}, "expected_revision": 1, "idempotency_key": "report"})
+
+
+def test_entering_a_meet_indexes_it_by_date_and_block_and_withdrawing_unindexes_it(monkeypatch):
+    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    table = FakeCompetitionTable()
+    table.items[("athlete-1", "COMP#meet")]["start_date"] = "2026-11-01"
+    monkeypatch.setattr(module, "_get_table", lambda: table)
+    monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
+    monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
+
+    entered = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "confirmed"}, "expected_revision": 0, "idempotency_key": "enter"})
+    stored = table.items[("athlete-1", "COMP#meet")]
+    assert (entered["entry_date"], entered["block_id"]) == ("2026-11-01", "block-new")
+    assert (stored["entry_date"], stored["block_id"]) == ("2026-11-01", "block-new")
+
+    withdrawn = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "available"}, "expected_revision": 1, "idempotency_key": "withdraw"})
+    assert "entry_date" not in withdrawn
+    assert "entry_date" not in table.items[("athlete-1", "COMP#meet")]

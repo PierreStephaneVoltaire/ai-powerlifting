@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 import logging
 from typing import Optional
+
+from block_scope import scope_program
 logger = logging.getLogger(__name__)
 _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 def _get_store():
@@ -47,7 +50,7 @@ async def health_get_diet_notes(
     store = _store_for(pk)
     program = await store.get_program()
 
-    diet_notes = program.get("diet_notes", [])
+    diet_notes = scope_program(program, args.get("block_id") if isinstance(args, dict) else None).get("diet_notes", [])
 
     if start_date or end_date:
         filtered = []

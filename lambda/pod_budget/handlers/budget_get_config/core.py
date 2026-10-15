@@ -21,4 +21,4 @@ async def budget_get_config(args: dict) -> dict:
     """
     store = _get_store()
     pk = args.get("pk") or os.environ.get("HEALTH_PROGRAM_PK", "operator")
-    return await store.get_config(pk)
+    return await store.get_config(pk, args.get("block_id"))

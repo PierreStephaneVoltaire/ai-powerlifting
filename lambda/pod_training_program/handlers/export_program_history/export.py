@@ -1234,7 +1234,7 @@ def _md_weight_trend_analysis(sessions: list[dict], weight_log: list[dict], meta
                 points.append((str(entry.get("date", "")), float(kg)))
     else:
         for session in sessions:
-            if session.get("block", "current") != "current" or not session.get("completed"):
+            if not session.get("completed"):
                 continue
             bw = session.get("body_weight_kg")
             if not _is_blank(bw):
@@ -2665,7 +2665,7 @@ def _write_trends_sheet(
                 bw_points.append((str(entry.get("date", "")), entry.get("kg")))
     else:
         for session in sessions:
-            if session.get("block", "current") != "current" or not session.get("completed"):
+            if not session.get("completed"):
                 continue
             if not _is_blank(session.get("body_weight_kg")):
                 bw_points.append((str(session.get("date", "")), session.get("body_weight_kg")))
@@ -2782,7 +2782,7 @@ def _build_dots_trend_rows(
 ) -> list[dict[str, Any]]:
     current_block_sessions = [
         s for s in sessions
-        if s.get("block", "current") == "current" and (s.get("completed") or s.get("status") in ("logged", "completed"))
+        if s.get("completed") or s.get("status") in ("logged", "completed")
     ]
     by_week: dict[Any, dict[str, Any]] = {}
     for session in current_block_sessions:

@@ -45,6 +45,7 @@ import {
 } from '@/api/analytics'
 import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
+import { recordsInBlock } from '@/utils/blockScope'
 
 function fatigueBadgeColor(score: number | null): string {
   if (score === null) return 'gray'
@@ -279,7 +280,7 @@ export function BlockWeeklySurface({
 
   const nutritionTrend = useMemo(() => {
     if (!program?.diet_notes?.length) return null
-    const inWindow = program.diet_notes
+    const inWindow = recordsInBlock(program.diet_notes, program, bundle.block.blockKey)
       .filter((n) => n.date >= analysisWindow.start && n.date <= analysisWindow.end)
       .sort((a, b) => a.date.localeCompare(b.date))
     if (!inWindow.length) return null
@@ -345,7 +346,7 @@ export function BlockWeeklySurface({
       consistencyPct: inWindow.length ? Math.round((consistent / inWindow.length) * 100) : null,
       entries: inWindow.length,
     }
-  }, [analysisWindow.end, analysisWindow.start, program?.diet_notes])
+  }, [analysisWindow.end, analysisWindow.start, bundle.block.blockKey, program])
 
   const fallbackBodyweight = useMemo(() => {
     const competitionBodyweight = bundle.historical.competitionOutcome?.bodyweightKg ?? null

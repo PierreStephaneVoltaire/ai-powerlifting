@@ -22,6 +22,9 @@ import boto3
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 
+from block_scope import active_block_id_for, in_block
+from competition_entries import participation_date
+
 from .config import (
     AWS_REGION,
     HEALTH_PROGRAM_PK,
@@ -217,8 +220,15 @@ def list_competitions(args: dict) -> list[dict]:
         if not last_key:
             break
 
+    active = active_block_id_for(pk)
+    target = args.get("block_id") or active
+    items = [comp for comp in items if _is_directory_entry(comp) or in_block(comp, target, active)]
     items.sort(key=lambda c: c.get("start_date") or "")
     return items
+
+
+def _is_directory_entry(comp: dict) -> bool:
+    return (comp.get("user_status") or comp.get("status") or "available") == "available"
 
 
 def update_user_competition(args: dict, operation: str = "update") -> dict:
@@ -259,6 +269,12 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
         raise CompetitionConflictError(expected_revision, current_revision, current)
 
     applied = copy.deepcopy(patch)
+    if not current.get("block_id") and not _is_directory_entry({**current, **applied}):
+        applied["block_id"] = active_block_id_for(pk)
+    entry_date = participation_date({**current, **applied})
+    if entry_date and current.get("entry_date") != entry_date:
+        applied["entry_date"] = entry_date
+    removed = ["entry_date"] if not entry_date and current.get("entry_date") else []
     if "post_meet_report" in applied:
         if applied["post_meet_report"] is None and isinstance(current.get("post_meet_report"), dict) and current["post_meet_report"].get("attempts"):
             applied["post_meet_report"] = copy.deepcopy(current["post_meet_report"])
@@ -266,7 +282,7 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
             applied["post_meet_report"] = _normalise_report(master_id, applied["post_meet_report"], current.get("post_meet_report"))
     next_revision = current_revision + 1
     now = datetime.now(timezone.utc).isoformat()
-    result = {**current, **copy.deepcopy(applied), "revision": next_revision, "updated_at": now}
+    result = {**{key: value for key, value in current.items() if key not in removed}, **copy.deepcopy(applied), "revision": next_revision, "updated_at": now}
     result.pop("pk", None)
     result.pop("sk", None)
     marker_item = {
@@ -283,6 +299,8 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
     names = {"#pk": "pk", "#revision": "revision", "#updated_at": "updated_at"}
     values = {":expected": _to_decimal(expected_revision), ":next": _to_decimal(next_revision), ":updated": now}
     sets = ["#revision = :next", "#updated_at = :updated"]
+    for field in removed:
+        names[f"#{field}"] = field
     for field, value in applied.items():
         names[f"#{field}"] = field
         values[f":value_{field}"] = _to_decimal(value)
@@ -292,7 +310,7 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
             "Update": {
                 "TableName": table_name,
                 "Key": key,
-                "UpdateExpression": "SET " + ", ".join(sets),
+                "UpdateExpression": "SET " + ", ".join(sets) + (" REMOVE " + ", ".join(f"#{field}" for field in removed) if removed else ""),
                 "ConditionExpression": "attribute_exists(#pk) AND (attribute_not_exists(#revision) OR #revision = :expected)",
                 "ExpressionAttributeNames": names,
                 "ExpressionAttributeValues": values,

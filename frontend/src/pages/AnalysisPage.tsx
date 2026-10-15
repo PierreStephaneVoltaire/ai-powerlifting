@@ -11,6 +11,7 @@ import {
   queueAnalysisSections,
   type AnalysisSectionKey,
   type AnalysisWindow,
+  programExportUrl,
   type AnalysisWindowKey,
   type WeeklyAnalysis,
 } from '@/api/analytics'
@@ -40,6 +41,7 @@ import { LifetimeComparePanel, PastBlocksPanel } from '@/components/analysis/Blo
 import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
 import MaxesPage from '@/pages/MaxesPage'
+import { recordsInBlock } from '@/utils/blockScope'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -663,7 +665,7 @@ export default function AnalysisPage() {
 
   const nutritionTrend = useMemo(() => {
     if (!program?.diet_notes?.length) return null
-    const inWindow = program.diet_notes
+    const inWindow = recordsInBlock(program.diet_notes, program)
       .filter(n => n.date >= analysisWindowStartStr && n.date <= analysisWindowEndStr)
       .sort((a, b) => a.date.localeCompare(b.date))
     if (!inWindow.length) return null
@@ -932,8 +934,8 @@ export default function AnalysisPage() {
           />
           <Button
             component="a"
-            href="/api/export/xlsx"
-            download="program_history.xlsx"
+            href={programExportUrl('xlsx', analysisWindows?.[analysisKey])}
+            download
             size="sm"
             leftSection={<Download size={16} />}
           >
@@ -941,8 +943,8 @@ export default function AnalysisPage() {
           </Button>
           <Button
             component="a"
-            href="/api/export/markdown"
-            download="program_history.md"
+            href={programExportUrl('markdown', analysisWindows?.[analysisKey])}
+            download
             size="sm"
             variant="light"
             leftSection={<Download size={16} />}

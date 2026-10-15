@@ -6,4 +6,4 @@ except ImportError:
 
 async def weight_log_get(args: dict) -> dict:
     pk, version = resolve(args)
-    return await get_store().get_log(pk, version)
+    return await get_store().get_log(pk, version, args.get("block_id"))

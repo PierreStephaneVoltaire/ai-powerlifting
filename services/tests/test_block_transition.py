@@ -459,3 +459,76 @@ def test_archived_block_cannot_be_named_current(name):
     archive_id = archived["program"]["meta"]["blocks"][0]["id"]
     with pytest.raises(ValueError, match="cannot be named current"):
         transition(store, action="rename", block_id=archive_id, expected_revision=5, idempotency_key="rename-1", name=name)
+
+
+def _apply_mutations_in_memory(store):
+    async def mutate_source(_name, _payload, _expected_revision, _idempotency_key, mutate):
+        program = copy.deepcopy(await store.get_program())
+        result = mutate(program)
+        store.get_program = _returning(program)
+        return result
+
+    store.mutate_source = mutate_source
+
+
+def _returning(program):
+    async def get_program():
+        return copy.deepcopy(program)
+
+    return get_program
+
+
+def _store_with_block_records():
+    store, table, sessions_store = make_store()
+    program = table.items[("athlete-1", "program#v007")]
+    program["diet_notes"] = [{"date": "2026-09-05", "notes": "old cut"}]
+    program["supplements"] = [{"name": "creatine", "dose": "5g"}]
+    program["supplement_phases"] = [{"phase": 1, "phase_name": "Base", "notes": "", "items": [], "block": "current"}]
+    return store, table
+
+
+def test_complete_and_start_archives_notes_and_supplements_with_the_block():
+    store, _table = _store_with_block_records()
+    result = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        expected_revision=4,
+        idempotency_key="transition-records",
+        name="Strength",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
+    )
+    program = result["program"]
+    archive_id = next(block["id"] for block in program["meta"]["blocks"] if block["status"] == "completed")
+    assert program["diet_notes"][0]["block_id"] == archive_id
+    assert program["supplements"][0]["block_id"] == archive_id
+    assert program["supplement_phases"][0]["block"] == archive_id
+
+    store.get_program = _returning(program)
+    _apply_mutations_in_memory(store)
+    upserted = asyncio.run(store.upsert_diet_note("2026-09-05", "new block note", 5, "note-1"))
+    assert [note["notes"] for note in upserted["diet_notes"]] == ["new block note"]
+    assert upserted["note"]["block_id"] == program["meta"]["current_block_id"]
+
+
+def test_replacing_current_block_supplements_keeps_archived_ones():
+    store, _table = _store_with_block_records()
+    transitioned = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        expected_revision=4,
+        idempotency_key="transition-supps",
+        name="Strength",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
+    )
+    store.get_program = _returning(transitioned["program"])
+    _apply_mutations_in_memory(store)
+    result = asyncio.run(store.update_supplements({"supplements": [{"name": "caffeine", "dose": "200mg"}]}, 5, "supps-1"))
+    assert [item["name"] for item in result["supplements"]] == ["caffeine"]
+    stored = asyncio.run(store.get_program())
+    assert sorted(item["name"] for item in stored["supplements"]) == ["caffeine", "creatine"]

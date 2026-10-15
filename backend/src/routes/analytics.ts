@@ -9,6 +9,7 @@ import * as competitionController from '../controllers/competitionController'
 import * as federationsController from '../controllers/federationsController'
 import * as weightController from '../controllers/weightController'
 import type { AthleteGoal, Program, WeightEntry } from '@powerlifting/types'
+import { ALL_BLOCKS, scopeProgramToBlock } from '../utils/blockScope'
 import {
   ALL_WINDOW_KEYS,
   ALL_SECTION_KEYS,
@@ -77,18 +78,16 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-async function getProgramWithWeightLog(pk: string, version = 'current'): Promise<ProgramWithWeightLog> {
+async function getProgramWithWeightLog(pk: string, version = 'current', block: string = ALL_BLOCKS): Promise<ProgramWithWeightLog> {
   const program = await programController.getProgram(pk, version)
+  let weightLog: WeightEntry[] = []
   try {
-    const log = await weightController.getWeightLog(pk, version)
-    return {
-      ...program,
-      weight_log: Array.isArray(log.entries) ? log.entries : [],
-    }
+    const log = await weightController.getWeightLog(pk, version, block === ALL_BLOCKS ? ALL_BLOCKS : undefined)
+    weightLog = Array.isArray(log.entries) ? log.entries : []
   } catch (error) {
     logger.warn({ error, pk }, 'Failed to load weight log for analytics context')
-    return { ...program, weight_log: [] }
   }
+  return scopeProgramToBlock({ ...program, weight_log: weightLog }, block)
 }
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
@@ -120,7 +119,7 @@ async function buildAnalysisContext(
   asOfDate: string,
   windowKey: AnalysisWindowKey,
 ): Promise<AnalysisContext> {
-  const program = await getProgramWithWeightLog(pk, 'current')
+  const program = await getProgramWithWeightLog(pk, 'current', 'current')
   const windows = buildAnalysisWindows(program, asOfDate)
   const sourceFingerprint = await buildAnalysisSourceFingerprint(program, windows[windowKey], pk)
   return { pk, asOfDate, windowKey, program, windows, sourceFingerprint }
@@ -257,7 +256,7 @@ async function runTargetedRegeneration(
   asOfDate: string,
   targetWindows?: AnalysisWindowKey[],
 ): Promise<{ generatedAt: string; windows: ReturnType<typeof buildAnalysisWindows>; results: Record<AnalysisWindowKey, unknown> }> {
-  const program = await getProgramWithWeightLog(pk, 'current')
+  const program = await getProgramWithWeightLog(pk, 'current', 'current')
   const windows = buildAnalysisWindows(program, asOfDate)
   const sessions = program.sessions ?? []
   const keys = targetWindows ?? ALL_WINDOW_KEYS
@@ -531,7 +530,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const weekEnd = Number.isFinite(weekEndRaw) && weekEndRaw > 0 ? weekEndRaw : undefined
     const projectionDate = isIsoDate(refDate) ? refDate : todayIso()
     await snapshotCompetitionProjection(req.mapped_pk!, projectionDate)
-    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
+    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current', block)
     const data: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
       const sectionPayload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
