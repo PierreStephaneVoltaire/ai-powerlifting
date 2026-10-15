@@ -3,7 +3,7 @@
     "name": "template_apply",
     "domain": "templates",
     "description": "Preview applying a template to the athlete program.",
-    "handler": "lambda.pod_templates.handlers.template_apply.handler",
+    "handler": "services.handlers.templates.template_apply.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -120,7 +120,7 @@
     "name": "template_apply_confirm",
     "domain": "templates",
     "description": "Apply a template and write a new versioned athlete program with template lineage.",
-    "handler": "lambda.pod_templates.handlers.template_apply_confirm.handler",
+    "handler": "services.handlers.templates.template_apply_confirm.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -213,7 +213,7 @@
     "name": "template_archive",
     "domain": "templates",
     "description": "Archive an owned template.",
-    "handler": "lambda.pod_templates.handlers.template_archive.handler",
+    "handler": "services.handlers.templates.template_archive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -270,7 +270,7 @@
     "name": "template_copy",
     "domain": "templates",
     "description": "Copy a visible template into a new owned unpublished template.",
-    "handler": "lambda.pod_templates.handlers.template_copy.handler",
+    "handler": "services.handlers.templates.template_copy.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -332,7 +332,7 @@
     "name": "template_create_blank",
     "domain": "templates",
     "description": "Create an empty reusable template.",
-    "handler": "lambda.pod_templates.handlers.template_create_blank.handler",
+    "handler": "services.handlers.templates.template_create_blank.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -397,7 +397,7 @@
     "name": "template_create_from_block",
     "domain": "templates",
     "description": "Create a reusable template from an athlete program block.",
-    "handler": "lambda.pod_templates.handlers.template_create_from_block.handler",
+    "handler": "services.handlers.templates.template_create_from_block.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -453,7 +453,7 @@
     "name": "template_create_from_payload",
     "domain": "templates",
     "description": "Create a reusable template from a complete payload.",
-    "handler": "lambda.pod_templates.handlers.template_create_from_payload.handler",
+    "handler": "services.handlers.templates.template_create_from_payload.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -514,7 +514,7 @@
     "name": "template_evaluate",
     "domain": "templates",
     "description": "Evaluate template suitability for the athlete and return a structured report.",
-    "handler": "lambda.pod_templates.handlers.template_evaluate.handler",
+    "handler": "services.handlers.templates.template_evaluate.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -606,7 +606,7 @@
     "name": "template_get",
     "domain": "templates",
     "description": "Get a visible template with phases, sessions, and metadata.",
-    "handler": "lambda.pod_templates.handlers.template_get.handler",
+    "handler": "services.handlers.templates.template_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -674,7 +674,7 @@
     "name": "template_list",
     "domain": "templates",
     "description": "List visible template summaries, excluding archived templates by default.",
-    "handler": "lambda.pod_templates.handlers.template_list.handler",
+    "handler": "services.handlers.templates.template_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -729,7 +729,7 @@
     "name": "template_publish",
     "domain": "templates",
     "description": "Publish an owned template to the shared library.",
-    "handler": "lambda.pod_templates.handlers.template_publish.handler",
+    "handler": "services.handlers.templates.template_publish.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -786,7 +786,7 @@
     "name": "template_unarchive",
     "domain": "templates",
     "description": "Restore an owned template to default lists.",
-    "handler": "lambda.pod_templates.handlers.template_unarchive.handler",
+    "handler": "services.handlers.templates.template_unarchive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -843,7 +843,7 @@
     "name": "template_unpublish",
     "domain": "templates",
     "description": "Remove an owned template from the shared library.",
-    "handler": "lambda.pod_templates.handlers.template_unpublish.handler",
+    "handler": "services.handlers.templates.template_unpublish.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -900,7 +900,7 @@
     "name": "template_update",
     "domain": "templates",
     "description": "Replace editable content of an owned template while preserving metadata and publication state.",
-    "handler": "lambda.pod_templates.handlers.template_update.handler",
+    "handler": "services.handlers.templates.template_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {

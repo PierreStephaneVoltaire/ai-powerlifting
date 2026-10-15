@@ -3,7 +3,7 @@
     "name": "get_analysis_markdown",
     "domain": "analytics",
     "description": "Return the cached markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Use the cache unless it is stale, dirty, or refresh is true.",
-    "handler": "lambda.get_analysis_markdown.handler",
+    "handler": "services.handlers.analysis_reports.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -84,7 +84,7 @@
     "name": "analysis_section",
     "domain": "analytics",
     "description": "Compute a single deterministic weekly analysis section. Loads program+sessions via the ProgramStore layer, fetches glossary via direct DynamoDB, then computes one analysis section (e.g. \"volume\", \"intensity\", \"progression\"). AI section keys (ai_correlation, program_evaluation) are rejected before reaching this core.",
-    "handler": "lambda.pod_analysis.handlers.analysis_section.handler",
+    "handler": "services.handlers.analysis.analysis_section.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -145,7 +145,7 @@
     "name": "analyze_powerlifting_stats",
     "domain": "analytics",
     "description": "Analyze powerlifting statistics for the current program version. Computes totals, Wilks, DOTS, and comparative metrics. Copied from tools/health/powerlifting_stats.py.",
-    "handler": "lambda.pod_analysis.handlers.analyze_powerlifting_stats.handler",
+    "handler": "services.handlers.analysis.analyze_powerlifting_stats.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -198,7 +198,7 @@
     "name": "analyze_progression",
     "domain": "analytics",
     "description": "Analyze progression rate for the current program. Loads program+sessions, then calls analytics.progression_rate to compute week-over-week progression trends.",
-    "handler": "lambda.pod_analysis.handlers.analyze_progression.handler",
+    "handler": "services.handlers.analysis.analyze_progression.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -265,7 +265,7 @@
     "name": "analyze_rpe_drift",
     "domain": "analytics",
     "description": "Analyze RPE (rate of perceived exertion) drift for a specific exercise over a window of weeks. Loads program+sessions, then calls analytics.rpe_drift. Uses window_weeks (default 4) to set the lookback period.",
-    "handler": "lambda.pod_analysis.handlers.analyze_rpe_drift.handler",
+    "handler": "services.handlers.analysis.analyze_rpe_drift.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -326,7 +326,7 @@
     "name": "block_correlation_analysis",
     "domain": "analytics",
     "description": "Generate an AI correlation report for a specific block. Analyzes relationships between training variables (volume, intensity, RPE) and outcomes (progression, fatigue). Uses AI to generate natural-language findings and summary.",
-    "handler": "lambda.pod_analysis.handlers.block_correlation_analysis.handler",
+    "handler": "services.handlers.analysis.block_correlation_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -397,7 +397,7 @@
     "name": "block_program_evaluation",
     "domain": "analytics",
     "description": "Generate an AI program evaluation report for a specific block. Assesses the overall program design, exercise selection, volume distribution, and progression. Uses AI to produce a structured evaluation with recommendations.",
-    "handler": "lambda.pod_analysis.handlers.block_program_evaluation.handler",
+    "handler": "services.handlers.analysis.block_program_evaluation.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -499,7 +499,7 @@
     "name": "correlation_analysis",
     "domain": "analytics",
     "description": "Generate a correlation analysis report across training variables. Analyzes how volume, intensity, RPE, and other factors correlate with progression. Uses cached DynamoDB values for deterministic sections.",
-    "handler": "lambda.pod_analysis.handlers.correlation_analysis.handler",
+    "handler": "services.handlers.analysis.correlation_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -570,7 +570,7 @@
     "name": "multi_block_comparison_analysis",
     "domain": "analytics",
     "description": "Generate a comparison report across multiple training blocks. Analyzes differences in volume, intensity, progression, and outcomes between blocks. Uses AI to produce a structured comparison.",
-    "handler": "lambda.pod_analysis.handlers.multi_block_comparison_analysis.handler",
+    "handler": "services.handlers.analysis.multi_block_comparison_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -667,7 +667,7 @@
     "name": "powerlifting_filter_categories",
     "domain": "analytics",
     "description": "List available filter categories for powerlifting ranking data. Returns the distinct values for federation, equipment, gender, and weight class filters used by the ranking percentile tool.",
-    "handler": "lambda.pod_analysis.handlers.powerlifting_filter_categories.handler",
+    "handler": "services.handlers.analysis.powerlifting_filter_categories.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -734,7 +734,7 @@
     "name": "powerlifting_ranking_percentile",
     "domain": "analytics",
     "description": "Compute the ranking percentile for a given total, body weight, gender, equipment, and federation. Returns the percentile rank compared to known competition results.",
-    "handler": "lambda.pod_analysis.handlers.powerlifting_ranking_percentile.handler",
+    "handler": "services.handlers.analysis.powerlifting_ranking_percentile.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -831,7 +831,7 @@
     "name": "program_evaluation",
     "domain": "analytics",
     "description": "Generate an AI program evaluation report for the current program. Assesses overall design, volume, intensity, exercise selection, and progression. Caches results in DynamoDB for fast retrieval.",
-    "handler": "lambda.pod_analysis.handlers.program_evaluation.handler",
+    "handler": "services.handlers.analysis.program_evaluation.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -916,7 +916,7 @@
     "name": "regenerate_analysis",
     "domain": "analytics",
     "description": "Regenerate deterministic current-block analysis caches and markdown export. AI reports are intentionally excluded \u2014 they are regenerated only through explicit AI section tools. NEVER touches past-block caches.",
-    "handler": "lambda.pod_analysis.handlers.regenerate_analysis.handler",
+    "handler": "services.handlers.analysis.regenerate_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -972,7 +972,7 @@
     "name": "weekly_analysis",
     "domain": "analytics",
     "description": "Build a full sectioned deterministic weekly analysis for the current program. Loads program+sessions, fetches glossary, then computes all deterministic analysis sections via the analytics module. AI sections (program_evaluation, correlation) are intentionally omitted.",
-    "handler": "lambda.pod_analysis.handlers.weekly_analysis.handler",
+    "handler": "services.handlers.analysis.weekly_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1029,7 +1029,7 @@
     "name": "health_suggest_e1rm_multipliers",
     "domain": "analytics",
     "description": "Suggest per lift e1RM multipliers from completed competition results and max history compared with recent session estimates.",
-    "handler": "lambda.get_analysis_markdown.suggest_e1rm_multipliers",
+    "handler": "services.handlers.analysis_reports.suggest_e1rm_multipliers",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1200,7 +1200,7 @@
     "name": "analytics.manifest",
     "domain": "analytics",
     "description": "Return section statuses, windows, and the current analysis source fingerprint.",
-    "handler": "lambda.get_analysis_markdown.manifest",
+    "handler": "services.handlers.analysis_reports.manifest",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1357,7 +1357,7 @@
     "name": "analytics.sections_queue",
     "domain": "analytics",
     "description": "Queue requested analysis sections for the selected window.",
-    "handler": "lambda.get_analysis_markdown.sections_queue",
+    "handler": "services.handlers.analysis_reports.sections_queue",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1443,7 +1443,7 @@
     "name": "analytics.sections_get",
     "domain": "analytics",
     "description": "Return one analysis section status and payload for the selected window.",
-    "handler": "lambda.get_analysis_markdown.sections_get",
+    "handler": "services.handlers.analysis_reports.sections_get",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1524,7 +1524,7 @@
     "name": "analytics.sections_invalidate",
     "domain": "analytics",
     "description": "Invalidate and requeue requested analysis sections for the selected window.",
-    "handler": "lambda.get_analysis_markdown.sections_invalidate",
+    "handler": "services.handlers.analysis_reports.sections_invalidate",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1607,7 +1607,7 @@
     "name": "analytics.weekly",
     "domain": "analytics",
     "description": "Return the legacy weekly analysis report for the requested window.",
-    "handler": "lambda.get_analysis_markdown.weekly",
+    "handler": "services.handlers.analysis_reports.weekly",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1856,7 +1856,7 @@
     "name": "analytics.bundle",
     "domain": "analytics",
     "description": "Return the complete current block weekly analysis bundle.",
-    "handler": "lambda.get_analysis_markdown.bundle",
+    "handler": "services.handlers.analysis_reports.bundle",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1965,7 +1965,7 @@
     "name": "analytics.blocks_list",
     "domain": "analytics",
     "description": "List analyzed training blocks and their cache/data quality status.",
-    "handler": "lambda.get_analysis_markdown.blocks_list",
+    "handler": "services.handlers.analysis_reports.blocks_list",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2033,7 +2033,7 @@
     "name": "analytics.blocks_get",
     "domain": "analytics",
     "description": "Return the cached or regenerated analysis bundle for one block.",
-    "handler": "lambda.get_analysis_markdown.blocks_get",
+    "handler": "services.handlers.analysis_reports.blocks_get",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2104,7 +2104,7 @@
     "name": "analytics.blocks_regenerate",
     "domain": "analytics",
     "description": "Regenerate one block analysis and its associated reports.",
-    "handler": "lambda.get_analysis_markdown.blocks_regenerate",
+    "handler": "services.handlers.analysis_reports.blocks_regenerate",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2159,7 +2159,7 @@
     "name": "analytics.block_evaluation",
     "domain": "analytics",
     "description": "Return the cached AI evaluation for one block.",
-    "handler": "lambda.get_analysis_markdown.block_evaluation",
+    "handler": "services.handlers.analysis_reports.block_evaluation",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2314,7 +2314,7 @@
     "name": "analytics.correlation",
     "domain": "analytics",
     "description": "Return the cached AI correlation report for one block.",
-    "handler": "lambda.get_analysis_markdown.correlation",
+    "handler": "services.handlers.analysis_reports.correlation",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2433,7 +2433,7 @@
     "name": "analytics.export",
     "domain": "analytics",
     "description": "Return a block analysis export as base64 with its content metadata.",
-    "handler": "lambda.get_analysis_markdown.analytics_export",
+    "handler": "services.handlers.analysis_reports.analytics_export",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2488,7 +2488,7 @@
     "name": "analytics.compare",
     "domain": "analytics",
     "description": "Compare selected training blocks using deterministic analytics.",
-    "handler": "lambda.get_analysis_markdown.compare",
+    "handler": "services.handlers.analysis_reports.compare",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2586,7 +2586,7 @@
     "name": "analytics.compare_ai",
     "domain": "analytics",
     "description": "Compare selected training blocks with the cached AI synthesis.",
-    "handler": "lambda.get_analysis_markdown.compare_ai",
+    "handler": "services.handlers.analysis_reports.compare_ai",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2733,7 +2733,7 @@
     "name": "analytics.regenerate",
     "domain": "analytics",
     "description": "Regenerate selected analysis sections and windows.",
-    "handler": "lambda.get_analysis_markdown.regenerate",
+    "handler": "services.handlers.analysis_reports.regenerate",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2827,7 +2827,7 @@
     "name": "analytics.markdown",
     "domain": "analytics",
     "description": "Return the cached markdown export of the full training program.",
-    "handler": "lambda.get_analysis_markdown.handler",
+    "handler": "services.handlers.analysis_reports.handler",
     "input_schema": {
       "type": "object",
       "properties": {

@@ -53,7 +53,7 @@ def test_calculation_bounds_are_rejected(name, arguments):
 
 
 def test_handler_returns_json_envelope():
-    module = importlib.import_module("lambda.pod_calc.handlers.calculate_dots.handler")
+    module = importlib.import_module("services.handlers.calculations.calculate_dots.handler")
     response = module.handler({"args": {"total_kg": 0, "bodyweight_kg": 80, "sex": "male"}}, None)
     assert response["statusCode"] == 200
     assert json.loads(response["body"]) == {"dots": 0.0}

@@ -24,13 +24,13 @@ def handler(args, _context):
     entries = list(pages(table, 'query', KeyConditionExpression=Key('pk').eq(args['pk']) & Key('sk').begins_with('COMP#'), ConsistentRead=True))
     all_entries = entries
     entries = visible_entries(entries, access)
-    from program_store import ProgramNotFoundError
-    from program_tool_helpers import get_store
+    from services.lib.program_store import ProgramNotFoundError
+    from services.lib.program_tool_helpers import get_store
     try:
         program = asyncio.run(get_store(args).get_program())
     except ProgramNotFoundError:
         program = {}
-    from competition_entries import with_competition_entries
+    from services.lib.competition_entries import with_competition_entries
     program = with_competition_entries(program, args['pk'], all_entries)
     filtered = program_view(program, access)
     meta = filtered.get('meta') or {}
@@ -43,9 +43,9 @@ def handler(args, _context):
     today = date.today().isoformat()
     nearest = next((session for session in sessions if str(session.get('date', '')) >= today), sessions[-1] if sessions else {})
     phase = nearest.get('phase')
-    analytics = importlib.import_module('lambda.get_analysis_markdown.analytics')
+    analytics = importlib.import_module('services.handlers.analysis_reports.analytics')
     comp_maxes = analytics._estimate_maxes_from_comps(program.get('competitions', []), reference_date=date.today())
     session_maxes = analytics._estimate_maxes_from_sessions(program.get('sessions', []), reference_date=date.today())
     maxes = analytics._analysis_current_maxes_out(comp_maxes or session_maxes, comp_maxes, session_maxes)
-    plain = importlib.import_module('lambda.pod_user.handlers.settings_get.core')._sanitize_decimals
+    plain = importlib.import_module('services.handlers.user.settings_get.core')._sanitize_decimals
     return plain({'profile': profile, 'block': block if 'program:read' in permissions else None, 'phase': phase if 'program:read' in permissions else None, 'estimated_maxes': maxes if 'performance:read' in permissions else {}, 'competitions': [{key: value for key, value in entry.items() if key not in ('pk', 'test_seed_source_pk')} for entry in entries] if 'competition:read' in permissions else [], 'notes': filtered.get('meta', {}).get('block_notes', []) if 'program:read' in permissions else []})

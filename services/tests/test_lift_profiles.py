@@ -1,15 +1,9 @@
 import importlib
 import json
-import sys
-from pathlib import Path
 
 import httpx
 import pytest
 
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lambda/layers/pl-ai/content"))
-sys.path.insert(0, str(ROOT))
 
 from services.contract import load_operations
 from services.dispatch import dispatch
@@ -44,7 +38,7 @@ def test_lift_profile_contracts_describe_all_outputs():
 
 def test_review_dispatch_uses_native_runtime_completion(monkeypatch):
     module = __import__(
-        "lambda.pod_lift_profile_ai.handlers.lift_profile_review.lift_profile_ai",
+        "services.handlers.lift_profiles.lift_profile_review.lift_profile_ai",
         fromlist=["completion"],
     )
 
@@ -88,7 +82,7 @@ def test_estimate_fallback_keeps_profile_result_shape():
 
 def test_lift_profile_update_normalizes_failure_nodes_and_angles():
     core = importlib.import_module(
-        "lambda.pod_training_program.handlers.program_update_lift_profiles.core"
+        "services.handlers.program.program_update_lift_profiles.core"
     )
     normalized = core.normalize_lift_profiles([{
         "lift": "squat",
@@ -106,7 +100,7 @@ def test_exercise_ai_fallbacks_match_runtime_schemas(monkeypatch):
     operations = load_operations("lift-profiles")
     for name in ("fatigue_profile_estimate", "muscle_group_estimate"):
         core = importlib.import_module(
-            f"lambda.pod_lift_profile_ai.handlers.{name}.core"
+            f"services.handlers.lift_profiles.{name}.core"
         )
 
         class FakeStore:
@@ -120,10 +114,10 @@ def test_exercise_ai_fallbacks_match_runtime_schemas(monkeypatch):
 
 def test_glossary_fatigue_handler_keeps_storage_update(monkeypatch):
     core = importlib.import_module(
-        "lambda.pod_lift_profile_ai.handlers.glossary_estimate_fatigue.core"
+        "services.handlers.lift_profiles.glossary_estimate_fatigue.core"
     )
     ai = importlib.import_module(
-        "lambda.pod_lift_profile_ai.handlers.glossary_estimate_fatigue.fatigue_ai"
+        "services.handlers.lift_profiles.glossary_estimate_fatigue.fatigue_ai"
     )
 
     class GlossaryStore:

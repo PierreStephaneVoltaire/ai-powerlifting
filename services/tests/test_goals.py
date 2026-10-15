@@ -19,8 +19,8 @@ class FakeGoalsStore:
 
 def test_goals_dispatch_returns_domain_shapes_and_replaces_empty_array(monkeypatch):
     store = FakeGoalsStore()
-    list_core = importlib.import_module("lambda.pod_goals.handlers.goals_list.core")
-    replace_core = importlib.import_module("lambda.pod_goals.handlers.goals_replace.core")
+    list_core = importlib.import_module("services.handlers.goals.goals_list.core")
+    replace_core = importlib.import_module("services.handlers.goals.goals_replace.core")
     monkeypatch.setattr(list_core, "_get_store", lambda: store)
     monkeypatch.setattr(replace_core, "_get_store", lambda: store)
     operations = load_operations("goals")

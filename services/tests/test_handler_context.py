@@ -5,7 +5,7 @@ from services.access import evaluate_facts
 
 
 def test_handler_context_filters_competition_ties_and_training_domains(monkeypatch):
-    import program_tool_helpers
+    from services.lib import program_tool_helpers
     owner = {'pk': 'owner-person', 'mapped_pk': 'athlete'}
     actor = {'pk': 'handler-person'}
     entries = [{'pk': 'athlete', 'sk': 'COMP#tied', 'date': '2099-01-01', 'post_meet_report': {'attempts': [{'lift': 'squat', 'attempt_number': 1, 'kg': 150, 'result': 'made'}]}}, {'pk': 'athlete', 'sk': 'COMP#other', 'date': '2099-02-01'}]

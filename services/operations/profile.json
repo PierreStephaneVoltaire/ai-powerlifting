@@ -3,7 +3,7 @@
     "name": "master_copy_seed_user",
     "domain": "profile",
     "description": "Seed per-user copies of master competitions and federations.",
-    "handler": "lambda.master_copy_seed_user.handler",
+    "handler": "services.handlers.user.master_copy_seed_user.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -28,7 +28,7 @@
     "name": "profile_get",
     "domain": "profile",
     "description": "Build a public profile by nickname, including visible training summary and videos.",
-    "handler": "lambda.pod_user.handlers.profile_get.handler",
+    "handler": "services.handlers.user.profile_get.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -145,7 +145,7 @@
     "name": "profile_get_current",
     "domain": "profile",
     "description": "Build the current user profile by mapped partition key.",
-    "handler": "lambda.pod_user.handlers.profile_get_current.handler",
+    "handler": "services.handlers.user.profile_get_current.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -263,7 +263,7 @@
     "name": "profile_search",
     "domain": "profile",
     "description": "Search public Athlete/Coach profiles and currently granted private profiles with approved tag and federation filters.",
-    "handler": "lambda.pod_user.handlers.profile_search.handler",
+    "handler": "services.handlers.user.profile_search.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -352,7 +352,7 @@
     "name": "settings_create",
     "domain": "profile",
     "description": "Conditionally create the initial settings row for a Discord identity.",
-    "handler": "lambda.pod_user.handlers.settings_create.handler",
+    "handler": "services.handlers.user.settings_create.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -443,7 +443,7 @@
     "name": "settings_get",
     "domain": "profile",
     "description": "Get settings by Discord username or mapped partition key, defaulting to operator settings when anonymous.",
-    "handler": "lambda.pod_user.handlers.settings_get.handler",
+    "handler": "services.handlers.user.settings_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -511,7 +511,7 @@
     "name": "settings_update_age_class",
     "domain": "profile",
     "description": "Update a user's age class.",
-    "handler": "lambda.pod_user.handlers.settings_update_age_class.handler",
+    "handler": "services.handlers.user.settings_update_age_class.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -580,7 +580,7 @@
     "name": "settings_update_avatar",
     "domain": "profile",
     "description": "Upload a profile avatar to configured media storage and update the settings row.",
-    "handler": "lambda.pod_user.handlers.settings_update_avatar.handler",
+    "handler": "services.handlers.user.settings_update_avatar.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -658,7 +658,7 @@
     "name": "settings_update_nickname",
     "domain": "profile",
     "description": "Update a user's public nickname.",
-    "handler": "lambda.pod_user.handlers.settings_update_nickname.handler",
+    "handler": "services.handlers.user.settings_update_nickname.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -720,7 +720,7 @@
     "name": "settings_update_profile",
     "domain": "profile",
     "description": "Update profile visibility, display name, bio, and public training summary setting.",
-    "handler": "lambda.pod_user.handlers.settings_update_profile.handler",
+    "handler": "services.handlers.user.settings_update_profile.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -793,7 +793,7 @@
     "name": "settings_update_ranking_location",
     "domain": "profile",
     "description": "Update a user's ranking country and region.",
-    "handler": "lambda.pod_user.handlers.settings_update_ranking_location.handler",
+    "handler": "services.handlers.user.settings_update_ranking_location.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -862,7 +862,7 @@
     "name": "settings_update_athlete_basics",
     "domain": "profile",
     "description": "Update athlete sex, country, region, bodyweight, and all three training maxes.",
-    "handler": "lambda.pod_user.handlers.settings_update_athlete_basics.handler",
+    "handler": "services.handlers.user.settings_update_athlete_basics.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -999,7 +999,7 @@
     "name": "settings_update_onboarding_profile",
     "domain": "profile",
     "description": "Complete onboarding profile fields and mark the profile complete.",
-    "handler": "lambda.pod_user.handlers.settings_update_onboarding_profile.handler",
+    "handler": "services.handlers.user.settings_update_onboarding_profile.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1088,7 +1088,7 @@
     "name": "settings_update_role",
     "domain": "profile",
     "description": "Set the user's assigned roles and active role.",
-    "handler": "lambda.pod_user.handlers.settings_update_role.handler",
+    "handler": "services.handlers.user.settings_update_role.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1164,7 +1164,7 @@
     "name": "settings_tag_add",
     "domain": "profile",
     "description": "Select an approved tag or request new vocabulary for operator review.",
-    "handler": "lambda.pod_user.handlers.settings_tag_add.handler",
+    "handler": "services.handlers.user.settings_tag_add.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1225,7 +1225,7 @@
     "name": "settings_tag_remove",
     "domain": "profile",
     "description": "Remove a tag from the authenticated user's profile.",
-    "handler": "lambda.pod_user.handlers.settings_tag_remove.handler",
+    "handler": "services.handlers.user.settings_tag_remove.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1283,7 +1283,7 @@
     "name": "settings_tag_approve",
     "domain": "profile",
     "description": "Operator decision on a global tag catalog entry.",
-    "handler": "lambda.pod_user.handlers.settings_tag_approve.handler",
+    "handler": "services.handlers.user.settings_tag_approve.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1357,7 +1357,7 @@
     "name": "settings_tag_propose",
     "domain": "profile",
     "description": "Request a global tag for the authenticated profile, pending operator approval.",
-    "handler": "lambda.pod_user.handlers.settings_tag_propose.handler",
+    "handler": "services.handlers.user.settings_tag_propose.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1420,7 +1420,7 @@
     "name": "onboarding_status",
     "domain": "profile",
     "description": "Return the current onboarding state for the authenticated user.",
-    "handler": "lambda.pod_user.handlers.onboarding_status.handler",
+    "handler": "services.handlers.user.onboarding_status.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1512,7 +1512,7 @@
     "name": "grant_check",
     "domain": "profile",
     "description": "grant check",
-    "handler": "lambda.pod_user.handlers.grant_check.handler",
+    "handler": "services.handlers.user.grant_check.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1662,7 +1662,7 @@
     "name": "grant_create",
     "domain": "profile",
     "description": "grant create",
-    "handler": "lambda.pod_user.handlers.grant_create.handler",
+    "handler": "services.handlers.user.grant_create.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1923,7 +1923,7 @@
     "name": "grant_list",
     "domain": "profile",
     "description": "grant list",
-    "handler": "lambda.pod_user.handlers.grant_list.handler",
+    "handler": "services.handlers.user.grant_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2145,7 +2145,7 @@
     "name": "grant_revoke",
     "domain": "profile",
     "description": "grant revoke",
-    "handler": "lambda.pod_user.handlers.grant_revoke.handler",
+    "handler": "services.handlers.user.grant_revoke.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2370,7 +2370,7 @@
     "name": "identity_resolve",
     "domain": "profile",
     "description": "Resolve a verified gateway identity to a stable Person and settings record.",
-    "handler": "lambda.pod_user.handlers.identity_resolve.handler",
+    "handler": "services.handlers.user.identity_resolve.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -2610,7 +2610,7 @@
     "name": "relationship_request",
     "domain": "profile",
     "description": "relationship request",
-    "handler": "lambda.pod_user.handlers.relationship_request.handler",
+    "handler": "services.handlers.user.relationship_request.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2765,7 +2765,7 @@
     "name": "relationship_respond",
     "domain": "profile",
     "description": "relationship respond",
-    "handler": "lambda.pod_user.handlers.relationship_respond.handler",
+    "handler": "services.handlers.user.relationship_respond.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2910,7 +2910,7 @@
     "name": "relationship_revoke",
     "domain": "profile",
     "description": "relationship revoke",
-    "handler": "lambda.pod_user.handlers.relationship_revoke.handler",
+    "handler": "services.handlers.user.relationship_revoke.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3018,7 +3018,7 @@
     "name": "relationship_list",
     "domain": "profile",
     "description": "relationship list",
-    "handler": "lambda.pod_user.handlers.relationship_list.handler",
+    "handler": "services.handlers.user.relationship_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3289,7 +3289,7 @@
     "name": "relationship_history",
     "domain": "profile",
     "description": "relationship history",
-    "handler": "lambda.pod_user.handlers.relationship_history.handler",
+    "handler": "services.handlers.user.relationship_history.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3394,7 +3394,7 @@
     "name": "favorite",
     "domain": "profile",
     "description": "favorite",
-    "handler": "lambda.pod_user.handlers.favorite.handler",
+    "handler": "services.handlers.user.favorite.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3437,7 +3437,7 @@
     "name": "favorites",
     "domain": "profile",
     "description": "favorites",
-    "handler": "lambda.pod_user.handlers.favorites.handler",
+    "handler": "services.handlers.user.favorites.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3476,7 +3476,7 @@
     "name": "notifications",
     "domain": "profile",
     "description": "notifications",
-    "handler": "lambda.pod_user.handlers.notifications.handler",
+    "handler": "services.handlers.user.notifications.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3543,7 +3543,7 @@
     "name": "notifications_read",
     "domain": "profile",
     "description": "notifications read",
-    "handler": "lambda.pod_user.handlers.notifications_read.handler",
+    "handler": "services.handlers.user.notifications_read.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3748,7 +3748,7 @@
     "name": "note_list_private",
     "domain": "profile",
     "description": "List private originals owned by the acting Person.",
-    "handler": "lambda.pod_authored_notes.handlers.note_list_private.handler",
+    "handler": "services.handlers.authored_notes.note_list_private.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3777,7 +3777,7 @@
     "name": "note_save_private",
     "domain": "profile",
     "description": "Save a revision of an author-owned private original.",
-    "handler": "lambda.pod_authored_notes.handlers.note_save_private.handler",
+    "handler": "services.handlers.authored_notes.note_save_private.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3824,7 +3824,7 @@
     "name": "note_list_attachments",
     "domain": "profile",
     "description": "Read permitted attributed note attachments.",
-    "handler": "lambda.pod_authored_notes.handlers.note_list_attachments.handler",
+    "handler": "services.handlers.authored_notes.note_list_attachments.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3874,7 +3874,7 @@
     "name": "note_share",
     "domain": "profile",
     "description": "Explicitly attach a private note revision while the author has permission.",
-    "handler": "lambda.pod_authored_notes.handlers.note_share.handler",
+    "handler": "services.handlers.authored_notes.note_share.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3934,7 +3934,7 @@
     "name": "note_detach",
     "domain": "profile",
     "description": "Allow the owning Athlete to remove a note attachment.",
-    "handler": "lambda.pod_authored_notes.handlers.note_detach.handler",
+    "handler": "services.handlers.authored_notes.note_detach.handler",
     "input_schema": {
       "type": "object",
       "properties": {

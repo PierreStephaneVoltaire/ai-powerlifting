@@ -87,18 +87,18 @@ async def report_source(arguments, athlete, operation=""):
     if "program_evaluation" in operation:
         source["federation_library"] = []
         if 'federation:read' in arguments.get('_access', {}).get('permissions', []):
-            FederationStore = import_module('lambda.pod_federation.handlers._federation_store').FederationStore
+            FederationStore = import_module('services.handlers.federation._federation_store').FederationStore
             source["federation_library"] = await FederationStore(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk=athlete, region=os.getenv("AWS_REGION", "ca-central-1")).get_library()
     if isinstance(arguments.get("program"), dict):
         return jsonable_encoder(source) or None
-    from program_store import ProgramStore
-    from storage_scope import current_athlete
+    from services.lib.program_store import ProgramStore
+    from services.lib.storage_scope import current_athlete
     token = current_athlete.set(athlete)
     try:
         store = ProgramStore(table_name=os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk=athlete, region=os.getenv("AWS_REGION", "ca-central-1"))
         store.invalidate_cache()
         program = await store.get_program()
-        from competition_entries import with_competition_entries
+        from services.lib.competition_entries import with_competition_entries
         from .publication import program_view
         program = await asyncio.to_thread(with_competition_entries, program, athlete)
         program = program_view(program, arguments.get('_access') or {})

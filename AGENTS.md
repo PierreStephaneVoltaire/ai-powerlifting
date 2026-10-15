@@ -8,9 +8,9 @@ working — this file is only layout + operating rules.
 
 - `frontend/` — React + Vite app
 - `backend/` — Express API (Node)
-- `services/` — sixteen typed HTTP/MCP domain services; manifests in `operations/`.
-- `lambda/` — retained domain handlers and storage helpers, plus the S3 video worker.
-  ADR-0001 records the historical nano-function architecture.
+- `services/` — sixteen typed HTTP/MCP domain services; handlers and shared `lib/`,
+  with manifests in `operations/`.
+- `lambda/` — the retained `video-thumbnail` and `master-sync` AWS Lambdas only.
 - `terraform/` — AWS-only (Lambdas, S3, API Gateway, SSM). Applied separately from
   the root infra.
 

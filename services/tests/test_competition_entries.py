@@ -3,10 +3,8 @@ import importlib
 from datetime import date
 from decimal import Decimal
 
-from services.dispatch import ROOT
-
-merge_entries = importlib.import_module('competition_entries').merge_entries
-with_competition_entries = importlib.import_module('competition_entries').with_competition_entries
+merge_entries = importlib.import_module('services.lib.competition_entries').merge_entries
+with_competition_entries = importlib.import_module('services.lib.competition_entries').with_competition_entries
 
 
 def test_independent_results_replace_matching_legacy_view_without_copying_storage():
@@ -18,13 +16,13 @@ def test_independent_results_replace_matching_legacy_view_without_copying_storag
     latest = program['competitions'][-1]
     assert latest['master_id'] == 'meet' and latest['revision'] == 3 and 'pk' not in latest
     assert merge_entries(program['competitions'], entries) == program['competitions']
-    analytics = importlib.import_module('lambda.get_analysis_markdown.analytics')
+    analytics = importlib.import_module('services.handlers.analysis_reports.analytics')
     assert analytics._estimate_maxes_from_comps(program['competitions'], date(2026, 9, 14)) == {'squat': 180, 'bench': 100, 'deadlift': 220}
     assert (legacy, entries) == original
 
 
 def test_load_entries_reads_only_participations_through_the_date_index():
-    import competition_entries
+    from services.lib import competition_entries
 
     class Table:
         def __init__(self):
@@ -42,7 +40,7 @@ def test_load_entries_reads_only_participations_through_the_date_index():
 
 
 def test_load_entries_falls_back_to_partition_query_until_index_exists():
-    import competition_entries
+    from services.lib import competition_entries
     from botocore.exceptions import ClientError
 
     class Table:

@@ -30,12 +30,12 @@ def test_weight_operations_round_trip_and_aliases(monkeypatch):
     store = FakeWeightStore()
     for name in ("weight_log_add", "weight_add_entry", "weight_log_get", "weight_get_log", "weight_log_remove", "weight_remove_entry"):
         module_name = {
-            "weight_log_add": "lambda.pod_weight.handlers.weight_log_add.core",
-            "weight_add_entry": "lambda.pod_weight.handlers.weight_add_entry.core",
-            "weight_log_get": "lambda.pod_weight.handlers.weight_log_get.core",
-            "weight_get_log": "lambda.pod_weight.handlers.weight_get_log.core",
-            "weight_log_remove": "lambda.pod_weight.handlers.weight_log_remove.core",
-            "weight_remove_entry": "lambda.pod_weight.handlers.weight_remove_entry.core",
+            "weight_log_add": "services.handlers.weight_log.weight_log_add.core",
+            "weight_add_entry": "services.handlers.weight_log.weight_add_entry.core",
+            "weight_log_get": "services.handlers.weight_log.weight_log_get.core",
+            "weight_get_log": "services.handlers.weight_log.weight_get_log.core",
+            "weight_log_remove": "services.handlers.weight_log.weight_log_remove.core",
+            "weight_remove_entry": "services.handlers.weight_log.weight_remove_entry.core",
         }[name]
         monkeypatch.setattr(importlib.import_module(module_name), "get_store", lambda: store)
 
@@ -72,7 +72,7 @@ class MemoryTable:
 
 def test_weight_log_is_scoped_to_the_active_block(monkeypatch):
     import asyncio
-    store_module = importlib.import_module("lambda.pod_weight.handlers._weight_store")
+    store_module = importlib.import_module("services.handlers.weight_log._weight_store")
     monkeypatch.setattr(store_module, "invalidate_analysis_caches", lambda *_a, **_k: None)
     table = MemoryTable([
         {"pk": "a", "sk": "program#current", "ref_sk": "program#v002", "current_block_id": "block-new"},

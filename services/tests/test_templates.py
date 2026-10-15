@@ -54,8 +54,8 @@ class TemplateContractTests(unittest.TestCase):
         operations["template_create_blank"].validate_result({"status": "created", "sk": "template#1"})
 
     def test_blank_creation_handler_returns_domain_result(self):
-        module = importlib.import_module("lambda.pod_templates.handlers.template_create_blank.core")
-        handler = importlib.import_module("lambda.pod_templates.handlers.template_create_blank.handler")
+        module = importlib.import_module("services.handlers.templates.template_create_blank.core")
+        handler = importlib.import_module("services.handlers.templates.template_create_blank.handler")
         store = FakeTemplateStore()
         with patch.object(module, "_get_template_store", return_value=store):
             result = handler.handler({"name": "Strength", "pk": "athlete-1", "expected_revision": 0, "idempotency_key": "create-strength"}, None)
@@ -64,8 +64,8 @@ class TemplateContractTests(unittest.TestCase):
         self.assertEqual(store.templates["template#1"]["meta"]["name"], "Strength")
 
     def test_apply_handler_writes_template_lineage(self):
-        apply_core = importlib.import_module("lambda.pod_templates.handlers.template_apply_confirm.core")
-        apply_handler = importlib.import_module("lambda.pod_templates.handlers.template_apply_confirm.handler")
+        apply_core = importlib.import_module("services.handlers.templates.template_apply_confirm.core")
+        apply_handler = importlib.import_module("services.handlers.templates.template_apply_confirm.handler")
         template_store = FakeTemplateStore()
         program_store = FakeProgramStore()
         template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}, "phases": [], "sessions": []}
@@ -104,7 +104,7 @@ class TemplateContractTests(unittest.TestCase):
                     operations[name].validate_result(missing)
 
     def test_evaluate_uses_program_competition_context(self):
-        core = importlib.import_module("lambda.pod_templates.handlers.template_evaluate.core")
+        core = importlib.import_module("services.handlers.templates.template_evaluate.core")
         template_store = FakeTemplateStore()
         template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}}
         program_store = FakeProgramStore()
@@ -120,7 +120,7 @@ class TemplateContractTests(unittest.TestCase):
 
         ai = ModuleType("template_evaluate_ai")
         ai.generate_template_evaluate_report = evaluate
-        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.dict(sys.modules, {"lambda.pod_templates.handlers.template_evaluate.template_evaluate_ai": ai}):
+        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
             core.template_evaluate({"pk": "athlete-1", "sk": "template#1"})
         self.assertEqual(captured["dots_score"], 369.31)
         self.assertEqual(captured["weeks_to_comp"], 10.0)

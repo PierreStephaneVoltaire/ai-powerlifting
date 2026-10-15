@@ -1,14 +1,11 @@
 import asyncio
 import copy
 import importlib
-import sys
-from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lambda/layers/pl-program/python"))
-core = importlib.import_module("lambda.pod_maxes.handlers.max_history_add.core")
+core = importlib.import_module("services.handlers.maxes.max_history_add.core")
 
 
 class Table:

@@ -1,18 +1,9 @@
-import sys
-from pathlib import Path
-
 import pytest
 
 from services.dispatch import owner_aliases
 
-ROOT = Path(__file__).resolve().parents[2]
-for layer in ("pl-templates", "pl-core"):
-    path = ROOT / f"lambda/layers/{layer}/python"
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from storage_scope import current_owner_aliases
-from template_store import TemplatePermissionError, TemplateStore
+from services.lib.storage_scope import current_owner_aliases
+from services.lib.template_store import TemplatePermissionError, TemplateStore
 
 
 INDEX = [

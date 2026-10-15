@@ -3,7 +3,7 @@
     "name": "goals_list",
     "domain": "goals",
     "description": "List all athlete goals for a user. Returns the full array of goal objects.",
-    "handler": "lambda.pod_goals.handlers.goals_list.handler",
+    "handler": "services.handlers.goals.goals_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -92,7 +92,7 @@
     "name": "goals_replace",
     "domain": "goals",
     "description": "Full replace of a user athlete goals. Upserts incoming goals by id and deletes any goals not in the incoming array. Send the complete goals array.",
-    "handler": "lambda.pod_goals.handlers.goals_replace.handler",
+    "handler": "services.handlers.goals.goals_replace.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -202,7 +202,7 @@
     "name": "health_get_goals",
     "domain": "goals",
     "description": "Get explicit goals attached to the current program block. Returns the goals array from the current block metadata.",
-    "handler": "lambda.pod_goals.handlers.health_get_goals.handler",
+    "handler": "services.handlers.goals.health_get_goals.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -309,7 +309,7 @@
     "name": "health_update_goals",
     "domain": "goals",
     "description": "Replace the explicit goals array on the current program block. Full replace \u2014 send the complete goals array.",
-    "handler": "lambda.pod_goals.handlers.health_update_goals.handler",
+    "handler": "services.handlers.goals.health_update_goals.handler",
     "input_schema": {
       "type": "object",
       "properties": {

@@ -1,23 +1,16 @@
-import sys
 import json
 import importlib
 import asyncio
 import copy
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lambda/layers/pl-sessions/python"))
-sys.path.insert(0, str(ROOT / "lambda/layers/pl-core/python"))
-sys.path.insert(0, str(ROOT))
-
 from services.contract import load_operations
 from services.dispatch import OperationError, unwrap
-from session_store import SessionIdentityConflictError, SessionRevisionConflictError, SessionStore
-from session_tool_helpers import resolve_context
+from services.lib.session_store import SessionIdentityConflictError, SessionRevisionConflictError, SessionStore
+from services.lib.session_tool_helpers import resolve_context
 
 
 class TransactionCanceledException(Exception):
@@ -330,16 +323,16 @@ def test_legacy_session_handlers_bind_every_mutation_to_the_stable_id(monkeypatc
         async def get_sessions_range(self, *args):
             return []
 
-    import session_store
+    from services.lib import session_store
     monkeypatch.setattr(session_store, "SessionStore", FakeSessionStore)
 
-    health_get = importlib.import_module("lambda.pod_sessions.handlers.health_get_session.core")
-    health_add = importlib.import_module("lambda.pod_sessions.handlers.health_add_exercise.core")
-    health_remove = importlib.import_module("lambda.pod_sessions.handlers.health_remove_exercise.core")
-    health_delete = importlib.import_module("lambda.pod_sessions.handlers.health_delete_session.core")
-    health_reschedule = importlib.import_module("lambda.pod_sessions.handlers.health_reschedule_session.core")
-    health_update = importlib.import_module("lambda.pod_sessions.handlers.health_update_session.core")
-    patch_by_date = importlib.import_module("lambda.pod_sessions.handlers.session_patch_by_date.core")
+    health_get = importlib.import_module("services.handlers.sessions.health_get_session.core")
+    health_add = importlib.import_module("services.handlers.sessions.health_add_exercise.core")
+    health_remove = importlib.import_module("services.handlers.sessions.health_remove_exercise.core")
+    health_delete = importlib.import_module("services.handlers.sessions.health_delete_session.core")
+    health_reschedule = importlib.import_module("services.handlers.sessions.health_reschedule_session.core")
+    health_update = importlib.import_module("services.handlers.sessions.health_update_session.core")
+    patch_by_date = importlib.import_module("services.handlers.sessions.session_patch_by_date.core")
     for module in (health_get, health_add, health_remove, health_delete, health_reschedule, health_update):
         monkeypatch.setattr(module, "_store_for", lambda pk: FakeProgramStore(pk or "operator"))
     class FakeContextStore:
@@ -395,29 +388,7 @@ def test_deleted_stable_session_is_a_recoverable_conflict(monkeypatch):
     assert error.value.current_record is None
 
 
-def test_identity_conflict_code_survives_lambda_and_service_transports(monkeypatch):
-    pod_handler = importlib.import_module("lambda.pod_sessions.handler")
-    original_import = pod_handler.importlib.import_module
-
-    class FakeSessionHandler:
-        @staticmethod
-        def handler(_event, _context):
-            raise SessionIdentityConflictError("deleted-session", 8)
-
-    def import_handler(name):
-        if name == "session_patch.handler":
-            return FakeSessionHandler
-        return original_import(name)
-
-    monkeypatch.setattr(pod_handler.importlib, "import_module", import_handler)
-    response = pod_handler.handler({"function": "session_patch"}, None)
-    body = json.loads(response["body"])
-    assert response["statusCode"] == 409
-    assert body["code"] == "session_identity_conflict"
-    with pytest.raises(OperationError) as error:
-        unwrap(response)
-    assert error.value.code == "session_identity_conflict"
-
+def test_identity_conflict_code_survives_service_transports(monkeypatch):
     monkeypatch.setenv("PL_DOMAIN", "sessions")
     monkeypatch.setenv("INTERNAL_API_TOKEN", "transport-test")
     services_app = importlib.reload(importlib.import_module("services.app"))
@@ -450,8 +421,8 @@ async def _authorized_session_request():
 
 
 def test_real_list_handler_result_matches_contract(monkeypatch):
-    session_list_full = importlib.import_module("lambda.pod_sessions.handlers.session_list_full.handler")
-    session_core = importlib.import_module("lambda.pod_sessions.handlers.session_list_full.core")
+    session_list_full = importlib.import_module("services.handlers.sessions.session_list_full.handler")
+    session_core = importlib.import_module("services.handlers.sessions.session_list_full.core")
 
     class FakeStore:
         async def list_sessions(self, program_sk, phases):
@@ -469,7 +440,7 @@ def test_real_list_handler_result_matches_contract(monkeypatch):
 
 
 def test_identity_fields_are_rejected_before_store_mutation(monkeypatch):
-    core = importlib.import_module("lambda.pod_sessions.handlers.session_patch.core")
+    core = importlib.import_module("services.handlers.sessions.session_patch.core")
 
     class FakeStore:
         async def patch_session(self, *args):
@@ -486,7 +457,7 @@ def test_identity_fields_are_rejected_before_store_mutation(monkeypatch):
 
 
 def test_full_replace_accepts_the_persisted_session_id(monkeypatch):
-    core = importlib.import_module("lambda.pod_sessions.handlers.session_replace.core")
+    core = importlib.import_module("services.handlers.sessions.session_replace.core")
 
     class FakeStore:
         async def patch_session(self, *args, **_kwargs):
@@ -542,7 +513,7 @@ def test_context_aliases_resolve_current_and_preserve_history():
 
 
 def test_session_list_resolves_current_aliases_against_pointer(monkeypatch):
-    core = importlib.import_module("lambda.pod_sessions.handlers.session_list.core")
+    core = importlib.import_module("services.handlers.sessions.session_list.core")
 
     class FakeSourceTable:
         def get_item(self, **kwargs):
@@ -565,7 +536,7 @@ def test_session_list_resolves_current_aliases_against_pointer(monkeypatch):
             }
 
     monkeypatch.setattr(core, "_get_table", lambda: FakeTable())
-    monkeypatch.setattr("session_store.SessionStore", FakeStore)
+    monkeypatch.setattr("services.lib.session_store.SessionStore", FakeStore)
 
     for alias in (None, "current", "program#current"):
         result = asyncio.run(core.session_list({"pk": "operator", "program_sk": alias, "limit": 1}))

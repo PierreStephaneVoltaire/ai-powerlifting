@@ -3,7 +3,7 @@
     "name": "fatigue_profile_estimate",
     "domain": "lift-profiles",
     "description": "Estimate the four-dimensional fatigue profile for an exercise using AI.",
-    "handler": "lambda.pod_lift_profile_ai.handlers.fatigue_profile_estimate.handler",
+    "handler": "services.handlers.lift_profiles.fatigue_profile_estimate.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -67,7 +67,7 @@
     "name": "muscle_group_estimate",
     "domain": "lift-profiles",
     "description": "Estimate primary, secondary, and tertiary muscle groups for an exercise using AI.",
-    "handler": "lambda.pod_lift_profile_ai.handlers.muscle_group_estimate.handler",
+    "handler": "services.handlers.lift_profiles.muscle_group_estimate.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -143,7 +143,7 @@
     "name": "lift_profile_estimate_stimulus",
     "domain": "lift-profiles",
     "description": "Estimate the INOL stimulus coefficient for a lift profile using AI.",
-    "handler": "lambda.pod_lift_profile_ai.handlers.lift_profile_estimate_stimulus.handler",
+    "handler": "services.handlers.lift_profiles.lift_profile_estimate_stimulus.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -263,7 +263,7 @@
     "name": "lift_profile_review",
     "domain": "lift-profiles",
     "description": "Review a lift profile using AI and report missing technique details.",
-    "handler": "lambda.pod_lift_profile_ai.handlers.lift_profile_review.handler",
+    "handler": "services.handlers.lift_profiles.lift_profile_review.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -437,7 +437,7 @@
     "name": "lift_profile_rewrite",
     "domain": "lift-profiles",
     "description": "Rewrite the descriptive fields of a lift profile using AI.",
-    "handler": "lambda.pod_lift_profile_ai.handlers.lift_profile_rewrite.handler",
+    "handler": "services.handlers.lift_profiles.lift_profile_rewrite.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -537,7 +537,7 @@
     "name": "lift_profile_rewrite_and_estimate",
     "domain": "lift-profiles",
     "description": "Rewrite a lift profile and estimate its INOL stimulus coefficient using AI.",
-    "handler": "lambda.pod_lift_profile_ai.handlers.lift_profile_rewrite_and_estimate.handler",
+    "handler": "services.handlers.lift_profiles.lift_profile_rewrite_and_estimate.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -661,7 +661,7 @@
     "name": "program_update_lift_profiles",
     "domain": "lift-profiles",
     "description": "Replace the lift_profiles array on a program version. Lift profiles define per-exercise stimulus targets and configuration used by the AI analysis tools.",
-    "handler": "lambda.pod_training_program.handlers.program_update_lift_profiles.handler",
+    "handler": "services.handlers.program.program_update_lift_profiles.handler",
     "input_schema": {
       "type": "object",
       "properties": {

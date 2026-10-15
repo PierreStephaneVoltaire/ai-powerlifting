@@ -8,7 +8,7 @@ import pytest
 
 
 def test_basics_atomically_store_dated_estimated_1rms_and_retry_without_duplicates(monkeypatch):
-    core = importlib.import_module('lambda.pod_user.handlers.settings_update_athlete_basics.core')
+    core = importlib.import_module('services.handlers.user.settings_update_athlete_basics.core')
     person = {'pk': 'person-a', 'mapped_pk': 'athlete-a', 'roles': ['athlete'], 'updated_at': 'before'}
     history = {}
     transactions = []
@@ -60,7 +60,7 @@ def test_basics_atomically_store_dated_estimated_1rms_and_retry_without_duplicat
 
 
 def test_non_athlete_profile_onboarding_finishes_without_training_basics():
-    module = importlib.import_module('lambda.pod_user.handlers._shared.settings_normalize')
+    module = importlib.import_module('services.handlers.user._shared.settings_normalize')
     settings = {'roles': ['coach', 'handler'], 'active_role': 'handler', 'profile_complete': True}
     assert module.derive_onboarding_status(settings)['next_step'] == 'done'
     settings['roles'].append('athlete')
@@ -70,7 +70,7 @@ def test_non_athlete_profile_onboarding_finishes_without_training_basics():
 def test_legacy_onboarding_prefills_only_owned_known_values(monkeypatch):
     from decimal import Decimal
     from services import access_store
-    core = importlib.import_module('lambda.pod_user.handlers.onboarding_status.core')
+    core = importlib.import_module('services.handlers.user.onboarding_status.core')
     reads = []
     def get_item(Key, **kwargs):
         reads.append(Key)

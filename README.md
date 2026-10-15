@@ -158,30 +158,24 @@ agent channel]
     BE[Express API
 thin transport + LRU cache]
     Agent[IF Agent API
-specialist routing + health_lambda MCP]
+specialist routing + MCP]
   end
-  subgraph AWS[AWS - powerlifting scope]
+  subgraph Runtime[Powerlifting runtime]
     DDB[(DynamoDB
 if-health, if-sessions,
 if-powerlifting-*)]
     S3[(S3
 videos, budget media)]
-    APIGW[HTTP API Gateway
-94 health tools + pl_authorizer]
-    PL[pl-* Lambda functions
-health tools + pl-ai layer]
+    Service[16 typed HTTP/MCP services]
     Thumbnails[Lambda
 video thumbnails]
   end
   UI -->|/api| BE
   Discord --> Agent
-  BE -->|invokeLambda
-HTTP POST /<tool>| APIGW
-  Agent -->|health_lambda MCP
-POST /<tool>| APIGW
-  APIGW -->|X-Internal-Token gate| PL
-  PL --> DDB
-  PL --> S3
+  BE -->|typed operations| Service
+  Agent -->|typed operations| Service
+  Service --> DDB
+  Service --> S3
   BE -.->|invokeToolDirect (health_rag_search only)| Agent
   BE --> DDB
   BE --> S3
@@ -189,14 +183,12 @@ POST /<tool>| APIGW
   Thumbnails --> DDB
 ```
 
-The stack runs on a **bare-metal k3s** cluster for cost savings. Analytics and
-long-running calculations run as 94 AWS Lambda functions behind an HTTP API
-Gateway so the cluster doesn't size for peak compute — the portal backend reaches
-them with `invokeLambda` (HTTP POST `/<tool>`) and the IF agent reaches them via
-the `health_lambda` MCP category. The `pl_authorizer` request-authorizer Lambda
-gates each route by `X-Internal-Token`. The stack is designed so I can spin up
-more nodes in AWS or any other cloud with an NFS server that provides secure
-access to my local master node.
+The stack runs on a **bare-metal k3s** cluster for cost savings. The sixteen
+typed services expose the same HTTP and MCP operations to the portal backend
+and IF specialists. Only the master-sync and video-thumbnail workers remain
+AWS Lambdas. The stack is designed so I can spin up more nodes in AWS or any
+other cloud with an NFS server that provides secure access to my local master
+node.
 
 For more on the request flow, data model, caching, and AI execution model, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -232,7 +224,7 @@ erDiagram
 - **Handler matching** same one-to-many rule for handlers.
 - **Forums** for like-minded lifters.
 - More **cloud portability** (NFS-backed cross-cloud workloads) and additional
-  **Lambda-based compute tools** extending the existing 94-health-tool pattern.
+  typed service operations.
 
 This isn't meant to replace coaching it's a shared notebook where coaches and
 athletes use the formulas and AI above to collaborate on the meet-prep journey.
@@ -243,10 +235,11 @@ athletes use the formulas and AI above to collaborate on the meet-prep journey.
 
 ```
 powerlifting-app/
-├── backend/        Express API (thin transport → health-tool Lambda HTTP + IF Agent API for RAG)
+├── backend/        Express API (thin transport → typed services + IF Agent API for RAG)
 ├── frontend/       React 19 + Vite PWA
 ├── packages/types/  Shared TypeScript types
-├── lambda/         Lambdas: 94 health tools (1/tool) + pl_authorizer + tool_registry + master-sync + video-thumbnail; 10 layers in lambda/layers/
+├── services/       Typed HTTP/MCP domain services, handlers, shared libraries, and operation manifests
+├── lambda/         Retained AWS Lambdas: master-sync and video-thumbnail
 ├── docker/         Container build context
 ├── terraform/      Powerlifting-specific AWS resources (ECR, S3, Lambda, API Gateway, SSM params, budget table)
 └── docs/           Architecture, formulas, and the implementation reference

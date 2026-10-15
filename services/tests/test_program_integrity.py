@@ -1,19 +1,14 @@
 import copy
 import importlib
-import sys
 import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "lambda"), str(ROOT / "lambda/layers/pl-program/python"), str(ROOT / "lambda/layers/pl-core/python")]
-
-from program_store import ProgramStore, ProgramRevisionConflictError
-setup = importlib.import_module("pod_training_program.handlers.health_setup_initialize.core")
+from services.lib.program_store import ProgramStore, ProgramRevisionConflictError
+setup = importlib.import_module("services.handlers.program.health_setup_initialize.core")
 
 
 class SetupTable:
@@ -141,7 +136,7 @@ def test_racing_initializations_have_one_published_program(monkeypatch, same_key
 
 def test_setup_status_scans_past_hidden_stages_in_both_handlers(monkeypatch):
     table, store, sessions, args = setup_fixture(monkeypatch)
-    status = importlib.import_module('pod_training_program.handlers.health_setup_status.core')
+    status = importlib.import_module('services.handlers.program.health_setup_status.core')
     monkeypatch.setattr(status, '_store_for', lambda pk: store)
     table.items[('athlete', 'program#v001-a')] = {'pk': 'athlete', 'sk': 'program#v001-a', 'published': False}
     table.items[('athlete', 'program#v001-b')] = {'pk': 'athlete', 'sk': 'program#v001-b', 'published': True}

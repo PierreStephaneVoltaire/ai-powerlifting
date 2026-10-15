@@ -83,7 +83,7 @@ def decide(args):
 
 def select(args, remove=False):
     from importlib import import_module
-    normalize = import_module('lambda.pod_user.handlers.settings_get.core')._normalize_settings
+    normalize = import_module('services.handlers.user.settings_get.core')._normalize_settings
     name = normalize_tag(args['tag'])
     person = args.get('_access', {}).get('settings_pk')
     if not person or person != args.get('pk'):

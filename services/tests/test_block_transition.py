@@ -1,27 +1,15 @@
 import asyncio
 import copy
 import hashlib
-import sys
 import threading
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from botocore.exceptions import ClientError
 
 
-ROOT = Path(__file__).resolve().parents[2]
-LAYER_PATHS = [
-    ROOT / "lambda/layers/pl-program/python",
-    ROOT / "lambda/layers/pl-sessions/python",
-    ROOT / "lambda/layers/pl-core/python",
-]
-for path in LAYER_PATHS:
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from program_store import ProgramNotFoundError, ProgramRevisionConflictError, ProgramStore
-from session_store import SessionIdentityConflictError
+from services.lib.program_store import ProgramNotFoundError, ProgramRevisionConflictError, ProgramStore
+from services.lib.session_store import SessionIdentityConflictError
 
 
 class TransactionCanceledException(ClientError):

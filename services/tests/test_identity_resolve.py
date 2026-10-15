@@ -47,7 +47,7 @@ class Table:
 
 
 def resolve(monkeypatch, table, **args):
-    module = __import__("lambda.pod_user.handlers.identity_resolve.core", fromlist=["identity_resolve"])
+    module = __import__("services.handlers.user.identity_resolve.core", fromlist=["identity_resolve"])
     monkeypatch.setattr(module, "_get_table", lambda: table)
     return asyncio.run(module.identity_resolve(args))
 

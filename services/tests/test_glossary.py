@@ -1,14 +1,8 @@
 import importlib
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lambda/layers/pl-glossary/python"))
-sys.path.insert(0, str(ROOT))
 
 from services.contract import load_operations
 from services.dispatch import dispatch
@@ -26,7 +20,7 @@ def test_glossary_contracts_have_real_shapes_and_required_mutations():
 
 
 def test_dispatch_uses_handler_result_shapes_with_fake_store(monkeypatch):
-    core = importlib.import_module("lambda.pod_glossary.handlers.exercise_search.core")
+    core = importlib.import_module("services.handlers.glossary.exercise_search.core")
 
     class FakeStore:
         async def search_exercises(self, query):
@@ -38,7 +32,7 @@ def test_dispatch_uses_handler_result_shapes_with_fake_store(monkeypatch):
 
 
 def test_upsert_merges_existing_metadata_before_handler_write(monkeypatch):
-    core = importlib.import_module("lambda.pod_glossary.handlers.exercise_upsert.core")
+    core = importlib.import_module("services.handlers.glossary.exercise_upsert.core")
 
     class FakeStore:
         def __init__(self):

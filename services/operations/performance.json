@@ -3,7 +3,7 @@
     "name": "health_get_current_maxes",
     "domain": "performance",
     "description": "Get current competition maxes. Returns {squat: kg, bench: kg, deadlift: kg}.",
-    "handler": "lambda.pod_maxes.handlers.health_get_current_maxes.handler",
+    "handler": "services.handlers.maxes.health_get_current_maxes.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -39,7 +39,7 @@
     "name": "health_update_current_maxes",
     "domain": "performance",
     "description": "Update current competition maxes. Provide any of squat_kg, bench_kg, deadlift_kg \u2014 omitted fields are left unchanged. Returns the updated current_maxes dict.",
-    "handler": "lambda.pod_maxes.handlers.health_update_current_maxes.handler",
+    "handler": "services.handlers.maxes.health_update_current_maxes.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -119,7 +119,7 @@
     "name": "max_history_add",
     "domain": "performance",
     "description": "Append a max entry to the max history for a program version. The entry must include a date and at least one of squat_kg, bench_kg, deadlift_kg. total_kg is optional (computed if omitted).",
-    "handler": "lambda.pod_maxes.handlers.max_history_add.handler",
+    "handler": "services.handlers.maxes.max_history_add.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -317,7 +317,7 @@
     "name": "max_history_get",
     "domain": "performance",
     "description": "Get the max history for a program version. Returns an array of max entries sorted by date.",
-    "handler": "lambda.pod_maxes.handlers.max_history_get.handler",
+    "handler": "services.handlers.maxes.max_history_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -415,7 +415,7 @@
     "name": "max_target_get",
     "domain": "performance",
     "description": "Get the target maxes (squat/bench/deadlift/total) for a program version. These are goal targets used for progression tracking.",
-    "handler": "lambda.pod_maxes.handlers.max_target_get.handler",
+    "handler": "services.handlers.maxes.max_target_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -487,7 +487,7 @@
     "name": "max_target_update",
     "domain": "performance",
     "description": "Replace the target maxes for a program version. Provide squat_kg, bench_kg, deadlift_kg; total_kg is recomputed as the sum of the three lifts.",
-    "handler": "lambda.pod_maxes.handlers.max_target_update.handler",
+    "handler": "services.handlers.maxes.max_target_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {

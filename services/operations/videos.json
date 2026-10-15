@@ -3,7 +3,7 @@
     "name": "video_library_get",
     "domain": "videos",
     "description": "Get the video library across sessions with optional exercise filter.",
-    "handler": "lambda.pod_videos.handlers.video_library_get.handler",
+    "handler": "services.handlers.videos.video_library_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -160,7 +160,7 @@
     "name": "video_upload_presign",
     "domain": "videos",
     "description": "Create an internal storage ticket for a session or lift-profile form video.",
-    "handler": "lambda.pod_videos.handlers.video_upload_presign.handler",
+    "handler": "services.handlers.videos.video_upload_presign.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -197,7 +197,7 @@
     "name": "video_upload_confirm",
     "domain": "videos",
     "description": "Verify an internally staged session or lift-profile form video.",
-    "handler": "lambda.pod_videos.handlers.video_upload_confirm.handler",
+    "handler": "services.handlers.videos.video_upload_confirm.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -244,7 +244,7 @@
     "name": "video_remove",
     "domain": "videos",
     "description": "Remove a session video (S3 object + thumbnail) and detach from session.",
-    "handler": "lambda.pod_videos.handlers.video_remove.handler",
+    "handler": "services.handlers.videos.video_remove.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -300,7 +300,7 @@
     "name": "video_update_metadata",
     "domain": "videos",
     "description": "Update metadata (exercise_name/set_number/notes) on a session video.",
-    "handler": "lambda.pod_videos.handlers.video_update_metadata.handler",
+    "handler": "services.handlers.videos.video_update_metadata.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -398,7 +398,7 @@
     "name": "video_media_resolve",
     "domain": "videos",
     "description": "Resolve an attached media key for authenticated media delivery.",
-    "handler": "lambda.pod_videos.handlers.video_media_resolve.handler",
+    "handler": "services.handlers.videos.video_media_resolve.handler",
     "input_schema": {
       "type": "object",
       "properties": {

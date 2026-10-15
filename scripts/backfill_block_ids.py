@@ -11,11 +11,9 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "lambda/layers/pl-program/python"))
-
-from block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id
-from competition_entries import participation_date
-from program_store import ProgramStore
+from services.lib.block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id
+from services.lib.competition_entries import participation_date
+from services.lib.program_store import ProgramStore
 
 REGION = os.getenv("AWS_REGION", "ca-central-1")
 

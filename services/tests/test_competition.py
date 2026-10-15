@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 
 from services.contract import load_operations
 from services.dispatch import dispatch
-from session_store import SessionIdentityConflictError
+from services.lib.session_store import SessionIdentityConflictError
 
 
 def test_competition_program_writers_validate_sessions_before_program_put(monkeypatch):
@@ -34,37 +34,17 @@ def test_competition_program_writers_validate_sessions_before_program_put(monkey
 
     table = Table()
     store = Store(table)
-    session_module = importlib.import_module("session_store")
+    session_module = importlib.import_module("services.lib.session_store")
     monkeypatch.setattr(session_module, "SessionStore", lambda **_kwargs: Sessions())
     for module_name in (
-        "lambda.pod_competition.handlers.health_complete_competition.core",
-        "lambda.pod_competition.handlers.health_snapshot_competition_projection.core",
+        "services.handlers.competition.health_complete_competition.core",
+        "services.handlers.competition.health_snapshot_competition_projection.core",
     ):
         module = importlib.import_module(module_name)
         monkeypatch.setattr(module, "_get_table_and_pk", lambda: (table, "athlete", store))
         with pytest.raises(SessionIdentityConflictError):
             module._save_program_version({"sessions": [{"id": "duplicate"}, {"id": "duplicate"}]}, "program#v002")
         assert table.puts == 0
-
-
-@pytest.mark.parametrize("operation", ["health_complete_competition", "health_snapshot_competition_projection"])
-def test_competition_wrapper_preserves_session_identity_conflict(monkeypatch, operation):
-    pod = importlib.import_module("lambda.pod_competition.handler")
-
-    class FailingHandler:
-        @staticmethod
-        def handler(_event, _context):
-            raise SessionIdentityConflictError("duplicate", 4, "Session identity duplicate occurs more than once")
-
-    original_import = pod.importlib.import_module
-    monkeypatch.setattr(
-        pod.importlib,
-        "import_module",
-        lambda name: FailingHandler if name == f"{operation}.handler" else original_import(name),
-    )
-    response = pod.handler({"function": operation}, None)
-    assert response["statusCode"] == 409
-    assert json.loads(response["body"])["code"] == "session_identity_conflict"
 
 
 class FakeProgramStore:
@@ -82,7 +62,7 @@ class FakeProgramStore:
 
     async def mutate_source(self, operation, payload, expected_revision, idempotency_key, mutator):
         if expected_revision != self.revision:
-            from program_store import ProgramRevisionConflictError
+            from services.lib.program_store import ProgramRevisionConflictError
             raise ProgramRevisionConflictError(expected_revision, self.revision, self.program)
         updated = copy.deepcopy(self.program)
         result = mutator(updated)
@@ -100,7 +80,7 @@ def test_legacy_competition_round_trip_through_dispatch(monkeypatch):
         "health_delete_competition",
     ]
     for name in modules:
-        module = importlib.import_module(f"lambda.pod_competition.handlers.{name}.core")
+        module = importlib.import_module(f"services.handlers.competition.{name}.core")
         monkeypatch.setattr(module, "_get_store", lambda: store)
 
     operations = load_operations("competition")
@@ -114,7 +94,7 @@ def test_legacy_competition_round_trip_through_dispatch(monkeypatch):
 
 
 def test_attempt_calculation_is_validated_and_structured(monkeypatch):
-    module = importlib.import_module("lambda.pod_competition.handlers.calculate_attempts.core")
+    module = importlib.import_module("services.handlers.competition.calculate_attempts.core")
     store = FakeProgramStore()
     store.program = {"operator_prefs": {"attempt_jumps": {"squat": {"j1": 20, "j2": 20}}}, "current_maxes": {"squat": 180}}
     monkeypatch.setattr(module, "_get_store", lambda: store)
@@ -128,7 +108,7 @@ def test_attempt_calculation_is_validated_and_structured(monkeypatch):
 
 
 def test_user_competitions_use_a_partition_query(monkeypatch):
-    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
 
     class Table:
         def query(self, **_kwargs):
@@ -143,7 +123,7 @@ def test_user_competitions_use_a_partition_query(monkeypatch):
 
 
 def test_user_competitions_show_directory_and_selected_block_participation(monkeypatch):
-    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
 
     class Table:
         def query(self, **_kwargs):
@@ -196,7 +176,7 @@ class FakeCompetitionTable:
 
 
 def test_competition_cas_conflict_and_lost_response(monkeypatch):
-    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
     table = FakeCompetitionTable()
     monkeypatch.setattr(module, "_get_table", lambda: table)
     first = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "first"}, "expected_revision": 0, "idempotency_key": "first"})
@@ -211,7 +191,7 @@ def test_competition_cas_conflict_and_lost_response(monkeypatch):
 
 
 def test_competition_idempotency_rejects_changed_payload_and_keeps_attempt_ids(monkeypatch):
-    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
     table = FakeCompetitionTable()
     monkeypatch.setattr(module, "_get_table", lambda: table)
     report = {"attempts": [{"lift": "squat", "attempt_number": 1, "kg": 100, "result": "made"}]}
@@ -224,7 +204,7 @@ def test_competition_idempotency_rejects_changed_payload_and_keeps_attempt_ids(m
 
 
 def test_entering_a_meet_indexes_it_by_date_and_block_and_withdrawing_unindexes_it(monkeypatch):
-    module = importlib.import_module("lambda.pod_competition.handlers.health_list_competitions.core")
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
     table = FakeCompetitionTable()
     table.items[("athlete-1", "COMP#meet")]["start_date"] = "2026-11-01"
     monkeypatch.setattr(module, "_get_table", lambda: table)

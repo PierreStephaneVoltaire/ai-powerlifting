@@ -1,19 +1,11 @@
 import importlib
 import json
 import os
-import sys
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 from .contract import Operation
 from .access import permission_map
-
-
-ROOT = Path(__file__).resolve().parent.parent
-for directory in [ROOT, *(ROOT / "lambda/layers").glob("*/python"), *(ROOT / "lambda/layers").glob("*/content")]:
-    if str(directory) not in sys.path:
-        sys.path.insert(0, str(directory))
 
 
 class OperationError(Exception):
@@ -108,10 +100,7 @@ def owner_aliases(arguments: dict[str, Any]) -> frozenset[str]:
 
 def dispatch(operation: Operation, arguments: dict[str, Any]) -> Any:
     operation.validate_input({key: value for key, value in arguments.items() if not key.startswith("_")})
-    package_root = ROOT / "lambda" / operation.handler.split(".")[1] / "handlers"
-    if package_root.is_dir() and str(package_root) not in sys.path:
-        sys.path.insert(0, str(package_root))
-    from storage_scope import current_athlete, current_owner_aliases
+    from services.lib.storage_scope import current_athlete, current_owner_aliases
     token = current_athlete.set(arguments.get("pk") if operation.ownership != "public" else None)
     aliases_token = current_owner_aliases.set(owner_aliases(arguments))
     try:

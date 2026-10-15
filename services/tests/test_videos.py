@@ -145,7 +145,7 @@ def register_form_media(table, video_id, status="ready", revision=1):
 
 
 def _core(name):
-    return importlib.import_module(f"lambda.pod_videos.handlers.{name}.core")
+    return importlib.import_module(f"services.handlers.videos.{name}.core")
 
 
 def _patch_core(core, store, s3=None):
@@ -528,12 +528,3 @@ def test_media_resolve_supports_revisioned_processed_keys():
     assert asyncio.run(core.video_media_resolve({
         "pk": "athlete-1", "s3_key": "processed/2026-09-13/vid-1/r2.mp4",
     })) == "processed/2026-09-13/vid-1/r2.mp4"
-
-
-def test_pod_handler_returns_json_and_rejects_unknown_function():
-    handler = importlib.import_module("lambda.pod_videos.handler")
-    unknown = handler.handler({"function": "missing"}, None)
-    assert unknown["statusCode"] == 404
-    assert json.loads(unknown["body"])["error"] == "unknown function: missing"
-    assert handler.handler({"function": "video_update_thumbnail"}, None)["statusCode"] == 404
-    assert handler.handler({"function": "video_upload"}, None)["statusCode"] == 404

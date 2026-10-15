@@ -3,7 +3,7 @@
     "name": "calculate_attempts",
     "domain": "competition",
     "description": "Calculate three competition attempts for a lift.",
-    "handler": "lambda.pod_competition.handlers.calculate_attempts.handler",
+    "handler": "services.handlers.competition.calculate_attempts.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -91,7 +91,7 @@
     "name": "health_list_competitions",
     "domain": "competition",
     "description": "List or mutate the athlete's directory competition entries.",
-    "handler": "lambda.pod_competition.handlers.health_list_competitions.handler",
+    "handler": "services.handlers.competition.health_list_competitions.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -155,7 +155,7 @@
     "name": "health_update_user_competition",
     "domain": "competition",
     "description": "Patch an athlete's directory competition entry.",
-    "handler": "lambda.pod_competition.handlers.health_list_competitions.handler",
+    "handler": "services.handlers.competition.health_list_competitions.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -201,7 +201,7 @@
     "name": "health_complete_user_competition",
     "domain": "competition",
     "description": "Complete an athlete's directory competition entry.",
-    "handler": "lambda.pod_competition.handlers.health_list_competitions.handler",
+    "handler": "services.handlers.competition.health_list_competitions.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -252,7 +252,7 @@
     "name": "health_complete_competition",
     "domain": "competition",
     "description": "Complete a legacy competition entry and compute its post-meet report.",
-    "handler": "lambda.pod_competition.handlers.health_complete_competition.handler",
+    "handler": "services.handlers.competition.health_complete_competition.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -309,7 +309,7 @@
     "name": "health_create_competition",
     "domain": "competition",
     "description": "Create a legacy competition entry.",
-    "handler": "lambda.pod_competition.handlers.health_create_competition.handler",
+    "handler": "services.handlers.competition.health_create_competition.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -355,7 +355,7 @@
     "name": "health_delete_competition",
     "domain": "competition",
     "description": "Delete a legacy competition entry by date.",
-    "handler": "lambda.pod_competition.handlers.health_delete_competition.handler",
+    "handler": "services.handlers.competition.health_delete_competition.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -405,7 +405,7 @@
     "name": "health_get_competition",
     "domain": "competition",
     "description": "Load a legacy competition entry by date.",
-    "handler": "lambda.pod_competition.handlers.health_get_competition.handler",
+    "handler": "services.handlers.competition.health_get_competition.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -437,7 +437,7 @@
     "name": "health_snapshot_competition_projection",
     "domain": "competition",
     "description": "Snapshot projected totals one week before a legacy competition.",
-    "handler": "lambda.pod_competition.handlers.health_snapshot_competition_projection.handler",
+    "handler": "services.handlers.competition.health_snapshot_competition_projection.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -495,7 +495,7 @@
     "name": "health_update_competition",
     "domain": "competition",
     "description": "Patch a legacy competition entry by date.",
-    "handler": "lambda.pod_competition.handlers.health_update_competition.handler",
+    "handler": "services.handlers.competition.health_update_competition.handler",
     "input_schema": {
       "type": "object",
       "properties": {

@@ -3,7 +3,7 @@
     "name": "weight_log_get",
     "domain": "weight-log",
     "description": "Get the weight log for a program version, sorted newest first.",
-    "handler": "lambda.pod_weight.handlers.weight_log_get.handler",
+    "handler": "services.handlers.weight_log.weight_log_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -79,7 +79,7 @@
     "name": "weight_get_log",
     "domain": "weight-log",
     "description": "Legacy alias for weight_log_get.",
-    "handler": "lambda.pod_weight.handlers.weight_get_log.handler",
+    "handler": "services.handlers.weight_log.weight_get_log.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -154,7 +154,7 @@
     "name": "weight_log_add",
     "domain": "weight-log",
     "description": "Add or replace a weight entry by date.",
-    "handler": "lambda.pod_weight.handlers.weight_log_add.handler",
+    "handler": "services.handlers.weight_log.weight_log_add.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -277,7 +277,7 @@
     "name": "weight_add_entry",
     "domain": "weight-log",
     "description": "Legacy alias for adding or replacing a weight entry by date.",
-    "handler": "lambda.pod_weight.handlers.weight_add_entry.handler",
+    "handler": "services.handlers.weight_log.weight_add_entry.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -380,7 +380,7 @@
     "name": "weight_log_remove",
     "domain": "weight-log",
     "description": "Remove a weight entry by date.",
-    "handler": "lambda.pod_weight.handlers.weight_log_remove.handler",
+    "handler": "services.handlers.weight_log.weight_log_remove.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -455,7 +455,7 @@
     "name": "weight_remove_entry",
     "domain": "weight-log",
     "description": "Legacy alias for removing a weight entry by date.",
-    "handler": "lambda.pod_weight.handlers.weight_remove_entry.handler",
+    "handler": "services.handlers.weight_log.weight_remove_entry.handler",
     "input_schema": {
       "type": "object",
       "properties": {

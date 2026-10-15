@@ -79,7 +79,7 @@ def test_profile_result_schema_preserves_extended_profile_shape():
 
 def test_profile_summary_uses_loaded_sessions_and_canonical_dots():
     module = __import__(
-        "lambda.pod_user.handlers.profile_get.core",
+        "services.handlers.user.profile_get.core",
         fromlist=["_build_profile"],
     )
     settings = {
@@ -117,7 +117,7 @@ def test_profile_summary_uses_loaded_sessions_and_canonical_dots():
 
 def test_onboarding_status_routes_through_shared_state(monkeypatch):
     module = __import__(
-        "lambda.pod_user.handlers.onboarding_status.core",
+        "services.handlers.user.onboarding_status.core",
         fromlist=["onboarding_status"],
     )
 
@@ -145,7 +145,7 @@ def test_onboarding_status_routes_through_shared_state(monkeypatch):
 
 def test_settings_get_default_is_contract_complete(monkeypatch):
     module = __import__(
-        "lambda.pod_user.handlers.settings_get.core",
+        "services.handlers.user.settings_get.core",
         fromlist=["settings_get"],
     )
     monkeypatch.setattr(module, "_get_table", lambda: object())
@@ -158,7 +158,7 @@ def test_settings_get_default_is_contract_complete(monkeypatch):
 
 def test_unachieved_targets_and_unknown_sex_are_not_profile_results():
     from importlib import import_module
-    core = import_module('lambda.pod_user.handlers.profile_get.core')
+    core = import_module('services.handlers.user.profile_get.core')
     assert core._resolved_lift({'meta': {'target_squat_kg': 300}}, 'squat') is None
     settings = {'nickname': 'athlete', 'profile_visibility': 'public'}
     result = core._build_profile(settings, None, {'current_maxes': {'squat': 100, 'bench': 100, 'deadlift': 100}, 'meta': {'current_body_weight_kg': 80}}, [])
@@ -167,7 +167,7 @@ def test_unachieved_targets_and_unknown_sex_are_not_profile_results():
 
 def test_settings_update_role_aliases_reserved_roles_attribute(monkeypatch):
     module = __import__(
-        "lambda.pod_user.handlers.settings_update_role.core",
+        "services.handlers.user.settings_update_role.core",
         fromlist=["settings_update_role"],
     )
 

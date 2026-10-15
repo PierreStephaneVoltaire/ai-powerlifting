@@ -3,7 +3,7 @@
     "name": "lb_to_kg",
     "domain": "calculations",
     "description": "Convert pounds to kilograms. Returns the input lb value and the rounded kg equivalent.",
-    "handler": "lambda.pod_calc.handlers.lb_to_kg.handler",
+    "handler": "services.handlers.calculations.lb_to_kg.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -43,7 +43,7 @@
     "name": "kg_to_lb",
     "domain": "calculations",
     "description": "Convert kilograms to pounds. Returns the input kg value and the rounded lb equivalent.",
-    "handler": "lambda.pod_calc.handlers.kg_to_lb.handler",
+    "handler": "services.handlers.calculations.kg_to_lb.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -83,7 +83,7 @@
     "name": "pct_of_max",
     "domain": "calculations",
     "description": "Calculate a percentage of a max weight. Returns the raw kg value, the value rounded to the nearest 2.5 kg plate, and the lb equivalent.",
-    "handler": "lambda.pod_calc.handlers.pct_of_max.handler",
+    "handler": "services.handlers.calculations.pct_of_max.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -142,7 +142,7 @@
     "name": "ipf_weight_classes",
     "domain": "calculations",
     "description": "Get IPF weight classes for a given sex. Returns the sex, class cutoffs in kg, and the operator's configured weight class if available.",
-    "handler": "lambda.pod_calc.handlers.ipf_weight_classes.handler",
+    "handler": "services.handlers.calculations.ipf_weight_classes.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -201,7 +201,7 @@
     "name": "calculate_dots",
     "domain": "calculations",
     "description": "Calculate the DOTS score from a competition total, bodyweight, and sex. Returns the raw dots value.",
-    "handler": "lambda.pod_calc.handlers.calculate_dots.handler",
+    "handler": "services.handlers.calculations.calculate_dots.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -252,7 +252,7 @@
     "name": "estimate_1rm",
     "domain": "calculations",
     "description": "Estimate E1RM using the shared RPE table for 1\u20136 reps, or conservative percentages without RPE for 1\u20135 reps. Unsupported ranges return null; legacy epley/brzycki fields remain null.",
-    "handler": "lambda.pod_calc.handlers.estimate_1rm.handler",
+    "handler": "services.handlers.calculations.estimate_1rm.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -336,7 +336,7 @@
     "name": "days_until",
     "domain": "calculations",
     "description": "Calculate days until a target date. Returns the label, target date, today's date, days remaining, weeks remaining, and whether the date is in the past.",
-    "handler": "lambda.pod_calc.handlers.days_until.handler",
+    "handler": "services.handlers.calculations.days_until.handler",
     "input_schema": {
       "type": "object",
       "properties": {

@@ -7,7 +7,7 @@ from types import ModuleType
 
 from services.contract import load_operations
 from services.dispatch import dispatch
-import competition_entries
+from services.lib import competition_entries
 
 
 class Store:
@@ -19,7 +19,7 @@ class Store:
 
 
 def test_history_exports_are_scoped_and_isolated(monkeypatch):
-    core = importlib.import_module("lambda.pod_training_program.handlers.export_program_history.core")
+    core = importlib.import_module("services.handlers.program.export_program_history.core")
     directories = []
 
     def write(program, session_block, window, store, directory, format_value):
@@ -40,8 +40,8 @@ def test_history_exports_are_scoped_and_isolated(monkeypatch):
 
 
 def test_markdown_export_uses_the_callers_athlete_and_private_tempfile(monkeypatch):
-    core = importlib.import_module("lambda.pod_training_program.handlers.export_program_markdown.core")
-    module_name = "lambda.pod_training_program.handlers.export_program_markdown.export"
+    core = importlib.import_module("services.handlers.program.export_program_markdown.core")
+    module_name = "services.handlers.program.export_program_markdown.export"
     fake_export = ModuleType(module_name)
 
     def build(program, path, **_kwargs):
@@ -61,7 +61,7 @@ def test_markdown_export_uses_the_callers_athlete_and_private_tempfile(monkeypat
 
 
 def test_export_dispatch_includes_only_permitted_independent_entries(monkeypatch):
-    core = importlib.import_module("lambda.pod_training_program.handlers.export_program_history.core")
+    core = importlib.import_module("services.handlers.program.export_program_history.core")
     monkeypatch.setattr(core, "_get_store", lambda args: Store(args["pk"]))
     monkeypatch.setattr(competition_entries, "load_entries", lambda pk, *_args, **_kwargs: [
         {"master_id": "tied", "name": "Visible meet", "user_status": "completed", "start_date": "2026-09-01", "results": {"squat_kg": 180}},
@@ -96,7 +96,7 @@ class TwoBlockStore(Store):
 
 
 def _capture_export(monkeypatch, args):
-    core = importlib.import_module("lambda.pod_training_program.handlers.export_program_history.core")
+    core = importlib.import_module("services.handlers.program.export_program_history.core")
     captured = {}
 
     def write(program, session_block, window, store, directory, format_value):

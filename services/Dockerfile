@@ -1,8 +1,7 @@
 FROM python:3.12-slim
 WORKDIR /opt/powerlifting
 COPY services/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt pandas numpy scipy pillow openpyxl pypdf python-dateutil
-COPY lambda ./lambda
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY services ./services
 RUN useradd -m -u 10001 service
 USER service

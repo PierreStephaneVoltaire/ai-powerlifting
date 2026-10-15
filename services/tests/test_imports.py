@@ -82,15 +82,15 @@ class FakeTemplateStore:
 def test_import_inventory_has_precise_shapes_and_replacement_handlers():
     operations = load_operations("imports")
     assert len(operations) == 6
-    assert all("pod_imports" in operation.handler for operation in operations.values())
+    assert all("services.handlers.imports" in operation.handler for operation in operations.values())
     with pytest.raises(Exception):
         operations["import_apply"].validate_input({"import_id": "x", "merge_strategy": "bogus", "pk": "athlete-1"})
     operations["import_apply"].validate_result({"status": "applied", "applied_count": 1, "skipped_count": 0, "new_version": "2.0"})
 
 
 def test_parse_stages_csv_using_authenticated_scope_and_native_parser(monkeypatch):
-    core = importlib.import_module("lambda.pod_imports.handlers.import_parse_file.core")
-    ai = importlib.import_module("lambda.pod_imports.handlers.import_parse_file.import_parse_ai")
+    core = importlib.import_module("services.handlers.imports.import_parse_file.core")
+    ai = importlib.import_module("services.handlers.imports.import_parse_file.import_parse_ai")
     imports = FakeImportStore()
 
     class Glossary:
@@ -115,7 +115,7 @@ def test_parse_stages_csv_using_authenticated_scope_and_native_parser(monkeypatc
 
 
 def test_apply_session_offsets_dates_and_preserves_program_write(monkeypatch):
-    apply = importlib.import_module("lambda.pod_imports.handlers.import_apply.core")
+    apply = importlib.import_module("services.handlers.imports.import_apply.core")
     imports = FakeImportStore({"import_id": "import-1", "status": "awaiting_review", "import_type": "session_import", "ai_parse_result": {"sessions": [{"date": "2026-09-01", "exercises": [{"name": "Squat"}]}]}})
     program = FakeProgramStore({"meta": {"version_label": "1.0"}, "sessions": [{"date": "2026-09-10", "exercises": []}]})
     monkeypatch.setattr(apply, "_get_import_store", lambda pk: imports)
@@ -129,7 +129,7 @@ def test_apply_session_offsets_dates_and_preserves_program_write(monkeypatch):
 
 
 def test_apply_template_writes_owned_template_with_import_lineage(monkeypatch):
-    apply = importlib.import_module("lambda.pod_imports.handlers.import_apply.core")
+    apply = importlib.import_module("services.handlers.imports.import_apply.core")
     imports = FakeImportStore({"import_id": "import-2", "status": "awaiting_review", "import_type": "template", "source_filename": "block.csv", "source_file_hash": "sha256:abc", "ai_parse_result": {"phases": [], "sessions": [{"week_number": 1, "day_index": 1, "exercises": [{"name": "Squat", "load_type": "percentage", "load_value": 75}]}], "parse_notes": "parsed"}})
     templates = FakeTemplateStore()
     monkeypatch.setattr(apply, "_get_import_store", lambda pk: imports)
@@ -146,7 +146,7 @@ def test_apply_template_writes_owned_template_with_import_lineage(monkeypatch):
 
 
 def test_failed_target_write_marks_import_uncertain_and_blocks_replay(monkeypatch):
-    apply = importlib.import_module("lambda.pod_imports.handlers.import_apply.core")
+    apply = importlib.import_module("services.handlers.imports.import_apply.core")
     imports = FakeImportStore({"import_id": "import-3", "status": "awaiting_review", "import_type": "session_import", "ai_parse_result": {"sessions": [{"date": "2026-09-01", "exercises": [{"name": "Squat"}]}]}})
     program = FailingProgramStore({"meta": {"version_label": "1.0"}, "sessions": []})
     monkeypatch.setattr(apply, "_get_import_store", lambda pk: imports)

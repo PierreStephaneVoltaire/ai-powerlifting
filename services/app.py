@@ -14,8 +14,8 @@ from .dispatch import OperationError, authorize, dispatch
 from . import execution
 from .authorization import authorize_request
 from .access import permission_map
-from program_store import ProgramRevisionConflictError
-from session_store import SessionRevisionConflictError
+from services.lib.program_store import ProgramRevisionConflictError
+from services.lib.session_store import SessionRevisionConflictError
 
 
 DOMAIN = os.environ["PL_DOMAIN"]

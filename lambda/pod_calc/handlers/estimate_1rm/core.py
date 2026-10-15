@@ -1,1 +1,0 @@
-from lift_calculations import estimate_1rm

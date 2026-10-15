@@ -3,7 +3,7 @@
     "name": "block_transition",
     "domain": "program",
     "description": "Complete the current block, start a next block, or do both with an idempotent revisioned transition.",
-    "handler": "lambda.pod_training_program.handlers.block_transition.handler",
+    "handler": "services.handlers.program.block_transition.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -94,7 +94,7 @@
     "name": "health_delete_diet_note",
     "domain": "program",
     "description": "Delete a diet note by date.",
-    "handler": "lambda.health_delete_diet_note.handler",
+    "handler": "services.handlers.health.delete_diet_note.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -135,7 +135,7 @@
     "name": "health_get_diet_notes",
     "domain": "program",
     "description": "Get diet notes for a date range.",
-    "handler": "lambda.health_get_diet_notes.handler",
+    "handler": "services.handlers.health.get_diet_notes.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -174,7 +174,7 @@
     "name": "health_get_meta",
     "domain": "program",
     "description": "Get program metadata (name, dates, weight class, etc.).",
-    "handler": "lambda.health_get_meta.handler",
+    "handler": "services.handlers.health.get_meta.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -199,7 +199,7 @@
     "name": "health_get_phases",
     "domain": "program",
     "description": "Get the training phases from the program.",
-    "handler": "lambda.health_get_phases.handler",
+    "handler": "services.handlers.health.get_phases.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -222,7 +222,7 @@
     "name": "health_get_program",
     "domain": "program",
     "description": "Get the full training program from DynamoDB. Returns the cached program dict with all sessions, phases, meta, and preferences.",
-    "handler": "lambda.health_get_program.handler",
+    "handler": "services.handlers.health.get_program.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -247,7 +247,7 @@
     "name": "health_get_supplements",
     "domain": "program",
     "description": "Get the supplement protocol from the program.",
-    "handler": "lambda.health_get_supplements.handler",
+    "handler": "services.handlers.health.get_supplements.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -276,7 +276,7 @@
     "name": "health_update_diet_note",
     "domain": "program",
     "description": "Create or replace a diet note for a date.",
-    "handler": "lambda.health_update_diet_note.handler",
+    "handler": "services.handlers.health.update_diet_note.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -322,7 +322,7 @@
     "name": "health_update_meta",
     "domain": "program",
     "description": "Update program metadata fields, including sex for DOTS calculations.",
-    "handler": "lambda.health_update_meta.handler",
+    "handler": "services.handlers.health.update_meta.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -363,7 +363,7 @@
     "name": "health_update_phases",
     "domain": "program",
     "description": "Replace the full phases list.",
-    "handler": "lambda.health_update_phases.handler",
+    "handler": "services.handlers.health.update_phases.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -406,7 +406,7 @@
     "name": "health_update_supplements",
     "domain": "program",
     "description": "Update the supplement protocol.",
-    "handler": "lambda.health_update_supplements.handler",
+    "handler": "services.handlers.health.update_supplements.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -447,7 +447,7 @@
     "name": "program_get",
     "domain": "program",
     "description": "Get a specific program version by its sort key. Returns the full program object with phases, sessions, meta, lift profiles, and competitions. Use this to load a program for display or before modifying it.",
-    "handler": "lambda.pod_training_program.handlers.program_get.handler",
+    "handler": "services.handlers.program.program_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -476,7 +476,7 @@
     "name": "program_list",
     "domain": "program",
     "description": "List all program versions for a user, newest first. Returns summaries (version number, created date, archived status). Use include_archived=true to include archived versions.",
-    "handler": "lambda.pod_training_program.handlers.program_list.handler",
+    "handler": "services.handlers.program.program_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -505,7 +505,7 @@
     "name": "program_list_full",
     "domain": "program",
     "description": "List all program versions with full program objects (not just summaries) for a user. Includes resolved phases and sessions. Use include_archived=true to include archived versions.",
-    "handler": "lambda.pod_training_program.handlers.program_list_full.handler",
+    "handler": "services.handlers.program.program_list_full.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -537,7 +537,7 @@
     "name": "program_archive",
     "domain": "program",
     "description": "Archive a program version by setting its archived flag. The version remains accessible via program_list with include_archived=true but is hidden from default views.",
-    "handler": "lambda.pod_training_program.handlers.program_archive.handler",
+    "handler": "services.handlers.program.program_archive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -577,7 +577,7 @@
     "name": "program_unarchive",
     "domain": "program",
     "description": "Unarchive a previously archived program version, restoring it to the default view.",
-    "handler": "lambda.pod_training_program.handlers.program_unarchive.handler",
+    "handler": "services.handlers.program.program_unarchive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -617,7 +617,7 @@
     "name": "program_update_meta_field",
     "domain": "program",
     "description": "Update a single top-level meta field on the current program (e.g. name, start_date, current_body_weight_kg, current_body_weight_lb). Reads the program, applies the field update, and writes it back.",
-    "handler": "lambda.pod_training_program.handlers.program_update_meta_field.handler",
+    "handler": "services.handlers.program.program_update_meta_field.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -666,7 +666,7 @@
     "name": "program_update_phases",
     "domain": "program",
     "description": "Update the phases array on a program version, or replace a single block within the phases. Reads the program, applies the phase/block update, and writes it back.",
-    "handler": "lambda.pod_training_program.handlers.program_update_phases.handler",
+    "handler": "services.handlers.program.program_update_phases.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -715,7 +715,7 @@
     "name": "block_notes_get",
     "domain": "program",
     "description": "Get block notes for a program version. Block notes are free-form per-block commentary stored alongside the program.",
-    "handler": "lambda.pod_training_program.handlers.block_notes_get.handler",
+    "handler": "services.handlers.program.block_notes_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -744,7 +744,7 @@
     "name": "block_notes_update",
     "domain": "program",
     "description": "Replace the block notes array for a program version. This is a full replace — send the complete array of block note dicts.",
-    "handler": "lambda.pod_training_program.handlers.block_notes_update.handler",
+    "handler": "services.handlers.program.block_notes_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -789,7 +789,7 @@
     "name": "diet_notes_get",
     "domain": "program",
     "description": "Get the diet notes array for a program version. Diet notes are free-form per-date nutrition notes.",
-    "handler": "lambda.pod_training_program.handlers.diet_notes_get.handler",
+    "handler": "services.handlers.program.diet_notes_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -818,7 +818,7 @@
     "name": "diet_notes_update",
     "domain": "program",
     "description": "Replace the diet notes array for a program version. Full replace — send the complete array of note dicts.",
-    "handler": "lambda.pod_training_program.handlers.diet_notes_update.handler",
+    "handler": "services.handlers.program.diet_notes_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -865,7 +865,7 @@
     "name": "supplement_phases_get",
     "domain": "program",
     "description": "Get the supplement phases array for a program version. Supplement phases define per-phase supplement protocols.",
-    "handler": "lambda.pod_training_program.handlers.supplement_phases_get.handler",
+    "handler": "services.handlers.program.supplement_phases_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -894,7 +894,7 @@
     "name": "supplement_phases_update",
     "domain": "program",
     "description": "Replace the supplement phases array for a program version. Full replace — send the complete array of phase dicts.",
-    "handler": "lambda.pod_training_program.handlers.supplement_phases_update.handler",
+    "handler": "services.handlers.program.supplement_phases_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -939,7 +939,7 @@
     "name": "export_program_history",
     "domain": "program",
     "description": "Export one training block (default: the active block), optionally limited to an analysis window, to Excel (.xlsx) or Markdown (.md) format. Returns a download URL or file content. AI section calls (program_evaluation) are intentionally omitted from the analysis bundle; correlation uses cached DynamoDB values only.",
-    "handler": "lambda.pod_training_program.handlers.export_program_history.handler",
+    "handler": "services.handlers.program.export_program_history.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1007,7 +1007,7 @@
     "name": "export_program_markdown",
     "domain": "program",
     "description": "Generate a markdown export of the current program and return its content as a string. Includes phases, sessions, meta, and analysis sections (deterministic only — AI sections excluded).",
-    "handler": "lambda.pod_training_program.handlers.export_program_markdown.handler",
+    "handler": "services.handlers.program.export_program_markdown.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1032,7 +1032,7 @@
     "name": "health_new_version",
     "domain": "program",
     "description": "Create a new major version of the program. Copies the current program, applies patches to specific fields, and stores as a new version. Use this when making significant program changes that should be tracked as a separate version.",
-    "handler": "lambda.pod_training_program.handlers.health_new_version.handler",
+    "handler": "services.handlers.program.health_new_version.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1078,7 +1078,7 @@
     "name": "health_setup_initialize",
     "domain": "program",
     "description": "Initialize a no-data user first training block for the active partition. Creates a blank program or applies a template depending on mode. Use when a new user needs their first program.",
-    "handler": "lambda.pod_training_program.handlers.health_setup_initialize.handler",
+    "handler": "services.handlers.program.health_setup_initialize.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1141,7 +1141,7 @@
     "name": "health_setup_status",
     "domain": "program",
     "description": "Return first-class setup state for the active health data partition. Indicates whether the user has a program, whether setup initialization is needed, and what step they are on.",
-    "handler": "lambda.pod_training_program.handlers.health_setup_status.handler",
+    "handler": "services.handlers.program.health_setup_status.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1166,7 +1166,7 @@
     "name": "health_invalidate_program_cache",
     "domain": "program",
     "description": "Invalidate the program cache for the current user. Forces the next read to go to DynamoDB instead of the in-process LRU cache. Use after writes that must be immediately visible.",
-    "handler": "lambda.pod_training_program.handlers.health_invalidate_program_cache.handler",
+    "handler": "services.handlers.program.health_invalidate_program_cache.handler",
     "input_schema": {
       "type": "object",
       "properties": {

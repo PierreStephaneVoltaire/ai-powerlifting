@@ -3,7 +3,7 @@
     "name": "glossary_add",
     "domain": "glossary",
     "description": "Add a new glossary exercise term for a user. The term dict defines the exercise name, muscle groups, fatigue estimate, and other metadata.",
-    "handler": "lambda.pod_glossary.handlers.glossary_add.handler",
+    "handler": "services.handlers.glossary.glossary_add.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -67,7 +67,7 @@
     "name": "glossary_list_terms",
     "domain": "glossary",
     "description": "List all glossary exercise terms for a user. Scans the templates table for rows with sk beginning with \"glossary#\" and flattens into a list of term summaries.",
-    "handler": "lambda.pod_glossary.handlers.glossary_list_terms.handler",
+    "handler": "services.handlers.glossary.glossary_list_terms.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -108,7 +108,7 @@
     "name": "glossary_set_e1rm",
     "domain": "glossary",
     "description": "Set the estimated 1-rep max (E1RM) for a glossary exercise by ID. The value is stored in kg; method describes how it was derived (e.g. \"epley\", \"brzycki\", \"direct\").",
-    "handler": "lambda.pod_glossary.handlers.glossary_set_e1rm.handler",
+    "handler": "services.handlers.glossary.glossary_set_e1rm.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -164,7 +164,7 @@
     "name": "glossary_update",
     "domain": "glossary",
     "description": "Update an existing glossary exercise term. The term dict replaces the exercise metadata for the given ID.",
-    "handler": "lambda.pod_glossary.handlers.glossary_update.handler",
+    "handler": "services.handlers.glossary.glossary_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -226,7 +226,7 @@
     "name": "exercise_upsert",
     "domain": "glossary",
     "description": "Upsert an exercise in the glossary. If the exercise ID exists, it is updated; otherwise a new entry is created.",
-    "handler": "lambda.pod_glossary.handlers.exercise_upsert.handler",
+    "handler": "services.handlers.glossary.exercise_upsert.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -273,7 +273,7 @@
     "name": "exercise_archive",
     "domain": "glossary",
     "description": "Archive a glossary exercise by ID. The exercise is hidden from default views but remains accessible.",
-    "handler": "lambda.pod_glossary.handlers.exercise_archive.handler",
+    "handler": "services.handlers.glossary.exercise_archive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -316,7 +316,7 @@
     "name": "exercise_unarchive",
     "domain": "glossary",
     "description": "Unarchive a previously archived glossary exercise, restoring it to default views.",
-    "handler": "lambda.pod_glossary.handlers.exercise_unarchive.handler",
+    "handler": "services.handlers.glossary.exercise_unarchive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -359,7 +359,7 @@
     "name": "exercise_remove",
     "domain": "glossary",
     "description": "Permanently remove a glossary exercise by ID. This is a hard delete \u2014 the exercise is removed from the table.",
-    "handler": "lambda.pod_glossary.handlers.exercise_remove.handler",
+    "handler": "services.handlers.glossary.exercise_remove.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -402,7 +402,7 @@
     "name": "exercise_search",
     "domain": "glossary",
     "description": "Search glossary exercises by substring across exercise name, muscle groups, and other text fields.",
-    "handler": "lambda.pod_glossary.handlers.exercise_search.handler",
+    "handler": "services.handlers.glossary.exercise_search.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -449,7 +449,7 @@
     "name": "exercise_get_glossary",
     "domain": "glossary",
     "description": "Get the full glossary for a user \u2014 all exercises with their metadata, E1RM values, and muscle group assignments.",
-    "handler": "lambda.pod_glossary.handlers.exercise_get_glossary.handler",
+    "handler": "services.handlers.glossary.exercise_get_glossary.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -498,7 +498,7 @@
     "name": "exercise_set_e1rm",
     "domain": "glossary",
     "description": "Set the estimated 1-rep max for a specific glossary exercise by ID. Same as glossary_set_e1rm but accessed via the exercise namespace.",
-    "handler": "lambda.pod_glossary.handlers.exercise_set_e1rm.handler",
+    "handler": "services.handlers.glossary.exercise_set_e1rm.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -558,7 +558,7 @@
     "name": "glossary_estimate_e1rm",
     "domain": "glossary",
     "description": "glossary estimate e1rm",
-    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_estimate_e1rm.handler",
+    "handler": "services.handlers.lift_profiles.glossary_estimate_e1rm.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -620,7 +620,7 @@
     "name": "glossary_estimate_fatigue",
     "domain": "glossary",
     "description": "glossary estimate fatigue",
-    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_estimate_fatigue.handler",
+    "handler": "services.handlers.lift_profiles.glossary_estimate_fatigue.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -701,7 +701,7 @@
     "name": "glossary_estimate_muscles",
     "domain": "glossary",
     "description": "glossary estimate muscles",
-    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_estimate_muscles.handler",
+    "handler": "services.handlers.lift_profiles.glossary_estimate_muscles.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -763,7 +763,7 @@
     "name": "glossary_generate_text",
     "domain": "glossary",
     "description": "glossary generate text",
-    "handler": "lambda.pod_lift_profile_ai.handlers.glossary_generate_text.handler",
+    "handler": "services.handlers.lift_profiles.glossary_generate_text.handler",
     "input_schema": {
       "type": "object",
       "properties": {

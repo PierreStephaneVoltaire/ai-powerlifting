@@ -31,7 +31,7 @@ class FederationContractTests(unittest.TestCase):
         )
 
     def test_federation_list_dispatch_returns_domain_shape(self):
-        module = "lambda.pod_federation.handlers.federation_list.core"
+        module = "services.handlers.federation.federation_list.core"
         imported = __import__(module, fromlist=["_store"])
         with patch.object(imported, "_get_store", return_value=FakeStore()):
             result = dispatch(
@@ -43,7 +43,7 @@ class FederationContractTests(unittest.TestCase):
         self.assertEqual(result["qualification_standards"], [{"id": "std-1", "required_total_kg": 500}])
 
     def test_master_store_defaults_to_the_master_table(self):
-        module = __import__("lambda.pod_federation.handlers._federation_store", fromlist=["FederationStore"])
+        module = __import__("services.handlers.federation._federation_store", fromlist=["FederationStore"])
         names = []
 
         class Resource:
@@ -59,7 +59,7 @@ class FederationContractTests(unittest.TestCase):
         self.assertEqual(names, ["if-powerlifting-master-federations"])
 
     def test_master_store_scans_hash_only_catalog_and_keeps_ids(self):
-        module = __import__("lambda.pod_federation.handlers._federation_store", fromlist=["FederationStore"])
+        module = __import__("services.handlers.federation._federation_store", fromlist=["FederationStore"])
 
         class MasterTable:
             def __init__(self):
@@ -79,7 +79,7 @@ class FederationContractTests(unittest.TestCase):
         self.assertEqual(table.calls, [{}, {"ExclusiveStartKey": {"pk": "FED#one"}}])
 
     def test_master_shape_without_optional_values_validates(self):
-        module = __import__("lambda.pod_federation.handlers._federation_store", fromlist=["FederationStore"])
+        module = __import__("services.handlers.federation._federation_store", fromlist=["FederationStore"])
         item = module.FederationStore._normalize_federation({"pk": "FED#one", "name": "One"})
         load_operations("federation")["federation_master_list"].validate_result([item])
         self.assertEqual(item["pk"], "FED#one")

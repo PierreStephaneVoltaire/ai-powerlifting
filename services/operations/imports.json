@@ -3,7 +3,7 @@
     "name": "import_apply",
     "domain": "imports",
     "description": "Apply a reviewed import to the athlete program or template library.",
-    "handler": "lambda.pod_imports.handlers.import_apply.handler",
+    "handler": "services.handlers.imports.import_apply.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -143,7 +143,7 @@
     "name": "import_get_pending",
     "domain": "imports",
     "description": "Get one staged import by ID for review.",
-    "handler": "lambda.pod_imports.handlers.import_get_pending.handler",
+    "handler": "services.handlers.imports.import_get_pending.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -243,7 +243,7 @@
     "name": "import_list",
     "domain": "imports",
     "description": "List staged import summaries for the athlete, newest first.",
-    "handler": "lambda.pod_imports.handlers.import_list.handler",
+    "handler": "services.handlers.imports.import_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -309,7 +309,7 @@
     "name": "import_list_pending",
     "domain": "imports",
     "description": "List the athlete's staged imports awaiting review, optionally filtered by type.",
-    "handler": "lambda.pod_imports.handlers.import_list_pending.handler",
+    "handler": "services.handlers.imports.import_list_pending.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -373,7 +373,7 @@
     "name": "import_parse_file",
     "domain": "imports",
     "description": "Parse and stage a CSV or XLSX training import for review.",
-    "handler": "lambda.pod_imports.handlers.import_parse_file.handler",
+    "handler": "services.handlers.imports.import_parse_file.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -434,7 +434,7 @@
     "name": "import_reject",
     "domain": "imports",
     "description": "Reject a staged import and retain its audit record.",
-    "handler": "lambda.pod_imports.handlers.import_reject.handler",
+    "handler": "services.handlers.imports.import_reject.handler",
     "input_schema": {
       "type": "object",
       "properties": {

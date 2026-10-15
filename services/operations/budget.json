@@ -3,7 +3,7 @@
     "name": "budget_advisor",
     "domain": "budget",
     "description": "Analyze budget spending and competition readiness.",
-    "handler": "lambda.pod_budget.handlers.budget_advisor.handler",
+    "handler": "services.handlers.budget.budget_advisor.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -279,7 +279,7 @@
     "name": "budget_create_item",
     "domain": "budget",
     "description": "Create a budget item.",
-    "handler": "lambda.pod_budget.handlers.budget_create_item.handler",
+    "handler": "services.handlers.budget.budget_create_item.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -497,7 +497,7 @@
     "name": "budget_delete_item",
     "domain": "budget",
     "description": "Delete a budget item.",
-    "handler": "lambda.pod_budget.handlers.budget_delete_item.handler",
+    "handler": "services.handlers.budget.budget_delete_item.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -535,7 +535,7 @@
     "name": "budget_get_config",
     "domain": "budget",
     "description": "Get budget configuration.",
-    "handler": "lambda.pod_budget.handlers.budget_get_config.handler",
+    "handler": "services.handlers.budget.budget_get_config.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -594,7 +594,7 @@
     "name": "budget_get_summary",
     "domain": "budget",
     "description": "Get budget summary for a month.",
-    "handler": "lambda.pod_budget.handlers.budget_get_summary.handler",
+    "handler": "services.handlers.budget.budget_get_summary.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -661,7 +661,7 @@
     "name": "budget_list_items",
     "domain": "budget",
     "description": "List budget items with optional filters.",
-    "handler": "lambda.pod_budget.handlers.budget_list_items.handler",
+    "handler": "services.handlers.budget.budget_list_items.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -816,7 +816,7 @@
     "name": "budget_priority_timeline",
     "domain": "budget",
     "description": "Generate a purchase priority timeline.",
-    "handler": "lambda.pod_budget.handlers.budget_priority_timeline.handler",
+    "handler": "services.handlers.budget.budget_priority_timeline.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1087,7 +1087,7 @@
     "name": "budget_put_config",
     "domain": "budget",
     "description": "Replace budget configuration.",
-    "handler": "lambda.pod_budget.handlers.budget_put_config.handler",
+    "handler": "services.handlers.budget.budget_put_config.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1169,7 +1169,7 @@
     "name": "budget_update_item",
     "domain": "budget",
     "description": "Update a budget item.",
-    "handler": "lambda.pod_budget.handlers.budget_update_item.handler",
+    "handler": "services.handlers.budget.budget_update_item.handler",
     "input_schema": {
       "type": "object",
       "properties": {

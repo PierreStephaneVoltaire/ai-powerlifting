@@ -110,7 +110,7 @@ def evaluate_facts(person: str, athlete: str, owner: dict | None, actor: dict | 
         permissions.update(['profile:read', 'profile:write'])
     if is_self and 'athlete' in actor.get('roles', []):
         from importlib import import_module
-        status = import_module('lambda.pod_user.handlers._shared.settings_normalize').derive_onboarding_status(actor)
+        status = import_module('services.handlers.user._shared.settings_normalize').derive_onboarding_status(actor)
         permissions.update(['grants:read', 'grants:write'])
         if status['has_athlete_basics']:
             permissions.update(COACH_PERMISSIONS)

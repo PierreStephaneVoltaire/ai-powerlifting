@@ -1,18 +1,13 @@
 import importlib
-import sys
 import unittest
 from decimal import Decimal
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lambda/layers/pl-ai/content"))
 
 
 class BudgetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.store = importlib.import_module("lambda.pod_budget.handlers._budget_store")
-        cls.timeline = importlib.import_module("lambda.pod_budget.handlers.budget_priority_timeline.budget_timeline_ai")
+        cls.store = importlib.import_module("services.handlers.budget._budget_store")
+        cls.timeline = importlib.import_module("services.handlers.budget.budget_priority_timeline.budget_timeline_ai")
 
     def test_store_helpers_preserve_dynamo_safety_and_unique_ids(self):
         converted = self.store._to_dynamo({"cost": 12.5, "nested": [1.25]})

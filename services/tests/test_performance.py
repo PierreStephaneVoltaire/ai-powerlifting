@@ -32,7 +32,7 @@ def test_performance_contract_requires_real_mutation_payloads():
 
 
 def test_target_max_update_returns_committed_target_record(monkeypatch):
-    max_core = importlib.import_module("lambda.pod_maxes.handlers.max_target_update.core")
+    max_core = importlib.import_module("services.handlers.maxes.max_target_update.core")
 
     class FakeStore:
         def __init__(self, *_args):
@@ -42,14 +42,14 @@ def test_target_max_update_returns_committed_target_record(monkeypatch):
             assert expected_revision == 4 and idempotency_key == "target-edit"
             return {"success": True, "meta": updates, "revision": 5, "sk": "program#v002", "updated_at": "2026-09-15T10:00:00+00:00"}
 
-    monkeypatch.setitem(sys.modules, "program_store", SimpleNamespace(ProgramStore=FakeStore))
+    monkeypatch.setitem(sys.modules, "services.lib.program_store", SimpleNamespace(ProgramStore=FakeStore))
     result = asyncio.run(max_core.max_target_update({"pk": "athlete-1", "version": "v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230, "expected_revision": 4, "idempotency_key": "target-edit"}))
     load_operations("performance")["max_target_update"].validate_result(result)
     assert result == {"version": "v002", "sk": "program#v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230, "total_kg": 545, "updated_at": "2026-09-15T10:00:00+00:00", "revision": 5}
 
 
 def test_program_store_replay_backfills_legacy_commit_metadata():
-    from program_store import ProgramStore
+    from services.lib.program_store import ProgramStore
     import hashlib
     import json
 
@@ -73,8 +73,8 @@ def test_program_store_replay_backfills_legacy_commit_metadata():
 
 def test_current_maxes_dispatch_uses_fake_store_and_preserves_omitted_lifts(monkeypatch):
     store = FakeProgramStore()
-    get_core = importlib.import_module("lambda.pod_maxes.handlers.health_get_current_maxes.core")
-    update_core = importlib.import_module("lambda.pod_maxes.handlers.health_update_current_maxes.core")
+    get_core = importlib.import_module("services.handlers.maxes.health_get_current_maxes.core")
+    update_core = importlib.import_module("services.handlers.maxes.health_update_current_maxes.core")
     monkeypatch.setattr(get_core, "_get_store", lambda: store)
     monkeypatch.setattr(update_core, "_get_store", lambda: store)
     operations = load_operations("performance")
@@ -84,8 +84,8 @@ def test_current_maxes_dispatch_uses_fake_store_and_preserves_omitted_lifts(monk
 
 
 def test_history_add_computes_total_and_get_filters_window(monkeypatch):
-    add_core = importlib.import_module("lambda.pod_maxes.handlers.max_history_add.core")
-    get_core = importlib.import_module("lambda.pod_maxes.handlers.max_history_get.core")
+    add_core = importlib.import_module("services.handlers.maxes.max_history_add.core")
+    get_core = importlib.import_module("services.handlers.maxes.max_history_get.core")
 
     class FakeTable:
         items = {}
@@ -119,7 +119,7 @@ def test_history_add_computes_total_and_get_filters_window(monkeypatch):
 
 
 def test_history_get_scopes_derived_and_tied_competitions(monkeypatch):
-    get_core = importlib.import_module("lambda.pod_maxes.handlers.max_history_get.core")
+    get_core = importlib.import_module("services.handlers.maxes.max_history_get.core")
     legacy = {'entry_id': 'competition#meet-a', 'date': '2026-08-01', 'squat_kg': 180, 'bodyweight_kg': 82}
     manual = {'date': '2026-09-15', 'squat_kg': 175, 'total_kg': 175}
     class Table:
@@ -137,7 +137,7 @@ def test_history_get_scopes_derived_and_tied_competitions(monkeypatch):
 
 
 def test_handlers_return_json_for_decimal_results():
-    handler = importlib.import_module("lambda.pod_maxes.handlers.health_update_current_maxes.handler")
+    handler = importlib.import_module("services.handlers.maxes.health_update_current_maxes.handler")
     assert handler._json_default(Decimal("12.5")) == 12.5
 
 

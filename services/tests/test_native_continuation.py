@@ -85,7 +85,7 @@ def test_dispatch_keeps_private_execution_metadata_out_of_public_contract_valida
         name='private_metadata',
         domain='analytics',
         description='private metadata validation',
-        handler='lambda.private_metadata.handler',
+        handler='services.private_metadata.handler',
         input_schema={'type': 'object', 'properties': {'pk': {'type': 'string'}}, 'required': ['pk'], 'additionalProperties': False},
         result_schema={'type': 'object'},
     )

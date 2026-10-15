@@ -28,20 +28,8 @@ class ProgramContractTests(unittest.TestCase):
         )
 
     def test_program_store_resolves_current_alias_and_historical_selection(self):
-        import sys
-        from pathlib import Path
-
-        layer_paths = [
-            str(Path(__file__).resolve().parents[2] / "lambda/layers/pl-program/python"),
-            str(Path(__file__).resolve().parents[2] / "lambda/layers/pl-core/python"),
-        ]
-        original_path = sys.path[:]
-        sys.path[:0] = [path for path in layer_paths if path not in sys.path]
-        try:
-            from program_store import ProgramStore
-            import storage_scope
-        finally:
-            sys.path[:] = original_path
+        from services.lib.program_store import ProgramStore
+        from services.lib import storage_scope
 
         class Table:
             def __init__(self):
@@ -98,7 +86,7 @@ def test_source_mutations_replay_deletes_invalidate_analysis_and_report_real_con
     import pytest
     from botocore.exceptions import ClientError
     from services.dispatch import dispatch
-    from program_store import ProgramStore, ProgramRevisionConflictError
+    from services.lib.program_store import ProgramStore, ProgramRevisionConflictError
 
     class Table:
         def __init__(self):

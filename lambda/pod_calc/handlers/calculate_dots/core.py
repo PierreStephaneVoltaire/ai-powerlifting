@@ -1,1 +1,0 @@
-from lift_calculations import calculate_dots

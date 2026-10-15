@@ -15,7 +15,7 @@ def test_analytics_contracts_have_structured_results():
 
 
 def test_analysis_section_uses_supplied_snapshot(monkeypatch):
-    core = importlib.import_module("lambda.pod_analysis.handlers.analysis_section.core")
+    core = importlib.import_module("services.handlers.analysis.analysis_section.core")
     monkeypatch.setattr(core, "_get_glossary_sync", lambda _table: [])
     result = dispatch(
         load_operations("analytics")["analysis_section"],
@@ -31,15 +31,15 @@ def test_analysis_section_uses_supplied_snapshot(monkeypatch):
 
 
 def test_shared_lift_calculations_are_used_by_analytics():
-    analytics = importlib.import_module("lambda.get_analysis_markdown.analytics")
-    calculations = importlib.import_module("lift_calculations")
+    analytics = importlib.import_module("services.handlers.analysis_reports.analytics")
+    calculations = importlib.import_module("services.lib.lift_calculations")
     assert analytics.estimate_1rm(100, 5, 8) == calculations.estimate_1rm(100, 5, 8)
     assert analytics.calculate_dots(500, 80, "male") == calculations.calculate_dots(500, 80, "male")
 
 
 def test_internal_e1rm_keeps_precision_before_regression():
-    analytics = importlib.import_module("lambda.get_analysis_markdown.analytics")
-    calculations = importlib.import_module("lift_calculations")
+    analytics = importlib.import_module("services.handlers.analysis_reports.analytics")
+    calculations = importlib.import_module("services.lib.lift_calculations")
     assert calculations.estimate_1rm_value(100, 3, 8) == 100 / 0.875
     assert analytics._estimate_e1rm_from_set(100, 3, 8) == 114.28571428571429
     assert calculations.estimate_1rm(100, 3, 8)["e1rm"] == 114.3
@@ -59,7 +59,7 @@ def test_e1rm_multiplier_suggestions_binding_uses_existing_calculation():
 
 
 def test_composite_operation_bindings_proxy_to_node_sidecar(monkeypatch):
-    composite = importlib.import_module("lambda.get_analysis_markdown.composite")
+    composite = importlib.import_module("services.handlers.analysis_reports.composite")
     calls = []
 
     def fake_post(url, **kwargs):
@@ -74,7 +74,7 @@ def test_composite_operation_bindings_proxy_to_node_sidecar(monkeypatch):
 
 
 def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as_input(monkeypatch):
-    composite = importlib.import_module("lambda.get_analysis_markdown.composite")
+    composite = importlib.import_module("services.handlers.analysis_reports.composite")
     calls = []
 
     def fake_post(url, **kwargs):
@@ -90,7 +90,7 @@ def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as
 
 
 def test_composite_block_cache_miss_preserves_not_found_status(monkeypatch):
-    composite = importlib.import_module("lambda.get_analysis_markdown.composite")
+    composite = importlib.import_module("services.handlers.analysis_reports.composite")
     from services.dispatch import OperationError
 
     def fake_post(url, **kwargs):
@@ -107,7 +107,7 @@ def test_composite_block_cache_miss_preserves_not_found_status(monkeypatch):
 
 
 def test_composite_correlation_cache_miss_preserves_not_found_status(monkeypatch):
-    composite = importlib.import_module("lambda.get_analysis_markdown.composite")
+    composite = importlib.import_module("services.handlers.analysis_reports.composite")
     from services.dispatch import OperationError
 
     def fake_post(url, **kwargs):
@@ -185,7 +185,7 @@ def test_legacy_weekly_contract_matches_flat_handler_result(monkeypatch):
         }
     operation.validate_result(flat_result)
 
-    composite = importlib.import_module("lambda.get_analysis_markdown.composite")
+    composite = importlib.import_module("services.handlers.analysis_reports.composite")
     monkeypatch.setattr(composite, "call_node", lambda _operation, _args: flat_result)
     assert dispatch(operation, {"pk": "athlete-1"}) == flat_result
 
@@ -229,7 +229,7 @@ def test_composite_ai_report_results_have_concrete_shapes():
 
 
 def test_markdown_export_formatter_remains_available_to_lazy_report_imports(tmp_path):
-    export = importlib.import_module("lambda.get_analysis_markdown.export")
+    export = importlib.import_module("services.handlers.analysis_reports.export")
     output = tmp_path / "program.md"
     export.build_program_markdown(
         {"meta": {"program_name": "Athlete A"}, "sessions": [], "phases": [], "goals": [], "competitions": []},
@@ -241,7 +241,7 @@ def test_markdown_export_formatter_remains_available_to_lazy_report_imports(tmp_
 
 
 def test_markdown_report_handler_lazily_loads_the_restored_formatter(monkeypatch):
-    core = importlib.import_module("lambda.get_analysis_markdown.core")
+    core = importlib.import_module("services.handlers.analysis_reports.core")
     writes = []
 
     class Store:
@@ -268,7 +268,7 @@ def test_markdown_report_handler_lazily_loads_the_restored_formatter(monkeypatch
     monkeypatch.setattr(core, "_get_glossary_store", Glossary)
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: {})
     monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: Table())))
-    monkeypatch.setitem(sys.modules, "analysis_cache", SimpleNamespace(AnalysisCacheStore=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("cache unavailable"))))
+    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("cache unavailable"))))
 
     result = core.get_analysis_markdown({"pk": "athlete-a"})
     assert result["markdown"].startswith("# Athlete A")
@@ -276,7 +276,7 @@ def test_markdown_report_handler_lazily_loads_the_restored_formatter(monkeypatch
 
 
 def test_markdown_cache_only_returns_a_miss_without_regenerating(monkeypatch):
-    core = importlib.import_module("lambda.get_analysis_markdown.core")
+    core = importlib.import_module("services.handlers.analysis_reports.core")
 
     class Store:
         pk = "athlete-a"
@@ -294,13 +294,13 @@ def test_markdown_cache_only_returns_a_miss_without_regenerating(monkeypatch):
     monkeypatch.setattr(core, "_get_store", Store)
     monkeypatch.setattr(core, "_regenerate_analysis", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("cache-only regenerated")))
     monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None)))
-    monkeypatch.setitem(sys.modules, "analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
+    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
 
     assert core.get_analysis_markdown({"pk": "athlete-a", "cache_only": True}) == {"cached": False, "cache_miss": True}
 
 
 def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkeypatch):
-    core = importlib.import_module("lambda.get_analysis_markdown.core")
+    core = importlib.import_module("services.handlers.analysis_reports.core")
     records = {}
     analysis_inputs = []
     glossary_reads = []
@@ -351,8 +351,8 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", build_analysis)
     import boto3
     monkeypatch.setattr(boto3, "resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
-    monkeypatch.setitem(sys.modules, "competition_entries", SimpleNamespace(with_competition_entries=lambda program, *args: program))
-    monkeypatch.setitem(sys.modules, "analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
+    monkeypatch.setitem(sys.modules, "services.lib.competition_entries", SimpleNamespace(with_competition_entries=lambda program, *args: program))
+    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
 
     access = {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}
     operations = load_operations("analytics")
@@ -403,7 +403,7 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
 
 
 def test_markdown_dispatch_preserves_athlete_cache_reads(monkeypatch):
-    core = importlib.import_module("lambda.get_analysis_markdown.core")
+    core = importlib.import_module("services.handlers.analysis_reports.core")
 
     class Store:
         pk = "athlete-a"
@@ -420,7 +420,7 @@ def test_markdown_dispatch_preserves_athlete_cache_reads(monkeypatch):
 
     monkeypatch.setattr(core, "_get_store", Store)
     monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None)))
-    monkeypatch.setitem(sys.modules, "analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
+    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
     operations = load_operations("analytics")
     for name in ("analytics.markdown", "get_analysis_markdown"):
         result = dispatch(operations[name], {"pk": "athlete-a", "cache_only": True, "_access": {"is_self": True}})

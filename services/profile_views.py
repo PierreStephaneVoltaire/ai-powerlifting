@@ -40,12 +40,12 @@ def visible_profile(owner, actor, vocabulary, details=False):
         'lift_videos': [],
     }
     if details and allowed.intersection({'performance:read', 'sessions:read', 'competition:read', 'lift-profiles:read'}):
-        legacy = importlib.import_module('lambda.pod_user.handlers.profile_get.core')
+        legacy = importlib.import_module('services.handlers.user.profile_get.core')
         health = database().Table(os.getenv('IF_HEALTH_TABLE_NAME', 'if-health'))
         program_sk = legacy._resolve_program_sk_sync(health, athlete)
         program = legacy._load_program_sync(health, athlete, program_sk)
         if program and program.get('published', True):
-            from session_store import SessionStore
+            from services.lib.session_store import SessionStore
             sessions = SessionStore(os.getenv('IF_SESSIONS_TABLE_NAME', 'if-sessions'), pk=athlete, region=os.getenv('AWS_REGION', 'ca-central-1')).list_sessions_sync(program_sk, program.get('phases', [])) if 'sessions:read' in allowed or 'performance:read' in allowed else []
             derived = legacy._build_profile(owner, None, program, sessions)
             if 'performance:read' in allowed:

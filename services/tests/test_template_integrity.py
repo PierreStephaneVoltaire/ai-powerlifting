@@ -1,27 +1,15 @@
 import copy
 import asyncio
 import json
-import sys
-from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
 
 from services import dispatch
 
-TEMPLATE_LAYER = Path(__file__).resolve().parents[2] / "lambda/layers/pl-templates/python"
-if str(TEMPLATE_LAYER) not in sys.path:
-    sys.path.insert(0, str(TEMPLATE_LAYER))
-APPLY_HANDLERS = Path(__file__).resolve().parents[2] / "lambda/pod_templates/handlers"
-if str(APPLY_HANDLERS) not in sys.path:
-    sys.path.insert(0, str(APPLY_HANDLERS))
-SESSION_LAYER = Path(__file__).resolve().parents[2] / "lambda/layers/pl-sessions/python"
-if str(SESSION_LAYER) not in sys.path:
-    sys.path.insert(0, str(SESSION_LAYER))
-
-from template_store import TemplateRevisionConflictError, TemplateStore
-from template_apply_confirm.core import _new_sessions
-from session_store import SessionIdentityConflictError
+from services.lib.template_store import TemplateRevisionConflictError, TemplateStore
+from services.handlers.templates.template_apply_confirm.core import _new_sessions
+from services.lib.session_store import SessionIdentityConflictError
 
 
 def canceled():
@@ -155,8 +143,8 @@ def test_template_applications_get_fresh_stable_session_ids():
 
 
 def test_template_apply_confirm_replays_before_changed_current_block_and_canonicalizes_maps(monkeypatch):
-    core = __import__("lambda.pod_templates.handlers.template_apply_confirm.core", fromlist=["core"])
-    handler = __import__("lambda.pod_templates.handlers.template_apply_confirm.handler", fromlist=["handler"])
+    core = __import__("services.handlers.templates.template_apply_confirm.core", fromlist=["core"])
+    handler = __import__("services.handlers.templates.template_apply_confirm.handler", fromlist=["handler"])
 
     class Templates:
         async def get_template(self, _sk, actor_pk=None):
@@ -203,23 +191,3 @@ def test_template_apply_confirm_replays_before_changed_current_block_and_canonic
     changed = {**event, "block_name": "Different"}
     with pytest.raises(ValueError, match="different payload"):
         handler.handler(changed, None)
-
-
-def test_template_handler_preserves_session_identity_conflict_code(monkeypatch):
-    pod = __import__("lambda.pod_templates.handler", fromlist=["handler"])
-    original_import = pod.importlib.import_module
-
-    class FailingHandler:
-        @staticmethod
-        def handler(_event, _context):
-            raise SessionIdentityConflictError("duplicate", 4, "Session identity duplicate occurs more than once")
-
-    def import_handler(name):
-        if name == "template_apply_confirm.handler":
-            return FailingHandler
-        return original_import(name)
-
-    monkeypatch.setattr(pod.importlib, "import_module", import_handler)
-    response = pod.handler({"function": "template_apply_confirm"}, None)
-    assert response["statusCode"] == 409
-    assert __import__("json").loads(response["body"])["code"] == "session_identity_conflict"

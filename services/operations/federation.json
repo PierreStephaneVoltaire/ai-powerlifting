@@ -3,7 +3,7 @@
     "name": "federation_master_list",
     "domain": "federation",
     "description": "List the global master federation directory.",
-    "handler": "lambda.pod_federation.handlers.federation_master_list.handler",
+    "handler": "services.handlers.federation.federation_master_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -115,7 +115,7 @@
     "name": "federation_master_update",
     "domain": "federation",
     "description": "Update one master federation definition.",
-    "handler": "lambda.pod_federation.handlers.federation_master_update.handler",
+    "handler": "services.handlers.federation.federation_master_update.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -159,7 +159,7 @@
     "name": "federation_user_library_get",
     "domain": "federation",
     "description": "Get the authenticated athlete's federation library.",
-    "handler": "lambda.pod_federation.handlers.federation_user_library_get.handler",
+    "handler": "services.handlers.federation.federation_user_library_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -213,7 +213,7 @@
     "name": "federation_user_library_set",
     "domain": "federation",
     "description": "Replace the authenticated athlete's federation library.",
-    "handler": "lambda.pod_federation.handlers.federation_user_library_set.handler",
+    "handler": "services.handlers.federation.federation_user_library_set.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -283,7 +283,7 @@
     "name": "health_get_federation_library",
     "domain": "federation",
     "description": "Get the shared federation reference library.",
-    "handler": "lambda.pod_federation.handlers.health_get_federation_library.handler",
+    "handler": "services.handlers.federation.health_get_federation_library.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -337,7 +337,7 @@
     "name": "health_update_federation_library",
     "domain": "federation",
     "description": "Replace the shared federation reference library.",
-    "handler": "lambda.pod_federation.handlers.health_update_federation_library.handler",
+    "handler": "services.handlers.federation.health_update_federation_library.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -407,7 +407,7 @@
     "name": "federation_library_get",
     "domain": "federation",
     "description": "Get the AI per-user federation library.",
-    "handler": "lambda.pod_federation.handlers.federation_library_get.handler",
+    "handler": "services.handlers.federation.federation_library_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -454,7 +454,7 @@
     "name": "federation_library_set",
     "domain": "federation",
     "description": "Replace the AI per-user federation library entries.",
-    "handler": "lambda.pod_federation.handlers.federation_library_set.handler",
+    "handler": "services.handlers.federation.federation_library_set.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -510,7 +510,7 @@
     "name": "federation_list",
     "domain": "federation",
     "description": "Return the AI federation entries and standards summary.",
-    "handler": "lambda.pod_federation.handlers.federation_list.handler",
+    "handler": "services.handlers.federation.federation_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
