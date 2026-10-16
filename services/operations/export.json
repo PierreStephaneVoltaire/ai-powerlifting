@@ -1,0 +1,74 @@
+[
+  {
+    "name": "export_program_history",
+    "domain": "export",
+    "description": "Export one training block (default: the active block), optionally limited to an analysis window, to Excel (.xlsx) or Markdown (.md) format.",
+    "handler": "services.handlers.program.export_program_history.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Export format: \"xlsx\" or \"md\"."
+        },
+        "block": {
+          "type": "string",
+          "description": "Block id to export, or \"current\" (default) for the active block."
+        },
+        "window_start": {
+          "type": "string",
+          "description": "Inclusive YYYY-MM-DD start of the selected analysis window."
+        },
+        "window_end": {
+          "type": "string",
+          "description": "Inclusive YYYY-MM-DD end of the selected analysis window."
+        },
+        "window_key": {
+          "type": "string",
+          "description": "Cached analysis window key for the selected export."
+        },
+        "week_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "week_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "filename",
+        "format",
+        "content_base64"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "xlsx",
+            "markdown"
+          ]
+        },
+        "content_base64": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_training_program"
+    ]
+  }
+]

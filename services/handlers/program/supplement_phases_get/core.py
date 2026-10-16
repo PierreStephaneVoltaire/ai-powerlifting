@@ -6,6 +6,7 @@ import os
 from decimal import Decimal
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def _get_table():
     if _table is None:
         region = os.environ.get("AWS_REGION", "ca-central-1")
         table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
-        _table = boto3.resource("dynamodb", region_name=region).Table(table_name)
+        _table = dynamodb_resource("dynamodb", region_name=region).Table(table_name)
         logger.info("[SupplementPhasesGet] DynamoDB table initialised: %s", table_name)
     return _table
 

@@ -875,8 +875,13 @@ export async function fetchWeeklyAnalysisBundle(asOfDate?: string, refresh = fal
 export async function fetchAnalysisManifest(
   asOfDate: string,
   windowKey: AnalysisWindowKey,
+  window?: AnalysisWindow | null,
 ): Promise<AnalysisManifest> {
   const params = new URLSearchParams({ asOfDate, window: windowKey })
+  if (window) {
+    params.set('window_start', window.start)
+    params.set('window_end', window.end)
+  }
   const res = await api.get(`/analytics/analysis/manifest?${params.toString()}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
@@ -887,12 +892,15 @@ export async function queueAnalysisSections(options: {
   asOfDate: string
   windowKey: AnalysisWindowKey
   sections: AnalysisSectionKey[]
+  window?: AnalysisWindow | null
   force?: boolean
 }): Promise<{ accepted: boolean; queued: AnalysisSectionKey[]; sourceFingerprint: string }> {
   const res = await api.post('/analytics/analysis/sections/queue', {
     asOfDate: options.asOfDate,
     window: options.windowKey,
     sections: options.sections,
+    window_start: options.window?.start,
+    window_end: options.window?.end,
     force: options.force === true,
   })
   const body = res.data
@@ -904,8 +912,13 @@ export async function fetchAnalysisSection<T = Partial<WeeklyAnalysis>>(
   asOfDate: string,
   windowKey: AnalysisWindowKey,
   sectionKey: AnalysisSectionKey,
+  window?: AnalysisWindow | null,
 ): Promise<AnalysisSectionStatus<T>> {
   const params = new URLSearchParams({ asOfDate, window: windowKey })
+  if (window) {
+    params.set('window_start', window.start)
+    params.set('window_end', window.end)
+  }
   const res = await api.get(`/analytics/analysis/sections/${sectionKey}?${params.toString()}`)
   const body = res.data
   if (body.error) throw new Error(body.error)
@@ -916,11 +929,14 @@ export async function invalidateAnalysisSections(options: {
   asOfDate: string
   windowKey: AnalysisWindowKey
   sections: AnalysisSectionKey[]
+  window?: AnalysisWindow | null
 }): Promise<{ accepted: boolean; queued: AnalysisSectionKey[]; sourceFingerprint: string }> {
   const res = await api.post('/analytics/analysis/sections/invalidate', {
     asOfDate: options.asOfDate,
     window: options.windowKey,
     sections: options.sections,
+    window_start: options.window?.start,
+    window_end: options.window?.end,
   })
   const body = res.data
   if (body.error) throw new Error(body.error)
@@ -947,6 +963,7 @@ export async function fetchBlockAnalysis(blockKey: string, refresh = false): Pro
 export function programExportUrl(format: 'xlsx' | 'markdown', window?: AnalysisWindow | null): string {
   const params = new URLSearchParams({ block: 'current' })
   if (window) {
+    params.set('window_key', window.key)
     params.set('window_start', window.start)
     params.set('window_end', window.end)
     params.set('week_start', String(window.weekStart))

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from botocore.exceptions import ClientError
 
 from ..settings_get.core import _normalize_settings
@@ -18,7 +19,7 @@ _table = None
 def _get_table():
     global _table
     if _table is None:
-        _table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
+        _table = dynamodb_resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
             os.environ.get("IF_USER_TABLE", "if-user")
         )
     return _table

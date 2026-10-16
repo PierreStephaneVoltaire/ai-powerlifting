@@ -434,7 +434,7 @@ export default function AnalysisPage() {
 
     async function pollSection(section: AnalysisSectionKey) {
       try {
-        const result = await fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section)
+        const result = await fetchAnalysisSection<Partial<WeeklyAnalysis>>(asOfDate, analysisKey, section, analysisWindow)
         if (cancelled) return
 
         setSectionStatuses((prev) => ({ ...prev, [section]: result.status }))
@@ -479,7 +479,7 @@ export default function AnalysisPage() {
     setSectionPayloads({})
     setSectionStatuses({})
 
-    fetchAnalysisManifest(asOfDate, analysisKey)
+    fetchAnalysisManifest(asOfDate, analysisKey, analysisWindow)
       .then((manifest) => {
         if (cancelled) return
         setAnalysisWindows(manifest.windows)
@@ -490,6 +490,7 @@ export default function AnalysisPage() {
           asOfDate,
           windowKey: analysisKey,
           sections: DETERMINISTIC_ANALYSIS_SECTIONS,
+          window: analysisWindow,
         }).then(() => {
           // Fire each section poll independently — no Promise.all/allSettled.
           // Each section updates its own state the moment it resolves.
@@ -934,7 +935,7 @@ export default function AnalysisPage() {
           />
           <Button
             component="a"
-            href={programExportUrl('xlsx', analysisWindows?.[analysisKey])}
+            href={programExportUrl('xlsx', analysisWindow)}
             download
             size="sm"
             leftSection={<Download size={16} />}
@@ -943,7 +944,7 @@ export default function AnalysisPage() {
           </Button>
           <Button
             component="a"
-            href={programExportUrl('markdown', analysisWindows?.[analysisKey])}
+            href={programExportUrl('markdown', analysisWindow)}
             download
             size="sm"
             variant="light"

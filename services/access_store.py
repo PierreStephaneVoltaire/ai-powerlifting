@@ -2,6 +2,7 @@ import os
 from functools import lru_cache
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Attr, Key
 
 from .access import evaluate_facts
@@ -9,7 +10,7 @@ from .access import evaluate_facts
 
 @lru_cache(maxsize=1)
 def database():
-    return boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'ca-central-1'))
+    return dynamodb_resource('dynamodb', region_name=os.getenv('AWS_REGION', 'ca-central-1'))
 
 
 def pages(table, method: str, **arguments):

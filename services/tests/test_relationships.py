@@ -100,6 +100,7 @@ def test_athlete_approval_authorizes_incoming_scope_and_ties(monkeypatch):
         "created_at": "2026-09-14T00:00:00+00:00",
     }
     writes = []
+    monkeypatch.setattr(relationships, "_legacy_grants", lambda *_args: [])
     monkeypatch.setattr(relationships, "_get", lambda _key: request)
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2027-01-01"})
     monkeypatch.setattr(relationships, "_active_relationship_ids", lambda _athlete, _role: set())
@@ -174,6 +175,7 @@ def test_approval_requires_explicit_replacement_for_an_active_role_slot(monkeypa
         "created_at": "2026-09-14T00:00:00+00:00",
     }
     slot = {"state": "active", "relationship_id": "old", "grant_sk": "Relationship#old"}
+    monkeypatch.setattr(relationships, "_legacy_grants", lambda *_args: [])
     monkeypatch.setattr(relationships, "_get", lambda key: request if key["pk"] == "Relationship#new" else slot)
     monkeypatch.setattr(relationships, "_slot_is_active", lambda _slot, _athlete: True)
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2026-12-01"})
@@ -371,6 +373,7 @@ def test_changed_competition_date_replaces_inactive_slot_with_observed_revision(
     request = {"relationship_id": "new", "state": "pending", "athlete_mapped_pk": "athlete", "athlete_person_pk": "athlete-person", "requester_person_pk": "athlete-person", "recipient_person_pk": "coach-person", "relationship_type": "coach", "scope": "write", "permissions": ["sessions:write"], "tied_competition_ids": ["meet"], "created_at": "2026-09-01T00:00:00+00:00"}
     slot = {"state": "active", "relationship_id": "old", "grant_sk": "Relationship#old", "revision": 7, "expires_at": "2026-12-08T23:59:59+00:00"}
     writes = []
+    monkeypatch.setattr(relationships, "_legacy_grants", lambda *_args: [])
     monkeypatch.setattr(relationships, "_get", lambda key: request if key["pk"] == "Relationship#new" else slot)
     monkeypatch.setattr(relationships, "_slot_is_active", lambda _slot, _athlete: False)
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2026-09-01"})

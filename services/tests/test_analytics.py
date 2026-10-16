@@ -242,6 +242,7 @@ def test_markdown_export_formatter_remains_available_to_lazy_report_imports(tmp_
 
 def test_markdown_report_handler_lazily_loads_the_restored_formatter(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
+    competition_entries = importlib.import_module("services.lib.competition_entries")
     writes = []
 
     class Store:
@@ -266,6 +267,8 @@ def test_markdown_report_handler_lazily_loads_the_restored_formatter(monkeypatch
 
     monkeypatch.setattr(core, "_get_store", Store)
     monkeypatch.setattr(core, "_get_glossary_store", Glossary)
+    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: Table()))
+    monkeypatch.setattr(competition_entries, "with_competition_entries", lambda program, _pk: program)
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: {})
     monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: Table())))
     monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("cache unavailable"))))
@@ -293,6 +296,7 @@ def test_markdown_cache_only_returns_a_miss_without_regenerating(monkeypatch):
 
     monkeypatch.setattr(core, "_get_store", Store)
     monkeypatch.setattr(core, "_regenerate_analysis", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("cache-only regenerated")))
+    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
     monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None)))
     monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
 
@@ -349,6 +353,7 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
         return {}
 
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", build_analysis)
+    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
     import boto3
     monkeypatch.setattr(boto3, "resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
     monkeypatch.setitem(sys.modules, "services.lib.competition_entries", SimpleNamespace(with_competition_entries=lambda program, *args: program))
@@ -419,6 +424,7 @@ def test_markdown_dispatch_preserves_athlete_cache_reads(monkeypatch):
             return False
 
     monkeypatch.setattr(core, "_get_store", Store)
+    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
     monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None)))
     monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
     operations = load_operations("analytics")

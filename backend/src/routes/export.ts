@@ -18,7 +18,7 @@ const EXPORT_DEFAULTS: Record<ExportFormat, { filename: string; contentType: str
 
 function exportSelection(req: Request): Record<string, string | number> {
   const selection: Record<string, string | number> = {}
-  for (const key of ['block', 'window_start', 'window_end'] as const) {
+  for (const key of ['block', 'window_start', 'window_end', 'window_key'] as const) {
     const value = req.query[key]
     if (typeof value === 'string' && value) selection[key] = value
   }

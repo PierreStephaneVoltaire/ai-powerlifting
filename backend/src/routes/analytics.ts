@@ -41,6 +41,7 @@ import {
   buildBlockAnalysisMarkdownExport,
   buildBlockAnalysisWorkbookExport,
 } from '../services/blockAnalysisExport'
+import { singleFlight } from '../services/programRequestCache'
 
 export const analyticsRouter = Router()
 
@@ -78,16 +79,34 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-async function getProgramWithWeightLog(pk: string, version = 'current', block: string = ALL_BLOCKS): Promise<ProgramWithWeightLog> {
-  const program = await programController.getProgram(pk, version)
-  let weightLog: WeightEntry[] = []
-  try {
-    const log = await weightController.getWeightLog(pk, version, block === ALL_BLOCKS ? ALL_BLOCKS : undefined)
-    weightLog = Array.isArray(log.entries) ? log.entries : []
-  } catch (error) {
-    logger.warn({ error, pk }, 'Failed to load weight log for analytics context')
-  }
-  return scopeProgramToBlock({ ...program, weight_log: weightLog }, block)
+async function getProgramWithWeightLog(
+  pk: string,
+  version = 'current',
+  block: string = ALL_BLOCKS,
+  window?: { start?: string; end?: string },
+): Promise<ProgramWithWeightLog> {
+  const key = [pk, block, window?.start || '', window?.end || ''].join('|')
+  return singleFlight(key, async () => {
+    const program = await programController.getProgram(pk, version, {
+      block,
+      windowStart: window?.start,
+      windowEnd: window?.end,
+    })
+    let weightLog: WeightEntry[] = []
+    try {
+      const log = await weightController.getWeightLog(pk, version, block === ALL_BLOCKS ? ALL_BLOCKS : undefined)
+      weightLog = Array.isArray(log.entries) ? log.entries : []
+    } catch (error) {
+      logger.warn({ error, pk }, 'Failed to load weight log for analytics context')
+    }
+    return scopeProgramToBlock({ ...program, weight_log: weightLog }, block)
+  })
+}
+
+function requestedWindow(value: Record<string, unknown> = {}): { start?: string; end?: string } {
+  const start = isIsoDate(value.window_start as string) ? value.window_start as string : undefined
+  const end = isIsoDate(value.window_end as string) ? value.window_end as string : undefined
+  return { start, end }
 }
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
@@ -118,8 +137,9 @@ async function buildAnalysisContext(
   pk: string,
   asOfDate: string,
   windowKey: AnalysisWindowKey,
+  window?: { start?: string; end?: string },
 ): Promise<AnalysisContext> {
-  const program = await getProgramWithWeightLog(pk, 'current', 'current')
+  const program = await getProgramWithWeightLog(pk, 'current', 'current', window)
   const windows = buildAnalysisWindows(program, asOfDate)
   const sourceFingerprint = await buildAnalysisSourceFingerprint(program, windows[windowKey], pk)
   return { pk, asOfDate, windowKey, program, windows, sourceFingerprint }
@@ -334,7 +354,7 @@ analyticsRouter.get('/analysis/manifest', async (req, res) => {
     const requestedAsOfDate = req.query.asOfDate as string | undefined
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.query.window)
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.query as Record<string, unknown>))
     const statuses = await Promise.all(ALL_SECTION_KEYS.map(async (sectionKey) => {
       const status = await analysisSectionStatusDirect(context, sectionKey)
       const { payload: _payload, ...withoutPayload } = status
@@ -372,7 +392,7 @@ analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
         error: 'Read-only users can only queue deterministic analysis sections.',
       })
     }
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueMissingSections(context, sectionKeys, true)
     await queueAnalysisSections(context, queued)
     res.status(202).json({
@@ -401,7 +421,7 @@ analyticsRouter.get('/analysis/sections/:sectionKey', async (req, res) => {
     const requestedAsOfDate = req.query.asOfDate as string | undefined
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.query.window)
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.query as Record<string, unknown>))
     const status = await analysisSectionStatusDirect(context, sectionKey)
     res.json({
       data: {
@@ -424,7 +444,7 @@ analyticsRouter.post('/analysis/sections/invalidate', async (req, res) => {
     const asOfDate = isIsoDate(req.body?.asOfDate) ? req.body.asOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.body?.window)
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueMissingSections(context, sectionKeys, true)
     await queueAnalysisSections(context, queued)
     res.status(202).json({
@@ -468,7 +488,7 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
     const requestedWindows = Array.isArray(req.body?.windows) ? req.body.windows : []
     const windowKey = normalizeAnalysisWindowKey(req.body?.window ?? requestedWindows[0])
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey)
+    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueMissingSections(context, sectionKeys, true)
     await queueAnalysisSections(context, queued)
     res.status(202).json({

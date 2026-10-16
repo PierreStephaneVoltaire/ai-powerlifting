@@ -8,12 +8,13 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)
 
 def _table(table_name: str | None = None, region: str | None = None):
-    return boto3.resource(
+    return dynamodb_resource(
         "dynamodb",
         region_name=region or os.environ.get("AWS_REGION", "ca-central-1"),
     ).Table(table_name or os.environ.get("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"))

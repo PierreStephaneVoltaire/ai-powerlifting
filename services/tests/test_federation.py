@@ -54,7 +54,7 @@ class FederationContractTests(unittest.TestCase):
         store = module.FederationStore.__new__(module.FederationStore)
         store._master_table_obj = None
         store._region = "ca-central-1"
-        with patch.object(module.boto3, "resource", return_value=Resource()):
+        with patch.object(module, "dynamodb_resource", return_value=Resource()):
             store.master_table
         self.assertEqual(names, ["if-powerlifting-master-federations"])
 

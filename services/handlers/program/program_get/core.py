@@ -3,6 +3,7 @@ import asyncio
 from decimal import Decimal
 from services.lib.program_tool_helpers import get_store
 from services.lib.competition_entries import with_competition_entries
+from services.lib.block_scope import ALL_BLOCKS, scope_program
 
 
 def _to_number(value):
@@ -72,16 +73,35 @@ def _coerce_current_maxes(program: dict) -> dict:
 
 
 async def program_get(args: dict):
-    store = get_store(args)
+    store = args.get("_store") or get_store(args)
     program = await store.get_program()
-    program = await asyncio.to_thread(with_competition_entries, program, store.pk)
-    program_sk = await asyncio.get_running_loop().run_in_executor(
-        None, store._current_program_sk_sync
+    program_sk = None
+    if hasattr(store, "_current_program_sk_sync"):
+        program_sk = await asyncio.get_running_loop().run_in_executor(
+            None, store._current_program_sk_sync
+        )
+    block = args.get("block")
+    window_start = args.get("window_start")
+    window_end = args.get("window_end")
+    if block and block != ALL_BLOCKS:
+        program = scope_program(program, block)
+    program = await asyncio.to_thread(
+        with_competition_entries,
+        program,
+        store.pk,
+        start=window_start,
+        end=window_end,
     )
-    program["sessions"] = await store._get_session_store().list_sessions(
-        str(program_sk),
-        program.get("phases", []) if isinstance(program.get("phases"), list) else [],
-    )
+    if program_sk is not None and hasattr(store, "_get_session_store"):
+        active_block = str((program.get("meta") or {}).get("current_block_id") or "current")
+        program["sessions"] = await store._get_session_store().list_sessions(
+            str(program_sk),
+            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+            window_start=window_start,
+            window_end=window_end,
+            block_id=block if block and block != ALL_BLOCKS else None,
+            active_block_id=active_block,
+        )
     program = _coerce_decimals(program)
     program = _normalize_session_numerics(program)
     return program

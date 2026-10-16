@@ -51,6 +51,7 @@ def _floats_to_decimals(obj):
 
 def program_evaluation(args):
     import boto3
+    from services.lib.aws import dynamodb_resource, client as aws_client
     from .config import AWS_REGION, IF_HEALTH_TABLE_NAME
     from .program_evaluation_ai import generate_program_evaluation_report
 
@@ -88,7 +89,7 @@ def program_evaluation(args):
     ).hexdigest()[:12]
     cache_sk = f"program_eval#{window_start}#{notes_fingerprint}"
 
-    table = boto3.resource("dynamodb", region_name=AWS_REGION).Table(IF_HEALTH_TABLE_NAME)
+    table = dynamodb_resource("dynamodb", region_name=AWS_REGION).Table(IF_HEALTH_TABLE_NAME)
 
     if not refresh:
         cached = table.get_item(Key={"pk": active_pk, "sk": cache_sk}).get("Item")

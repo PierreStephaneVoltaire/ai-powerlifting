@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def _get_table():
     if _table is None:
         region = os.environ.get("AWS_REGION", "ca-central-1")
         table_name = os.environ.get("IF_USER_TABLE", "if-user")
-        _table = boto3.resource("dynamodb", region_name=region).Table(table_name)
+        _table = dynamodb_resource("dynamodb", region_name=region).Table(table_name)
         logger.info("[SettingsUpdateRole] User table initialised: %s", table_name)
     return _table
 

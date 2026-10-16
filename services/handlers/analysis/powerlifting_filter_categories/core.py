@@ -41,7 +41,8 @@ def _ensure_dataset_downloaded() -> None:
         return
     try:
         import boto3
-        s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ca-central-1"))
+        from services.lib.aws import dynamodb_resource, client as aws_client
+        s3 = aws_client("s3", region_name=os.environ.get("AWS_REGION", "ca-central-1"))
         os.makedirs(SANDBOX_PATH, exist_ok=True)
         paginator = s3.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=bucket, Prefix="datasets/openpowerlifting-"):

@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 
 DEFAULT_BLOCK = "current"
@@ -202,14 +203,14 @@ class SessionStore:
     @property
     def table(self):
         if self._table is None:
-            self._table = boto3.resource("dynamodb", region_name=self._region).Table(self._table_name)
+            self._table = dynamodb_resource("dynamodb", region_name=self._region).Table(self._table_name)
         return self._table
 
     @property
     def source_table(self):
         """The if-health program table (program#current pointer + program phases)."""
         if getattr(self, "_source_table", None) is None:
-            self._source_table = boto3.resource(
+            self._source_table = dynamodb_resource(
                 "dynamodb", region_name=self._region
             ).Table(self._source_table_name)
         return self._source_table
@@ -275,13 +276,51 @@ class SessionStore:
             kwargs["ExclusiveStartKey"] = last_key
         return sorted(items, key=_sort_key)
 
-    async def list_sessions(self, program_sk: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
+    def _query_items_in_window_sync(self, program_sk: str, start: str | None, end: str | None) -> list[dict[str, Any]]:
+        prefix = self._prefix(program_sk)
+        lower = f"{prefix}{start or ''}"
+        upper = f"{prefix}{end or chr(0x10ffff)}{chr(0x10ffff)}"
+        items: list[dict[str, Any]] = []
+        arguments: dict[str, Any] = {
+            "KeyConditionExpression": Key("pk").eq(self._pk) & Key("sk").between(lower, upper),
+        }
+        while True:
+            response = self.table.query(**arguments)
+            items.extend(response.get("Items", []))
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            arguments["ExclusiveStartKey"] = last_key
+        return sorted(items, key=_sort_key)
+
+    async def list_sessions(
+        self,
+        program_sk: str,
+        phases: Optional[list[dict[str, Any]]] = None,
+        window_start: str | None = None,
+        window_end: str | None = None,
+        block_id: str | None = None,
+        active_block_id: str = DEFAULT_BLOCK,
+    ) -> list[dict[str, Any]]:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.list_sessions_sync(program_sk, phases)
+            None, lambda: self.list_sessions_sync(program_sk, phases, window_start, window_end, block_id, active_block_id)
         )
 
-    def list_sessions_sync(self, program_sk: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
-        return [_public_session(item, phases) for item in self._query_items_sync(program_sk)]
+    def list_sessions_sync(
+        self,
+        program_sk: str,
+        phases: Optional[list[dict[str, Any]]] = None,
+        window_start: str | None = None,
+        window_end: str | None = None,
+        block_id: str | None = None,
+        active_block_id: str = DEFAULT_BLOCK,
+    ) -> list[dict[str, Any]]:
+        items = self._query_items_in_window_sync(program_sk, window_start, window_end) if window_start or window_end else self._query_items_sync(program_sk)
+        sessions = [_public_session(item, phases) for item in items]
+        if not block_id:
+            return sessions
+        from services.lib.block_scope import in_block
+        return [session for session in sessions if in_block(session, block_id, active_block_id)]
 
     def list_sessions_on_date_sync(self, program_sk: str, date_value: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
         if not date_value:

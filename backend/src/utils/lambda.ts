@@ -9,7 +9,7 @@ const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
 const SERVICE_BASE_URL = process.env.POWERLIFTING_SERVICE_BASE_URL
 const operations = new Map<string, Operation>()
-for (const domain of ['program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'profile', 'lift-profiles', 'analytics', 'videos']) {
+for (const domain of ['program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'profile', 'lift-profiles', 'analytics', 'videos', 'export']) {
   const records = JSON.parse(readFileSync(resolve(__dirname, '../../../services/operations', `${domain}.json`), 'utf8')) as Operation[]
   for (const operation of records) {
     operations.set(operation.name, operation)

@@ -7,6 +7,7 @@ import os
 from datetime import date, datetime, timezone
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from botocore.exceptions import ClientError
 from services.lib.program_store import ProgramStore
 
@@ -94,7 +95,7 @@ async def settings_update_athlete_basics(args: dict) -> dict:
         if not existing or "athlete" not in existing.get("roles", []):
             raise ValueError("The Athlete role is required")
         athlete = existing.get("mapped_pk") or existing["pk"]
-        health = boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"))
+        health = dynamodb_resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"))
         history_key = {"pk": athlete, "sk": "max_history#current"}
         history = health.get_item(Key=history_key, ConsistentRead=True).get("Item") or {}
         entry = {"date": validated["maxes_date"], **validated["training_maxes"], "estimated": validated["training_maxes_estimated"], "source": "athlete_basics"}

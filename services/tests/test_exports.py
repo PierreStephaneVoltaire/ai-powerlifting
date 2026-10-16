@@ -36,7 +36,7 @@ def test_history_exports_are_scoped_and_isolated(monkeypatch):
 
     assert {base64.b64decode(result["content_base64"]).decode() for result in results} == {"athlete-a", "athlete-b"}
     assert len(set(directories)) == 2
-    load_operations("program")["export_program_history"].validate_result(results[0])
+    load_operations("export")["export_program_history"].validate_result(results[0])
 
 
 def test_markdown_export_uses_the_callers_athlete_and_private_tempfile(monkeypatch):
@@ -74,7 +74,7 @@ def test_export_dispatch_includes_only_permitted_independent_entries(monkeypatch
         return "history.md", "export", "markdown"
     monkeypatch.setattr(core, "_write_program_export", write)
     access = {"permissions": ["program:read", "competition:read"], "competition_scope": {"read": ["tied"]}}
-    result = dispatch(load_operations("program")["export_program_history"], {"pk": "athlete", "format": "markdown", "_access": access})
+    result = dispatch(load_operations("export")["export_program_history"], {"pk": "athlete", "format": "markdown", "_access": access})
     assert base64.b64decode(result["content_base64"]) == b"Visible meet"
 
 

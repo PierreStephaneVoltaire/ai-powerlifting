@@ -37,7 +37,10 @@ def test_report_handlers_preserve_empty_filtered_sources(monkeypatch, name):
     if hasattr(core, '_get_federation_store'):
         monkeypatch.setattr(core, '_get_federation_store', federation_store)
     table = SimpleNamespace(put_item=Mock(), get_item=Mock(side_effect=AssertionError('Legacy cache read')))
-    monkeypatch.setattr('boto3.resource', lambda *args, **kwargs: SimpleNamespace(Table=lambda name: table))
+    aws = importlib.import_module('services.lib.aws')
+    monkeypatch.setattr(aws, 'dynamodb_resource', lambda *args, **kwargs: SimpleNamespace(Table=lambda name: table))
+    if hasattr(core, 'dynamodb_resource'):
+        monkeypatch.setattr(core, 'dynamodb_resource', lambda *args, **kwargs: SimpleNamespace(Table=lambda name: table))
     ai_name = 'correlation_ai' if name == 'correlation_analysis' else 'program_evaluation_ai'
     function_name = 'generate_correlation_report' if name == 'correlation_analysis' else 'generate_program_evaluation_report'
     ai = importlib.import_module(f'services.handlers.analysis.{name}.{ai_name}')

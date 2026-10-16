@@ -20,6 +20,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
@@ -102,7 +103,7 @@ class ProgramStore:
     def table(self):
         """Lazy-load DynamoDB table resource."""
         if self._table is None:
-            self._table = boto3.resource(
+            self._table = dynamodb_resource(
                 "dynamodb", region_name=self._region
             ).Table(self._table_name)
         return self._table

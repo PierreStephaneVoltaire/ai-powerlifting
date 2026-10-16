@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
+from services.lib.aws import dynamodb_resource
 
 
 def _run_async(coro):
@@ -39,7 +40,6 @@ def _floats_to_decimals(obj):
 
 
 def correlation_analysis(args):
-    import boto3
     from .config import AWS_REGION, IF_HEALTH_TABLE_NAME
     from .correlation_ai import generate_correlation_report
 
@@ -56,7 +56,7 @@ def correlation_analysis(args):
 
     store = _get_store()
     active_pk = store.pk
-    table = boto3.resource("dynamodb", region_name=AWS_REGION).Table(IF_HEALTH_TABLE_NAME)
+    table = dynamodb_resource("dynamodb", region_name=AWS_REGION).Table(IF_HEALTH_TABLE_NAME)
 
     if not refresh:
         cached = table.get_item(Key={"pk": active_pk, "sk": cache_sk}).get("Item")

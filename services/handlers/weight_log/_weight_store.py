@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from botocore.exceptions import ClientError
 from services.lib.block_scope import ALL_BLOCKS, active_block_id_for, scope_entries
 from services.lib.cache_invalidation import invalidate_analysis_caches
@@ -29,7 +30,7 @@ def _numberize(value: Any) -> Any:
 class WeightStore:
     def __init__(self, table_name: str, region: str):
         self.region = region
-        self.table = boto3.resource("dynamodb", region_name=region).Table(table_name)
+        self.table = dynamodb_resource("dynamodb", region_name=region).Table(table_name)
 
     @staticmethod
     def _key(pk: str, version: str) -> dict[str, str]:

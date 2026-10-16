@@ -7,13 +7,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 
 logger = logging.getLogger(__name__)
 
 def _get_table():
     region = os.environ.get("AWS_REGION", "ca-central-1")
     table_name = os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
-    return boto3.resource("dynamodb", region_name=region).Table(table_name)
+    return dynamodb_resource("dynamodb", region_name=region).Table(table_name)
 
 
 def _resolve_pk(args: dict) -> str:

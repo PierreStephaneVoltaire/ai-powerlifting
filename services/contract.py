@@ -13,6 +13,7 @@ DOMAINS = (
     "program", "sessions", "competition", "federation", "glossary", "goals",
     "budget", "calculations", "performance", "weight-log", "templates",
     "imports", "profile", "lift-profiles", "analytics", "videos",
+    "export",
 )
 
 

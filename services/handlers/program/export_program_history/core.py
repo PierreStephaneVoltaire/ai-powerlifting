@@ -10,7 +10,6 @@ import asyncio
 import base64
 import logging
 from importlib import import_module
-from services.lib.competition_entries import with_competition_entries
 from services.lib.block_scope import ACTIVE, current_block_id, in_block, resolve_block_id, scope_entries, scope_program
 import os
 import re
@@ -18,6 +17,7 @@ import tempfile
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, Optional
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +63,7 @@ def _sanitize_decimals(obj: Any) -> Any:
 
 def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
     """Fetch glossary from DynamoDB for the active health partition."""
-    import boto3
-
-    dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
+    dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
     resp = table.get_item(Key={"pk": pk, "sk": "glossary#v1"})
     item = resp.get("Item")
@@ -75,9 +73,7 @@ def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
 
 
 def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
-    import boto3
-
-    dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
+    dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
     resp = table.get_item(Key={"pk": pk, "sk": sk})
     item = resp.get("Item")
@@ -159,7 +155,7 @@ def _block_date_range(program: dict, block: str | None) -> tuple[str | None, str
 
 
 def _export_window(args: dict) -> dict:
-    window = {key: args.get(key) for key in ("window_start", "window_end", "week_start", "week_end")}
+    window = {key: args.get(key) for key in ("window_key", "window_start", "window_end", "week_start", "week_end")}
     window = {key: value for key, value in window.items() if value not in (None, "")}
     for key in ("week_start", "week_end"):
         if key in window:
@@ -177,7 +173,7 @@ def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
     window_start = (raw_cutoff - timedelta(days=raw_cutoff.weekday())).isoformat()
     cache_sk = f"corr_report#{window_start}_{weeks}w"
 
-    table = boto3.resource("dynamodb", region_name="ca-central-1").Table(IF_HEALTH_TABLE_NAME)
+    table = dynamodb_resource("dynamodb", region_name="ca-central-1").Table(IF_HEALTH_TABLE_NAME)
     item = table.get_item(Key={"pk": pk, "sk": cache_sk}).get("Item")
     if not item or not item.get("report"):
         return None
@@ -272,7 +268,12 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
 
     try:
         if window:
-            bundle["weekly"] = _build_sectioned_analysis(
+            cached = None
+            window_key = window.get("window_key")
+            if window_key:
+                from services.lib.analysis_cache import AnalysisCacheStore
+                cached = AnalysisCacheStore(pk=active_pk).get_window_analysis(str(window_key), None if session_block == ACTIVE else session_block)
+            bundle["weekly"] = cached.get("data") if cached else _build_sectioned_analysis(
                 program,
                 sessions,
                 glossary,
@@ -368,10 +369,16 @@ def _entries_in_window(entries: list[dict], program: dict, window: dict | None =
 
 
 def export_program_history(args: dict) -> dict:
+    from services.handlers.program.program_get.core import program_get
     store = _get_store(args)
-    program = _run_async(store.get_program())
-    start, end = _block_date_range(program, args.get("block"))
-    program = with_competition_entries(program, store.pk, start=start, end=end)
+    program = _run_async(program_get({
+        "pk": args["pk"],
+        "block": args.get("block") or ACTIVE,
+        "window_start": args.get("window_start"),
+        "window_end": args.get("window_end"),
+        "_access": args.get("_access"),
+        "_store": store,
+    }))
     from services.publication import program_view
     access = args.get('_access')
     if access:

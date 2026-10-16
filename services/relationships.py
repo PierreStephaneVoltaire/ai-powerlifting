@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.conditions import Attr
@@ -22,13 +23,13 @@ REQUEST_STATES = ("pending", "approved", "rejected", "cancelled", "revoked", "re
 
 
 def _table():
-    return boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(
+    return dynamodb_resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(
         os.getenv("IF_POWERLIFTING_REQUESTS_TABLE", "if-powerlifting-requests")
     )
 
 
 def _notifications():
-    return boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(
+    return dynamodb_resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(
         os.getenv("IF_POWERLIFTING_NOTIFICATIONS_TABLE", "if-powerlifting-notifications")
     )
 
@@ -187,7 +188,7 @@ def _stored_competition_dates(athlete: str, identifiers: list[str]) -> dict[str,
     if not identifiers:
         return {}
     wanted = set(identifiers)
-    table = boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(
+    table = dynamodb_resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(
         os.getenv("POWERLIFTING_USER_COMPETITIONS_TABLE", "if-powerlifting-user-competitions")
     )
     dates: dict[str, str] = {}

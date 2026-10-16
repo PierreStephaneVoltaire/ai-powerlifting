@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 
 
@@ -102,7 +103,7 @@ def _public_attachment(item: dict, snapshot: dict | None = None) -> dict:
 
 class AuthoredNotesStore:
     def __init__(self, table=None, table_name: str | None = None, region: str | None = None):
-        self.table = table or boto3.resource(
+        self.table = table or dynamodb_resource(
             "dynamodb", region_name=region or os.getenv("AWS_REGION", "ca-central-1")
         ).Table(table_name or os.getenv("IF_HEALTH_TABLE_NAME", "if-health"))
 

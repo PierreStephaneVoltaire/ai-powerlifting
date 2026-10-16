@@ -2,6 +2,7 @@ import copy
 import os
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
@@ -28,7 +29,7 @@ def _query_all(table, arguments: dict) -> list[dict]:
 
 def load_entries(pk: str, start: str | None = None, end: str | None = None, table=None) -> list[dict]:
     if table is None:
-        table = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'ca-central-1')).Table(os.getenv('POWERLIFTING_USER_COMPETITIONS_TABLE', 'if-powerlifting-user-competitions'))
+        table = dynamodb_resource('dynamodb', region_name=os.getenv('AWS_REGION', 'ca-central-1')).Table(os.getenv('POWERLIFTING_USER_COMPETITIONS_TABLE', 'if-powerlifting-user-competitions'))
     condition = Key('pk').eq(pk)
     if start and end:
         condition &= Key('entry_date').between(start, end)
@@ -69,4 +70,7 @@ def merge_entries(legacy: list[dict], entries: list[dict]) -> list[dict]:
 
 
 def with_competition_entries(program: dict, pk: str, entries: list[dict] | None = None, start: str | None = None, end: str | None = None) -> dict:
-    return {**program, 'competitions': merge_entries(program.get('competitions') or [], load_entries(pk, start, end) if entries is None else entries)}
+    legacy = program.get('competitions') or []
+    if start or end:
+        legacy = [entry for entry in legacy if (date := participation_date(entry)) and (not start or date >= start) and (not end or date <= end)]
+    return {**program, 'competitions': merge_entries(legacy, load_entries(pk, start, end) if entries is None else entries)}

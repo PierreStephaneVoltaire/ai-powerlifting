@@ -3,8 +3,21 @@ import { randomUUID } from 'crypto'
 import type { Program, ProgramListItem, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
 import type { MutationEnvelope } from './sessionController'
 
-export async function getProgram(pk: string, version: string): Promise<Program> {
-  return (await invokeLambda('pod_training_program', { function: 'program_get',  pk, program_sk: version === "current" ? undefined : `program#${version}` })) as Program
+export type ProgramLoadOptions = {
+  block?: string
+  windowStart?: string
+  windowEnd?: string
+}
+
+export async function getProgram(pk: string, version: string, options: ProgramLoadOptions = {}): Promise<Program> {
+  return (await invokeLambda('pod_training_program', {
+    function: 'program_get',
+    pk,
+    program_sk: version === "current" ? undefined : `program#${version}`,
+    block: options.block,
+    window_start: options.windowStart,
+    window_end: options.windowEnd,
+  })) as Program
 }
 
 export async function listPrograms(pk: string): Promise<ProgramListItem[]> {

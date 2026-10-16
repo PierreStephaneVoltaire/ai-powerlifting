@@ -12,15 +12,29 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
+_HEADER_FONT = None
+_SECTION_FONT = None
+_HEADER_FILL = None
+_SECTION_FILL = None
+_WRAP = None
+_column_letter = None
+_workbook_type = None
 
-_HEADER_FONT = Font(bold=True, size=11)
-_SECTION_FONT = Font(bold=True, size=11, color="1F3864")
-_HEADER_FILL = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-_SECTION_FILL = PatternFill(start_color="E7ECF5", end_color="E7ECF5", fill_type="solid")
-_WRAP = Alignment(wrap_text=True, vertical="top")
+
+def _ensure_excel():
+    global _HEADER_FONT, _SECTION_FONT, _HEADER_FILL, _SECTION_FILL, _WRAP, _column_letter, _workbook_type
+    if _HEADER_FONT is not None:
+        return
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    _HEADER_FONT = Font(bold=True, size=11)
+    _SECTION_FONT = Font(bold=True, size=11, color="1F3864")
+    _HEADER_FILL = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    _SECTION_FILL = PatternFill(start_color="E7ECF5", end_color="E7ECF5", fill_type="solid")
+    _WRAP = Alignment(wrap_text=True, vertical="top")
+    _column_letter = get_column_letter
+    _workbook_type = Workbook
 
 _CELL_CHAR_LIMIT = 32000
 _FAILED_SET_REASON_LABELS = {
@@ -148,7 +162,7 @@ def _write_sheet(ws, headers: list[str], rows: list[list[Any]], col_widths: dict
                 if val is not None:
                     max_len = max(max_len, len(str(val)))
             width = min(max_len + 2, 50)
-        ws.column_dimensions[get_column_letter(col_idx)].width = width
+        ws.column_dimensions[_column_letter(col_idx)].width = width
 
     ws.freeze_panes = "A2"
 
@@ -172,7 +186,7 @@ def _autosize_columns(ws, max_cols: int, min_width: int = 10, max_width: int = 6
             longest_line = max((len(line) for line in s.splitlines()), default=len(s))
             if longest_line > max_len:
                 max_len = longest_line
-        ws.column_dimensions[get_column_letter(col_idx)].width = min(max_len + 2, max_width)
+        ws.column_dimensions[_column_letter(col_idx)].width = min(max_len + 2, max_width)
 
 def _fmt(val: Any) -> Any:
     """Format a value for a key-value cell: join lists, coerce numbers, truncate."""
@@ -362,7 +376,8 @@ def _build_program_workbook(
     Returns:
         In-memory workbook containing all export sheets.
     """
-    wb = Workbook()
+    _ensure_excel()
+    wb = _workbook_type()
     export_context = export_context or {}
 
     meta = copy.deepcopy(program.get("meta", {}))

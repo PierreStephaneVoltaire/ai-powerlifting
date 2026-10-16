@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)
@@ -183,7 +184,7 @@ class GoalsStore:
         self.table_name = table_name
         self.pk = pk
         self.region = region
-        self._table = boto3.resource("dynamodb", region_name=region).Table(table_name)
+        self._table = dynamodb_resource("dynamodb", region_name=region).Table(table_name)
 
     @property
     def table(self):

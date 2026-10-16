@@ -138,6 +138,7 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     import os
     import tempfile
     import boto3
+    from services.lib.aws import dynamodb_resource, client as aws_client
     from .export import build_program_markdown
 
     from .config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
@@ -152,7 +153,7 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     glossary_store = _get_glossary_store()
     glossary = _run_async(glossary_store.get_glossary()) if hasattr(glossary_store, "get_glossary") else []
 
-    dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+    dynamodb = dynamodb_resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
     cache_pk = f"analysis#{pk}"
     expires_at = int(_time.time()) + 7 * 86400

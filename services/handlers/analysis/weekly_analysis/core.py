@@ -56,8 +56,9 @@ def _sanitize_decimals(obj: Any) -> Any:
 def _get_glossary_sync(table_name: str) -> list[dict]:
     """Fetch glossary from DynamoDB for the active health partition."""
     import boto3
+    from services.lib.aws import dynamodb_resource, client as aws_client
 
-    dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
+    dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
     resp = table.get_item(Key={"pk": _get_store().pk, "sk": "glossary#v1"})
     item = resp.get("Item")

@@ -7,6 +7,7 @@ from datetime import date
 from importlib import import_module
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 import httpx
 from fastapi.encoders import jsonable_encoder
 from botocore.exceptions import ClientError
@@ -27,7 +28,7 @@ def fingerprint(operation, arguments, source=None):
 class GenerationStore:
     def __init__(self, athlete):
         self.athlete = athlete
-        self.table = boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(os.getenv("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"))
+        self.table = dynamodb_resource("dynamodb", region_name=os.getenv("AWS_REGION", "ca-central-1")).Table(os.getenv("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"))
 
     def key(self, generation_id):
         return {"pk": "analysis#" + self.athlete, "sk": "native_generation#" + generation_id}

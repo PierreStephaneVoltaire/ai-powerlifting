@@ -61,8 +61,9 @@ def _sanitize_decimals(obj: Any) -> Any:
 def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
     """Fetch glossary from DynamoDB for the active health partition."""
     import boto3
+    from services.lib.aws import dynamodb_resource, client as aws_client
 
-    dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
+    dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
     resp = table.get_item(Key={"pk": pk, "sk": "glossary#v1"})
     item = resp.get("Item")
@@ -74,7 +75,7 @@ def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
 def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
     import boto3
 
-    dynamodb = boto3.resource("dynamodb", region_name="ca-central-1")
+    dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
     resp = table.get_item(Key={"pk": pk, "sk": sk})
     item = resp.get("Item")
@@ -158,7 +159,7 @@ def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
     window_start = (raw_cutoff - timedelta(days=raw_cutoff.weekday())).isoformat()
     cache_sk = f"corr_report#{window_start}_{weeks}w"
 
-    table = boto3.resource("dynamodb", region_name="ca-central-1").Table(IF_HEALTH_TABLE_NAME)
+    table = dynamodb_resource("dynamodb", region_name="ca-central-1").Table(IF_HEALTH_TABLE_NAME)
     item = table.get_item(Key={"pk": pk, "sk": cache_sk}).get("Item")
     if not item or not item.get("report"):
         return None

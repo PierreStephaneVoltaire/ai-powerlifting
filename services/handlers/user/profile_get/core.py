@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 
 from .._shared.settings_normalize import (
     SEX_VALUES,
@@ -47,7 +48,7 @@ def _get_user_table():
     global _user_table
     if _user_table is None:
         region = os.environ.get("AWS_REGION", "ca-central-1")
-        _user_table = boto3.resource("dynamodb", region_name=region).Table(
+        _user_table = dynamodb_resource("dynamodb", region_name=region).Table(
             os.environ.get("IF_USER_TABLE", "if-user")
         )
     return _user_table
@@ -57,7 +58,7 @@ def _get_health_table():
     global _health_table
     if _health_table is None:
         region = os.environ.get("AWS_REGION", "ca-central-1")
-        _health_table = boto3.resource("dynamodb", region_name=region).Table(
+        _health_table = dynamodb_resource("dynamodb", region_name=region).Table(
             os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
         )
     return _health_table
@@ -67,7 +68,7 @@ def _get_session_table():
     global _session_table
     if _session_table is None:
         region = os.environ.get("AWS_REGION", "ca-central-1")
-        _session_table = boto3.resource("dynamodb", region_name=region).Table(
+        _session_table = dynamodb_resource("dynamodb", region_name=region).Table(
             os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions")
         )
     return _session_table

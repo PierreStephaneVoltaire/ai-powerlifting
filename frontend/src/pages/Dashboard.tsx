@@ -10,6 +10,7 @@ import {
   fetchAnalysisManifest,
   fetchAnalysisSection,
   queueAnalysisSections,
+  programExportUrl,
   type AnalysisSectionKey,
   type AnalysisWindow,
   type WeeklyAnalysis,
@@ -829,10 +830,10 @@ export default function Dashboard() {
       <div className="if-mock-header">
         <h1 className="if-mock-title">Dashboard</h1>
         <div className="if-mock-toolbar">
-          <a className="if-mock-button" href="/api/export/xlsx" download="program_history.xlsx">
+          <a className="if-mock-button" href={programExportUrl('xlsx')} download="program_history.xlsx">
             <Download size={12} /> Excel
           </a>
-          <a className="if-mock-button" href="/api/export/markdown" download="program_history.md">
+          <a className="if-mock-button" href={programExportUrl('markdown')} download="program_history.md">
             <Download size={12} /> Markdown
           </a>
         </div>

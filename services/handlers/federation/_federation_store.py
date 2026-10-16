@@ -27,6 +27,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 
 
 def _to_dynamo_value(obj: Any) -> Any:
@@ -66,7 +67,7 @@ class FederationStore:
     @property
     def table(self):
         if self._table is None:
-            self._table = boto3.resource("dynamodb", region_name=self._region).Table(self._table_name)
+            self._table = dynamodb_resource("dynamodb", region_name=self._region).Table(self._table_name)
         return self._table
 
     @property
@@ -75,7 +76,7 @@ class FederationStore:
         if self._master_table_obj is None:
             import os
             name = os.environ.get("POWERLIFTING_MASTER_FEDERATIONS_TABLE", "if-powerlifting-master-federations")
-            self._master_table_obj = boto3.resource("dynamodb", region_name=self._region).Table(name)
+            self._master_table_obj = dynamodb_resource("dynamodb", region_name=self._region).Table(name)
         return self._master_table_obj
 
     def _sanitize_decimals(self, obj: Any) -> Any:

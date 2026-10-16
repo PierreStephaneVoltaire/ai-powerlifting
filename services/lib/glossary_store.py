@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class GlossaryStore:
     @property
     def table(self):
         if self._table is None:
-            self._table = boto3.resource(
+            self._table = dynamodb_resource(
                 "dynamodb", region_name=self._region
             ).Table(self._table_name)
         return self._table

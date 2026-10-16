@@ -60,8 +60,8 @@ def stamp(record: dict, program: dict | None) -> dict:
 def active_block_id_for(pk: str, table: Any = None) -> str:
     if table is None:
         import os
-        import boto3
-        table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"))
+        from services.lib.aws import table as dynamodb_table
+        table = dynamodb_table(os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"), os.environ.get("AWS_REGION", "ca-central-1"))
     pointer = table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item") or {}
     if pointer.get("current_block_id"):
         return str(pointer["current_block_id"])

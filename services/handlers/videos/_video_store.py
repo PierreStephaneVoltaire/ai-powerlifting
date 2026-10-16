@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
@@ -16,7 +17,7 @@ _NOTIFICATIONS = None
 
 
 def get_health_table():
-    return boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
+    return dynamodb_resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
         os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
     )
 
@@ -34,7 +35,7 @@ def get_session_store(args: dict):
 
 
 def get_s3():
-    return boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ca-central-1"))
+    return aws_client("s3", region_name=os.environ.get("AWS_REGION", "ca-central-1"))
 
 
 def _notifications_module():
@@ -55,7 +56,7 @@ def notify_media_ready(media: dict) -> bool:
     if notification is None:
         return False
     person, event_id, kind, payload = notification
-    table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
+    table = dynamodb_resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
         _notifications_module().notification_table_name()
     )
     try:

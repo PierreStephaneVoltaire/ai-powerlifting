@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
+from services.lib.aws import dynamodb_resource, client as aws_client
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 
@@ -65,7 +66,7 @@ def _invalidate_analysis_cache(pk: str) -> None:
 def _get_table():
     global _table
     if _table is None:
-        _table = boto3.resource("dynamodb", region_name=AWS_REGION).Table(
+        _table = dynamodb_resource("dynamodb", region_name=AWS_REGION).Table(
             POWERLIFTING_USER_COMPETITIONS_TABLE
         )
     return _table

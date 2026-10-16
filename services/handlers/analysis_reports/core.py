@@ -12,6 +12,7 @@ import time as _time
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +202,7 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     import os
     import tempfile
     import boto3
+    from services.lib.aws import dynamodb_resource, client as aws_client
     from .export import build_program_markdown
 
     from .config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
@@ -220,7 +222,7 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     else:
         glossary = []
 
-    dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+    dynamodb = dynamodb_resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
     cache_pk = f"analysis#{pk}"
     expires_at = int(_time.time()) + 7 * 86400
@@ -339,7 +341,7 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     else:
         source_requirements = _markdown_source_requirements(args)
 
-    dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+    dynamodb = dynamodb_resource("dynamodb", region_name=AWS_REGION)
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
 
     def _parse_generated_at(value: str | None):

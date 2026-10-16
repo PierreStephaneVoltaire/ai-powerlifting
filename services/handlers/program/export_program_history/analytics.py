@@ -15,7 +15,6 @@ from decimal import Decimal
 from statistics import median
 from typing import Any, Literal, Optional
 
-from scipy.stats import kendalltau, theilslopes
 
 DOTS_COEFFICIENTS: dict[str, dict[str, float]] = {
     "male": {
@@ -202,6 +201,7 @@ def _mad(values: list[float]) -> float:
 def _fit_quality(xs: list[float], ys: list[float], slope: float, intercept: float) -> tuple[float, float]:
     if len(xs) < 2:
         return 0.0, 0.0
+    from scipy.stats import kendalltau
     tau = kendalltau(xs, ys, nan_policy="omit").statistic
     if tau is None or math.isnan(float(tau)):
         tau = 0.0
@@ -1078,6 +1078,7 @@ def progression_rate(
     if len(xs) < 2:
         return {**INSUFFICIENT_DATA, "reason": f"Need at least 2 effective training weeks with {exercise_name} data"}
 
+    from scipy.stats import theilslopes
     result = theilslopes(ys, xs)
     slope, intercept = result[0], result[1]
     kendall_tau, fit_quality = _fit_quality(xs, ys, slope, intercept)
@@ -1199,6 +1200,7 @@ def rpe_drift(
             use_residual = False
 
     if len(xs) >= 2:
+        from scipy.stats import theilslopes
         slope, intercept, _, _ = theilslopes(ys, xs)
         kendall_tau, fit_quality = _fit_quality(xs, ys, slope, intercept)
     else:
@@ -1775,6 +1777,7 @@ def _readiness_performance_trend_component(
 
     xs = [(day - daily_series[0][0]).days / 7.0 for day, _ in daily_series]
     ys = [value for _, value in daily_series]
+    from scipy.stats import theilslopes
     slope = theilslopes(ys, xs)[0]
 
     current_max_values = [
@@ -1844,6 +1847,7 @@ def _readiness_bodyweight_component(
     recent_entries = entries[-7:]
     xs = [(day - recent_entries[0][0]).days / 7.0 for day, _ in recent_entries]
     ys = [value for _, value in recent_entries]
+    from scipy.stats import theilslopes
     actual_weekly_change = theilslopes(ys, xs)[0] if len(recent_entries) >= 2 else 0.0
 
     upcoming = _next_competition(program, reference_date=ref)

@@ -32,7 +32,7 @@ def test_basics_atomically_store_dated_estimated_1rms_and_retry_without_duplicat
     health_table = SimpleNamespace(name='if-health', get_item=lambda **kwargs: {'Item': history})
     monkeypatch.setattr(core, '_get_table', lambda: user_table)
     real_resource = boto3.resource
-    monkeypatch.setattr(core.boto3, 'resource', lambda *args, **kwargs: SimpleNamespace(Table=lambda name: health_table))
+    monkeypatch.setattr(core, 'dynamodb_resource', lambda *args, **kwargs: SimpleNamespace(Table=lambda name: health_table))
     args = {'username': 'person-a', 'input': {'sex': 'female', 'country': 'ca', 'bodyweight_kg': 63.5, 'training_maxes': {'squat_kg': 145.5, 'bench_kg': 82.5, 'deadlift_kg': 180}, 'maxes_date': '2026-09-01', 'training_maxes_estimated': {'bench': True}}}
     result = asyncio.run(core.settings_update_athlete_basics(args))
     assert result['athlete_basics_complete'] and result['ranking_country'] == 'CA'
