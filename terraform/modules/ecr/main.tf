@@ -14,7 +14,7 @@ resource "aws_ecr_lifecycle_policy" "keep_5" {
   # which blocks plan and import).
   for_each = toset(var.repository_names)
 
-  repository = "${var.repository_prefix}-${each.value}"
+  repository = aws_ecr_repository.this[each.key].name
 
   policy = jsonencode({
     rules = concat(
