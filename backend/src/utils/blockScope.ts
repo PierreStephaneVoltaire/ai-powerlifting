@@ -53,14 +53,7 @@ function recordDate(record: BlockScoped): string | null {
 }
 
 function phaseStart(record: BlockScoped, program: ProgramScope): string | null {
-  const explicit = recordDate(record)
-  if (explicit) return explicit
-  const week = Number(record.start_week || record.week || record.phase_week || 0)
-  const start = program?.meta?.program_start
-  if (!start || !Number.isFinite(week) || week <= 0) return null
-  const date = new Date(`${start.slice(0, 10)}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + (week - 1) * 7)
-  return date.toISOString().slice(0, 10)
+  return recordDate(record)
 }
 
 function mostRecentCompleted(program: ProgramScope): string | null {
@@ -111,7 +104,7 @@ export function scopeProgramToBlock<T extends Program & { weight_log?: BlockScop
   const active = currentBlockId(program)
   const target = blockId === 'current' ? active : blockId
   const keep = (records: unknown, field: string) => Array.isArray(records)
-    ? records.filter((record: BlockScoped) => record && recordBlock(record, field, program) === target)
+    ? records.filter((record: BlockScoped) => record && (field === 'sessions' ? isInBlock(record, target, active) : recordBlock(record, field, program) === target))
     : records
   const scoped = { ...program } as T & Record<string, unknown>
   for (const field of SCOPED_PROGRAM_LISTS) scoped[field] = keep(program[field], field) as never

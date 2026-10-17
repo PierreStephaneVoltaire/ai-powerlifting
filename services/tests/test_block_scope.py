@@ -35,7 +35,8 @@ def test_undated_records_have_fallback_blocks():
     program = program_with_ranges()
     assert record_block({"name": "creatine"}, "supplements", program) == "block-active"
     assert record_block({"start_week": 29}, "supplement_phases", program) == "block-middle"
-    assert record_block({"start_week": 35}, "supplement_phases", program) == "block-active"
+    assert record_block({"start_week": 35}, "supplement_phases", program) == "block-middle"
+    assert record_block({"start_week": 1, "date": "2026-10-07"}, "supplement_phases", program) == record_block({"date": "2026-10-07"}, "diet_notes", program)
     no_start = {"meta": {"current_block_id": "block-active", "blocks": program["meta"]["blocks"]}}
     assert record_block({"name": "phase"}, "supplement_phases", no_start) == "block-middle"
 

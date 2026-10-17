@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Any, Iterable
 
 ACTIVE = "current"
@@ -70,22 +70,8 @@ def parse_iso_date(value: Any) -> date | None:
         return None
 
 
-def _program_start(program: dict) -> date | None:
-    return parse_iso_date((program.get("meta") or {}).get("program_start"))
-
-
 def _supplement_phase_start(record: dict, program: dict) -> date | None:
-    explicit = parse_iso_date(record_date(record))
-    if explicit:
-        return explicit
-    try:
-        week = int(record.get("start_week") or record.get("week") or record.get("phase_week"))
-    except (TypeError, ValueError):
-        week = 0
-    start = _program_start(program)
-    if week <= 0 or not start:
-        return None
-    return start + timedelta(days=(week - 1) * 7)
+    return parse_iso_date(record_date(record))
 
 
 def _most_recent_completed_block(program: dict) -> str | None:
@@ -134,7 +120,11 @@ def scope_entries(entries: Iterable[Any] | None, block_id: str, program: dict, f
     return [
         entry
         for entry in entries or []
-        if isinstance(entry, dict) and record_block(entry, field, program) == target
+        if isinstance(entry, dict) and (
+            in_block(entry, target, current_block_id(program))
+            if field == "sessions"
+            else record_block(entry, field, program) == target
+        )
     ]
 
 

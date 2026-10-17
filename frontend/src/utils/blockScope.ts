@@ -48,14 +48,7 @@ function recordDate(record: BlockScoped): string | null {
 }
 
 function phaseStart(record: BlockScoped, program: Program | null | undefined): string | null {
-  const explicit = recordDate(record)
-  if (explicit) return explicit
-  const week = Number(record.start_week || record.week || record.phase_week || 0)
-  const start = program?.meta?.program_start
-  if (!start || !Number.isFinite(week) || week <= 0) return null
-  const date = new Date(`${start.slice(0, 10)}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + (week - 1) * 7)
-  return date.toISOString().slice(0, 10)
+  return recordDate(record)
 }
 
 function mostRecentCompleted(program: Program | null | undefined): string | null {
@@ -101,5 +94,5 @@ export function isInBlock(record: BlockScoped, blockId: string, activeBlockId: s
 
 export function recordsInBlock<T extends BlockScoped>(records: T[] | null | undefined, program: Program | null | undefined, blockId = 'current', field = ''): T[] {
   const target = blockId === 'current' ? currentBlockId(program) : blockId
-  return (records ?? []).filter((record) => recordBlock(record, field, program) === target)
+  return (records ?? []).filter((record) => field === 'sessions' ? isInBlock(record, target, currentBlockId(program)) : recordBlock(record, field, program) === target)
 }

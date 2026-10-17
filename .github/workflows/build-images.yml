@@ -88,6 +88,14 @@ jobs:
               - '.github/workflows/build-images.yml'
             services:
               - 'services/**'
+              - 'backend/src/**'
+              - 'backend/package.json'
+              - 'backend/tsconfig.json'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - 'frontend/package.json'
               - '.github/workflows/build-images.yml'
             terraform:
               - 'terraform/**'
@@ -151,14 +159,17 @@ jobs:
             powerlifting-backend.pkr.hcl
 
   build-services:
-    needs: changes
+    needs: [changes, terraform-apply]
     runs-on: ubuntu-latest
-    if: ${{ needs.changes.outputs.services == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
+    if: ${{ always() && needs.changes.outputs.services == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') && needs.terraform-apply.result != 'failure' && needs.terraform-apply.result != 'cancelled' }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Build services image
         run: docker build -f services/Dockerfile -t powerlifting-services:ci .
+
+      - name: Build analytics image
+        run: docker build -f services/analytics.Dockerfile -t powerlifting-analytics:ci .
 
       - uses: aws-actions/configure-aws-credentials@v4
         if: ${{ github.event_name != 'pull_request' }}
@@ -174,15 +185,20 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
-          REPO="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-fns"
+          SERVICES_REPO="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-fns"
+          ANALYTICS_REPO="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-analytics"
           TAG="${{ inputs.image_tag }}"
           TAG="${TAG:-${GITHUB_SHA::12}}"
           for t in latest "$TAG"; do
-            docker tag powerlifting-services:ci "$REPO:$t"
-            docker push "$REPO:$t"
+            docker tag powerlifting-services:ci "$SERVICES_REPO:$t"
+            docker push "$SERVICES_REPO:$t"
+            docker tag powerlifting-analytics:ci "$ANALYTICS_REPO:$t"
+            docker push "$ANALYTICS_REPO:$t"
           done
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$REPO:latest")
-          echo "Services image: $DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          SERVICES_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$SERVICES_REPO:latest")
+          ANALYTICS_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$ANALYTICS_REPO:latest")
+          echo "Services image: $SERVICES_DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          echo "Analytics image: $ANALYTICS_DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
   build-frontend:
     needs: changes

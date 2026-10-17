@@ -8,7 +8,7 @@ not involved in a given lift are excluded to avoid spurious correlations.
 """
 from __future__ import annotations
 from services.ai import completion
-from services.lib.block_scope import current_block_id, record_block
+from services.lib.block_scope import current_block_id, in_block
 
 import json
 import logging
@@ -189,7 +189,7 @@ async def generate_correlation_report(
     """Call LLM to generate correlation findings for the given session window."""
     if program:
         active = current_block_id(program)
-        sessions = [session for session in sessions if record_block(session, "sessions", program) == active]
+        sessions = [session for session in sessions if in_block(session, "current", active)]
     weekly_e1rm = _build_weekly_e1rm(sessions, window_start)
     weekly_accessory = _build_weekly_accessory_volume(sessions, window_start)
 

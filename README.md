@@ -248,3 +248,17 @@ powerlifting-app/
 See [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md) for the annotated tree and
 [`AGENTS.md`](AGENTS.md) for the guidelines agents and contributors must follow
 when working in this repo.
+
+## Image rollout
+
+The existing `build-services` workflow job builds both `services/Dockerfile` and
+`services/analytics.Dockerfile`. On pushes it publishes the services image to
+`if-powerlifting-fns` and the reports sidecar to `if-powerlifting-analytics`,
+using `latest` and the 12-character commit SHA. Pull requests build both images
+without AWS credentials or pushes. When Terraform changes create the analytics
+repository, the job waits for the existing `terraform-apply` job before pushing.
+
+After CI, resolve both image digests. Set the services and reports digest
+variables in the root Terraform rollout. Set
+`powerlifting_analytics_reports_image_repository` once to the analytics ECR URL,
+review the targeted plan, and apply the same targeted workload resources.
