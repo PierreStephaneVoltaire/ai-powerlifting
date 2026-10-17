@@ -19,6 +19,7 @@ export interface ProgramMeta {
   comp_date: string             // YYYY-MM-DD
   federation: string
   practicing_for: string
+  weight_classes_kg?: number[]
   version_label: string
   sex?: Sex
   weight_class_kg: number
@@ -321,6 +322,7 @@ export interface BetweenCompPlan {
 export interface Exercise {
   id?: string
   set_ids?: string[]
+  sets_data?: ExerciseSetData[]
   name: string
   sets: number
   reps: number
@@ -333,6 +335,13 @@ export interface Exercise {
   load_source?: LoadSource
   rpe_target?: number | null
   rpe?: number | null       // executed RPE for the exercise (4-10, 0.5 increments)
+}
+
+export interface ExerciseSetData {
+  reps: number | null
+  kg: number | null
+  rpe: number | null
+  video_id?: string | null
 }
 
 export type SetStatus = 'pending' | 'completed' | 'failed' | 'skipped'

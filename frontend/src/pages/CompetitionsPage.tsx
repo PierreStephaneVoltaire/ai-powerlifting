@@ -160,6 +160,10 @@ export default function CompetitionsPage() {
   const [selectedState, setSelectedState] = useState<string | null>(ranking_region)
   const [categories, setCategories] = useState<{ countries: string[]; country_regions: Record<string, string[]> } | null>(null)
   const [datasetLoading, setDatasetLoading] = useState(false)
+  const datasetCountry = useMemo(() => {
+    if (!rankingCountry || !categories) return rankingCountry
+    return categories.countries.find((country) => country.toLowerCase() === rankingCountry.toLowerCase()) ?? rankingCountry
+  }, [rankingCountry, categories])
 
   const [showCompleteModal, setShowCompleteModal] = useState<string | null>(null)
   const [completeForm, setCompleteForm] = useState<{ body_weight_kg: number; unit: 'kg' | 'lb'; report: PostMeetReport }>({
@@ -190,18 +194,18 @@ export default function CompetitionsPage() {
 
   useEffect(() => {
     if (authLoading) return
-    loadAll({ country: rankingCountry ?? undefined, state: selectedState ?? undefined })
-  }, [authLoading, person_pk, mapped_pk, rankingCountry, selectedState, loadAll])
+    loadAll({ country: datasetCountry ?? undefined, state: selectedState ?? undefined })
+  }, [authLoading, person_pk, mapped_pk, datasetCountry, selectedState, loadAll])
 
   const stateOptions = useMemo(() => {
-    if (!rankingCountry || !categories) return []
-    const regions = categories.country_regions[rankingCountry] ?? []
+    if (!datasetCountry || !categories) return []
+    const regions = categories.country_regions[datasetCountry] ?? []
     return [{ value: '__all__', label: 'All States' }, ...regions.map((r) => ({ value: r, label: r }))]
-  }, [rankingCountry, categories])
+  }, [datasetCountry, categories])
 
   const handleSearch = useCallback(() => {
-    loadAll({ country: rankingCountry ?? undefined, state: selectedState ?? undefined })
-  }, [person_pk, mapped_pk, rankingCountry, selectedState, loadAll])
+    loadAll({ country: datasetCountry ?? undefined, state: selectedState ?? undefined })
+  }, [person_pk, mapped_pk, datasetCountry, selectedState, loadAll])
 
   function setDraft(masterId: string, updates: UserCompetitionUpdate) {
     setDrafts((prev) => ({ ...prev, [masterId]: { ...(prev[masterId] || {}), ...updates } }))

@@ -70,10 +70,6 @@ def parse_iso_date(value: Any) -> date | None:
         return None
 
 
-def _supplement_phase_start(record: dict, program: dict) -> date | None:
-    return parse_iso_date(record_date(record))
-
-
 def _most_recent_completed_block(program: dict) -> str | None:
     completed = [block for block in _blocks(program) if block.get("status") == "completed"]
     if not completed:
@@ -103,16 +99,15 @@ def record_block(record: Any, field: str, program: dict) -> str:
     active = current_block_id(program)
     if not isinstance(record, dict):
         return active
+    record_day = parse_iso_date(record_date(record))
+    if record_day and _blocks(program):
+        return _block_for_date(record_day, program)
     stamped = record_block_key(record)
     if stamped:
         return active if stamped == ACTIVE else stamped
-    if field == "supplements":
-        return active
     if field == "supplement_phases":
-        phase_start = _supplement_phase_start(record, program)
-        return _block_for_date(phase_start, program) if phase_start else (_most_recent_completed_block(program) or active)
-    record_day = parse_iso_date(record_date(record))
-    return _block_for_date(record_day, program) if record_day else active
+        return _most_recent_completed_block(program) or active
+    return active
 
 
 def scope_entries(entries: Iterable[Any] | None, block_id: str, program: dict, field: str) -> list:
@@ -121,9 +116,7 @@ def scope_entries(entries: Iterable[Any] | None, block_id: str, program: dict, f
         entry
         for entry in entries or []
         if isinstance(entry, dict) and (
-            in_block(entry, target, current_block_id(program))
-            if field == "sessions"
-            else record_block(entry, field, program) == target
+            record_block(entry, field, program) == target
         )
     ]
 

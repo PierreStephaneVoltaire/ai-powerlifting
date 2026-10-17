@@ -20,7 +20,7 @@ import boto3
 from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 
-from services.lib.block_scope import active_block_id_for, scope_entries
+from services.lib.block_scope import active_block_id_for, current_program_for, scope_entries
 
 logger = logging.getLogger(__name__)
 
@@ -291,9 +291,9 @@ class BudgetStore:
         return active_block_id_for(pk)
 
     def _query_items_sync(self, pk: str, block_id: Optional[str] = None) -> list[dict]:
-        active = self._active_block_id(pk)
-        program = {"meta": {"current_block_id": active}}
-        return scope_entries(self._query_all_items_sync(pk), block_id or active, program, "budget")
+        program = current_program_for(pk)
+        target = block_id or self._active_block_id(pk)
+        return scope_entries(self._query_all_items_sync(pk), target, program, "budget")
 
     def _query_all_items_sync(self, pk: str) -> list[dict]:
         items: list[dict] = []
@@ -357,9 +357,9 @@ class BudgetStore:
     async def create_item(self, pk: str, raw) -> dict:
         return await asyncio.get_running_loop().run_in_executor(None, lambda: self.create_item_sync(pk, raw))
 
-    def update_item_sync(self, pk: str, item_id: str, raw) -> dict:
-        stored = self._query_items_sync(pk)
-        existing = next((s for s in stored if s.get("id") == item_id), None)
+    def update_item_sync(self, pk: str, item_id: str, raw, block_id: Optional[str] = None) -> dict:
+        stored = self._query_all_items_sync(pk)
+        existing = next((s for s in stored if s.get("id") == item_id and self._item_matches_block(s, block_id, pk)), None)
         if not existing:
             raise ValueError(f"Budget item {item_id} not found")
         normalized = normalize_budget_item_from_store(_strip_stored(existing), pk)
@@ -367,18 +367,23 @@ class BudgetStore:
         self.table.put_item(Item=_to_dynamo({**updated, "pk": pk, "sk": f"{ITEM_PREFIX}{item_id}"}))
         return updated
 
-    async def update_item(self, pk: str, item_id: str, raw) -> dict:
-        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.update_item_sync(pk, item_id, raw))
+    async def update_item(self, pk: str, item_id: str, raw, block_id: Optional[str] = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.update_item_sync(pk, item_id, raw, block_id))
 
-    def delete_item_sync(self, pk: str, item_id: str) -> None:
-        stored = self._query_items_sync(pk)
-        existing = next((s for s in stored if s.get("id") == item_id), None)
+    def _item_matches_block(self, item: dict, block_id: Optional[str], pk: str) -> bool:
+        if block_id:
+            return item in self._query_items_sync(pk, block_id)
+        return True
+
+    def delete_item_sync(self, pk: str, item_id: str, block_id: Optional[str] = None) -> None:
+        stored = self._query_all_items_sync(pk)
+        existing = next((s for s in stored if s.get("id") == item_id and self._item_matches_block(s, block_id, pk)), None)
         if not existing:
             raise ValueError(f"Budget item {item_id} not found")
         self.table.delete_item(Key={"pk": pk, "sk": f"{ITEM_PREFIX}{item_id}"})
 
-    async def delete_item(self, pk: str, item_id: str) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, lambda: self.delete_item_sync(pk, item_id))
+    async def delete_item(self, pk: str, item_id: str, block_id: Optional[str] = None) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, lambda: self.delete_item_sync(pk, item_id, block_id))
 
     def get_summary_sync(self, pk: str, month: str, block_id: Optional[str] = None) -> dict:
         config = self.get_config_sync(pk, block_id)

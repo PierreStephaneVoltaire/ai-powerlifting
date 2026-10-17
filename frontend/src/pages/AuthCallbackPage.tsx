@@ -28,7 +28,7 @@ export default function AuthCallbackPage() {
         navigate('/', { replace: true })
       })
       .catch(() => {
-        if (!cancelled) navigate('/login?error=auth_failed', { replace: true })
+        if (!cancelled) navigate('/', { replace: true })
       })
     return () => {
       cancelled = true

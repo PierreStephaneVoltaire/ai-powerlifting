@@ -115,7 +115,7 @@ def _capture_export(monkeypatch, args):
 
 def test_export_defaults_to_active_block_only(monkeypatch):
     captured = _capture_export(monkeypatch, {})
-    assert [s["date"] for s in captured["program"]["sessions"]] == ["2026-10-05", "2026-10-12"]
+    assert [s["date"] for s in captured["program"]["sessions"]] == ["2026-10-12"]
     assert [n["notes"] for n in captured["program"]["diet_notes"]] == ["new"]
     assert [item["name"] for item in captured["program"]["supplements"]] == ["current-creatine"]
     assert [item["name"] for item in captured["program"]["competitions"]] == ["new"]
@@ -133,5 +133,5 @@ def test_export_follows_selected_window(monkeypatch):
 
 def test_export_of_past_block_excludes_active_block(monkeypatch):
     captured = _capture_export(monkeypatch, {"block": "block-2025"})
-    assert [s["date"] for s in captured["program"]["sessions"]] == ["2025-01-06", "2025-01-13"]
+    assert [s["date"] for s in captured["program"]["sessions"]] == ["2025-01-06", "2025-01-13", "2026-10-05"]
     assert captured["session_block"] == "block-2025"

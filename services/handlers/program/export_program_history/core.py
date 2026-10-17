@@ -135,8 +135,18 @@ def _scope_export_program(program: dict, block: str | None, window: dict) -> tup
     target = resolve_block_id(program, block)
     scoped = scope_program(program, target)
     scoped["sessions"] = [s for s in scoped.get("sessions", []) if _session_in_window(s, window)]
+    entry_window = dict(window)
+    if not entry_window.get("window_start") and not entry_window.get("window_end"):
+        blocks = sorted((program.get("meta") or {}).get("blocks") or [], key=lambda item: str(item.get("start_date") or ""))
+        target_index = next((index for index, item in enumerate(blocks) if str(item.get("id") or item.get("block_id") or "") == target), None)
+        if target_index is not None:
+            entry_window["window_start"] = str(blocks[target_index].get("start_date") or "")[:10]
+            next_start = str(blocks[target_index + 1].get("start_date") or "")[:10] if target_index + 1 < len(blocks) else ""
+            if next_start:
+                from datetime import date
+                entry_window["window_end"] = (date.fromisoformat(next_start) - timedelta(days=1)).isoformat()
     if isinstance(scoped.get("diet_notes"), list):
-        scoped["diet_notes"] = _entries_in_window(scoped["diet_notes"], scoped, window)
+        scoped["diet_notes"] = _entries_in_window(scoped["diet_notes"], scoped, entry_window)
     session_block = ACTIVE if target == current_block_id(program) else target
     return scoped, session_block
 

@@ -23,4 +23,4 @@ async def budget_update_item(args: dict) -> dict:
     pk = args.get("pk") or os.environ.get("HEALTH_PROGRAM_PK", "operator")
     item_id = args.get("item_id") or ""
     raw = args.get("item") or {}
-    return await store.update_item(pk, item_id, raw)
+    return await store.update_item(pk, item_id, raw, args.get("block_id"))

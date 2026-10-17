@@ -8,8 +8,8 @@ interface BudgetState {
   isLoading: boolean
   error: string | null
   loaded: boolean
-  load: (force?: boolean) => Promise<void>
-  save: (store: { config: BudgetConfig; items: BudgetItem[] }) => Promise<void>
+  load: (blockId?: string, force?: boolean) => Promise<void>
+  save: (store: { config: BudgetConfig; items: BudgetItem[] }, blockId?: string) => Promise<void>
   setItemPhoto: (itemId: string, photoS3Key: string | null) => void
   reset: () => void
 }
@@ -29,21 +29,21 @@ export const useBudgetStore = create<BudgetState>((set, get) => ({
   error: null,
   loaded: false,
 
-  load: async (force = false) => {
+  load: async (blockId, force = false) => {
     if (get().loaded && !force) return
     set({ isLoading: true, error: null })
     try {
-      const store = await api.fetchBudget()
+      const store = await api.fetchBudget(blockId)
       set({ config: store.config, items: store.items, isLoading: false, loaded: true })
     } catch (error) {
       set({ error: String(error), isLoading: false, loaded: true })
     }
   },
 
-  save: async (store) => {
+  save: async (store, blockId) => {
     set({ isLoading: true, error: null })
     try {
-      await api.putBudget(store)
+      await api.putBudget(store, blockId)
       set({ config: store.config, items: store.items, isLoading: false })
     } catch (error) {
       set({ error: String(error), isLoading: false })

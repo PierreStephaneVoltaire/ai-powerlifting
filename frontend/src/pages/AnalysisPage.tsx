@@ -448,12 +448,10 @@ export default function AnalysisPage() {
           })
         }
 
-        // Clear global error as soon as any section succeeds
         if (result.status === 'complete' || (result.status === 'error' && result.payload)) {
           setError(null)
         }
 
-        // Re-poll this section independently if it's still pending/running
         if (result.status === 'pending' || result.status === 'running' || result.status === 'missing') {
           sectionTimers[section] = window.setTimeout(() => {
             pollSection(section).catch((e) => {
@@ -479,46 +477,32 @@ export default function AnalysisPage() {
     setSectionPayloads({})
     setSectionStatuses({})
 
+    DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
+      pollSection(section).catch((e) => {
+        if (!cancelled) setError(e.message)
+      })
+    })
+
     fetchAnalysisManifest(asOfDate, analysisKey, analysisWindow)
       .then((manifest) => {
         if (cancelled) return
         setAnalysisWindows(manifest.windows)
-        setSectionStatuses(Object.fromEntries(
-          DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => [section, manifest.sections[section]?.status ?? 'missing']),
-        ))
-        queueAnalysisSections({
-          asOfDate,
-          windowKey: analysisKey,
-          sections: DETERMINISTIC_ANALYSIS_SECTIONS,
-          window: analysisWindow,
-        }).then(() => {
-          // Fire each section poll independently — no Promise.all/allSettled.
-          // Each section updates its own state the moment it resolves.
-          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
-            pollSection(section).catch((e) => {
-              if (!cancelled) setError(e.message)
-            })
-          })
-        }).catch(() => {
-          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
-            pollSection(section).catch((e) => {
-              if (!cancelled) setError(e.message)
-            })
-          })
-        })
+        setSectionStatuses((previous) => ({
+          ...previous,
+          ...Object.fromEntries(
+            DETERMINISTIC_ANALYSIS_SECTIONS.map((section) => [section, manifest.sections[section]?.status ?? previous[section] ?? 'missing']),
+          ),
+        }))
       })
-      .catch(() => {
-        if (!cancelled) {
-          DETERMINISTIC_ANALYSIS_SECTIONS.forEach((section) => {
-            pollSection(section).catch((e) => {
-              if (!cancelled) setError(e.message)
-            })
-          })
-        }
-      })
+      .catch(() => {})
 
-    // Stop loading as soon as the first section payload arrives — the
-    // loading gate is cleared in a separate effect below.
+    queueAnalysisSections({
+      asOfDate,
+      windowKey: analysisKey,
+      sections: DETERMINISTIC_ANALYSIS_SECTIONS,
+      window: analysisWindow,
+    }).catch(() => {})
+
     return () => {
       cancelled = true
       for (const timer of Object.values(sectionTimers)) {
@@ -527,9 +511,6 @@ export default function AnalysisPage() {
     }
   }, [activeSection, analysisKey, analysisRefreshNonce, asOfDate])
 
-  // Clear the global loading spinner the moment ANY section payload arrives.
-  // Sections load independently — don't make the user stare at a spinner while
-  // some sections are already ready.
   useEffect(() => {
     if (activeSection === 'weekly' && loading && Object.keys(sectionPayloads).length > 0) {
       setLoading(false)

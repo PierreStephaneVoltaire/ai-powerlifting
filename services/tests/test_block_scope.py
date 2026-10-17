@@ -23,9 +23,9 @@ def test_dated_records_use_half_open_block_ranges_and_earliest_before_all():
     assert record_block({"date": "2025-01-01"}, "diet_notes", program) == "block-old"
 
 
-def test_stamps_win_and_current_means_active():
+def test_dates_win_over_stale_stamps_and_current_means_active():
     program = program_with_ranges()
-    assert record_block({"date": "2025-01-01", "block_id": "archived-version"}, "diet_notes", program) == "archived-version"
+    assert record_block({"date": "2025-01-01", "block_id": "archived-version"}, "diet_notes", program) == "block-old"
     assert record_block({"block": "current"}, "diet_notes", program) == "block-active"
     assert in_block({"name": "legacy"}, "block-active", "block-active") is False
     assert in_block({"block_id": "current"}, "current", "block-active") is True
@@ -45,6 +45,17 @@ def test_scope_entries_keeps_unstamped_dated_records_in_their_range():
     program = program_with_ranges()
     entries = [{"date": "2026-05-31", "name": "old"}, {"date": "2026-11-07", "name": "active"}]
     assert [item["name"] for item in scope_entries(entries, "current", program, "competitions")] == ["active"]
+
+
+def test_notes_nutrition_and_budget_use_record_dates_even_when_stamped_wrong():
+    program = program_with_ranges()
+    records = [
+        {"date": "2026-09-27", "block_id": "block-active", "name": "previous"},
+        {"start_date": "2026-10-06", "block_id": "block-middle", "name": "active"},
+    ]
+    assert [item["name"] for item in scope_entries(records, "block-middle", program, "diet_notes")] == ["previous"]
+    assert [item["name"] for item in scope_entries(records, "block-active", program, "supplements")] == ["active"]
+    assert [item["name"] for item in scope_entries(records, "block-active", program, "budget")] == ["active"]
 
 
 def test_scope_program_filters_legacy_records_and_removes_stale_comp_date():

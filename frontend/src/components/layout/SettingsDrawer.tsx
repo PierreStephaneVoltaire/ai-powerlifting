@@ -17,7 +17,8 @@ import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import { WEEK_START_DAYS, weekStartForBlock } from '@/utils/weekStart'
-import { LogIn, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
+import LoginOptions from '@/components/auth/LoginOptions'
 import { AGE_CATEGORY_OPTIONS, type Sex, type WeekStartDay } from '@powerlifting/types'
 import { getSettings, updateAgeClass, updateRankingLocation } from '@/api/settings'
 import { fetchStatCategories } from '@/api/client'
@@ -50,7 +51,7 @@ export default function SettingsDrawer() {
     currency, setCurrency,
   } = useSettingsStore()
   const { program, setSex: programSetSex, setWeekStartDay } = useProgramStore()
-  const { user, loading, readOnly, signInDiscord, signInAuthentik, signOut, age_class: authAgeClass } = useAuth('settings')
+  const { user, loading, readOnly, signOut, age_class: authAgeClass } = useAuth('settings')
 
   const isOpen = drawerOpen && drawerType === 'settings'
   const effectiveSex = program?.meta?.sex ?? sex
@@ -199,28 +200,7 @@ export default function SettingsDrawer() {
               </Button>
             </Stack>
           ) : (
-            <Stack gap="xs">
-              <Button
-                variant="filled"
-                size="sm"
-                leftSection={<LogIn size={16} />}
-                onClick={signInDiscord}
-                fullWidth
-                data-testid="settings-signin-discord"
-              >
-                Sign in with Discord
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                leftSection={<LogIn size={16} />}
-                onClick={signInAuthentik}
-                fullWidth
-                data-testid="settings-signin-authentik"
-              >
-                Sign in with Authentik
-              </Button>
-            </Stack>
+            <LoginOptions compact />
           )}
         </div>
 

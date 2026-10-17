@@ -29,7 +29,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Session, Exercise, SessionVideo, SessionWellness, GlossaryExercise, SetStatus, FailedSetReason } from '@powerlifting/types'
+import type { Session, Exercise, ExerciseSetData, SessionVideo, SessionWellness, GlossaryExercise, SetStatus, FailedSetReason } from '@powerlifting/types'
 import VideoGrid from './VideoGrid'
 import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
@@ -150,6 +150,17 @@ function withSetStatusFields(exercise: Exercise, sessionCompleted = false): Exer
   }
 }
 
+function normalizeSetData(exercise: Exercise): ExerciseSetData[] {
+  const count = Math.max(0, Math.round(Number(exercise.sets) || 0))
+  const source = Array.isArray(exercise.sets_data) ? exercise.sets_data : []
+  return Array.from({ length: count }, (_, index) => ({
+    reps: source[index]?.reps ?? exercise.reps ?? null,
+    kg: source[index]?.kg ?? exercise.kg ?? null,
+    rpe: source[index]?.rpe ?? exercise.rpe ?? null,
+    video_id: source[index]?.video_id ?? null,
+  }))
+}
+
 function finalizeSessionForSave(session: Session): Session {
   return {
     ...session,
@@ -196,6 +207,7 @@ function SortableExerciseItem({
   onUpdate, 
   onUpdateSets,
   onUpdateRpe,
+  onUpdateSet,
   glossaryNames,
   unit,
   renderMobileMenu,
@@ -210,6 +222,7 @@ function SortableExerciseItem({
   onUpdate: (i: number, field: keyof Exercise, v: any) => void;
   onUpdateSets: (i: number, sets: number) => void;
   onUpdateRpe: (i: number, rpe: number | null) => void;
+  onUpdateSet: (exerciseIndex: number, setIndex: number, patch: Partial<ExerciseSetData>) => void;
   glossaryNames: string[];
   unit: string;
   renderMobileMenu: (ex: Exercise, i: number) => React.ReactNode;
@@ -236,6 +249,7 @@ function SortableExerciseItem({
   }
 
   const setStatuses = normalizeSetStatuses(exercise)
+  const setData = normalizeSetData(exercise)
 
   return (
     <Paper ref={setNodeRef} style={style} withBorder p={0} radius={10} className="if-exercise-card" data-testid={`session-exercise-${index}`}>
@@ -364,6 +378,18 @@ function SortableExerciseItem({
             </Box>
           </SimpleGrid>
         </Group>
+
+        <Stack gap={4} mt="xs">
+          {setData.map((set, setIndex) => (
+            <SimpleGrid key={setIndex} cols={{ base: 2, sm: 5 }} spacing="xs">
+              <Text size="xs" c="dimmed" pt={8}>Set {setIndex + 1}</Text>
+              <TextInput type="number" size="xs" value={set.reps ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { reps: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} reps`} />
+              <TextInput type="number" size="xs" step={0.5} value={set.kg === null ? '' : toDisplayUnit(set.kg, unit as 'kg' | 'lb')} onChange={(event) => onUpdateSet(index, setIndex, { kg: event.currentTarget.value === '' ? null : fromDisplayUnit(Number(event.currentTarget.value), unit as 'kg' | 'lb') })} disabled={disabled} aria-label={`Set ${setIndex + 1} weight`} />
+              <TextInput type="number" size="xs" step={0.5} value={set.rpe ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { rpe: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} RPE`} />
+              <Text size="xs" c={set.video_id ? 'blue' : 'dimmed'} pt={8}>{set.video_id ? 'Video attached' : 'No video'}</Text>
+            </SimpleGrid>
+          ))}
+        </Stack>
         
         <Box mt="xs">
           <Text className="if-small-label">Notes</Text>
@@ -854,27 +880,27 @@ export default function SessionDrawer({
       if (!prev) return prev
       const exercises = prev.exercises.map((ex, i) => {
         if (i !== index) return ex
-        // Preserve per-set state (RPE via exercise-level, set_statuses, failed_set_reasons,
-        // failed_sets) by index when adding/removing sets — BUG-1.2. Removing a set drops
-        // only that row's state; adding inserts a blank pending row. Existing rows keep
-        // their state across the resize.
         const prevStatuses = normalizeSetStatuses(ex, prev.completed)
         const prevReasons = normalizeFailedSetReasons(ex, prevStatuses)
+        const previousData = normalizeSetData(ex)
         const fallbackStatus: SetStatus = prev.completed ? 'completed' : 'pending'
         const set_statuses: SetStatus[] = []
         const failed_set_reasons: FailedSetReason[][] = []
+        const sets_data: ExerciseSetData[] = []
         for (let s = 0; s < newSets; s++) {
           if (s < prevStatuses.length) {
             set_statuses.push(prevStatuses[s])
             failed_set_reasons.push(prevReasons[s] ?? [])
+            sets_data.push(previousData[s])
           } else {
             set_statuses.push(fallbackStatus)
             failed_set_reasons.push([])
+            sets_data.push({ reps: ex.reps || null, kg: ex.kg, rpe: ex.rpe ?? null, video_id: null })
           }
         }
         const failed_sets = set_statuses.map((status) => status === 'failed')
         return withSetStatusFields(
-          { ...ex, sets: newSets, set_statuses, failed_sets, failed_set_reasons },
+          { ...ex, sets: newSets, set_statuses, failed_sets, failed_set_reasons, sets_data },
           prev.completed,
         )
       })
@@ -888,6 +914,20 @@ export default function SessionDrawer({
       if (!prev) return prev
       const exercises = [...prev.exercises]
       exercises[index] = { ...exercises[index], rpe }
+      return { ...prev, exercises }
+    })
+    markChanged()
+  }
+
+  const updateExerciseSet = (exerciseIndex: number, setIndex: number, patch: Partial<ExerciseSetData>) => {
+    setLocalSession((prev) => {
+      if (!prev) return prev
+      const exercises = prev.exercises.map((exercise, index) => {
+        if (index !== exerciseIndex) return exercise
+        const sets_data = normalizeSetData(exercise).map((set, currentIndex) => currentIndex === setIndex ? { ...set, ...patch } : set)
+        const first = sets_data[0]
+        return { ...exercise, sets_data, reps: first?.reps ?? exercise.reps, kg: first?.kg ?? exercise.kg, rpe: first?.rpe ?? exercise.rpe }
+      })
       return { ...prev, exercises }
     })
     markChanged()
@@ -1413,6 +1453,7 @@ export default function SessionDrawer({
                       onUpdate={updateExercise}
                       onUpdateSets={updateSetsWithResize}
                       onUpdateRpe={updateExerciseRpe}
+                      onUpdateSet={updateExerciseSet}
                       glossaryNames={glossaryNames}
                       unit={unit}
                       renderMobileMenu={renderMobileExerciseMenu}
@@ -1668,16 +1709,21 @@ export default function SessionDrawer({
 
       {/* Video Upload Modal */}
       <VideoUploadModal
-        session={baseline}
+        session={localSession || baseline}
         isOpen={showVideoUpload}
         onClose={() => setShowVideoUpload(false)}
         onUploaded={(video: SessionVideo) => {
-          // Update local state and the store for persistence
           setLocalSession((prev) => {
             if (!prev) return prev
+              const exercises = prev.exercises.map((exercise) => {
+                if (!video.exercise_name || exercise.name !== video.exercise_name || video.set_number == null) return exercise
+                const sets_data = normalizeSetData(exercise).map((set, index) => index + 1 === video.set_number ? { ...set, video_id: video.video_id } : set)
+                return { ...exercise, sets_data }
+              })
             const updated = {
               ...prev,
               videos: [...(prev.videos || []), video],
+                exercises,
             }
             return updated
           })

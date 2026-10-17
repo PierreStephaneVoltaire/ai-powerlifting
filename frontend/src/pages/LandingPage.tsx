@@ -22,7 +22,6 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <Button component={Link} to="/" variant="subtle" size="xs" px={7} style={{ minHeight: 44 }}>Home</Button>
           <Button component={Link} to="/profiles" variant="subtle" size="xs" px={7} style={{ minHeight: 44 }}>Search</Button>
           <Button component={Link} to="/about" variant="subtle" size="xs" px={7} style={{ minHeight: 44 }}>About</Button>
-          <Button component={Link} to="/login" variant="light" size="xs" px={7} style={{ minHeight: 44 }}>Sign in</Button>
         </Group>
       </Group>
       <Box component="main" style={{ flex: 1 }}>{children}</Box>

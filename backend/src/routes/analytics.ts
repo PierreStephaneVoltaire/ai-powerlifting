@@ -355,7 +355,7 @@ analyticsRouter.get('/analysis/manifest', async (req, res) => {
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.query.window)
     const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.query as Record<string, unknown>))
-    const statuses = await Promise.all(ALL_SECTION_KEYS.map(async (sectionKey) => {
+    const statuses = await Promise.allSettled(ALL_SECTION_KEYS.map(async (sectionKey) => {
       const status = await analysisSectionStatusDirect(context, sectionKey)
       const { payload: _payload, ...withoutPayload } = status
       return withoutPayload
@@ -367,7 +367,10 @@ analyticsRouter.get('/analysis/manifest', async (req, res) => {
         windowKey,
         windows: context.windows,
         sourceFingerprint: context.sourceFingerprint,
-        sections: Object.fromEntries(statuses.map((status) => [status.sectionKey, status])),
+        sections: Object.fromEntries(statuses.map((result, index) => [
+          ALL_SECTION_KEYS[index],
+          result.status === 'fulfilled' ? result.value : { sectionKey: ALL_SECTION_KEYS[index], status: 'error' },
+        ])),
       },
       error: null,
     })

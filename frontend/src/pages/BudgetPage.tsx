@@ -126,6 +126,8 @@ export default function BudgetPage() {
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const { library, loadLibrary, saveLibrary } = useFederationStore()
   const { program } = useProgramStore()
+  const activeBlockId = program?.meta?.current_block_id || program?.meta?.blocks?.find((block) => block.status === 'active')?.id || 'current'
+  const blockOptions = useMemo(() => (program?.meta?.blocks ?? []).map((block) => ({ value: block.id, label: block.name || block.id })), [program?.meta?.blocks])
 
   const programStart = program?.meta?.program_start
   const programEnd = program?.meta?.comp_date
@@ -139,9 +141,11 @@ export default function BudgetPage() {
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<string | null>('overview')
   const [athleteName, setAthleteName] = useState<string | null>(null)
+  const [selectedBlock, setSelectedBlock] = useState<string>(activeBlockId)
   const isTabsMobile = useMediaQuery('(max-width: 560px)') ?? false
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { setSelectedBlock(activeBlockId) }, [activeBlockId])
+  useEffect(() => { load(selectedBlock, true) }, [load, selectedBlock])
   useEffect(() => { loadCompetitions().catch(() => {}) }, [loadCompetitions])
   useEffect(() => { loadLibrary().catch(() => {}) }, [loadLibrary])
   useEffect(() => {
@@ -210,7 +214,7 @@ export default function BudgetPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await save({ config: draftConfig, items: draftItems })
+      await save({ config: draftConfig, items: draftItems }, selectedBlock)
       pushToast({ message: 'Budget saved', type: 'success' })
       setDirty(false)
     } catch {
@@ -304,6 +308,14 @@ export default function BudgetPage() {
             <Text size="sm" c="dimmed">Monthly budget, recurring costs, equipment condition, and a priority timeline driven by your competitions.</Text>
           </Stack>
           <Group gap="sm">
+            <Select
+              label="Block"
+              value={selectedBlock}
+              onChange={(value) => value && setSelectedBlock(value)}
+              data={blockOptions}
+              placeholder="Current block"
+              searchable
+            />
             <Tooltip label={dirty ? 'You have unsaved changes' : ''}>
               <Button
                 leftSection={<Save size={16} />}

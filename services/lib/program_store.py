@@ -1360,7 +1360,7 @@ class ProgramStore:
 
     ALLOWED_META_FIELDS = (
         "program_name", "program_start", "comp_date", "federation", "practicing_for",
-        "version_label", "sex", "weight_class_kg", "weight_class_confirm_by",
+        "version_label", "sex", "weight_class_kg", "weight_classes_kg", "weight_class_confirm_by",
         "current_body_weight_kg", "current_body_weight_lb",
         "manual_maxes", "lift_attempt_settings",
         "target_squat_kg", "target_bench_kg", "target_dl_kg", "target_total_kg",
@@ -1377,6 +1377,10 @@ class ProgramStore:
         unknown = set(updates) - set(self.ALLOWED_META_FIELDS)
         if unknown:
             raise ValueError(f"Cannot update fields: {sorted(unknown)}")
+        if "weight_classes_kg" in updates:
+            classes = updates["weight_classes_kg"]
+            if not isinstance(classes, list) or len(classes) > 2 or any(not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0 for value in classes):
+                raise ValueError("weight_classes_kg must contain at most two positive numbers")
 
         def mutate(program):
             meta = program.setdefault("meta", {})
@@ -1456,8 +1460,12 @@ class ProgramStore:
             raise ValueError("block_notes must be a list")
 
         def mutate(program):
-            program.setdefault("meta", {})["block_notes"] = [stamp(copy.deepcopy(note), program) for note in notes if isinstance(note, dict)]
-            return {"success": True, "block_notes": copy.deepcopy(notes)}
+            meta = program.setdefault("meta", {})
+            active = current_block_id(program)
+            kept = [copy.deepcopy(note) for note in meta.get("block_notes") or [] if isinstance(note, dict) and record_block(note, "meta.block_notes", program) != active]
+            replaced = [stamp(copy.deepcopy(note), program, field="meta.block_notes") for note in notes if isinstance(note, dict) and record_block(note, "meta.block_notes", program) == active]
+            meta["block_notes"] = kept + replaced
+            return {"success": True, "block_notes": scope_program(program)["meta"]["block_notes"]}
 
         return await self.mutate_source("block_notes_update", {"block_notes": notes}, expected_revision, idempotency_key, mutate)
 

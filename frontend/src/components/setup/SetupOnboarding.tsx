@@ -12,7 +12,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core'
-import { AlertCircle, BookOpen, CalendarDays, Dumbbell, LogIn, PencilRuler } from 'lucide-react'
+import { AlertCircle, BookOpen, CalendarDays, Dumbbell, PencilRuler } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { fetchTemplates, mutationEnvelope } from '@/api/client'
 import { useProgramStore } from '@/store/programStore'
@@ -46,7 +46,7 @@ interface SetupOnboardingProps {
 
 export default function SetupOnboarding({ compact = false }: SetupOnboardingProps) {
   const navigate = useNavigate()
-  const { user, readOnly, signIn } = useAuth('settings')
+  const { user, readOnly } = useAuth('settings')
   const { initializeSetup, loadProgram, loadVersions } = useProgramStore()
   const { pushToast } = useUiStore()
   const [programName, setProgramName] = useState('Getting Started')
@@ -137,7 +137,6 @@ export default function SetupOnboarding({ compact = false }: SetupOnboardingProp
           <Text c="dimmed" maw={720}>
             This account is viewing the public operator dataset. Sign in to create a private training block.
           </Text>
-          <Button leftSection={<LogIn size={16} />} onClick={signIn}>Sign in</Button>
         </Stack>
       </Paper>
     )

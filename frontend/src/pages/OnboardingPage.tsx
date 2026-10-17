@@ -340,8 +340,7 @@ export default function OnboardingPage() {
       <Center maw={480} mx="auto" mt="xl" px="md">
         <Paper p="xl" radius="md" shadow="sm" w="100%">
           <Stack align="center" gap="md">
-            <Text>Please sign in to complete onboarding.</Text>
-            <Button onClick={() => navigate('/login')}>Sign in</Button>
+            <Text>Please sign in from Settings to complete onboarding.</Text>
           </Stack>
         </Paper>
       </Center>

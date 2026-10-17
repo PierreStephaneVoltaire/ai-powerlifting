@@ -30,16 +30,29 @@ class BudgetTests(unittest.TestCase):
         store = self.store.BudgetStore("budget", "a")
         store._table = table
         store._active_block_id = lambda pk: "block-new"
+        original_program = self.store.current_program_for
+        self.store.current_program_for = lambda pk: {
+            "meta": {
+                "current_block_id": "block-new",
+                "blocks": [
+                    {"id": "block-2025", "start_date": "2025-01-01", "status": "completed"},
+                    {"id": "block-new", "start_date": "2026-01-01", "status": "active"},
+                ],
+            },
+        }
 
-        self.assertEqual(store.list_items_sync("a"), [])
-        self.assertEqual([item["id"] for item in store.list_items_sync("a", block_id="block-2025")], ["old"])
-        created = store.create_item_sync("a", {"name": "Meet fee", "cost": 120})
-        self.assertEqual(created["block_id"], "block-new")
-        self.assertEqual([item["name"] for item in store.list_items_sync("a")], ["Meet fee"])
-        self.assertNotEqual(store.get_config_sync("a").get("monthly_cap"), 300)
-        self.assertEqual(store.get_config_sync("a", "block-2025").get("monthly_cap"), 300)
-        store.put_config_sync("a", {"monthly_cap": 200, "currency": "CAD"})
-        self.assertIn(("a", "CONFIG#budget#block-new"), table.items)
+        try:
+            self.assertEqual(store.list_items_sync("a"), [])
+            self.assertEqual([item["id"] for item in store.list_items_sync("a", block_id="block-2025")], ["old"])
+            created = store.create_item_sync("a", {"name": "Meet fee", "cost": 120})
+            self.assertEqual(created["block_id"], "block-new")
+            self.assertEqual([item["name"] for item in store.list_items_sync("a")], ["Meet fee"])
+            self.assertNotEqual(store.get_config_sync("a").get("monthly_cap"), 300)
+            self.assertEqual(store.get_config_sync("a", "block-2025").get("monthly_cap"), 300)
+            store.put_config_sync("a", {"monthly_cap": 200, "currency": "CAD"})
+            self.assertIn(("a", "CONFIG#budget#block-new"), table.items)
+        finally:
+            self.store.current_program_for = original_program
 
 
 class MemoryBudgetTable:

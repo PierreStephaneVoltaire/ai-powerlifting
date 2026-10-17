@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   Alert,
   Avatar,
@@ -11,6 +11,7 @@ import {
   Loader,
   Paper,
   Progress,
+  MultiSelect,
   Select,
   SimpleGrid,
   Stack,
@@ -29,7 +30,7 @@ import {
   uploadProfileAvatar,
   type UserSettings,
 } from '@/api/settings'
-import { fetchCurrentProfile, type PublicProfile } from '@/api/profiles'
+import { fetchCurrentProfile, fetchProfile, type PublicProfile } from '@/api/profiles'
 import * as api from '@/api/client'
 import { useAuth } from '@/auth/AuthProvider'
 import { useProgramStore } from '@/store/programStore'
@@ -42,16 +43,18 @@ import VideoCard from '@/components/videos/VideoCard'
 import VideoPlayerModal from '@/components/videos/VideoPlayerModal'
 import { sortVideos, VIDEO_SORTS, type VideoSort } from '@/utils/videoSort'
 import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
-import type { Session, VideoLibraryItem } from '@powerlifting/types'
+import type { Session, VideoLibraryItem, MasterFederation } from '@powerlifting/types'
 import { AGE_CATEGORY_OPTIONS, type AgeCategory } from '@powerlifting/types'
+import LiftProfileContext from '@/components/lift-profiles/LiftProfileContext'
 
-type LiftFilter = 'all' | 'squat' | 'bench' | 'deadlift'
+type LiftFilter = 'all' | 'squat' | 'bench' | 'deadlift' | 'other'
 
 const LIFT_FILTERS: Array<{ value: LiftFilter; label: string }> = [
   { value: 'all', label: 'All' },
   { value: 'squat', label: 'Squat' },
   { value: 'bench', label: 'Bench' },
   { value: 'deadlift', label: 'Deadlift' },
+  { value: 'other', label: 'Other' },
 ]
 
 function initials(name: string): string {
@@ -62,6 +65,7 @@ function initials(name: string): string {
 
 function liftMatches(item: VideoLibraryItem, filter: LiftFilter): boolean {
   if (filter === 'all') return true
+  if (filter === 'other') return !['squat', 'bench', 'deadlift'].some((lift) => (item.video.exercise_name || '').toLowerCase().includes(lift))
   return (item.video.exercise_name || '').toLowerCase().includes(filter)
 }
 
@@ -117,7 +121,15 @@ function metricTestId(label: string): string {
   return `profile-metric-${label.toLowerCase()}`
 }
 
+function federationSummary(federation: string | null | undefined, practicingFor: string | null | undefined, weightClass: number | string | null | undefined): string {
+  const labels = String(federation || '').split('+').map((value) => value.trim()).filter(Boolean)
+  const unique = [...new Set(labels)]
+  if (practicingFor && !unique.some((value) => value.toLowerCase() === practicingFor.toLowerCase())) unique.push(practicingFor)
+  return `${unique.join(' + ') || 'Federation unset'} - ${weightClass || '--'} kg`
+}
+
 export default function ProfilePage() {
+  const { nickname: targetNickname } = useParams<{ nickname?: string }>()
   const { user, loading: authLoading, readOnly } = useAuth('settings')
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
@@ -138,13 +150,18 @@ export default function ProfilePage() {
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarProgress, setAvatarProgress] = useState(0)
   const [ageClass, setAgeClass] = useState<AgeCategory>('open')
+  const [mainFederation, setMainFederation] = useState('')
+  const [weightClasses, setWeightClasses] = useState<string[]>([])
+  const [federations, setFederations] = useState<MasterFederation[]>([])
+  const [otherExercise, setOtherExercise] = useState<string | null>(null)
+  const viewingOther = Boolean(targetNickname)
 
   // The page renders one of two video grids (own-videos when signed in,
   // public-videos when reading someone else's profile). Both grids feed
   // the same VideoPlayerModal, so the URL hook reads from whichever
   // source is currently active.
-  const effectiveVideos = user ? videos : (publicProfile?.lift_videos ?? [])
-  const effectiveVideosReady = user
+  const effectiveVideos = user && !viewingOther ? videos : (publicProfile?.lift_videos ?? [])
+  const effectiveVideosReady = user && !viewingOther
     ? !videosLoading
     : !publicProfileLoading && !!publicProfile
   const { selectedVideo, openVideo, closeVideo } = useVideoModalFromUrl(
@@ -153,7 +170,7 @@ export default function ProfilePage() {
   )
 
   useEffect(() => {
-    if (authLoading || !user) return
+    if (authLoading || !user || viewingOther) return
 
     let cancelled = false
     setLoading(true)
@@ -177,16 +194,17 @@ export default function ProfilePage() {
     return () => {
       cancelled = true
     }
-  }, [authLoading, user])
+  }, [authLoading, user, viewingOther])
 
   useEffect(() => {
-    if (authLoading || user) return
+    if (authLoading || (user && !viewingOther)) return
 
     let cancelled = false
     setPublicProfileLoading(true)
     setPublicProfile(null)
     setError(null)
-    fetchCurrentProfile()
+    const profileRequest = viewingOther && targetNickname ? fetchProfile(targetNickname) : fetchCurrentProfile()
+    profileRequest
       .then((profile) => {
         if (!cancelled) setPublicProfile(profile)
       })
@@ -200,7 +218,14 @@ export default function ProfilePage() {
     return () => {
       cancelled = true
     }
-  }, [authLoading, user])
+  }, [authLoading, user, targetNickname, viewingOther])
+
+  useEffect(() => {
+    if (!program || viewingOther) return
+    setMainFederation(program.meta.federation || '')
+    setWeightClasses((program.meta.weight_classes_kg ?? (program.meta.weight_class_kg ? [program.meta.weight_class_kg] : [])).map(String).slice(0, 2))
+    api.fetchFederations().then(setFederations).catch(() => setFederations([]))
+  }, [program, viewingOther])
 
   const loadVideos = async () => {
     setVideosLoading(true)
@@ -215,11 +240,11 @@ export default function ProfilePage() {
   }
 
   useEffect(() => {
-    if (!user) return
+    if (!user || viewingOther) return
     loadVideos()
     // Reload when the active program version changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, version])
+  }, [user, version, viewingOther])
 
   const profileMetrics = useMemo(() => {
     const meta = program?.meta
@@ -256,11 +281,13 @@ export default function ProfilePage() {
 
   const filteredVideos = useMemo(
     () => sortVideos(
-      videos.filter((item) => liftMatches(item, videoFilter)),
+      videos.filter((item) => liftMatches(item, videoFilter) && (videoFilter !== 'other' || !otherExercise || item.video.exercise_name === otherExercise)),
       videoSort,
     ),
-    [videoFilter, videos, videoSort],
+    [videoFilter, videos, videoSort, otherExercise],
   )
+
+  const otherExerciseOptions = useMemo(() => [...new Set(effectiveVideos.map((item) => item.video.exercise_name || '').filter((name) => name && !['squat', 'bench', 'deadlift'].some((lift) => name.toLowerCase().includes(lift))))].map((name) => ({ value: name, label: name })), [effectiveVideos])
 
   const publicProfileMetrics = useMemo(() => {
     const summary = publicProfile?.summary
@@ -285,10 +312,10 @@ export default function ProfilePage() {
 
   const readonlyFilteredVideos = useMemo(
     () => sortVideos(
-      (publicProfile?.lift_videos ?? []).filter((item) => liftMatches(item, videoFilter)),
+      (publicProfile?.lift_videos ?? []).filter((item) => liftMatches(item, videoFilter) && (videoFilter !== 'other' || !otherExercise || item.video.exercise_name === otherExercise)),
       videoSort,
     ),
-    [publicProfile?.lift_videos, videoFilter, videoSort],
+    [publicProfile?.lift_videos, videoFilter, videoSort, otherExercise],
   )
 
   async function handleAvatarUpload(file: File | null) {
@@ -339,6 +366,16 @@ export default function ProfilePage() {
         nextSettings = await updateAgeClass({ age_class: ageClass })
       }
 
+      if (program) {
+        const selectedWeightClasses = weightClasses.map(Number).filter((value) => Number.isFinite(value)).slice(0, 2)
+        await api.updateMetaFields(version, {
+          federation: mainFederation.trim(),
+          weight_class_kg: selectedWeightClasses[0] ?? null,
+          weight_classes_kg: selectedWeightClasses,
+        }, api.mutationEnvelope(program.meta.revision ?? 0))
+        await useProgramStore.getState().loadProgram(version)
+      }
+
       setSettings(nextSettings)
       setNickname(nextSettings.nickname)
       setDisplayName(nextSettings.display_name)
@@ -357,7 +394,7 @@ export default function ProfilePage() {
     return <Text c="dimmed">Loading profile...</Text>
   }
 
-  if (!user) {
+  if (!user || viewingOther) {
     if (publicProfileLoading) {
       return (
         <Group justify="center" py="xl" data-testid="profile-page">
@@ -393,10 +430,7 @@ export default function ProfilePage() {
                     <span className="if-pill if-pill-info">Public profile</span>
                     <span className="if-pill if-pill-neutral">Read only</span>
                   </Group>
-                  <Text size="sm" c="var(--text-secondary)">
-                    {publicProfile.federation || 'Federation unset'} - {publicProfile.weight_class_kg || '--'} kg
-                    {publicProfile.practicing_for ? ` - ${publicProfile.practicing_for}` : ''}
-                  </Text>
+                  <Text size="sm" c="var(--text-secondary)">{federationSummary(publicProfile.federation, publicProfile.practicing_for, publicProfile.weight_class_kg)}</Text>
                   {(publicProfile.tags || []).length > 0 && (
                     <Group gap={4} wrap="wrap">
                       {publicProfile.tags.map((tag) => (
@@ -413,6 +447,8 @@ export default function ProfilePage() {
               </Group>
             </Stack>
           </Paper>
+
+          <LiftProfileContext profiles={publicProfile.lift_profiles} athlete={publicProfile.athlete_pk} />
 
           <SimpleGrid cols={{ base: 2, xs: 3, md: 6 }} spacing="xs">
             {publicProfileMetrics.map((metric) => (
@@ -448,6 +484,7 @@ export default function ProfilePage() {
                       </button>
                     ))}
                   </div>
+                  {videoFilter === 'other' && <Select placeholder="Exercise" data={otherExerciseOptions} value={otherExercise} onChange={setOtherExercise} searchable clearable />}
                   <div className="if-tab-group" role="group" aria-label="Sort videos" data-testid="profile-video-sort">
                     {VIDEO_SORTS.map((sort) => (
                       <button
@@ -581,8 +618,7 @@ export default function ProfilePage() {
                   </span>
                 </Group>
                 <Text size="sm" c="var(--text-secondary)">
-                  {program?.meta.federation || 'Federation unset'} - {program?.meta.weight_class_kg || '--'} kg
-                  {program?.meta.practicing_for ? ` - ${program.meta.practicing_for}` : ''}
+                  {federationSummary(mainFederation || program?.meta.federation, program?.meta.practicing_for, weightClasses[0] || program?.meta.weight_class_kg)}
                 </Text>
 
               </Stack>
@@ -627,6 +663,28 @@ export default function ProfilePage() {
             disabled={readOnly || loading || !settings}
             data-testid="profile-age-class"
           />
+
+          <Select
+            label="Main federation"
+            data={federations.map((federation) => ({ value: federation.abbreviation || federation.name, label: federation.abbreviation ? `${federation.abbreviation} — ${federation.name}` : federation.name }))}
+            value={mainFederation || null}
+            onChange={(value) => setMainFederation(value || '')}
+            searchable
+            clearable
+            disabled={readOnly || loading || !settings}
+            data-testid="profile-main-federation"
+          />
+
+          <MultiSelect
+            label="Weight classes"
+            description="Choose up to two classes."
+            data={['47', '52', '57', '59', '63', '66', '69', '74', '76', '83', '84', '93', '105', '120', '125'].map((value) => ({ value, label: `${value} kg` }))}
+            value={weightClasses}
+            onChange={(values) => setWeightClasses(values.slice(0, 2))}
+            maxValues={2}
+            disabled={readOnly || loading || !settings}
+            data-testid="profile-weight-classes"
+          />
         </Stack>
       </Paper>
 
@@ -664,6 +722,7 @@ export default function ProfilePage() {
                   </button>
                 ))}
               </div>
+              {videoFilter === 'other' && <Select placeholder="Exercise" data={otherExerciseOptions} value={otherExercise} onChange={setOtherExercise} searchable clearable />}
               <div className="if-tab-group" role="group" aria-label="Sort videos" data-testid="profile-video-sort">
                 {VIDEO_SORTS.map((sort) => (
                   <button

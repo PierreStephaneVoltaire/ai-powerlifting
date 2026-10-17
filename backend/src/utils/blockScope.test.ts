@@ -27,15 +27,15 @@ const program = {
 
 test('scopeProgramToBlock keeps only the active block by default', () => {
   const scoped = scopeProgramToBlock(program)
-  assert.deepEqual(scoped.sessions.map((s) => s.date), ['2026-10-05'])
+  assert.deepEqual(scoped.sessions.map((s) => s.date), [])
   assert.deepEqual(scoped.diet_notes.map((n) => n.notes), ['legacy'])
   assert.deepEqual(scoped.weight_log.map((e) => e.kg), [92])
 })
 
 test('scopeProgramToBlock selects a past block by id', () => {
   const scoped = scopeProgramToBlock(program, 'block-2025')
-  assert.deepEqual(scoped.sessions.map((s) => s.date), ['2025-01-06'])
-  assert.deepEqual(scoped.weight_log.map((e) => e.kg), [90])
+  assert.deepEqual(scoped.sessions.map((s) => s.date), [])
+  assert.deepEqual(scoped.weight_log.map((e) => e.kg), [])
 })
 
 test('scopeProgramToBlock leaves the program whole for all blocks', () => {

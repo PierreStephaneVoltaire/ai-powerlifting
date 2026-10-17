@@ -52,10 +52,6 @@ function recordDate(record: BlockScoped): string | null {
   return null
 }
 
-function phaseStart(record: BlockScoped, program: ProgramScope): string | null {
-  return recordDate(record)
-}
-
 function mostRecentCompleted(program: ProgramScope): string | null {
   const completed = blocks(program).filter((block) => block.status === 'completed')
   completed.sort((a, b) => `${a.completed_at || ''}|${a.start_date || ''}`.localeCompare(`${b.completed_at || ''}|${b.start_date || ''}`))
@@ -80,15 +76,12 @@ function blockForDate(value: string, program: ProgramScope): string {
 
 export function recordBlock(record: BlockScoped, field: string, program: ProgramScope): string {
   const active = currentBlockId(program)
+  const date = recordDate(record)
+  if (date && blocks(program).length) return blockForDate(date, program)
   const stamped = record.block_id || record.block
   if (stamped) return stamped === 'current' ? active : stamped
-  if (field === 'supplements') return active
-  if (field === 'supplement_phases') {
-    const start = phaseStart(record, program)
-    return start ? blockForDate(start, program) : mostRecentCompleted(program) || active
-  }
-  const date = recordDate(record)
-  return date ? blockForDate(date, program) : active
+  if (field === 'supplement_phases') return mostRecentCompleted(program) || active
+  return active
 }
 
 export function isInBlock(record: BlockScoped, blockId: string, activeBlockId: string): boolean {
@@ -104,7 +97,7 @@ export function scopeProgramToBlock<T extends Program & { weight_log?: BlockScop
   const active = currentBlockId(program)
   const target = blockId === 'current' ? active : blockId
   const keep = (records: unknown, field: string) => Array.isArray(records)
-    ? records.filter((record: BlockScoped) => record && (field === 'sessions' ? isInBlock(record, target, active) : recordBlock(record, field, program) === target))
+    ? records.filter((record: BlockScoped) => record && recordBlock(record, field, program) === target)
     : records
   const scoped = { ...program } as T & Record<string, unknown>
   for (const field of SCOPED_PROGRAM_LISTS) scoped[field] = keep(program[field], field) as never

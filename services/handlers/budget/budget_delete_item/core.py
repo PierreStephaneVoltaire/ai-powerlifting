@@ -22,5 +22,5 @@ async def budget_delete_item(args: dict) -> dict:
     store = _get_store()
     pk = args.get("pk") or os.environ.get("HEALTH_PROGRAM_PK", "operator")
     item_id = args.get("item_id") or ""
-    await store.delete_item(pk, item_id)
+    await store.delete_item(pk, item_id, args.get("block_id"))
     return {"deleted": item_id}

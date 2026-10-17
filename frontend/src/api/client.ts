@@ -1184,13 +1184,15 @@ export async function fetchRankingPercentile(params: RankingPercentileParams): P
 
 // ─── Budget ───────────────────────────────────────────────────────────────────
 
-export async function fetchBudget(): Promise<BudgetStore> {
-  const data = await cachedGet(api, '/budget', ['budget'])
+export async function fetchBudget(blockId?: string): Promise<BudgetStore> {
+  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
+  const data = await cachedGet(api, `/budget${query}`, ['budget'])
   return data.data
 }
 
-export async function putBudget(store: { config: BudgetConfig; items: BudgetItem[] }): Promise<void> {
-  await api.put('/budget', store)
+export async function putBudget(store: { config: BudgetConfig; items: BudgetItem[] }, blockId?: string): Promise<void> {
+  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
+  await api.put(`/budget${query}`, store)
   await invalidateDomain('budget')
 }
 
@@ -1232,30 +1234,35 @@ export async function fetchBudgetItems(params?: {
   comp_id?: string
   category?: string
   priority?: string
+  block_id?: string
 }): Promise<BudgetItem[]> {
   const query = new URLSearchParams()
   if (params?.comp_id) query.set('comp_id', params.comp_id)
   if (params?.category) query.set('category', params.category)
   if (params?.priority) query.set('priority', params.priority)
+  if (params?.block_id) query.set('block_id', params.block_id)
   const qs = query.toString()
   const res = await api.get<ApiResponse<BudgetItem[]>>(`/budget/items${qs ? `?${qs}` : ''}`)
   return res.data.data
 }
 
-export async function createBudgetItem(item: BudgetItem): Promise<BudgetItem> {
-  const res = await api.post<ApiResponse<BudgetItem>>('/budget/items', item)
+export async function createBudgetItem(item: BudgetItem, blockId?: string): Promise<BudgetItem> {
+  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
+  const res = await api.post<ApiResponse<BudgetItem>>(`/budget/items${query}`, item)
   await invalidateDomain('budget')
   return res.data.data
 }
 
-export async function updateBudgetItem(id: string, patch: Partial<BudgetItem>): Promise<BudgetItem> {
-  const res = await api.put<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}`, patch)
+export async function updateBudgetItem(id: string, patch: Partial<BudgetItem>, blockId?: string): Promise<BudgetItem> {
+  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
+  const res = await api.put<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}${query}`, patch)
   await invalidateDomain('budget')
   return res.data.data
 }
 
-export async function deleteBudgetItem(id: string): Promise<void> {
-  await api.delete(`/budget/items/${encodeURIComponent(id)}`)
+export async function deleteBudgetItem(id: string, blockId?: string): Promise<void> {
+  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
+  await api.delete(`/budget/items/${encodeURIComponent(id)}${query}`)
   await invalidateDomain('budget')
 }
 

@@ -45,6 +45,8 @@ class WeightStore:
             return log
         active = active_block_id_for(log["pk"], self.table)
         program = current_program_for(log["pk"], self.table)
+        if not program:
+            program = {"meta": {"current_block_id": active}}
         return {**log, "entries": scope_entries(log.get("entries", []), block_id or active, program, "weight_log")}
 
     async def get_log(self, pk: str, version: str, block_id: str | None = None) -> dict:

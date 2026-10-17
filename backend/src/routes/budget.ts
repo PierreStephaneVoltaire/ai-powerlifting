@@ -30,7 +30,8 @@ budgetRouter.get(/^\/media\/(.+)$/, async (req, res, next) => {
 
 budgetRouter.get('/config', async (req, res, next) => {
   try {
-    const config = await budgetController.getBudgetConfig(req.mapped_pk!)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    const config = await budgetController.getBudgetConfig(req.mapped_pk!, blockId)
     res.json({ data: config, error: null })
   } catch (err) {
     next(err)
@@ -39,7 +40,8 @@ budgetRouter.get('/config', async (req, res, next) => {
 
 budgetRouter.put('/config', invalidateAfter(['budget']), async (req, res, next) => {
   try {
-    const config = await budgetController.putBudgetConfig(req.mapped_pk!, req.body)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    const config = await budgetController.putBudgetConfig(req.mapped_pk!, req.body, blockId)
     res.json({ data: config, error: null })
   } catch (err) {
     next(err)
@@ -53,8 +55,9 @@ function parseFilters(query: Record<string, unknown>): budgetController.BudgetIt
     typeof query.category === 'string' ? (query.category as BudgetCategory) : undefined
   const priority =
     typeof query.priority === 'string' ? (query.priority as BudgetPriorityTier) : undefined
-  if (compId === undefined && category === undefined && priority === undefined) return undefined
-  return { comp_id: compId, category, priority }
+  const blockId = typeof query.block_id === 'string' ? query.block_id : undefined
+  if (compId === undefined && category === undefined && priority === undefined && blockId === undefined) return undefined
+  return { comp_id: compId, category, priority, block_id: blockId }
 }
 
 budgetRouter.get('/items', async (req, res, next) => {
@@ -69,7 +72,8 @@ budgetRouter.get('/items', async (req, res, next) => {
 
 budgetRouter.post('/items', invalidateAfter(['budget']), async (req, res, next) => {
   try {
-    const item = await budgetController.createBudgetItem(req.mapped_pk!, req.body)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    const item = await budgetController.createBudgetItem(req.mapped_pk!, req.body, blockId)
     res.json({ data: item, error: null })
   } catch (err) {
     next(err)
@@ -78,7 +82,8 @@ budgetRouter.post('/items', invalidateAfter(['budget']), async (req, res, next) 
 
 budgetRouter.put('/items/:id', invalidateAfter(['budget']), async (req, res, next) => {
   try {
-    const item = await budgetController.updateBudgetItem(req.mapped_pk!, req.params.id, req.body)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    const item = await budgetController.updateBudgetItem(req.mapped_pk!, req.params.id, req.body, blockId)
     res.json({ data: item, error: null })
   } catch (err) {
     next(err)
@@ -87,7 +92,8 @@ budgetRouter.put('/items/:id', invalidateAfter(['budget']), async (req, res, nex
 
 budgetRouter.delete('/items/:id', invalidateAfter(['budget']), async (req, res, next) => {
   try {
-    await budgetController.deleteBudgetItem(req.mapped_pk!, req.params.id)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    await budgetController.deleteBudgetItem(req.mapped_pk!, req.params.id, blockId)
     res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)
@@ -140,7 +146,8 @@ budgetRouter.get('/summary', async (req, res, next) => {
     const month = /^\d{4}-\d{2}$/.test(monthQuery)
       ? monthQuery
       : new Date().toISOString().slice(0, 7)
-    const summary = await budgetController.getBudgetSummary(req.mapped_pk!, month)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    const summary = await budgetController.getBudgetSummary(req.mapped_pk!, month, blockId)
     res.json({ data: summary, error: null })
   } catch (err) {
     next(err)
@@ -172,7 +179,8 @@ budgetRouter.post('/ai-analysis', async (req, res, next) => {
 
 budgetRouter.get('/', cacheGet(['budget']), async (req, res, next) => {
   try {
-    const store = await budgetController.getBudget(req.mapped_pk!)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    const store = await budgetController.getBudget(req.mapped_pk!, blockId)
     res.json({ data: store, error: null })
   } catch (err) {
     next(err)
@@ -188,7 +196,8 @@ budgetRouter.put('/', invalidateAfter(['budget']), async (req, res, next) => {
     if (!Array.isArray(items)) {
       return res.status(400).json({ data: null, error: 'items must be an array' })
     }
-    await budgetController.putBudget(req.mapped_pk!, config, items)
+    const blockId = typeof req.query.block_id === 'string' ? req.query.block_id : undefined
+    await budgetController.putBudget(req.mapped_pk!, config, items, blockId)
     res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)

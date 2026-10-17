@@ -9,6 +9,7 @@ import {
 import { DatePickerInput } from '@mantine/dates'
 import type { BlockNote } from '@powerlifting/types'
 import AuthoredNotes from '@/components/notes/AuthoredNotes'
+import { recordsInBlock } from '@/utils/blockScope'
 
 function todayString(): string {
   return new Date().toISOString().split('T')[0]
@@ -77,7 +78,7 @@ export default function NotesPage() {
 
   useEffect(() => {
     if (program) {
-      setNotes(normalizeNotes(program.meta?.block_notes, program.meta?.program_start || todayString()))
+      setNotes(normalizeNotes(recordsInBlock(program.meta?.block_notes, program, 'current', 'meta.block_notes'), program.meta?.program_start || todayString()))
       setEditingDate(null)
       setEditDate('')
       setEditText('')

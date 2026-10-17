@@ -47,10 +47,6 @@ function recordDate(record: BlockScoped): string | null {
   return null
 }
 
-function phaseStart(record: BlockScoped, program: Program | null | undefined): string | null {
-  return recordDate(record)
-}
-
 function mostRecentCompleted(program: Program | null | undefined): string | null {
   const completed = blocks(program).filter((block) => block.status === 'completed')
   completed.sort((a, b) => `${a.completed_at || ''}|${a.start_date || ''}`.localeCompare(`${b.completed_at || ''}|${b.start_date || ''}`))
@@ -75,15 +71,12 @@ function blockForDate(value: string, program: Program | null | undefined): strin
 
 export function recordBlock(record: BlockScoped, field: string, program: Program | null | undefined): string {
   const active = currentBlockId(program)
+  const date = recordDate(record)
+  if (date && blocks(program).length) return blockForDate(date, program)
   const stamped = record.block_id || record.block
   if (stamped) return stamped === 'current' ? active : stamped
-  if (field === 'supplements') return active
-  if (field === 'supplement_phases') {
-    const start = phaseStart(record, program)
-    return start ? blockForDate(start, program) : mostRecentCompleted(program) || active
-  }
-  const date = recordDate(record)
-  return date ? blockForDate(date, program) : active
+  if (field === 'supplement_phases') return mostRecentCompleted(program) || active
+  return active
 }
 
 export function isInBlock(record: BlockScoped, blockId: string, activeBlockId: string): boolean {
@@ -94,5 +87,5 @@ export function isInBlock(record: BlockScoped, blockId: string, activeBlockId: s
 
 export function recordsInBlock<T extends BlockScoped>(records: T[] | null | undefined, program: Program | null | undefined, blockId = 'current', field = ''): T[] {
   const target = blockId === 'current' ? currentBlockId(program) : blockId
-  return (records ?? []).filter((record) => field === 'sessions' ? isInBlock(record, target, currentBlockId(program)) : recordBlock(record, field, program) === target)
+  return (records ?? []).filter((record) => recordBlock(record, field, program) === target)
 }

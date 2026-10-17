@@ -8,6 +8,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
+import { currentBlockId, recordBlock } from '@/utils/blockScope'
 
 export default function SupplementsPage() {
   const { readOnly } = useAuth()
@@ -17,28 +18,30 @@ export default function SupplementsPage() {
   const [hasChanges, setHasChanges] = useState(false)
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null)
   const [editingPhase, setEditingPhase] = useState<number | null>(null)
-  const [block, setBlock] = useState('current')
+  const [block, setBlock] = useState(() => currentBlockId(program))
 
   const availableBlocks = useMemo(() => {
-    if (!program) return ['current']
-    const blocks = new Set<string>()
-    for (const s of program.sessions) blocks.add(s.block ?? 'current')
-    return Array.from(blocks).sort()
+    const ids = (program?.meta?.blocks ?? []).map((item) => item.id).filter(Boolean)
+    return ids.length ? ids : [currentBlockId(program)]
   }, [program])
 
   const blockWeeks = useMemo(() => {
     if (!program) return []
     const weeks = new Set<number>()
     for (const s of program.sessions) {
-      if ((s.block ?? 'current') === block) weeks.add(s.week_number)
+      if (recordBlock(s, 'sessions', program) === block) weeks.add(s.week_number)
     }
     return Array.from(weeks).sort((a, b) => a - b)
   }, [program, block])
 
   const filteredPhases = useMemo(
-    () => phases.filter(p => (p.block ?? 'current') === block),
-    [phases, block]
+    () => phases.filter(p => recordBlock(p, 'supplement_phases', program) === block),
+    [phases, block, program]
   )
+
+  useEffect(() => {
+    setBlock(currentBlockId(program))
+  }, [program?.meta?.current_block_id])
 
   useEffect(() => {
     if (program?.supplement_phases) {
@@ -110,7 +113,7 @@ export default function SupplementsPage() {
         phase_name: `Phase ${nextPhase}`,
         notes: '',
         items: [],
-        block: block,
+        block_id: block,
       },
     ])
     setExpandedPhase(nextPhase)
@@ -184,10 +187,10 @@ export default function SupplementsPage() {
         <Group gap="sm">
           <Select
             value={block}
-            onChange={(v) => setBlock(v ?? 'current')}
+            onChange={(v) => setBlock(v ?? currentBlockId(program))}
             data={availableBlocks.map((b) => ({
               value: b,
-              label: b === 'current' ? 'Current Block' : b,
+              label: b === currentBlockId(program) ? 'Current Block' : (program?.meta?.blocks ?? []).find((item) => item.id === b)?.name || b,
             }))}
             size="sm"
             w={160}
