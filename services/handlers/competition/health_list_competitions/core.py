@@ -23,7 +23,7 @@ from services.lib.aws import dynamodb_resource, client as aws_client
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 
-from services.lib.block_scope import active_block_id_for, in_block
+from services.lib.block_scope import active_block_id_for, in_block, stamp
 from services.lib.competition_entries import participation_date
 
 from .config import (
@@ -271,7 +271,7 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
 
     applied = copy.deepcopy(patch)
     if not current.get("block_id") and not _is_directory_entry({**current, **applied}):
-        applied["block_id"] = active_block_id_for(pk)
+        stamp(applied, None, active_block_id_for(pk))
     entry_date = participation_date({**current, **applied})
     if entry_date and current.get("entry_date") != entry_date:
         applied["entry_date"] = entry_date

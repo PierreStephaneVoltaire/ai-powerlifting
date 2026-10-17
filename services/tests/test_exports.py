@@ -64,8 +64,8 @@ def test_export_dispatch_includes_only_permitted_independent_entries(monkeypatch
     core = importlib.import_module("services.handlers.program.export_program_history.core")
     monkeypatch.setattr(core, "_get_store", lambda args: Store(args["pk"]))
     monkeypatch.setattr(competition_entries, "load_entries", lambda pk, *_args, **_kwargs: [
-        {"master_id": "tied", "name": "Visible meet", "user_status": "completed", "start_date": "2026-09-01", "results": {"squat_kg": 180}},
-        {"master_id": "private", "name": "Hidden meet", "user_status": "completed", "start_date": "2026-08-01", "results": {"squat_kg": 170}},
+        {"master_id": "tied", "name": "Visible meet", "user_status": "completed", "start_date": "2026-09-01", "block_id": "current", "results": {"squat_kg": 180}},
+        {"master_id": "private", "name": "Hidden meet", "user_status": "completed", "start_date": "2026-08-01", "block_id": "current", "results": {"squat_kg": 170}},
     ])
     def write(program, session_block, window, store, directory, format_value):
         assert [entry["master_id"] for entry in program["competitions"]] == ["tied"]
@@ -82,7 +82,6 @@ class TwoBlockStore(Store):
     async def get_program(self):
         return {
             "pk": self.pk,
-            "meta": {"current_block_id": "block-new", "blocks": [{"id": "block-2025"}, {"id": "block-new"}]},
             "phases": [],
             "sessions": [
                 {"date": "2025-01-06", "week_number": 1, "block": "block-2025", "block_id": "block-2025", "completed": True},
@@ -91,7 +90,10 @@ class TwoBlockStore(Store):
                 {"date": "2026-10-12", "week_number": 2, "block": "current", "block_id": "block-new", "completed": True},
             ],
             "diet_notes": [{"date": "2025-01-07", "notes": "old", "block_id": "block-2025"}, {"date": "2026-10-06", "notes": "new", "block_id": "block-new"}],
-            "supplements": [{"name": "creatine", "dose": "5g", "block_id": "block-2025"}],
+            "supplements": [{"name": "old-creatine", "dose": "5g", "block_id": "block-2025"}, {"name": "current-creatine", "dose": "5g"}],
+            "supplement_phases": [{"phase": 1, "block_id": "block-2025"}, {"phase": 2, "block_id": "block-new"}],
+            "competitions": [{"name": "old", "date": "2026-08-22", "block_id": "block-2025"}, {"name": "new", "date": "2026-11-07"}],
+            "meta": {"current_block_id": "block-new", "program_start": "2025-01-01", "comp_date": "2026-08-22", "blocks": [{"id": "block-2025", "status": "completed", "start_date": "2025-01-01", "completed_at": "2026-10-05"}, {"id": "block-new", "status": "active", "start_date": "2026-10-06"}], "block_notes": [{"date": "2026-05-01", "notes": "old"}, {"date": "2026-10-06", "notes": "new", "block_id": "block-new"}]},
         }
 
 
@@ -115,7 +117,11 @@ def test_export_defaults_to_active_block_only(monkeypatch):
     captured = _capture_export(monkeypatch, {})
     assert [s["date"] for s in captured["program"]["sessions"]] == ["2026-10-05", "2026-10-12"]
     assert [n["notes"] for n in captured["program"]["diet_notes"]] == ["new"]
-    assert captured["program"]["supplements"] == []
+    assert [item["name"] for item in captured["program"]["supplements"]] == ["current-creatine"]
+    assert [item["name"] for item in captured["program"]["competitions"]] == ["new"]
+    assert [item["notes"] for item in captured["program"]["meta"]["block_notes"]] == ["new"]
+    assert [item["phase"] for item in captured["program"]["supplement_phases"]] == [2]
+    assert captured["program"]["meta"]["comp_date"] == "2026-11-07"
     assert captured["session_block"] == "current"
 
 

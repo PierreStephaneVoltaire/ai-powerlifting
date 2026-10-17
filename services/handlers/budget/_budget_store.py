@@ -292,7 +292,8 @@ class BudgetStore:
 
     def _query_items_sync(self, pk: str, block_id: Optional[str] = None) -> list[dict]:
         active = self._active_block_id(pk)
-        return scope_entries(self._query_all_items_sync(pk), block_id or active, active)
+        program = {"meta": {"current_block_id": active}}
+        return scope_entries(self._query_all_items_sync(pk), block_id or active, program, "budget")
 
     def _query_all_items_sync(self, pk: str) -> list[dict]:
         items: list[dict] = []

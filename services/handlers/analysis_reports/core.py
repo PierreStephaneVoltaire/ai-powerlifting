@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict
 from services.lib.aws import dynamodb_resource
+from services.lib.block_scope import scope_program
 
 logger = logging.getLogger(__name__)
 
@@ -122,11 +123,7 @@ def _build_sectioned_week_analysis(
 
 
 def _scope_program_to_current_block(program: dict) -> dict:
-    """Return a shallow copy of program with phases and sessions filtered to the current block only."""
-    scoped = dict(program)
-    scoped["phases"] = [p for p in program.get("phases", []) if (p.get("block") or "current") == "current"]
-    scoped["sessions"] = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
-    return scoped
+    return scope_program(program)
 
 
 def _shared_cache_allowed(args: Dict[str, Any]) -> bool:
@@ -228,10 +225,10 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     expires_at = int(_time.time()) + 7 * 86400
 
     program_start = (program.get("meta") or {}).get("program_start") or next(
-        (s.get("date") for s in sessions if (s.get("block") or "current") == "current"), None
+        (s.get("date") for s in scope_program(program).get("sessions", []) if s.get("date")), None
     ) or datetime.utcnow().date().isoformat()
 
-    current_sessions = [s for s in sessions if (s.get("block") or "current") == "current"]
+    current_sessions = scope_program(program).get("sessions", [])
     current_week = max(
         (int(s.get("week_number", 0)) for s in current_sessions if s.get("week_number")),
         default=1
@@ -414,7 +411,7 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     from services.lib.competition_entries import with_competition_entries
     program = with_competition_entries(program, store.pk)
     program = _visible_program(program, args)
-    sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
+    sessions = scope_program(program).get("sessions", [])
     today_iso = datetime.utcnow().date().isoformat()
     current_week = max(
         (int(s.get("week_number", 0)) for s in sessions if s.get("week_number")),

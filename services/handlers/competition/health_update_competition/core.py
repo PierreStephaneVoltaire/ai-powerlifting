@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 from typing import Optional
+from services.lib.block_scope import stamp
 logger = logging.getLogger(__name__)
 _store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 def _get_store():
@@ -60,6 +61,7 @@ async def health_update_competition(args: dict | None = None, date: str | None =
         competitions = program.get("competitions", [])
         for comp in competitions:
             if comp.get("date") == date:
+                stamp(comp, program, field="competitions")
                 comp.update(copy.deepcopy(patch))
                 return copy.deepcopy(comp)
         raise ValueError(f"Competition not found with date={date}")

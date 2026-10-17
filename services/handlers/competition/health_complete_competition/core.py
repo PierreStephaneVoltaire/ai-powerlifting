@@ -5,6 +5,7 @@ import logging
 import os
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
+from services.lib.block_scope import stamp
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,8 @@ def _snapshot_competitions_in_program(
         if comp.get("status") not in ("confirmed", "optional") and not allow_retrospective:
             continue
 
+        stamp(comp, program, field="competitions")
+
         projection = meet_projection(program, program.get("sessions", []), comp_date=comp.get("date"), ref_date=snapshot_date)
         if "total" not in projection:
             continue
@@ -174,6 +177,7 @@ def _complete_competition_in_program(
             break
     if target is None:
         raise ValueError(f"Competition not found with date={comp_date}")
+    stamp(target, program, field="competitions")
 
     if target.get("projected_at_t_minus_1w") is None:
         comp_dt = datetime.strptime(comp_date, "%Y-%m-%d").date()

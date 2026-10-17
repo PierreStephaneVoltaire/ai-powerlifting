@@ -24,7 +24,7 @@ from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
-from services.lib.block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id, in_block, scope_program, stamp
+from services.lib.block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id, record_block, scope_program, stamp
 
 logger = logging.getLogger(__name__)
 
@@ -940,15 +940,19 @@ class ProgramStore:
     @staticmethod
     def _replace_active_block_records(program: dict, field: str, incoming: list) -> list:
         active = current_block_id(program)
-        kept = [copy.deepcopy(item) for item in (program.get(field) or []) if isinstance(item, dict) and not in_block(item, active, active)]
-        replaced = [stamp(copy.deepcopy(item), program) for item in incoming if isinstance(item, dict) and in_block(item, active, active)]
+        kept = [copy.deepcopy(item) for item in (program.get(field) or []) if isinstance(item, dict) and not ProgramStore._record_is_active_for_mutation(item, field, program)]
+        replaced = [stamp(copy.deepcopy(item), program, field=field) for item in incoming if isinstance(item, dict) and ProgramStore._record_is_active_for_mutation(item, field, program)]
         return kept + replaced
+
+    @staticmethod
+    def _record_is_active_for_mutation(record: dict, field: str, program: dict) -> bool:
+        return record_block(record, field, program) == current_block_id(program)
 
     @staticmethod
     def _archive_block_records(program: dict, source_id: str, archive_id: str) -> None:
         for field in BLOCK_SCOPED_RECORD_FIELDS:
             for record in program.get(field) or []:
-                if isinstance(record, dict) and in_block(record, source_id, source_id):
+                if isinstance(record, dict) and record_block(record, field, program) in {source_id, current_block_id(program) if source_id == "current" else source_id}:
                     record["block_id"] = archive_id
                     if "block" in record:
                         record["block"] = archive_id
@@ -967,7 +971,7 @@ class ProgramStore:
         notes = meta.get("block_notes")
         if isinstance(notes, list):
             for note in notes:
-                if isinstance(note, dict) and (str(note.get("block") or "") in {source_id, "current"} or str(note.get("block_id") or "") == source_id):
+                if isinstance(note, dict) and (str(note.get("block") or "") in {source_id, "current"} or str(note.get("block_id") or "") == source_id or (source_id == "current" and not note.get("block_id") and not note.get("block"))):
                     note["block"] = archive_id
                     note["block_id"] = archive_id
     
@@ -1401,10 +1405,10 @@ class ProgramStore:
             existing = program.get("phases") if isinstance(program.get("phases"), list) else []
             if block:
                 other_blocks = [p for p in existing if (p.get("block") or "current") != block]
-                incoming = [{**p, "block": p.get("block", block)} for p in phases]
+                incoming = [stamp({**p, "block": p.get("block", block)}, program, p.get("block") or block) for p in phases]
                 program["phases"] = other_blocks + incoming
             else:
-                program["phases"] = [{**p, "block": p.get("block", "current")} for p in phases]
+                program["phases"] = [stamp({**p, "block": p.get("block", "current")}, program, p.get("block")) for p in phases]
             return {"success": True, "phases": copy.deepcopy(program["phases"])}
 
         return await self.mutate_source("phases_update", {"phases": phases, "block": block}, expected_revision, idempotency_key, mutate)
@@ -1452,7 +1456,7 @@ class ProgramStore:
             raise ValueError("block_notes must be a list")
 
         def mutate(program):
-            program.setdefault("meta", {})["block_notes"] = copy.deepcopy(notes)
+            program.setdefault("meta", {})["block_notes"] = [stamp(copy.deepcopy(note), program) for note in notes if isinstance(note, dict)]
             return {"success": True, "block_notes": copy.deepcopy(notes)}
 
         return await self.mutate_source("block_notes_update", {"block_notes": notes}, expected_revision, idempotency_key, mutate)
@@ -1478,9 +1482,9 @@ class ProgramStore:
         def mutate(program):
             active = current_block_id(program)
             items = [copy.deepcopy(item) for item in (program.get("diet_notes") or []) if isinstance(item, dict)]
-            item = {"date": note_date, "notes": notes, "block_id": active}
+            item = stamp({"date": note_date, "notes": notes}, program)
             for index, existing in enumerate(items):
-                if existing.get("date") == note_date and in_block(existing, active, active):
+                if existing.get("date") == note_date and record_block(existing, "diet_notes", program) == active:
                     items[index] = item
                     break
             else:
@@ -1494,7 +1498,7 @@ class ProgramStore:
         def mutate(program):
             active = current_block_id(program)
             notes = [copy.deepcopy(item) for item in (program.get("diet_notes") or []) if isinstance(item, dict)]
-            updated = [item for item in notes if not (item.get("date") == note_date and in_block(item, active, active))]
+            updated = [item for item in notes if not (item.get("date") == note_date and record_block(item, "diet_notes", program) == active)]
             if len(updated) == len(notes):
                 raise ValueError(f"Diet note not found: {note_date}")
             program["diet_notes"] = updated

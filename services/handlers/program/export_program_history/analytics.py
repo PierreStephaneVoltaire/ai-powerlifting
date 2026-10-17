@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from statistics import median
 from typing import Any, Literal, Optional
+from services.lib.block_scope import record_block, resolve_block_id
 
 
 DOTS_COEFFICIENTS: dict[str, dict[str, float]] = {
@@ -3615,7 +3616,7 @@ def _weekly_analysis_window_context(
     program_start = meta.get("program_start", "")
 
     if block:
-        sessions = [s for s in sessions if s.get("block", "current") == block]
+        sessions = [s for s in sessions if record_block(s, "sessions", program) == resolve_block_id(program, block)]
 
     current_week = _calculate_current_week(program_start, sessions)
     current_phase = _find_current_phase(phases, current_week)
@@ -4315,7 +4316,7 @@ def weekly_analysis(
     program_start = meta.get("program_start", "")
 
     if block:
-        sessions = [s for s in sessions if s.get("block", "current") == block]
+        sessions = [s for s in sessions if record_block(s, "sessions", program) == resolve_block_id(program, block)]
 
     current_week = _calculate_current_week(program_start, sessions)
     current_phase = _find_current_phase(phases, current_week)

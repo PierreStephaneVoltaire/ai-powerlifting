@@ -83,8 +83,6 @@ async def program_get(args: dict):
     block = args.get("block")
     window_start = args.get("window_start")
     window_end = args.get("window_end")
-    if block and block != ALL_BLOCKS:
-        program = scope_program(program, block)
     program = await asyncio.to_thread(
         with_competition_entries,
         program,
@@ -92,8 +90,11 @@ async def program_get(args: dict):
         start=window_start,
         end=window_end,
     )
+    if block and block != ALL_BLOCKS:
+        program = scope_program(program, block)
     if program_sk is not None and hasattr(store, "_get_session_store"):
-        active_block = str((program.get("meta") or {}).get("current_block_id") or "current")
+        from services.lib.block_scope import current_block_id
+        active_block = current_block_id(program)
         program["sessions"] = await store._get_session_store().list_sessions(
             str(program_sk),
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],

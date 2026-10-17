@@ -10,6 +10,7 @@ import asyncio
 import logging
 from importlib import import_module
 from services.lib.competition_entries import with_competition_entries
+from services.lib.block_scope import scope_program
 import os
 import tempfile
 from datetime import datetime, timedelta
@@ -142,11 +143,7 @@ def _build_sectioned_week_analysis(
 
 
 def _scope_program_to_current_block(program: dict) -> dict:
-    """Return a shallow copy of program with phases and sessions filtered to the current block only."""
-    scoped = dict(program)
-    scoped["phases"] = [p for p in program.get("phases", []) if (p.get("block") or "current") == "current"]
-    scoped["sessions"] = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
-    return scoped
+    return scope_program(program)
 
 
 def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
@@ -245,7 +242,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
         bundle["max_history"] = []
 
     try:
-        block_sessions = [s for s in sessions if s.get("block", "current") == "current" and s.get("date")]
+        block_sessions = [s for s in scope_program(program).get("sessions", []) if s.get("date")]
         if not block_sessions:
             effective_weeks = 4
         else:
@@ -259,7 +256,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
         effective_weeks = 4
 
     try:
-        current_sessions = [s for s in sessions if (s.get("block") or "current") == "current"]
+        current_sessions = scope_program(program).get("sessions", [])
         current_week = max(
             (int(s.get("week_number", 0)) for s in current_sessions if s.get("week_number")),
             default=effective_weeks,

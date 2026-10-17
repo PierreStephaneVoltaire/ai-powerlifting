@@ -5,6 +5,7 @@ import logging
 import os
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
+from services.lib.block_scope import stamp
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,8 @@ def _snapshot_competitions_in_program(
             continue
         if comp.get("status") not in ("confirmed", "optional") and not allow_retrospective:
             continue
+
+        stamp(comp, program, field="competitions")
 
         projection = meet_projection(program, program.get("sessions", []), comp_date=comp.get("date"), ref_date=snapshot_date)
         if "total" not in projection:

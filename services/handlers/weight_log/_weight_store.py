@@ -9,7 +9,7 @@ from typing import Any
 import boto3
 from services.lib.aws import dynamodb_resource, client as aws_client
 from botocore.exceptions import ClientError
-from services.lib.block_scope import ALL_BLOCKS, active_block_id_for, scope_entries
+from services.lib.block_scope import ALL_BLOCKS, active_block_id_for, current_program_for, scope_entries, stamp
 from services.lib.cache_invalidation import invalidate_analysis_caches
 
 
@@ -44,7 +44,8 @@ class WeightStore:
         if block_id == ALL_BLOCKS:
             return log
         active = active_block_id_for(log["pk"], self.table)
-        return {**log, "entries": scope_entries(log.get("entries", []), block_id or active, active)}
+        program = current_program_for(log["pk"], self.table)
+        return {**log, "entries": scope_entries(log.get("entries", []), block_id or active, program, "weight_log")}
 
     async def get_log(self, pk: str, version: str, block_id: str | None = None) -> dict:
         return await asyncio.get_running_loop().run_in_executor(None, lambda: self._scoped(self._read(pk, version), block_id))
@@ -64,9 +65,9 @@ class WeightStore:
             log = self._read(pk, version)
             previous = log["updated_at"]
             active = active_block_id_for(pk, self.table)
-            in_active = {id(item) for item in scope_entries(log.get("entries", []), active, active)}
+            in_active = {id(item) for item in scope_entries(log.get("entries", []), active, current_program_for(pk, self.table), "weight_log")}
             entries = [item for item in log.get("entries", []) if not (id(item) in in_active and item.get("date") == entry["date"])]
-            entries.append({**entry, "block_id": active})
+            entries.append(stamp(dict(entry), None, active))
             log.update({"version": version, "entries": sorted(entries, key=lambda item: str(item.get("date", "")), reverse=True), "updated_at": datetime.now(timezone.utc).isoformat()})
             self._persist(log, previous)
             return self._scoped(log)
@@ -77,7 +78,7 @@ class WeightStore:
             log = self._read(pk, version)
             previous = log["updated_at"]
             active = active_block_id_for(pk, self.table)
-            in_active = {id(item) for item in scope_entries(log.get("entries", []), active, active)}
+            in_active = {id(item) for item in scope_entries(log.get("entries", []), active, current_program_for(pk, self.table), "weight_log")}
             log.update({"version": version, "entries": [item for item in log.get("entries", []) if not (id(item) in in_active and item.get("date") == date)], "updated_at": datetime.now(timezone.utc).isoformat()})
             self._persist(log, previous)
             return self._scoped(log)

@@ -12,6 +12,7 @@ import json
 import logging
 from datetime import date
 from typing import Any
+from services.lib.block_scope import scope_program
 
 from importlib import import_module
 
@@ -206,7 +207,7 @@ def _parse_date(value: str | None) -> date | None:
         return None
 
 def _current_block_sessions(program: dict[str, Any]) -> list[dict[str, Any]]:
-    return [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
+    return scope_program(program).get("sessions", [])
 
 def _analysis_weeks(program: dict[str, Any], sessions: list[dict[str, Any]]) -> int:
     meta = program.get("meta", {})

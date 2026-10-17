@@ -8,6 +8,7 @@ not involved in a given lift are excluded to avoid spurious correlations.
 """
 from __future__ import annotations
 from services.ai import completion
+from services.lib.block_scope import current_block_id, record_block
 
 import json
 import logging
@@ -76,8 +77,6 @@ def _build_weekly_e1rm(sessions: list[dict], cutoff_str: str) -> dict[int, dict[
             continue
         if s.get("date", "") < cutoff_str:
             continue
-        if (s.get("block") or "current") != "current":
-            continue
         wn = s.get("week_number", 0)
         if wn <= 0:
             continue
@@ -118,8 +117,6 @@ def _build_weekly_accessory_volume(sessions: list[dict], cutoff_str: str) -> dic
         if not (s.get("completed") or s.get("status") in ("logged", "completed")):
             continue
         if s.get("date", "") < cutoff_str:
-            continue
-        if (s.get("block") or "current") != "current":
             continue
         wn = s.get("week_number", 0)
         if wn <= 0:
@@ -190,6 +187,9 @@ async def generate_correlation_report(
     program: dict | None = None,
 ) -> dict[str, Any]:
     """Call LLM to generate correlation findings for the given session window."""
+    if program:
+        active = current_block_id(program)
+        sessions = [session for session in sessions if record_block(session, "sessions", program) == active]
     weekly_e1rm = _build_weekly_e1rm(sessions, window_start)
     weekly_accessory = _build_weekly_accessory_volume(sessions, window_start)
 

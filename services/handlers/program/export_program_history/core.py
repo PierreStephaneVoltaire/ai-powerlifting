@@ -10,7 +10,7 @@ import asyncio
 import base64
 import logging
 from importlib import import_module
-from services.lib.block_scope import ACTIVE, current_block_id, in_block, resolve_block_id, scope_entries, scope_program
+from services.lib.block_scope import ACTIVE, current_block_id, record_block, resolve_block_id, scope_entries, scope_program
 import os
 import re
 import tempfile
@@ -144,7 +144,7 @@ def _scope_export_program(program: dict, block: str | None, window: dict) -> tup
 def _block_date_range(program: dict, block: str | None) -> tuple[str | None, str | None]:
     target = resolve_block_id(program, block)
     active = current_block_id(program)
-    session_dates = [(str(s.get("date"))[:10], in_block(s, target, active)) for s in program.get("sessions", []) if s.get("date")]
+    session_dates = [(str(s.get("date"))[:10], record_block(s, "sessions", program) == target) for s in program.get("sessions", []) if s.get("date")]
     block_dates = sorted(date for date, inside in session_dates if inside)
     if not block_dates:
         return None, None
@@ -344,7 +344,7 @@ def _write_program_export(program: dict, session_block: str, window: dict, store
     active = current_block_id(program)
     target = active if session_block == ACTIVE else session_block
     if isinstance(analysis.get("weight_log"), list):
-        analysis["weight_log"] = _entries_in_window(scope_entries(analysis["weight_log"], target, active), program, window)
+        analysis["weight_log"] = _entries_in_window(scope_entries(analysis["weight_log"], target, program, "weight_log"), program, window)
     if isinstance(analysis.get("max_history"), list):
         analysis["max_history"] = _entries_in_window(analysis["max_history"], program, window)
 

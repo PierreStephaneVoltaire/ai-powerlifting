@@ -5,6 +5,7 @@ import os
 import time as _time
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from services.lib.block_scope import scope_program
 
 
 def _run_async(coro):
@@ -64,7 +65,7 @@ def program_evaluation(args):
     program = source["program"] if "program" in source else _run_async(store.get_program())
     federation_library = source["federation_library"] if "federation_library" in source else _run_async(_get_federation_store().get_library())
     active_pk = store.pk
-    sessions = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
+    sessions = scope_program(program).get("sessions", [])
 
     completed_weeks = sorted({
         int(s.get("week_number"))

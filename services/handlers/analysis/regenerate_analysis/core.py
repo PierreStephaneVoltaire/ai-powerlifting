@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
+from services.lib.block_scope import scope_program
 
 def _get_store():
     """Create the request-scoped ProgramStore."""
@@ -121,11 +122,7 @@ def _build_sectioned_week_analysis(
 
 
 def _scope_program_to_current_block(program: dict) -> dict:
-    """Return a shallow copy of program with phases and sessions filtered to the current block only."""
-    scoped = dict(program)
-    scoped["phases"] = [p for p in program.get("phases", []) if (p.get("block") or "current") == "current"]
-    scoped["sessions"] = [s for s in program.get("sessions", []) if (s.get("block") or "current") == "current"]
-    return scoped
+    return scope_program(program)
 
 
 async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -159,10 +156,10 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     expires_at = int(_time.time()) + 7 * 86400
 
     program_start = (program.get("meta") or {}).get("program_start") or next(
-        (s.get("date") for s in sessions if (s.get("block") or "current") == "current"), None
+        (s.get("date") for s in scope_program(program).get("sessions", []) if s.get("date")), None
     ) or datetime.utcnow().date().isoformat()
 
-    current_sessions = [s for s in sessions if (s.get("block") or "current") == "current"]
+    current_sessions = scope_program(program).get("sessions", [])
     current_week = max(
         (int(s.get("week_number", 0)) for s in current_sessions if s.get("week_number")),
         default=1
