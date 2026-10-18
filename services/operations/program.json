@@ -655,13 +655,29 @@
         "idempotency_key": {
           "type": "string",
           "minLength": 1
+        },
+        "updates": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Multiple meta fields to update at once, keyed by field name."
         }
       },
       "required": [
-        "field",
-        "value",
         "expected_revision",
         "idempotency_key"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "field",
+            "value"
+          ]
+        },
+        {
+          "required": [
+            "updates"
+          ]
+        }
       ]
     },
     "result_schema": {

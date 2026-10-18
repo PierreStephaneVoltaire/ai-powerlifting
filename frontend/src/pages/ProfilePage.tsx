@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom'
 import {
   Alert,
   Avatar,
-  Badge,
   Box,
   Button,
   FileButton,
@@ -45,7 +44,6 @@ import { sortVideos, VIDEO_SORTS, type VideoSort } from '@/utils/videoSort'
 import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
 import type { Session, VideoLibraryItem, MasterFederation } from '@powerlifting/types'
 import { AGE_CATEGORY_OPTIONS, type AgeCategory } from '@powerlifting/types'
-import LiftProfileContext from '@/components/lift-profiles/LiftProfileContext'
 
 type LiftFilter = 'all' | 'squat' | 'bench' | 'deadlift' | 'other'
 
@@ -394,146 +392,17 @@ export default function ProfilePage() {
     return <Text c="dimmed">Loading profile...</Text>
   }
 
-  if (!user || viewingOther) {
-    if (publicProfileLoading) {
-      return (
-        <Group justify="center" py="xl" data-testid="profile-page">
-          <Loader size="sm" />
-        </Group>
-      )
-    }
+  const readOnlyView = !user || viewingOther
 
-    if (publicProfile) {
-      return (
-        <Stack gap="md" data-testid="profile-page">
-          <div className="if-page-header">
-            <Stack gap={2}>
-              <Text component="h1" className="if-page-title">Profile</Text>
-              <Text className="if-page-subtitle">Read-only public profile and lift gallery.</Text>
-            </Stack>
-          </div>
+  if (readOnlyView && publicProfileLoading) {
+    return (
+      <Group justify="center" py="xl" data-testid="profile-page">
+        <Loader size="sm" />
+      </Group>
+    )
+  }
 
-          <Paper withBorder p="lg" radius="md" className="if-card">
-            <Stack gap="md">
-              <Group gap="md" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
-                <Avatar src={resolveAvatarUrl(publicProfile.avatar_url)} alt={publicProfile.display_name} radius="xl" size={60}>
-                  {initials(publicProfile.display_name)}
-                </Avatar>
-                <Stack gap={8} style={{ minWidth: 0 }}>
-                  <Group gap="xs" wrap="wrap">
-                    <Text fw={600} size="lg" c="var(--text-primary)" truncate>
-                      {publicProfile.display_name}
-                    </Text>
-                    <Text size="sm" c="var(--text-secondary)">
-                      @{publicProfile.nickname}
-                    </Text>
-                    <span className="if-pill if-pill-info">Public profile</span>
-                    <span className="if-pill if-pill-neutral">Read only</span>
-                  </Group>
-                  <Text size="sm" c="var(--text-secondary)">{federationSummary(publicProfile.federation, publicProfile.practicing_for, publicProfile.weight_class_kg)}</Text>
-                  {(publicProfile.tags || []).length > 0 && (
-                    <Group gap={4} wrap="wrap">
-                      {publicProfile.tags.map((tag) => (
-                        <Badge key={tag} variant="light" size="sm">{tag}</Badge>
-                      ))}
-                    </Group>
-                  )}
-                  {publicProfile.bio && (
-                    <Text size="sm" c="var(--text-primary)" lh={1.6}>
-                      {publicProfile.bio}
-                    </Text>
-                  )}
-                </Stack>
-              </Group>
-            </Stack>
-          </Paper>
-
-          <LiftProfileContext profiles={publicProfile.lift_profiles} athlete={publicProfile.athlete_pk} />
-
-          <SimpleGrid cols={{ base: 2, xs: 3, md: 6 }} spacing="xs">
-            {publicProfileMetrics.map((metric) => (
-              <Paper key={metric.label} className="if-metric-card" p="sm" ta="center" data-testid={metricTestId(metric.label)}>
-                <Text className="if-metric-label">{metric.label}</Text>
-                <Text className="if-metric-value" data-testid={`${metricTestId(metric.label)}-value`}>{metric.value}</Text>
-                <Text size="xs" c="var(--text-secondary)">{metric.sub}</Text>
-              </Paper>
-            ))}
-          </SimpleGrid>
-
-          <Paper withBorder p="lg" radius="md" className="if-card">
-            <Stack gap="md">
-              <div className="if-panel-header">
-                <Group gap="xs">
-                  <Film size={18} />
-                  <Text fw={600} c="var(--text-primary)">Lift videos</Text>
-                  <Text size="sm" c="var(--text-secondary)">
-                    {(publicProfile.lift_videos ?? []).length} video{(publicProfile.lift_videos ?? []).length === 1 ? '' : 's'}
-                  </Text>
-                </Group>
-                <Group gap="xs" wrap="wrap" justify="flex-end">
-                  <div className="if-tab-group" role="group" aria-label="Filter videos by lift" data-testid="profile-video-filter">
-                    {LIFT_FILTERS.map((filter) => (
-                      <button
-                        key={filter.value}
-                        type="button"
-                        className="if-tab-button"
-                        data-active={videoFilter === filter.value}
-                        onClick={() => setVideoFilter(filter.value)}
-                      >
-                        {filter.label}
-                      </button>
-                    ))}
-                  </div>
-                  {videoFilter === 'other' && <Select placeholder="Exercise" data={otherExerciseOptions} value={otherExercise} onChange={setOtherExercise} searchable clearable />}
-                  <div className="if-tab-group" role="group" aria-label="Sort videos" data-testid="profile-video-sort">
-                    {VIDEO_SORTS.map((sort) => (
-                      <button
-                        key={sort.value}
-                        type="button"
-                        className="if-tab-button"
-                        data-active={videoSort === sort.value}
-                        onClick={() => setVideoSort(sort.value)}
-                      >
-                        {sort.label}
-                      </button>
-                    ))}
-                  </div>
-                </Group>
-              </div>
-
-              {readonlyFilteredVideos.length > 0 ? (
-                <div className="if-video-grid">
-                  {readonlyFilteredVideos.map((item) => (
-                    <VideoCard
-                      key={item.video.video_id}
-                      item={item}
-                      onClick={() => openVideo(item.video.video_id)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Paper className="if-metric-card" p="lg">
-                  <Stack align="center" gap="xs">
-                    <Calendar size={28} color="var(--text-muted)" />
-                    <Text size="sm" c="var(--text-secondary)" ta="center">
-                      No public lift videos match this filter.
-                    </Text>
-                  </Stack>
-                </Paper>
-              )}
-            </Stack>
-          </Paper>
-
-          <VideoPlayerModal
-            item={selectedVideo}
-            onClose={closeVideo}
-            onDeleted={() => undefined}
-            readOnly
-          />
-        </Stack>
-      )
-    }
-
+  if (readOnlyView && !publicProfile) {
     return (
       <Stack gap="lg" data-testid="profile-page">
         <Group gap="xs">
@@ -549,7 +418,39 @@ export default function ProfilePage() {
     )
   }
 
-  const resolvedName = displayName || settings?.display_name || user.username
+  const locked = readOnlyView || readOnly || loading || !settings
+  const view = readOnlyView && publicProfile
+    ? {
+        name: publicProfile.display_name,
+        avatar: resolveAvatarUrl(publicProfile.avatar_url),
+        nickname: publicProfile.nickname,
+        displayName: publicProfile.display_name,
+        bio: publicProfile.bio,
+        visibility: publicProfile.profile_visibility,
+        federation: publicProfile.federation || '',
+        weightClasses: publicProfile.weight_class_kg ? [String(publicProfile.weight_class_kg)] : [],
+        summary: federationSummary(publicProfile.federation, publicProfile.practicing_for, publicProfile.weight_class_kg),
+        metrics: publicProfileMetrics,
+        videos: publicProfile.lift_videos ?? [],
+        shownVideos: readonlyFilteredVideos,
+      }
+    : {
+        name: displayName || settings?.display_name || user!.username,
+        avatar: resolveAvatarUrl(settings?.avatar_url) || user!.avatar,
+        nickname,
+        displayName,
+        bio,
+        visibility: settings?.profile_visibility || 'private',
+        federation: mainFederation,
+        weightClasses,
+        summary: federationSummary(mainFederation || program?.meta.federation, program?.meta.practicing_for, weightClasses[0] || program?.meta.weight_class_kg),
+        metrics: profileMetrics,
+        videos,
+        shownVideos: filteredVideos,
+      }
+  const federationOptions = federations.length
+    ? federations.map((federation) => ({ value: federation.abbreviation || federation.name, label: federation.abbreviation ? `${federation.abbreviation} — ${federation.name}` : federation.name }))
+    : view.federation ? [{ value: view.federation, label: view.federation }] : []
 
   return (
     <Stack gap="md" data-testid="profile-page">
@@ -558,15 +459,17 @@ export default function ProfilePage() {
           <Text component="h1" className="if-page-title">Profile</Text>
           <Text className="if-page-subtitle">Public identity, training summary, and lift video gallery.</Text>
         </Stack>
-        <Button
-          leftSection={<Save size={16} />}
-          onClick={saveProfile}
-          loading={saving}
-          disabled={readOnly || loading || !settings}
-          data-testid="profile-save"
-        >
-          Save Profile
-        </Button>
+        {!readOnlyView && (
+          <Button
+            leftSection={<Save size={16} />}
+            onClick={saveProfile}
+            loading={saving}
+            disabled={locked}
+            data-testid="profile-save"
+          >
+            Save Profile
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -580,47 +483,49 @@ export default function ProfilePage() {
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <Group gap="md" align="flex-start" wrap="nowrap" style={{ minWidth: 0 }}>
               <Stack gap={6} align="center" style={{ flexShrink: 0 }}>
-                <Avatar src={resolveAvatarUrl(settings?.avatar_url) || user.avatar} alt={resolvedName} radius="xl" size={60}>
-                  {initials(resolvedName)}
+                <Avatar src={view.avatar} alt={view.name} radius="xl" size={60}>
+                  {initials(view.name)}
                 </Avatar>
-                <FileButton
-                  onChange={handleAvatarUpload}
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  disabled={readOnly || loading || !settings || avatarUploading}
-                >
-                  {(props) => (
-                    <Button
-                      {...props}
-                      size="xs"
-                      variant="light"
-                      leftSection={<Upload size={14} />}
-                      loading={avatarUploading}
-                      disabled={readOnly || loading || !settings}
-                      data-testid="profile-avatar-upload"
-                    >
-                      Photo
-                    </Button>
-                  )}
-                </FileButton>
+                {!readOnlyView && (
+                  <FileButton
+                    onChange={handleAvatarUpload}
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    disabled={locked || avatarUploading}
+                  >
+                    {(props) => (
+                      <Button
+                        {...props}
+                        size="xs"
+                        variant="light"
+                        leftSection={<Upload size={14} />}
+                        loading={avatarUploading}
+                        disabled={locked}
+                        data-testid="profile-avatar-upload"
+                      >
+                        Photo
+                      </Button>
+                    )}
+                  </FileButton>
+                )}
                 {avatarUploading && <Progress value={avatarProgress} size="xs" w={72} />}
               </Stack>
               <Stack gap={8} style={{ minWidth: 0 }}>
                 <Group gap="xs" wrap="wrap">
                   <Text fw={600} size="lg" c="var(--text-primary)" truncate>
-                    {resolvedName}
+                    {view.name}
                   </Text>
                   <Text size="sm" c="var(--text-secondary)">
-                    @{nickname || settings?.nickname}
+                    @{view.nickname}
                   </Text>
-                  <span className="if-pill if-pill-success">Discord connected</span>
-                  <span className={`if-pill ${settings?.profile_visibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
-                    {settings?.profile_visibility || 'private'}
+                  {!readOnlyView && <span className="if-pill if-pill-success">Discord connected</span>}
+                  <span className={`if-pill ${view.visibility === 'public' ? 'if-pill-info' : 'if-pill-neutral'}`}>
+                    {view.visibility}
                   </span>
+                  {readOnlyView && <span className="if-pill if-pill-neutral">Read only</span>}
                 </Group>
                 <Text size="sm" c="var(--text-secondary)">
-                  {federationSummary(mainFederation || program?.meta.federation, program?.meta.practicing_for, weightClasses[0] || program?.meta.weight_class_kg)}
+                  {view.summary}
                 </Text>
-
               </Stack>
             </Group>
           </Group>
@@ -628,17 +533,17 @@ export default function ProfilePage() {
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
             <TextInput
               label="Nickname"
-              value={nickname}
+              value={view.nickname}
               onChange={(event) => setNickname(event.currentTarget.value)}
-              disabled={readOnly || loading || !settings}
+              disabled={locked}
               maxLength={32}
               data-testid="profile-nickname"
             />
             <TextInput
               label="Display name"
-              value={displayName}
+              value={view.displayName}
               onChange={(event) => setDisplayName(event.currentTarget.value)}
-              disabled={readOnly || loading || !settings}
+              disabled={locked}
               maxLength={80}
               data-testid="profile-display-name"
             />
@@ -646,50 +551,52 @@ export default function ProfilePage() {
 
           <Textarea
             label="Bio"
-            value={bio}
+            value={view.bio}
             onChange={(event) => setBio(event.currentTarget.value)}
-            disabled={readOnly || loading || !settings}
+            disabled={locked}
             maxLength={280}
             minRows={3}
             data-testid="profile-bio"
           />
 
-          <Select
-            label="Age Class (IPF)"
-            description="Used for qualifying standards. Defaults to Open."
-            data={AGE_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-            value={ageClass}
-            onChange={(v) => v && setAgeClass(v as AgeCategory)}
-            disabled={readOnly || loading || !settings}
-            data-testid="profile-age-class"
-          />
+          {!readOnlyView && (
+            <Select
+              label="Age Class (IPF)"
+              description="Used for qualifying standards. Defaults to Open."
+              data={AGE_CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              value={ageClass}
+              onChange={(v) => v && setAgeClass(v as AgeCategory)}
+              disabled={locked}
+              data-testid="profile-age-class"
+            />
+          )}
 
           <Select
             label="Main federation"
-            data={federations.map((federation) => ({ value: federation.abbreviation || federation.name, label: federation.abbreviation ? `${federation.abbreviation} — ${federation.name}` : federation.name }))}
-            value={mainFederation || null}
+            data={federationOptions}
+            value={view.federation || null}
             onChange={(value) => setMainFederation(value || '')}
             searchable
-            clearable
-            disabled={readOnly || loading || !settings}
+            clearable={!readOnlyView}
+            disabled={locked}
             data-testid="profile-main-federation"
           />
 
           <MultiSelect
             label="Weight classes"
-            description="Choose up to two classes."
-            data={['47', '52', '57', '59', '63', '66', '69', '74', '76', '83', '84', '93', '105', '120', '125'].map((value) => ({ value, label: `${value} kg` }))}
-            value={weightClasses}
+            description={readOnlyView ? undefined : 'Choose up to two classes.'}
+            data={[...new Set(['47', '52', '57', '59', '63', '66', '69', '74', '76', '83', '84', '93', '105', '120', '125', ...view.weightClasses])].map((value) => ({ value, label: `${value} kg` }))}
+            value={view.weightClasses}
             onChange={(values) => setWeightClasses(values.slice(0, 2))}
             maxValues={2}
-            disabled={readOnly || loading || !settings}
+            disabled={locked}
             data-testid="profile-weight-classes"
           />
         </Stack>
       </Paper>
 
       <SimpleGrid cols={{ base: 2, xs: 3, md: 6 }} spacing="xs">
-        {profileMetrics.map((metric) => (
+        {view.metrics.map((metric) => (
           <Paper key={metric.label} className="if-metric-card" p="sm" ta="center" data-testid={metricTestId(metric.label)}>
             <Text className="if-metric-label">{metric.label}</Text>
             <Text className="if-metric-value" data-testid={`${metricTestId(metric.label)}-value`}>{metric.value}</Text>
@@ -705,7 +612,7 @@ export default function ProfilePage() {
               <Film size={18} />
               <Text fw={600} c="var(--text-primary)">Lift videos</Text>
               <Text size="sm" c="var(--text-secondary)">
-                {videos.length} video{videos.length === 1 ? '' : 's'}
+                {view.videos.length} video{view.videos.length === 1 ? '' : 's'}
               </Text>
             </Group>
             <Group gap="xs" wrap="wrap">
@@ -736,25 +643,27 @@ export default function ProfilePage() {
                   </button>
                 ))}
               </div>
-              <Button
-                component={Link}
-                to="/sessions"
-                size="xs"
-                variant="default"
-                leftSection={<Upload size={14} />}
-              >
-                Upload
-              </Button>
+              {!readOnlyView && (
+                <Button
+                  component={Link}
+                  to="/sessions"
+                  size="xs"
+                  variant="default"
+                  leftSection={<Upload size={14} />}
+                >
+                  Upload
+                </Button>
+              )}
             </Group>
           </div>
 
-          {videosLoading ? (
+          {!readOnlyView && videosLoading ? (
             <Group justify="center" py="xl">
               <Loader size="sm" />
             </Group>
-          ) : filteredVideos.length > 0 ? (
+          ) : view.shownVideos.length > 0 ? (
             <div className="if-video-grid">
-              {filteredVideos.map((item) => (
+              {view.shownVideos.map((item) => (
                 <VideoCard
                   key={item.video.video_id}
                   item={item}
@@ -767,7 +676,7 @@ export default function ProfilePage() {
               <Stack align="center" gap="xs">
                 <Calendar size={28} color="var(--text-muted)" />
                 <Text size="sm" c="var(--text-secondary)" ta="center">
-                  No lift videos match this filter. Upload videos from a session.
+                  {readOnlyView ? 'No public lift videos match this filter.' : 'No lift videos match this filter. Upload videos from a session.'}
                 </Text>
               </Stack>
             </Paper>
@@ -778,8 +687,8 @@ export default function ProfilePage() {
       <VideoPlayerModal
         item={selectedVideo}
         onClose={closeVideo}
-        onDeleted={loadVideos}
-        readOnly={readOnly}
+        onDeleted={readOnlyView ? () => undefined : loadVideos}
+        readOnly={readOnlyView || readOnly}
       />
     </Stack>
   )
