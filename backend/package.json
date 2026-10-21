@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test:forwarding": "node --import tsx --test src/utils/forwarding.test.ts",
-    "test:media": "node --import tsx --test src/utils/mediaCdn.test.ts src/utils/serveMedia.test.ts",
+    "test:media": "node --import tsx --test src/utils/mediaCdn.test.ts src/utils/serveMedia.test.ts src/utils/videoMultipart.test.ts",
     "test:block-scope": "node --import tsx --test src/utils/blockScope.test.ts",
     "seed:glossary": "tsx src/scripts/seedGlossary.ts",
     "backfill:planned": "tsx src/scripts/backfillPlanned.ts",

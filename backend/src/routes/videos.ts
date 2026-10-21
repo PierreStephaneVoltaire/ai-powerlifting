@@ -4,16 +4,16 @@ import { unlink } from 'fs/promises'
 import type { NextFunction, Request, Response } from 'express'
 import * as videoController from '../controllers/videoController'
 import { isVideoSort } from '../utils/videoSort'
+import { MAX_VIDEO_BYTES } from '../utils/videoMultipart'
+import { videoMimeTypes, videoUploadsRouter } from './videoUploads'
 import { serveStoredMedia } from '../utils/serveMedia'
 import { isPublicMediaKey, mediaCdnConfig, publicMediaUrl, signedMediaUrl } from '../utils/mediaCdn'
 import type { LiftProfileVideoAngle, VideoSort } from '@powerlifting/types'
 
 export const videosRouter = Router({ mergeParams: true })
-const maxVideoBytes = 500 * 1024 * 1024
-const videoMimeTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo']
 const upload = multer({
   dest: process.env.TMPDIR || '/tmp',
-  limits: { fileSize: maxVideoBytes, files: 1 },
+  limits: { fileSize: MAX_VIDEO_BYTES, files: 1 },
   fileFilter: (_req, file, callback) => callback(null, videoMimeTypes.includes(file.mimetype)),
 })
 
@@ -25,6 +25,8 @@ function receiveVideo(req: Request, res: Response, next: NextFunction) {
     next()
   })
 }
+
+videosRouter.use('/:version/:sessionDate/uploads', videoUploadsRouter)
 
 videosRouter.get('/', async (req, res, next) => {
   try {

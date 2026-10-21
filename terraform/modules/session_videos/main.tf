@@ -46,6 +46,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
       storage_class = "STANDARD_IA"
     }
   }
+
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = "videos/"
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
