@@ -341,7 +341,6 @@ export interface ExerciseSetData {
   reps: number | null
   kg: number | null
   rpe: number | null
-  video_id?: string | null
 }
 
 export type SetStatus = 'pending' | 'completed' | 'failed' | 'skipped'

@@ -157,8 +157,25 @@ function normalizeSetData(exercise: Exercise): ExerciseSetData[] {
     reps: source[index]?.reps ?? exercise.reps ?? null,
     kg: source[index]?.kg ?? exercise.kg ?? null,
     rpe: source[index]?.rpe ?? exercise.rpe ?? null,
-    video_id: source[index]?.video_id ?? null,
   }))
+}
+
+function cumulativeSetNumber(exercises: Exercise[], exerciseIndex: number, setIndex: number): number {
+  const name = exercises[exerciseIndex].name
+  const offset = exercises
+    .slice(0, exerciseIndex)
+    .filter((candidate) => candidate.name === name)
+    .reduce((total, candidate) => total + Math.max(0, Math.round(Number(candidate.sets) || 0)), 0)
+  return offset + setIndex + 1
+}
+
+function videosBySet(exercises: Exercise[], exerciseIndex: number, videos: SessionVideo[] = []): SessionVideo[][] {
+  const exercise = exercises[exerciseIndex]
+  const count = Math.max(0, Math.round(Number(exercise.sets) || 0))
+  return Array.from({ length: count }, (_, setIndex) => {
+    const setNumber = cumulativeSetNumber(exercises, exerciseIndex, setIndex)
+    return videos.filter((video) => video.exercise_name === exercise.name && video.set_number === setNumber)
+  })
 }
 
 function finalizeSessionForSave(session: Session): Session {
@@ -208,6 +225,9 @@ function SortableExerciseItem({
   onUpdateSets,
   onUpdateRpe,
   onUpdateSet,
+  setVideos,
+  onAddSetVideo,
+  onShowVideos,
   glossaryNames,
   unit,
   renderMobileMenu,
@@ -223,6 +243,9 @@ function SortableExerciseItem({
   onUpdateSets: (i: number, sets: number) => void;
   onUpdateRpe: (i: number, rpe: number | null) => void;
   onUpdateSet: (exerciseIndex: number, setIndex: number, patch: Partial<ExerciseSetData>) => void;
+  setVideos: SessionVideo[][];
+  onAddSetVideo: (exerciseIndex: number, setIndex: number) => void;
+  onShowVideos: () => void;
   glossaryNames: string[];
   unit: string;
   renderMobileMenu: (ex: Exercise, i: number) => React.ReactNode;
@@ -379,16 +402,34 @@ function SortableExerciseItem({
           </SimpleGrid>
         </Group>
 
-        <Stack gap={4} mt="xs">
-          {setData.map((set, setIndex) => (
-            <SimpleGrid key={setIndex} cols={{ base: 2, sm: 5 }} spacing="xs">
-              <Text size="xs" c="dimmed" pt={8}>Set {setIndex + 1}</Text>
-              <TextInput type="number" size="xs" value={set.reps ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { reps: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} reps`} />
-              <TextInput type="number" size="xs" step={0.5} value={set.kg === null ? '' : toDisplayUnit(set.kg, unit as 'kg' | 'lb')} onChange={(event) => onUpdateSet(index, setIndex, { kg: event.currentTarget.value === '' ? null : fromDisplayUnit(Number(event.currentTarget.value), unit as 'kg' | 'lb') })} disabled={disabled} aria-label={`Set ${setIndex + 1} weight`} />
-              <TextInput type="number" size="xs" step={0.5} value={set.rpe ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { rpe: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} RPE`} />
-              <Text size="xs" c={set.video_id ? 'blue' : 'dimmed'} pt={8}>{set.video_id ? 'Video attached' : 'No video'}</Text>
-            </SimpleGrid>
-          ))}
+        <Stack gap={6} mt="xs">
+          {setData.map((set, setIndex) => {
+            const linkedVideos = setVideos[setIndex] ?? []
+            return (
+              <Box key={setIndex} data-testid={`exercise-${index}-set-${setIndex + 1}`}>
+                <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
+                  <Group h={36} gap={6} wrap="nowrap">
+                    <Text size="sm" c="dimmed">Set {setIndex + 1}</Text>
+                  </Group>
+                  <TextInput type="number" size="sm" classNames={{ input: 'if-control-input' }} value={set.reps ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { reps: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} reps`} />
+                  <TextInput type="number" size="sm" step={0.5} classNames={{ input: 'if-control-input' }} value={set.kg === null ? '' : toDisplayUnit(set.kg, unit as 'kg' | 'lb')} onChange={(event) => onUpdateSet(index, setIndex, { kg: event.currentTarget.value === '' ? null : fromDisplayUnit(Number(event.currentTarget.value), unit as 'kg' | 'lb') })} disabled={disabled} aria-label={`Set ${setIndex + 1} weight`} />
+                  <TextInput type="number" size="sm" step={0.5} classNames={{ input: 'if-control-input' }} value={set.rpe ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { rpe: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} RPE`} />
+                </SimpleGrid>
+                <Group gap="xs" mt={2}>
+                  {linkedVideos.length > 0 && (
+                    <Button size="compact-xs" variant="subtle" leftSection={<Film size={12} />} onClick={onShowVideos}>
+                      {linkedVideos.length} video{linkedVideos.length === 1 ? '' : 's'}
+                    </Button>
+                  )}
+                  {!disabled && (
+                    <Button size="compact-xs" variant="subtle" color="gray" leftSection={<Plus size={12} />} onClick={() => onAddSetVideo(index, setIndex)} data-testid={`exercise-${index}-set-${setIndex + 1}-add-video`}>
+                      Video
+                    </Button>
+                  )}
+                </Group>
+              </Box>
+            )
+          })}
         </Stack>
         
         <Box mt="xs">
@@ -447,6 +488,7 @@ export default function SessionDrawer({
   const [isSaving, setIsSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const [showVideoUpload, setShowVideoUpload] = useState(false)
+  const [videoUploadPreset, setVideoUploadPreset] = useState<{ exerciseName: string; setNumber: number } | null>(null)
   const [discardIntent, setDiscardIntent] = useState<'reset' | 'close' | null>(null)
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
   const [showNotesHelper, setShowNotesHelper] = useState(false)
@@ -895,7 +937,7 @@ export default function SessionDrawer({
           } else {
             set_statuses.push(fallbackStatus)
             failed_set_reasons.push([])
-            sets_data.push({ reps: ex.reps || null, kg: ex.kg, rpe: ex.rpe ?? null, video_id: null })
+            sets_data.push({ reps: ex.reps || null, kg: ex.kg, rpe: ex.rpe ?? null })
           }
         }
         const failed_sets = set_statuses.map((status) => status === 'failed')
@@ -931,6 +973,15 @@ export default function SessionDrawer({
       return { ...prev, exercises }
     })
     markChanged()
+  }
+
+  const openSetVideoUpload = (exerciseIndex: number, setIndex: number) => {
+    if (!localSession) return
+    setVideoUploadPreset({
+      exerciseName: localSession.exercises[exerciseIndex].name,
+      setNumber: cumulativeSetNumber(localSession.exercises, exerciseIndex, setIndex),
+    })
+    setShowVideoUpload(true)
   }
 
   const validateRpeValues = (): string | null => {
@@ -1454,6 +1505,9 @@ export default function SessionDrawer({
                       onUpdateSets={updateSetsWithResize}
                       onUpdateRpe={updateExerciseRpe}
                       onUpdateSet={updateExerciseSet}
+                      setVideos={videosBySet(localSession.exercises, i, localSession.videos)}
+                      onAddSetVideo={openSetVideoUpload}
+                      onShowVideos={() => document.getElementById('session-videos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       glossaryNames={glossaryNames}
                       unit={unit}
                       renderMobileMenu={renderMobileExerciseMenu}
@@ -1470,7 +1524,7 @@ export default function SessionDrawer({
 
           {/* Videos Section */}
           <Divider my="sm" />
-          <Group justify="space-between" mb="sm">
+          <Group justify="space-between" mb="sm" id="session-videos">
             <Group gap="xs">
               <Film size={16} />
               <Text size="sm" fw={500}>Videos</Text>
@@ -1481,7 +1535,7 @@ export default function SessionDrawer({
               <Button
                 size="xs"
                 variant="default"
-                onClick={() => setShowVideoUpload(true)}
+                onClick={() => { setVideoUploadPreset(null); setShowVideoUpload(true) }}
                 leftSection={<Plus size={12} />}
                 disabled={readOnly}
                 data-testid="session-upload-video"
@@ -1711,19 +1765,15 @@ export default function SessionDrawer({
       <VideoUploadModal
         session={localSession || baseline}
         isOpen={showVideoUpload}
-        onClose={() => setShowVideoUpload(false)}
+        initialExerciseName={videoUploadPreset?.exerciseName}
+        initialSetNumber={videoUploadPreset?.setNumber}
+        onClose={() => { setShowVideoUpload(false); setVideoUploadPreset(null) }}
         onUploaded={(video: SessionVideo) => {
           setLocalSession((prev) => {
             if (!prev) return prev
-              const exercises = prev.exercises.map((exercise) => {
-                if (!video.exercise_name || exercise.name !== video.exercise_name || video.set_number == null) return exercise
-                const sets_data = normalizeSetData(exercise).map((set, index) => index + 1 === video.set_number ? { ...set, video_id: video.video_id } : set)
-                return { ...exercise, sets_data }
-              })
             const updated = {
               ...prev,
               videos: [...(prev.videos || []), video],
-                exercises,
             }
             return updated
           })

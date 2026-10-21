@@ -26,6 +26,8 @@ interface VideoUploadModalProps {
   isOpen: boolean
   onClose: () => void
   onUploaded: (video: SessionVideo) => void
+  initialExerciseName?: string
+  initialSetNumber?: number
 }
 
 export default function VideoUploadModal({
@@ -33,6 +35,8 @@ export default function VideoUploadModal({
   isOpen,
   onClose,
   onUploaded,
+  initialExerciseName,
+  initialSetNumber,
 }: VideoUploadModalProps) {
   const { pushToast } = useUiStore()
   const { version } = useProgramStore()
@@ -59,10 +63,12 @@ export default function VideoUploadModal({
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
+      return
     }
-  }, [isOpen])
+    setExerciseName(initialExerciseName ?? '')
+    setSetNumber(initialSetNumber)
+  }, [isOpen, initialExerciseName, initialSetNumber])
 
-  if (!isOpen) return null
 
   // Build exercise dropdown options that include a 1-based index and the
   // cumulative set range each entry occupies. The backend treats a video's
@@ -92,6 +98,8 @@ export default function VideoUploadModal({
       label: `${name} — ${parts.join(', ')}`,
     }))
   }, [session.exercises])
+
+  if (!isOpen) return null
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0]
