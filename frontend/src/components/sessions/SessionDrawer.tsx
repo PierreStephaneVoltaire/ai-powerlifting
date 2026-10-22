@@ -31,6 +31,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { Session, Exercise, ExerciseSetData, SessionVideo, SessionWellness, GlossaryExercise, SetStatus, FailedSetReason } from '@powerlifting/types'
 import VideoGrid from './VideoGrid'
+import DraftNumberInput from './DraftNumberInput'
 import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
 import SessionNotesHelperModal from './SessionNotesHelperModal'
@@ -50,17 +51,6 @@ const WELLNESS_FIELDS: Array<{
   { key: 'stress', label: 'Stress' },
   { key: 'energy', label: 'Energy' },
 ]
-
-function sanitizeRpe(raw: string): number | null {
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  const parsed = Number(trimmed)
-  if (!Number.isFinite(parsed)) return null
-  if (parsed < 1 || parsed > 10) return null
-  const decimal = Math.round((parsed % 1) * 10)
-  if (decimal !== 0 && decimal !== 5) return null
-  return parsed
-}
 
 function clampWellnessScore(value: number): 1 | 2 | 3 | 4 | 5 {
   return Math.max(1, Math.min(5, Math.round(value))) as 1 | 2 | 3 | 4 | 5
@@ -153,11 +143,34 @@ function withSetStatusFields(exercise: Exercise, sessionCompleted = false): Exer
 function normalizeSetData(exercise: Exercise): ExerciseSetData[] {
   const count = Math.max(0, Math.round(Number(exercise.sets) || 0))
   const source = Array.isArray(exercise.sets_data) ? exercise.sets_data : []
-  return Array.from({ length: count }, (_, index) => ({
-    reps: source[index]?.reps ?? exercise.reps ?? null,
-    kg: source[index]?.kg ?? exercise.kg ?? null,
-    rpe: source[index]?.rpe ?? exercise.rpe ?? null,
-  }))
+  return Array.from({ length: count }, (_, index) => {
+    const stored = source[index]
+    if (stored) return { reps: stored.reps ?? null, kg: stored.kg ?? null, rpe: stored.rpe ?? null }
+    return { reps: exercise.reps ?? null, kg: exercise.kg ?? null, rpe: exercise.rpe ?? null }
+  })
+}
+
+type ExerciseLayout = 'straight' | 'per-set'
+
+function hasStraightSets(sets: ExerciseSetData[]): boolean {
+  const [first, ...rest] = sets
+  return !first || rest.every((set) => set.reps === first.reps && set.kg === first.kg && set.rpe === first.rpe)
+}
+
+function isValidRpe(value: number): boolean {
+  return value >= 1 && value <= 10 && (value * 2) % 1 === 0
+}
+
+function isNonNegative(value: number): boolean {
+  return value >= 0
+}
+
+function isNonNegativeInteger(value: number): boolean {
+  return value >= 0 && Number.isInteger(value)
+}
+
+function isPositiveInteger(value: number): boolean {
+  return value > 0 && Number.isInteger(value)
 }
 
 function cumulativeSetNumber(exercises: Exercise[], exerciseIndex: number, setIndex: number): number {
@@ -223,7 +236,7 @@ function SortableExerciseItem({
   onRemove, 
   onUpdate, 
   onUpdateSets,
-  onUpdateRpe,
+  onUpdateStraight,
   onUpdateSet,
   setVideos,
   onAddSetVideo,
@@ -241,7 +254,7 @@ function SortableExerciseItem({
   onRemove: (i: number) => void;
   onUpdate: (i: number, field: keyof Exercise, v: any) => void;
   onUpdateSets: (i: number, sets: number) => void;
-  onUpdateRpe: (i: number, rpe: number | null) => void;
+  onUpdateStraight: (i: number, field: keyof ExerciseSetData, value: number | null) => void;
   onUpdateSet: (exerciseIndex: number, setIndex: number, patch: Partial<ExerciseSetData>) => void;
   setVideos: SessionVideo[][];
   onAddSetVideo: (exerciseIndex: number, setIndex: number) => void;
@@ -273,6 +286,16 @@ function SortableExerciseItem({
 
   const setStatuses = normalizeSetStatuses(exercise)
   const setData = normalizeSetData(exercise)
+  const [layout, setLayout] = useState<ExerciseLayout>(() => hasStraightSets(setData) ? 'straight' : 'per-set')
+  const straight: ExerciseSetData = setData[0] ?? { reps: exercise.reps ?? null, kg: exercise.kg ?? null, rpe: exercise.rpe ?? null }
+  const displayUnit = unit as 'kg' | 'lb'
+  const toDisplay = (kg: number) => toDisplayUnit(kg, displayUnit)
+  const fromDisplay = (value: number) => fromDisplayUnit(value, displayUnit)
+  const failedIndicator = setStatuses.includes('failed') ? (
+    <Tooltip label="Contains failed sets">
+      <AlertTriangle size={14} color="var(--mantine-color-red-6)" />
+    </Tooltip>
+  ) : null
 
   return (
     <Paper ref={setNodeRef} style={style} withBorder p={0} radius={10} className="if-exercise-card" data-testid={`session-exercise-${index}`}>
@@ -331,14 +354,29 @@ function SortableExerciseItem({
       </Group>
 
       <Box p={16}>
-        <Group justify="space-between" align="flex-start" gap={4} mb="xs" wrap="nowrap">
-          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" style={{ flex: 1, minWidth: 0 }}>
+        <Group justify="flex-end" mb="xs">
+          <SegmentedControl
+            size="xs"
+            value={layout}
+            onChange={(next) => setLayout(next as ExerciseLayout)}
+            data={[
+              { label: 'Straight sets', value: 'straight' },
+              { label: 'Per set', value: 'per-set' },
+            ]}
+            data-testid={`exercise-layout-${index}`}
+          />
+        </Group>
+
+        {layout === 'straight' ? (
+          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" mb="xs">
             <Box>
               <Text className="if-small-label">Sets</Text>
-              <TextInput
-                type="number"
-                value={exercise.sets || ''}
-                onChange={(e) => onUpdateSets(index, Number(e.currentTarget.value) || 0)}
+              <DraftNumberInput
+                value={exercise.sets}
+                onValueChange={(next) => next !== null && onUpdateSets(index, next)}
+                isValid={isPositiveInteger}
+                nullable={false}
+                commitOnlyValid
                 size="sm"
                 classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
@@ -347,10 +385,10 @@ function SortableExerciseItem({
             </Box>
             <Box>
               <Text className="if-small-label">Reps</Text>
-              <TextInput
-                type="number"
-                value={exercise.reps || ''}
-                onChange={(e) => onUpdate(index, 'reps', Number(e.currentTarget.value) || 0)}
+              <DraftNumberInput
+                value={straight.reps}
+                onValueChange={(next) => onUpdateStraight(index, 'reps', next)}
+                isValid={isNonNegativeInteger}
                 size="sm"
                 classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
@@ -359,39 +397,25 @@ function SortableExerciseItem({
             </Box>
             <Box>
               <Text className="if-small-label">{unit}</Text>
-              <TextInput
-                type="number"
-                value={exercise.kg !== null && exercise.kg !== undefined ? toDisplayUnit(exercise.kg, unit as 'kg' | 'lb') : ''}
-                onChange={(e) => onUpdate(index, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
+              <DraftNumberInput
+                value={straight.kg}
+                onValueChange={(next) => onUpdateStraight(index, 'kg', next)}
+                isValid={isNonNegative}
+                toDisplay={toDisplay}
+                fromDisplay={fromDisplay}
                 size="sm"
-                step={0.5}
                 classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
                 data-testid={`exercise-weight-${index}`}
-                rightSection={setStatuses.includes('failed') ? (
-                  <Tooltip label="Contains failed sets">
-                    <AlertTriangle size={14} color="var(--mantine-color-red-6)" />
-                  </Tooltip>
-                ) : null}
+                rightSection={failedIndicator}
               />
             </Box>
             <Box>
               <Text className="if-small-label">RPE</Text>
-              <TextInput
-                type="number"
-                inputMode="decimal"
-                step={0.5}
-                value={exercise.rpe != null ? String(exercise.rpe) : ''}
-                onChange={(e) => {
-                  const raw = e.currentTarget.value
-                  if (raw.trim() === '') { onUpdateRpe(index, null); return }
-                  const parsed = Number(raw)
-                  if (Number.isFinite(parsed)) onUpdateRpe(index, parsed)
-                }}
-                onBlur={(e) => {
-                  const sanitized = sanitizeRpe(e.currentTarget.value)
-                  onUpdateRpe(index, sanitized)
-                }}
+              <DraftNumberInput
+                value={straight.rpe}
+                onValueChange={(next) => onUpdateStraight(index, 'rpe', next)}
+                isValid={isValidRpe}
                 placeholder="1-10"
                 size="sm"
                 classNames={{ input: 'if-control-input' }}
@@ -400,38 +424,84 @@ function SortableExerciseItem({
               />
             </Box>
           </SimpleGrid>
-        </Group>
-
-        <Stack gap={6} mt="xs">
-          {setData.map((set, setIndex) => {
-            const linkedVideos = setVideos[setIndex] ?? []
-            return (
-              <Box key={setIndex} data-testid={`exercise-${index}-set-${setIndex + 1}`}>
-                <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
-                  <Group h={36} gap={6} wrap="nowrap">
-                    <Text size="sm" c="dimmed">Set {setIndex + 1}</Text>
+        ) : (
+          <Stack gap={6} mb="xs">
+            <Box maw={120}>
+              <Text className="if-small-label">Sets</Text>
+              <DraftNumberInput
+                value={exercise.sets}
+                onValueChange={(next) => next !== null && onUpdateSets(index, next)}
+                isValid={isPositiveInteger}
+                nullable={false}
+                commitOnlyValid
+                size="sm"
+                classNames={{ input: 'if-control-input' }}
+                disabled={disabled}
+                data-testid={`exercise-sets-${index}`}
+              />
+            </Box>
+            <SimpleGrid cols={4} spacing="xs">
+              <Text className="if-small-label">Set</Text>
+              <Text className="if-small-label">Reps</Text>
+              <Text className="if-small-label">{unit}</Text>
+              <Text className="if-small-label">RPE</Text>
+            </SimpleGrid>
+            {setData.map((set, setIndex) => {
+              const linkedVideos = setVideos[setIndex] ?? []
+              return (
+                <Box key={setIndex} data-testid={`exercise-${index}-set-${setIndex + 1}`}>
+                  <SimpleGrid cols={4} spacing="xs">
+                    <Group h={36} gap={6} wrap="nowrap">
+                      <Text size="sm" c="dimmed">{setIndex + 1}</Text>
+                    </Group>
+                    <DraftNumberInput
+                      value={set.reps}
+                      onValueChange={(next) => onUpdateSet(index, setIndex, { reps: next })}
+                      isValid={isNonNegativeInteger}
+                      size="sm"
+                      classNames={{ input: 'if-control-input' }}
+                      disabled={disabled}
+                      aria-label={`Set ${setIndex + 1} reps`}
+                    />
+                    <DraftNumberInput
+                      value={set.kg}
+                      onValueChange={(next) => onUpdateSet(index, setIndex, { kg: next })}
+                      isValid={isNonNegative}
+                      toDisplay={toDisplay}
+                      fromDisplay={fromDisplay}
+                      size="sm"
+                      classNames={{ input: 'if-control-input' }}
+                      disabled={disabled}
+                      aria-label={`Set ${setIndex + 1} weight`}
+                    />
+                    <DraftNumberInput
+                      value={set.rpe}
+                      onValueChange={(next) => onUpdateSet(index, setIndex, { rpe: next })}
+                      isValid={isValidRpe}
+                      size="sm"
+                      classNames={{ input: 'if-control-input' }}
+                      disabled={disabled}
+                      aria-label={`Set ${setIndex + 1} RPE`}
+                    />
+                  </SimpleGrid>
+                  <Group gap="xs" mt={2}>
+                    {linkedVideos.length > 0 && (
+                      <Button size="compact-xs" variant="subtle" leftSection={<Film size={12} />} onClick={onShowVideos}>
+                        {linkedVideos.length} video{linkedVideos.length === 1 ? '' : 's'}
+                      </Button>
+                    )}
+                    {!disabled && (
+                      <Button size="compact-xs" variant="subtle" color="gray" leftSection={<Plus size={12} />} onClick={() => onAddSetVideo(index, setIndex)} data-testid={`exercise-${index}-set-${setIndex + 1}-add-video`}>
+                        Video
+                      </Button>
+                    )}
                   </Group>
-                  <TextInput type="number" size="sm" classNames={{ input: 'if-control-input' }} value={set.reps ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { reps: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} reps`} />
-                  <TextInput type="number" size="sm" step={0.5} classNames={{ input: 'if-control-input' }} value={set.kg === null ? '' : toDisplayUnit(set.kg, unit as 'kg' | 'lb')} onChange={(event) => onUpdateSet(index, setIndex, { kg: event.currentTarget.value === '' ? null : fromDisplayUnit(Number(event.currentTarget.value), unit as 'kg' | 'lb') })} disabled={disabled} aria-label={`Set ${setIndex + 1} weight`} />
-                  <TextInput type="number" size="sm" step={0.5} classNames={{ input: 'if-control-input' }} value={set.rpe ?? ''} onChange={(event) => onUpdateSet(index, setIndex, { rpe: event.currentTarget.value === '' ? null : Number(event.currentTarget.value) })} disabled={disabled} aria-label={`Set ${setIndex + 1} RPE`} />
-                </SimpleGrid>
-                <Group gap="xs" mt={2}>
-                  {linkedVideos.length > 0 && (
-                    <Button size="compact-xs" variant="subtle" leftSection={<Film size={12} />} onClick={onShowVideos}>
-                      {linkedVideos.length} video{linkedVideos.length === 1 ? '' : 's'}
-                    </Button>
-                  )}
-                  {!disabled && (
-                    <Button size="compact-xs" variant="subtle" color="gray" leftSection={<Plus size={12} />} onClick={() => onAddSetVideo(index, setIndex)} data-testid={`exercise-${index}-set-${setIndex + 1}-add-video`}>
-                      Video
-                    </Button>
-                  )}
-                </Group>
-              </Box>
-            )
-          })}
-        </Stack>
-        
+                </Box>
+              )
+            })}
+          </Stack>
+        )}
+
         <Box mt="xs">
           <Text className="if-small-label">Notes</Text>
           <Textarea
@@ -951,11 +1021,15 @@ export default function SessionDrawer({
     markChanged()
   }
 
-  const updateExerciseRpe = (index: number, rpe: number | null) => {
+  const updateExerciseStraight = (index: number, field: keyof ExerciseSetData, value: number | null) => {
     setLocalSession((prev) => {
       if (!prev) return prev
-      const exercises = [...prev.exercises]
-      exercises[index] = { ...exercises[index], rpe }
+      const exercises = prev.exercises.map((exercise, currentIndex) => {
+        if (currentIndex !== index) return exercise
+        const sets_data = normalizeSetData(exercise).map((set) => ({ ...set, [field]: value }))
+        const summary = field === 'reps' ? value ?? 0 : value
+        return { ...exercise, [field]: summary, sets_data }
+      })
       return { ...prev, exercises }
     })
     markChanged()
@@ -968,7 +1042,7 @@ export default function SessionDrawer({
         if (index !== exerciseIndex) return exercise
         const sets_data = normalizeSetData(exercise).map((set, currentIndex) => currentIndex === setIndex ? { ...set, ...patch } : set)
         const first = sets_data[0]
-        return { ...exercise, sets_data, reps: first?.reps ?? exercise.reps, kg: first?.kg ?? exercise.kg, rpe: first?.rpe ?? exercise.rpe }
+        return first ? { ...exercise, sets_data, reps: first.reps ?? 0, kg: first.kg, rpe: first.rpe } : { ...exercise, sets_data }
       })
       return { ...prev, exercises }
     })
@@ -986,7 +1060,12 @@ export default function SessionDrawer({
 
   const validateRpeValues = (): string | null => {
     for (let i = 0; i < localSession.exercises.length; i++) {
-      const rpe = localSession.exercises[i].rpe
+      const exercise = localSession.exercises[i]
+      const invalidSet = normalizeSetData(exercise).findIndex((set) => set.rpe != null && !isValidRpe(set.rpe))
+      if (invalidSet >= 0) {
+        return `Exercise "${exercise.name || 'unnamed'}" set ${invalidSet + 1} has RPE ${normalizeSetData(exercise)[invalidSet].rpe}, must be 1-10 in 0.5 increments.`
+      }
+      const rpe = exercise.rpe
       if (rpe != null && (rpe < 1 || rpe > 10)) {
         return `Exercise "${localSession.exercises[i].name || 'unnamed'}" has RPE ${rpe}, must be 1-10.`
       }
@@ -1503,7 +1582,7 @@ export default function SessionDrawer({
                       onRemove={removeExercise}
                       onUpdate={updateExercise}
                       onUpdateSets={updateSetsWithResize}
-                      onUpdateRpe={updateExerciseRpe}
+                      onUpdateStraight={updateExerciseStraight}
                       onUpdateSet={updateExerciseSet}
                       setVideos={videosBySet(localSession.exercises, i, localSession.videos)}
                       onAddSetVideo={openSetVideoUpload}
@@ -1584,41 +1663,28 @@ export default function SessionDrawer({
           <SimpleGrid cols={2} spacing="sm">
             <Box>
               <Text className="if-small-label">Session RPE</Text>
-              <TextInput
-                type="number"
-                value={localSession.session_rpe || ''}
-                onChange={(e) => {
-                  const raw = e.currentTarget.value
-                  const parsed = Number(raw)
-                  if (raw.trim() === '' || !Number.isFinite(parsed)) { updateRpe(null); return }
-                  updateRpe(parsed)
-                }}
-                onBlur={(e) => {
-                  const sanitized = sanitizeRpe(e.currentTarget.value)
-                  updateRpe(sanitized)
-                }}
+              <DraftNumberInput
+                value={localSession.session_rpe ?? null}
+                onValueChange={updateRpe}
+                isValid={isValidRpe}
                 placeholder="1-10"
                 size="sm"
                 classNames={{ input: 'if-control-input' }}
-                step={0.5}
                 disabled={readOnly}
                 data-testid="session-rpe"
               />
             </Box>
             <Box>
               <Text className="if-small-label">Body Weight ({unit})</Text>
-              <TextInput
-                type="number"
-                value={
-                  localSession.body_weight_kg
-                    ? toDisplayUnit(localSession.body_weight_kg, unit as 'kg' | 'lb')
-                    : ''
-                }
-                onChange={(e) => updateBodyWeight(e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit as 'kg' | 'lb') : null)}
+              <DraftNumberInput
+                value={localSession.body_weight_kg ?? null}
+                onValueChange={updateBodyWeight}
+                isValid={(value) => value > 0}
+                toDisplay={(kg) => toDisplayUnit(kg, unit as 'kg' | 'lb')}
+                fromDisplay={(value) => fromDisplayUnit(value, unit as 'kg' | 'lb')}
                 placeholder={unit}
                 size="sm"
                 classNames={{ input: 'if-control-input' }}
-                step={0.1}
                 disabled={readOnly}
                 data-testid="session-body-weight"
               />
