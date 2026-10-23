@@ -1,6 +1,6 @@
 import axios, { CanceledError } from 'axios'
 import { requestAthlete, requestPartition } from './context'
-import { isQueueableMutation, markMutationBlocked, markMutationConflict, prepareMutation, removeMutation } from './drafts'
+import { isQueueableMutation, markMutationBlocked, prepareMutation, removeMutation } from './drafts'
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -39,7 +39,6 @@ api.interceptors.request.use(async config => {
   if (partition !== requestPartition()) throw new CanceledError('The change remains saved for the original Person and Athlete')
   config.powerliftingMutationId = mutation.id
   config.data = { ...body, idempotency_key: mutation.idempotency_key }
-  if (mutation.status === 'conflict') throw new CanceledError('This change needs conflict resolution before retrying')
   if (mutation.status === 'blocked') throw new CanceledError('This change needs access reauthorization before retrying')
   if (!navigator.onLine) throw new OfflineQueuedError(mutation.id)
   return config
@@ -50,9 +49,9 @@ api.interceptors.response.use(async response => {
   if (mutationId) await removeMutation(mutationId).catch(() => {})
   if (response.config.powerliftingPartition !== requestPartition()) throw new CanceledError('The Person or Athlete context changed')
   return response
-}, error => {
+}, async error => {
   const mutationId = error.config?.powerliftingMutationId
-  if (mutationId && error.response?.status === 409) void markMutationConflict(mutationId, { status: 409, data: error.response.data }).catch(() => {})
+  if (mutationId && error.response?.status === 409) await removeMutation(mutationId).catch(() => {})
   if (mutationId && [401, 403].includes(error.response?.status)) void markMutationBlocked(mutationId).catch(() => {})
   if (error.config?.powerliftingPartition === requestPartition() && [401, 403].includes(error.response?.status)) window.dispatchEvent(new Event('powerlifting-access-changed'))
   return Promise.reject(error)

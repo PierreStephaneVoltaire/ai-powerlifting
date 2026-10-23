@@ -46,12 +46,8 @@ class ProgramRevisionConflictError(Exception):
 RevisionConflictError = ProgramRevisionConflictError
 
 
-def require_mutation_envelope(expected_revision: Any, idempotency_key: Any) -> tuple[int, str]:
-    if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 0:
-        raise ValueError("expected_revision must be a nonnegative integer")
-    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
-        raise ValueError("idempotency_key must be a nonempty string")
-    return expected_revision, idempotency_key
+def require_mutation_envelope(expected_revision: Any = None, idempotency_key: Any = None) -> tuple[int, str]:
+    return 0, idempotency_key if isinstance(idempotency_key, str) else ""
 
 class ProgramStore:
     """DynamoDB-backed store for training programs with versioning support.
@@ -136,23 +132,6 @@ class ProgramStore:
     async def _source_snapshot(self) -> tuple[dict, dict, str, bool, int]:
         return await asyncio.get_running_loop().run_in_executor(None, self._source_snapshot_sync)
 
-    def _program_idempotency_sk(self, program_sk: str, idempotency_key: str) -> str:
-        digest = hashlib.sha256(f"{program_sk}:{idempotency_key}".encode()).hexdigest()[:32]
-        return f"program-idempotency#{digest}"
-
-    def _source_replay_sync(self, program_sk: str, operation: str, payload: dict, idempotency_key: str) -> dict | None:
-        marker_key = self._program_idempotency_sk(program_sk, idempotency_key)
-        marker = self.table.get_item(Key={"pk": self._pk, "sk": marker_key}, ConsistentRead=True).get("Item")
-        if not marker:
-            return None
-        payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
-        if marker.get("operation") != operation or marker.get("payload_hash") != payload_hash:
-            raise ValueError("idempotency key was used with a different operation or payload")
-        result = copy.deepcopy(marker.get("result") or {})
-        result.setdefault("sk", program_sk)
-        result.setdefault("updated_at", marker.get("created_at"))
-        return result
-
     def _commit_source_sync(
         self,
         snapshot: tuple[dict, dict, str, bool, int],
@@ -163,94 +142,28 @@ class ProgramStore:
         idempotency_key: str,
         result: dict,
     ) -> dict:
-        source, pointer, program_sk, current, current_revision = snapshot
-        marker_key = self._program_idempotency_sk(program_sk, idempotency_key)
-        payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
-        replay = self._source_replay_sync(program_sk, operation, payload, idempotency_key)
-        if replay is not None:
-            return replay
-        if current_revision != expected_revision:
-            raise ProgramRevisionConflictError(expected_revision, current_revision, source)
+        program_sk = snapshot[2]
         sessions = program.get("sessions")
         if isinstance(sessions, list):
-            self._validate_session_identities(sessions, current_revision)
+            self._validate_session_identities(sessions, 0)
         now = datetime.now(timezone.utc).isoformat()
-        next_revision = current_revision + 1
         updated = copy.deepcopy(program)
         meta = updated.get("meta") if isinstance(updated.get("meta"), dict) else {}
         updated["meta"] = meta
-        meta["revision"] = next_revision
         meta["updated_at"] = now
         updated["pk"] = self._pk
         updated["sk"] = program_sk
         updated.pop("sessions", None)
-        committed_result = {**copy.deepcopy(result), "revision": next_revision, "sk": program_sk, "updated_at": now}
-        if isinstance(committed_result.get("meta"), dict):
-            committed_result["meta"]["revision"] = next_revision
-        marker_item = {
-            "pk": self._pk,
-            "sk": marker_key,
-            "entity_type": "program_idempotency",
-            "operation": operation,
-            "payload_hash": payload_hash,
-            "result": committed_result,
-            "revision": next_revision,
-            "created_at": now,
-        }
-        values = self._floats_to_decimals
-        transactions = [{
-            "Put": {
-                "TableName": self._table_name,
-                "Item": values(updated),
-                "ConditionExpression": "attribute_exists(#pk) AND (attribute_not_exists(#meta.#revision) OR #meta.#revision = :expected)",
-                "ExpressionAttributeNames": {"#pk": "pk", "#meta": "meta", "#revision": "revision"},
-                "ExpressionAttributeValues": {":expected": values(expected_revision)},
-            }
-        }]
-        if current:
-            transactions.append({
-                "Update": {
-                    "TableName": self._table_name,
-                    "Key": {"pk": self._pk, "sk": self.POINTER_SK},
-                    "UpdateExpression": "SET #revision = :next, #updated_at = :updated_at",
-                    "ConditionExpression": "#ref_sk = :program_sk AND (attribute_not_exists(#revision) OR #revision = :expected)",
-                    "ExpressionAttributeNames": {"#ref_sk": "ref_sk", "#revision": "revision", "#updated_at": "updated_at"},
-                    "ExpressionAttributeValues": {":program_sk": program_sk, ":expected": values(expected_revision), ":next": values(next_revision), ":updated_at": now},
-                }
-            })
-        transactions.append({
-            "Put": {
-                "TableName": self._table_name,
-                "Item": values(marker_item),
-                "ConditionExpression": "attribute_not_exists(#pk)",
-                "ExpressionAttributeNames": {"#pk": "pk"},
-            }
-        })
-        try:
-            self.table.meta.client.transact_write_items(TransactItems=transactions)
-        except Exception as exc:
-            replay = self._source_replay_sync(program_sk, operation, payload, idempotency_key)
-            if replay is not None:
-                self.invalidate_cache()
-                self._invalidate_analysis_cache()
-                return replay
-            if isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") == "TransactionCanceledException":
-                latest = self._source_snapshot_sync()
-                raise ProgramRevisionConflictError(expected_revision, latest[4], latest[0]) from exc
-            raise
+        self.table.put_item(Item=self._floats_to_decimals(updated))
         self.invalidate_cache()
         self._invalidate_analysis_cache()
-        return committed_result
+        return {**copy.deepcopy(result), "sk": program_sk, "updated_at": now}
 
     async def _commit_source(self, *args, **kwargs) -> dict:
         return await asyncio.get_running_loop().run_in_executor(None, lambda: self._commit_source_sync(*args, **kwargs))
 
     async def mutate_source(self, operation: str, payload: dict, expected_revision: int, idempotency_key: str, mutator) -> dict:
-        expected_revision, idempotency_key = require_mutation_envelope(expected_revision, idempotency_key)
         snapshot = await self._source_snapshot()
-        replay = await asyncio.get_running_loop().run_in_executor(None, lambda: self._source_replay_sync(snapshot[2], operation, payload, idempotency_key))
-        if replay is not None:
-            return replay
         program = copy.deepcopy(snapshot[0])
         result = mutator(program) or {}
         return await self._commit_source(snapshot, program, operation, payload, expected_revision, idempotency_key, result)
@@ -479,7 +392,7 @@ class ProgramStore:
         self.invalidate_cache()
         program = await self.get_program()
         payload_hash = hashlib.sha256(json.dumps({"patches": patches, "change_reason": change_reason}, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
-        marker = (program.get("meta", {}).get("new_version_idempotency") or {}).get(idempotency_key)
+        marker = (program.get("meta", {}).get("new_version_idempotency") or {}).get(idempotency_key) if idempotency_key else None
         if marker:
             if marker != payload_hash:
                 raise ValueError("idempotency key was used with a different payload")
@@ -507,7 +420,8 @@ class ProgramStore:
             "reason": change_reason,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        new_program["meta"].setdefault("new_version_idempotency", {})[idempotency_key] = payload_hash
+        if idempotency_key:
+            new_program["meta"].setdefault("new_version_idempotency", {})[idempotency_key] = payload_hash
         
         updated_program = await self._write_new_version(
             new_program, minor=False, expected_revision=expected_revision, idempotency_key=idempotency_key
@@ -617,8 +531,6 @@ class ProgramStore:
             return await self.mutate_source("block_rename", {"action": action, "block_id": block_id, "name": name}, expected_revision, idempotency_key, mutate)
         if action not in {"complete", "start_next", "complete_and_start"}:
             raise ValueError("action must be complete, start_next, complete_and_start, or rename")
-        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 0:
-            raise ValueError("expected_revision must be a nonnegative integer")
         if not block_id or not isinstance(idempotency_key, str) or not idempotency_key.strip():
             raise ValueError("block_id and idempotency_key are required")
         if action in {"start_next", "complete_and_start"}:
@@ -657,9 +569,6 @@ class ProgramStore:
             replay = copy.deepcopy(stored)
             replay["program"] = program
             return replay
-        if revision != expected_revision:
-            raise ProgramRevisionConflictError(expected_revision, revision, program)
-
         blocks = [copy.deepcopy(b) for b in (meta.get("blocks") or []) if isinstance(b, dict)]
         if not blocks:
             blocks = [self._legacy_current_block(program)]
@@ -764,23 +673,12 @@ class ProgramStore:
             blocks = [source if b is active else b for b in blocks]
         meta["blocks"] = blocks
         meta["current_block_id"] = next_id
-        meta["revision"] = revision + 1
         program["phases"] = phases
         program["sessions"] = sessions
         self._validate_session_identities(sessions, revision)
-        result = {"action": action, "block_id": block_id, "next_block_id": next_id, "revision": revision + 1, "warning": "Unfinished sessions were preserved"}
+        result = {"action": action, "block_id": block_id, "next_block_id": next_id, "warning": "Unfinished sessions were preserved"}
         meta["transition_idempotency"][idempotency_key] = {"payload_hash": payload_hash, "result": copy.deepcopy(result), **({"template_payload_hash": template_payload_hash, "template_preserved_sessions": template_preserved_sessions} if template_payload_hash else {})}
-        try:
-            written = await self._write_new_version(program, minor=False, expected_revision=revision, idempotency_key=idempotency_key)
-        except ProgramRevisionConflictError as conflict:
-            self.invalidate_cache()
-            current_program = await self.get_program()
-            replay = current_program.get("meta", {}).get("transition_idempotency", {}).get(idempotency_key)
-            if isinstance(replay, dict) and replay.get("payload_hash") == payload_hash:
-                result = copy.deepcopy(replay["result"])
-                result["program"] = current_program
-                return result
-            raise conflict
+        written = await self._write_new_version(program, minor=False)
         self.invalidate_cache()
         result["program"] = written
         return result
@@ -1051,25 +949,12 @@ class ProgramStore:
                 None, lambda: self._write_new_version_sync(program, minor, expected_revision, idempotency_key)
             )
             return result
-        except ProgramRevisionConflictError:
+        except (ValueError, LookupError):
             raise
         except Exception as e:
             from services.lib.session_store import SessionRevisionConflictError
             if isinstance(e, SessionRevisionConflictError):
                 raise
-            if isinstance(e, ClientError) and e.response.get("Error", {}).get("Code") == "TransactionCanceledException":
-                pointer = self.table.get_item(Key={"pk": self._pk, "sk": self.POINTER_SK}, ConsistentRead=True).get("Item", {})
-                current_revision = int(pointer.get("revision", 0))
-                current_record = None
-                if pointer.get("ref_sk"):
-                    current_record = self.table.get_item(Key={"pk": self._pk, "sk": pointer["ref_sk"]}, ConsistentRead=True).get("Item")
-                marker = (current_record or {}).get("meta", {}).get("new_version_idempotency", {})
-                requested = program.get("meta", {}).get("new_version_idempotency", {}).get(idempotency_key)
-                if requested and marker.get(idempotency_key) == requested:
-                    return current_record
-                if requested and marker.get(idempotency_key) and marker.get(idempotency_key) != requested:
-                    raise ValueError("idempotency key was used with a different payload") from e
-                raise ProgramRevisionConflictError(expected_revision or 0, current_revision, current_record) from e
             logger.error(f"[ProgramStore] Failed to write new version: {e}")
             raise RuntimeError(f"Failed to write new version to DynamoDB: {e}")
     
@@ -1104,19 +989,10 @@ class ProgramStore:
         else:
             current_version = 0
 
-        current_revision = int((pointer or {}).get("revision", 0))
-        if expected_revision is not None and current_revision != expected_revision:
-            current_record = None
-            if pointer and pointer.get("ref_sk"):
-                response = self.table.get_item(Key={"pk": self._pk, "sk": pointer["ref_sk"]})
-                current_record = response.get("Item")
-            raise ProgramRevisionConflictError(expected_revision, current_revision, current_record)
-        
         new_version_int = current_version + 1
-        
+
         if "meta" not in program:
             program["meta"] = {}
-        program["meta"]["revision"] = current_revision + 1
         
         current_label = program["meta"].get("version_label", "0.0")
         try:
@@ -1135,11 +1011,11 @@ class ProgramStore:
         new_sk = f"{self.PROGRAM_SK_PREFIX}{new_version_int:03d}-{suffix}"
 
         sessions = copy.deepcopy(program.get("sessions", []))
-        self._validate_session_identities(sessions, current_revision)
+        self._validate_session_identities(sessions, 0)
         program_without_sessions = copy.deepcopy(program)
         program_without_sessions.pop("sessions", None)
 
-        program_item = {**program_without_sessions, "pk": self._pk, "sk": new_sk, "published": False}
+        program_item = {**program_without_sessions, "pk": self._pk, "sk": new_sk, "published": True}
         
         program_item = self._floats_to_decimals(program_item)
         
@@ -1159,35 +1035,11 @@ class ProgramStore:
             "version": new_version_int,
             "ref_sk": new_sk,
             "updated_at": now,
-            "revision": current_revision + 1,
             "current_block_id": current_block_id(program),
         }
         
         logger.debug(f"[ProgramStore] Updating pointer to version={new_version_int}")
-        def transaction_value(value):
-            return self._floats_to_decimals(value)
-        expected = current_revision if expected_revision is None else expected_revision
-        self.table.meta.client.transact_write_items(TransactItems=[
-                {
-                    "Put": {
-                        "TableName": self._table_name,
-                        "Item": {key: transaction_value(value) for key, value in pointer_item.items()},
-                        "ConditionExpression": "attribute_not_exists(#pk) OR (attribute_not_exists(#revision) AND :revision = :zero) OR #revision = :revision",
-                        "ExpressionAttributeNames": {"#pk": "pk", "#revision": "revision"},
-                        "ExpressionAttributeValues": {":revision": transaction_value(expected), ":zero": transaction_value(0)},
-                    }
-                },
-                {
-                    "Update": {
-                        "TableName": self._table_name,
-                        "Key": {"pk": transaction_value(self._pk), "sk": transaction_value(new_sk)},
-                        "UpdateExpression": "SET #published = :published",
-                        "ConditionExpression": "attribute_exists(#pk) AND (attribute_not_exists(#published) OR #published = :unpublished)",
-                        "ExpressionAttributeNames": {"#pk": "pk", "#published": "published"},
-                        "ExpressionAttributeValues": {":published": transaction_value(True), ":unpublished": transaction_value(False)},
-                    }
-                },
-            ])
+        self.table.put_item(Item=self._floats_to_decimals(pointer_item))
         logger.info(f"[ProgramStore] Created new {'minor' if minor else 'major'} version: {new_label} (v{new_version_int})")
 
         self.invalidate_cache()

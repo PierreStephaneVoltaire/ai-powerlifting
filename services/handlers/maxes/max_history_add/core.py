@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import asyncio
 import logging
 import os
@@ -103,40 +105,14 @@ async def max_history_add(args: dict) -> dict:
 
     import hashlib
     actor_pk = str(args.get("_person_pk") or pk)
-    entry.setdefault("id", hashlib.sha256(f"{actor_pk}:{version}:{idempotency_key}".encode()).hexdigest()[:24])
-    payload_hash = _payload_hash(actor_pk, version, entry)
-    marker_key = _marker_sk(actor_pk, version, idempotency_key)
+    entry.setdefault("id", hashlib.sha256(f"{actor_pk}:{version}:{idempotency_key}".encode()).hexdigest()[:24] if idempotency_key else uuid.uuid4().hex[:24])
     def _sync():
-        current = table.get_item(Key={"pk": pk, "sk": _max_history_sk(version)}, ConsistentRead=True).get("Item") or {"entries": [], "revision": 0}
-        marker = table.get_item(Key={"pk": pk, "sk": marker_key}, ConsistentRead=True).get("Item")
-        if marker:
-            if marker.get("actor_pk") != actor_pk or marker.get("payload_hash") != payload_hash:
-                raise ValueError("idempotency key was used with a different payload")
-            return _sanitize_decimals(marker["result"])
-        revision = int(current.get("revision", 0))
-        if revision != expected_revision:
-            raise ProgramRevisionConflictError(expected_revision, revision, current)
-        entries = list(current.get("entries") or []) + [_to_dynamo(entry)]
+        current = table.get_item(Key={"pk": pk, "sk": _max_history_sk(version)}, ConsistentRead=True).get("Item") or {"entries": []}
+        entries = [item for item in (current.get("entries") or []) if item.get("id") != entry["id"]] + [_to_dynamo(entry)]
         entries.sort(key=lambda item: item["date"], reverse=True)
-        result = {**current, "pk": pk, "sk": _max_history_sk(version), "version": version, "entries": entries, "revision": revision + 1, "updated_at": datetime.now(timezone.utc).isoformat()}
-        try:
-            table_name = getattr(table, "name", os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"))
-            update = {"TableName": table_name, "Key": {"pk": pk, "sk": _max_history_sk(version)}, "UpdateExpression": "SET #entries = :entries, #version = :version, #revision = :revision, updated_at = :updated_at", "ConditionExpression": "(attribute_not_exists(#revision) AND :expected = :zero) OR #revision = :expected", "ExpressionAttributeNames": {"#entries": "entries", "#version": "version", "#revision": "revision"}, "ExpressionAttributeValues": _to_dynamo({":entries": entries, ":version": version, ":revision": revision + 1, ":expected": expected_revision, ":zero": 0, ":updated_at": result["updated_at"]})}
-            marker = {"TableName": table_name, "Item": _to_dynamo({"pk": pk, "sk": marker_key, "actor_pk": actor_pk, "payload_hash": payload_hash, "result": result}), "ConditionExpression": "attribute_not_exists(pk)"}
-            table.meta.client.transact_write_items(TransactItems=[
-                {"Update": update},
-                {"Put": marker},
-            ])
-        except Exception as exc:
-            committed = table.get_item(Key={"pk": pk, "sk": marker_key}, ConsistentRead=True).get("Item")
-            if committed:
-                if committed.get("actor_pk") != actor_pk or committed.get("payload_hash") != payload_hash:
-                    raise ValueError("idempotency key was used with a different payload") from exc
-                return _sanitize_decimals(committed["result"])
-            if isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") == "TransactionCanceledException":
-                latest = table.get_item(Key={"pk": pk, "sk": _max_history_sk(version)}, ConsistentRead=True).get("Item") or {}
-                raise ProgramRevisionConflictError(expected_revision, int(latest.get("revision", 0)), latest) from exc
-            raise
+        result = {**current, "pk": pk, "sk": _max_history_sk(version), "version": version, "entries": entries, "updated_at": datetime.now(timezone.utc).isoformat()}
+        result.pop("revision", None)
+        table.put_item(Item=_to_dynamo(result))
         return result
 
     result = await asyncio.get_running_loop().run_in_executor(None, _sync)

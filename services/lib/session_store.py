@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import hashlib
-import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -33,12 +31,8 @@ class SessionIdentityConflictError(SessionRevisionConflictError):
         super().__init__(current_revision, current_revision, None)
         self.args = (message or f"Session {session_id} no longer exists",)
 
-def require_mutation_envelope(expected_revision: Any, idempotency_key: Any) -> tuple[int, str]:
-    if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 0:
-        raise ValueError("expected_revision must be a nonnegative integer")
-    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
-        raise ValueError("idempotency_key must be a nonempty string")
-    return expected_revision, idempotency_key
+def require_mutation_envelope(expected_revision: Any = None, idempotency_key: Any = None) -> tuple[int, str]:
+    return 0, idempotency_key if isinstance(idempotency_key, str) else ""
 
 def _to_dynamo(obj: Any) -> Any:
     if isinstance(obj, float):
@@ -330,15 +324,14 @@ class SessionStore:
     def _same_day_ordinal_sync(self, program_sk: str, date_value: str) -> int:
         return len(self._query_items_sync(program_sk, date_prefix=date_value)) + 1
 
-    def _ensure_unique_session_ids(self, sessions: list[dict[str, Any]], program_sk: str, current_revision: int | None = None) -> None:
+    def _ensure_unique_session_ids(self, sessions: list[dict[str, Any]], program_sk: str) -> None:
         seen: set[str] = set()
         for session in sessions:
             session_id = str(session.get("session_id") or session.get("id") or "").strip()
             if not session_id:
                 continue
             if session_id in seen:
-                revision = current_revision if current_revision is not None else self._current_revision_sync(program_sk)
-                raise SessionIdentityConflictError(session_id, revision, f"Session identity {session_id} occurs more than once")
+                raise SessionIdentityConflictError(session_id, 0, f"Session identity {session_id} occurs more than once")
             seen.add(session_id)
 
     def _build_item(
@@ -420,24 +413,15 @@ class SessionStore:
             item["migrated_at"] = existing_item["migrated_at"]
         return item
 
-    def _current_revision_sync(self, program_sk: str) -> int:
-        pointer = self.source_table.get_item(Key={"pk": self._pk, "sk": "program#current"}, ConsistentRead=True).get("Item") or {}
-        if str(pointer.get("ref_sk")) == program_sk:
-            return _int_value(pointer.get("revision"), 0)
-        program = self.source_table.get_item(Key={"pk": self._pk, "sk": program_sk}, ConsistentRead=True).get("Item") or {}
-        meta = program.get("meta") if isinstance(program.get("meta"), dict) else {}
-        return _int_value(meta.get("revision"), 0)
-
     def _find_item_sync(self, program_sk: str, date_value: str, index: int | None = None, session_id: str | None = None) -> dict[str, Any]:
         items = self._query_items_sync(program_sk)
         if session_id:
             matches = [item for item in items if str(item.get("session_id") or item.get("id") or "") == session_id]
             if len(matches) == 1:
                 return matches[0]
-            revision = self._current_revision_sync(program_sk)
             if len(matches) > 1:
-                raise SessionIdentityConflictError(session_id, revision, f"Session identity {session_id} is ambiguous")
-            raise SessionIdentityConflictError(session_id, revision)
+                raise ValueError(f"Session identity {session_id} is ambiguous")
+            raise ValueError(f"Session {session_id} no longer exists")
         if index is not None:
             dated_items = [item for item in items if str(item.get("date") or "") == date_value]
             if index < 0 or index >= len(dated_items):
@@ -447,8 +431,7 @@ class SessionStore:
         if len(dated_items) == 1:
             return dated_items[0]
         if len(dated_items) > 1:
-            revision = self._current_revision_sync(program_sk)
-            raise SessionRevisionConflictError(revision, revision, None)
+            raise ValueError(f"Several Sessions are on {date_value}; choose one by id")
         raise ValueError(f"Session not found with date={date_value}")
 
     async def get_session(self, program_sk: str, date_value: str, phases: Optional[list[dict[str, Any]]] = None, session_id: str | None = None) -> dict[str, Any]:
@@ -470,211 +453,12 @@ class SessionStore:
         from services.lib.cache_invalidation import invalidate_analysis_caches
         invalidate_analysis_caches(self._pk, region=self._region)
 
-    def _revision_context_sync(self, program_sk: str, expected_revision: int | None) -> tuple[dict, dict | None, bool, int, int]:
-        program_response = self.source_table.get_item(
-            Key={"pk": self._pk, "sk": program_sk},
-            ConsistentRead=True,
-        )
-        program = program_response.get("Item")
-        pointer_response = self.source_table.get_item(
-            Key={"pk": self._pk, "sk": "program#current"},
-            ConsistentRead=True,
-        )
-        pointer = pointer_response.get("Item")
-        current = bool(pointer and str(pointer.get("ref_sk")) == program_sk)
-        if current:
-            current_revision = _int_value(pointer.get("revision"), 0)
-        else:
-            meta = program.get("meta") if isinstance(program, dict) else {}
-            current_revision = _int_value(meta.get("revision") if isinstance(meta, dict) else 0, 0)
-        expected = current_revision if expected_revision is None else int(expected_revision)
-        if expected != current_revision:
-            raise SessionRevisionConflictError(expected, current_revision, copy.deepcopy(program))
-        if not isinstance(program, dict):
-            raise ValueError(f"Program not found: {program_sk}")
-        return program, pointer, current, current_revision, expected + 1
-
-    @staticmethod
-    def _transaction_item(item: dict[str, Any]) -> dict[str, Any]:
-        return {key: _to_dynamo(value) for key, value in item.items()}
-
-    @staticmethod
-    def _transaction_value(value: Any) -> dict[str, Any]:
-        return _to_dynamo(value)
-
-    @staticmethod
-    def _transaction_key(key: dict[str, Any]) -> dict[str, Any]:
-        return SessionStore._transaction_item(key)
-
-    def _idempotency_sk(self, program_sk: str, idempotency_key: str) -> str:
-        digest = hashlib.sha256(idempotency_key.encode()).hexdigest()[:32]
-        return f"session-idempotency#{program_sk}#{digest}"
-
-    def _load_idempotency_sync(self, program_sk: str, idempotency_key: str) -> dict | None:
-        if not idempotency_key:
-            return None
-        return self.source_table.get_item(
-            Key={"pk": self._pk, "sk": self._idempotency_sk(program_sk, idempotency_key)},
-            ConsistentRead=True,
-        ).get("Item")
-
-    def _replay_sync(self, program_sk: str, idempotency_key: str | None, payload: dict) -> dict | None:
-        if not idempotency_key:
-            return None
-        marker = self._load_idempotency_sync(program_sk, idempotency_key)
-        if not marker:
-            return None
-        payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
-        if marker.get("payload_hash") != payload_hash:
-            raise ValueError("idempotency key was used with a different payload")
-        return copy.deepcopy(marker.get("result") or {})
-
-    def _transaction_mutation_sync(
-        self,
-        program_sk: str,
-        operation: str,
-        payload: dict,
-        session_item: dict | None,
-        existing_item: dict | None,
-        expected_revision: int | None,
-        idempotency_key: str | None,
-        delete: bool = False,
-        session_operations: list[dict[str, Any]] | None = None,
-    ) -> dict:
-        marker = self._load_idempotency_sync(program_sk, idempotency_key or "")
-        payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
-        if marker:
-            if marker.get("payload_hash") != payload_hash:
-                raise ValueError("idempotency key was used with a different payload")
-            return copy.deepcopy(marker.get("result") or {})
-
-        program, pointer, current, current_revision, next_revision = self._revision_context_sync(program_sk, expected_revision)
-        program_record = copy.deepcopy(program)
-        program_meta = program_record.get("meta")
-        if not isinstance(program_meta, dict):
-            program_meta = {}
-            program_record["meta"] = program_meta
-        program_meta["revision"] = next_revision
-        program_meta["updated_at"] = datetime.now(timezone.utc).isoformat()
-        transactions: list[dict[str, Any]] = []
-        if session_operations is not None:
-            transactions.extend(session_operations)
-        elif delete:
-            media_revision = _int_value(existing_item.get("media_revision"), 0)
-            transactions.append({
-                "Delete": {
-                    "TableName": self._table_name,
-                    "Key": self._transaction_key({"pk": self._pk, "sk": existing_item["sk"]}),
-                    "ConditionExpression": "attribute_exists(#pk) AND ((attribute_not_exists(#revision) AND :existing_revision = :zero) OR #revision = :existing_revision) AND ((attribute_not_exists(#media_revision) AND :existing_media_revision = :zero) OR #media_revision = :existing_media_revision)",
-                    "ExpressionAttributeNames": {"#pk": "pk", "#revision": "revision", "#media_revision": "media_revision"},
-                    "ExpressionAttributeValues": {":existing_revision": self._transaction_value(_int_value(existing_item.get("revision"), 0)), ":existing_media_revision": self._transaction_value(media_revision), ":zero": self._transaction_value(0)},
-                }
-            })
-        elif session_item is not None and existing_item is not None and session_item.get("sk") != existing_item.get("sk"):
-            session_item = copy.deepcopy(session_item)
-            session_item["revision"] = next_revision
-            transactions.append({
-                "Put": {
-                    "TableName": self._table_name,
-                    "Item": self._transaction_item(session_item),
-                    "ConditionExpression": "attribute_not_exists(#pk)",
-                    "ExpressionAttributeNames": {"#pk": "pk"},
-                }
-            })
-            transactions.append({
-                "Delete": {
-                    "TableName": self._table_name,
-                    "Key": self._transaction_key({"pk": self._pk, "sk": existing_item["sk"]}),
-                    "ConditionExpression": "((attribute_not_exists(#revision) AND :existing_revision = :zero) OR #revision = :existing_revision) AND ((attribute_not_exists(#media_revision) AND :existing_media_revision = :zero) OR #media_revision = :existing_media_revision)",
-                    "ExpressionAttributeNames": {"#revision": "revision", "#media_revision": "media_revision"},
-                    "ExpressionAttributeValues": {":existing_revision": self._transaction_value(_int_value(existing_item.get("revision"), 0)), ":existing_media_revision": self._transaction_value(_int_value(existing_item.get("media_revision"), 0)), ":zero": self._transaction_value(0)},
-                }
-            })
-        elif session_item is not None:
-            session_item = copy.deepcopy(session_item)
-            session_item["revision"] = next_revision
-            condition = "attribute_not_exists(#pk)" if existing_item is None else "((attribute_not_exists(#revision) AND :existing_revision = :zero) OR #revision = :existing_revision) AND ((attribute_not_exists(#media_revision) AND :existing_media_revision = :zero) OR #media_revision = :existing_media_revision)"
-            values = {} if existing_item is None else {":existing_revision": self._transaction_value(_int_value(existing_item.get("revision"), 0)), ":existing_media_revision": self._transaction_value(_int_value(existing_item.get("media_revision"), 0)), ":zero": self._transaction_value(0)}
-            transactions.append({
-                "Put": {
-                    "TableName": self._table_name,
-                    "Item": self._transaction_item(session_item or {}),
-                    "ConditionExpression": condition,
-                    "ExpressionAttributeNames": ({"#pk": "pk"} if existing_item is None else {"#revision": "revision", "#media_revision": "media_revision"}),
-                    **({"ExpressionAttributeValues": values} if values else {}),
-                }
-            })
-        if current:
-            transactions.append({
-                "Update": {
-                    "TableName": self._source_table_name,
-                    "Key": self._transaction_key({"pk": self._pk, "sk": "program#current"}),
-                    "UpdateExpression": "SET #revision = :next_revision, #updated_at = :updated_at",
-                    "ConditionExpression": "#ref_sk = :program_sk AND ((attribute_not_exists(#revision) AND :expected_revision = :zero) OR #revision = :expected_revision)",
-                    "ExpressionAttributeNames": {"#ref_sk": "ref_sk", "#revision": "revision", "#updated_at": "updated_at"},
-                    "ExpressionAttributeValues": {
-                        ":program_sk": self._transaction_value(program_sk),
-                        ":expected_revision": self._transaction_value(current_revision),
-                        ":zero": self._transaction_value(0),
-                        ":next_revision": self._transaction_value(next_revision),
-                        ":updated_at": self._transaction_value(program_meta["updated_at"]),
-                    },
-                }
-            })
-        program_record["pk"] = self._pk
-        program_record["sk"] = program_sk
-        transactions.append({
-            "Put": {
-                "TableName": self._source_table_name,
-                "Item": self._transaction_item(program_record),
-                "ConditionExpression": "attribute_exists(#pk) AND (attribute_not_exists(#meta.#revision) OR #meta.#revision = :expected_revision)",
-                "ExpressionAttributeNames": {"#pk": "pk", "#meta": "meta", "#revision": "revision"},
-                "ExpressionAttributeValues": {":expected_revision": self._transaction_value(current_revision)},
-            }
-        })
-        if operation == "replace_all":
-            result = {"success": True, "revision": next_revision}
-        elif session_item is not None:
-            result = _public_session(session_item, None)
-        else:
-            result = {"deleted": str(payload.get("date") or ""), "revision": next_revision}
-        if idempotency_key:
-            marker_item = {
-                "pk": self._pk,
-                "sk": self._idempotency_sk(program_sk, idempotency_key),
-                "entity_type": "session_idempotency",
-                "operation": operation,
-                "payload_hash": payload_hash,
-                "result": result,
-                "revision": next_revision,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-            transactions.append({
-                "Put": {
-                    "TableName": self._source_table_name,
-                    "Item": self._transaction_item(marker_item),
-                    "ConditionExpression": "attribute_not_exists(#pk)",
-                    "ExpressionAttributeNames": {"#pk": "pk"},
-                }
-            })
-        try:
-            self.source_table.meta.client.transact_write_items(TransactItems=transactions)
-        except Exception as exc:
-            marker = self._load_idempotency_sync(program_sk, idempotency_key or "")
-            if marker and marker.get("payload_hash") == payload_hash:
-                return copy.deepcopy(marker.get("result") or {})
-            if exc.__class__.__name__ == "TransactionCanceledException":
-                if current:
-                    pointer_now = self.source_table.get_item(Key={"pk": self._pk, "sk": "program#current"}, ConsistentRead=True).get("Item") or {}
-                    now_revision = _int_value(pointer_now.get("revision"), current_revision)
-                else:
-                    program_now = self.source_table.get_item(Key={"pk": self._pk, "sk": program_sk}, ConsistentRead=True).get("Item") or {}
-                    meta_now = program_now.get("meta") if isinstance(program_now.get("meta"), dict) else {}
-                    now_revision = _int_value(meta_now.get("revision"), current_revision)
-                raise SessionRevisionConflictError(current_revision, now_revision, copy.deepcopy(program)) from exc
-            raise
+    def _write_sync(self, session_item: dict | None, existing_item: dict | None, delete: bool = False) -> None:
+        if existing_item is not None and (delete or (session_item is not None and session_item.get("sk") != existing_item.get("sk"))):
+            self.table.delete_item(Key={"pk": self._pk, "sk": existing_item["sk"]})
+        if session_item is not None and not delete:
+            self.table.put_item(Item=_to_dynamo(session_item))
         self._invalidate_caches()
-        return result
 
     async def create_session(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(
@@ -682,25 +466,17 @@ class SessionStore:
         )
 
     def create_session_sync(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict[str, Any]:
-        require_mutation_envelope(expected_revision, idempotency_key)
         date_value = str(session.get("date") or "")
         if not date_value:
             raise ValueError("Session date is required")
-        replay = self._replay_sync(program_sk, idempotency_key, {"session": session})
-        if replay is not None:
-            replay["phase"] = resolve_phase(replay, phases)
-            return replay
-        item = self._build_item(program_sk, session, phases, source_index=len(self._query_items_sync(program_sk)))
-        existing_ids = {
-            str(candidate.get("session_id") or candidate.get("id") or "").strip()
-            for candidate in self._query_items_sync(program_sk)
-        }
+        existing = self._query_items_sync(program_sk)
+        item = self._build_item(program_sk, session, phases, source_index=len(existing))
+        existing_ids = {str(candidate.get("session_id") or candidate.get("id") or "").strip() for candidate in existing}
         session_id = str(item.get("session_id") or "").strip()
         if session_id and session_id in existing_ids:
-            raise SessionIdentityConflictError(session_id, self._current_revision_sync(program_sk), f"Session identity {session_id} already exists")
-        result = self._transaction_mutation_sync(
-            program_sk, "create", {"session": session}, item, None, expected_revision, idempotency_key,
-        )
+            raise SessionIdentityConflictError(session_id, 0, f"Session identity {session_id} already exists")
+        self._write_sync(item, None)
+        result = _public_session(item, None)
         result["phase"] = resolve_phase(result, phases)
         return result
 
@@ -732,12 +508,6 @@ class SessionStore:
         media_update: bool = False,
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        require_mutation_envelope(expected_revision, idempotency_key)
-        payload = {"date": date_value, "index": index, "session_id": session_id, "patch": patch}
-        replay = self._replay_sync(program_sk, idempotency_key, payload)
-        if replay is not None:
-            replay["phase"] = resolve_phase(replay, phases)
-            return replay
         existing = self._find_item_sync(program_sk, date_value, index, session_id)
         for key in ("id", "session_id"):
             if key in patch and str(patch[key]) != str(existing.get("session_id")):
@@ -745,12 +515,10 @@ class SessionStore:
         session = _public_session(existing, phases)
         session.update(copy.deepcopy(patch))
         item = self._build_item(program_sk, session, phases, existing_item=existing, preserve_media=not media_update)
-        if media_update:
-            item["media_revision"] = _int_value(existing.get("media_revision"), 0) + 1
-        item["revision"] = _int_value(existing.get("revision"), 0) + 1
-        result = self._transaction_mutation_sync(
-            program_sk, "patch", payload, item, existing, expected_revision, idempotency_key,
-        )
+        item.pop("revision", None)
+        item.pop("media_revision", None)
+        self._write_sync(item, existing)
+        result = _public_session(item, None)
         result["phase"] = resolve_phase(result, phases)
         return result
 
@@ -760,14 +528,9 @@ class SessionStore:
         )
 
     def delete_session_sync(self, program_sk: str, date_value: str, index: int | None = None, expected_revision: int | None = None, idempotency_key: str | None = None, session_id: str | None = None) -> dict[str, Any]:
-        require_mutation_envelope(expected_revision, idempotency_key)
-        replay = self._replay_sync(program_sk, idempotency_key, {"date": date_value, "index": index, "session_id": session_id})
-        if replay is not None:
-            return replay
         existing = self._find_item_sync(program_sk, date_value, index, session_id)
-        return self._transaction_mutation_sync(
-            program_sk, "delete", {"date": date_value, "index": index, "session_id": session_id}, None, existing, expected_revision, idempotency_key, delete=True,
-        )
+        self._write_sync(None, existing, delete=True)
+        return {"deleted": date_value}
 
     async def replace_program_sessions(
         self,
@@ -778,8 +541,6 @@ class SessionStore:
         expected_revision: int | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any] | None:
-        if bump_program_revision:
-            require_mutation_envelope(expected_revision, idempotency_key)
         return await asyncio.get_running_loop().run_in_executor(
             None, lambda: self.replace_program_sessions_sync(program_sk, sessions, phases, bump_program_revision, expected_revision, idempotency_key)
         )
@@ -793,11 +554,8 @@ class SessionStore:
         expected_revision: int | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any] | None:
-        if bump_program_revision:
-            require_mutation_envelope(expected_revision, idempotency_key)
         existing = self._query_items_sync(program_sk)
-        current_revision = self._current_revision_sync(program_sk) if bump_program_revision else None
-        self._ensure_unique_session_ids(existing, program_sk, current_revision)
+        self._ensure_unique_session_ids(existing, program_sk)
         ordinals: dict[str, int] = {}
         prepared = []
         for source_index, session in enumerate(sessions):
@@ -810,63 +568,14 @@ class SessionStore:
             if previous is None and len(same_day) >= ordinals[date_value]:
                 previous = same_day[ordinals[date_value] - 1]
             prepared.append(self._build_item(program_sk, session, phases, source_index=source_index, same_day_ordinal=ordinals[date_value], existing_item=previous))
-        self._ensure_unique_session_ids(prepared, program_sk, current_revision)
-        if not bump_program_revision:
-            with self.table.batch_writer() as batch:
-                for item in existing:
-                    batch.delete_item(Key={"pk": self._pk, "sk": item["sk"]})
-                for item in prepared:
-                    batch.put_item(Item=_to_dynamo(item))
-        else:
-            _, _, _, current_revision, next_revision = self._revision_context_sync(program_sk, expected_revision)
-            existing_by_sk = {str(item["sk"]): item for item in existing}
-            prepared_keys = {str(item["sk"]) for item in prepared}
-            operations: list[dict[str, Any]] = []
+        self._ensure_unique_session_ids(prepared, program_sk)
+        prepared_keys = {str(item["sk"]) for item in prepared}
+        with self.table.batch_writer() as batch:
             for item in existing:
-                if str(item["sk"]) in prepared_keys:
-                    continue
-                operations.append({
-                    "Delete": {
-                        "TableName": self._table_name,
-                        "Key": self._transaction_key({"pk": self._pk, "sk": item["sk"]}),
-                        "ConditionExpression": "((attribute_not_exists(#revision) AND :existing_revision = :zero) OR #revision = :existing_revision) AND ((attribute_not_exists(#media_revision) AND :existing_media_revision = :zero) OR #media_revision = :existing_media_revision)",
-                        "ExpressionAttributeNames": {"#revision": "revision", "#media_revision": "media_revision"},
-                        "ExpressionAttributeValues": {":existing_revision": self._transaction_value(_int_value(item.get("revision"), 0)), ":existing_media_revision": self._transaction_value(_int_value(item.get("media_revision"), 0)), ":zero": self._transaction_value(0)},
-                    }
-                })
+                if str(item["sk"]) not in prepared_keys:
+                    batch.delete_item(Key={"pk": self._pk, "sk": item["sk"]})
             for item in prepared:
-                item["revision"] = next_revision
-                previous = existing_by_sk.get(str(item["sk"]))
-                if previous is None:
-                    condition = "attribute_not_exists(#pk)"
-                    names = {"#pk": "pk"}
-                    values = {}
-                else:
-                    condition = "((attribute_not_exists(#revision) AND :existing_revision = :zero) OR #revision = :existing_revision) AND ((attribute_not_exists(#media_revision) AND :existing_media_revision = :zero) OR #media_revision = :existing_media_revision)"
-                    names = {"#revision": "revision", "#media_revision": "media_revision"}
-                    values = {":existing_revision": self._transaction_value(_int_value(previous.get("revision"), 0)), ":existing_media_revision": self._transaction_value(_int_value(previous.get("media_revision"), 0)), ":zero": self._transaction_value(0)}
-                operations.append({
-                    "Put": {
-                        "TableName": self._table_name,
-                        "Item": self._transaction_item(item),
-                        "ConditionExpression": condition,
-                        "ExpressionAttributeNames": names,
-                        **({"ExpressionAttributeValues": values} if values else {}),
-                    }
-                })
-            if len(operations) > (97 if idempotency_key else 98):
-                raise ValueError("Session replacement exceeds the atomic DynamoDB transaction limit")
-            result = self._transaction_mutation_sync(
-                program_sk,
-                "replace_all",
-                {"sessions": sessions},
-                None,
-                None,
-                current_revision,
-                idempotency_key,
-                session_operations=operations,
-            )
-            self._invalidate_caches()
-            return result
+                item.pop("revision", None)
+                batch.put_item(Item=_to_dynamo(item))
         self._invalidate_caches()
         return None

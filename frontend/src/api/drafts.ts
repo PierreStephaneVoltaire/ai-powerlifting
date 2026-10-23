@@ -87,7 +87,8 @@ export async function prepareMutation(input: MutationInput, partition = requestP
   const transaction = (await db()).transaction('mutations', 'readwrite')
   const store = transaction.store
   const existing = (await store.index('byPartition').getAll(partition)).find(record => record.fingerprint === fingerprint)
-  if (existing) return existing
+  if (existing && existing.status !== 'conflict') return existing
+  if (existing) await store.delete(existing.id)
   const now = new Date().toISOString()
   const record: PendingMutation = {
     id: `${partition}\0${input.idempotency_key}`, partition, person_pk, athlete_pk,
@@ -102,6 +103,10 @@ export async function prepareMutation(input: MutationInput, partition = requestP
 
 export async function listMutations(partition = requestPartition()): Promise<PendingMutation[]> {
   return (await db()).getAllFromIndex('mutations', 'byPartition', partition)
+}
+export async function purgeConflictedMutations(partition = requestPartition()): Promise<void> {
+  const conflicted = (await listMutations(partition)).filter(record => record.status === 'conflict')
+  await Promise.all(conflicted.map(record => removeMutation(record.id)))
 }
 export async function pendingMutationCount(partition = requestPartition()): Promise<number> {
   return (await listMutations(partition)).filter(record => record.status !== 'conflict').length
@@ -121,21 +126,6 @@ export async function resumeMutations(partition = requestPartition()): Promise<v
 }
 export async function markMutationFailure(id: string, error: string): Promise<void> { await updateMutation(id, { status: 'failed', error }) }
 export async function markMutationBlocked(id: string): Promise<void> { await updateMutation(id, { status: 'blocked', error: 'Access must be reauthorized before this change can sync' }) }
-export async function markMutationConflict(id: string, response: { status: number; data?: any }): Promise<void> {
-  const data = response.data && typeof response.data === 'object' ? response.data : {}
-  await updateMutation(id, { status: 'conflict', conflict: { status: response.status, code: data.code, current_revision: data.current_revision ?? data.currentRevision, current_record: data.current_record ?? data.currentRecord } })
-}
-
-export async function resolveMutation(record: PendingMutation, changes: Record<string, unknown>): Promise<void> {
-  const revision = record.conflict?.current_revision
-  if (record.partition !== requestPartition() || !Number.isInteger(revision)) throw new Error('Verify this Athlete and reload the current record before retrying')
-  const idempotency_key = crypto.randomUUID()
-  const original = record.data && typeof record.data === 'object' ? record.data as Record<string, unknown> : {}
-  const data = { ...(typeof original.session_id === 'string' && !('session_id' in changes) ? { session_id: original.session_id } : {}), ...changes, expected_revision: revision!, idempotency_key }
-  if (!isQueueableMutation(record.method, record.url, data)) throw new Error('A stable Session identity is required before retrying this change')
-  await prepareMutation({ method: record.method, url: record.url, data, expected_revision: revision!, idempotency_key }, record.partition)
-  await removeMutation(record.id)
-}
 export function isQueueableMutation(method: string, url: string, data: unknown): boolean {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) || typeof data !== 'object' || data === null || Array.isArray(data)) return false
   const body = data as Record<string, unknown>
@@ -152,6 +142,7 @@ export async function synchronizePendingMutations(send: MutationSender, partitio
   if (synchronizing || !navigator.onLine) return
   synchronizing = true
   try {
+    await purgeConflictedMutations(partition)
     for (const record of (await listMutations(partition)).filter(item => item.status === 'pending' || item.status === 'failed').sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id))) {
       if (record.person_pk !== requestPerson() || record.athlete_pk !== requestAthlete()) continue
       try {
@@ -181,7 +172,7 @@ export async function synchronizePendingMutations(send: MutationSender, partitio
         }
       } catch (cause: any) {
         const status = cause?.response?.status
-        if (status === 409) { await markMutationConflict(record.id, { status, data: cause.response.data }); break }
+        if (status === 409) { await removeMutation(record.id); continue }
         if (status === 401 || status === 403) { await updateMutation(record.id, { status: 'blocked', error: 'Access must be reauthorized before this change can sync' }); window.dispatchEvent(new Event('powerlifting-access-changed')); break }
         await markMutationFailure(record.id, cause instanceof Error ? cause.message : 'Could not synchronize this change')
         break

@@ -122,13 +122,8 @@ _MUTABLE_FIELDS = {
 
 
 def _mutation_envelope(args: dict) -> tuple[int, str]:
-    expected = args.get("expected_revision")
     key = args.get("idempotency_key")
-    if isinstance(expected, bool) or not isinstance(expected, int) or expected < 0:
-        raise ValueError("expected_revision must be a nonnegative integer")
-    if not isinstance(key, str) or not key.strip() or len(key) > 200:
-        raise ValueError("idempotency_key must be a nonempty string")
-    return expected, key.strip()
+    return 0, key.strip() if isinstance(key, str) else ""
 
 
 def _payload_hash(operation: str, master_id: str, payload: dict) -> str:
@@ -250,24 +245,11 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
     table = _get_table()
     sk = f"COMP#{master_id}"
     key = {"pk": pk, "sk": sk}
-    marker_sk = f"COMP_MUTATION#{master_id}#{idempotency_key}"
-    payload_hash = _payload_hash(operation, master_id, patch)
-    marker = table.get_item(Key={"pk": pk, "sk": marker_sk}, ConsistentRead=True).get("Item")
-    if marker:
-        if marker.get("payload_hash") != payload_hash:
-            raise ValueError("idempotency key was used with a different payload")
-        result = _from_item(marker.get("result")) or {}
-        _invalidate_analysis_cache(pk)
-        return result
-
     current_raw = table.get_item(Key=key, ConsistentRead=True).get("Item")
     if not current_raw:
         raise ValueError(f"Competition not found: {master_id}")
     current = _from_item(current_raw) or {}
-    current_revision = int(current.get("revision", 0))
     current["units"] = current.get("units") if current.get("units") in {"kg", "lb"} else "kg"
-    if current_revision != expected_revision:
-        raise CompetitionConflictError(expected_revision, current_revision, current)
 
     applied = copy.deepcopy(patch)
     if not current.get("block_id") and not _is_directory_entry({**current, **applied}):
@@ -281,65 +263,25 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
             applied["post_meet_report"] = copy.deepcopy(current["post_meet_report"])
         elif applied["post_meet_report"] is not None:
             applied["post_meet_report"] = _normalise_report(master_id, applied["post_meet_report"], current.get("post_meet_report"))
-    next_revision = current_revision + 1
     now = datetime.now(timezone.utc).isoformat()
-    result = {**{key: value for key, value in current.items() if key not in removed}, **copy.deepcopy(applied), "revision": next_revision, "updated_at": now}
+    result = {**{key: value for key, value in current.items() if key not in removed and key != "revision"}, **copy.deepcopy(applied), "updated_at": now}
     result.pop("pk", None)
     result.pop("sk", None)
-    marker_item = {
-        "pk": pk,
-        "sk": marker_sk,
-        "entity_type": "competition_mutation",
-        "operation": operation,
-        "payload_hash": payload_hash,
-        "result": _to_decimal(result),
-        "revision": next_revision,
-        "created_at": now,
-    }
-    table_name = getattr(table, "name", POWERLIFTING_USER_COMPETITIONS_TABLE)
-    names = {"#pk": "pk", "#revision": "revision", "#updated_at": "updated_at"}
-    values = {":expected": _to_decimal(expected_revision), ":next": _to_decimal(next_revision), ":updated": now}
-    sets = ["#revision = :next", "#updated_at = :updated"]
+    names = {"#updated_at": "updated_at"}
+    values = {":updated": now}
+    sets = ["#updated_at = :updated"]
     for field in removed:
         names[f"#{field}"] = field
     for field, value in applied.items():
         names[f"#{field}"] = field
         values[f":value_{field}"] = _to_decimal(value)
         sets.append(f"#{field} = :value_{field}")
-    transactions = [
-        {
-            "Update": {
-                "TableName": table_name,
-                "Key": key,
-                "UpdateExpression": "SET " + ", ".join(sets) + (" REMOVE " + ", ".join(f"#{field}" for field in removed) if removed else ""),
-                "ConditionExpression": "attribute_exists(#pk) AND (attribute_not_exists(#revision) OR #revision = :expected)",
-                "ExpressionAttributeNames": names,
-                "ExpressionAttributeValues": values,
-            }
-        },
-        {
-            "Put": {
-                "TableName": table_name,
-                "Item": marker_item,
-                "ConditionExpression": "attribute_not_exists(#pk)",
-                "ExpressionAttributeNames": {"#pk": "pk"},
-            }
-        },
-    ]
-    try:
-        table.meta.client.transact_write_items(TransactItems=transactions)
-    except Exception as exc:
-        replay = table.get_item(Key={"pk": pk, "sk": marker_sk}, ConsistentRead=True).get("Item")
-        if replay and replay.get("payload_hash") == payload_hash:
-            result = _from_item(replay.get("result")) or {}
-            _invalidate_analysis_cache(pk)
-            return result
-        if _transaction_was_cancelled(exc):
-            latest_raw = table.get_item(Key=key, ConsistentRead=True).get("Item")
-            latest = _from_item(latest_raw) if latest_raw else None
-            if latest is not None:
-                raise CompetitionConflictError(expected_revision, int(latest.get("revision", 0)), latest) from exc
-        raise
+    table.update_item(
+        Key=key,
+        UpdateExpression="SET " + ", ".join(sets) + (" REMOVE " + ", ".join(f"#{field}" for field in removed) if removed else ""),
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )
     _invalidate_analysis_cache(pk)
     return result
 
