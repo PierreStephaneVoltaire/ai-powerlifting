@@ -13,20 +13,27 @@ def people():
     return [item for item in pages(database().Table(os.getenv('IF_USER_TABLE', 'if-user')), 'scan', ConsistentRead=True) if not str(item.get('pk', '')).startswith('Identity#')]
 
 
+def _current_program(athlete):
+    legacy = importlib.import_module('services.handlers.user.profile_get.core')
+    health = database().Table(os.getenv('IF_HEALTH_TABLE_NAME', 'if-health'))
+    program_sk = legacy._resolve_program_sk_sync(health, athlete)
+    program = legacy._load_program_sync(health, athlete, program_sk)
+    return (program_sk, program) if program and program.get('published', True) else (program_sk, None)
+
+
 def visible_profile(owner, actor, vocabulary, details=False):
     athlete = str(owner.get('mapped_pk') or owner['pk'])
     access = current_context(actor, athlete)
     allowed = set(access['permissions'])
     if 'profile:read' not in allowed:
         return None
-    private = access['is_self'] or 'profile:read' in access.get('granted_permissions', [])
     federations = [value for value in owner.get('federations', []) if isinstance(value, str)]
     result = {
         'athlete_pk': athlete,
         'nickname': owner.get('nickname') or owner.get('username') or owner['pk'],
         'display_name': owner.get('display_name') or owner.get('nickname') or owner['pk'],
         'avatar_url': owner.get('avatar_url'),
-        'bio': owner.get('bio', '') if private else '',
+        'bio': owner.get('bio', ''),
         'profile_visibility': 'public' if owner.get('profile_visibility') == 'public' else 'private',
         'public_training_summary_enabled': 'analytics:read' in allowed,
         'is_self': access['is_self'],
@@ -39,26 +46,30 @@ def visible_profile(owner, actor, vocabulary, details=False):
         'summary': dict.fromkeys(['squat_kg', 'bench_kg', 'deadlift_kg', 'total_kg', 'bodyweight_kg', 'dots']),
         'lift_videos': [],
     }
-    if details and allowed.intersection({'performance:read', 'sessions:read', 'competition:read', 'lift-profiles:read'}):
+    if details:
+        result['sessions_public'] = {'program:read', 'sessions:read'} <= allowed
+    program_sk, program = _current_program(athlete)
+    if not program:
+        return result
+    meta = program.get('meta') or {}
+    result['federation'] = meta.get('federation') or result['federation']
+    if 'competition:read' in allowed:
         legacy = importlib.import_module('services.handlers.user.profile_get.core')
-        health = database().Table(os.getenv('IF_HEALTH_TABLE_NAME', 'if-health'))
-        program_sk = legacy._resolve_program_sk_sync(health, athlete)
-        program = legacy._load_program_sync(health, athlete, program_sk)
-        if program and program.get('published', True):
-            from services.lib.session_store import SessionStore
-            sessions = SessionStore(os.getenv('IF_SESSIONS_TABLE_NAME', 'if-sessions'), pk=athlete, region=os.getenv('AWS_REGION', 'ca-central-1')).list_sessions_sync(program_sk, program.get('phases', [])) if 'sessions:read' in allowed or 'performance:read' in allowed else []
-            derived = legacy._build_profile(owner, None, program, sessions)
-            if 'performance:read' in allowed:
-                result['summary'] = derived['summary']
+        result.update(weight_class_kg=legacy._positive_number(meta.get('weight_class_kg')), practicing_for=meta.get('practicing_for') or None)
+    if details and allowed.intersection({'performance:read', 'sessions:read', 'lift-profiles:read'}):
+        legacy = importlib.import_module('services.handlers.user.profile_get.core')
+        from services.lib.session_store import SessionStore
+        sessions = SessionStore(os.getenv('IF_SESSIONS_TABLE_NAME', 'if-sessions'), pk=athlete, region=os.getenv('AWS_REGION', 'ca-central-1')).list_sessions_sync(program_sk, program.get('phases', [])) if 'sessions:read' in allowed or 'performance:read' in allowed else []
+        derived = legacy._build_profile(owner, None, program, sessions)
+        if 'performance:read' in allowed:
+            result['summary'] = derived['summary']
             if 'weight-log:read' not in allowed:
-                result['summary'].update(bodyweight_kg=None, dots=None)
-            if 'competition:read' in allowed:
-                result.update(weight_class_kg=derived['weight_class_kg'], practicing_for=derived['practicing_for'])
-            if {'sessions:read', 'videos:read'} <= allowed:
-                result['lift_videos'] = [{**item, 'athlete_pk': athlete} for item in derived['lift_videos']]
-            if 'lift-profiles:read' in allowed:
-                from .publication import program_view
-                result['lift_profiles'] = program_view(program, access).get('lift_profiles', [])
+                result['summary']['bodyweight_kg'] = None
+        if {'sessions:read', 'videos:read'} <= allowed:
+            result['lift_videos'] = [{**item, 'athlete_pk': athlete} for item in derived['lift_videos']]
+        if 'lift-profiles:read' in allowed:
+            from .publication import program_view
+            result['lift_profiles'] = program_view(program, access).get('lift_profiles', [])
     return result
 
 

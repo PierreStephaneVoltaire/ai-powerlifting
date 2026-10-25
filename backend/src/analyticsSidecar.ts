@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express'
 import { analyticsRouter } from './routes/analytics'
 import { operationScope } from './utils/operationScope'
 import { blocksGetPath } from './analyticsOperationPaths'
+import { relayResponse } from './analyticsRelay'
 
 const app = express()
 const port = Number(process.env.ANALYTICS_NODE_PORT || 8091)
@@ -58,11 +59,7 @@ app.post('/internal/analytics/operations/:operation', async (req, res) => {
       },
       ...(target.body === undefined ? {} : { body: JSON.stringify(target.body) }),
     })
-    const contentType = response.headers.get('content-type') || ''
-    const body = Buffer.from(await response.arrayBuffer())
-    res.status(response.status)
-    if (contentType) res.setHeader('Content-Type', contentType)
-    res.send(body)
+    await relayResponse(response, res)
   } catch (error) {
     res.status(502).json({ data: null, error: String(error) })
   }

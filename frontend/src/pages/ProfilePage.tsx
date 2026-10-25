@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   Alert,
   Avatar,
@@ -19,6 +19,7 @@ import {
   TextInput,
 } from '@mantine/core'
 import { AlertCircle, Calendar, Check, Film, Plus, Save, Upload, User, X } from 'lucide-react'
+import ProfileTrainingView, { type ProfileTrainingTab } from '@/components/profile/ProfileTrainingView'
 import {
   getSettings,
   isValidProfileAvatarType,
@@ -126,9 +127,18 @@ function federationSummary(federation: string | null | undefined, practicingFor:
   return `${unique.join(' + ') || 'Federation unset'} - ${weightClass || '--'} kg`
 }
 
+type ProfileSection = 'profile' | ProfileTrainingTab
+
+const PROFILE_SECTIONS: { value: ProfileSection; label: string }[] = [
+  { value: 'profile', label: 'Profile' },
+  { value: 'sessions', label: 'Sessions' },
+  { value: 'analysis', label: 'Analysis' },
+]
+
 export default function ProfilePage() {
   const { nickname: targetNickname } = useParams<{ nickname?: string }>()
   const { user, loading: authLoading, readOnly } = useAuth('settings')
+  const [searchParams, setSearchParams] = useSearchParams()
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
   const { pushToast } = useUiStore()
@@ -393,6 +403,16 @@ export default function ProfilePage() {
   }
 
   const readOnlyView = !user || viewingOther
+  const requestedSection = searchParams.get('section')
+  const profileSection: ProfileSection = requestedSection === 'sessions' || requestedSection === 'analysis' ? requestedSection : 'profile'
+  const sectionAvailable = (section: ProfileSection) =>
+    section === 'profile' || (section === 'sessions' ? publicProfile?.sessions_public === true : publicProfile?.sessions_public === true && publicProfile.public_training_summary_enabled)
+  const selectSection = (section: ProfileSection) => {
+    const next = new URLSearchParams(searchParams)
+    if (section === 'profile') next.delete('section')
+    else next.set('section', section)
+    setSearchParams(next, { replace: true })
+  }
 
   if (readOnlyView && publicProfileLoading) {
     return (
@@ -457,8 +477,26 @@ export default function ProfilePage() {
       <div className="if-page-header">
         <Stack gap={2}>
           <Text component="h1" className="if-page-title">Profile</Text>
-          <Text className="if-page-subtitle">Public identity, training summary, and lift video gallery.</Text>
         </Stack>
+        {readOnlyView && publicProfile && (
+          <div className="if-tab-group" role="tablist" aria-label="Profile sections" data-testid="profile-sections">
+            {PROFILE_SECTIONS.map((section) => (
+              <button
+                key={section.value}
+                type="button"
+                role="tab"
+                className="if-tab-button"
+                aria-selected={profileSection === section.value}
+                data-active={profileSection === section.value}
+                disabled={section.value !== 'profile' && !sectionAvailable(section.value)}
+                onClick={() => selectSection(section.value)}
+                data-testid={`profile-section-${section.value}`}
+              >
+                {section.label}
+              </button>
+            ))}
+          </div>
+        )}
         {!readOnlyView && (
           <Button
             leftSection={<Save size={16} />}
@@ -478,6 +516,10 @@ export default function ProfilePage() {
         </Alert>
       )}
 
+      {readOnlyView && publicProfile && profileSection !== 'profile' && sectionAvailable(profileSection) ? (
+        <ProfileTrainingView athlete={publicProfile.athlete_pk} tab={profileSection} analysisAvailable={publicProfile.public_training_summary_enabled} />
+      ) : (
+      <>
       <Paper withBorder p="lg" radius="md" className="if-card">
         <Stack gap="md">
           <Group justify="space-between" align="flex-start" wrap="nowrap">
@@ -690,6 +732,8 @@ export default function ProfilePage() {
         onDeleted={readOnlyView ? () => undefined : loadVideos}
         readOnly={readOnlyView || readOnly}
       />
+      </>
+      )}
     </Stack>
   )
 }

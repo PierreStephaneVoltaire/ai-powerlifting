@@ -34,3 +34,16 @@ token exchange and key retrieval travel through the internal Authentik Service.
 Short-lived signed operation principals bind the acting Person, selected
 Athlete and operation at HTTP/MCP boundaries. The internal API token alone is
 insufficient to impersonate a Person.
+
+## Clarification 2026-10-24 — public profiles
+
+Grants are the only source of access, and a public profile is a grant to everyone.
+When an Athlete's profile is public, anyone, signed in or not, may read the domains
+the Athlete has published. Sessions are readable when Program and Sessions are
+published, and Analysis when Analysis is also published. A private profile, or an
+unpublished domain, confers nothing.
+
+Viewing another Athlete's published records never changes the viewer's selected
+Athlete. The profile page renders those records read-only in place, with read
+requests scoped to the viewed Athlete. It never redirects into the full
+application under the viewed Athlete's partition.

@@ -1,10 +1,7 @@
 import importlib
 import copy
-import json
-from decimal import Decimal
 
 import pytest
-from botocore.exceptions import ClientError
 
 from services.contract import load_operations
 from services.dispatch import dispatch
@@ -143,64 +140,49 @@ class FakeCompetitionTable:
     name = "competitions"
 
     def __init__(self):
-        self.items = {("athlete-1", "COMP#meet"): {"pk": "athlete-1", "sk": "COMP#meet", "master_id": "meet", "revision": Decimal("0"), "notes": ""}}
-        self.meta = type("Meta", (), {"client": self})()
-        self.fail_after_commit = False
+        self.items = {("athlete-1", "COMP#meet"): {"pk": "athlete-1", "sk": "COMP#meet", "master_id": "meet", "notes": ""}}
+        self.updates = 0
 
     def get_item(self, Key, ConsistentRead=False):
         item = self.items.get(tuple(Key.values()))
         return {"Item": copy.deepcopy(item)} if item is not None else {}
 
-    def transact_write_items(self, TransactItems):
-        update = TransactItems[0]["Update"]
-        key = tuple(update["Key"].values())
-        item = self.items[key]
-        expected = int(update["ExpressionAttributeValues"][":expected"])
-        if int(item.get("revision", 0)) != expected:
-            raise ClientError({"Error": {"Code": "TransactionCanceledException", "Message": "condition failed"}}, "TransactWriteItems")
-        item["revision"] = update["ExpressionAttributeValues"][":next"]
-        item["updated_at"] = update["ExpressionAttributeValues"][":updated"]
-        for name, field in update["ExpressionAttributeNames"].items():
-            if name.startswith("#") and name not in {"#pk", "#revision", "#updated_at"}:
-                value_key = f":value_{field}"
-                if value_key in update["ExpressionAttributeValues"]:
-                    item[field] = copy.deepcopy(update["ExpressionAttributeValues"][value_key])
-        if " REMOVE " in update["UpdateExpression"]:
-            for name in update["UpdateExpression"].split(" REMOVE ", 1)[1].split(", "):
-                item.pop(update["ExpressionAttributeNames"][name.strip()], None)
-        marker = TransactItems[1]["Put"]["Item"]
-        self.items[(marker["pk"], marker["sk"])] = copy.deepcopy(marker)
-        if self.fail_after_commit:
-            self.fail_after_commit = False
-            raise ClientError({"Error": {"Code": "InternalServerError", "Message": "lost response"}}, "TransactWriteItems")
+    def update_item(self, Key, UpdateExpression, ExpressionAttributeNames, ExpressionAttributeValues, **kwargs):
+        assert "ConditionExpression" not in kwargs
+        item = self.items[tuple(Key.values())]
+        sets, _, removes = UpdateExpression.removeprefix("SET ").partition(" REMOVE ")
+        for assignment in sets.split(", "):
+            name, value = (part.strip() for part in assignment.split("="))
+            item[ExpressionAttributeNames[name]] = copy.deepcopy(ExpressionAttributeValues[value])
+        for name in filter(None, (part.strip() for part in removes.split(","))):
+            item.pop(ExpressionAttributeNames[name], None)
+        self.updates += 1
 
 
-def test_competition_cas_conflict_and_lost_response(monkeypatch):
+def test_competition_update_is_a_plain_last_write_wins_save(monkeypatch):
     module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
     table = FakeCompetitionTable()
     monkeypatch.setattr(module, "_get_table", lambda: table)
-    first = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "first"}, "expected_revision": 0, "idempotency_key": "first"})
-    assert first["revision"] == 1
-    with pytest.raises(module.CompetitionConflictError) as conflict:
-        module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "lost"}, "expected_revision": 0, "idempotency_key": "second"})
-    assert conflict.value.current_revision == 1
-    table.fail_after_commit = True
-    replay = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "second"}, "expected_revision": 1, "idempotency_key": "second"})
-    assert replay["notes"] == "second"
-    assert replay["revision"] == 2
+    monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
+    first = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "first"}})
+    second = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "second"}, "expected_revision": 0})
+    assert (first["notes"], second["notes"]) == ("first", "second")
+    assert "revision" not in second
+    assert table.items[("athlete-1", "COMP#meet")]["notes"] == "second"
+    assert table.updates == 2
+    assert not any(sk != "COMP#meet" for _, sk in table.items)
 
 
-def test_competition_idempotency_rejects_changed_payload_and_keeps_attempt_ids(monkeypatch):
+def test_competition_report_resave_keeps_attempt_ids(monkeypatch):
     module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
     table = FakeCompetitionTable()
     monkeypatch.setattr(module, "_get_table", lambda: table)
+    monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
     report = {"attempts": [{"lift": "squat", "attempt_number": 1, "kg": 100, "result": "made"}]}
-    result = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"post_meet_report": report}, "expected_revision": 0, "idempotency_key": "report"})
+    result = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"post_meet_report": report}})
     attempt_id = result["post_meet_report"]["attempts"][0]["attempt_id"]
-    replay = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"post_meet_report": report}, "expected_revision": 1, "idempotency_key": "report"})
-    assert replay["post_meet_report"]["attempts"][0]["attempt_id"] == attempt_id
-    with pytest.raises(ValueError, match="different payload"):
-        module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "changed"}, "expected_revision": 1, "idempotency_key": "report"})
+    resaved = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"post_meet_report": report}})
+    assert resaved["post_meet_report"]["attempts"][0]["attempt_id"] == attempt_id
 
 
 def test_entering_a_meet_indexes_it_by_date_and_block_and_withdrawing_unindexes_it(monkeypatch):
@@ -211,11 +193,11 @@ def test_entering_a_meet_indexes_it_by_date_and_block_and_withdrawing_unindexes_
     monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
     monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
 
-    entered = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "confirmed"}, "expected_revision": 0, "idempotency_key": "enter"})
+    entered = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "confirmed"}})
     stored = table.items[("athlete-1", "COMP#meet")]
     assert (entered["entry_date"], entered["block_id"]) == ("2026-11-01", "block-new")
     assert (stored["entry_date"], stored["block_id"]) == ("2026-11-01", "block-new")
 
-    withdrawn = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "available"}, "expected_revision": 1, "idempotency_key": "withdraw"})
+    withdrawn = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "available"}})
     assert "entry_date" not in withdrawn
     assert "entry_date" not in table.items[("athlete-1", "COMP#meet")]

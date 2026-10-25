@@ -6,8 +6,10 @@ declare module 'axios' {
   interface AxiosRequestConfig {
     powerliftingReplay?: boolean
     powerliftingPartition?: string
+    powerliftingViewAthlete?: string
   }
   interface InternalAxiosRequestConfig {
+    powerliftingViewAthlete?: string
     powerliftingPartition?: string
     powerliftingMutationId?: string
     powerliftingReplay?: boolean
@@ -29,9 +31,14 @@ api.interceptors.request.use(async config => {
   const partition = config.powerliftingPartition || requestPartition()
   if (partition !== requestPartition()) throw new CanceledError('The Person or Athlete context changed')
   config.powerliftingPartition = partition
+  const method = (config.method || 'get').toUpperCase()
+  if (config.powerliftingViewAthlete) {
+    if (method !== 'GET') throw new CanceledError('Viewing another Athlete is read-only')
+    config.headers.set('X-Selected-Athlete-Pk', config.powerliftingViewAthlete)
+    return config
+  }
   config.headers.set('X-Selected-Athlete-Pk', requestAthlete())
   if (config.powerliftingReplay) return config
-  const method = (config.method || 'get').toUpperCase()
   const url = config.url || ''
   if (!isQueueableMutation(method, url, config.data)) return config
   const body = config.data as Record<string, unknown>
@@ -53,7 +60,7 @@ api.interceptors.response.use(async response => {
   const mutationId = error.config?.powerliftingMutationId
   if (mutationId && error.response?.status === 409) await removeMutation(mutationId).catch(() => {})
   if (mutationId && [401, 403].includes(error.response?.status)) void markMutationBlocked(mutationId).catch(() => {})
-  if (error.config?.powerliftingPartition === requestPartition() && [401, 403].includes(error.response?.status)) window.dispatchEvent(new Event('powerlifting-access-changed'))
+  if (!error.config?.powerliftingViewAthlete && error.config?.powerliftingPartition === requestPartition() && [401, 403].includes(error.response?.status)) window.dispatchEvent(new Event('powerlifting-access-changed'))
   return Promise.reject(error)
 })
 

@@ -17,11 +17,13 @@ def test_public_baseline_current_grants_and_approved_search_pagination(monkeypat
     vocabulary = {'approved': {'status': 'approved'}, 'pending': {'status': 'pending'}}
     monkeypatch.setattr(views, 'people', lambda: owners)
     monkeypatch.setattr(views, 'catalog', lambda: vocabulary)
+    monkeypatch.setattr(views, '_current_program', lambda athlete: ('program#v001', {'meta': {'federation': 'CPU', 'weight_class_kg': 83}, 'phases': []}))
     monkeypatch.setattr(views, 'current_context', lambda person, athlete: evaluate_facts(person, athlete, by_athlete[athlete], actor if person == 'coach' else None, grants if athlete == 'private-athlete' else [], {'meet': '2099-01-01'}, datetime(2026, 9, 14, tzinfo=timezone.utc)))
     first = views.search({'tags': ['approved'], 'federations': ['IPF']})
     assert len(first['profiles']) == 20 and first['next_cursor']
     baseline = first['profiles'][0]
-    assert baseline['bio'] == '' and baseline['tags'] == ['approved']
+    assert baseline['bio'] == 'private original' and baseline['tags'] == ['approved']
+    assert baseline['federation'] == 'CPU'
     assert baseline['lift_videos'] == [] and baseline['summary']['bodyweight_kg'] is None
     assert not {'discord_id', 'pk', 'grants', 'notifications'} & baseline.keys()
     second = views.search({'tags': ['approved'], 'federations': ['IPF'], 'cursor': first['next_cursor']})
@@ -38,3 +40,19 @@ def test_public_baseline_current_grants_and_approved_search_pagination(monkeypat
         views.get_by_handle({'nickname': 'private', '_person_pk': 'coach'})
     vocabulary['approved']['status'] = 'rejected'
     assert views.search({'tags': ['approved']})['profiles'] == []
+
+
+def test_public_profile_reports_main_federation_and_dots_without_bodyweight(monkeypatch):
+    owner = {'pk': 'person', 'mapped_pk': 'athlete', 'nickname': 'lifter', 'display_name': 'Lifter', 'roles': ['athlete'], 'profile_visibility': 'public', 'federations': [], 'bio': 'Meet prep for nationals'}
+    program = {'meta': {'federation': 'CPU', 'weight_class_kg': 83, 'sex': 'male', 'current_body_weight_kg': 82}, 'phases': [], 'current_maxes': {'squat': 210, 'bench': 122.5, 'deadlift': 225}}
+    access = {'permissions': ['profile:read', 'performance:read', 'competition:read', 'analytics:read'], 'is_self': False, 'granted_permissions': []}
+    monkeypatch.setattr(views, '_current_program', lambda athlete: ('program#v001', program))
+    monkeypatch.setattr(views, 'current_context', lambda person, athlete: access)
+    from services.lib.session_store import SessionStore
+    monkeypatch.setattr(SessionStore, 'list_sessions_sync', lambda self, *_args, **_kwargs: [])
+    profile = views.visible_profile(owner, '', {}, details=True)
+    assert profile['bio'] == 'Meet prep for nationals'
+    assert profile['federation'] == 'CPU' and profile['weight_class_kg'] == 83
+    assert profile['summary']['total_kg'] == 557.5
+    assert profile['summary']['dots'] and profile['summary']['dots'] > 370
+    assert profile['summary']['bodyweight_kg'] is None

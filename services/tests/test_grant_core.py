@@ -3,6 +3,7 @@
 Run with:  python3 -m pytest services/tests/test_grant_core.py
 """
 import asyncio
+import sys
 from datetime import datetime, timedelta, timezone
 
 # Stub out boto3 / AWS modules so this can run offline.

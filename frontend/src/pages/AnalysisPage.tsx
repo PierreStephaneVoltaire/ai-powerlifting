@@ -42,6 +42,7 @@ import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
 import MaxesPage from '@/pages/MaxesPage'
 import { recordsInBlock } from '@/utils/blockScope'
+import { glossaryCategoryLookup, glossaryMuscleLookup, muscleGroupAverages, perLiftBreakdown } from '@/utils/weeklyBreakdown'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -563,85 +564,16 @@ export default function AnalysisPage() {
     )
   }, [analysisWindowEndStr, analysisWindowStartStr, program?.sessions])
 
-  const glossaryMuscles = useMemo(() => {
-    const lookup = new Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>()
-    for (const ex of glossary) {
-      lookup.set(normalizeExerciseName(ex.name), {
-        primary: ex.primary_muscles,
-        secondary: ex.secondary_muscles,
-        tertiary: ex.tertiary_muscles ?? [],
-      })
-    }
-    return lookup
-  }, [glossary])
+  const glossaryMuscles = useMemo(() => glossaryMuscleLookup(glossary), [glossary])
 
-  const glossaryCategory = useMemo(() => {
-    const lookup = new Map<string, ExerciseCategory>()
-    for (const ex of glossary) {
-      lookup.set(normalizeExerciseName(ex.name), ex.category)
-    }
-    return lookup
-  }, [glossary])
+  const glossaryCategory = useMemo(() => glossaryCategoryLookup(glossary), [glossary])
 
-  const muscleGroupAvgWeekly = useMemo(() => {
-    if (!glossaryMuscles.size || !filteredSessions.length) return { sets: {}, volume: {} }
-    const periodWeeks = Math.max(1, effectiveWeeks)
-    const mgSets: Record<string, number> = {}
-    const mgVol: Record<string, number> = {}
-    for (const s of filteredSessions) {
-      for (const ex of s.exercises || []) {
-        const muscles = glossaryMuscles.get(normalizeExerciseName(ex.name))
-        if (!muscles) continue
-        const sets = executedSets(ex)
-        const vol = exerciseVolume(ex)
-        for (const m of muscles.primary) { mgSets[m] = (mgSets[m] || 0) + sets; mgVol[m] = (mgVol[m] || 0) + vol }
-        for (const m of muscles.secondary) { mgSets[m] = (mgSets[m] || 0) + sets * 0.5; mgVol[m] = (mgVol[m] || 0) + vol * 0.5 }
-        for (const m of muscles.tertiary) { mgSets[m] = (mgSets[m] || 0) + sets * 0.25; mgVol[m] = (mgVol[m] || 0) + vol * 0.25 }
-      }
-    }
-    const avgSets: Record<string, number> = {}
-    const avgVol: Record<string, number> = {}
-    for (const m of Object.keys(mgSets)) {
-      avgSets[m] = Math.round((mgSets[m] / periodWeeks) * 10) / 10
-      avgVol[m] = Math.round(mgVol[m] / periodWeeks)
-    }
-    return { sets: avgSets, volume: avgVol }
-  }, [effectiveWeeks, glossaryMuscles, filteredSessions])
+  const muscleGroupAvgWeekly = useMemo(
+    () => muscleGroupAverages(filteredSessions, glossaryMuscles, effectiveWeeks),
+    [effectiveWeeks, glossaryMuscles, filteredSessions],
+  )
 
-  const perLiftDetails = useMemo(() => {
-    if (!glossaryCategory.size || !filteredSessions.length) return {}
-    const numWeeks = new Set(filteredSessions.map(s => s.week_number)).size || 1
-    const result: Record<string, { frequency: number; raw_sets: number; accessories: { name: string; sets: number; volume: number }[] }> = {}
-    for (const [liftName, category] of [['squat', 'squat'], ['bench', 'bench'], ['deadlift', 'deadlift']] as const) {
-      let liftSessions = 0, rawSets = 0
-      const accessoryMap: Record<string, { sets: number; volume: number }> = {}
-      for (const s of filteredSessions) {
-        let hasLift = false
-        for (const ex of s.exercises || []) {
-          const sets = executedSets(ex)
-          if (sets <= 0) continue
-          const exLower = ex.name.toLowerCase().trim()
-          const info = glossaryCategory.get(normalizeExerciseName(ex.name))
-          const isMainLift = exLower === liftName || (liftName === 'bench' && exLower === 'bench press')
-          if (isMainLift || (info && info === category)) hasLift = true
-          if (isMainLift) rawSets += sets
-          if (info && info === category && !isMainLift) {
-            const vol = exerciseVolume(ex)
-            if (!accessoryMap[ex.name]) accessoryMap[ex.name] = { sets: 0, volume: 0 }
-            accessoryMap[ex.name].sets += sets
-            accessoryMap[ex.name].volume += vol
-          }
-        }
-        if (hasLift) liftSessions++
-      }
-      result[liftName] = {
-        frequency: Math.round((liftSessions / numWeeks) * 10) / 10,
-        raw_sets: rawSets,
-        accessories: Object.entries(accessoryMap).map(([name, d]) => ({ name, ...d })).sort((a, b) => b.volume - a.volume),
-      }
-    }
-    return result
-  }, [glossaryCategory, filteredSessions])
+  const perLiftDetails = useMemo(() => perLiftBreakdown(filteredSessions, glossaryCategory), [glossaryCategory, filteredSessions])
 
   const avgSessionsPerWeek = data ? Math.round((data.sessions_analyzed / effectiveWeeks) * 10) / 10 : null
 

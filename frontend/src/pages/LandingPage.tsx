@@ -22,9 +22,10 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <Button component={Link} to="/" variant="subtle" size="xs" px={7} style={{ minHeight: 44 }}>Home</Button>
           <Button component={Link} to="/profiles" variant="subtle" size="xs" px={7} style={{ minHeight: 44 }}>Search</Button>
           <Button component={Link} to="/about" variant="subtle" size="xs" px={7} style={{ minHeight: 44 }}>About</Button>
+          <Button component={Link} to="/login" variant="light" size="xs" px={7} style={{ minHeight: 44 }}>Sign in</Button>
         </Group>
       </Group>
-      <Box component="main" style={{ flex: 1 }}>{children}</Box>
+      <Box component="main" px={{ base: 'md', sm: 'lg' }} py={{ base: 'md', sm: 'lg' }} maw={1280} mx="auto" w="100%" style={{ flex: 1 }}>{children}</Box>
     </Stack>
   )
 }
@@ -33,8 +34,8 @@ const EXAMPLE_HANDLE = 'failure'
 
 export default function LandingPage() {
   return (
-    <Center mih="calc(100dvh - 60px)" py="md">
-      <Container size="md" w="100%">
+    <Center mih="calc(100dvh - 140px)">
+      <Container size="md" w="100%" px={0}>
         <Stack gap="lg">
           <Stack gap="xs">
             <Group gap="xs">

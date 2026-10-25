@@ -34,7 +34,7 @@ import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
 
 export default function AboutPage() {
   return (
-    <Container size="lg" py="xl">
+    <Container size="lg" px={0}>
       <Stack gap="xl">
         {/* Header Section */}
         <Stack gap="xs">

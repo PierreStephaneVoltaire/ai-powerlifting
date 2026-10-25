@@ -35,6 +35,11 @@ seven days after the latest stored tied competition date. An Athlete has at most
 one active Coach and one active Handler. A separate peer grant confers only
 specified reads; a favorite is private and confers no access.
 
+**Public profile** — A profile the Athlete has made public. It acts as a read grant
+to everyone for each domain the Athlete publishes. Sessions and Analysis on a public
+profile are shown read-only on the profile itself. Viewing them does not select the
+Athlete.
+
 **Authored note** — Words owned by the Person who wrote them. A private original
 is separate from an attributed revision attached to an Athlete's record. The
 Athlete may remove the attachment but cannot rewrite another Person's words.

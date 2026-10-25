@@ -11,6 +11,8 @@ import logging
 from importlib import import_module
 from services.lib.competition_entries import with_competition_entries
 from services.lib.block_scope import scope_program
+from services.lib.aws import dynamodb_resource
+from services.lib.performed_sets import expand_session_sets
 import os
 import tempfile
 from datetime import datetime, timedelta
@@ -299,6 +301,8 @@ def export_program_markdown(args: Dict[str, Any]) -> dict:
     if access:
         program = program_view(program, access)
     store.export_access = access
+    if isinstance(program, dict):
+        program = {**program, "sessions": expand_session_sets(program.get("sessions", []))}
     sessions = program.get("sessions", []) if isinstance(program, dict) else []
     analysis = _build_analysis_bundle(program, sessions, store)
     scoped_program = _scope_program_to_current_block(program)

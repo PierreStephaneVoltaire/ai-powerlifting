@@ -1,0 +1,13 @@
+region                 = ""
+kubeconfig_path        = ""
+kubeconfig_context     = null
+namespace              = ""
+node_name              = ""
+image_pull_secret      = ""
+shared_secret_name     = ""
+discord_secret_name    = ""
+discord_operator_id    = ""
+operator_person        = ""
+discord_persons        = {}
+coach_model            = ""
+coach_reasoning_effort = ""

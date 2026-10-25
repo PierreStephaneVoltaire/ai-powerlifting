@@ -38,7 +38,7 @@ except ModuleNotFoundError:
         return slope, intercept, slope, slope
 
 from services.lib.lift_calculations import DOTS_COEFFICIENTS as _DOTS_COEFFICIENTS, RPE_PERCENT as _RPE_PERCENT, calculate_dots as _calculate_dots, estimate_1rm as _estimate_1rm, estimate_1rm_value as _estimate_1rm_value
-from services.lib.block_scope import in_block
+from services.lib.block_scope import current_block_id, in_block
 
 DOTS_COEFFICIENTS = _DOTS_COEFFICIENTS
 

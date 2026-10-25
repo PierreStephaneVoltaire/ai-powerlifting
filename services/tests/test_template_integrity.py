@@ -3,82 +3,35 @@ import asyncio
 import json
 
 import pytest
-from botocore.exceptions import ClientError
 
-from services import dispatch
 
-from services.lib.template_store import TemplateRevisionConflictError, TemplateStore
+from services.lib.template_store import TemplateStore
 from services.handlers.templates.template_apply_confirm.core import _new_sessions
-from services.lib.session_store import SessionIdentityConflictError
 
 
-def canceled():
-    return ClientError({"Error": {"Code": "TransactionCanceledException", "Message": "condition failed"}}, "TransactWriteItems")
-
-
-class AtomicClient:
-    def __init__(self, table):
-        self.table = table
-        self.fail_before = False
-        self.fail_after = False
-        self.cancel_next = False
-        self.always_cancel = False
-
-    def transact_write_items(self, *, TransactItems):
-        if self.fail_before:
-            self.fail_before = False
-            raise ClientError({"Error": {"Code": "InternalServerError", "Message": "injected"}}, "TransactWriteItems")
-        if self.always_cancel:
-            raise canceled()
-        if self.cancel_next:
-            self.cancel_next = False
-            raise canceled()
-        snapshot = copy.deepcopy(self.table.items)
-        try:
-            for operation in TransactItems:
-                put = operation["Put"]
-                key = (put["Item"]["pk"], put["Item"]["sk"])
-                current = self.table.items.get(key)
-                condition = put.get("ConditionExpression", "")
-                if "attribute_not_exists" in condition and current is not None and "OR" not in condition:
-                    raise canceled()
-                if "#index_revision = :revision" in condition and current and current.get("index_revision") != put["ExpressionAttributeValues"][":revision"]:
-                    raise canceled()
-                if "#revision = :expected" in condition and (not current or current.get("meta", {}).get("revision", 0) != put["ExpressionAttributeValues"][":expected"]):
-                    raise canceled()
-            for operation in TransactItems:
-                item = operation["Put"]["Item"]
-                self.table.items[(item["pk"], item["sk"])] = copy.deepcopy(item)
-        except ClientError:
-            self.table.items = snapshot
-            raise
-        if self.fail_after:
-            self.fail_after = False
-            raise ClientError({"Error": {"Code": "InternalServerError", "Message": "lost reply"}}, "TransactWriteItems")
-
-
-class AtomicTable:
+class PlainTable:
     def __init__(self):
         self.items = {}
-        self.meta = type("Meta", (), {})()
-        self.meta.client = AtomicClient(self)
+        self.puts = 0
 
     def get_item(self, *, Key, **kwargs):
         item = self.items.get((Key["pk"], Key["sk"]))
         return {"Item": copy.deepcopy(item)} if item else {}
 
-    def put_item(self, *, Item):
+    def put_item(self, *, Item, **kwargs):
+        assert "ConditionExpression" not in kwargs
         self.items[(Item["pk"], Item["sk"])] = copy.deepcopy(Item)
+        self.puts += 1
 
 
 def store():
     result = TemplateStore("templates")
-    result._table = AtomicTable()
+    result._table = PlainTable()
     return result
 
 
-def template(name="Base", author="alice", published=False, revision=0):
-    return {"meta": {"name": name, "author_pk": author, "author": author, "published": published, "revision": revision}, "phases": [], "sessions": []}
+def template(name="Base", author="alice", published=False):
+    return {"meta": {"name": name, "author_pk": author, "author": author, "published": published}, "phases": [], "sessions": []}
 
 
 def seed(result, sk="template#1", item=None):
@@ -88,39 +41,35 @@ def seed(result, sk="template#1", item=None):
     result._write_index_sync([result._summary(item)])
 
 
-def test_failed_publication_keeps_template_and_index_unchanged():
+def test_publication_is_a_plain_write_of_template_and_index():
     result = store()
     seed(result)
-    before = copy.deepcopy(result.table.items)
-    result.table.meta.client.fail_before = True
-    with pytest.raises(ClientError):
-        result.set_published_sync("template#1", True, actor_pk="alice", expected_revision=0, idempotency_key="publish")
-    assert result.table.items == before
+    result.set_published_sync("template#1", True, actor_pk="alice")
+    assert result.table.items[(result.pk, "template#1")]["meta"]["published"] is True
+    assert [item["published"] for item in result.table.items[(result.pk, result.INDEX_SK)]["templates"]] == [True]
 
 
-def test_lost_reply_retries_once_and_returns_same_template():
+def test_creating_the_same_template_twice_makes_two_templates():
     result = store()
-    result.table.meta.client.fail_after = True
-    first = result.put_template_sync(template("New"), actor_pk="alice", published=False, expected_revision=0, idempotency_key="create")
-    assert result.put_template_sync(template("New"), actor_pk="alice", published=False, expected_revision=0, idempotency_key="create") == first
-    assert [item["sk"] for item in result.list_templates_sync(actor_pk="alice")] == [first]
+    first = result.put_template_sync(template("New"), actor_pk="alice", published=False)
+    second = result.put_template_sync(template("New"), actor_pk="alice", published=False)
+    assert first != second
+    assert sorted(item["sk"] for item in result.list_templates_sync(actor_pk="alice")) == sorted([first, second])
 
 
-def test_index_cas_retry_preserves_different_template_creates():
+def test_index_keeps_templates_created_by_different_people():
     result = store()
-    result.table.meta.client.cancel_next = True
     first = result.put_template_sync(template("One"), actor_pk="alice")
     second = result.put_template_sync(template("Two"), actor_pk="bob")
     assert {item["sk"] for item in result.table.items[(result.pk, result.INDEX_SK)]["templates"]} == {first, second}
 
 
-def test_real_client_error_becomes_revision_conflict():
+def test_update_with_stale_revision_still_applies():
     result = store()
     seed(result)
-    result.table.meta.client.cancel_next = True
-    with pytest.raises(TemplateRevisionConflictError) as error:
-        result.update_template_sync("template#1", template("Changed"), actor_pk="alice", expected_revision=0, idempotency_key="update")
-    assert error.value.expected_revision == 0
+    result.update_template_sync("template#1", template("Changed"), actor_pk="alice", expected_revision=0)
+    assert result.table.items[(result.pk, "template#1")]["meta"]["name"] == "Changed"
+    assert "revision" not in result.table.items[(result.pk, "template#1")]["meta"]
 
 
 def test_private_copy_cannot_be_replayed_or_retrieved_by_other_person():

@@ -1,5 +1,6 @@
 import api from './http'
-import type { LiftProfile, VideoLibraryItem } from '@powerlifting/types'
+import type { LiftProfile, Program, VideoLibraryItem } from '@powerlifting/types'
+import type { WeeklyAnalysis } from './analytics'
 
 
 
@@ -29,6 +30,7 @@ export interface PublicProfile {
   }
   lift_videos?: VideoLibraryItem[]
   lift_profiles?: LiftProfile[]
+  sessions_public?: boolean
 }
 
 export async function searchProfiles(query: string): Promise<PublicProfile[]> {
@@ -53,5 +55,17 @@ export async function fetchProfile(nickname: string): Promise<PublicProfile> {
 
 export async function fetchCurrentProfile(): Promise<PublicProfile> {
   const response = await api.get('/profiles/current')
+  return response.data.data
+}
+
+export async function fetchViewedProgram(athlete: string): Promise<Program> {
+  const response = await api.get('/programs/current', { powerliftingViewAthlete: athlete })
+  return response.data.data
+}
+
+export async function fetchViewedWeeklyAnalysis(athlete: string, weeks: number): Promise<WeeklyAnalysis> {
+  const params = new URLSearchParams({ weeks: String(weeks), block: 'current' })
+  const response = await api.get(`/analytics/analysis/weekly?${params.toString()}`, { powerliftingViewAthlete: athlete })
+  if (response.data.error) throw new Error(response.data.error)
   return response.data.data
 }

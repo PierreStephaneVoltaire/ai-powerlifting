@@ -3,6 +3,7 @@
 Run with:  python3 -m pytest services/tests/test_onboarding.py
 """
 import asyncio
+import sys
 from decimal import Decimal
 from unittest import mock
 

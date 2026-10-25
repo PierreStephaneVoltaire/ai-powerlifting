@@ -1,7 +1,6 @@
 /**
- * Integration test for the onboarding routes. Boots the express app,
- * stubs the userSettings service via a real HTTP fake-Lambda server
- * (the real one calls AWS, so we point it at us). Exercises the
+ * Integration test for the onboarding routes. Boots the express app against
+ * a fake Powerlifting profile service and exercises the
  * role -> profile -> athlete_basics flow end-to-end.
  *
  * Run with:  npx tsx src/controllers/__tests__/onboarding.test.ts
@@ -162,7 +161,7 @@ function deriveStatus(settings: Settings) {
   }
 }
 
-function startFakeLambda(): Promise<http.Server> {
+function startFakeServices(): Promise<http.Server> {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       let buf = ''
@@ -170,40 +169,28 @@ function startFakeLambda(): Promise<http.Server> {
       req.on('end', () => {
         const body = buf ? JSON.parse(buf) : {}
         const route = (req.url || '').split('?')[0]
+        const athlete = String(req.headers['x-athlete-pk'] || '')
         const respond = (status: number, payload: any) => {
           res.statusCode = status
           res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ statusCode: status, body: JSON.stringify(payload) }))
+          res.end(JSON.stringify(status >= 400 ? { detail: { message: payload?.error, code: 'validation' } } : payload))
         }
         try {
-          if (route === '/pod_user') {
-            const fn = body.function
-            const username = body.username
-            if (fn === 'settings_get') {
-              if (!store[username]) return respond(200, null)
-              return respond(200, { ...store[username] })
-            }
-            if (fn === 'settings_create') {
-              const u = body.username || body.discord_id
-              if (!store[u]) store[u] = defaultSettings(u)
-              return respond(200, { ...store[u] })
-            }
-            if (fn === 'settings_update_athlete_basics') {
-              if (!store[username]) store[username] = defaultSettings(username)
-              store[username] = applyAthleteBasics(store[username], body.input)
-              return respond(200, { ...store[username] })
-            }
-            if (fn === 'settings_update_onboarding_profile') {
-              if (!store[username]) store[username] = defaultSettings(username)
-              store[username] = applyOnboardingProfile(store[username], body.input)
-              return respond(200, { ...store[username] })
-            }
-            if (fn === 'settings_update_role') {
-              if (!store[username]) store[username] = defaultSettings(username)
-              store[username] = applyRole(store[username], { roles: body.roles, active_role: body.active_role })
-              return respond(200, { ...store[username] })
-            }
-            return respond(400, { error: `Unknown function: ${fn}` })
+          if (route === '/profile/internal/access') return respond(200, { permissions: ['settings:read', 'settings:write'] })
+          const operation = route.startsWith('/profile/operations/') ? route.slice('/profile/operations/'.length) : ''
+          if (!store[athlete]) store[athlete] = defaultSettings(athlete)
+          if (operation === 'onboarding_status') return respond(200, deriveStatus(store[athlete]))
+          if (operation === 'settings_update_athlete_basics') {
+            store[athlete] = applyAthleteBasics(store[athlete], body.input)
+            return respond(200, { ...store[athlete] })
+          }
+          if (operation === 'settings_update_onboarding_profile') {
+            store[athlete] = applyOnboardingProfile(store[athlete], body.input)
+            return respond(200, { ...store[athlete] })
+          }
+          if (operation === 'settings_update_role') {
+            store[athlete] = applyRole(store[athlete], { roles: body.roles, active_role: body.active_role })
+            return respond(200, { ...store[athlete] })
           }
           respond(404, { error: `Unknown route: ${route}` })
         } catch (err) {
@@ -215,7 +202,7 @@ function startFakeLambda(): Promise<http.Server> {
   })
 }
 
-function startBackendApp(onboardingRouter: any): Promise<http.Server> {
+function startBackendApp(onboardingRouter: any, operationScope: any): Promise<http.Server> {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
@@ -237,7 +224,10 @@ function startBackendApp(onboardingRouter: any): Promise<http.Server> {
       mapped_pk: 'testuser',
       readOnly: false,
     }
-    next()
+    req.settings = store['testuser']
+    req.actor_mapped_pk = 'testuser'
+    req.mapped_pk = 'testuser'
+    operationScope.run({ athlete: 'testuser', person: 'testuser' }, next)
   })
   app.use('/api/onboarding', onboardingRouter)
   return new Promise((resolve) => {
@@ -283,18 +273,16 @@ async function jsonReq(
 
 async function main() {
   store['testuser'] = defaultSettings('testuser')
-  // Start the fake Lambda backend first, then point the real backend at it.
-  const lambdaServer = await startFakeLambda()
-  const lambdaPort = (lambdaServer.address() as AddressInfo).port
-  process.env.POWERLIFTING_LAMBDA_BASE_URL = `http://127.0.0.1:${lambdaPort}`
+  const servicesServer = await startFakeServices()
+  const servicesPort = (servicesServer.address() as AddressInfo).port
+  process.env.POWERLIFTING_SERVICE_BASE_URL = `http://127.0.0.1:${servicesPort}`
   process.env.INTERNAL_API_TOKEN = 'test'
+  process.env.PL_PRINCIPAL_SECRET = 'x'.repeat(40)
 
-  // Dynamic import so the userSettings -> lambda module chain picks up the
-  // env vars we just set (the LAMBDA_BASE_URL const is captured at module
-  // load time, so we have to set the env before importing the router).
   const { onboardingRouter } = await import('../../routes/onboarding')
+  const { operationScope } = await import('../../utils/operationScope')
 
-  const backendServer = await startBackendApp(onboardingRouter)
+  const backendServer = await startBackendApp(onboardingRouter, operationScope)
 
   // 1) /status on a brand-new user — should be at the role step.
   const status0 = await jsonReq(backendServer, 'GET', '/api/onboarding/status')
@@ -378,7 +366,7 @@ async function main() {
   check('store matches derived status', expected.is_onboarded === true && expected.next_step === 'done', expected)
 
   backendServer.close()
-  lambdaServer.close()
+  servicesServer.close()
 
   if (failures === 0) {
     console.log('\nOK')

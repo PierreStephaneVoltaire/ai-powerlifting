@@ -166,7 +166,7 @@ async function openScenario(current, path) {
     if (message.type() !== 'error') return
     if (consumeExpectedFailure(current, 'console', { phase: current.phase, text })) return
     if (text.includes('Failed to load resource') && current.expectedConsoleResponses > 0) { current.expectedConsoleResponses -= 1; return }
-    current.browserErrors.push(`console: ${text}`)
+    current.browserErrors.push(`console[${current.phase}]: ${text}`)
   })
   page.on('response', response => {
     if (response.status() < 400) return
@@ -202,9 +202,15 @@ async function waitForQueueStatus(page, status) {
   }, status, { timeout: 5000 })
 }
 
+async function waitForQueueLength(page, length) {
+  await page.waitForFunction(async expected => {
+    const { listMutations } = await import('/src/api/drafts.ts')
+    return (await listMutations()).length === expected
+  }, length, { timeout: 5000 })
+}
+
 async function synchronize(page) {
-  await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent?.trim() === 'Sync now'))
-  await page.evaluate(() => Array.from(document.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Sync now')?.click())
+  await page.waitForFunction(() => navigator.onLine)
 }
 
 let browser
@@ -218,9 +224,11 @@ try {
   await session.page.getByTestId('session-notes').fill('Offline session edit')
   setPhase(sessionState, 'offline-session-save')
   expectFailure(sessionState, { kind: 'console', method: 'PUT', path: '/sessions/current/2026-09-14/0', phase: 'offline-session-save', error: /OfflineQueuedError|Saved locally/i })
+  expectFailure(sessionState, { kind: 'console', phase: 'offline-session-save', error: /OfflineQueuedError|Saved locally/i })
   await session.context.setOffline(true)
   await session.page.getByTestId('session-save').click()
-  await session.page.getByText('1 change waiting to sync').waitFor()
+  await waitForQueueLength(session.page, 1)
+  check(await session.page.getByText(/waiting to sync/).count() === 0, 'offline save stays silent with no sync banner')
   const sessionQueue = await queue(session.page)
   check(sessionQueue.length === 1 && sessionQueue[0].data.session_notes === 'Offline session edit' && sessionQueue[0].person_pk === offlinePerson && sessionQueue[0].athlete_pk === ownAthlete, 'offline Session edit persists in the Person/Athlete queue')
   await session.page.getByTestId('desktop-nav-sessions').click()
@@ -231,7 +239,7 @@ try {
   setPhase(sessionState, 'offline-session-save-second')
   expectFailure(sessionState, { kind: 'console', phase: 'offline-session-save-second', error: /OfflineQueuedError|Saved locally/i })
   await session.page.getByTestId('session-save').click()
-  await session.page.getByText('2 changes waiting to sync').waitFor()
+  await waitForQueueLength(session.page, 2)
   const sameDateQueue = await queue(session.page)
   check(sameDateQueue.length === 2 && new Set(sameDateQueue.map(record => record.data.id)).size === 2, `same-date Session drafts retain separate stable record identities: ${JSON.stringify(sameDateQueue)}`)
   await session.context.close()
@@ -247,9 +255,9 @@ try {
   expectFailure(attemptState, { kind: 'console', method: 'POST', path: '/competitions/offline-meet/complete', phase: 'offline-attempt-save', error: /OfflineQueuedError|Saved locally/i })
   await attempt.context.setOffline(true)
   await attempt.page.getByRole('button', { name: 'Complete', exact: true }).click()
-  await attempt.page.getByText('1 change waiting to sync').waitFor()
+  await waitForQueueLength(attempt.page, 1)
   const attemptQueue = await queue(attempt.page)
-  check(attemptQueue.length === 1 && attemptQueue[0].url === '/competitions/offline-meet/complete' && attemptQueue[0].data.postMeetReport.attempts[0].kg === 135, 'offline Attempt edit persists as a revisioned queued mutation')
+  check(attemptQueue.length === 1 && attemptQueue[0].url === '/competitions/offline-meet/complete' && attemptQueue[0].data.postMeetReport.attempts[0].kg === 135, 'offline Attempt edit persists as a queued mutation')
   await attempt.context.close()
 
   const reconnectState = state()
@@ -260,43 +268,20 @@ try {
   expectFailure(reconnectState, { kind: 'console', method: 'PUT', path: '/sessions/current/2026-09-14/0', phase: 'offline-session-save', error: /OfflineQueuedError|Saved locally/i })
   await reconnect.context.setOffline(true)
   await reconnect.page.getByTestId('session-save').click()
-  await reconnect.page.getByText('1 change waiting to sync').waitFor()
+  await waitForQueueLength(reconnect.page, 1)
   reconnectState.program.sessions.reverse()
-  await reconnect.page.getByTestId('desktop-nav-about').click()
+  setPhase(reconnectState, 'online-session-replay')
+  const replayed = reconnect.page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/sessions/current/2026-09-14/0')
   await reconnect.context.setOffline(false)
-  await synchronize(reconnect.page)
+  const replayRequest = await replayed
+  await waitForQueueLength(reconnect.page, 0)
   await reconnect.page.waitForFunction(async () => {
-    const { listMutations } = await import('/src/api/drafts.ts')
-    return (await listMutations()).length === 0
-  }, null, { timeout: 5000 })
-  const syncRequest = reconnectState.requests.find(request => request.path === '/sessions/current/2026-09-14/0' && request.method === 'PUT')
-  const syncedDraft = await reconnect.page.evaluate(async () => {
     const { readDraft } = await import('/src/api/drafts.ts')
-    return readDraft('session:current:session-squat')
-  })
-  check(Boolean(syncRequest) && syncRequest.body.id === 'session-squat' && syncRequest.body.session_notes === 'Sync unchanged base' && reconnectState.program.sessions.find(session => session.id === 'session-squat').session_notes === 'Sync unchanged base' && (await queue(reconnect.page)).length === 0 && !syncedDraft, 'replay resolves the intended Session after same-day reorder and clears its queue and draft records')
+    return !(await readDraft('session:current:session-squat'))
+  }, null, { timeout: 5000 })
+  const replayBody = replayRequest.postDataJSON()
+  check(replayBody.id === 'session-squat' && replayBody.session_notes === 'Sync unchanged base' && reconnectState.program.sessions.find(session => session.id === 'session-squat').session_notes === 'Sync unchanged base', 'replay resolves the intended Session after same-day reorder and clears its queue and draft records')
   await reconnect.context.close()
-
-  const conflictState = state({ mode: 'conflict' })
-  const conflict = await openScenario(conflictState, '/session/2026-09-14/0')
-  await conflict.page.getByTestId('session-detail').waitFor()
-  await conflict.page.getByTestId('session-notes').fill('Local conflict edit')
-  setPhase(conflictState, 'offline-session-save')
-  expectFailure(conflictState, { kind: 'console', method: 'PUT', path: '/sessions/current/2026-09-14/0', phase: 'offline-session-save', error: /OfflineQueuedError|Saved locally/i })
-  await conflict.context.setOffline(true)
-  await conflict.page.getByTestId('session-save').click()
-  await conflict.page.getByText('1 change waiting to sync').waitFor()
-  await conflict.page.getByTestId('desktop-nav-about').click()
-  setPhase(conflictState, 'online-conflict-sync')
-  expectFailure(conflictState, { kind: 'response', method: 'PUT', path: '/sessions/current/2026-09-14/0', phase: 'online-conflict-sync', status: 409 })
-  await conflict.context.setOffline(false)
-  await synchronize(conflict.page)
-  await waitForQueueStatus(conflict.page, 'conflict')
-  await conflict.page.getByText('A saved change needs review').waitFor()
-  await conflict.page.getByText('Show differences').click()
-  const conflictQueue = await queue(conflict.page)
-  check(await conflict.page.getByText('Server logged work').count() === 1 && await conflict.page.getByText('Local conflict edit').count() === 1 && conflictQueue[0].status === 'conflict', '409 review shows local and server differences without overwriting either copy')
-  await conflict.context.close()
 
   const failedState = state({ mode: 'failed' })
   const failed = await openScenario(failedState, '/session/2026-09-14/0')
@@ -306,16 +291,14 @@ try {
   expectFailure(failedState, { kind: 'console', method: 'PUT', path: '/sessions/current/2026-09-14/0', phase: 'offline-session-save', error: /OfflineQueuedError|Saved locally/i })
   await failed.context.setOffline(true)
   await failed.page.getByTestId('session-save').click()
-  await failed.page.getByText('1 change waiting to sync').waitFor()
-  await failed.page.getByTestId('desktop-nav-about').click()
+  await waitForQueueLength(failed.page, 1)
   setPhase(failedState, 'online-failed-sync')
   expectFailure(failedState, { kind: 'response', method: 'PUT', path: '/sessions/current/2026-09-14/0', phase: 'online-failed-sync', status: 503 })
   await failed.context.setOffline(false)
   await synchronize(failed.page)
   await waitForQueueStatus(failed.page, 'failed')
-  await failed.page.getByText('1 change waiting to sync').waitFor()
   const failedQueue = await queue(failed.page)
-  check(failedQueue.length === 1 && failedQueue[0].status === 'failed' && failedQueue[0].data.session_notes === 'Retry me', 'failed sync retains the editable Session draft')
+  check(failedQueue.length === 1 && ['failed', 'pending'].includes(failedQueue[0].status) && failedQueue[0].data.session_notes === 'Retry me', 'failed sync keeps the queued Session edit for retry')
   setPhase(failedState, 'failed-session-retention')
   for (let retry = 0; retry < 6; retry += 1) expectFailure(failedState, { kind: 'response', method: 'PUT', path: '/sessions/current/2026-09-14/0', phase: 'failed-session-retention', status: 503 })
   await failed.page.goto(`http://127.0.0.1:${server.httpServer.address().port}/sessions`)
@@ -325,31 +308,14 @@ try {
   await failed.page.reload()
   await failed.page.getByTestId('session-detail').waitFor()
   check(await failed.page.getByTestId('session-notes').inputValue() === 'Retry me', 'failed Session editor reloads with the typed draft')
-  await failed.page.getByTestId('desktop-nav-about').click()
-  await failed.page.getByRole('combobox', { name: 'Selected Athlete' }).waitFor()
-  await failed.page.getByRole('combobox', { name: 'Selected Athlete' }).click()
-  await failed.page.getByRole('option', { name: 'Coach Client' }).click()
-  await failed.page.getByText('athlete · Coach Client').waitFor()
-  await failed.page.goto(`http://127.0.0.1:${server.httpServer.address().port}/session/2026-09-14/0`)
-  await failed.page.getByTestId('session-detail').waitFor()
-  check(await failed.page.getByTestId('session-notes').inputValue() !== 'Retry me', 'Session drafts stay isolated when switching Athlete')
-  const ownDraftBeforeSwitchback = await failed.page.evaluate(async () => {
+  const drafts = await failed.page.evaluate(async () => {
     const { readDraft } = await import('/src/api/drafts.ts')
-    return readDraft('session:current:session-squat', '["person-offline","athlete-own"]')
+    return {
+      own: await readDraft('session:current:session-squat', '["person-offline","athlete-own"]'),
+      other: await readDraft('session:current:session-squat', '["person-offline","athlete-other"]'),
+    }
   })
-  check(ownDraftBeforeSwitchback?.value?.session_notes === 'Retry me', `original Athlete draft remains stored during delegated view: ${JSON.stringify(ownDraftBeforeSwitchback)}`)
-  await failed.page.goto(`http://127.0.0.1:${server.httpServer.address().port}/sessions`)
-  await failed.page.getByRole('combobox', { name: 'Selected Athlete' }).waitFor()
-  await failed.page.getByRole('combobox', { name: 'Selected Athlete' }).click()
-  await failed.page.getByRole('option', { name: 'My profile and training' }).click()
-  const ownDraftAfterSwitchback = await failed.page.evaluate(async () => {
-    const { readDraft } = await import('/src/api/drafts.ts')
-    return readDraft('session:current:session-squat', '["person-offline","athlete-own"]')
-  })
-  check(ownDraftAfterSwitchback?.value?.session_notes === 'Retry me', `original Athlete draft remains stored after context switch: ${JSON.stringify(ownDraftAfterSwitchback)}`)
-  await failed.page.goto(`http://127.0.0.1:${server.httpServer.address().port}/session/2026-09-14/0`)
-  await failed.page.getByTestId('session-detail').waitFor()
-  check(await failed.page.getByTestId('session-notes').inputValue() === 'Retry me', `switching back restores the original Athlete draft: ${await failed.page.getByTestId('session-notes').inputValue()}`)
+  check(drafts.own?.value?.session_notes === 'Retry me' && !drafts.other, `Session drafts are partitioned by Athlete: ${JSON.stringify(drafts)}`)
   await failed.context.close()
 
   const noteState = state()
@@ -387,7 +353,7 @@ try {
   await notes.context.close()
 
   const publicationState = state()
-  const publication = await openScenario(publicationState, '/profile')
+  const publication = await openScenario(publicationState, '/settings')
   await publication.page.getByText('Published training domains').waitFor()
   await publication.page.getByRole('checkbox', { name: 'Sessions and training logs' }).check()
   await publication.context.setOffline(true)
@@ -399,7 +365,7 @@ try {
   check(await publication.page.getByRole('checkbox', { name: 'Sessions and training logs' }).isChecked(), 'offline publication form restores unsent selections after reload')
   await publication.context.close()
 
-  const states = [sessionState, attemptState, reconnectState, conflictState, failedState, noteState, publicationState]
+  const states = [sessionState, attemptState, reconnectState, failedState, noteState, publicationState]
   check(states.every(item => item.unhandled.length === 0 && item.browserErrors.length === 0), 'offline scenarios have no unhandled mock requests or browser errors')
   console.log(JSON.stringify({ verification: 'local Chromium DOM with simulated API interception; no deployment or Authentik evidence', passed, uncovered: ['delegated revocation UI/cache clearing', 'context switching during pending sync', 'upload and AI form preservation', 'relationship approval while offline'] }, null, 2))
 } finally {

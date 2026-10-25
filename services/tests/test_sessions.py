@@ -8,43 +8,9 @@ import pytest
 
 
 from services.contract import load_operations
-from services.dispatch import OperationError, unwrap
-from services.lib.session_store import SessionIdentityConflictError, SessionRevisionConflictError, SessionStore
+
+from services.lib.session_store import SessionIdentityConflictError, SessionStore
 from services.lib.session_tool_helpers import resolve_context
-
-
-class TransactionCanceledException(Exception):
-    pass
-
-
-class WireClient:
-    def __init__(self, tables):
-        self.tables = tables
-        self.calls = []
-        self.fail_next = False
-
-    def transact_write_items(self, TransactItems):
-        self.calls.append(copy.deepcopy(TransactItems))
-        if self.fail_next:
-            self.fail_next = False
-            raise TransactionCanceledException("conditional check failed")
-        pending = {name: copy.deepcopy(table.items) for name, table in self.tables.items()}
-        for operation in TransactItems:
-            kind, value = next(iter(operation.items()))
-            items = pending[value["TableName"]]
-            key = tuple(value["Key"].values()) if "Key" in value else None
-            if kind == "Put":
-                item = copy.deepcopy(value["Item"])
-                items[(item["pk"], item["sk"])] = item
-            elif kind == "Delete":
-                items.pop(key, None)
-            else:
-                current = items[key]
-                values = dict(value["ExpressionAttributeValues"])
-                current["revision"] = values[":next_revision"]
-                current["updated_at"] = values[":updated_at"]
-        for name, items in pending.items():
-            self.tables[name].items = items
 
 
 class WireTable:
@@ -52,6 +18,7 @@ class WireTable:
         self.name = name
         self.items = {(item["pk"], item["sk"]): copy.deepcopy(item) for item in items}
         self.meta = SimpleNamespace(client=None)
+        self.puts = []
 
     def get_item(self, Key, **_kwargs):
         item = self.items.get((Key["pk"], Key["sk"]))
@@ -60,30 +27,27 @@ class WireTable:
     def query(self, **_kwargs):
         return {"Items": copy.deepcopy(list(self.items.values()))}
 
+    def put_item(self, Item, **kwargs):
+        assert "ConditionExpression" not in kwargs
+        self.puts.append(copy.deepcopy(Item))
+        self.items[(Item["pk"], Item["sk"])] = copy.deepcopy(Item)
 
-def test_session_mutation_is_wire_serialized_and_bumps_program_revision(monkeypatch):
-    source = WireTable("if-health", [
-        {"pk": "athlete", "sk": "program#current", "ref_sk": "program#v001", "revision": 4},
-        {"pk": "athlete", "sk": "program#v001", "meta": {"revision": 4}},
-    ])
+    def delete_item(self, Key, **kwargs):
+        assert "ConditionExpression" not in kwargs
+        self.items.pop((Key["pk"], Key["sk"]), None)
+
+
+def test_session_writes_are_plain_puts_to_the_session_table_only(monkeypatch):
+    program = {"pk": "athlete", "sk": "program#v001", "meta": {}}
+    source = WireTable("if-health", [{"pk": "athlete", "sk": "program#current", "ref_sk": "program#v001"}, program])
     sessions = WireTable("if-sessions", [])
-    client = WireClient({"if-health": source, "if-sessions": sessions})
-    source.meta.client = client
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
     monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
-    created = store.create_session_sync(
-        "program#v001",
-        {"date": "2026-09-14", "week_number": 1, "exercises": [{"sets": 1, "kg": 100.5}]},
-        expected_revision=4,
-        idempotency_key="create-session",
-    )
-    assert source.items[("athlete", "program#current")]["revision"] == 5
-    assert source.items[("athlete", "program#v001")]["meta"]["revision"] == 5
+    created = store.create_session_sync("program#v001", {"date": "2026-09-14", "week_number": 1, "exercises": [{"sets": 1, "kg": 100.5}]})
     assert created["id"]
-    assert len(client.calls) == 1
 
     def contains_float(value):
         if isinstance(value, float):
@@ -94,26 +58,12 @@ def test_session_mutation_is_wire_serialized_and_bumps_program_revision(monkeypa
             return any(contains_float(child) for child in value)
         return False
 
-    assert not contains_float(client.calls[0])
-    replay = store.create_session_sync(
-        "program#v001",
-        {"date": "2026-09-14", "week_number": 1, "exercises": [{"sets": 1, "kg": 100.5}]},
-        expected_revision=4,
-        idempotency_key="create-session",
-    )
-    assert replay["id"] == created["id"]
-    assert len(client.calls) == 1
-
-    updated = store.patch_session_sync(
-        "program#v001", "2026-09-14", {"session_notes": "logged"}, expected_revision=5, idempotency_key="patch-session"
-    )
+    assert len(sessions.puts) == 1 and not contains_float(sessions.puts[0])
+    updated = store.patch_session_sync("program#v001", "2026-09-14", {"session_notes": "logged"})
     assert updated["session_notes"] == "logged"
-    assert source.items[("athlete", "program#current")]["revision"] == 6
-    client.fail_next = True
-    with pytest.raises(Exception) as error:
-        store.patch_session_sync("program#v001", "2026-09-14", {"session_notes": "lost"}, expected_revision=6, idempotency_key="failed-patch")
-    assert error.value.__class__.__name__ == "SessionRevisionConflictError"
-    assert source.items[("athlete", "program#current")]["revision"] == 6
+    stored = next(iter(sessions.items.values()))
+    assert stored["session_notes"] == "logged" and "revision" not in stored
+    assert source.puts == [] and source.items[("athlete", "program#v001")] == program
 
 
 def test_session_identity_collisions_are_rejected_before_writes(monkeypatch):
@@ -125,8 +75,6 @@ def test_session_identity_collisions_are_rejected_before_writes(monkeypatch):
         "pk": "athlete", "sk": "session#program#v001#2026-09-14#001#history",
         "session_id": "history", "id": "history", "date": "2026-09-14",
     }])
-    client = WireClient({"if-health": source, "if-sessions": sessions})
-    source.meta.client = client
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
@@ -137,7 +85,7 @@ def test_session_identity_collisions_are_rejected_before_writes(monkeypatch):
             "program#v001", {"id": "history", "date": "2026-09-15"},
             expected_revision=4, idempotency_key="duplicate-create",
         )
-    assert not client.calls
+    assert sessions.puts == []
     with pytest.raises(SessionIdentityConflictError, match="occurs more than once"):
         store.replace_program_sessions_sync(
             "program#v001", [{"id": "new", "date": "2026-09-15"}, {"id": "new", "date": "2026-09-16"}],
@@ -159,15 +107,12 @@ def test_explicit_lookup_rejects_legacy_ambiguous_identity(monkeypatch):
     store._table = sessions
     store._source_table = source
 
-    with pytest.raises(SessionIdentityConflictError, match="ambiguous"):
+    with pytest.raises(ValueError, match="ambiguous"):
         store._find_item_sync("program#v001", "2026-09-14", session_id="legacy")
 
 
-def test_training_patch_preserves_authoritative_media_and_guards_media_revision(monkeypatch):
-    source = WireTable("if-health", [
-        {"pk": "athlete", "sk": "program#current", "ref_sk": "program#v001", "revision": 4},
-        {"pk": "athlete", "sk": "program#v001", "meta": {"revision": 4}},
-    ])
+def test_training_patch_preserves_stored_media(monkeypatch):
+    source = WireTable("if-health", [{"pk": "athlete", "sk": "program#current", "ref_sk": "program#v001"}])
     sessions = WireTable("if-sessions", [{
         "pk": "athlete",
         "sk": "session#program#v001#2026-09-14#001#session-1",
@@ -177,26 +122,17 @@ def test_training_patch_preserves_authoritative_media_and_guards_media_revision(
         "week_number": 1,
         "exercises": [],
         "videos": [{"video_id": "worker-ready", "thumbnail_status": "ready"}],
-        "media_revision": 7,
-        "revision": 2,
     }])
-    client = WireClient({"if-health": source, "if-sessions": sessions})
-    source.meta.client = client
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
     monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
-    result = store.patch_session_sync(
-        "program#v001", "2026-09-14", {"session_notes": "logged"},
-        expected_revision=4, idempotency_key="media-patch",
-    )
+    result = store.patch_session_sync("program#v001", "2026-09-14", {"session_notes": "logged", "videos": []})
     assert result["videos"] == [{"video_id": "worker-ready", "thumbnail_status": "ready"}]
-    put = next(item["Put"] for item in client.calls[-1] if "Put" in item and item["Put"]["TableName"] == "if-sessions")
-    assert put["Item"]["videos"] == [{"video_id": "worker-ready", "thumbnail_status": "ready"}]
-    assert put["Item"]["media_revision"] == 7
-    assert "#pk" not in put["ExpressionAttributeNames"]
-    assert "#media_revision" in put["ConditionExpression"]
+    put = sessions.puts[-1]
+    assert put["videos"] == [{"video_id": "worker-ready", "thumbnail_status": "ready"}]
+    assert "media_revision" not in put and "revision" not in put
 
 
 def test_session_operation_results_describe_handler_shapes():
@@ -239,8 +175,6 @@ def test_stable_session_id_wins_when_same_day_order_changes(monkeypatch):
         {"pk": "athlete", "sk": "session#program#v001#2026-09-13#001#first", "session_id": "first", "id": "first", "date": "2026-09-13", "week_number": 1, "exercises": [], "revision": 1, "same_day_ordinal": 1},
         {"pk": "athlete", "sk": "session#program#v001#2026-09-13#002#second", "session_id": "second", "id": "second", "date": "2026-09-13", "week_number": 1, "exercises": [], "revision": 1, "same_day_ordinal": 2},
     ])
-    client = WireClient({"if-health": source, "if-sessions": sessions})
-    source.meta.client = client
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
@@ -248,26 +182,22 @@ def test_stable_session_id_wins_when_same_day_order_changes(monkeypatch):
 
     first, second = sessions.items.values()
     first["same_day_ordinal"], second["same_day_ordinal"] = 2, 1
-    updated = store.patch_session_sync(
-        "program#v001", "2026-09-13", {"session_notes": "intended"}, [], 0, 4, "stable-id", False, "second"
-    )
+    updated = store.patch_session_sync("program#v001", "2026-09-13", {"session_notes": "intended"}, [], 0, session_id="second")
 
     assert updated["id"] == "second"
     assert updated["session_notes"] == "intended"
 
 
-def test_date_only_lookup_rejects_ambiguous_sessions_and_missing_id_is_structured_conflict():
+def test_date_only_lookup_rejects_ambiguous_sessions_and_missing_id():
     store = SessionStore.__new__(SessionStore)
     store._query_items_sync = lambda _program_sk: [
         {"date": "2026-09-13", "session_id": "first"},
         {"date": "2026-09-13", "session_id": "second"},
     ]
-    store._current_revision_sync = lambda _program_sk: 8
-    with pytest.raises(SessionRevisionConflictError):
+    with pytest.raises(ValueError, match="choose one by id"):
         store._find_item_sync("program#v001", "2026-09-13")
-    with pytest.raises(SessionIdentityConflictError) as error:
+    with pytest.raises(ValueError, match="no longer exists"):
         store._find_item_sync("program#v001", "2026-09-13", session_id="deleted")
-    assert error.value.code == "session_identity_conflict"
 
 
 def test_legacy_session_handlers_bind_every_mutation_to_the_stable_id(monkeypatch):
@@ -369,23 +299,17 @@ async def _patch_context():
     return "program#v001", []
 
 
-def test_deleted_stable_session_is_a_recoverable_conflict(monkeypatch):
-    source = WireTable("if-health", [
-        {"pk": "athlete", "sk": "program#current", "ref_sk": "program#v001", "revision": 4},
-        {"pk": "athlete", "sk": "program#v001", "meta": {"revision": 4}},
-    ])
+def test_patching_a_deleted_session_reports_it_is_gone(monkeypatch):
+    source = WireTable("if-health", [{"pk": "athlete", "sk": "program#current", "ref_sk": "program#v001"}])
     sessions = WireTable("if-sessions", [])
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
     monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
-    with pytest.raises(SessionIdentityConflictError) as error:
-        store.patch_session_sync(
-            "program#v001", "2026-09-13", {"session_notes": "keep draft"}, [], 0, 4, "deleted-id", False, "deleted-session"
-        )
-    assert error.value.current_revision == 4
-    assert error.value.current_record is None
+    with pytest.raises(ValueError, match="no longer exists"):
+        store.patch_session_sync("program#v001", "2026-09-13", {"session_notes": "keep draft"}, session_id="deleted-session")
+    assert sessions.puts == []
 
 
 def test_identity_conflict_code_survives_service_transports(monkeypatch):

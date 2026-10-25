@@ -10,6 +10,8 @@ import asyncio
 import base64
 import logging
 from importlib import import_module
+
+from services.lib.performed_sets import expand_session_sets
 from services.lib.block_scope import ACTIVE, current_block_id, in_block, resolve_block_id, scope_entries, scope_program
 import os
 import re
@@ -335,21 +337,29 @@ def _normalize_export_format(format_value: str | None) -> str:
     raise ValueError(f"Unsupported export format: {format_value!r}. Use 'xlsx' or 'markdown'.")
 
 
+def _export_block_name(program: dict, session_block: str) -> str:
+    meta = program.get("meta") or {}
+    target = current_block_id(program) if session_block == ACTIVE else session_block
+    block = next((item for item in meta.get("blocks") or [] if isinstance(item, dict) and target in {item.get("id"), item.get("label")}), None)
+    return str((block or {}).get("name") or meta.get("program_name") or "program").strip()
+
+
 def _export_filename(program: dict, session_block: str, window: dict, extension: str) -> str:
-    block_label = "current" if session_block == ACTIVE else session_block
     if window.get("week_start") is not None and window.get("week_end") is not None:
         span = f"_W{window['week_start']}-W{window['week_end']}"
     elif window.get("window_start") or window.get("window_end"):
         span = f"_{window.get('window_start', '')}_{window.get('window_end', '')}"
     else:
         span = ""
-    return re.sub(r"[^A-Za-z0-9_.-]+", "-", f"program_{block_label}{span}.{extension}")
+    stem = re.sub(r"[^A-Za-z0-9]+", "-", _export_block_name(program, session_block)).strip("-").lower() or "program"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", f"{stem}{span}.{extension}")
 
 
 def _write_program_export(program: dict, session_block: str, window: dict, store, out_dir: str, format_value: str | None) -> tuple[str, str, str]:
     from .export import build_program_markdown, build_program_xlsx
 
     export_format = _normalize_export_format(format_value)
+    program = {**program, "meta": {**(program.get("meta") or {}), "program_name": _export_block_name(program, session_block)}, "sessions": expand_session_sets(program.get("sessions", []))}
     analysis = _build_analysis_bundle(program, program.get("sessions", []), store, session_block=session_block, window=window)
     active = current_block_id(program)
     target = active if session_block == ACTIVE else session_block

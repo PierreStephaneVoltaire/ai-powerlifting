@@ -168,24 +168,13 @@ def test_new_version_detects_partial_performed_sets_and_preserves_media(status):
         store._validate_version_patches(old, [{"path": "sessions[0].exercises", "value": []}])
 
 
-def test_new_version_lost_reply_same_key_replays_authoritative_marker():
-    store = ProgramStore("health", "athlete")
-    current = {"pk": "athlete", "sk": "program#v002", "meta": {"new_version_idempotency": {"same": "hash"}}}
-    table = SetupTable()
-    table.items[("athlete", "program#current")] = {"pk": "athlete", "sk": "program#current", "ref_sk": "program#v002", "revision": 2}
-    table.items[("athlete", "program#v002")] = current
-    store._table = table
-    store._write_new_version_sync = lambda *args: (_ for _ in ()).throw(ClientError({"Error": {"Code": "TransactionCanceledException"}}, "TransactWriteItems"))
-    result = asyncio.run(store._write_new_version({"meta": {"new_version_idempotency": {"same": "hash"}}}, False, 1, "same"))
-    assert result["sk"] == "program#v002"
-
-
-def test_new_version_different_key_payload_rejects_authoritative_marker():
+def test_new_version_write_failure_is_reported_without_replay():
     store = ProgramStore("health", "athlete")
     table = SetupTable()
-    table.items[("athlete", "program#current")] = {"pk": "athlete", "sk": "program#current", "ref_sk": "program#v002", "revision": 2}
-    table.items[("athlete", "program#v002")] = {"pk": "athlete", "sk": "program#v002", "meta": {"new_version_idempotency": {"same": "other"}}}
+    table.items[("athlete", "program#current")] = {"pk": "athlete", "sk": "program#current", "ref_sk": "program#v002"}
+    table.items[("athlete", "program#v002")] = {"pk": "athlete", "sk": "program#v002", "meta": {}}
     store._table = table
-    store._write_new_version_sync = lambda *args: (_ for _ in ()).throw(ClientError({"Error": {"Code": "TransactionCanceledException"}}, "TransactWriteItems"))
-    with pytest.raises(ValueError, match="different payload"):
-        asyncio.run(store._write_new_version({"meta": {"new_version_idempotency": {"same": "hash"}}}, False, 1, "same"))
+    store._write_new_version_sync = lambda *args: (_ for _ in ()).throw(ClientError({"Error": {"Code": "InternalServerError"}}, "PutItem"))
+    with pytest.raises(RuntimeError, match="Failed to write new version"):
+        asyncio.run(store._write_new_version({"meta": {}}, False))
+    assert table.items[("athlete", "program#current")]["ref_sk"] == "program#v002"

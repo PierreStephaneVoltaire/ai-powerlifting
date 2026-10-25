@@ -1,31 +1,19 @@
 import asyncio
 import copy
 import hashlib
-import threading
-from types import SimpleNamespace
 
 import pytest
-from botocore.exceptions import ClientError
 
 
-from services.lib.program_store import ProgramNotFoundError, ProgramRevisionConflictError, ProgramStore
+from services.lib.program_store import ProgramNotFoundError, ProgramStore
 from services.lib.session_store import SessionIdentityConflictError
-
-
-class TransactionCanceledException(ClientError):
-    def __init__(self, message):
-        super().__init__({"Error": {"Code": "TransactionCanceledException", "Message": message}}, "TransactWriteItems")
 
 
 class FakeTable:
     def __init__(self, items):
         self.items = {tuple(item[key] for key in ("pk", "sk")): copy.deepcopy(item) for item in items}
-        self.meta = SimpleNamespace(client=SimpleNamespace(transact_write_items=self.transact_write_items))
-        self.conflict_next = False
         self.puts = []
         self.deletes = []
-        self.transaction_lock = threading.Lock()
-        self.transaction_barrier = None
 
     def get_item(self, Key, **_kwargs):
         item = self.items.get((Key["pk"], Key["sk"]))
@@ -46,34 +34,6 @@ class FakeTable:
             for (pk, sk), item in self.items.items()
             if pk == "athlete-1" and sk.startswith("program#v")
         ]}
-
-    def transact_write_items(self, TransactItems):
-        if self.conflict_next:
-            self.conflict_next = False
-            pointer = self.items[("athlete-1", "program#current")]
-            pointer["revision"] = int(pointer.get("revision", 0)) + 1
-            raise TransactionCanceledException("conditional check failed")
-        if self.transaction_barrier is not None:
-            self.transaction_barrier.wait()
-        with self.transaction_lock:
-            pending = copy.deepcopy(self.items)
-            for operation in TransactItems:
-                if "Put" in operation:
-                    put = operation["Put"]
-                    item = copy.deepcopy(put["Item"])
-                    current = pending.get((item["pk"], item["sk"]))
-                    expected = put["ExpressionAttributeValues"][":revision"]
-                    if current and int(current.get("revision", 0)) != int(expected):
-                        raise TransactionCanceledException("conditional check failed")
-                    pending[(item["pk"], item["sk"])] = item
-                else:
-                    update = operation["Update"]
-                    key = dict(update["Key"])
-                    current = pending.get((key["pk"], key["sk"]))
-                    if not current or current.get("published", True) is not False:
-                        raise TransactionCanceledException("conditional check failed")
-                    current["published"] = update["ExpressionAttributeValues"][":published"]
-            self.items = pending
 
 
 class FakeSessionStore:
@@ -145,7 +105,6 @@ def test_complete_and_start_preserves_history_resets_numbering_and_sessions():
     meta = program["meta"]
     next_id = f"block-{hashlib.sha256(b'transition-1').hexdigest()[:16]}"
     archive_id = next(block["id"] for block in meta["blocks"] if block["status"] == "completed")
-    assert result["revision"] == 5
     assert meta["current_block_id"] == next_id
     assert [block["label"] for block in meta["blocks"]].count("current") == 1
     assert [block["id"] for block in meta["blocks"]].count(next_id) == 1
@@ -204,7 +163,7 @@ def test_retry_is_idempotent_and_creates_one_archive_and_next_block():
     }
     first = transition(store, **args)
     second = transition(store, **args)
-    assert second["revision"] == first["revision"] == 5
+    assert "revision" not in second
     assert second["next_block_id"] == first["next_block_id"]
     assert len(second["program"]["meta"]["blocks"]) == 2
     assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v")]) == 2
@@ -226,7 +185,7 @@ def test_template_replay_uses_outer_payload_before_current_block_changes():
     }
     first = transition(store, **args)
     replay = transition(store, **{**args, "block_id": first["next_block_id"], "template_payload_hash": "outer-payload"})
-    assert replay["revision"] == first["revision"] == 5
+    assert "revision" not in replay
     assert replay["next_block_id"] == first["next_block_id"]
     assert replay["program"]["meta"]["current_block_id"] == first["next_block_id"]
     assert len(replay["program"]["meta"]["blocks"]) == 2
@@ -235,21 +194,13 @@ def test_template_replay_uses_outer_payload_before_current_block_changes():
         transition(store, **{**args, "template_payload_hash": "changed-payload"})
 
 
-def test_revision_conflict_removes_uncommitted_staged_version_from_history():
+def test_stale_expected_revision_no_longer_blocks_transition():
     store, table, _ = make_store()
-    table.conflict_next = True
-    with pytest.raises(ProgramRevisionConflictError) as error:
-        transition(
-            store,
-            action="complete",
-            block_id="current",
-            expected_revision=4,
-            idempotency_key="transition-conflict",
-        )
-    assert error.value.expected_revision == 4
-    assert error.value.current_revision == 5
-    assert [item["sk"] for item in store._list_programs_sync(include_archived=True)] == ["program#v007"]
-    assert any(item.get("published") is False for item in table.items.values())
+    result = transition(store, action="complete", block_id="current", expected_revision=0, idempotency_key="stale-revision")
+    assert result["program"]["meta"]["current_block_id"] is None
+    pointer = table.items[("athlete-1", "program#current")]
+    assert pointer["ref_sk"].startswith("program#v008")
+    assert table.items[("athlete-1", pointer["ref_sk"])]["published"] is True
 
 
 def test_complete_and_start_backfills_historical_start_maxes_from_block():
@@ -360,66 +311,20 @@ def test_new_version_rejects_full_program_duplicate_before_staging():
 
 def test_unpublished_stages_are_hidden_from_lists_and_reads():
     store, table, _ = make_store()
-    table.conflict_next = True
-    with pytest.raises(ProgramRevisionConflictError):
-        transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="stage-hidden")
-    staged = [item for item in table.items.values() if item.get("published") is False]
-    assert len(staged) == 1
-    assert all(item["sk"] not in {p["sk"] for p in store._list_programs_sync(include_archived=True)} for item in staged)
-    store._selected_program_sk = staged[0]["sk"]
+    staged = {**copy.deepcopy(table.items[("athlete-1", "program#v007")]), "sk": "program#v008", "published": False}
+    table.items[("athlete-1", "program#v008")] = staged
+    assert [item["sk"] for item in store._list_programs_sync(include_archived=True)] == ["program#v007"]
+    store._selected_program_sk = "program#v008"
     with pytest.raises(ProgramNotFoundError):
         store._load_program_sync()
 
 
-def test_ordinary_new_version_advances_existing_revision():
+def test_ordinary_new_version_writes_next_version_without_revision_check():
     store, table, _ = make_store()
-    result = asyncio.run(store.new_version([], "ordinary change", 4, "ordinary-change"))
-    assert result["meta"]["revision"] == 5
-    assert table.items[("athlete-1", "program#current")]["revision"] == 5
-
-
-def test_concurrent_different_payloads_stage_distinct_unpublished_versions():
-    first, table, _ = make_store()
-    second, _, _ = make_store()
-    second._table = table
-    table.transaction_barrier = threading.Barrier(2)
-    async def race():
-        return await asyncio.gather(
-            first.block_transition(action="complete", block_id="current", expected_revision=4, idempotency_key="race-one"),
-            second.block_transition(action="complete", block_id="current", expected_revision=4, idempotency_key="race-two"),
-            return_exceptions=True,
-        )
-    results = asyncio.run(race())
-    assert sum(isinstance(result, ProgramRevisionConflictError) for result in results) == 1
-    staged = [item for item in table.items.values() if item.get("published") is False]
-    assert len(staged) == 1
-    assert staged[0]["sk"] != "program#v008"
-
-
-def test_transition_rejects_session_log_written_after_staging():
-    store, table, sessions_store = make_store()
-
-    def log_session_after_stage(program_sk):
-        if program_sk == "program#v007":
-            return
-        pointer = table.items[("athlete-1", "program#current")]
-        pointer["revision"] = 5
-        table.items[("athlete-1", "program#v007")]["meta"]["revision"] = 5
-        sessions_store.sessions["program#v007"][0]["session_notes"] = "logged during transition"
-
-    sessions_store.on_replace = log_session_after_stage
-    with pytest.raises(ProgramRevisionConflictError):
-        transition(
-            store,
-            action="complete",
-            block_id="current",
-            expected_revision=4,
-            idempotency_key="session-race",
-        )
-    assert sessions_store.sessions["program#v007"][0]["session_notes"] == "logged during transition"
-    assert table.items[("athlete-1", "program#current")]["ref_sk"] == "program#v007"
-    staged = [item for item in table.items.values() if item.get("published") is False]
-    assert len(staged) == 1
+    result = asyncio.run(store.new_version([], "ordinary change", 0, "ordinary-change"))
+    pointer = table.items[("athlete-1", "program#current")]
+    assert pointer["ref_sk"].startswith("program#v008")
+    assert result["meta"]["version_label"] != "7.0"
 
 
 def test_complete_archives_current_block_under_name_slug():

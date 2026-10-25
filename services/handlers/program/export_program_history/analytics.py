@@ -2376,6 +2376,17 @@ def _lift_stimulus_coefficients(lift_profiles: list[dict] | None) -> dict[str, f
         coeffs[lift] = round(_clamp(_num(raw_coeff) if raw_coeff is not None else 1.0, 1.0, 2.0), 2)
     return coeffs
 
+def _lift_e1rm_multipliers(lift_profiles: list[dict] | None) -> dict[str, float]:
+    multipliers = {"squat": 1.0, "bench": 1.0, "deadlift": 1.0}
+    for profile in lift_profiles or []:
+        lift = str(profile.get("lift", "")).lower().strip()
+        if lift not in multipliers:
+            continue
+        value = _num(profile.get("e1rm_multiplier", 1.0))
+        if value > 0:
+            multipliers[lift] = value
+    return multipliers
+
 def compute_e1rm_multiplier_suggestions(
     program: dict,
     max_history: list[dict] | None = None,

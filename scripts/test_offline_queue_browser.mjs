@@ -41,17 +41,12 @@ try {
     await drafts.synchronizePendingMutations(sender)
     check(applied.size === 1 && !(await drafts.listMutations()).length, 'lost response replay applies exactly once')
     check(!(await drafts.readDraft('authored-note:note')), 'successful replay clears original draft')
-    const conflict = await drafts.prepareMutation(input('conflict'))
-    await drafts.synchronizePendingMutations(async () => { throw { response: { status: 409, data: { code: 'revision_conflict', current_revision: 4, current_record: { text: 'server' } } } } })
-    const savedConflict = (await drafts.listMutations())[0]
-    check(savedConflict.status === 'conflict' && savedConflict.conflict.current_record.text === 'server' && savedConflict.data.text === 'local', 'conflict preserves server and local versions')
+    const rejected = await drafts.prepareMutation(input('rejected'))
+    await drafts.synchronizePendingMutations(async () => { throw { response: { status: 409, data: { code: 'rejected' } } } })
+    check(!(await drafts.listMutations()).some(record => record.id === rejected.id), 'server-rejected edit is dropped, not held for review')
     let sent = 0
     await drafts.synchronizePendingMutations(async () => { sent++; return { status: 200 } })
-    check(sent === 0, 'conflict never silently replays')
-    await drafts.resolveMutation(savedConflict, { note_id: 'note', text: 'reviewed' })
-    const reviewed = (await drafts.listMutations())[0]
-    check(reviewed.expected_revision === 4 && reviewed.idempotency_key !== conflict.idempotency_key, 'explicit resolution uses reviewed revision and a new key')
-    await drafts.synchronizePendingMutations(async () => ({ status: 200 }))
+    check(sent === 0, 'rejected edit never replays')
     actor('other-author', 'athlete')
     await drafts.prepareMutation(input('other-person'))
     actor('author', 'athlete')
@@ -74,9 +69,8 @@ try {
     check(sessionReplay.join(',') === 'old,new' && !(await drafts.readDraft('session:current:session-b')), 'newer typed Session text survives an older in-flight replay')
     await drafts.saveDraft('session:current:deleted', { id: 'deleted', session_notes: 'preserve' })
     const deleted = await drafts.prepareMutation({ method: 'PUT', url: '/sessions/current/2026-09-14/0', data: { id: 'deleted', session_notes: 'preserve', expected_revision: 7, idempotency_key: 'deleted-session' }, expected_revision: 7, idempotency_key: 'deleted-session' })
-    await drafts.synchronizePendingMutations(async () => { throw { response: { status: 409, data: { code: 'session_identity_conflict', current_revision: 8, current_record: null } } } })
-    const deletedConflict = (await drafts.listMutations()).find(record => record.id === deleted.id)
-    check(deletedConflict.status === 'conflict' && (await drafts.readDraft('session:current:deleted')).value.session_notes === 'preserve', 'deleted Session preserves a structured conflict and the editable draft')
+    await drafts.synchronizePendingMutations(async () => { throw { response: { status: 409, data: { code: 'session_identity_conflict' } } } })
+    check(!(await drafts.listMutations()).some(record => record.id === deleted.id) && (await drafts.readDraft('session:current:deleted')).value.session_notes === 'preserve', 'deleted Session drops the rejected replay and keeps the editable draft')
     await drafts.prepareMutation(input('blocked'))
     await cache.setCached('/private', { private: 'cached' }, ['program:current'])
     await drafts.saveDraft('unsent', { text: 'preserved' })
@@ -96,7 +90,7 @@ try {
     check(cancelled, 'late response cannot populate switched context')
     return passed
   })
-  assert.equal(results.length, 14)
+  assert.equal(results.length, 13)
   console.log(JSON.stringify({ verification: 'local browser with simulated server responses', passed: results }, null, 2))
 } finally {
   await browser?.close()

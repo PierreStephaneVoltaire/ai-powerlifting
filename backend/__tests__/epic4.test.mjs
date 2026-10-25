@@ -1,28 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import jwt from 'jsonwebtoken'
 
-process.env.JWT_SECRET = 'test-secret'
+process.env.AUTHENTIK_ISSUER_URL = 'https://auth.example.com/application/o/powerlifting/'
+process.env.SESSION_SECRET = 'test-secret'
 
-// Use tsx to import the TypeScript source files
-const { signToken, verifyToken, tokenToIdentity } = await import('../src/middleware/auth.ts')
+const { discordIdentityFromProfile, isValidIdentity } = await import('../src/middleware/auth.ts')
 
-function makeDiscordToken() {
+function authentikIdentity() {
   return {
-    provider: 'discord',
-    sub: '1234567890',
-    username: 'oliver',
-    display_name: 'Oliver',
-    avatar: 'https://example.com/avatar.png',
-    groups: [],
-    roles: [],
-    email: null,
-    discord_id: '1234567890',
-  }
-}
-
-function makeAuthentikToken() {
-  return {
+    issuer: process.env.AUTHENTIK_ISSUER_URL,
     provider: 'authentik',
     sub: 'authentik-user-uuid',
     username: 'oliver',
@@ -31,58 +17,40 @@ function makeAuthentikToken() {
     groups: ['powerlifting', 'coaches'],
     roles: ['app:coach'],
     email: 'oliver@example.com',
-    discord_id: '',
   }
 }
 
-test('Discord token roundtrips and yields a discord identity', () => {
-  const token = signToken(makeDiscordToken())
-  const payload = verifyToken(token)
-  assert.ok(payload, 'payload should not be null')
-  assert.equal(payload.provider, 'discord')
-  assert.equal(payload.sub, '1234567890')
-  const identity = tokenToIdentity(payload)
+test('Discord profile becomes a verified discord identity', () => {
+  const identity = discordIdentityFromProfile({ id: '1234567890', username: 'oliver', global_name: 'Oliver', avatar: 'abc' })
   assert.equal(identity.provider, 'discord')
-  assert.equal(identity.username, 'oliver')
+  assert.equal(identity.issuer, 'https://discord.com')
+  assert.equal(identity.sub, '1234567890')
+  assert.equal(identity.display_name, 'Oliver')
+  assert.equal(identity.avatar, 'https://cdn.discordapp.com/avatars/1234567890/abc.png')
+  assert.deepEqual(identity.discord_subjects, ['1234567890'])
+  assert.ok(isValidIdentity(identity))
 })
 
-test('Authentik token roundtrips and preserves groups and roles', () => {
-  const token = signToken(makeAuthentikToken())
-  const payload = verifyToken(token)
-  assert.ok(payload, 'payload should not be null')
-  assert.equal(payload.provider, 'authentik')
-  assert.equal(payload.sub, 'authentik-user-uuid')
-  assert.deepEqual(payload.groups, ['powerlifting', 'coaches'])
-  assert.deepEqual(payload.roles, ['app:coach'])
-  assert.equal(payload.email, 'oliver@example.com')
-  const identity = tokenToIdentity(payload)
-  assert.equal(identity.provider, 'authentik')
-  assert.ok(identity.groups.includes('powerlifting'))
+test('Discord profile without a display name falls back to the username', () => {
+  const identity = discordIdentityFromProfile({ id: '42', username: 'legacy' })
+  assert.equal(identity.display_name, 'legacy')
+  assert.equal(identity.avatar, null)
 })
 
-test('Old discord tokens (no provider field) are migrated to provider=discord', () => {
-  const legacy = jwt.sign(
-    { discord_id: '42', username: 'legacy', avatar: null, sub: '42' },
-    process.env.JWT_SECRET,
-    { expiresIn: '7d' },
-  )
-  const payload = verifyToken(legacy)
-  assert.ok(payload, 'payload should not be null')
-  assert.equal(payload.provider, 'discord')
-  assert.equal(payload.username, 'legacy')
+test('malformed Discord profiles are rejected', () => {
+  assert.equal(discordIdentityFromProfile(null), null)
+  assert.equal(discordIdentityFromProfile({ id: 'not-a-snowflake', username: 'x' }), null)
+  assert.equal(discordIdentityFromProfile({ id: '42' }), null)
 })
 
-test('invalid tokens return null', () => {
-  const bad = verifyToken('not-a-jwt')
-  assert.equal(bad, null)
+test('Authentik identity from the configured issuer is valid and keeps groups and roles', () => {
+  const identity = authentikIdentity()
+  assert.ok(isValidIdentity(identity))
+  assert.deepEqual(identity.groups, ['powerlifting', 'coaches'])
 })
 
-test('expired tokens return null', () => {
-  const expired = jwt.sign(
-    { ...makeDiscordToken() },
-    process.env.JWT_SECRET,
-    { expiresIn: '-1s' },
-  )
-  const payload = verifyToken(expired)
-  assert.equal(payload, null)
+test('identities from another issuer or with missing fields are invalid', () => {
+  assert.equal(isValidIdentity({ ...authentikIdentity(), issuer: 'https://evil.example.com/' }), false)
+  assert.equal(isValidIdentity({ ...authentikIdentity(), groups: undefined }), false)
+  assert.equal(isValidIdentity('not-an-identity'), false)
 })

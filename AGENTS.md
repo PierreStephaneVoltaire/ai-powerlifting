@@ -18,6 +18,7 @@ working — this file is only layout + operating rules.
 
 - Root `terraform/` (in the parent IF agent repo) → k3s infra, applied locally.
 - `powerlifting-app/terraform/` → AWS resources only.
+- `powerlifting-app/terraform/coach/` → its own state for the Coach Kubernetes resources only (PVC, Deployments, Services), applied locally because CI cannot reach the cluster. Coach ECR repositories live in `powerlifting-app/terraform/` with the other AWS resources. See `services/coach/README.md`.
 
 ## Run
 

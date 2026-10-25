@@ -40,6 +40,7 @@ import AuthoredNotes from '@/components/notes/AuthoredNotes'
 import ProfilesPage from '@/pages/ProfilesPage'
 import ProfilePage from '@/pages/ProfilePage'
 import LogPage from '@/pages/LogPage'
+import LoginPage from '@/pages/LoginPage'
 import AuthCallbackPage from '@/pages/AuthCallbackPage'
 import OnboardingPage from '@/pages/OnboardingPage'
 import LiftProfilePage from '@/pages/LiftProfilePage'
@@ -77,6 +78,7 @@ function AppContent() {
   if (loading) return <Center mih="100vh"><Loader aria-label="Loading your access" /></Center>
 
   const content = permission && !permissions.includes(permission) ? <Alert title="This view needs access" color="orange"><Stack><span>Choose an Athlete you can access, or complete your Athlete basics before personal training.</span><Button component={Link} to="/onboarding">Edit onboarding</Button><Button component={Link} to="/profiles" variant="default">Search profiles</Button></Stack></Alert> : <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/" element={<Landing />} />
@@ -128,7 +130,7 @@ function AppContent() {
         <Route path="/designer/templates/:sk" element={<TemplateDetailPage />} />
         <Route path="/about" element={<AboutPage />} />
       </Routes>
-  const publicRoute = !user && (/^\/(about|profiles)(\/|$)/.test(location.pathname) || location.pathname === '/')
+  const publicRoute = !user && (/^\/(login|about|profiles)(\/|$)/.test(location.pathname) || location.pathname === '/')
   return publicRoute ? <PublicLayout>{content}</PublicLayout> : <AppShell key={`${person_pk}:${mapped_pk}`}>{content}</AppShell>
 }
 

@@ -29,11 +29,14 @@ export default function DraftNumberInput({
 }: DraftNumberInputProps) {
   const [draft, setDraft] = useState(() => formatValue(value, toDisplay))
   const lastEmitted = useRef<number | null | undefined>(value)
+  const lastFormatted = useRef(formatValue(value, toDisplay))
 
   useEffect(() => {
-    if (value === lastEmitted.current) return
+    const formatted = formatValue(value, toDisplay)
+    if (value === lastEmitted.current && formatted === lastFormatted.current) return
     lastEmitted.current = value
-    setDraft(formatValue(value, toDisplay))
+    lastFormatted.current = formatted
+    setDraft(formatted)
   }, [value, toDisplay])
 
   const trimmed = draft.trim()
@@ -44,6 +47,7 @@ export default function DraftNumberInput({
 
   const emit = (next: number | null) => {
     lastEmitted.current = next
+    lastFormatted.current = formatValue(next, toDisplay)
     onValueChange(next)
   }
 

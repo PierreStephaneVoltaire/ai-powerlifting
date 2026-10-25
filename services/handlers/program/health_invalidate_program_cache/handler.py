@@ -1,6 +1,11 @@
 import json
 from decimal import Decimal
 from .core import health_invalidate_program_cache
+def _json_default(obj):
+    if isinstance(obj, Decimal):
+        return float(obj) if obj % 1 else int(obj)
+    return str(obj)
+
 def handler(event, context):
     args = event.get("args", event)
     result = health_invalidate_program_cache(args)
