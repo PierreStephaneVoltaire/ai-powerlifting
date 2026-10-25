@@ -32,7 +32,7 @@ import type { Program, Session, WeightEntry, GlossaryExercise, ExerciseCategory 
 import type { Sex } from '@powerlifting/types'
 import type { Unit } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
-import { estimateSetE1rm } from '@/utils/rpe'
+import { bestSetE1rm, mainLiftFor } from '@/utils/sbdE1rm'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
@@ -377,19 +377,17 @@ export function BlockWeeklySurface({
       if (!w.date || s.date < w.date) w.date = s.date
       if (s.body_weight_kg && s.body_weight_kg > w.bw) w.bw = s.body_weight_kg
       for (const ex of s.exercises || []) {
-        const name = ex.name.toLowerCase()
-        const kg = ex.kg || 0
-        const reps = ex.reps || 0
-        const rpe = (ex as { rpe?: number | null }).rpe ?? s.session_rpe
-        const e1rm = estimateSetE1rm(kg, reps, rpe)?.e1rmKg ?? null
+        const lift = mainLiftFor(ex.name)
+        if (!lift) continue
+        const e1rm = bestSetE1rm(ex, s.session_rpe)
         if (e1rm == null) continue
-        if (name === 'squat' || (name.includes('squat') && !name.includes('hack') && !name.includes('split'))) {
+        if (lift === 'squat') {
           w.squat = Math.max(w.squat, e1rm)
           w.hasSquat = true
-        } else if (name === 'bench press' || name === 'bench') {
+        } else if (lift === 'bench') {
           w.bench = Math.max(w.bench, e1rm)
           w.hasBench = true
-        } else if (name === 'deadlift' || (name.includes('deadlift') && !name.includes('rdl') && !name.includes('romanian'))) {
+        } else {
           w.deadlift = Math.max(w.deadlift, e1rm)
           w.hasDeadlift = true
         }

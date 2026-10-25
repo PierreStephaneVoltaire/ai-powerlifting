@@ -38,6 +38,7 @@ import SessionNotesHelperModal from './SessionNotesHelperModal'
 import AutoRegulationModal from './AutoRegulationModal'
 import RestTimerHeaderButton from './RestTimerHeaderButton'
 import { normalizeExerciseName } from '@/utils/volume'
+import { lastPerformance } from '@/utils/lastPerformance'
 import { useAuth } from '@/auth/AuthProvider'
 import Num from '@/components/shared/Num'
 
@@ -553,6 +554,13 @@ export default function SessionDrawer({
   const pushToast = useUiStore(s => s.pushToast)
   const [baseline, setBaseline] = useState<Session | null>(null)
   const [localSession, setLocalSession] = useState<Session | null>(null)
+  const programSessions = useProgramStore(s => s.program?.sessions)
+  const plannedHistory = useMemo(() => {
+    if (!localSession?.planned_exercises?.length || !programSessions) return []
+    return localSession.planned_exercises
+      .map((pe) => ({ name: pe.name, last: lastPerformance(programSessions, localSession, pe.name) }))
+      .filter((entry) => entry.last !== null)
+  }, [programSessions, localSession?.planned_exercises, localSession?.date, localSession?.block, localSession?.block_id, localSession?.id])
   const [originalDate, setOriginalDate] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -1561,6 +1569,18 @@ export default function SessionDrawer({
                   </Text>
                 ))}
               </Group>
+              {plannedHistory.length > 0 && (
+                <>
+                  <Text size="xs" c="dimmed" fw={500} mt="xs" mb={4}>Last time</Text>
+                  <Group gap="md" wrap="wrap">
+                    {plannedHistory.map(({ name, last }, i) => (
+                      <Text key={i} size="xs" c="dimmed" span>
+                        {name} {last!.groups.map((g) => `${g.sets}x${g.reps ?? '?'}${g.kg !== null ? ` @${toDisplayUnit(g.kg, unit as 'kg' | 'lb')}${unit}` : ''}`).join(', ')}
+                      </Text>
+                    ))}
+                  </Group>
+                </>
+              )}
             </Paper>
           )}
           <Stack gap="xs">
