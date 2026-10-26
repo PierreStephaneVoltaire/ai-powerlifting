@@ -1,8 +1,6 @@
 import copy
-import importlib.util
 import os
 import re
-from pathlib import Path
 import subprocess
 import tempfile
 import urllib.parse
@@ -21,7 +19,6 @@ SESSIONS_TABLE_NAME = os.environ.get('SESSIONS_TABLE_NAME', 'if-sessions')
 VIDEOS_BUCKET = os.environ.get('VIDEOS_BUCKET', 'powerlifting-session-videos')
 MAX_VIDEO_BYTES = 500 * 1024 * 1024
 MAX_FORM_VIDEO_SECONDS = 180
-_NOTIFICATIONS = None
 
 
 def _table():
@@ -29,16 +26,8 @@ def _table():
 
 
 def _notifications_module():
-    global _NOTIFICATIONS
-    if _NOTIFICATIONS is None:
-        path = Path(__file__).resolve().parent / 'notifications.py'
-        spec = importlib.util.spec_from_file_location('video_thumbnail_notifications', path)
-        if spec is None or spec.loader is None:
-            raise RuntimeError('Video notification helper is unavailable')
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        _NOTIFICATIONS = module
-    return _NOTIFICATIONS
+    import notifications
+    return notifications
 
 
 def _notify_media_ready(media):

@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import os
 import re
-import importlib.util
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import boto3
 from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+from services.lib import media_notifications
 
 MEDIA_SK_PREFIX = "Media#"
-_NOTIFICATIONS = None
 
 
 def get_health_table():
@@ -38,35 +36,22 @@ def get_s3():
     return aws_client("s3", region_name=os.environ.get("AWS_REGION", "ca-central-1"))
 
 
-def _notifications_module():
-    global _NOTIFICATIONS
-    if _NOTIFICATIONS is None:
-        path = Path(__file__).resolve().parents[3] / "lambda" / "video-thumbnail" / "notifications.py"
-        spec = importlib.util.spec_from_file_location("video_thumbnail_notifications", path)
-        if spec is None or spec.loader is None:
-            raise RuntimeError("Video notification helper is unavailable")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        _NOTIFICATIONS = module
-    return _NOTIFICATIONS
-
-
 def notify_media_ready(media: dict) -> bool:
-    notification = _notifications_module().media_ready_notification(media)
+    notification = media_notifications.media_ready_notification(media)
     if notification is None:
         return False
     person, event_id, kind, payload = notification
     table = dynamodb_resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
-        _notifications_module().notification_table_name()
+        media_notifications.notification_table_name()
     )
     try:
         table.meta.client.transact_write_items(
-            TransactItems=_notifications_module().notification_transaction_items(person, event_id, kind, payload)
+            TransactItems=media_notifications.notification_transaction_items(person, event_id, kind, payload)
         )
     except ClientError as error:
         if error.response.get("Error", {}).get("Code") != "TransactionCanceledException":
             raise
-        if table.get_item(Key=_notifications_module().notification_marker_key(event_id), ConsistentRead=True).get("Item"):
+        if table.get_item(Key=media_notifications.notification_marker_key(event_id), ConsistentRead=True).get("Item"):
             return False
         raise
     return True

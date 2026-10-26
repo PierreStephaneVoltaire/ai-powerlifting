@@ -1,13 +1,18 @@
 data "aws_caller_identity" "current" {}
 
-# The lambda source lives in the repo at lambda/video-thumbnail, three
-# directories up from this module (terraform/modules/video_thumbnail_lambda).
-# The output zip is written to .terraform/ inside the module dir so the
-# committed video-thumbnail.zip in the repo root is never overwritten.
 data "archive_file" "lambda" {
   type        = "zip"
   output_path = "${path.module}/.terraform/video-thumbnail.zip"
-  source_dir  = "${path.module}/../../../lambda/video-thumbnail"
+
+  source {
+    content  = file("${path.module}/../../../lambda/video-thumbnail/index.py")
+    filename = "index.py"
+  }
+
+  source {
+    content  = file("${path.module}/../../../services/lib/media_notifications.py")
+    filename = "notifications.py"
+  }
 }
 
 # The prebuilt ffmpeg layer is committed alongside this module so the

@@ -1,16 +1,20 @@
 import importlib.util
 import json
+import sys
 import threading
 from types import SimpleNamespace
 from pathlib import Path
 
 from botocore.exceptions import ClientError
 
+from services.lib import media_notifications
+
 
 MODULE_PATH = Path(__file__).parents[2] / "lambda" / "video-thumbnail" / "index.py"
 
 
 def load_worker():
+    sys.modules["notifications"] = media_notifications
     spec = importlib.util.spec_from_file_location("video_thumbnail_worker", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
