@@ -13,19 +13,18 @@ import {
 import { Upload, Film, Loader2 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useProgramStore } from '@/store/programStore'
+import { useVideoUploadStore } from '@/store/videoUploadStore'
 import {
-  uploadVideo,
   isValidVideoType,
   formatFileSize,
   MAX_VIDEO_SIZE,
 } from '@/utils/s3'
-import type { Session, SessionVideo } from '@powerlifting/types'
+import type { Session } from '@powerlifting/types'
 
 interface VideoUploadModalProps {
   session: Session
   isOpen: boolean
   onClose: () => void
-  onUploaded: (video: SessionVideo) => void
   initialExerciseName?: string
   initialSetNumber?: number
 }
@@ -34,7 +33,6 @@ export default function VideoUploadModal({
   session,
   isOpen,
   onClose,
-  onUploaded,
   initialExerciseName,
   initialSetNumber,
 }: VideoUploadModalProps) {
@@ -44,9 +42,12 @@ export default function VideoUploadModal({
   const [exerciseName, setExerciseName] = useState<string>('')
   const [setNumber, setSetNumber] = useState<number | undefined>()
   const [notes, setNotes] = useState('')
-  const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [idempotencyKey, setIdempotencyKey] = useState(() => globalThis.crypto.randomUUID())
+  const startUpload = useVideoUploadStore((state) => state.start)
+  const uploadProgress = useVideoUploadStore((state) => state.uploads.find((upload) => upload.id === idempotencyKey)?.progress ?? 0)
+  const activeKeyRef = useRef(idempotencyKey)
+  activeKeyRef.current = idempotencyKey
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Reset all form state whenever the modal is closed so a second upload
@@ -57,7 +58,6 @@ export default function VideoUploadModal({
       setExerciseName('')
       setSetNumber(undefined)
       setNotes('')
-      setUploadProgress(0)
       setIsUploading(false)
       setIdempotencyKey(globalThis.crypto.randomUUID())
       if (fileInputRef.current) {
@@ -126,32 +126,20 @@ export default function VideoUploadModal({
 
   async function handleUpload() {
     if (!file) return
-
+    const key = idempotencyKey
     setIsUploading(true)
-    setUploadProgress(0)
-
-    try {
-      const { video } = await uploadVideo(version, {
-        file,
-        sessionDate: session.date,
-        sessionId: session.id,
-        exerciseName,
-        setNumber,
-        notes: notes || undefined,
-        onProgress: setUploadProgress,
-        idempotencyKey,
-      })
-
-      pushToast({ message: 'Video uploaded successfully', type: 'success' })
-      onUploaded(video)
-      onClose()
-    } catch (err) {
-      console.error('Upload failed:', err)
-      pushToast({ message: 'Failed to upload video', type: 'error' })
-    } finally {
-      setIsUploading(false)
-      setUploadProgress(0)
-    }
+    const video = await startUpload(version, {
+      file,
+      sessionDate: session.date,
+      sessionId: session.id,
+      exerciseName,
+      setNumber,
+      notes: notes || undefined,
+      idempotencyKey: key,
+    })
+    if (activeKeyRef.current !== key) return
+    setIsUploading(false)
+    if (video) onClose()
   }
 
   return (
@@ -248,7 +236,7 @@ export default function VideoUploadModal({
 
       {/* Footer */}
       <Group justify="flex-end" mt="md" pt="md" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
-        <Button variant="default" onClick={onClose} disabled={isUploading}>
+        <Button variant="default" onClick={onClose}>
           Cancel
         </Button>
         <Button

@@ -39,6 +39,7 @@ import AutoRegulationModal from './AutoRegulationModal'
 import RestTimerHeaderButton from './RestTimerHeaderButton'
 import { normalizeExerciseName } from '@/utils/volume'
 import { lastPerformance } from '@/utils/lastPerformance'
+import { uploadBelongsTo, useVideoUploadStore } from '@/store/videoUploadStore'
 import { useAuth } from '@/auth/AuthProvider'
 import Num from '@/components/shared/Num'
 
@@ -561,6 +562,20 @@ export default function SessionDrawer({
       .map((pe) => ({ name: pe.name, last: lastPerformance(programSessions, localSession, pe.name) }))
       .filter((entry) => entry.last !== null)
   }, [programSessions, localSession?.planned_exercises, localSession?.date, localSession?.block, localSession?.block_id, localSession?.id])
+  const backgroundUploads = useVideoUploadStore(s => s.uploads)
+  const consumeUpload = useVideoUploadStore(s => s.consume)
+  useEffect(() => {
+    if (!localSession) return
+    const finished = backgroundUploads.filter((upload) => upload.video && uploadBelongsTo(upload, localSession))
+    if (!finished.length) return
+    setLocalSession((prev) => {
+      if (!prev) return prev
+      const known = new Set((prev.videos || []).map((video) => video.video_id))
+      const added = finished.map((upload) => upload.video!).filter((video) => !known.has(video.video_id))
+      return added.length ? { ...prev, videos: [...(prev.videos || []), ...added] } : prev
+    })
+    finished.forEach((upload) => consumeUpload(upload.id))
+  }, [backgroundUploads, localSession?.date, localSession?.id, consumeUpload])
   const [originalDate, setOriginalDate] = useState<string>('')
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -1854,17 +1869,6 @@ export default function SessionDrawer({
         initialExerciseName={videoUploadPreset?.exerciseName}
         initialSetNumber={videoUploadPreset?.setNumber}
         onClose={() => { setShowVideoUpload(false); setVideoUploadPreset(null) }}
-        onUploaded={(video: SessionVideo) => {
-          setLocalSession((prev) => {
-            if (!prev) return prev
-            const updated = {
-              ...prev,
-              videos: [...(prev.videos || []), video],
-            }
-            return updated
-          })
-          setShowVideoUpload(false)
-        }}
       />
 
       <SessionNotesHelperModal

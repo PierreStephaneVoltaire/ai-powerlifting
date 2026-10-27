@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   Alert,
   Avatar,
+  Badge,
   Box,
   Button,
   FileButton,
@@ -31,6 +32,7 @@ import {
   type UserSettings,
 } from '@/api/settings'
 import { fetchCurrentProfile, fetchProfile, type PublicProfile } from '@/api/profiles'
+import ProfileTags from '@/components/settings/ProfileTags'
 import * as api from '@/api/client'
 import { useAuth } from '@/auth/AuthProvider'
 import { useProgramStore } from '@/store/programStore'
@@ -453,6 +455,7 @@ export default function ProfilePage() {
         metrics: publicProfileMetrics,
         videos: publicProfile.lift_videos ?? [],
         shownVideos: readonlyFilteredVideos,
+        tags: publicProfile.tags ?? [],
       }
     : {
         name: displayName || settings?.display_name || user!.username,
@@ -467,6 +470,7 @@ export default function ProfilePage() {
         metrics: profileMetrics,
         videos,
         shownVideos: filteredVideos,
+        tags: (settings?.tags ?? []).filter((tag) => tag.approved).map((tag) => tag.tag),
       }
   const federationOptions = federations.length
     ? federations.map((federation) => ({ value: federation.abbreviation || federation.name, label: federation.abbreviation ? `${federation.abbreviation} — ${federation.name}` : federation.name }))
@@ -568,6 +572,13 @@ export default function ProfilePage() {
                 <Text size="sm" c="var(--text-secondary)">
                   {view.summary}
                 </Text>
+                {view.tags.length > 0 && (
+                  <Group gap={4} wrap="wrap" data-testid="profile-tags">
+                    {view.tags.map((tag) => (
+                      <Badge key={tag} variant="light" size="sm">{tag}</Badge>
+                    ))}
+                  </Group>
+                )}
               </Stack>
             </Group>
           </Group>
@@ -634,6 +645,8 @@ export default function ProfilePage() {
             disabled={locked}
             data-testid="profile-weight-classes"
           />
+
+          {!readOnlyView && <ProfileTags settings={settings} onChange={setSettings} />}
         </Stack>
       </Paper>
 
