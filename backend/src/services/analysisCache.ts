@@ -162,13 +162,22 @@ function normalizeWeekStartDay(value: unknown, fallback: WeekStartDay): WeekStar
     : fallback
 }
 
+function activeBlockId(program: Program): string | null {
+  const meta = program.meta
+  if (meta?.current_block_id) return meta.current_block_id
+  const active = (meta?.blocks ?? []).find((candidate) => candidate?.status === 'active')
+  const id = String(active?.id ?? active?.block_id ?? '')
+  return id && id !== 'current' ? id : null
+}
+
 function weekStartForBlock(program: Program, block = 'current'): WeekStartDay {
   const blockValue = block || 'current'
-  const stored = program.meta?.block_week_start_days?.[blockValue]
-  if (stored) return normalizeWeekStartDay(stored, 'Monday')
-  const blockRecord = (program.meta?.blocks ?? []).find((candidate) => String(candidate?.id ?? candidate?.block_id ?? '') === blockValue)
-  if (blockRecord?.week_start_day) return normalizeWeekStartDay(blockRecord.week_start_day, 'Monday')
-  return 'Monday'
+  const blockId = blockValue === 'current' ? activeBlockId(program) ?? 'current' : blockValue
+  const stored = program.meta?.block_week_start_days ?? {}
+  const blockRecord = (program.meta?.blocks ?? []).find((candidate) => String(candidate?.id ?? candidate?.block_id ?? '') === blockId)
+  const candidates = [stored[blockId], blockRecord?.week_start_day, stored[blockValue], blockValue === 'current' ? program.meta?.program_week_start_day : undefined]
+  const found = candidates.find((value) => typeof value === 'string' && WEEK_START_DAYS.includes(value as WeekStartDay))
+  return normalizeWeekStartDay(found, 'Monday')
 }
 
 function parseIsoDate(value: string): Date {

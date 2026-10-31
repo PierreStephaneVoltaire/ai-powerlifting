@@ -13,13 +13,33 @@ def normalize_week_start_day(value: Any, default: str = "Monday") -> str:
             return cleaned
     return default if default in WEEKDAY_INDEX else "Monday"
 
+def active_block_id(meta: dict[str, Any]) -> str | None:
+    if meta.get("current_block_id"):
+        return str(meta["current_block_id"])
+    for block in meta.get("blocks") or []:
+        if isinstance(block, dict) and block.get("status") == "active":
+            block_id = str(block.get("id") or block.get("block_id") or "")
+            if block_id and block_id != "current":
+                return block_id
+    return None
+
+
 def week_start_for_block(program: dict[str, Any] | None, block: str = "current") -> str:
-    """Resolve the configured week-start day for a block."""
     meta = (program or {}).get("meta", {}) if isinstance(program, dict) else {}
+    meta = meta if isinstance(meta, dict) else {}
     block_name = block or "current"
-    stored = meta.get("block_week_start_days") if isinstance(meta, dict) else None
-    if isinstance(stored, dict) and block_name in stored:
-        return normalize_week_start_day(stored.get(block_name), "Monday")
+    block_id = (active_block_id(meta) or "current") if block_name == "current" else block_name
+    stored = meta.get("block_week_start_days") if isinstance(meta.get("block_week_start_days"), dict) else {}
+    record = next(
+        (b for b in meta.get("blocks") or [] if isinstance(b, dict) and str(b.get("id") or b.get("block_id") or "") == block_id),
+        {},
+    )
+    candidates = [stored.get(block_id), record.get("week_start_day"), stored.get(block_name)]
+    if block_name == "current":
+        candidates.append(meta.get("program_week_start_day"))
+    for value in candidates:
+        if isinstance(value, str) and value.strip().capitalize() in WEEKDAY_INDEX:
+            return value.strip().capitalize()
     return "Monday"
 
 def week_anchor(program_start: date, week_start_day: str) -> date:

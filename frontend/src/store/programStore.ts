@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Program, Session, Exercise, Phase, MaxEntry, WeightEntry, ProgramListItem, SupplementPhase, DietNote, BlockNote, Competition, SessionVideo, LiftResults, LiftProfile, Sex, AthleteGoal, PostMeetReport, WeekStartDay } from '@powerlifting/types'
 import * as api from '@/api/client'
 import { requestPartition } from '@/api/context'
+import { activeBlockId } from '@/utils/weekStart'
 
 interface ProgramState {
   program: Program | null
@@ -434,9 +435,11 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   setWeekStartDay: async (day: WeekStartDay) => {
     const { version, program } = get()
+    const blockId = activeBlockId(program)
     const nextBlockWeekStarts = {
       ...(program?.meta.block_week_start_days ?? {}),
       current: day,
+      ...(blockId ? { [blockId]: day } : {}),
     }
 
     const result = await api.updateMetaFields(version, { program_week_start_day: day, block_week_start_days: nextBlockWeekStarts }, api.mutationEnvelope(program?.meta.revision ?? 0))

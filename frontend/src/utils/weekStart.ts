@@ -30,13 +30,21 @@ export function normalizeWeekStartDay(value: unknown, fallback: WeekStartDay): W
   return isWeekStartDay(value) ? value : fallback
 }
 
+export function activeBlockId(program: Program | null | undefined): string | null {
+  const meta = program?.meta
+  if (meta?.current_block_id) return meta.current_block_id
+  const active = meta?.blocks?.find((candidate) => candidate.status === 'active')
+  const id = String(active?.id ?? active?.block_id ?? '')
+  return id && id !== 'current' ? id : null
+}
+
 export function weekStartForBlock(program: Program | null | undefined, block = 'current'): WeekStartDay {
   const blockValue = block || 'current'
-  const stored = program?.meta?.block_week_start_days?.[blockValue]
-  if (isWeekStartDay(stored)) return stored
-  const blockRecord = program?.meta?.blocks?.find((candidate) => String(candidate.id ?? candidate.block_id ?? '') === blockValue)
-  if (isWeekStartDay(blockRecord?.week_start_day)) return blockRecord.week_start_day
-  return 'Monday'
+  const blockId = blockValue === 'current' ? activeBlockId(program) ?? 'current' : blockValue
+  const stored = program?.meta?.block_week_start_days ?? {}
+  const blockRecord = program?.meta?.blocks?.find((candidate) => String(candidate.id ?? candidate.block_id ?? '') === blockId)
+  const candidates = [stored[blockId], blockRecord?.week_start_day, stored[blockValue], blockValue === 'current' ? program?.meta?.program_week_start_day : undefined]
+  return candidates.find(isWeekStartDay) ?? 'Monday'
 }
 
 export function programWeekAnchorDate(programStart: string | undefined, weekStartDay: WeekStartDay): string {
