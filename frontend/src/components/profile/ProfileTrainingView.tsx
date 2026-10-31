@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Badge, Box, Button, Collapse, Group, Loader, Paper, SimpleGrid, Stack, Table, Text, UnstyledButton } from '@mantine/core'
+import { Alert, Badge, Box, Button, Collapse, Group, Loader, Paper, Stack, Table, Text, UnstyledButton } from '@mantine/core'
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
-import type { Exercise, GlossaryExercise, Program, Session } from '@powerlifting/types'
-import { fetchViewedProgram, fetchViewedWeeklyAnalysis } from '@/api/profiles'
-import type { WeeklyAnalysis } from '@/api/analytics'
-import { fetchGlossary } from '@/api/client'
-import { AlertsStrip } from '@/components/analysis/AlertsStrip'
-import { WeeklyData } from '@/components/analysis/WeeklyData'
+import type { Exercise, Program, Session } from '@powerlifting/types'
+import { fetchViewedProgram } from '@/api/profiles'
+import { fetchBlockAnalysis, fetchProgramBlocks, type BlockAnalysisBundle } from '@/api/analytics'
+import { BlockWeeklySurface } from '@/components/analysis/BlockWeeklySurface'
 import { useSettingsStore } from '@/store/settingsStore'
 import { toDisplayUnit } from '@/utils/units'
-import { glossaryCategoryLookup, glossaryMuscleLookup, muscleGroupAverages, perLiftBreakdown } from '@/utils/weeklyBreakdown'
 
 export type ProfileTrainingTab = 'sessions' | 'analysis'
 
 const PAGE_SIZE = 20
-const ANALYSIS_WINDOWS = [1, 4, 8] as const
 
 function isoToday(): string {
   const now = new Date()
@@ -150,94 +146,41 @@ function ReadOnlySessions({ program, unit }: { program: Program; unit: 'kg' | 'l
   )
 }
 
-function SummaryCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <Paper withBorder p="md" radius="md" className="if-metric-card">
-      <Text size="xs" c="var(--text-secondary)">{label}</Text>
-      <Text fz="xl" fw={700}>{value}</Text>
-      {sub && <Text size="xs" c="var(--text-secondary)">{sub}</Text>}
-    </Paper>
-  )
-}
-
 function ReadOnlyAnalysis({ athlete, program, unit }: { athlete: string; program: Program; unit: 'kg' | 'lb' }) {
-  const [weeks, setWeeks] = useState<number>(4)
-  const [data, setData] = useState<WeeklyAnalysis | null>(null)
-  const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
+  const [bundle, setBundle] = useState<BlockAnalysisBundle | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchGlossary().then(setGlossary).catch(() => setGlossary([]))
-  }, [])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    fetchViewedWeeklyAnalysis(athlete, weeks)
-      .then((result) => { if (!cancelled) setData(result) })
-      .catch(() => { if (!cancelled) setError('Analysis is unavailable for this Athlete.') })
+    setBundle(null)
+    fetchProgramBlocks(athlete)
+      .then((blocks) => {
+        const current = blocks.find((block) => block.isCurrent)
+        if (!current) throw new Error('No current block')
+        return fetchBlockAnalysis(current.blockKey, false, athlete)
+      })
+      .then((result) => { if (!cancelled) setBundle(result) })
+      .catch(() => { if (!cancelled) setError('Block analysis is unavailable for this Athlete.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [athlete, weeks])
+  }, [athlete])
 
-  const windowSessions = useMemo(() => {
-    if (!data?.window_start || !data?.window_end) return []
-    return (program.sessions ?? []).filter((session) =>
-      (session.completed || session.status === 'logged' || session.status === 'completed') &&
-      session.status !== 'skipped' &&
-      session.date >= data.window_start! &&
-      session.date <= data.window_end!,
-    )
-  }, [data?.window_end, data?.window_start, program.sessions])
-
-  const muscleGroupAvgWeekly = useMemo(() => muscleGroupAverages(windowSessions, glossaryMuscleLookup(glossary), weeks), [glossary, weeks, windowSessions])
-  const perLiftDetails = useMemo(() => perLiftBreakdown(windowSessions, glossaryCategoryLookup(glossary)), [glossary, windowSessions])
-
-  const maxes = data?.current_maxes
-  const projection = data?.projections?.[0]
+  if (loading) return <Group justify="center" py="xl"><Loader size="sm" /></Group>
+  if (error || !bundle) return <Alert color="yellow" icon={<AlertCircle size={16} />}>{error ?? 'Block analysis is unavailable.'}</Alert>
 
   return (
     <Stack gap="md" data-testid="profile-analysis">
-      <div className="if-tab-group" role="group" aria-label="Analysis window">
-        {ANALYSIS_WINDOWS.map((value) => (
-          <button key={value} type="button" className="if-tab-button" data-active={weeks === value} onClick={() => setWeeks(value)}>
-            {value === 1 ? '1 week' : `${value} weeks`}
-          </button>
-        ))}
-      </div>
-      {loading && <Group justify="center" py="xl"><Loader size="sm" /></Group>}
-      {!loading && error && <Alert color="red" icon={<AlertCircle size={16} />}>{error}</Alert>}
-      {!loading && data && (
-        <>
-          <AlertsStrip alerts={data.alerts || []} />
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-            <SummaryCard
-              label="Current maxes"
-              value={weightText(maxes ? (maxes.squat ?? 0) + (maxes.bench ?? 0) + (maxes.deadlift ?? 0) : null, unit)}
-              sub={maxes ? `S ${weightText(maxes.squat, unit)} · B ${weightText(maxes.bench, unit)} · D ${weightText(maxes.deadlift, unit)}` : undefined}
-            />
-            <SummaryCard label="Estimated DOTS" value={data.estimated_dots !== null ? data.estimated_dots.toFixed(1) : '--'} sub={data.estimated_dots_reason ?? undefined} />
-            <SummaryCard
-              label="Compliance"
-              value={data.compliance ? `${data.compliance.pct.toFixed(0)}%` : '--'}
-              sub={data.compliance ? `${data.compliance.completed}/${data.compliance.planned} sessions · ${data.compliance.phase}` : undefined}
-            />
-            <SummaryCard
-              label="Projected total"
-              value={projection ? weightText(projection.total, unit) : '--'}
-              sub={projection ? `${projection.comp_name ?? 'Next competition'}${projection.weeks_to_comp !== undefined ? ` · ${projection.weeks_to_comp} wk` : ''}` : (data.projection_reason ?? undefined)}
-            />
-          </SimpleGrid>
-          <SummaryCard
-            label="Fatigue"
-            value={data.fatigue_index !== null ? `${(data.fatigue_index * 100).toFixed(0)}%` : '--'}
-            sub={`${data.sessions_analyzed} sessions analyzed`}
-          />
-          <WeeklyData data={data} viewMode="raw" perLiftDetails={perLiftDetails} muscleGroupAvgWeekly={muscleGroupAvgWeekly} analysisWeeks={weeks} unit={unit} />
-        </>
-      )}
+      <BlockWeeklySurface
+        program={program}
+        bundle={bundle}
+        unit={unit}
+        sex={program.meta?.sex ?? null}
+        version="current"
+        viewAthlete={athlete}
+      />
     </Stack>
   )
 }

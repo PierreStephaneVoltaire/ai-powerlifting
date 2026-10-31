@@ -244,7 +244,6 @@ function SortableExerciseItem({
   onUpdateStraight,
   onUpdateSet,
   setVideos,
-  onAddSetVideo,
   onShowVideos,
   glossaryNames,
   unit,
@@ -263,7 +262,6 @@ function SortableExerciseItem({
   onUpdateStraight: (i: number, field: keyof ExerciseSetData, value: number | null) => void;
   onUpdateSet: (exerciseIndex: number, setIndex: number, patch: Partial<ExerciseSetData>) => void;
   setVideos: SessionVideo[][];
-  onAddSetVideo: (exerciseIndex: number, setIndex: number) => void;
   onShowVideos: () => void;
   glossaryNames: string[];
   unit: string;
@@ -359,13 +357,22 @@ function SortableExerciseItem({
         </Group>
       </Group>
 
+      {lastTime && (
+        <Text
+          size="xs"
+          c="dimmed"
+          px={16}
+          py={6}
+          bg="var(--color-background-secondary)"
+          style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
+          data-testid={`exercise-last-time-${index}`}
+        >
+          {lastTime}
+        </Text>
+      )}
+
       <Box p={16}>
-        <Group justify={lastTime ? 'space-between' : 'flex-end'} mb="xs" wrap="nowrap" gap="xs">
-          {lastTime && (
-            <Text size="xs" c="dimmed" truncate="end" title={lastTime} style={{ minWidth: 0 }} data-testid={`exercise-last-time-${index}`}>
-              {lastTime}
-            </Text>
-          )}
+        <Group justify="flex-end" mb="xs">
           <SegmentedControl
             size="xs"
             value={layout}
@@ -495,18 +502,13 @@ function SortableExerciseItem({
                       aria-label={`Set ${setIndex + 1} RPE`}
                     />
                   </SimpleGrid>
-                  <Group gap="xs" mt={2}>
-                    {linkedVideos.length > 0 && (
+                  {linkedVideos.length > 0 && (
+                    <Group gap="xs" mt={2}>
                       <Button size="compact-xs" variant="subtle" leftSection={<Film size={12} />} onClick={onShowVideos}>
                         {linkedVideos.length} video{linkedVideos.length === 1 ? '' : 's'}
                       </Button>
-                    )}
-                    {!disabled && (
-                      <Button size="compact-xs" variant="subtle" color="gray" leftSection={<Plus size={12} />} onClick={() => onAddSetVideo(index, setIndex)} data-testid={`exercise-${index}-set-${setIndex + 1}-add-video`}>
-                        Video
-                      </Button>
-                    )}
-                  </Group>
+                    </Group>
+                  )}
                 </Box>
               )
             })}
@@ -533,7 +535,7 @@ function SortableExerciseItem({
           <Box mt={6}>
             <Group gap={4} align="center" wrap="nowrap">
               <Text className="if-small-label" style={{ flexShrink: 0 }}>Sets</Text>
-              <Box style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <Box style={{ flex: 1, minWidth: 0 }}>
                 {renderSetStatusControls(exercise, index)}
               </Box>
             </Group>
@@ -574,7 +576,7 @@ export default function SessionDrawer({
       const last = lastPerformance(programSessions, localSession, ex.name)
       if (!last) continue
       const groups = last.groups.map((g) => `${g.sets}x${g.reps ?? '?'}${g.kg !== null ? ` @${toDisplayUnit(g.kg, unit as 'kg' | 'lb')}${unit}` : ''}`).join(', ')
-      labels.set(ex.name, `Last time (${format(parseLocalDate(last.date), 'MMM d')}): ${groups}`)
+      labels.set(ex.name, `${format(parseLocalDate(last.date), 'MMM d')}: ${groups}`)
     }
     return labels
   }, [programSessions, exerciseNamesKey, localSession?.date, localSession?.block, localSession?.block_id, localSession?.id, unit])
@@ -1086,15 +1088,6 @@ export default function SessionDrawer({
       return { ...prev, exercises }
     })
     markChanged()
-  }
-
-  const openSetVideoUpload = (exerciseIndex: number, setIndex: number) => {
-    if (!localSession) return
-    setVideoUploadPreset({
-      exerciseName: localSession.exercises[exerciseIndex].name,
-      setNumber: cumulativeSetNumber(localSession.exercises, exerciseIndex, setIndex),
-    })
-    setShowVideoUpload(true)
   }
 
   const validateRpeValues = (): string | null => {
@@ -1625,7 +1618,6 @@ export default function SessionDrawer({
                       onUpdateStraight={updateExerciseStraight}
                       onUpdateSet={updateExerciseSet}
                       setVideos={videosBySet(localSession.exercises, i, localSession.videos)}
-                      onAddSetVideo={openSetVideoUpload}
                       onShowVideos={() => document.getElementById('session-videos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       glossaryNames={glossaryNames}
                       unit={unit}

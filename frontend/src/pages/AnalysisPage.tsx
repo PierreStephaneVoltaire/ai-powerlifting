@@ -26,7 +26,7 @@ import { estimateSetE1rm } from '@/utils/rpe'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit, displayWeight } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
-import { programWeekEndDate, programWeekStartDate, resolveTrainingWeekForDate, trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
+import { parseWeekNumber, programWeekEndDate, programWeekStartDate, resolveTrainingWeekForDate, trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { userCompToCompetition } from '@/utils/competitions'
 import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
 import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session, WeekStartDay } from '@powerlifting/types'
@@ -149,8 +149,18 @@ function getAnalysisWindow(
     weekStart = Math.max(1, currentWeek - weeks)
   }
 
-  const start = programWeekStartDate(programStart ?? sessions[0]?.date ?? asOfDate, weekStart, weekStartDay)
-  const end = programWeekEndDate(programStart ?? sessions[0]?.date ?? asOfDate, weekEnd, weekStartDay)
+  const calendarStart = programWeekStartDate(programStart ?? sessions[0]?.date ?? asOfDate, weekStart, weekStartDay)
+  const calendarEnd = programWeekEndDate(programStart ?? sessions[0]?.date ?? asOfDate, weekEnd, weekStartDay)
+  const labelledDates = sessions
+    .filter((session) => (session.block ?? 'current') === 'current' && session.date <= asOfDate)
+    .filter((session) => {
+      const week = parseWeekNumber(session.week_number)
+      return week !== null && week >= weekStart && week <= weekEnd
+    })
+    .map((session) => session.date)
+    .sort()
+  const start = labelledDates.length && labelledDates[0] < calendarStart ? labelledDates[0] : calendarStart
+  const end = labelledDates.length && labelledDates[labelledDates.length - 1] > calendarEnd ? labelledDates[labelledDates.length - 1] : calendarEnd
 
   return {
     start: programStart && start < programStart ? programStart : start,

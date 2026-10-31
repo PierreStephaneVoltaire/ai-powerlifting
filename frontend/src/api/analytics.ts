@@ -943,18 +943,19 @@ export async function invalidateAnalysisSections(options: {
   return body.data
 }
 
-export async function fetchProgramBlocks(): Promise<ProgramBlockIndexEntry[]> {
-  const res = await api.get('/analytics/blocks')
+export async function fetchProgramBlocks(viewAthlete?: string): Promise<ProgramBlockIndexEntry[]> {
+  const res = await api.get('/analytics/blocks', viewAthlete ? { powerliftingViewAthlete: viewAthlete } : undefined)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return body.data
 }
 
-export async function fetchBlockAnalysis(blockKey: string, refresh = false): Promise<BlockAnalysisBundle> {
+export async function fetchBlockAnalysis(blockKey: string, refresh = false, viewAthlete?: string): Promise<BlockAnalysisBundle> {
   const params = new URLSearchParams({
     refresh: String(refresh),
+    ...(viewAthlete ? { cacheOnly: 'true' } : {}),
   })
-  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/analysis?${params.toString()}`)
+  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/analysis?${params.toString()}`, viewAthlete ? { powerliftingViewAthlete: viewAthlete } : undefined)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return body.data
@@ -1060,13 +1061,13 @@ export async function fetchCorrelationReport(
 
 export async function fetchBlockCorrelationReport(
   blockKey: string,
-  options: { refresh?: boolean; cacheOnly?: boolean } = {},
+  options: { refresh?: boolean; cacheOnly?: boolean; viewAthlete?: string } = {},
 ): Promise<CorrelationReport> {
   const params = new URLSearchParams({
     refresh: String(Boolean(options.refresh)),
     cacheOnly: String(Boolean(options.cacheOnly)),
   })
-  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/correlation?${params.toString()}`)
+  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/correlation?${params.toString()}`, options.viewAthlete ? { powerliftingViewAthlete: options.viewAthlete } : undefined)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return normalizeCorrelationReport(await resolveReport(body.data, options.cacheOnly))

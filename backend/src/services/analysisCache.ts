@@ -189,8 +189,12 @@ function diffDays(end: string, start: string): number {
   return Math.floor((parseIsoDate(end).getTime() - parseIsoDate(start).getTime()) / MS_PER_DAY)
 }
 
-function maxIso(a: string, b: string): string {
-  return a > b ? a : b
+function maxIso(a: string, b: string | undefined): string {
+  return b !== undefined && b > a ? b : a
+}
+
+function minIso(a: string, b: string | undefined): string {
+  return b !== undefined && b < a ? b : a
 }
 
 function parseWeekNumber(value: unknown): number | null {
@@ -264,8 +268,16 @@ export function buildAnalysisWindows(program: Program, asOfDate: string): Record
       weekStart = Math.max(1, currentWeek - spec.mode)
     }
 
-    const weekStartDate = programWeekStartDate(programStart, weekStart, weekStartDay)
-    const weekEndDate = addDaysIso(programWeekStartDate(programStart, weekEnd, weekStartDay), 6)
+    const labelledDates = sessions
+      .filter((session) => (session.block ?? 'current') === 'current' && session.date <= asOfDate)
+      .filter((session) => {
+        const week = parseWeekNumber(session.week_number)
+        return week !== null && week >= weekStart && week <= weekEnd
+      })
+      .map((session) => session.date)
+      .sort()
+    const weekStartDate = minIso(programWeekStartDate(programStart, weekStart, weekStartDay), labelledDates[0])
+    const weekEndDate = maxIso(addDaysIso(programWeekStartDate(programStart, weekEnd, weekStartDay), 6), labelledDates[labelledDates.length - 1])
     const start = maxIso(weekStartDate, programStart)
     const end = weekEndDate
 

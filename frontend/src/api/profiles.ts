@@ -1,6 +1,5 @@
 import api from './http'
-import type { LiftProfile, Program, VideoLibraryItem } from '@powerlifting/types'
-import type { WeeklyAnalysis } from './analytics'
+import type { LiftProfile, Program, VideoLibraryItem, WeightEntry } from '@powerlifting/types'
 
 
 
@@ -63,9 +62,8 @@ export async function fetchViewedProgram(athlete: string): Promise<Program> {
   return response.data.data
 }
 
-export async function fetchViewedWeeklyAnalysis(athlete: string, weeks: number): Promise<WeeklyAnalysis> {
-  const params = new URLSearchParams({ weeks: String(weeks), block: 'current' })
-  const response = await api.get(`/analytics/analysis/weekly?${params.toString()}`, { powerliftingViewAthlete: athlete })
-  if (response.data.error) throw new Error(response.data.error)
-  return response.data.data
+export async function fetchViewedWeightLog(athlete: string, version: string): Promise<WeightEntry[]> {
+  const response = await api.get(`/weight/${version}`, { powerliftingViewAthlete: athlete })
+  return response.data.data.entries
 }
+

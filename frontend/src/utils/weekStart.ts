@@ -83,7 +83,7 @@ export function trainingWeekStartForDate(
   return programWeekStartDate(programStart, week, weekStartDay)
 }
 
-function parseWeekNumber(value: unknown): number | null {
+export function parseWeekNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
     const parsed = Number.parseInt(value, 10)

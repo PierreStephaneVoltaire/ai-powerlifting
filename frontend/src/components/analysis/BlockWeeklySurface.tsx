@@ -37,6 +37,7 @@ import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl
 import { toDisplayUnit } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { fetchGlossary, fetchWeightLog } from '@/api/client'
+import { fetchViewedWeightLog } from '@/api/profiles'
 import {
   type BlockAnalysisBundle,
   type CorrelationReport,
@@ -148,12 +149,14 @@ export function BlockWeeklySurface({
   unit,
   sex,
   version,
+  viewAthlete,
 }: {
   program: Program | null
   bundle: BlockAnalysisBundle
   unit: Unit
-  sex: Sex
+  sex: Sex | null
   version: string
+  viewAthlete?: string
 }) {
   const [viewMode, setViewMode] = useState<'raw' | 'graph'>('raw')
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
@@ -173,9 +176,10 @@ export function BlockWeeklySurface({
   )
 
   useEffect(() => {
-    fetchWeightLog(version).then(setWeightLog).catch(() => undefined)
+    const weightLogRequest = viewAthlete ? fetchViewedWeightLog(viewAthlete, version) : fetchWeightLog(version)
+    weightLogRequest.then(setWeightLog).catch(() => undefined)
     fetchGlossary().then(setGlossary).catch(() => undefined)
-  }, [version])
+  }, [version, viewAthlete])
 
   const loadCorrelation = (refresh = false, cacheOnly = false) => {
     if (analysisWindow.weeks < 4) {
@@ -186,7 +190,7 @@ export function BlockWeeklySurface({
     }
     setCorrelationLoading(true)
     setCorrelationError(null)
-    fetchBlockCorrelationReport(bundle.block.blockKey, { refresh, cacheOnly })
+    fetchBlockCorrelationReport(bundle.block.blockKey, { refresh, cacheOnly, viewAthlete })
       .then(setCorrelationReport)
       .catch((error: unknown) => setCorrelationError(error instanceof Error ? error.message : 'Failed to load ROI correlation'))
       .finally(() => setCorrelationLoading(false))
@@ -194,7 +198,7 @@ export function BlockWeeklySurface({
 
   useEffect(() => {
     loadCorrelation(false, true)
-  }, [analysisWindow.weeks, bundle.block.blockKey])
+  }, [analysisWindow.weeks, bundle.block.blockKey, viewAthlete])
 
   const glossaryMuscles = useMemo(() => {
     const lookup = new Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>()
@@ -397,10 +401,10 @@ export function BlockWeeklySurface({
       let bw = d.bw
       if (!bw) bw = latestBodyweightOnOrBefore(bodyweightEntries, d.date ?? analysisWindow.end, fallbackBodyweight) ?? 0
       const total = (d.squat > 0 ? d.squat : 0) + (d.bench > 0 ? d.bench : 0) + (d.deadlift > 0 ? d.deadlift : 0)
-      const dots = total > 0 && bw > 0 ? calculateDots(total, bw, sex) : null
+      const dots = sex && total > 0 && bw > 0 ? calculateDots(total, bw, sex) : null
       const hasFullSbd = d.hasSquat && d.hasBench && d.hasDeadlift
       const hasBenchOnly = d.hasBench && !d.hasSquat && !d.hasDeadlift
-      const ipfGl = bw > 0 && hasFullSbd && total > 0
+      const ipfGl = !sex ? null : bw > 0 && hasFullSbd && total > 0
         ? calculateIpfGl(total, bw, sex, 'classic_powerlifting')
         : bw > 0 && hasBenchOnly && d.bench > 0
           ? calculateIpfGl(d.bench, bw, sex, 'classic_bench')
@@ -447,7 +451,7 @@ export function BlockWeeklySurface({
     if (!squat && !bench && !deadlift) return null
     const total = squat + bench + deadlift
     let bw = weightTrend?.latest || fallbackBodyweight || 0
-    const dots = total > 0 && bw > 0 ? calculateDots(total, bw, sex) : null
+    const dots = sex && total > 0 && bw > 0 ? calculateDots(total, bw, sex) : null
     return { squat: squat || null, bench: bench || null, deadlift: deadlift || null, total, dots }
   }, [dotsTrend, fallbackBodyweight, sex, weightTrend?.latest])
 
@@ -768,7 +772,7 @@ export function BlockWeeklySurface({
               </Badge>
             )}
           </Group>
-          {analysisWindow.weeks >= 4 && (
+          {analysisWindow.weeks >= 4 && !viewAthlete && (
             <Button
               variant="subtle"
               size="xs"
