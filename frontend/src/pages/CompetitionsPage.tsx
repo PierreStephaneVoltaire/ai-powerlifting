@@ -22,7 +22,6 @@ import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { calculateDots } from '@/utils/dots'
-import { fetchStatCategories } from '@/api/client'
 import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
 import type {
   UserCompetition,
@@ -150,6 +149,8 @@ const EMPTY_COMP: UserCompetition = {
   units: 'kg',
 }
 
+const ALL_STATES = '__all__'
+
 export default function CompetitionsPage() {
   const { readOnly, ranking_country, ranking_region, loading: authLoading, person_pk, mapped_pk } = useAuth()
   const { competitions, isLoading, loadAll, patch, complete } = useCompetitionsStore()
@@ -158,12 +159,7 @@ export default function CompetitionsPage() {
 
   const rankingCountry = ranking_country
   const [selectedState, setSelectedState] = useState<string | null>(ranking_region)
-  const [categories, setCategories] = useState<{ countries: string[]; country_regions: Record<string, string[]> } | null>(null)
-  const [datasetLoading, setDatasetLoading] = useState(false)
-  const datasetCountry = useMemo(() => {
-    if (!rankingCountry || !categories) return rankingCountry
-    return categories.countries.find((country) => country.toLowerCase() === rankingCountry.toLowerCase()) ?? rankingCountry
-  }, [rankingCountry, categories])
+  const stateFilter = selectedState && selectedState !== ALL_STATES ? selectedState : null
 
   const [showCompleteModal, setShowCompleteModal] = useState<string | null>(null)
   const [completeForm, setCompleteForm] = useState<{ body_weight_kg: number; unit: 'kg' | 'lb'; report: PostMeetReport }>({
@@ -173,39 +169,19 @@ export default function CompetitionsPage() {
   const [drafts, setDrafts] = useState<Record<string, UserCompetitionUpdate>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
 
-  const loadCategories = useCallback(() => {
-    fetchStatCategories().then((data: any) => {
-      if (!data) return
-      if (data._status === 503 || data.error === 'DATASET_NOT_FOUND') {
-        setDatasetLoading(true)
-        setTimeout(loadCategories, 30000)
-        return
-      }
-      setDatasetLoading(false)
-      if (!data.error) setCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
-    }).catch(() => {
-      setTimeout(loadCategories, 30000)
-    })
-  }, [])
-
-  useEffect(() => {
-    loadCategories()
-  }, [loadCategories])
-
   useEffect(() => {
     if (authLoading) return
-    loadAll({ country: datasetCountry ?? undefined, state: selectedState ?? undefined })
-  }, [authLoading, person_pk, mapped_pk, datasetCountry, selectedState, loadAll])
+    loadAll({ country: rankingCountry ?? undefined })
+  }, [authLoading, person_pk, mapped_pk, rankingCountry, loadAll])
 
   const stateOptions = useMemo(() => {
-    if (!datasetCountry || !categories) return []
-    const regions = categories.country_regions[datasetCountry] ?? []
-    return [{ value: '__all__', label: 'All States' }, ...regions.map((r) => ({ value: r, label: r }))]
-  }, [datasetCountry, categories])
+    const states = Array.from(new Set(competitions.map((comp) => comp.venue_state).filter((state): state is string => Boolean(state)))).sort()
+    return [{ value: ALL_STATES, label: 'All States' }, ...states.map((state) => ({ value: state, label: state }))]
+  }, [competitions])
 
   const handleSearch = useCallback(() => {
-    loadAll({ country: datasetCountry ?? undefined, state: selectedState ?? undefined })
-  }, [person_pk, mapped_pk, datasetCountry, selectedState, loadAll])
+    loadAll({ country: rankingCountry ?? undefined })
+  }, [person_pk, mapped_pk, rankingCountry, loadAll])
 
   function setDraft(masterId: string, updates: UserCompetitionUpdate) {
     setDrafts((prev) => ({ ...prev, [masterId]: { ...(prev[masterId] || {}), ...updates } }))
@@ -284,7 +260,12 @@ export default function CompetitionsPage() {
     return { dots: calculateDots(total, bodyweight, sex), label: comp.user_status === 'completed' ? 'Actual' : 'Projected' }
   }
 
-  const sortedCompetitions = useMemo(() => [...competitions].sort((a, b) => a.start_date.localeCompare(b.start_date)), [competitions])
+  const sortedCompetitions = useMemo(
+    () => competitions
+      .filter((comp) => !stateFilter || (comp.venue_state ?? '').toLowerCase() === stateFilter.toLowerCase())
+      .sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    [competitions, stateFilter],
+  )
 
   return (
     <Stack gap="md">
@@ -302,9 +283,8 @@ export default function CompetitionsPage() {
       <Paper withBorder p="md">
         <Group gap="md" align="flex-end">
           <TextInput label="Country" value={rankingCountry ?? ''} readOnly style={{ minWidth: 120 }} description="From your ranking settings" />
-          <Select label="State / Region" placeholder={datasetLoading ? 'Loading regions...' : 'Select state'} data={stateOptions} value={selectedState} onChange={setSelectedState} style={{ minWidth: 180 }} searchable disabled={datasetLoading} />
+          <Select label="State / Region" placeholder="All States" data={stateOptions} value={selectedState} onChange={setSelectedState} style={{ minWidth: 180 }} searchable />
           <Button leftSection={<Search size={16} />} onClick={handleSearch} loading={isLoading}>Search</Button>
-          {datasetLoading && <Text size="xs" c="dimmed" style={{ alignSelf: 'center' }}>Ranking dataset loading...</Text>}
         </Group>
       </Paper>
 

@@ -25,6 +25,7 @@ from boto3.dynamodb.conditions import Key
 
 from services.lib.block_scope import active_block_id_for, in_block, stamp
 from services.lib.competition_entries import participation_date
+from services.lib.countries import country_code
 
 from .config import (
     AWS_REGION,
@@ -188,7 +189,7 @@ def _normalise_report(master_id: str, incoming: Any, existing: Any) -> dict:
 
 def list_competitions(args: dict) -> list[dict]:
     pk = args.get("pk") or HEALTH_PROGRAM_PK
-    country = (args.get("country") or "").strip().lower() or None
+    country = country_code(args.get("country"))
     state = (args.get("state") or "").strip().lower() or None
 
     table = _get_table()
@@ -207,7 +208,7 @@ def list_competitions(args: dict) -> list[dict]:
             comp.pop("sk", None)
             comp["revision"] = int(comp.get("revision", 0))
             comp["units"] = comp.get("units") if comp.get("units") in {"kg", "lb"} else "kg"
-            if country and (comp.get("venue_country") or "").strip().lower() != country:
+            if country and country_code(comp.get("venue_country")) != country:
                 continue
             if state and (comp.get("venue_state") or "").strip().lower() != state:
                 continue

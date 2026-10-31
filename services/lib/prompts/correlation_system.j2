@@ -64,7 +64,20 @@ FOR EACH FINDING, PROVIDE:
   - correlation_direction: "positive", "negative", or "unclear"
   - strength: "strong", "moderate", or "weak"
   - reasoning: 2-3 sentences on WHY this makes biomechanical sense given the data trend
-  - caveat: note that correlation ≠ causation and any confounds
+  - caveat: the one confound specific to THIS finding that the data shows (e.g. the
+    lift's own volume rose in the same weeks, a deload or peak sits inside the window,
+    body weight moved, only 2-3 weeks overlap). Empty string if there is none.
+
+OUTPUT STYLE:
+- Correlation does not establish causation. The reader knows this. Apply it to how
+  strongly you rate findings, but never write it, or any paraphrase of it, anywhere in
+  the output.
+- No generic disclaimers or boilerplate: "more data is needed", "individual responses
+  vary", "consult a coach", "this is only an observation". If a sentence would fit
+  every finding, delete it.
+- Never repeat the same sentence or caveat across findings. Each caveat must name
+  something concrete from this athlete's data.
+- The summary states what the findings say. It does not restate caveats.
 
 Be conservative. Fewer high-confidence findings are better than many speculative ones.
 Output ONLY valid JSON in the format specified by the tool call.

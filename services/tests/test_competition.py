@@ -136,6 +136,25 @@ def test_user_competitions_show_directory_and_selected_block_participation(monke
     assert [c["name"] for c in module.list_competitions({"pk": "a", "block_id": "block-2025"})] == ["2025 Provincials", "Directory meet"]
 
 
+def test_user_competitions_match_country_names_against_iso_venue_codes(monkeypatch):
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
+
+    class Table:
+        def query(self, **_kwargs):
+            return {"Items": [
+                {"pk": "a", "sk": "COMP#on", "name": "Ontario meet", "venue_country": "CA", "venue_state": "ON", "start_date": "2026-12-01"},
+                {"pk": "a", "sk": "COMP#qc", "name": "Quebec meet", "venue_country": "CA", "venue_state": "QC", "start_date": "2026-12-02"},
+                {"pk": "a", "sk": "COMP#tx", "name": "Texas meet", "venue_country": "US", "venue_state": "TX", "start_date": "2026-12-03"},
+            ]}
+
+    monkeypatch.setattr(module, "_get_table", lambda: Table())
+    monkeypatch.setattr(module, "active_block_id_for", lambda pk: None)
+    names = lambda args: [c["name"] for c in module.list_competitions({"pk": "a", **args})]
+    assert names({"country": "CANADA"}) == ["Ontario meet", "Quebec meet"]
+    assert names({"country": "ca", "state": "on"}) == ["Ontario meet"]
+    assert names({"country": "USA"}) == ["Texas meet"]
+
+
 class FakeCompetitionTable:
     name = "competitions"
 
