@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, Trash2, Save, BarChart3, Copy, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GripVertical } from 'lucide-react'
 import {
   Stack, Group, Text, Button, Modal,
-  Select, Autocomplete, Box
+  Select, Autocomplete, Box, SegmentedControl
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
@@ -34,7 +34,9 @@ import { toDisplayUnit, fromDisplayUnit, displayWeight } from '@/utils/units'
 import * as api from '@/api/client'
 import { useAuth } from '@/auth/AuthProvider'
 import { LoadTypeBadge } from '@/components/shared/LoadTypeBadge'
-import type { Session, PlannedExercise, GlossaryExercise } from '@powerlifting/types'
+import DraftNumberInput from '@/components/sessions/DraftNumberInput'
+import { formatPlannedExercise, hasRepRange, plannedSets } from '@/utils/plannedPrescription'
+import type { Session, PlannedExercise, PlannedSet, GlossaryExercise } from '@powerlifting/types'
 
 const MUSCLE_LABELS: Record<string, string> = {
   quads: 'Quads',
@@ -75,10 +77,37 @@ interface PlannedExerciseWithId extends PlannedExercise {
   id: string
 }
 
-function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, readOnly = false }: { 
-  ex: PlannedExerciseWithId; 
+type DesignLayout = 'straight' | 'per-set'
+type RepsMode = 'fixed' | 'range'
+
+function isPositiveInteger(value: number): boolean {
+  return value > 0 && Number.isInteger(value)
+}
+
+function isNonNegative(value: number): boolean {
+  return value >= 0
+}
+
+function isValidRpe(value: number): boolean {
+  return value >= 1 && value <= 10 && (value * 2) % 1 === 0
+}
+
+function withTopLevelFromPlan(plan: PlannedSet[]): Partial<PlannedExercise> {
+  const first = plan[0]
+  return {
+    set_plan: plan,
+    sets: plan.length,
+    reps: first?.reps ?? 0,
+    reps_max: first?.reps_max ?? null,
+    kg: first?.kg ?? null,
+    rpe_target: first?.rpe_target ?? null,
+  }
+}
+
+function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMoveUp, canMoveDown, readOnly = false }: {
+  ex: PlannedExerciseWithId;
   onRemove: (id: string) => void;
-  onUpdate: (id: string, f: keyof PlannedExercise, v: any) => void;
+  onPatch: (id: string, patch: Partial<PlannedExercise>) => void;
   onMoveUp: (id: string) => void;
   onMoveDown: (id: string) => void;
   canMoveUp: boolean;
@@ -94,117 +123,241 @@ function SortableExercise({ ex, onRemove, onUpdate, onMoveUp, onMoveDown, canMov
     transition,
     isDragging
   } = useSortable({ id: ex.id, disabled: readOnly })
+  const [layout, setLayout] = useState<DesignLayout>(() => ex.set_plan?.length ? 'per-set' : 'straight')
+  const [repsMode, setRepsMode] = useState<RepsMode>(() => hasRepRange(ex) ? 'range' : 'fixed')
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 1000 : undefined,
     opacity: isDragging ? 0.5 : 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'stretch',
   }
 
-  const renderLoadInput = () => {
-    switch (ex.load_source) {
-      case 'rpe':
-        return (
-          <input
-            className="if-designer-weight-inp"
-            type="number"
-            value={ex.rpe_target || ''}
-            onChange={(e) => onUpdate(ex.id, 'rpe_target', Number(e.currentTarget.value) || null)}
-            step={0.5}
-            placeholder="RPE"
-            disabled={readOnly}
-          />
-        )
-      case 'percentage':
-        return (
-          <>
-            <span className="if-designer-at">~</span>
-            <input
-              className="if-designer-weight-inp"
-              type="number"
-              value={ex.kg !== null ? toDisplayUnit(ex.kg, unit) : ''}
-              onChange={(e) => onUpdate(ex.id, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
-              placeholder={unit}
-              step={0.5}
-              disabled={readOnly}
-            />
-          </>
-        )
-      case 'unresolvable':
-        return <span className="if-designer-at">—</span>
-      case 'absolute':
-      default:
-        return (
-          <input
-            className="if-designer-weight-inp"
-            type="number"
-            value={ex.kg !== null ? toDisplayUnit(ex.kg, unit) : ''}
-            onChange={(e) => onUpdate(ex.id, 'kg', e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null)}
-            placeholder={unit}
-            step={0.5}
-            disabled={readOnly}
-          />
-        )
+  const displayUnit = unit as 'kg' | 'lb'
+  const toDisplay = (kg: number) => toDisplayUnit(kg, displayUnit)
+  const fromDisplay = (value: number) => fromDisplayUnit(value, displayUnit)
+  const plan = ex.set_plan ?? []
+  const baseSet: PlannedSet = { reps: ex.reps, reps_max: ex.reps_max ?? null, kg: ex.kg, rpe_target: ex.rpe_target ?? null }
+
+  const changeLayout = (next: DesignLayout) => {
+    setLayout(next)
+    if (next === 'per-set') {
+      const seed = plannedSets(ex)
+      onPatch(ex.id, withTopLevelFromPlan(seed.length ? seed : [baseSet]))
+    } else {
+      onPatch(ex.id, { ...(plan[0] ?? baseSet), set_plan: undefined })
     }
   }
 
+  const changeRepsMode = (next: RepsMode) => {
+    setRepsMode(next)
+    const repsMaxFor = (reps: number) => next === 'range' ? reps : null
+    onPatch(ex.id, {
+      reps_max: repsMaxFor(ex.reps),
+      ...(plan.length ? { set_plan: plan.map((set) => ({ ...set, reps_max: repsMaxFor(set.reps) })) } : {}),
+    })
+  }
+
+  const resizePlan = (count: number) => {
+    const next = Array.from({ length: count }, (_, i) => plan[i] ?? plan[plan.length - 1] ?? baseSet)
+    onPatch(ex.id, withTopLevelFromPlan(next))
+  }
+
+  const updateSet = (index: number, patch: Partial<PlannedSet>) => {
+    onPatch(ex.id, withTopLevelFromPlan(plan.map((set, i) => i === index ? { ...set, ...patch } : set)))
+  }
+
+  const renderReps = (
+    reps: number | null | undefined,
+    repsMax: number | null | undefined,
+    onChange: (patch: { reps?: number; reps_max?: number | null }) => void,
+    label: string,
+  ) => repsMode === 'range' ? (
+    <Group gap={4} wrap="nowrap">
+      <DraftNumberInput
+        value={reps}
+        onValueChange={(next) => next !== null && onChange({ reps: next })}
+        isValid={isPositiveInteger}
+        nullable={false}
+        commitOnlyValid
+        size="xs"
+        w={48}
+        placeholder="Min"
+        disabled={readOnly}
+        aria-label={`${label} minimum reps`}
+      />
+      <span className="if-designer-at">–</span>
+      <DraftNumberInput
+        value={repsMax}
+        onValueChange={(next) => onChange({ reps_max: next })}
+        isValid={(value) => isPositiveInteger(value) && value >= (reps ?? 0)}
+        size="xs"
+        w={48}
+        placeholder="Max"
+        disabled={readOnly}
+        aria-label={`${label} maximum reps`}
+      />
+    </Group>
+  ) : (
+    <DraftNumberInput
+      value={reps}
+      onValueChange={(next) => next !== null && onChange({ reps: next })}
+      isValid={isPositiveInteger}
+      nullable={false}
+      commitOnlyValid
+      size="xs"
+      w={48}
+      placeholder="Reps"
+      disabled={readOnly}
+      aria-label={`${label} reps`}
+    />
+  )
+
+  const renderLoad = (
+    kg: number | null,
+    rpeTarget: number | null | undefined,
+    onChange: (patch: { kg?: number | null; rpe_target?: number | null }) => void,
+    label: string,
+  ) => {
+    if (ex.load_source === 'unresolvable') return <span className="if-designer-at">—</span>
+    if (ex.load_source === 'rpe') {
+      return (
+        <DraftNumberInput
+          value={rpeTarget}
+          onValueChange={(next) => onChange({ rpe_target: next })}
+          isValid={isValidRpe}
+          size="xs"
+          w={60}
+          placeholder="RPE"
+          disabled={readOnly}
+          aria-label={`${label} RPE`}
+        />
+      )
+    }
+    return (
+      <Group gap={4} wrap="nowrap">
+        {ex.load_source === 'percentage' && <span className="if-designer-at">~</span>}
+        <DraftNumberInput
+          value={kg}
+          onValueChange={(next) => onChange({ kg: next })}
+          isValid={isNonNegative}
+          toDisplay={toDisplay}
+          fromDisplay={fromDisplay}
+          size="xs"
+          w={64}
+          placeholder={unit}
+          disabled={readOnly}
+          aria-label={`${label} weight`}
+        />
+      </Group>
+    )
+  }
+
+  const setsInput = (
+    <DraftNumberInput
+      value={layout === 'per-set' ? plan.length : ex.sets}
+      onValueChange={(next) => next !== null && (layout === 'per-set' ? resizePlan(next) : onPatch(ex.id, { sets: next }))}
+      isValid={isPositiveInteger}
+      nullable={false}
+      commitOnlyValid
+      size="xs"
+      w={48}
+      placeholder="Sets"
+      disabled={readOnly}
+      aria-label={`${ex.name} sets`}
+    />
+  )
+
   return (
     <div ref={setNodeRef} style={style} className="if-designer-ex-block">
-      <span {...(readOnly ? {} : { ...attributes, ...listeners })} className="if-designer-drag-handle">
-        <GripVertical size={16} />
-      </span>
-      <span className="if-designer-ex-block-name">{ex.name}</span>
-      {ex.load_source && <LoadTypeBadge source={ex.load_source} />}
-      <input
-        className="if-designer-num-inp"
-        type="number"
-        value={ex.sets || ''}
-        onChange={(e) => onUpdate(ex.id, 'sets', Number(e.currentTarget.value) || 0)}
-        placeholder="Sets"
-        disabled={readOnly}
-      />
-      <span className="if-designer-at">x</span>
-      <input
-        className="if-designer-num-inp"
-        type="number"
-        value={ex.reps || ''}
-        onChange={(e) => onUpdate(ex.id, 'reps', Number(e.currentTarget.value) || 0)}
-        placeholder="Reps"
-        disabled={readOnly}
-      />
-      <span className="if-designer-at">@</span>
-      {renderLoadInput()}
-      <button
-        className="if-designer-icon-btn"
-        type="button"
-        onClick={() => onMoveUp(ex.id)}
-        disabled={!canMoveUp || readOnly}
-        title="Move exercise up"
-        aria-label="Move exercise up"
-      >
-        <ArrowUp size={13} />
-      </button>
-      <button
-        className="if-designer-icon-btn"
-        type="button"
-        onClick={() => onMoveDown(ex.id)}
-        disabled={!canMoveDown || readOnly}
-        title="Move exercise down"
-        aria-label="Move exercise down"
-      >
-        <ArrowDown size={13} />
-      </button>
-      <button
-        className="if-designer-icon-btn if-designer-icon-btn-danger"
-        type="button"
-        onClick={() => onRemove(ex.id)}
-        title="Remove exercise"
-        aria-label="Remove exercise"
-        disabled={readOnly}
-      >
-        <Trash2 size={13} />
-      </button>
+      <Group gap={8} wrap="nowrap">
+        <span {...(readOnly ? {} : { ...attributes, ...listeners })} className="if-designer-drag-handle">
+          <GripVertical size={16} />
+        </span>
+        <span className="if-designer-ex-block-name">{ex.name}</span>
+        {ex.load_source && <LoadTypeBadge source={ex.load_source} />}
+        <button
+          className="if-designer-icon-btn"
+          type="button"
+          onClick={() => onMoveUp(ex.id)}
+          disabled={!canMoveUp || readOnly}
+          title="Move exercise up"
+          aria-label="Move exercise up"
+        >
+          <ArrowUp size={13} />
+        </button>
+        <button
+          className="if-designer-icon-btn"
+          type="button"
+          onClick={() => onMoveDown(ex.id)}
+          disabled={!canMoveDown || readOnly}
+          title="Move exercise down"
+          aria-label="Move exercise down"
+        >
+          <ArrowDown size={13} />
+        </button>
+        <button
+          className="if-designer-icon-btn if-designer-icon-btn-danger"
+          type="button"
+          onClick={() => onRemove(ex.id)}
+          title="Remove exercise"
+          aria-label="Remove exercise"
+          disabled={readOnly}
+        >
+          <Trash2 size={13} />
+        </button>
+      </Group>
+
+      <Group gap="xs" wrap="wrap">
+        <SegmentedControl
+          size="xs"
+          value={layout}
+          onChange={(next) => changeLayout(next as DesignLayout)}
+          data={[
+            { label: 'Straight sets', value: 'straight' },
+            { label: 'Per set', value: 'per-set' },
+          ]}
+          disabled={readOnly}
+        />
+        <SegmentedControl
+          size="xs"
+          value={repsMode}
+          onChange={(next) => changeRepsMode(next as RepsMode)}
+          data={[
+            { label: 'Fixed reps', value: 'fixed' },
+            { label: 'Rep range', value: 'range' },
+          ]}
+          disabled={readOnly}
+        />
+      </Group>
+
+      {layout === 'straight' ? (
+        <Group gap={6} wrap="wrap" align="center">
+          {setsInput}
+          <span className="if-designer-at">x</span>
+          {renderReps(ex.reps, ex.reps_max, (patch) => onPatch(ex.id, patch), ex.name)}
+          <span className="if-designer-at">@</span>
+          {renderLoad(ex.kg, ex.rpe_target, (patch) => onPatch(ex.id, patch), ex.name)}
+        </Group>
+      ) : (
+        <Stack gap={6}>
+          <Group gap={6} align="center">
+            <span className="if-designer-at">Sets</span>
+            {setsInput}
+          </Group>
+          {plan.map((set, setIndex) => (
+            <Group key={setIndex} gap={6} wrap="nowrap" align="center">
+              <span className="if-designer-at" style={{ width: 40 }}>Set {setIndex + 1}</span>
+              {renderReps(set.reps, set.reps_max, (patch) => updateSet(setIndex, patch), `Set ${setIndex + 1}`)}
+              <span className="if-designer-at">@</span>
+              {renderLoad(set.kg, set.rpe_target, (patch) => updateSet(setIndex, patch), `Set ${setIndex + 1}`)}
+            </Group>
+          ))}
+        </Stack>
+      )}
     </div>
   )
 }
@@ -534,8 +687,14 @@ export default function DesignerPage() {
     setExerciseSearch('')
   }
 
-  function updatePlannedExercise(id: string, field: keyof PlannedExercise, value: unknown) {
-    setPlannedExercises(prev => prev.map((pe) => pe.id === id ? { ...pe, [field]: value } : pe))
+  function patchPlannedExercise(id: string, patch: Partial<PlannedExercise>) {
+    setPlannedExercises(prev => prev.map((pe) => {
+      if (pe.id !== id) return pe
+      const next = { ...pe, ...patch }
+      if ('set_plan' in patch && patch.set_plan === undefined) delete next.set_plan
+      if (next.reps_max == null) delete next.reps_max
+      return next
+    }))
   }
 
   function movePlannedExercise(id: string, direction: -1 | 1) {
@@ -660,7 +819,7 @@ export default function DesignerPage() {
         <div className="if-designer-sess-grid">
           {weekSessions.map((session, i) => {
             const status = session.completed ? 'completed' : (session.status || 'planned')
-            const groups: Record<string, { sets: number; reps: number; kg: number | null }[]> = {}
+            const groups: Record<string, PlannedExercise[]> = {}
             for (const ex of session.planned_exercises || []) {
               if (!groups[ex.name]) groups[ex.name] = []
               groups[ex.name].push(ex)
@@ -685,9 +844,7 @@ export default function DesignerPage() {
                       <div className="if-designer-ex-line" key={`${name}-${j}`}>
                         <span className="if-designer-ex-line-name">{name}</span>
                         <span className="if-designer-ex-line-sets">
-                          {items.map((item) => (
-                            `${item.sets}x${item.reps}${item.kg !== null ? ` @${displayWeight(item.kg, unit)}` : ''}`
-                          )).join('\n')}
+                          {items.map((item) => formatPlannedExercise(item, (kg) => displayWeight(kg, unit))).join('\n')}
                         </span>
                       </div>
                     ))}
@@ -773,7 +930,7 @@ export default function DesignerPage() {
                       key={ex.id}
                       ex={ex}
                       onRemove={removePlannedExercise}
-                      onUpdate={updatePlannedExercise}
+                      onPatch={patchPlannedExercise}
                       onMoveUp={(id) => movePlannedExercise(id, -1)}
                       onMoveDown={(id) => movePlannedExercise(id, 1)}
                       canMoveUp={index > 0}

@@ -359,12 +359,21 @@ export type FailedSetReason =
 export type LoadSource = 'absolute' | 'rpe' | 'percentage' | 'unresolvable'
 export type LoadType = LoadSource
 
+export interface PlannedSet {
+  reps: number
+  reps_max?: number | null
+  kg: number | null
+  rpe_target?: number | null
+}
+
 export interface PlannedExercise {
   id?: string
   set_ids?: string[]
   name: string
   sets: number
   reps: number
+  reps_max?: number | null
+  set_plan?: PlannedSet[]
   kg: number | null
   load_source?: LoadSource
   rpe_target?: number | null

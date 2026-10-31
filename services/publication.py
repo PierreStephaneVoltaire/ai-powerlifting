@@ -55,6 +55,14 @@ def session_view(session, access):
     return out
 
 
+def current_block_only(access):
+    return not access.get('is_self') and 'sessions:read' not in set(access.get('granted_permissions', []))
+
+
+def in_current_block(session):
+    return (session.get('block') or 'current') == 'current'
+
+
 def program_view(program, access):
     from .competition_access import visible_entries
     out = copy.deepcopy(program)
@@ -63,7 +71,8 @@ def program_view(program, access):
         if f'{domain}:read' not in permissions:
             out[field] = [] if isinstance(out.get(field), list) else {}
     if isinstance(out.get('sessions'), list):
-        out['sessions'] = [session_view(session, access) for session in out['sessions']]
+        sessions = [session for session in out['sessions'] if in_current_block(session)] if current_block_only(access) else out['sessions']
+        out['sessions'] = [session_view(session, access) for session in sessions]
     if isinstance(out.get('competitions'), list):
         out['competitions'] = visible_entries(out['competitions'], access)
     if 'videos:read' not in permissions:
@@ -112,7 +121,8 @@ def operation_result(name, value, access):
     if name in ('session_get', 'health_get_session'):
         return session_view(value, access)
     if name in ('session_list', 'session_list_full', 'health_get_sessions_range'):
+        visible = (lambda items: [item for item in items if in_current_block(item)]) if current_block_only(access) else (lambda items: items)
         if isinstance(value, list):
-            return [session_view(item, access) for item in value]
-        return {**value, 'sessions': [session_view(item, access) for item in value.get('sessions', [])]}
+            return [session_view(item, access) for item in visible(value)]
+        return {**value, 'sessions': [session_view(item, access) for item in visible(value.get('sessions', []))]}
     return value

@@ -38,7 +38,10 @@ specified reads; a favorite is private and confers no access.
 **Public profile** — A profile the Athlete has made public. It acts as a read grant
 to everyone for each domain the Athlete publishes. Sessions and Analysis on a public
 profile are shown read-only on the profile itself. Viewing them does not select the
-Athlete.
+Athlete. Public Sessions cover the current block only.
+
+**Profile tag** — A label an Athlete submits for their profile. The operator
+approves tags directly in DynamoDB, and only approved tags are shown.
 
 **Authored note** — Words owned by the Person who wrote them. A private original
 is separate from an attributed revision attached to an Athlete's record. The

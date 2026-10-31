@@ -5,7 +5,8 @@ import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { useRestTimerStore } from '@/store/restTimerStore'
-import { getDayOfWeek } from '@/utils/dates'
+import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
+import { format } from 'date-fns'
 import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
@@ -39,6 +40,7 @@ import AutoRegulationModal from './AutoRegulationModal'
 import RestTimerHeaderButton from './RestTimerHeaderButton'
 import { normalizeExerciseName } from '@/utils/volume'
 import { lastPerformance } from '@/utils/lastPerformance'
+import { formatPlannedExercise } from '@/utils/plannedPrescription'
 import { uploadBelongsTo, useVideoUploadStore } from '@/store/videoUploadStore'
 import { useAuth } from '@/auth/AuthProvider'
 import Num from '@/components/shared/Num'
@@ -235,6 +237,7 @@ interface SessionDrawerProps {
 function SortableExerciseItem({ 
   exercise, 
   index, 
+  lastTime,
   onRemove, 
   onUpdate, 
   onUpdateSets,
@@ -253,6 +256,7 @@ function SortableExerciseItem({
 }: { 
   exercise: Exercise;
   index: number;
+  lastTime?: string;
   onRemove: (i: number) => void;
   onUpdate: (i: number, field: keyof Exercise, v: any) => void;
   onUpdateSets: (i: number, sets: number) => void;
@@ -356,7 +360,12 @@ function SortableExerciseItem({
       </Group>
 
       <Box p={16}>
-        <Group justify="flex-end" mb="xs">
+        <Group justify={lastTime ? 'space-between' : 'flex-end'} mb="xs" wrap="nowrap" gap="xs">
+          {lastTime && (
+            <Text size="xs" c="dimmed" truncate="end" title={lastTime} style={{ minWidth: 0 }} data-testid={`exercise-last-time-${index}`}>
+              {lastTime}
+            </Text>
+          )}
           <SegmentedControl
             size="xs"
             value={layout}
@@ -556,12 +565,19 @@ export default function SessionDrawer({
   const [baseline, setBaseline] = useState<Session | null>(null)
   const [localSession, setLocalSession] = useState<Session | null>(null)
   const programSessions = useProgramStore(s => s.program?.sessions)
-  const plannedHistory = useMemo(() => {
-    if (!localSession?.planned_exercises?.length || !programSessions) return []
-    return localSession.planned_exercises
-      .map((pe) => ({ name: pe.name, last: lastPerformance(programSessions, localSession, pe.name) }))
-      .filter((entry) => entry.last !== null)
-  }, [programSessions, localSession?.planned_exercises, localSession?.date, localSession?.block, localSession?.block_id, localSession?.id])
+  const exerciseNamesKey = localSession?.exercises.map((ex) => ex.name).join('\u0000') ?? ''
+  const lastTimeByName = useMemo(() => {
+    const labels = new Map<string, string>()
+    if (!localSession || !programSessions) return labels
+    for (const ex of localSession.exercises) {
+      if (labels.has(ex.name)) continue
+      const last = lastPerformance(programSessions, localSession, ex.name)
+      if (!last) continue
+      const groups = last.groups.map((g) => `${g.sets}x${g.reps ?? '?'}${g.kg !== null ? ` @${toDisplayUnit(g.kg, unit as 'kg' | 'lb')}${unit}` : ''}`).join(', ')
+      labels.set(ex.name, `Last time (${format(parseLocalDate(last.date), 'MMM d')}): ${groups}`)
+    }
+    return labels
+  }, [programSessions, exerciseNamesKey, localSession?.date, localSession?.block, localSession?.block_id, localSession?.id, unit])
   const backgroundUploads = useVideoUploadStore(s => s.uploads)
   const consumeUpload = useVideoUploadStore(s => s.consume)
   useEffect(() => {
@@ -1580,22 +1596,10 @@ export default function SessionDrawer({
               <Group gap="md" wrap="wrap">
                 {localSession.planned_exercises!.map((pe, i) => (
                   <Text key={i} size="xs" c="dimmed" span>
-                    {pe.name} {pe.sets}x{pe.reps}{pe.kg !== null ? ` @${toDisplayUnit(pe.kg, unit as 'kg' | 'lb')}${unit}` : ''}
+                    {pe.name} {formatPlannedExercise(pe, (kg) => `${toDisplayUnit(kg, unit as 'kg' | 'lb')}${unit}`)}
                   </Text>
                 ))}
               </Group>
-              {plannedHistory.length > 0 && (
-                <>
-                  <Text size="xs" c="dimmed" fw={500} mt="xs" mb={4}>Last time</Text>
-                  <Group gap="md" wrap="wrap">
-                    {plannedHistory.map(({ name, last }, i) => (
-                      <Text key={i} size="xs" c="dimmed" span>
-                        {name} {last!.groups.map((g) => `${g.sets}x${g.reps ?? '?'}${g.kg !== null ? ` @${toDisplayUnit(g.kg, unit as 'kg' | 'lb')}${unit}` : ''}`).join(', ')}
-                      </Text>
-                    ))}
-                  </Group>
-                </>
-              )}
             </Paper>
           )}
           <Stack gap="xs">
@@ -1614,6 +1618,7 @@ export default function SessionDrawer({
                       key={exerciseDragId(ex, i)}
                       exercise={ex}
                       index={i}
+                      lastTime={lastTimeByName.get(ex.name)}
                       onRemove={removeExercise}
                       onUpdate={updateExercise}
                       onUpdateSets={updateSetsWithResize}

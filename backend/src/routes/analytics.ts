@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import { invokeToolDirect } from '../utils/agent'
 import { invokeLambda, readGeneration } from '../utils/lambda'
 import { readAnalysisRecord, writeAnalysisRecord } from '../services/analysisRecords'
@@ -77,6 +77,11 @@ async function invokeAnalysisTool(
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+function viewsOwnAthlete(req: Request): boolean {
+  const own = req.settings?.mapped_pk || req.settings?.pk
+  return Boolean(own) && own === req.mapped_pk
 }
 
 async function getProgramWithWeightLog(
@@ -553,7 +558,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const weekEnd = Number.isFinite(weekEndRaw) && weekEndRaw > 0 ? weekEndRaw : undefined
     const projectionDate = isIsoDate(refDate) ? refDate : todayIso()
     await snapshotCompetitionProjection(req.mapped_pk!, projectionDate)
-    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current', block)
+    const snapshot = viewsOwnAthlete(req) ? await getProgramWithWeightLog(req.mapped_pk!, 'current', block) : null
     const data: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
       const sectionPayload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
@@ -566,8 +571,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
         week_start: weekStart,
         week_end: weekEnd,
         refresh_program: false,
-        program,
-        sessions: program.sessions ?? [],
+        ...(snapshot ? { program: snapshot, sessions: snapshot.sessions ?? [] } : {}),
         pk: req.mapped_pk,
       }) as Record<string, unknown>
       Object.assign(data, sectionPayload)

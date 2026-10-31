@@ -175,20 +175,6 @@ export async function removeTagHandler(req: Request, res: Response): Promise<voi
   res.json({ data: settings })
 }
 
-export async function approveTagHandler(req: Request, res: Response): Promise<void> {
-  if (!req.user) {
-    throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')
-  }
-
-  const tag = normalizeTagInput(req.params.tag)
-  if (!tag) {
-    throw new AppError('Invalid tag', 400)
-  }
-
-  const result = await invokeLambda('settings_tag_approve', { ...req.body, tag })
-  res.json({ data: result })
-}
-
 export async function proposeTagHandler(req: Request, res: Response): Promise<void> {
   if (!req.user) {
     throw new AppError('Not authenticated', 401, 'AUTH_REQUIRED')

@@ -47,3 +47,12 @@ Viewing another Athlete's published records never changes the viewer's selected
 Athlete. The profile page renders those records read-only in place, with read
 requests scoped to the viewed Athlete. It never redirects into the full
 application under the viewed Athlete's partition.
+
+Public access to Sessions covers the current block only. Earlier blocks need a
+grant with `sessions:read`, such as a Coach's. Analysis for a viewed Athlete is
+computed server-side from the Athlete's full records and returned only as
+analysis output.
+
+Profile tags are submitted by the Athlete. The operator approves them directly
+in DynamoDB. There is no approval UI or HTTP route. Only approved tags appear
+on later page loads and on public profiles.

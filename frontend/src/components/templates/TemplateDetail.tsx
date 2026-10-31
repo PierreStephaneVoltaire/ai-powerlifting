@@ -4,6 +4,7 @@ import { Edit2, Eye, EyeOff } from 'lucide-react'
 import { Template } from '@powerlifting/types'
 import { SessionGrid } from './SessionGrid'
 import { EvaluationPanel } from './EvaluationPanel'
+import { TemplateMuscleWorkload } from './TemplateMuscleWorkload'
 import { ApplyModal } from './ApplyModal'
 import { MaxResolutionGate } from './MaxResolutionGate'
 import { confirmApplyTemplate, mutationEnvelope, publishTemplate, unpublishTemplate } from '../../api/client'
@@ -147,6 +148,8 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
           />          </Stack>
         </Grid.Col>
       </Grid>
+
+      <TemplateMuscleWorkload template={template} />
 
       <ApplyModal 
         opened={applyModalOpened} 

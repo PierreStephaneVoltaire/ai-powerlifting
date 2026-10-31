@@ -58,3 +58,14 @@ def test_publication_get_projects_internal_metadata(monkeypatch):
 
     monkeypatch.setattr(publication, 'database', Database)
     assert publication.handler({'_access': {'settings_pk': 'athlete-person'}}, None) == {'domains': ['competition'], 'revision': 3}
+
+
+def test_public_viewers_see_only_current_block_sessions():
+    program = {'meta': {}, 'sessions': [{'date': '2026-10-01', 'block': 'current'}, {'date': '2025-01-01', 'block': 'ottawa-prep'}, {'date': '2026-10-02'}]}
+    public = {'is_self': False, 'permissions': ['program:read', 'sessions:read'], 'granted_permissions': []}
+    coach = {**public, 'granted_permissions': ['sessions:read']}
+    owner = {**public, 'is_self': True}
+    assert [s['date'] for s in publication.program_view(program, public)['sessions']] == ['2026-10-01', '2026-10-02']
+    assert len(publication.program_view(program, coach)['sessions']) == 3
+    assert len(publication.operation_result('program_get', program, owner)['sessions']) == 3
+    assert [s['date'] for s in publication.operation_result('session_list', program['sessions'], public)] == ['2026-10-01', '2026-10-02']

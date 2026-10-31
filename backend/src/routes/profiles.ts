@@ -15,7 +15,7 @@ profilesRouter.get(/^\/media\/(.+)$/, async (req, res, next) => {
 profilesRouter.get('/search', searchProfilesHandler)
 profilesRouter.get('/tags', async (req, res, next) => {
   try {
-    const result = await invokeLambda('tag_catalog_get', { include_pending: req.query.review === 'true' })
+    const result = await invokeLambda('tag_catalog_get', {})
     res.json({ data: result.tags })
   } catch (error) { next(error) }
 })
