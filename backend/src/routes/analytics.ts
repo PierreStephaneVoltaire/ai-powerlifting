@@ -114,6 +114,8 @@ function requestedWindow(value: Record<string, unknown> = {}): { start?: string;
   return { start, end }
 }
 
+const SNAPSHOT_SECTION_KEYS = new Set<AnalysisSectionKey>(['overview', 'alerts'])
+
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
   try {
     await invokeLambda('pod_competition', { function: 'health_snapshot_competition_projection', 
@@ -170,9 +172,6 @@ async function computeSection(
   try {
     let payload: unknown
     if (DETERMINISTIC_SECTION_SET.has(sectionKey)) {
-      if (sectionKey === 'overview' || sectionKey === 'alerts') {
-        await snapshotCompetitionProjection(context.pk, context.asOfDate)
-      }
       const window = context.windows[context.windowKey]
       payload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
         section: sectionKey,
@@ -400,6 +399,9 @@ analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
         error: 'Read-only users can only queue deterministic analysis sections.',
       })
     }
+    if (sectionKeys.some((sectionKey: AnalysisSectionKey) => SNAPSHOT_SECTION_KEYS.has(sectionKey))) {
+      await snapshotCompetitionProjection(pk, asOfDate)
+    }
     const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueMissingSections(context, sectionKeys, true)
     await queueAnalysisSections(context, queued)
@@ -452,6 +454,9 @@ analyticsRouter.post('/analysis/sections/invalidate', async (req, res) => {
     const asOfDate = isIsoDate(req.body?.asOfDate) ? req.body.asOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.body?.window)
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
+    if (sectionKeys.some((sectionKey: AnalysisSectionKey) => SNAPSHOT_SECTION_KEYS.has(sectionKey))) {
+      await snapshotCompetitionProjection(pk, asOfDate)
+    }
     const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueMissingSections(context, sectionKeys, true)
     await queueAnalysisSections(context, queued)
@@ -496,6 +501,9 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
     const requestedWindows = Array.isArray(req.body?.windows) ? req.body.windows : []
     const windowKey = normalizeAnalysisWindowKey(req.body?.window ?? requestedWindows[0])
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
+    if (sectionKeys.some((sectionKey: AnalysisSectionKey) => SNAPSHOT_SECTION_KEYS.has(sectionKey))) {
+      await snapshotCompetitionProjection(pk, asOfDate)
+    }
     const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueMissingSections(context, sectionKeys, true)
     await queueAnalysisSections(context, queued)

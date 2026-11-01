@@ -205,7 +205,8 @@ def list_competitions(args: dict) -> list[dict]:
         for raw in response.get("Items", []) or []:
             comp = _from_item(raw) or {}
             comp.pop("pk", None)
-            comp.pop("sk", None)
+            sk = str(comp.pop("sk", "") or "")
+            comp["master_id"] = comp.get("master_id") or sk.removeprefix("COMP#") or None
             comp["revision"] = int(comp.get("revision", 0))
             comp["units"] = comp.get("units") if comp.get("units") in {"kg", "lb"} else "kg"
             if country and country_code(comp.get("venue_country")) != country:

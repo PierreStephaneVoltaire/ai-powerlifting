@@ -3,8 +3,8 @@ import { invokeLambda } from '../utils/lambda'
 import { invokeToolDirect } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 import { principalToken } from '../auth/principal'
+import { coachUrl } from '../utils/coachUrl'
 
-const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 function normalizeTemplateSk(sk: string): string {
@@ -216,7 +216,7 @@ export async function uploadTemplateImport(req: Request, res: Response) {
     throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
   }
 
-  const response = await fetch(`${IF_API_URL}/v1/jobs`, {
+  const response = await fetch(`${coachUrl()}/v1/jobs`, {
     method: 'POST',
     headers: jobHeaders(req, 'import_parse_file'),
     body: JSON.stringify({
@@ -238,7 +238,7 @@ export async function getTemplateImport(req: Request, res: Response) {
   if (!req.user || req.readOnly || !req.mapped_pk || !req.actor_mapped_pk) {
     throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
   }
-  const response = await fetch(`${IF_API_URL}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, {
+  const response = await fetch(`${coachUrl()}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, {
     headers: jobHeaders(req, 'domain_job_read'),
   })
   if (response.status === 404) throw new AppError('Template import job not found', 404)
@@ -263,7 +263,7 @@ export async function getTemplateImport(req: Request, res: Response) {
 
 export async function applyTemplateImport(req: Request, res: Response) {
   if (!req.user || req.readOnly || !req.mapped_pk || !req.actor_mapped_pk) throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
-  const response = await fetch(`${IF_API_URL}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, { headers: jobHeaders(req, 'domain_job_read') })
+  const response = await fetch(`${coachUrl()}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, { headers: jobHeaders(req, 'domain_job_read') })
   if (!response.ok) throw new AppError('Template import job not found', response.status === 404 ? 404 : 502)
   const job: any = await response.json()
   if (job.status !== 'succeeded') throw new AppError(`Template import is ${job.status}`, 409, 'IMPORT_NOT_READY')

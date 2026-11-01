@@ -3,10 +3,10 @@ import { AppError } from '../middleware/errorHandler'
 import { operationScope } from './operationScope'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { coachUrl } from './coachUrl'
 
 type Operation = { name: string; domain: string; legacy?: string[] }
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
-const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
 const SERVICE_BASE_URL = process.env.POWERLIFTING_SERVICE_BASE_URL
 const operations = new Map<string, Operation>()
 for (const domain of ['program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'profile', 'lift-profiles', 'analytics', 'videos', 'export']) {
@@ -22,7 +22,7 @@ function serviceUrl(domain: string): string {
 
 export async function pollJob(jobId: string, operation: string, person: string, athlete?: string): Promise<any> {
   for (let attempt = 0; attempt < 1800; attempt += 1) {
-    const response = await fetch(`${IF_API_URL}/v1/jobs/${encodeURIComponent(jobId)}/result`, { headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person, ...(athlete ? { 'X-PL-Principal': principalToken('domain_job_read', { athlete, person }) } : {}) } })
+    const response = await fetch(`${coachUrl()}/v1/jobs/${encodeURIComponent(jobId)}/result`, { headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person, ...(athlete ? { 'X-PL-Principal': principalToken('domain_job_read', { athlete, person }) } : {}) } })
     if (response.status === 202) { await new Promise((done) => setTimeout(done, 500)); continue }
     if (!response.ok) throw new Error(`Job error ${response.status} for ${operation}: ${await response.text()}`)
     const body: any = await response.json()

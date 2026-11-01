@@ -128,3 +128,34 @@ class TemplateContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_template_evaluation_prompt_accepts_dynamodb_decimals():
+    import asyncio
+    import json
+    from decimal import Decimal
+
+    module = importlib.import_module("services.handlers.templates.template_evaluate.template_evaluate_ai")
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            arguments = {"stance": "solid", "summary": "ok", "strengths": [], "weaknesses": [], "suggestions": [], "projected_readiness_at_comp": 0.8}
+            return {"choices": [{"message": {"tool_calls": [{"function": {"arguments": json.dumps(arguments)}}]}}]}
+
+    async def completion(payload):
+        captured["user"] = payload["messages"][1]["content"]
+        return Response()
+
+    template = {"meta": {"estimated_weeks": Decimal("12")}, "sessions": [{"exercises": [{"sets": Decimal("3"), "load_value": Decimal("0.75")}]}]}
+    with patch.object(module, "completion", completion):
+        report = asyncio.run(module.generate_template_evaluate_report(template, {"bodyweight_kg": Decimal("82.5")}))
+
+    payload = json.loads(captured["user"])
+    assert payload["template"]["meta"]["estimated_weeks"] == 12
+    assert payload["template"]["sessions"][0]["exercises"][0]["load_value"] == 0.75
+    assert payload["athlete_context"]["bodyweight_kg"] == 82.5
+    assert report["stance"] == "solid"

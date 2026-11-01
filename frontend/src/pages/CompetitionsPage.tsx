@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { format } from 'date-fns'
+import DraftNumberInput from '@/components/sessions/DraftNumberInput'
 import { Link } from 'react-router-dom'
 import { CheckCircle, ExternalLink, Save, Search, Target, Trophy } from 'lucide-react'
 import {
@@ -151,6 +153,14 @@ const EMPTY_COMP: UserCompetition = {
 
 const ALL_STATES = '__all__'
 
+function isPositive(value: number): boolean {
+  return value > 0
+}
+
+function isNonNegative(value: number): boolean {
+  return value >= 0
+}
+
 export default function CompetitionsPage() {
   const { readOnly, ranking_country, ranking_region, loading: authLoading, person_pk, mapped_pk } = useAuth()
   const { competitions, isLoading, loadAll, patch, complete } = useCompetitionsStore()
@@ -260,11 +270,13 @@ export default function CompetitionsPage() {
     return { dots: calculateDots(total, bodyweight, sex), label: comp.user_status === 'completed' ? 'Actual' : 'Projected' }
   }
 
+  const today = format(new Date(), 'yyyy-MM-dd')
   const sortedCompetitions = useMemo(
     () => competitions
+      .filter((comp) => comp.user_status !== 'available' || (comp.end_date ?? comp.start_date) >= today)
       .filter((comp) => !stateFilter || (comp.venue_state ?? '').toLowerCase() === stateFilter.toLowerCase())
       .sort((a, b) => a.start_date.localeCompare(b.start_date)),
-    [competitions, stateFilter],
+    [competitions, stateFilter, today],
   )
 
   return (
@@ -376,17 +388,17 @@ export default function CompetitionsPage() {
                     <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
                       <Select label="Entry units" value={unit} data={[{ value: 'kg', label: 'Kilograms' }, { value: 'lb', label: 'Pounds' }]} onChange={(v) => { if (v && !isDisabled) setDraft(comp.master_id, { units: v as 'kg' | 'lb' }) }} disabled={readOnly || isCancelled} allowDeselect={false} />
                       <Select label="Your Status" value={view.user_status} data={STATUS_OPTIONS} onChange={(v) => { if (v && !isDisabled) setDraft(comp.master_id, { user_status: v as UserCompetition['user_status'] }) }} disabled={readOnly || isCancelled} />
-                      <TextInput type="number" label={`Weight Class (${unit})`} value={view.weight_class_kg == null ? '' : toDisplayUnit(view.weight_class_kg, unit)} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { weight_class_kg: e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null }) }} disabled={readOnly || isCancelled} />
-                      {view.user_status === 'completed' && <TextInput type="number" label={`Body Weight (${unit})`} value={view.body_weight_kg == null ? '' : toDisplayUnit(view.body_weight_kg, unit)} onChange={(e) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { body_weight_kg: e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : null }) }} disabled={readOnly || isCancelled} />}
+                      <DraftNumberInput label={`Weight Class (${unit})`} value={view.weight_class_kg} toDisplay={(kg) => toDisplayUnit(kg, unit)} fromDisplay={(value) => fromDisplayUnit(value, unit)} isValid={isPositive} onValueChange={(next) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { weight_class_kg: next }) }} disabled={readOnly || isCancelled} />
+                      {view.user_status === 'completed' && <DraftNumberInput label={`Body Weight (${unit})`} value={view.body_weight_kg} toDisplay={(kg) => toDisplayUnit(kg, unit)} fromDisplay={(value) => fromDisplayUnit(value, unit)} isValid={isPositive} onValueChange={(next) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { body_weight_kg: next }) }} disabled={readOnly || isCancelled} />}
                       <Checkbox mt={30} label="Hotel required" checked={view.hotel_required} onChange={(event) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { hotel_required: event.currentTarget.checked }) }} disabled={readOnly || isCancelled} />
                     </SimpleGrid>
                     <Stack gap="xs">
                       <Text size="xs" c="dimmed">{view.user_status === 'completed' ? `Results (${unit})` : `Targets (${unit})`}</Text>
                       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
                         {(['squat_kg', 'bench_kg', 'deadlift_kg', 'total_kg'] as const).map((lift) => (
-                          <TextInput key={lift} type="number" label={lift.replace('_kg', '')} value={(() => { const value = view.user_status === 'completed' ? view.results?.[lift] : view.targets?.[lift]; return value == null ? '' : toDisplayUnit(value, unit) })()} onChange={(e) => {
+                          <DraftNumberInput key={lift} label={lift.replace('_kg', '')} value={view.user_status === 'completed' ? view.results?.[lift] : view.targets?.[lift]} toDisplay={(kg) => toDisplayUnit(kg, unit)} fromDisplay={(value) => fromDisplayUnit(value, unit)} isValid={isNonNegative} onValueChange={(next) => {
                             if (readOnly || isCancelled) return
-                            const v = e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), unit) : 0
+                            const v = next ?? 0
                             const field = view.user_status === 'completed' ? 'results' : 'targets'
                             const currentField = view[field] || { squat_kg: 0, bench_kg: 0, deadlift_kg: 0, total_kg: 0 }
                             const newLifts = { squat_kg: currentField.squat_kg || 0, bench_kg: currentField.bench_kg || 0, deadlift_kg: currentField.deadlift_kg || 0, [lift]: v }
@@ -441,9 +453,9 @@ export default function CompetitionsPage() {
         <Stack gap="md">
           <Text size="sm" c="dimmed">Log the attempt card and meet-day context.</Text>
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-            <TextInput type="number" label={`Body Weight at Weigh-in (${completeForm.unit})`} value={toDisplayUnit(completeForm.body_weight_kg, completeForm.unit)} onChange={(e) => setCompleteForm((p) => ({ ...p, body_weight_kg: e.currentTarget.value ? fromDisplayUnit(Number(e.currentTarget.value), p.unit) : 0 }))} disabled={readOnly} />
-            <TextInput type="number" label="Sleep before meet (hours)" value={completeForm.report.sleep_hours ?? ''} onChange={(e) => updateCompleteReport({ sleep_hours: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })} disabled={readOnly} />
-            <TextInput type="number" label="Attempt selection grade" value={completeForm.report.attempt_selection_grade ?? ''} onChange={(e) => updateCompleteReport({ attempt_selection_grade: e.currentTarget.value !== '' ? Math.max(1, Math.min(5, Math.round(Number(e.currentTarget.value)))) as 1 | 2 | 3 | 4 | 5 : null })} disabled={readOnly} />
+            <DraftNumberInput label={`Body Weight at Weigh-in (${completeForm.unit})`} value={completeForm.body_weight_kg || null} toDisplay={(kg) => toDisplayUnit(kg, completeForm.unit)} fromDisplay={(value) => fromDisplayUnit(value, completeForm.unit)} isValid={isPositive} onValueChange={(next) => setCompleteForm((p) => ({ ...p, body_weight_kg: next ?? 0 }))} disabled={readOnly} />
+            <DraftNumberInput label="Sleep before meet (hours)" value={completeForm.report.sleep_hours} isValid={(value) => value >= 0 && value <= 24} onValueChange={(next) => updateCompleteReport({ sleep_hours: next })} disabled={readOnly} />
+            <DraftNumberInput label="Attempt selection grade" placeholder="1-5" value={completeForm.report.attempt_selection_grade} isValid={(value) => Number.isInteger(value) && value >= 1 && value <= 5} commitOnlyValid onValueChange={(next) => updateCompleteReport({ attempt_selection_grade: next as 1 | 2 | 3 | 4 | 5 | null })} disabled={readOnly} />
           </SimpleGrid>
           <Text size="sm" fw={500}>Attempt Card</Text>
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
@@ -451,7 +463,7 @@ export default function CompetitionsPage() {
               <Paper key={attempt.lift + '-' + attempt.attempt_number} withBorder p="xs">
                 <Text size="xs" fw={500}>{LIFT_LABELS[attempt.lift]} {attempt.attempt_number}</Text>
                 <Group gap="xs" mt={4}>
-                  <TextInput type="number" placeholder={completeForm.unit} value={attempt.kg == null ? '' : toDisplayUnit(attempt.kg, completeForm.unit)} onChange={(e) => updateCompleteAttempt(index, { kg: e.currentTarget.value !== '' ? fromDisplayUnit(Number(e.currentTarget.value), completeForm.unit) : null })} size="xs" style={{ width: 70 }} disabled={readOnly} />
+                  <DraftNumberInput placeholder={completeForm.unit} value={attempt.kg} toDisplay={(kg) => toDisplayUnit(kg, completeForm.unit)} fromDisplay={(value) => fromDisplayUnit(value, completeForm.unit)} isValid={isPositive} onValueChange={(next) => updateCompleteAttempt(index, { kg: next })} size="xs" style={{ width: 70 }} disabled={readOnly} aria-label={`${attempt.lift} attempt ${attempt.attempt_number} weight`} />
                   <Select value={attempt.result} data={ATTEMPT_RESULT_OPTIONS} onChange={(value) => updateCompleteAttempt(index, { result: (value || 'not_taken') as CompetitionAttemptResult })} size="xs" style={{ width: 100 }} disabled={readOnly} />
                 </Group>
               </Paper>
@@ -462,7 +474,7 @@ export default function CompetitionsPage() {
             <Textarea label="Sleep / travel" value={completeForm.report.travel_notes} onChange={(e) => updateCompleteReport({ travel_notes: e.currentTarget.value })} autosize minRows={2} disabled={readOnly} />
             <Textarea label="Food before" value={completeForm.report.pre_meet_food} onChange={(e) => updateCompleteReport({ pre_meet_food: e.currentTarget.value })} autosize minRows={2} disabled={readOnly} />
             <Textarea label="Food during" value={completeForm.report.during_meet_food} onChange={(e) => updateCompleteReport({ during_meet_food: e.currentTarget.value })} autosize minRows={2} disabled={readOnly} />
-            <TextInput type="number" label="Caffeine total (mg)" value={completeForm.report.caffeine_mg ?? ''} onChange={(e) => updateCompleteReport({ caffeine_mg: e.currentTarget.value !== '' ? Number(e.currentTarget.value) : null })} disabled={readOnly} />
+            <DraftNumberInput label="Caffeine total (mg)" value={completeForm.report.caffeine_mg} isValid={isNonNegative} onValueChange={(next) => updateCompleteReport({ caffeine_mg: next })} disabled={readOnly} />
             <Textarea label="Caffeine timing" value={completeForm.report.caffeine_timing} onChange={(e) => updateCompleteReport({ caffeine_timing: e.currentTarget.value })} autosize minRows={2} disabled={readOnly} />
             <Textarea label="Equipment issues" value={completeForm.report.equipment_issues} onChange={(e) => updateCompleteReport({ equipment_issues: e.currentTarget.value })} autosize minRows={2} disabled={readOnly} />
             <Textarea label="Commands missed" value={completeForm.report.commands_missed} onChange={(e) => updateCompleteReport({ commands_missed: e.currentTarget.value })} autosize minRows={2} disabled={readOnly} />

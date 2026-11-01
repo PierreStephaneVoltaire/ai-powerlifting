@@ -7,6 +7,7 @@ from __future__ import annotations
 from services.ai import completion
 
 import json
+from decimal import Decimal
 import logging
 from typing import Any
 
@@ -50,6 +51,12 @@ _TOOL_SCHEMA = {
     }
 }
 
+def _json_default(obj: Any) -> Any:
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == obj.to_integral_value() else float(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def _sanitize_floats(obj: Any) -> Any:
     import math
     if isinstance(obj, float):
@@ -70,7 +77,7 @@ async def generate_template_evaluate_report(
     user_msg = json.dumps({
         "template": template,
         "athlete_context": athlete_context
-    }, indent=2)
+    }, indent=2, default=_json_default)
 
     logger.info("[TemplateEvaluateAI] payload_chars=%s", len(user_msg))
 

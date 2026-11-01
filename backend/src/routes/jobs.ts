@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppError } from '../middleware/errorHandler'
 import { principalToken } from '../auth/principal'
+import { coachUrl } from '../utils/coachUrl'
 
 const router = Router()
-const IF_API_URL = process.env.IF_API_URL || 'http://if-agent-api.if-portals.svc.cluster.local:8000'
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 function checkScope(value: unknown, athlete: string): void {
@@ -39,7 +39,7 @@ function forward(path: (req: Request) => string, method: string) {
         }
       }
       if (method === 'POST' && path(req).endsWith('/cancel')) principalOperation = 'domain_job_cancel'
-      const response = await fetch(`${IF_API_URL}${path(req)}`, {
+      const response = await fetch(`${coachUrl()}${path(req)}`, {
         method,
         headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person, 'X-PL-Principal': principalToken(principalOperation, { athlete, person }) },
         ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),

@@ -441,7 +441,9 @@ export default function AnalysisPage() {
     }
 
     let cancelled = false
+    let queueSettled = false
     const sectionTimers: Partial<Record<AnalysisSectionKey, number>> = {}
+    const requeuedSections = new Set<AnalysisSectionKey>()
 
     async function pollSection(section: AnalysisSectionKey) {
       try {
@@ -461,6 +463,11 @@ export default function AnalysisPage() {
 
         if (result.status === 'complete' || (result.status === 'error' && result.payload)) {
           setError(null)
+        }
+
+        if (result.status === 'missing' && queueSettled && !requeuedSections.has(section)) {
+          requeuedSections.add(section)
+          queueAnalysisSections({ asOfDate, windowKey: analysisKey, sections: [section], window: analysisWindow }).catch(() => {})
         }
 
         if (result.status === 'pending' || result.status === 'running' || result.status === 'missing') {
@@ -512,7 +519,7 @@ export default function AnalysisPage() {
       windowKey: analysisKey,
       sections: DETERMINISTIC_ANALYSIS_SECTIONS,
       window: analysisWindow,
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => { queueSettled = true })
 
     return () => {
       cancelled = true

@@ -116,7 +116,7 @@ def test_user_competitions_use_a_partition_query(monkeypatch):
 
     monkeypatch.setattr(module, "_get_table", lambda: Table())
     monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
-    assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet", "revision": 0, "units": "kg"}]
+    assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet", "master_id": "meet", "revision": 0, "units": "kg"}]
 
 
 def test_user_competitions_show_directory_and_selected_block_participation(monkeypatch):
@@ -153,6 +153,24 @@ def test_user_competitions_match_country_names_against_iso_venue_codes(monkeypat
     assert names({"country": "CANADA"}) == ["Ontario meet", "Quebec meet"]
     assert names({"country": "ca", "state": "on"}) == ["Ontario meet"]
     assert names({"country": "USA"}) == ["Texas meet"]
+
+
+def test_user_competitions_keep_a_stored_master_id_and_fill_a_missing_one_from_the_key(monkeypatch):
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
+
+    class Table:
+        def query(self, **_kwargs):
+            return {"Items": [
+                {"pk": "a", "sk": "COMP#from-key", "name": "Royal City Rumble 5", "start_date": "2027-05-01"},
+                {"pk": "a", "sk": "COMP#key", "master_id": "stored", "name": "WRPF Nationals", "start_date": "2026-11-07"},
+            ]}
+
+    monkeypatch.setattr(module, "_get_table", lambda: Table())
+    monkeypatch.setattr(module, "active_block_id_for", lambda pk: None)
+    assert [(c["name"], c["master_id"]) for c in module.list_competitions({"pk": "a"})] == [
+        ("WRPF Nationals", "stored"),
+        ("Royal City Rumble 5", "from-key"),
+    ]
 
 
 class FakeCompetitionTable:

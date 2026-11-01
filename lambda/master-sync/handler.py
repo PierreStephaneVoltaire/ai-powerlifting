@@ -98,6 +98,7 @@ def _handle_master_change(master_record, master_id):
             is None
         )
         merged = _build_merged(user_pk, user_sk, master_record, COMP_MASTER_FIELDS, is_insert)
+        merged["master_id"] = master_id
         _put_copy(COMP_USER_TABLE, user_pk, user_sk, merged)
 
 
