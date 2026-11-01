@@ -55,3 +55,19 @@ def test_load_entries_falls_back_to_partition_query_until_index_exists():
 
     entries = competition_entries.load_entries("a", "2026-01-01", None, table=Table())
     assert [entry["sk"] for entry in entries] == ["COMP#nats"]
+
+
+def test_an_available_entry_supersedes_a_stale_legacy_participation_for_the_same_meet():
+    legacy = [
+        {'name': 'WRPF Nationals 2026', 'date': '2026-11-07', 'status': 'optional'},
+        {'name': 'Ottawa Open', 'date': '2025-10-04', 'status': 'completed', 'results': {'total_kg': 520}},
+    ]
+    entries = [
+        {'pk': 'athlete', 'sk': 'COMP#nationals', 'name': 'WRPF Nationals 2026', 'start_date': '2026-11-07', 'user_status': 'available'},
+        {'pk': 'athlete', 'sk': 'COMP#rumble', 'name': 'Royal City Rumble 5', 'start_date': '2027-05-01', 'user_status': 'confirmed'},
+    ]
+    merged = merge_entries(legacy, entries)
+    assert [(c['date'], c['name'], c['status']) for c in merged] == [
+        ('2025-10-04', 'Ottawa Open', 'completed'),
+        ('2027-05-01', 'Royal City Rumble 5', 'confirmed'),
+    ]

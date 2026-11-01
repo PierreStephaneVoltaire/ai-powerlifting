@@ -119,7 +119,7 @@ def test_user_competitions_use_a_partition_query(monkeypatch):
     assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet", "master_id": "meet", "revision": 0, "units": "kg"}]
 
 
-def test_user_competitions_show_directory_and_selected_block_participation(monkeypatch):
+def test_user_competitions_show_every_participation_unless_a_block_is_requested(monkeypatch):
     module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
 
     class Table:
@@ -132,8 +132,9 @@ def test_user_competitions_show_directory_and_selected_block_participation(monke
 
     monkeypatch.setattr(module, "_get_table", lambda: Table())
     monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
-    assert [c["name"] for c in module.list_competitions({"pk": "a"})] == ["2026 Nationals", "Directory meet"]
+    assert [c["name"] for c in module.list_competitions({"pk": "a"})] == ["2025 Provincials", "2026 Nationals", "Directory meet"]
     assert [c["name"] for c in module.list_competitions({"pk": "a", "block_id": "block-2025"})] == ["2025 Provincials", "Directory meet"]
+    assert [c["name"] for c in module.list_competitions({"pk": "a", "block_id": "block-new"})] == ["2026 Nationals", "Directory meet"]
 
 
 def test_user_competitions_match_country_names_against_iso_venue_codes(monkeypatch):
@@ -171,6 +172,21 @@ def test_user_competitions_keep_a_stored_master_id_and_fill_a_missing_one_from_t
         ("WRPF Nationals", "stored"),
         ("Royal City Rumble 5", "from-key"),
     ]
+
+
+def test_participations_without_a_block_are_listed_so_they_can_be_edited(monkeypatch):
+    module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
+
+    class Table:
+        def query(self, **_kwargs):
+            return {"Items": [
+                {"pk": "a", "sk": "COMP#coldfront", "name": "Coldfront 2", "user_status": "confirmed", "start_date": "2026-11-14"},
+                {"pk": "a", "sk": "COMP#rumble", "name": "Royal City Rumble 5", "user_status": "confirmed", "block_id": "block-new", "start_date": "2027-05-01"},
+            ]}
+
+    monkeypatch.setattr(module, "_get_table", lambda: Table())
+    monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
+    assert [c["name"] for c in module.list_competitions({"pk": "a"})] == ["Coldfront 2", "Royal City Rumble 5"]
 
 
 class FakeCompetitionTable:

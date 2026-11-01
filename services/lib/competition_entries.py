@@ -63,8 +63,8 @@ def merge_entries(legacy: list[dict], entries: list[dict]) -> list[dict]:
         current['body_weight_kg'] = entry.get('body_weight_kg')
         current['units'] = entry.get('units') or 'kg'
         normalized.append(current)
-    identifiers = {entry['master_id'] for entry in normalized if entry['master_id']}
-    dated_names = {(entry['date'], str(entry.get('name') or '').strip().casefold()) for entry in normalized}
+    identifiers = {entry.get('master_id') or str(entry.get('sk', '')).removeprefix('COMP#') for entry in entries} - {''}
+    dated_names = {(entry.get('start_date') or entry.get('date'), str(entry.get('name') or '').strip().casefold()) for entry in entries}
     retained = [copy.deepcopy(entry) for entry in legacy if entry.get('master_id') not in identifiers and (entry.get('date'), str(entry.get('name') or '').strip().casefold()) not in dated_names]
     return sorted([*retained, *normalized], key=lambda entry: (str(entry.get('date') or ''), str(entry.get('master_id') or entry.get('name') or '')))
 

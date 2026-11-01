@@ -431,3 +431,23 @@ def test_markdown_dispatch_preserves_athlete_cache_reads(monkeypatch):
     for name in ("analytics.markdown", "get_analysis_markdown"):
         result = dispatch(operations[name], {"pk": "athlete-a", "cache_only": True, "_access": {"is_self": True}})
         assert result["markdown"] == "# Full private report" and result["cached"] is True
+
+
+
+def test_overview_reports_why_upcoming_competitions_could_not_be_projected(monkeypatch):
+    import importlib
+
+    analytics = importlib.import_module("services.handlers.analysis_reports.analytics")
+    monkeypatch.setattr(analytics, "meet_projection", lambda *args, **kwargs: {"status": "insufficient_data", "reason": "No session data to estimate maxes from"})
+    program = {
+        "meta": {"program_start": "2026-10-06"},
+        "competitions": [{"name": "Royal City Rumble 5", "date": "2027-05-01", "status": "confirmed"}],
+        "sessions": [],
+    }
+    result = analytics.weekly_analysis_section(
+        program, [], "overview",
+        window_start="2026-10-06", window_end="2026-10-31", ref_date="2026-10-31",
+        week_start=1, week_end=4, weeks=4, block="current",
+    )
+    assert result["projections"] == []
+    assert result["projection_reason"] == "No session data to estimate maxes from"

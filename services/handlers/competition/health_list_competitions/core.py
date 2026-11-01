@@ -218,9 +218,9 @@ def list_competitions(args: dict) -> list[dict]:
         if not last_key:
             break
 
-    active = active_block_id_for(pk)
-    target = args.get("block_id") or active
-    items = [comp for comp in items if _is_directory_entry(comp) or in_block(comp, target, active)]
+    if args.get("block_id"):
+        active = active_block_id_for(pk)
+        items = [comp for comp in items if _is_directory_entry(comp) or in_block(comp, args["block_id"], active)]
     items.sort(key=lambda c: c.get("start_date") or "")
     return items
 

@@ -3783,6 +3783,8 @@ def _analysis_projection_payload(ctx: dict[str, Any], current_maxes_out: dict[st
 
     for comp in to_project:
         proj = meet_projection(program, sessions, comp_date=comp["date"], ref_date=end)
+        if "total" not in proj:
+            projection_reason = proj.get("reason", "Insufficient data for projection")
         if "total" in proj:
             projections.append({
                 "total": proj["total"],
@@ -3793,6 +3795,9 @@ def _analysis_projection_payload(ctx: dict[str, Any], current_maxes_out: dict[st
                 "lifts": proj.get("lifts", {}),
                 "projection_calibration": proj.get("projection_calibration"),
             })
+
+    if projections:
+        projection_reason = None
 
     if not projections and not to_project and meta.get("comp_date"):
         proj = meet_projection(program, sessions, comp_date=meta["comp_date"], ref_date=end)
@@ -4527,6 +4532,8 @@ def weekly_analysis(
 
     for comp in to_project:
         proj = meet_projection(program, sessions, comp_date=comp["date"], ref_date=end)
+        if "total" not in proj:
+            projection_reason = proj.get("reason", "Insufficient data for projection")
         if "total" in proj:
             projections.append({
                 "total": proj["total"],
@@ -4537,6 +4544,9 @@ def weekly_analysis(
                 "lifts": proj.get("lifts", {}),
                 "projection_calibration": proj.get("projection_calibration"),
             })
+
+    if projections:
+        projection_reason = None
 
     if not projections and not to_project and meta.get("comp_date"):
         proj = meet_projection(program, sessions, comp_date=meta["comp_date"], ref_date=end)
