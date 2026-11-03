@@ -18,7 +18,6 @@ authentik_client_id        = ""
 authentik_client_secret    = ""
 jwt_secret                 = ""
 internal_api_token         = ""
-tunnel_token               = ""
 
 repositories = {
   services  = ""

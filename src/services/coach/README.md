@@ -1,7 +1,7 @@
 # Coach
 
-A lightweight AI Coach for the portal, plus a Discord relay. It will replace
-the external agent API once that system is decommissioned.
+A lightweight AI Coach for the portal, plus a Discord bot. Together they replace
+the external agent API.
 
 - `src/services/coach/` (`pl-coach`) runs on a ChatGPT subscription through the pinned
   `openai-codex` SDK.
@@ -13,10 +13,15 @@ the external agent API once that system is decommissioned.
   - `POST /v1/conversations/{id}/turns` handles chat. Each Conversation keeps one
     Codex thread, and every non-internal operation in `src/services/operations/` is
     exposed as an MCP tool for the Person and Athlete on that turn.
-- `src/services/coach_discord/` (`pl-coach-discord`) is the Discord Interactions
-  endpoint. It verifies the request signature, defers the reply, forwards
-  `/coach` to the Coach and edits the reply when the answer is ready.
-  `/coach-reset` starts a new Conversation for the channel.
+- `src/services/coach_discord/` (`pl-coach-discord`) is the Discord bot, ported
+  from the agent API's channel listener. Registrations (bot token, channel) live in
+  the `if-webhooks` table under the `powerlifting` partition, in the same item
+  format the agent API used. On startup it opens one gateway websocket per bot
+  token for every active registration. Each human message (or edit) in a
+  registered channel goes to the Coach as the sender's Person, mapped from
+  `DISCORD_PERSONS` and the operator's Discord ID, and the answer is posted as a
+  reply. `/coach-reset` starts a new Conversation for the channel. Nothing calls
+  the bot from outside the cluster.
 
 ## Build and deploy
 
@@ -53,13 +58,13 @@ kubectl exec -it -n <namespace> deploy/pl-coach -- python -m services.coach.logi
 
 The login is stored on `pl-coach-state` and survives restarts.
 
-## Discord cutover
+## Discord registrations
 
-1. Register the commands with `python -m services.coach_discord.register [guild_id]`.
-   This creates or updates only `/coach` and `/coach-reset`.
-2. Expose `pl-coach-discord:8000/interactions` publicly (Cloudflare lives in the
-   root repo).
-3. Set that URL as the bot's Interactions Endpoint URL.
+The only HTTP routes besides `/health` manage registrations. Each needs the
+`X-Internal-Token` header.
 
-After step 3, Discord delivers **all** of that application's slash commands to the
-relay rather than to the gateway bot.
+- `POST /v1/servers` with `{"label", "bot_token", "channel_id"}` stores the
+  registration and starts listening immediately.
+- `GET /v1/servers` lists registrations without their tokens.
+- `DELETE /v1/servers/{webhook_id}` stops listening and marks it inactive.
+- `POST /v1/servers/{webhook_id}/restart` reconnects it.

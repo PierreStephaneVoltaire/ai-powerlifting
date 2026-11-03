@@ -51,6 +51,11 @@ resource "kubernetes_secret_v1" "aws_credentials" {
   }
 }
 
+data "aws_ssm_parameter" "tunnel_token" {
+  name            = "/powerlifting/k8s/tunnel-token"
+  with_decryption = true
+}
+
 resource "kubernetes_secret_v1" "tunnel" {
   metadata {
     name      = "cloudflared-token"
@@ -58,6 +63,6 @@ resource "kubernetes_secret_v1" "tunnel" {
   }
 
   data = {
-    token = var.tunnel_token
+    token = data.aws_ssm_parameter.tunnel_token.value
   }
 }

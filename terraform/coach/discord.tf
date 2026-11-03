@@ -63,13 +63,13 @@ resource "kubernetes_deployment_v1" "coach_discord" {
           }
 
           env {
-            name = "DISCORD_TOKEN"
-            value_from {
-              secret_key_ref {
-                name = var.discord_secret_name
-                key  = "DISCORD_TOKEN"
-              }
-            }
+            name  = "AWS_SHARED_CREDENTIALS_FILE"
+            value = "/secrets/aws/credentials"
+          }
+
+          env {
+            name  = "AWS_CONFIG_FILE"
+            value = "/secrets/aws/config"
           }
 
           port {
@@ -88,6 +88,20 @@ resource "kubernetes_deployment_v1" "coach_discord" {
             }
             initial_delay_seconds = 3
             period_seconds        = 10
+          }
+
+          volume_mount {
+            name       = "aws"
+            mount_path = "/secrets/aws"
+            read_only  = true
+          }
+        }
+
+        volume {
+          name = "aws"
+
+          secret {
+            secret_name = var.aws_credentials_secret_name
           }
         }
       }

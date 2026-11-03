@@ -31,8 +31,8 @@ variable "shared_secret_name" {
   type        = string
 }
 
-variable "discord_secret_name" {
-  description = "Secret holding the Discord bot token under DISCORD_TOKEN"
+variable "aws_credentials_secret_name" {
+  description = "Secret holding the AWS credentials and config files the Discord bot uses to read its registrations"
   type        = string
 }
 

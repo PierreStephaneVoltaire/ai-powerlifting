@@ -1,110 +1,111 @@
 import asyncio
+import hmac
 import json
 import logging
 import os
-from dataclasses import dataclass
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException
+from pydantic import BaseModel
 
 from .coach_client import CoachClient
-from .discord_api import Application, Discord, verify
-
+from .gateway import Gateway, Relay
+from .store import Registration, RegistrationStore
 
 logger = logging.getLogger("coach.discord")
-PING, APPLICATION_COMMAND = 1, 2
-PONG, DEFERRED_MESSAGE, MESSAGE = 1, 5, 4
-EPHEMERAL = 64
 
 
-@dataclass(frozen=True)
-class RelaySettings:
-    coach_url: str
-    internal_token: str
+class RegisterServer(BaseModel):
+    label: str
     bot_token: str
-    public_key: str
-    application_id: str
-    persons: dict[str, str]
+    channel_id: str
 
 
-def load() -> RelaySettings:
+def persons_from_env() -> dict[str, str]:
     persons = json.loads(os.getenv("DISCORD_PERSONS", "{}"))
     operator = os.getenv("DISCORD_OPERATOR_ID", "")
     if operator:
         persons.setdefault(operator, os.getenv("OPERATOR_PERSON", "operator"))
-    return RelaySettings(
-        coach_url=os.getenv("COACH_URL", "http://pl-coach:8000"),
-        internal_token=os.getenv("INTERNAL_API_TOKEN", ""),
-        bot_token=os.getenv("DISCORD_TOKEN", ""),
-        public_key=os.getenv("DISCORD_PUBLIC_KEY", ""),
-        application_id=os.getenv("DISCORD_APPLICATION_ID", ""),
-        persons=persons,
+    return persons
+
+
+def store_from_env() -> RegistrationStore:
+    return RegistrationStore(
+        table_name=os.getenv("DISCORD_STORE_TABLE", "if-webhooks"),
+        partition=os.getenv("DISCORD_STORE_PARTITION", "powerlifting"),
+        region=os.getenv("AWS_REGION", "ca-central-1"),
     )
 
 
-def _user_id(interaction: dict) -> str:
-    return str(((interaction.get("member") or {}).get("user") or interaction.get("user") or {}).get("id", ""))
+def view(registration: Registration, gateway: Gateway) -> dict:
+    return {
+        "webhook_id": registration.webhook_id,
+        "label": registration.label,
+        "channel_id": registration.channel_id,
+        "status": registration.status,
+        "listening": gateway.listening(registration),
+    }
 
 
-def _option(interaction: dict, name: str) -> str:
-    return next((str(o.get("value", "")) for o in (interaction.get("data") or {}).get("options") or [] if o.get("name") == name), "")
+def create_app(store: RegistrationStore | None = None, coach: CoachClient | None = None, persons: dict[str, str] | None = None, internal_token: str | None = None, gateway: Gateway | None = None) -> FastAPI:
+    internal_token = os.getenv("INTERNAL_API_TOKEN", "") if internal_token is None else internal_token
+    coach = coach or CoachClient(os.getenv("COACH_URL", "http://pl-coach:8000"), internal_token)
+    relay = Relay(coach, persons_from_env() if persons is None else persons)
+    state = {"store": store, "gateway": gateway}
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        state["store"] = state["store"] or store_from_env()
+        state["gateway"] = state["gateway"] or Gateway(relay)
+        for registration in await asyncio.to_thread(state["store"].list, True):
+            state["gateway"].attach(registration)
+        logger.info("Loaded %s Discord registrations", len(state["gateway"].channels))
+        yield
+        await state["gateway"].close()
 
-def _notice(text: str) -> JSONResponse:
-    return JSONResponse({"type": MESSAGE, "data": {"content": text, "flags": EPHEMERAL}})
+    app = FastAPI(title="Powerlifting Coach Discord bot", lifespan=lifespan)
 
+    def authorized(x_internal_token: str = Header(default="")) -> None:
+        if not internal_token or not hmac.compare_digest(x_internal_token, internal_token):
+            raise HTTPException(401, "Invalid internal token")
 
-def create_app(settings: RelaySettings | None = None, discord: Discord | None = None, coach: CoachClient | None = None) -> FastAPI:
-    settings = settings or load()
-    discord = discord or Discord(settings.bot_token)
-    coach = coach or CoachClient(settings.coach_url, settings.internal_token)
-    app = FastAPI(title="Powerlifting Coach Discord relay")
-    app.state.application = Application(settings.application_id, settings.public_key) if settings.public_key and settings.application_id else None
-    app.state.tasks = set()
-
-    async def application() -> Application:
-        if app.state.application is None:
-            app.state.application = await discord.application()
-        return app.state.application
-
-    async def answer(interaction: dict, person: str, conversation_id: str, text: str) -> None:
-        current = await application()
-        try:
-            reply = await coach.ask(person, person, conversation_id, text)
-        except Exception as exc:
-            logger.exception("coach request failed")
-            reply = f"The Coach is unavailable right now ({type(exc).__name__})."
-        await discord.reply(current.application_id, interaction["token"], reply)
+    async def found(webhook_id: str) -> Registration:
+        registration = await asyncio.to_thread(state["store"].get, webhook_id)
+        if registration is None:
+            raise HTTPException(404, f"Registration not found: {webhook_id}")
+        return registration
 
     @app.get("/health")
     def health():
         return {"status": "ok"}
 
-    @app.post("/interactions")
-    async def interactions(request: Request):
-        current = await application()
-        body = await request.body()
-        if not verify(current.public_key, request.headers.get("X-Signature-Ed25519", ""), request.headers.get("X-Signature-Timestamp", ""), body):
-            raise HTTPException(401, "Invalid request signature")
-        interaction = json.loads(body)
-        if interaction.get("type") == PING:
-            return {"type": PONG}
-        if interaction.get("type") != APPLICATION_COMMAND:
-            return _notice("Unsupported interaction.")
-        person = settings.persons.get(_user_id(interaction))
-        if not person:
-            return _notice("Your Discord account is not linked to a powerlifting Person yet.")
-        conversation_id = f"powerlifting:{person}:discord:{interaction.get('channel_id', 'dm')}"
-        command = (interaction.get("data") or {}).get("name")
-        if command == "coach-reset":
-            await coach.reset(person, conversation_id)
-            return _notice("Started a fresh Coach conversation for this channel.")
-        if command != "coach":
-            return _notice("Unknown command.")
-        task = asyncio.create_task(answer(interaction, person, conversation_id, _option(interaction, "message")))
-        app.state.tasks.add(task)
-        task.add_done_callback(app.state.tasks.discard)
-        return {"type": DEFERRED_MESSAGE}
+    @app.post("/v1/servers", dependencies=[Depends(authorized)])
+    async def register(body: RegisterServer):
+        registration = await asyncio.to_thread(state["store"].create, Registration(label=body.label, bot_token=body.bot_token, channel_id=body.channel_id))
+        state["gateway"].attach(registration)
+        logger.info("Registered Discord channel %s (%s)", registration.channel_id, registration.label)
+        return view(registration, state["gateway"])
+
+    @app.get("/v1/servers", dependencies=[Depends(authorized)])
+    async def list_servers():
+        registrations = await asyncio.to_thread(state["store"].list)
+        return {"servers": [view(registration, state["gateway"]) for registration in registrations]}
+
+    @app.delete("/v1/servers/{webhook_id}", dependencies=[Depends(authorized)])
+    async def deactivate(webhook_id: str):
+        registration = await found(webhook_id)
+        state["gateway"].detach(registration)
+        await asyncio.to_thread(state["store"].deactivate, webhook_id)
+        return {"webhook_id": webhook_id, "status": "inactive"}
+
+    @app.post("/v1/servers/{webhook_id}/restart", dependencies=[Depends(authorized)])
+    async def restart(webhook_id: str):
+        registration = await found(webhook_id)
+        if registration.status != "active":
+            raise HTTPException(400, "Registration is not active")
+        state["gateway"].detach(registration)
+        state["gateway"].attach(registration)
+        return view(registration, state["gateway"])
 
     return app
 

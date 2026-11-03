@@ -8,5 +8,7 @@ terraform {
     kubernetes = { source = "hashicorp/kubernetes" }
     helm       = { source = "hashicorp/helm" }
     kubectl    = { source = "gavinbunney/kubectl" }
+    cloudflare = { source = "cloudflare/cloudflare", version = "~> 4.52" }
+    random     = { source = "hashicorp/random" }
   }
 }

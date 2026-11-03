@@ -61,7 +61,7 @@ def _read(path: str) -> pd.DataFrame:
     for chunk in pd.read_csv(
         path,
         usecols=lambda column: column in wanted,
-        dtype={column: "float32" for column in FLOAT_COLUMNS},
+        dtype={**{column: "str" for column in TEXT_COLUMNS + CATEGORY_COLUMNS}, **{column: "float32" for column in FLOAT_COLUMNS}},
         chunksize=CHUNK_ROWS,
     ):
         if DATE_COLUMN in chunk.columns:

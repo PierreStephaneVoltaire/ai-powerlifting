@@ -1,3 +1,10 @@
+data "kubernetes_secret_v1" "tunnel" {
+  metadata {
+    name      = "cloudflared-token"
+    namespace = var.namespace
+  }
+}
+
 resource "kubernetes_deployment_v1" "tunnel" {
   wait_for_rollout = false
 
@@ -15,7 +22,8 @@ resource "kubernetes_deployment_v1" "tunnel" {
 
     template {
       metadata {
-        labels = { app = "cloudflared" }
+        labels      = { app = "cloudflared" }
+        annotations = { "checksum/token" = sha256(data.kubernetes_secret_v1.tunnel.data["token"]) }
       }
 
       spec {

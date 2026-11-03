@@ -19,8 +19,7 @@ resource "kubernetes_persistent_volume_claim_v1" "coach_state" {
   wait_until_bound = false
 
   lifecycle {
-    prevent_destroy = true
-    ignore_changes  = [metadata[0].annotations, spec[0].volume_name]
+    ignore_changes = [metadata[0].annotations, spec[0].volume_name]
   }
 }
 
