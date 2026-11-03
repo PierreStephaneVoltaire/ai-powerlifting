@@ -11,8 +11,9 @@ Four independent states, applied in order.
 
 `core` and `perms` hold every secret and the runner's own permissions, so they
 are only applied from the operator's machine with the full `k8s.tfvars`.
-The pods' AWS key belongs to the scoped `powerlifting-pods` IAM user created by
-the main stack and stored in SSM; no AWS key lives in any tfvars file.
+The pods' AWS key belongs to the scoped `powerlifting-pods` IAM user, created
+outside terraform and stored in SSM at `/powerlifting/k8s/aws-credentials`; no AWS
+key lives in any tfvars file or terraform state.
 
 CI applies `network` and `app` from the `kubernetes-apply` job on the in-cluster
 runner, only for pushes or manual runs triggered by the repository owner. Those

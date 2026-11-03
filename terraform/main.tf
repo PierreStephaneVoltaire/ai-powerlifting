@@ -55,24 +55,3 @@ module "powerlifting_dataset" {
 module "powerlifting_master_sync" {
   source = "./modules/powerlifting_master_sync"
 }
-
-module "pod_credentials" {
-  source = "./modules/pod_credentials"
-
-  user_name        = "powerlifting-pods"
-  parameter_name   = "/powerlifting/k8s/aws-credentials"
-  repository_names = ["if-powerlifting-*"]
-  bucket_arns = [
-    module.session_videos.bucket_arn,
-    module.budget_media.bucket_arn,
-    module.powerlifting_dataset.bucket_arn,
-  ]
-  table_names = [
-    "if-health",
-    "if-health-templates",
-    "if-sessions",
-    "if-user",
-    "if-proposals",
-    "if-powerlifting-*",
-  ]
-}
