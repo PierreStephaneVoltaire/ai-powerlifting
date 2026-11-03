@@ -22,6 +22,10 @@ class FakeTemplateStore:
     async def get_template(self, sk, **kwargs):
         return self.templates.get(sk)
 
+    async def set_evaluation(self, sk, evaluation, actor_pk=None):
+        self.templates[sk]["meta"]["ai_evaluation"] = evaluation
+        self.evaluated_by = actor_pk
+
 
 class FakeProgramStore:
     pk = "athlete-1"
@@ -103,15 +107,13 @@ class TemplateContractTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     operations[name].validate_result(missing)
 
-    def test_evaluate_uses_program_competition_context(self):
+    def _evaluate(self, program, entries):
         core = importlib.import_module("services.handlers.templates.template_evaluate.core")
+        entries_module = importlib.import_module("services.lib.competition_entries")
         template_store = FakeTemplateStore()
         template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}}
         program_store = FakeProgramStore()
-        program_store.program = {
-            "meta": {"sex": "male", "current_body_weight_kg": 100, "comp_date": (date.today() + timedelta(days=70)).isoformat()},
-            "current_maxes": {"squat": 200, "bench": 150, "deadlift": 250},
-        }
+        program_store.program = program
         captured = {}
 
         async def evaluate(_template, athlete_context):
@@ -120,10 +122,33 @@ class TemplateContractTests(unittest.TestCase):
 
         ai = ModuleType("template_evaluate_ai")
         ai.generate_template_evaluate_report = evaluate
-        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
-            core.template_evaluate({"pk": "athlete-1", "sk": "template#1"})
+        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(entries_module, "load_entries", return_value=entries), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
+            report = core.template_evaluate({"pk": "athlete-1", "actor_pk": "person-1", "sk": "template#1"})
+        return captured, template_store, report
+
+    def test_evaluate_counts_weeks_to_the_next_confirmed_competition_and_saves_the_report(self):
+        future = (date.today() + timedelta(days=70)).isoformat()
+        program = {
+            "meta": {"sex": "male", "current_body_weight_kg": 100, "comp_date": (date.today() - timedelta(days=70)).isoformat()},
+            "current_maxes": {"squat": 200, "bench": 150, "deadlift": 250},
+        }
+        entries = [
+            {"sk": "COMP#past", "name": "Old Meet", "start_date": (date.today() - timedelta(days=7)).isoformat(), "user_status": "confirmed"},
+            {"sk": "COMP#skip", "name": "Maybe Meet", "start_date": (date.today() + timedelta(days=14)).isoformat(), "user_status": "available"},
+            {"sk": "COMP#next", "name": "Royal City Rumble 5", "start_date": future, "user_status": "confirmed"},
+        ]
+        captured, store, report = self._evaluate(program, entries)
         self.assertEqual(captured["dots_score"], 369.31)
         self.assertEqual(captured["weeks_to_comp"], 10.0)
+        self.assertEqual(captured["next_competition"], {"name": "Royal City Rumble 5", "date": future, "status": "confirmed"})
+        self.assertEqual(store.templates["template#1"]["meta"]["ai_evaluation"], report)
+        self.assertEqual(store.evaluated_by, "person-1")
+
+    def test_evaluate_ignores_a_past_meta_comp_date_when_no_competition_is_upcoming(self):
+        program = {"meta": {"comp_date": (date.today() - timedelta(days=73)).isoformat()}, "current_maxes": {}}
+        captured, _, _ = self._evaluate(program, [])
+        self.assertIsNone(captured["weeks_to_comp"])
+        self.assertIsNone(captured["next_competition"])
 
 
 if __name__ == "__main__":
@@ -159,3 +184,22 @@ def test_template_evaluation_prompt_accepts_dynamodb_decimals():
     assert payload["template"]["sessions"][0]["exercises"][0]["load_value"] == 0.75
     assert payload["athlete_context"]["bodyweight_kg"] == 82.5
     assert report["stance"] == "solid"
+
+
+def test_set_evaluation_updates_only_the_evaluation_field_for_the_owner():
+    from decimal import Decimal
+    from unittest.mock import MagicMock
+    import pytest
+    from services.lib.template_store import TemplateStore
+
+    store = TemplateStore("if-health-templates")
+    table = MagicMock()
+    store._table = table
+    store.get_template_sync = lambda sk, actor_pk=None: {"sk": sk, "meta": {"author_pk": "person-1"}}
+    store.set_evaluation_sync("template#1", {"stance": "monitor", "score": 0.5}, actor_pk="person-1")
+    call = table.update_item.call_args.kwargs
+    assert call["Key"] == {"pk": "template_library", "sk": "template#1"}
+    assert call["ExpressionAttributeNames"]["#evaluation"] == "ai_evaluation"
+    assert call["ExpressionAttributeValues"][":evaluation"]["score"] == Decimal("0.5")
+    with pytest.raises(Exception):
+        store.set_evaluation_sync("template#1", {"stance": "x"}, actor_pk="someone-else")

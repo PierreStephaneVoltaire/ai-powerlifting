@@ -1,5 +1,6 @@
 import copy
 import os
+from datetime import date
 
 import boto3
 from services.lib.aws import dynamodb_resource, client as aws_client
@@ -74,3 +75,18 @@ def with_competition_entries(program: dict, pk: str, entries: list[dict] | None 
     if start or end:
         legacy = [entry for entry in legacy if (date := participation_date(entry)) and (not start or date >= start) and (not end or date <= end)]
     return {**program, 'competitions': merge_entries(legacy, load_entries(pk, start, end) if entries is None else entries)}
+
+
+def next_competition(competitions: list[dict], today: date | None = None) -> dict | None:
+    today = today or date.today()
+    upcoming = []
+    for entry in competitions:
+        if (entry.get('status') or entry.get('user_status')) not in ('confirmed', 'optional'):
+            continue
+        try:
+            when = date.fromisoformat(str(entry.get('date') or entry.get('start_date') or '')[:10])
+        except ValueError:
+            continue
+        if when > today:
+            upcoming.append((when, entry))
+    return min(upcoming, key=lambda item: item[0])[1] if upcoming else None

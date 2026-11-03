@@ -19,11 +19,17 @@ def _athlete_context(program):
         dots_score = calculate_dots(total, bodyweight, sex) if sex else None
     except (TypeError, ValueError):
         dots_score = None
-    try:
-        weeks_to_comp = round((date.fromisoformat(meta["comp_date"]) - date.today()).days / 7, 1)
-    except (KeyError, TypeError, ValueError):
+    from services.lib.competition_entries import next_competition
+    fallback = [{"date": meta.get("comp_date"), "status": "confirmed"}] if meta.get("comp_date") else []
+    competition = next_competition(program.get("competitions") or []) or next_competition(fallback)
+    if competition:
+        competition_date = date.fromisoformat(str(competition.get("date") or competition.get("start_date"))[:10])
+        weeks_to_comp = round((competition_date - date.today()).days / 7, 1)
+        next_comp = {"name": competition.get("name"), "date": competition_date.isoformat(), "status": competition.get("status")}
+    else:
         weeks_to_comp = None
-    return {"current_maxes": maxes, "dots_score": dots_score, "weeks_to_comp": weeks_to_comp}
+        next_comp = None
+    return {"current_maxes": maxes, "dots_score": dots_score, "weeks_to_comp": weeks_to_comp, "next_competition": next_comp}
 
 
 def _get_program_store(args):
@@ -53,11 +59,12 @@ async def _dispatch(args):
     template = await _get_template_store().get_template(sk, actor_pk=actor_pk)
     if not template:
         raise ValueError(f"Template not found: {sk}")
+    from services.lib.competition_entries import with_competition_entries
     program = await _get_program_store(args).get_program()
+    program = await asyncio.to_thread(with_competition_entries, program, args["pk"])
     athlete_context = _athlete_context(program)
     report = await generate_template_evaluate_report(template, athlete_context)
-    if isinstance(template, dict) and isinstance(template.get("meta"), dict):
-        template["meta"]["ai_evaluation"] = report
+    await _get_template_store().set_evaluation(sk, report, actor_pk=actor_pk)
     return report
 
 
