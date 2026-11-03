@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import os
 import uuid
@@ -28,6 +29,14 @@ def _get_template_store():
     )
 
 
+def _glossary(pk):
+    from services.lib.glossary_store import GlossaryStore
+    try:
+        return GlossaryStore(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk=pk or "operator", region=os.getenv("AWS_REGION", "ca-central-1")).get_glossary_sync()
+    except Exception:
+        return []
+
+
 def _days_per_week(sessions):
     weeks = {}
     for session in sessions:
@@ -40,7 +49,11 @@ def _days_per_week(sessions):
     return max((len(days) for days in weeks.values()), default=0)
 
 
-def _prepare_template(template):
+USER_SELECTED_RPE = 8
+
+
+def _prepare_template(template, glossary=None):
+    from services.lib.exercise_names import glossary_entry_for
     prepared = copy.deepcopy(template)
     metadata = prepared.setdefault("meta", {})
     sessions = prepared.setdefault("sessions", [])
@@ -60,6 +73,7 @@ def _prepare_template(template):
         except (TypeError, ValueError):
             week = 1
         session["week_number"] = week
+        session.pop("date", None)
         max_week = max(max_week, week)
         day = session.get("day_of_week")
         try:
@@ -91,6 +105,17 @@ def _prepare_template(template):
                 except (TypeError, ValueError):
                     exercise["load_type"] = "unresolvable"
                     exercise["load_value"] = None
+            if exercise["load_type"] == "unresolvable" or exercise.get("load_value") in (None, ""):
+                exercise["load_type"] = "rpe"
+                exercise["load_value"] = USER_SELECTED_RPE
+                exercise["rpe_target"] = exercise.get("rpe_target") or USER_SELECTED_RPE
+                note = f"Lifter selects the load at RPE {USER_SELECTED_RPE}."
+                exercise["notes"] = f"{exercise['notes']} {note}".strip() if note not in str(exercise["notes"]) else exercise["notes"]
+            load_type = exercise["load_type"]
+            if not exercise.get("glossary_id") and glossary:
+                entry = glossary_entry_for(exercise.get("name", ""), glossary)
+                if entry and entry.get("id"):
+                    exercise["glossary_id"] = entry["id"]
             glossary_id = exercise.get("glossary_id")
             if glossary_id:
                 glossary_id = str(glossary_id)
@@ -182,7 +207,7 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
                 },
                 "phases": parsed.get("phases", []),
                 "sessions": sessions,
-            })
+            }, glossary=await asyncio.to_thread(_glossary, pk))
             target_sk = await _get_template_store().put_template(
                 template,
                 actor_pk=actor,

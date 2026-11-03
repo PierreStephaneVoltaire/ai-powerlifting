@@ -1,8 +1,4 @@
-"""AI-powered evaluation of training templates.
-
-Analyzes a template against an athlete's profile, competition timeline,
-and current metrics to produce a recommendation stance and suggestions.
-"""
+"""AI-powered review of a training template's design."""
 from __future__ import annotations
 from services.ai import completion
 
@@ -43,10 +39,9 @@ _TOOL_SCHEMA = {
                         "required": ["type", "rationale"]
                     }
                 },
-                "projected_readiness_at_comp": {"type": "number"},
                 "data_citations": {"type": "array", "items": {"type": "string"}}
             },
-            "required": ["stance", "summary", "strengths", "weaknesses", "suggestions", "projected_readiness_at_comp"]
+            "required": ["stance", "summary", "strengths", "weaknesses", "suggestions"]
         }
     }
 }
@@ -71,43 +66,33 @@ def _sanitize_floats(obj: Any) -> Any:
 
 async def generate_template_evaluate_report(
     template: dict[str, Any],
-    athlete_context: dict[str, Any]
+    athlete_context: dict[str, Any],
+    metrics: dict[str, Any] | None = None,
+    program_context: str = "",
 ) -> dict[str, Any]:
-    """Call the LLM to evaluate a template against athlete context."""
     user_msg = json.dumps({
+        "program_context": program_context or "Not provided.",
         "template": template,
-        "athlete_context": athlete_context
+        "metrics": metrics or {},
+        "athlete_context": athlete_context,
     }, indent=2, default=_json_default)
 
     logger.info("[TemplateEvaluateAI] payload_chars=%s", len(user_msg))
 
-    try:
-        resp = await completion({'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'report_template_evaluation'}}})
-        resp.raise_for_status()
-        data = resp.json()
+    resp = await completion({'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'report_template_evaluation'}}})
+    resp.raise_for_status()
+    data = resp.json()
 
-        choices = data.get("choices", [])
-        if not choices:
-            raise ValueError("No choices in LLM response")
+    choices = data.get("choices", [])
+    if not choices:
+        raise ValueError("No choices in LLM response")
 
-        message = choices[0].get("message", {})
-        tool_calls = message.get("tool_calls", [])
-        if not tool_calls:
-            content = message.get("content", "").strip()
-            if content.startswith("{"):
-                return _sanitize_floats(json.loads(content))
-            raise ValueError("No tool calls in LLM response")
+    message = choices[0].get("message", {})
+    tool_calls = message.get("tool_calls", [])
+    if not tool_calls:
+        content = message.get("content", "").strip()
+        if content.startswith("{"):
+            return _sanitize_floats(json.loads(content))
+        raise ValueError("No tool calls in LLM response")
 
-        args_str = tool_calls[0].get("function", {}).get("arguments", "{}")
-        return _sanitize_floats(json.loads(args_str))
-
-    except Exception as e:
-        logger.error(f"[TemplateEvaluateAI] evaluation failed: {e}")
-        return {
-            "stance": "monitor",
-            "summary": f"AI evaluation failed: {e}",
-            "strengths": [],
-            "weaknesses": [],
-            "suggestions": [],
-            "projected_readiness_at_comp": 50
-        }
+    return _sanitize_floats(json.loads(tool_calls[0].get("function", {}).get("arguments", "{}")))

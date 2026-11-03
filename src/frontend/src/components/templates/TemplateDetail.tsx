@@ -143,9 +143,11 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
           <EvaluationPanel
             sk={resolvedTemplateSk ?? ''}
             evaluation={template.meta.ai_evaluation ?? null}
+            programContext={template.meta.program_context ?? ''}
             onRefresh={onRefresh}
             readOnly={readOnly}
-          />          </Stack>
+          />
+          </Stack>
         </Grid.Col>
       </Grid>
 

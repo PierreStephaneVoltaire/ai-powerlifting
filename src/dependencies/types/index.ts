@@ -644,6 +644,7 @@ export interface TemplateMeta {
   derived_from_template_sk?: string
   derived_from_program_sk?: string
   ai_evaluation?: AiTemplateEvaluation
+  program_context?: string
 }
 
 export interface TemplateEvaluationSuggestion {

@@ -300,20 +300,24 @@ class TemplateStore:
             None, lambda: self.update_template_sync(sk, template, actor_pk=actor_pk, expected_revision=expected_revision, idempotency_key=idempotency_key)
         )
 
-    def set_evaluation_sync(self, sk: str, evaluation: dict, actor_pk: str | None = None) -> None:
+    def set_evaluation_sync(self, sk: str, evaluation: dict, actor_pk: str | None = None, program_context: str | None = None) -> None:
         existing = self.get_template_sync(sk, actor_pk=actor_pk)
         if not existing:
             raise TemplateNotFoundError(f"Template not found: {sk}")
         self._assert_owner(existing, actor_pk)
         self.table.update_item(
             Key={"pk": self._pk, "sk": sk},
-            UpdateExpression="SET #meta.#evaluation = :evaluation, #meta.#updated = :updated",
-            ExpressionAttributeNames={"#meta": "meta", "#evaluation": "ai_evaluation", "#updated": "updated_at"},
-            ExpressionAttributeValues={":evaluation": self._floats_to_decimals(evaluation), ":updated": self._now()},
+            UpdateExpression="SET #meta.#evaluation = :evaluation, #meta.#context = :context, #meta.#updated = :updated",
+            ExpressionAttributeNames={"#meta": "meta", "#evaluation": "ai_evaluation", "#context": "program_context", "#updated": "updated_at"},
+            ExpressionAttributeValues={
+                ":evaluation": self._floats_to_decimals(evaluation),
+                ":context": program_context if program_context is not None else (existing.get("meta") or {}).get("program_context", ""),
+                ":updated": self._now(),
+            },
         )
 
-    async def set_evaluation(self, sk: str, evaluation: dict, actor_pk: str | None = None) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, lambda: self.set_evaluation_sync(sk, evaluation, actor_pk))
+    async def set_evaluation(self, sk: str, evaluation: dict, actor_pk: str | None = None, program_context: str | None = None) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, lambda: self.set_evaluation_sync(sk, evaluation, actor_pk, program_context))
 
     def _set_archived_sync(self, sk: str, archived: bool, actor_pk: str | None, expected_revision: int | None, idempotency_key: str | None) -> dict:
         require_mutation_envelope(expected_revision, idempotency_key)

@@ -159,3 +159,29 @@ def test_failed_target_write_marks_import_uncertain_and_blocks_replay(monkeypatc
     with pytest.raises(ValueError, match="do not replay"):
         asyncio.run(apply.import_apply({"pk": "athlete-1", "import_id": "import-3"}))
     assert len(program.saved["sessions"]) == 1
+
+
+def test_apply_template_defaults_unloaded_exercises_to_rpe_8_drops_dates_and_links_main_lifts(monkeypatch):
+    apply = importlib.import_module("services.handlers.imports.import_apply.core")
+    sessions = [{"week_number": 1, "day_of_week": "Saturday", "date": "2027-01-02", "exercises": [
+        {"name": "Squat heavy single", "sets": 1, "reps": 1, "load_type": "absolute", "load_value": 162.5},
+        {"name": "Weighted pull-up", "sets": 2, "reps": 8, "load_type": "unresolvable", "load_value": None, "notes": "add 5 lb per week"},
+        {"name": "Dead bug", "sets": 1, "reps": 8},
+        {"name": "Pause bench", "sets": 2, "reps": 4, "load_type": "absolute", "load_value": 105},
+    ]}]
+    imports = FakeImportStore({"import_id": "import-3", "status": "awaiting_review", "import_type": "session_import", "source_filename": "peak.xlsx", "source_file_hash": "sha256:def", "ai_parse_result": {"phases": [], "sessions": sessions, "parse_notes": "parsed"}})
+    templates = FakeTemplateStore()
+    monkeypatch.setattr(apply, "_get_import_store", lambda pk: imports)
+    monkeypatch.setattr(apply, "_get_template_store", lambda: templates)
+    monkeypatch.setattr(apply, "_glossary", lambda pk: [{"id": "g-squat", "name": "Squat"}, {"id": "g-bench", "name": "Bench Press"}])
+
+    asyncio.run(apply.import_apply({"pk": "athlete-1", "_person_pk": "coach-person", "import_id": "import-3", "classification_override": "template"}))
+
+    session = templates.template["sessions"][0]
+    squat, pullup, deadbug, pause = session["exercises"]
+    assert "date" not in session
+    assert squat["glossary_id"] == "g-squat" and squat["load_value"] == 162.5
+    assert (pullup["load_type"], pullup["load_value"], pullup["rpe_target"]) == ("rpe", 8, 8)
+    assert pullup["notes"] == "add 5 lb per week Lifter selects the load at RPE 8."
+    assert (deadbug["load_type"], deadbug["load_value"]) == ("rpe", 8)
+    assert "glossary_id" not in pause or pause["glossary_id"] is None

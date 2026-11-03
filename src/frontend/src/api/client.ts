@@ -992,8 +992,8 @@ export async function unarchiveTemplate(sk: string, envelope: MutationEnvelope):
   return res.data
 }
 
-export async function evaluateTemplate(sk: string): Promise<AiTemplateEvaluation> {
-  const res = await api.post(templatePath(sk, '/evaluate'))
+export async function evaluateTemplate(sk: string, context: string): Promise<AiTemplateEvaluation> {
+  const res = await api.post(templatePath(sk, '/evaluate'), { context })
   return res.data
 }
 

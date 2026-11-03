@@ -142,7 +142,8 @@ export async function unarchiveTemplate(req: Request, res: Response) {
 export async function evaluateTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeToolDirect('template_evaluate', { sk, ...templateActor(req), pk: req.mapped_pk })
+    const context = typeof req.body?.context === 'string' ? req.body.context.slice(0, 4000) : undefined
+    const result = await invokeToolDirect('template_evaluate', { sk, ...templateActor(req), pk: req.mapped_pk, ...(context === undefined ? {} : { context }) })
     res.json(result)
   } catch (err: any) {
     throw new AppError(`Evaluation failed: ${err.message}`, 502)

@@ -22,8 +22,9 @@ class FakeTemplateStore:
     async def get_template(self, sk, **kwargs):
         return self.templates.get(sk)
 
-    async def set_evaluation(self, sk, evaluation, actor_pk=None):
+    async def set_evaluation(self, sk, evaluation, actor_pk=None, program_context=None):
         self.templates[sk]["meta"]["ai_evaluation"] = evaluation
+        self.templates[sk]["meta"]["program_context"] = program_context
         self.evaluated_by = actor_pk
 
 
@@ -107,23 +108,25 @@ class TemplateContractTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     operations[name].validate_result(missing)
 
-    def _evaluate(self, program, entries):
+    def _evaluate(self, program, entries, **extra):
         core = importlib.import_module("services.handlers.templates.template_evaluate.core")
         entries_module = importlib.import_module("services.lib.competition_entries")
         template_store = FakeTemplateStore()
-        template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}}
+        template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}, "sessions": [{"week_number": 1, "date": "2027-01-02", "exercises": []}, {"week_number": 4, "date": "2027-01-23", "exercises": [{"name": "Squat", "sets": 1, "reps": 1}]}]}
         program_store = FakeProgramStore()
         program_store.program = program
         captured = {}
 
-        async def evaluate(_template, athlete_context):
+        async def evaluate(stripped, athlete_context, metrics, context):
             captured.update(athlete_context)
-            return {"stance": "monitor", "summary": "ok", "strengths": [], "weaknesses": [], "suggestions": [], "projected_readiness_at_comp": 50}
+            captured["template"] = stripped
+            captured["context"] = context
+            return {"stance": "monitor", "summary": "ok", "strengths": [], "weaknesses": [], "suggestions": []}
 
         ai = ModuleType("template_evaluate_ai")
         ai.generate_template_evaluate_report = evaluate
-        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(entries_module, "load_entries", return_value=entries), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
-            report = core.template_evaluate({"pk": "athlete-1", "actor_pk": "person-1", "sk": "template#1"})
+        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(core, "_get_glossary", return_value=[]), patch.object(core, "_specificity_band", return_value=lambda weeks_out: None), patch.object(entries_module, "load_entries", return_value=entries), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
+            report = core.template_evaluate({"pk": "athlete-1", "actor_pk": "person-1", "sk": "template#1", **extra})
         return captured, template_store, report
 
     def test_evaluate_counts_weeks_to_the_next_confirmed_competition_and_saves_the_report(self):
@@ -138,18 +141,19 @@ class TemplateContractTests(unittest.TestCase):
             {"sk": "COMP#optional", "name": "WRPF Nationals 2026", "start_date": (date.today() + timedelta(days=4)).isoformat(), "user_status": "optional"},
             {"sk": "COMP#next", "name": "Royal City Rumble 5", "start_date": future, "user_status": "confirmed"},
         ]
-        captured, store, report = self._evaluate(program, entries)
-        self.assertEqual(captured["dots_score"], 369.31)
-        self.assertEqual(captured["weeks_to_comp"], 10.0)
-        self.assertEqual(captured["next_competition"], {"name": "Royal City Rumble 5", "date": future, "status": "confirmed"})
+        captured, store, report = self._evaluate(program, entries, context="Overreach with separate lift progressions")
+        self.assertNotIn("dots_score", captured)
+        self.assertEqual(captured["timeline"], {"template_weeks": 4, "next_confirmed_competition": {"name": "Royal City Rumble 5", "weeks_away": 10.0}, "weeks_until_template_must_start": 6.0})
+        self.assertEqual(captured["context"], "Overreach with separate lift progressions")
+        self.assertNotIn("date", captured["template"]["sessions"][0])
         self.assertEqual(store.templates["template#1"]["meta"]["ai_evaluation"], report)
+        self.assertEqual(store.templates["template#1"]["meta"]["program_context"], "Overreach with separate lift progressions")
         self.assertEqual(store.evaluated_by, "person-1")
 
     def test_evaluate_ignores_a_past_meta_comp_date_when_no_competition_is_upcoming(self):
         program = {"meta": {"comp_date": (date.today() - timedelta(days=73)).isoformat()}, "current_maxes": {}}
         captured, _, _ = self._evaluate(program, [])
-        self.assertIsNone(captured["weeks_to_comp"])
-        self.assertIsNone(captured["next_competition"])
+        self.assertEqual(captured["timeline"], {"template_weeks": 4, "next_confirmed_competition": None})
 
 
 if __name__ == "__main__":
@@ -202,5 +206,8 @@ def test_set_evaluation_updates_only_the_evaluation_field_for_the_owner():
     assert call["Key"] == {"pk": "template_library", "sk": "template#1"}
     assert call["ExpressionAttributeNames"]["#evaluation"] == "ai_evaluation"
     assert call["ExpressionAttributeValues"][":evaluation"]["score"] == Decimal("0.5")
+    assert call["ExpressionAttributeValues"][":context"] == ""
+    store.set_evaluation_sync("template#1", {"stance": "monitor"}, actor_pk="person-1", program_context="overreach")
+    assert table.update_item.call_args.kwargs["ExpressionAttributeValues"][":context"] == "overreach"
     with pytest.raises(Exception):
         store.set_evaluation_sync("template#1", {"stance": "x"}, actor_pk="someone-else")
