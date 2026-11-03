@@ -17,7 +17,7 @@ for (const domain of ['program', 'sessions', 'competition', 'federation', 'gloss
 }
 
 function serviceUrl(domain: string): string {
-  return SERVICE_BASE_URL ? `${SERVICE_BASE_URL.replace(/\/$/, '')}/${domain}` : `http://pl-${domain}.if-portals.svc.cluster.local:8000`
+  return SERVICE_BASE_URL ? `${SERVICE_BASE_URL.replace(/\/$/, '')}/${domain}` : `http://pl-${domain}:8000`
 }
 
 export async function pollJob(jobId: string, operation: string, person: string, athlete?: string): Promise<any> {

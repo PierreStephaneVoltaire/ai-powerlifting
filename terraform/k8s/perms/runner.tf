@@ -5,6 +5,19 @@ resource "kubernetes_service_account_v1" "runner" {
   }
 }
 
+resource "kubernetes_role_v1" "runner_namespace" {
+  metadata {
+    name      = "powerlifting-deployer"
+    namespace = var.namespace
+  }
+
+  rule {
+    api_groups = ["*"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+}
+
 resource "kubernetes_role_binding_v1" "runner_namespace" {
   metadata {
     name      = "powerlifting-deployer"
@@ -19,8 +32,8 @@ resource "kubernetes_role_binding_v1" "runner_namespace" {
 
   role_ref {
     api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = "admin"
+    kind      = "Role"
+    name      = kubernetes_role_v1.runner_namespace.metadata[0].name
   }
 }
 
@@ -32,7 +45,7 @@ resource "kubernetes_cluster_role_v1" "runner_cluster" {
   rule {
     api_groups = [""]
     resources  = ["namespaces"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs      = ["get", "list", "watch"]
   }
 
   rule {
@@ -43,7 +56,7 @@ resource "kubernetes_cluster_role_v1" "runner_cluster" {
 
   rule {
     api_groups = ["rbac.authorization.k8s.io"]
-    resources  = ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+    resources  = ["clusterroles", "clusterrolebindings"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"]
   }
 
@@ -51,30 +64,6 @@ resource "kubernetes_cluster_role_v1" "runner_cluster" {
     api_groups = ["gateway.networking.k8s.io"]
     resources  = ["gatewayclasses"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
-  }
-
-  rule {
-    api_groups = ["admissionregistration.k8s.io"]
-    resources  = ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
-  }
-
-  rule {
-    api_groups = [""]
-    resources  = ["serviceaccounts", "secrets", "configmaps", "services", "pods"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
-  }
-
-  rule {
-    api_groups = ["apps"]
-    resources  = ["deployments"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
-  }
-
-  rule {
-    api_groups = ["actions.github.com"]
-    resources  = ["*"]
-    verbs      = ["*"]
   }
 }
 

@@ -50,7 +50,7 @@ async def authorize_request(operation: str, arguments: dict, token: str, person:
         return claims, check_context(operation, arguments, claims, context)
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(os.getenv('PL_PROFILE_URL', 'http://pl-profile.if-portals.svc.cluster.local:8000') + '/internal/access',
+            response = await client.post(os.getenv('PL_PROFILE_URL', 'http://pl-profile:8000') + '/internal/access',
                 headers={'X-Internal-Token': os.environ['INTERNAL_API_TOKEN'], 'X-PL-Principal': token},
                 json={'operation': operation, 'arguments': arguments})
         if response.status_code != 200:
