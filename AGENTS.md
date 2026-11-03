@@ -6,19 +6,19 @@ working — this file is only layout + operating rules.
 
 ## Layout
 
-- `frontend/` — React + Vite app
-- `backend/` — Express API (Node)
-- `services/` — sixteen typed HTTP/MCP domain services; handlers and shared `lib/`,
+- `src/frontend/` — React + Vite app
+- `src/backend/` — Express API (Node)
+- `src/services/` — sixteen typed HTTP/MCP domain services; handlers and shared `lib/`,
   with manifests in `operations/`.
-- `lambda/` — the retained `video-thumbnail` and `master-sync` AWS Lambdas only.
+- `src/lambda/` — the retained `video-thumbnail` and `master-sync` AWS Lambdas only.
 - `terraform/` — AWS-only (Lambdas, S3, API Gateway, SSM). Applied separately from
   the root infra.
 
-## Two Terraform scopes — do not cross them
+## Terraform scopes — do not cross them
 
-- Root `terraform/` (in the parent IF agent repo) → k3s infra, applied locally.
-- `powerlifting-app/terraform/` → AWS resources only.
-- `powerlifting-app/terraform/coach/` → its own state for the Coach Kubernetes resources only (PVC, Deployments, Services), applied locally because CI cannot reach the cluster. Coach ECR repositories live in `powerlifting-app/terraform/` with the other AWS resources. See `services/coach/README.md`.
+- `powerlifting-app/terraform/` → AWS resources only, applied by CI.
+- `powerlifting-app/terraform/k8s/{core,perms,network,app}` → the Powerlifting Kubernetes resources, one state each, applied by the in-cluster runner (`kubernetes-apply` job). See `terraform/k8s/README.md`.
+- `powerlifting-app/terraform/coach/` → its own state for the Coach Kubernetes resources only (PVC, Deployments, Services), applied locally because CI cannot reach the cluster. Coach ECR repositories live in `powerlifting-app/terraform/` with the other AWS resources. See `src/services/coach/README.md`.
 
 ## Run
 

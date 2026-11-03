@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 
-const require = createRequire('/home/sirsimpalot/Downloads/discord-ai-bot/utils/powerlifting-app/package.json')
+const require = createRequire(new URL('../package.json', import.meta.url))
 const { request } = require('@playwright/test')
 
 const base = process.env.PL_BASE_URL || 'https://dev.nolift.training'

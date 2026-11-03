@@ -9,7 +9,7 @@ import boto3
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Attr
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from services.access_store import pages, person_record
 

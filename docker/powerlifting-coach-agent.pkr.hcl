@@ -44,7 +44,7 @@ build {
   }
 
   provisioner "file" {
-    sources     = ["../services/__init__.py", "../services/permissions.json", "../services/operations", "../services/coach"]
+    sources     = ["../src/services/__init__.py", "../src/services/permissions.json", "../src/services/operations", "../src/services/coach"]
     destination = "/opt/powerlifting/services/"
   }
 

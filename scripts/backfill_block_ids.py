@@ -9,7 +9,7 @@ from pathlib import Path
 import boto3
 from boto3.dynamodb.conditions import Key
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from services.lib.block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id, record_block, record_date
 from services.lib.competition_entries import participation_date

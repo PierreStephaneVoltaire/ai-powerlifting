@@ -6,7 +6,7 @@ this file is the orientation guide.
 
 ```
 powerlifting-app/
-├── backend/                 Express API — thin transport layer (delegates to IF Agent API)
+├── src/backend/             Express API — thin transport layer (delegates to IF Agent API)
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── src/
@@ -35,7 +35,7 @@ powerlifting-app/
 │           ├── logger.ts     pino logger
 │           ├── countries.ts  ISO country resolution (competitions)
 │           └── videoSort.ts  Video ordering helpers
-├── frontend/               React 19 + Vite PWA (Mantine 9, Tailwind, Zustand)
+├── src/frontend/               React 19 + Vite PWA (Mantine 9, Tailwind, Zustand)
 │   ├── index.html
 │   ├── package.json
 │   └── src/
@@ -61,16 +61,15 @@ powerlifting-app/
 │       └── constants/
 │           ├── formulaDescriptions.ts  Human-facing formula prose (mirrors the math)
 │           └── plates.ts                Plate inventory constants
-├── packages/types/         Shared TypeScript types (@powerlifting/types)
+├── src/dependencies/types/         Shared TypeScript types (@powerlifting/types)
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── index.ts             Program, Session, Exercise, Competition, Glossary, Budget, …
-├── services/
+├── src/services/
 │   ├── handlers/             Domain operation packages grouped by service
 │   ├── lib/                  Shared stores, scoping, calculations, and AI prompts
 │   ├── operations/           Typed HTTP/MCP operation manifests
-│   └── Dockerfile            Shared service image
-├── lambda/
+├── src/lambda/
 │   ├── master-sync/          Master data sync AWS Lambda
 │   └── video-thumbnail/      S3-triggered thumbnail AWS Lambda
 ├── docker/                  Container build context
@@ -90,7 +89,7 @@ powerlifting-app/
 │   ├── versions.tf          Provider versions
 │   └── outputs.tf
 ├── domain.yaml              Domain config
-├── package.json             Workspace root (workspaces: packages/types, backend, frontend)
+├── package.json             Workspace root (workspaces: src/dependencies/types, src/backend, src/frontend)
 ├── tsconfig.json
 ├── docs/
 │   ├── ARCHITECTURE.md      Software/technical architecture deep-dive
@@ -105,19 +104,19 @@ powerlifting-app/
 
 When behavior and prose disagree, the code wins. The highest-signal files:
 
-- **Frontend behavior:** `frontend/src/App.tsx` (routes),
-  `frontend/src/pages/AnalysisPage.tsx`,
-  `frontend/src/components/analysis/WeeklyData.tsx`,
-  `frontend/src/components/analysis/AiAnalysis.tsx`,
-  `frontend/src/components/layout/SettingsDrawer.tsx`
-- **Formula prose:** `frontend/src/constants/formulaDescriptions.ts`
-- **Backend routes:** `backend/src/routes/analytics.ts`, `backend/src/routes/setup.ts`,
-  `backend/src/routes/settings.ts`, `backend/src/routes/profiles.ts`
-- **Backend services:** `backend/src/services/blockAnalytics.ts`,
-  `backend/src/services/analysisCache.ts`, `backend/src/services/userSettings.ts`
-- **Types:** `packages/types/index.ts`
-- **Agent plumbing:** `backend/src/utils/agent.ts` (invokeToolDirect → IF Agent API; still used for `health_rag_search`)
-- **Lambda plumbing:** `backend/src/utils/lambda.ts` (invokeLambda HTTP wrapper against the API Gateway) + `backend/src/utils/lambdaCache.ts` (in-process LRU cache + write invalidation)
-- **Service runtime:** `services/` handlers and shared `services/lib/`, packaged by `services/Dockerfile`.
+- **Frontend behavior:** `src/frontend/src/App.tsx` (routes),
+  `src/frontend/src/pages/AnalysisPage.tsx`,
+  `src/frontend/src/components/analysis/WeeklyData.tsx`,
+  `src/frontend/src/components/analysis/AiAnalysis.tsx`,
+  `src/frontend/src/components/layout/SettingsDrawer.tsx`
+- **Formula prose:** `src/frontend/src/constants/formulaDescriptions.ts`
+- **Backend routes:** `src/backend/src/routes/analytics.ts`, `src/backend/src/routes/setup.ts`,
+  `src/backend/src/routes/settings.ts`, `src/backend/src/routes/profiles.ts`
+- **Backend services:** `src/backend/src/services/blockAnalytics.ts`,
+  `src/backend/src/services/analysisCache.ts`, `src/backend/src/services/userSettings.ts`
+- **Types:** `src/dependencies/types/index.ts`
+- **Agent plumbing:** `src/backend/src/utils/agent.ts` (invokeToolDirect → IF Agent API; still used for `health_rag_search`)
+- **Lambda plumbing:** `src/backend/src/utils/lambda.ts` (invokeLambda HTTP wrapper against the API Gateway) + `src/backend/src/utils/lambdaCache.ts` (in-process LRU cache + write invalidation)
+- **Service runtime:** `src/services/` handlers and shared `src/services/lib/`, packaged by `docker/powerlifting-services.pkr.hcl`.
 - **AWS Lambda substrate:** `powerlifting-app/terraform/` retains only the master-sync and video-thumbnail Lambdas.
 - **Infra:** `terraform/` (root, local k3s) and `powerlifting-app/terraform/` (AWS-only)

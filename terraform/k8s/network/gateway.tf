@@ -1,0 +1,64 @@
+locals {
+  gateway_class   = "powerlifting"
+  gateway_name    = "edge"
+  gateway_service = "${local.gateway_name}-${local.gateway_class}"
+}
+
+data "http" "gateway_api_crds" {
+  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml"
+}
+
+data "kubectl_file_documents" "gateway_api_crds" {
+  content = data.http.gateway_api_crds.response_body
+}
+
+resource "kubectl_manifest" "gateway_api_crds" {
+  for_each = data.kubectl_file_documents.gateway_api_crds.manifests
+
+  yaml_body         = each.value
+  server_side_apply = true
+  force_conflicts   = true
+  wait              = true
+}
+
+resource "helm_release" "gateway_controller" {
+  name       = "gateway"
+  namespace  = var.namespace
+  repository = "oci://ghcr.io/nginx/charts"
+  chart      = "nginx-gateway-fabric"
+  version    = "2.6.3"
+
+  values = [yamlencode({
+    nginxGateway = {
+      replicas              = 1
+      gatewayClassName      = local.gateway_class
+      gatewayControllerName = "gateway.nginx.org/${local.gateway_class}-controller"
+      watchNamespaces       = [var.namespace]
+      snippets              = { enable = true }
+    }
+    nginx = {
+      service = { type = "ClusterIP" }
+    }
+  })]
+
+  depends_on = [kubectl_manifest.gateway_api_crds]
+}
+
+resource "kubectl_manifest" "gateway" {
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "Gateway"
+    metadata   = { name = local.gateway_name, namespace = var.namespace }
+    spec = {
+      gatewayClassName = local.gateway_class
+      listeners = [{
+        name          = "http"
+        port          = 80
+        protocol      = "HTTP"
+        allowedRoutes = { namespaces = { from = "Same" } }
+      }]
+    }
+  })
+
+  depends_on = [helm_release.gateway_controller]
+}

@@ -48,7 +48,7 @@ browser-to-storage uploads, account lifecycle features, or Postgres migration.
   current stored grants/publication settings. Every HTTP/MCP operation has an
   explicit permission; unmapped operations fail closed. The gateway uses the
   same evaluator. Read-cached reports need read; generation needs write.
-- Keep operation manifests in `services/operations/*.json`, and register new
+- Keep operation manifests in `src/services/operations/*.json`, and register new
   operations in an existing domain. Coordinator owns shared TypeScript types.
 - Mutation envelopes use `expected_revision` (nonnegative integer) and
   `idempotency_key` (nonempty string). Conflict responses are HTTP 409 with

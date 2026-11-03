@@ -38,7 +38,7 @@ build {
   }
 
   provisioner "file" {
-    sources     = ["../services/__init__.py", "../services/coach_discord"]
+    sources     = ["../src/services/__init__.py", "../src/services/coach_discord"]
     destination = "/opt/powerlifting/services/"
   }
 

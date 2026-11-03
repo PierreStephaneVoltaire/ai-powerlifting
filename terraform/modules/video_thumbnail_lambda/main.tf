@@ -5,12 +5,12 @@ data "archive_file" "lambda" {
   output_path = "${path.module}/.terraform/video-thumbnail.zip"
 
   source {
-    content  = file("${path.module}/../../../lambda/video-thumbnail/index.py")
+    content  = file("${path.module}/../../../src/lambda/video-thumbnail/index.py")
     filename = "index.py"
   }
 
   source {
-    content  = file("${path.module}/../../../services/lib/media_notifications.py")
+    content  = file("${path.module}/../../../src/services/lib/media_notifications.py")
     filename = "notifications.py"
   }
 }

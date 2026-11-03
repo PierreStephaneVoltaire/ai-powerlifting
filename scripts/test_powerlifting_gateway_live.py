@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 BACKEND = "http://127.0.0.1:13005"
 FRONTEND = "http://127.0.0.1:13001"
-GATEWAY = "http://192.168.2.56"
+GATEWAY = os.environ["PL_GATEWAY_URL"]
 MEDIA_ORIGIN = "d2kntj88zo3vgy.cloudfront.net"
 CANARY_HEADERS = {"Cookie": f"pl_auth={os.environ['PL_CANARY_COOKIE']}"} if os.environ.get("PL_CANARY_COOKIE") else {}
 

@@ -21,7 +21,7 @@ source "docker" "powerlifting_analytics" {
   commit   = true
   platform = "linux/amd64"
   changes = [
-    "WORKDIR /opt/powerlifting/backend",
+    "WORKDIR /opt/powerlifting/src/backend",
     "USER node",
     "CMD [\"node\", \"dist/analyticsSidecar.js\"]"
   ]
@@ -32,7 +32,7 @@ build {
   sources = ["source.docker.powerlifting_analytics"]
 
   provisioner "shell" {
-    inline = ["mkdir -p /opt/powerlifting/backend /opt/powerlifting/frontend /opt/powerlifting/packages /opt/powerlifting/services"]
+    inline = ["mkdir -p /opt/powerlifting/src/backend /opt/powerlifting/src/frontend /opt/powerlifting/src/dependencies /opt/powerlifting/src/services"]
   }
 
   provisioner "file" {
@@ -41,32 +41,32 @@ build {
   }
 
   provisioner "file" {
-    sources     = ["../backend/package.json", "../backend/tsconfig.json", "../backend/src"]
-    destination = "/opt/powerlifting/backend/"
+    sources     = ["../src/backend/package.json", "../src/backend/tsconfig.json", "../src/backend/src"]
+    destination = "/opt/powerlifting/src/backend/"
   }
 
   provisioner "file" {
-    source      = "../frontend/package.json"
-    destination = "/opt/powerlifting/frontend/package.json"
+    source      = "../src/frontend/package.json"
+    destination = "/opt/powerlifting/src/frontend/package.json"
   }
 
   provisioner "file" {
-    source      = "../packages/types"
-    destination = "/opt/powerlifting/packages/"
+    source      = "../src/dependencies/types"
+    destination = "/opt/powerlifting/src/dependencies/"
   }
 
   provisioner "file" {
-    sources     = ["../services/operations", "../services/calculation_constants.json"]
-    destination = "/opt/powerlifting/services/"
+    sources     = ["../src/services/operations", "../src/services/calculation_constants.json"]
+    destination = "/opt/powerlifting/src/services/"
   }
 
   provisioner "shell" {
     inline = [
       "cd /opt/powerlifting",
-      "npm ci --workspace=backend --workspace=packages/types",
-      "npm run build --workspace=backend",
-      "npm prune --omit=dev --workspace=backend --workspace=packages/types",
-      "rm -rf /opt/powerlifting/backend/src /opt/powerlifting/frontend /root/.npm",
+      "npm ci --workspace=src/backend --workspace=src/dependencies/types",
+      "npm run build --workspace=src/backend",
+      "npm prune --omit=dev --workspace=src/backend --workspace=src/dependencies/types",
+      "rm -rf /opt/powerlifting/src/backend/src /opt/powerlifting/src/frontend /root/.npm",
       "chown -R node:node /opt/powerlifting"
     ]
   }

@@ -21,7 +21,7 @@ source "docker" "powerlifting_backend" {
   commit   = true
   platform = "linux/amd64"
   changes = [
-    "WORKDIR /workspace/backend",
+    "WORKDIR /workspace/src/backend",
     "ENV NODE_ENV=production",
     "EXPOSE 3005",
     "CMD [\"node\", \"dist/server.js\"]"
@@ -47,14 +47,14 @@ build {
   provisioner "shell" {
     inline = [
       "cd /workspace",
-      "test -d services/operations",
-      "test -f services/operations/program.json",
+      "test -d src/services/operations",
+      "test -f src/services/operations/program.json",
       "if [ -f package.json ] && grep -q '\"workspaces\"' package.json; then",
       "  npm ci || npm install",
-      "  if [ -f packages/types/package.json ]; then npm run build --workspace=packages/types || true; fi",
-      "  npm run build --workspace=backend",
+      "  if [ -f src/dependencies/types/package.json ]; then npm run build --workspace=src/dependencies/types || true; fi",
+      "  npm run build --workspace=src/backend",
       "else",
-      "  cd backend && npm ci || npm install && npm run build",
+      "  cd src/backend && npm ci || npm install && npm run build",
       "fi"
     ]
   }
@@ -63,7 +63,7 @@ build {
     inline = [
       "addgroup -g 1001 -S nodejs || true",
       "adduser -S nodejs -u 1001 -G nodejs 2>/dev/null || true",
-      "chown -R nodejs:nodejs /workspace/backend || true"
+      "chown -R nodejs:nodejs /workspace/src/backend || true"
     ]
   }
 

@@ -4,10 +4,11 @@ on:
   push:
     branches: [master, main]
     paths:
-      - "backend/**"
-      - "frontend/**"
-      - "packages/**"
-      - "services/**"
+      - "src/backend/**"
+      - "src/frontend/**"
+      - "src/dependencies/**"
+      - "src/services/**"
+      - "src/lambda/**"
       - "docker/**"
       - "terraform/**"
       - "package.json"
@@ -18,10 +19,11 @@ on:
   pull_request:
     branches: [master, main]
     paths:
-      - "backend/**"
-      - "frontend/**"
-      - "packages/**"
-      - "services/**"
+      - "src/backend/**"
+      - "src/frontend/**"
+      - "src/dependencies/**"
+      - "src/services/**"
+      - "src/lambda/**"
       - "docker/**"
       - "terraform/**"
       - ".github/workflows/build-images.yml"
@@ -61,6 +63,7 @@ jobs:
       frontend: ${{ steps.result.outputs.frontend }}
       services: ${{ steps.result.outputs.services }}
       terraform: ${{ steps.result.outputs.terraform }}
+      kubernetes: ${{ steps.result.outputs.kubernetes }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,35 +73,39 @@ jobs:
         with:
           filters: |
             backend:
-              - 'backend/**'
-              - 'packages/**'
-              - 'services/**'
+              - 'src/backend/**'
+              - 'src/dependencies/**'
+              - 'src/services/**'
               - 'docker/**'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.json'
               - '.github/workflows/build-images.yml'
             frontend:
-              - 'frontend/**'
-              - 'packages/**'
+              - 'src/frontend/**'
+              - 'src/dependencies/**'
               - 'docker/**'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.json'
               - '.github/workflows/build-images.yml'
             services:
-              - 'services/**'
-              - 'backend/src/**'
-              - 'backend/package.json'
-              - 'backend/tsconfig.json'
-              - 'packages/**'
+              - 'src/services/**'
+              - 'src/backend/src/**'
+              - 'src/backend/package.json'
+              - 'src/backend/tsconfig.json'
+              - 'src/dependencies/**'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.json'
-              - 'frontend/package.json'
+              - 'src/frontend/package.json'
               - '.github/workflows/build-images.yml'
+            kubernetes:
+              - 'terraform/k8s/**'
             terraform:
               - 'terraform/**'
+              - 'src/lambda/**'
+              - 'src/services/lib/media_notifications.py'
               - '.github/workflows/build-images.yml'
 
       - id: result
@@ -109,11 +116,13 @@ jobs:
             echo "frontend=true" >> "$GITHUB_OUTPUT"
             echo "services=true" >> "$GITHUB_OUTPUT"
             echo "terraform=true" >> "$GITHUB_OUTPUT"
+            echo "kubernetes=true" >> "$GITHUB_OUTPUT"
           else
             echo "backend=${{ steps.filter.outputs.backend }}" >> "$GITHUB_OUTPUT"
             echo "frontend=${{ steps.filter.outputs.frontend }}" >> "$GITHUB_OUTPUT"
             echo "services=${{ steps.filter.outputs.services }}" >> "$GITHUB_OUTPUT"
             echo "terraform=${{ steps.filter.outputs.terraform }}" >> "$GITHUB_OUTPUT"
+            echo "kubernetes=${{ steps.filter.outputs.kubernetes }}" >> "$GITHUB_OUTPUT"
           fi
 
   build-backend:
@@ -369,3 +378,55 @@ jobs:
 
       - working-directory: terraform
         run: terraform apply -input=false -no-color -auto-approve -var="region=${{ env.AWS_REGION }}"
+
+  kubernetes-apply:
+    needs: [changes, build-backend, build-services, build-frontend, terraform-apply]
+    runs-on: powerlifting-k8s
+    if: >-
+      ${{ always()
+      && github.event_name != 'pull_request'
+      && github.triggering_actor == github.repository_owner
+      && github.actor == github.repository_owner
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+      && (needs.changes.outputs.kubernetes == 'true'
+        || needs.build-backend.result == 'success'
+        || needs.build-services.result == 'success'
+        || needs.build-frontend.result == 'success') }}
+    concurrency:
+      group: kubernetes-apply
+      cancel-in-progress: false
+    env:
+      KUBE_LOAD_CONFIG_FILE: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: command -v unzip || (sudo apt-get update && sudo apt-get install -y unzip)
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - env:
+          K8S_TFVARS: ${{ vars.K8S_TFVARS }}
+        run: printf '%s' "$K8S_TFVARS" > "$RUNNER_TEMP/k8s.tfvars"
+
+      - env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        working-directory: terraform/k8s
+        run: |
+          set -euo pipefail
+          for stack in network app; do
+            terraform -chdir="$stack" init -input=false \
+              -backend-config="bucket=$TF_STATE_BUCKET" \
+              -backend-config="key=powerlifting-app/k8s/$stack.tfstate" \
+              -backend-config="region=$AWS_REGION" \
+              -backend-config="encrypt=true" \
+              -backend-config="use_lockfile=true"
+            terraform -chdir="$stack" apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/k8s.tfvars"
+          done

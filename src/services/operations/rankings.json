@@ -1,0 +1,219 @@
+[
+  {
+    "name": "analyze_powerlifting_stats",
+    "domain": "rankings",
+    "description": "Analyze powerlifting statistics for the current program version. Computes totals, Wilks, DOTS, and comparative metrics. Copied from tools/health/powerlifting_stats.py.",
+    "handler": "services.handlers.analysis.analyze_powerlifting_stats.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "version": {
+          "type": "string",
+          "description": "Program version. Defaults to current."
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "dataset_size",
+            "computed",
+            "analysis"
+          ],
+          "properties": {
+            "dataset_size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "computed": {
+              "type": "object"
+            },
+            "analysis": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_analysis"
+    ]
+  },
+  {
+    "name": "powerlifting_filter_categories",
+    "domain": "rankings",
+    "description": "List available filter categories for powerlifting ranking data. Returns the distinct values for federation, equipment, gender, and weight class filters used by the ranking percentile tool.",
+    "handler": "services.handlers.analysis.powerlifting_filter_categories.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "federations": {
+              "type": "array"
+            },
+            "countries": {
+              "type": "array"
+            },
+            "regions": {
+              "type": "array"
+            },
+            "equipment": {
+              "type": "array"
+            },
+            "sex": {
+              "type": "array"
+            },
+            "age_classes": {
+              "type": "array"
+            },
+            "event_types": {
+              "type": "array"
+            },
+            "years": {
+              "type": "array"
+            },
+            "country_federations": {
+              "type": "object"
+            },
+            "country_regions": {
+              "type": "object"
+            },
+            "region_federations": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_analysis"
+    ]
+  },
+  {
+    "name": "powerlifting_ranking_percentile",
+    "domain": "rankings",
+    "description": "Compute the ranking percentile for a given total, body weight, gender, equipment, and federation. Returns the percentile rank compared to known competition results.",
+    "handler": "services.handlers.analysis.powerlifting_ranking_percentile.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "squat_kg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bench_kg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "deadlift_kg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bodyweight_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sex_code": {
+          "type": "string",
+          "enum": [
+            "M",
+            "F"
+          ]
+        },
+        "country": {
+          "type": "string",
+          "minLength": 1
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "age_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "equipment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "global",
+            "national",
+            "regional",
+            "meta"
+          ],
+          "properties": {
+            "global": {
+              "type": "object"
+            },
+            "national": {
+              "type": "object"
+            },
+            "regional": {
+              "type": "object"
+            },
+            "weight_class_label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "meta": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_analysis"
+    ]
+  }
+]

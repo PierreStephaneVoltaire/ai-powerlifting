@@ -235,11 +235,12 @@ athletes use the formulas and AI above to collaborate on the meet-prep journey.
 
 ```
 powerlifting-app/
-├── backend/        Express API (thin transport → typed services + IF Agent API for RAG)
-├── frontend/       React 19 + Vite PWA
-├── packages/types/  Shared TypeScript types
-├── services/       Typed HTTP/MCP domain services, handlers, shared libraries, and operation manifests
-├── lambda/         Retained AWS Lambdas: master-sync and video-thumbnail
+├── src/
+│   ├── backend/              Express API (thin transport → typed services)
+│   ├── frontend/             React 19 + Vite PWA
+│   ├── services/             Typed HTTP/MCP domain services, handlers, shared libraries, and operation manifests
+│   ├── lambda/               Retained AWS Lambdas: master-sync and video-thumbnail
+│   └── dependencies/types/   Shared TypeScript types
 ├── docker/         Container build context
 ├── terraform/      Powerlifting-specific AWS resources (ECR, S3, Lambda, API Gateway, SSM params, budget table)
 └── docs/           Architecture, formulas, and the implementation reference
@@ -251,8 +252,8 @@ when working in this repo.
 
 ## Image rollout
 
-The existing `build-services` workflow job builds both `services/Dockerfile` and
-`services/analytics.Dockerfile`. On pushes it publishes the services image to
+The existing `build-services` workflow job builds both `docker/powerlifting-services.pkr.hcl` and
+`docker/powerlifting-analytics.pkr.hcl`. On pushes it publishes the services image to
 `if-powerlifting-fns` and the reports sidecar to `if-powerlifting-analytics`,
 using `latest` and the 12-character commit SHA. Pull requests build both images
 without AWS credentials or pushes. When Terraform changes create the analytics

@@ -59,11 +59,11 @@ build {
       "cd /workspace",
       "if [ -f package.json ] && grep -q '\"workspaces\"' package.json; then",
       "  npm ci || npm install",
-      "  if [ -f packages/types/package.json ]; then npm run build --workspace=packages/types || true; fi",
-      "  VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} VITE_CLOUDFRONT_MEDIA_BASE_URL=${var.cloudfront_media_base_url} npm run build --workspace=frontend",
-      "  cp -r frontend/dist /app/dist",
+      "  if [ -f src/dependencies/types/package.json ]; then npm run build --workspace=src/dependencies/types || true; fi",
+      "  VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} VITE_CLOUDFRONT_MEDIA_BASE_URL=${var.cloudfront_media_base_url} npm run build --workspace=src/frontend",
+      "  cp -r src/frontend/dist /app/dist",
       "else",
-      "  cd frontend && npm ci || npm install && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} VITE_CLOUDFRONT_MEDIA_BASE_URL=${var.cloudfront_media_base_url} npm run build && cp -r dist /app/dist",
+      "  cd src/frontend && npm ci || npm install && VITE_API_URL=${var.api_url} VITE_API_BASE_URL=${var.api_url} VITE_CLOUDFRONT_MEDIA_BASE_URL=${var.cloudfront_media_base_url} npm run build && cp -r dist /app/dist",
       "fi",
       "npm install -g serve"
     ]

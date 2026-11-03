@@ -38,7 +38,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "../services"
+    source      = "../src/services"
     destination = "/opt/powerlifting/"
   }
 

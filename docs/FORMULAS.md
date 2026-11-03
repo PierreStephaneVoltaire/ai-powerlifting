@@ -5,7 +5,7 @@ the equation, the variables, the thresholds, **what's different from the textboo
 original version**, and the **pros and cons** of the chosen approach.
 
 The canonical formula prose in the app lives in
-`frontend/src/constants/formulaDescriptions.ts`. Where that prose and this doc
+`src/frontend/src/constants/formulaDescriptions.ts`. Where that prose and this doc
 disagree, the code (and [`REFERENCE.md`](./REFERENCE.md)) wins.
 
 A guiding principle across all of these: **training logs are noisy**, and the

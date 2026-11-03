@@ -11,7 +11,7 @@ data "aws_dynamodb_table" "master_federations" {
 data "archive_file" "powerlifting_master_sync" {
   type        = "zip"
   output_path = "${path.module}/.terraform/powerlifting-master-sync.zip"
-  source_dir  = "${path.module}/../../../lambda/master-sync"
+  source_dir  = "${path.module}/../../../src/lambda/master-sync"
 }
 
 resource "aws_sqs_queue" "powerlifting_master_sync_dlq" {

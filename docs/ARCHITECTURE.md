@@ -6,7 +6,7 @@ Software and technical deep-dive for the powerlifting portal. For the math, see
 ## Current request flow
 
 Powerlifting runs in the existing `if-portals` namespace as sixteen domain
-Services/Deployments. The operation manifests in `services/operations/*.json`
+Services/Deployments. The operation manifests in `src/services/operations/*.json`
 define typed HTTP and MCP operations. The Express gateway and native Specialists
 use these same domain handlers. Retained DynamoDB/S3 stores hold the data.
 Fission and direct chat-based tool invocation are retired.
@@ -17,7 +17,7 @@ uses a reviewed targeted Terraform plan and apply; manifest tooling is not part
 of the deployment flow.
 
 The sixteen services use `if-powerlifting-fns`. The Analytics reports sidecar is
-built separately from `services/analytics.Dockerfile` and uses
+built separately from `docker/powerlifting-analytics.pkr.hcl` and uses
 `if-powerlifting-analytics`. The first repository is created by this repository's
 AWS Terraform before the existing CI services job pushes the first sidecar image.
 
