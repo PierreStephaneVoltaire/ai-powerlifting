@@ -10,8 +10,14 @@ from services.dispatch import dispatch
 
 def test_analytics_contracts_have_structured_results():
     operations = load_operations("analytics")
-    assert len(operations) == 31
+    assert len(operations) == 28
     assert all(operation.result_schema for operation in operations.values())
+
+
+def test_rankings_operations_live_in_their_own_domain():
+    rankings = load_operations("rankings")
+    assert set(rankings) == {"analyze_powerlifting_stats", "powerlifting_filter_categories", "powerlifting_ranking_percentile"}
+    assert not set(rankings) & set(load_operations("analytics"))
 
 
 def test_analysis_section_uses_supplied_snapshot(monkeypatch):

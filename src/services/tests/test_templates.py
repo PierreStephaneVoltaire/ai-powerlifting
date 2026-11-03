@@ -135,6 +135,7 @@ class TemplateContractTests(unittest.TestCase):
         entries = [
             {"sk": "COMP#past", "name": "Old Meet", "start_date": (date.today() - timedelta(days=7)).isoformat(), "user_status": "confirmed"},
             {"sk": "COMP#skip", "name": "Maybe Meet", "start_date": (date.today() + timedelta(days=14)).isoformat(), "user_status": "available"},
+            {"sk": "COMP#optional", "name": "WRPF Nationals 2026", "start_date": (date.today() + timedelta(days=4)).isoformat(), "user_status": "optional"},
             {"sk": "COMP#next", "name": "Royal City Rumble 5", "start_date": future, "user_status": "confirmed"},
         ]
         captured, store, report = self._evaluate(program, entries)

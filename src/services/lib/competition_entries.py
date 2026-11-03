@@ -81,7 +81,7 @@ def next_competition(competitions: list[dict], today: date | None = None) -> dic
     today = today or date.today()
     upcoming = []
     for entry in competitions:
-        if (entry.get('status') or entry.get('user_status')) not in ('confirmed', 'optional'):
+        if (entry.get('status') or entry.get('user_status')) != 'confirmed':
             continue
         try:
             when = date.fromisoformat(str(entry.get('date') or entry.get('start_date') or '')[:10])

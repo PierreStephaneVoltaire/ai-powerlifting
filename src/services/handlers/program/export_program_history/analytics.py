@@ -1792,7 +1792,7 @@ def _next_competition(program: dict, reference_date: date | None = None) -> dict
     ref = reference_date or date.today()
     competitions = sorted(program.get("competitions", []), key=lambda c: c.get("date", ""))
     for comp in competitions:
-        if comp.get("status") not in ("confirmed", "optional"):
+        if comp.get("status") != "confirmed":
             continue
         comp_date = _parse_date(comp.get("date", ""))
         if comp_date is not None and comp_date > ref:
