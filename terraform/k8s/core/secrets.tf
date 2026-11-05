@@ -27,6 +27,7 @@ resource "kubernetes_secret_v1" "app" {
     DISCORD_CLIENT_SECRET     = var.discord_client_secret
     AUTHENTIK_CLIENT_SECRET   = var.authentik_client_secret
     MEDIA_SIGNING_PRIVATE_KEY = data.aws_ssm_parameter.media_signing_private_key.value
+    DISCORD_BOT_TOKEN         = var.discord_bot_token
   }
 }
 

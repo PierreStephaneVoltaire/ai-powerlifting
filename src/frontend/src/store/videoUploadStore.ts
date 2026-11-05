@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { SessionVideo } from '@powerlifting/types'
-import { uploadVideo, type VideoUploadOptions } from '@/utils/s3'
+import type { VideoUploadOptions } from '@/utils/s3'
 import { useUiStore } from '@/store/uiStore'
 
 export interface BackgroundUpload {
@@ -69,6 +69,7 @@ export const useVideoUploadStore = create<VideoUploadState>()((set, get) => {
     start: async (version, options) => {
       const id = options.idempotencyKey || globalThis.crypto.randomUUID()
       try {
+        const { uploadVideo } = await import('@/utils/s3')
         const { video } = await track({ id, file: options.file, sessionDate: options.sessionDate, sessionId: options.sessionId }, (onProgress) =>
           uploadVideo(version, { ...options, idempotencyKey: id, onProgress }))
         patch(id, { video })

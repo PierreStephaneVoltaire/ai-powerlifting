@@ -76,3 +76,12 @@ def test_missing_dataset_is_reported_as_not_found(monkeypatch, fresh_dataset):
     monkeypatch.delenv("POWERLIFTING_S3_BUCKET", raising=False)
     with pytest.raises(FileNotFoundError):
         opl_dataset.load_data(block=True)
+
+
+def test_ranking_filters_match_country_and_region_ignoring_case(monkeypatch, fresh_dataset):
+    monkeypatch.delenv("POWERLIFTING_S3_BUCKET", raising=False)
+    (fresh_dataset / "openpowerlifting-current.csv").write_text(CSV)
+    stats = importlib.import_module("services.handlers.analysis.analyze_powerlifting_stats.core")
+    frame = opl_dataset.load_data(block=True)
+    assert len(stats.filter_dataset(frame, country="CANADA")) == 2
+    assert len(stats.filter_dataset(frame, country="canada", region="on")) == 1

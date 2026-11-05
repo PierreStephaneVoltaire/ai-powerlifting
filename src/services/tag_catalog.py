@@ -10,13 +10,24 @@ from .access_store import database, pages
 from .dispatch import OperationError
 
 
+MAX_TAG_LENGTH = 50
+
+
 def normalize_tag(value):
     if not isinstance(value, str):
         raise ValueError('Tag must be text')
-    tag = re.sub(r'\s+', '-', unicodedata.normalize('NFKC', value).strip().lower())
-    if not re.fullmatch(r'[a-z0-9_-]{1,30}', tag):
-        raise ValueError('Tags must be 1–30 letters, numbers, hyphens or underscores')
+    tag = re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', value)).strip()
+    if not tag or len(tag) > MAX_TAG_LENGTH:
+        raise ValueError(f'Tags must be 1–{MAX_TAG_LENGTH} characters')
     return tag
+
+
+def tag_key(tag):
+    return tag.casefold()
+
+
+def canonical_tag(name, vocabulary):
+    return next((existing for existing in vocabulary if tag_key(existing) == tag_key(name)), name)
 
 
 def table():
@@ -34,7 +45,7 @@ def selected_tags(raw, vocabulary=None):
             name = normalize_tag(item.get('tag') if isinstance(item, dict) else item)
         except ValueError:
             continue
-        if name not in names:
+        if tag_key(name) not in {tag_key(existing) for existing in names}:
             names.append(name)
     vocabulary = catalog() if names and vocabulary is None else (vocabulary or {})
     return [{'tag': name, 'approved': vocabulary.get(name, {}).get('status') == 'approved', 'status': vocabulary.get(name, {}).get('status', 'pending'), 'proposed_by': ''} for name in names[:20]]
@@ -56,7 +67,7 @@ def handler(args, _context):
 def decide(args):
     if 'operator:write' not in args.get('_access', {}).get('permissions', []):
         raise OperationError(403, 'forbidden', 'Only the operator may approve vocabulary')
-    name = normalize_tag(args['tag'])
+    name = canonical_tag(normalize_tag(args['tag']), catalog())
     decision = args.get('decision', 'approved')
     if decision not in ('approved', 'rejected'):
         raise ValueError('Decision must be approved or rejected')
@@ -95,8 +106,9 @@ def select(args, remove=False):
     if args.get('target_nickname') and args['target_nickname'] != current.get('nickname'):
         raise OperationError(403, 'forbidden', 'Tags can only be selected for your own profile')
     vocabulary = catalog()
+    name = canonical_tag(name, vocabulary)
     selected = selected_tags(current.get('tags'), vocabulary)
-    if not remove and name not in {tag['tag'] for tag in selected} and len(selected) >= 20:
+    if not remove and tag_key(name) not in {tag_key(tag['tag']) for tag in selected} and len(selected) >= 20:
         raise ValueError('A profile can have at most twenty tags')
     if not remove and name not in vocabulary:
         pending = {'pk': 'Catalog', 'sk': 'Tag#' + name, 'tag': name, 'status': 'pending', 'revision': 1, 'requested_by': person, 'created_at': datetime.now(timezone.utc).isoformat()}
@@ -105,7 +117,7 @@ def select(args, remove=False):
         except ClientError as exc:
             if exc.response['Error']['Code'] != 'ConditionalCheckFailedException':
                 raise
-    tags = [tag for tag in selected if tag['tag'] != name]
+    tags = [tag for tag in selected if tag_key(tag['tag']) != tag_key(name)]
     if not remove:
         tags.append({'tag': name})
     values = {':tags': tags, ':now': datetime.now(timezone.utc).isoformat()}

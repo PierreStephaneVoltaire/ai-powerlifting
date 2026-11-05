@@ -19,6 +19,10 @@ class Table:
     def scan(self, **kwargs):
         return {"Items": list(self.items.values())}
 
+    def update_item(self, Key, UpdateExpression, ExpressionAttributeValues, ConditionExpression, **_):
+        assert Key["pk"] in self.items
+        self.items[Key["pk"]] = {**self.items[Key["pk"]], "avatar_url": ExpressionAttributeValues[":avatar"], "avatar_source": ExpressionAttributeValues[":source"]}
+
     def put_item(self, Item, ConditionExpression):
         assert ConditionExpression == 'attribute_not_exists(pk)'
         if Item['pk'] in self.items:
@@ -149,3 +153,43 @@ def test_identity_transactions_encode_scalar_keys_with_real_boto3(monkeypatch, l
     client.meta.events.register('before-call.dynamodb.TransactWriteItems', capture)
     with pytest.raises(Captured):
         resolve(monkeypatch, table, issuer='issuer-a', provider='authentik', sub='subject', discord_subjects=['42'])
+
+
+DISCORD = "https://cdn.discordapp.com/avatars/42/new.png"
+
+
+def _linked(person):
+    module = __import__("services.handlers.user.identity_resolve.core", fromlist=["_identity_key"])
+    pointer = {"pk": module._identity_key("https://discord.com", "42"), "mapped_pk": person["pk"]}
+    return Table([person, pointer])
+
+
+def test_discord_login_refreshes_the_profile_picture(monkeypatch):
+    table = _linked({"pk": "person-a", "avatar_url": "https://cdn.discordapp.com/avatars/42/old.png", "avatar_source": "discord"})
+    result = resolve(monkeypatch, table, issuer="https://discord.com", provider="discord", sub="42", avatar_url=DISCORD)
+    assert result["settings"]["avatar_url"] == DISCORD
+    assert table.items["person-a"]["avatar_url"] == DISCORD
+
+
+def test_uploaded_picture_is_kept_on_login(monkeypatch):
+    for person in ({"pk": "person-a", "avatar_url": "/api/videos/media/profiles/a/avatars/x.jpg"},
+                   {"pk": "person-a", "avatar_url": "profiles/a/avatars/x.jpg", "avatar_source": "upload"}):
+        table = _linked(dict(person))
+        resolve(monkeypatch, table, issuer="https://discord.com", provider="discord", sub="42", avatar_url=DISCORD)
+        assert table.items["person-a"]["avatar_url"] == person["avatar_url"]
+
+
+def test_authentik_login_uses_the_linked_discord_avatar(monkeypatch):
+    module = __import__("services.handlers.user.identity_resolve.core", fromlist=["_discord_user_avatar"])
+    looked_up = []
+    monkeypatch.setattr(module, "_discord_user_avatar", lambda user_id: looked_up.append(user_id) or DISCORD)
+    table = Table([{"pk": "operator", "username": "operator", "discord_id": "42", "avatar_url": None}])
+    result = resolve(monkeypatch, table, issuer="https://auth.example/", provider="authentik", sub="auth-sub", discord_subjects=["42"], avatar_url="https://auth.example/gravatar.png")
+    assert looked_up == ["42"]
+    assert result["settings"]["avatar_url"] == DISCORD
+
+
+def test_sign_up_starts_with_the_discord_avatar(monkeypatch):
+    result = resolve(monkeypatch, Table(), issuer="https://discord.com", provider="discord", sub="99", avatar_url="https://cdn.discordapp.com/avatars/99/a.png")
+    assert result["created"] is True
+    assert result["settings"]["avatar_url"] == "https://cdn.discordapp.com/avatars/99/a.png"

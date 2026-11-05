@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { RankingLocationFields } from '@/components/settings/RankingLocationFields'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Alert,
@@ -285,7 +286,7 @@ export default function OnboardingPage() {
     try {
       const next = await submitAthleteBasics({
         sex,
-        country: country.trim().toUpperCase(),
+        country: country.trim(),
         region: region.trim() || null,
         bodyweight_kg: bw,
         training_maxes: { squat_kg: sq, bench_kg: be, deadlift_kg: dl },
@@ -703,20 +704,11 @@ function AthleteBasicsStep(props: {
         </Group>
       </Radio.Group>
       <Group grow align="flex-end">
-        <TextInput
-          label="Country (ISO-2)"
-          description="e.g. US, GB, DE"
-          placeholder="US"
-          value={country}
-          onChange={(e) => setCountry(e.currentTarget.value.toUpperCase().slice(0, 8))}
+        <RankingLocationFields
+          country={country || null}
+          region={region || null}
+          onChange={(location) => { setCountry(location.country ?? ''); setRegion(location.region ?? '') }}
           required
-          disabled={disabled}
-        />
-        <TextInput
-          label="Region / state (optional)"
-          placeholder="CA, Ontario, ..."
-          value={region}
-          onChange={(e) => setRegion(e.currentTarget.value.slice(0, 64))}
           disabled={disabled}
         />
       </Group>

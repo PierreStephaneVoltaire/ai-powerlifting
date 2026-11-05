@@ -279,7 +279,7 @@
           "items": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 30
+            "maxLength": 50
           }
         },
         "federations": {
@@ -1179,8 +1179,7 @@
         "tag": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 30,
-          "pattern": "^[a-zA-Z0-9 _-]+$"
+          "maxLength": 50
         },
         "pk": {
           "type": "string",
@@ -1240,8 +1239,7 @@
         "tag": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 30,
-          "pattern": "^[a-zA-Z0-9 _-]+$"
+          "maxLength": 50
         },
         "pk": {
           "type": "string",
@@ -1299,8 +1297,7 @@
         "tag": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 30,
-          "pattern": "^[a-zA-Z0-9 _-]+$"
+          "maxLength": 50
         },
         "pk": {
           "type": "string",
@@ -1377,8 +1374,7 @@
         "tag": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 30,
-          "pattern": "^[a-zA-Z0-9 _-]+$"
+          "maxLength": 50
         },
         "pk": {
           "type": "string",

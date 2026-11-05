@@ -17,6 +17,7 @@ discord_client_secret      = ""
 authentik_client_id        = ""
 authentik_client_secret    = ""
 jwt_secret                 = ""
+discord_bot_token          = ""
 internal_api_token         = ""
 
 repositories = {

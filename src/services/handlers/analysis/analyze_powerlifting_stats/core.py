@@ -55,9 +55,9 @@ def filter_dataset(
     if federation:
         mask &= (df["Federation"].astype(str).str.strip() == federation)
     if country:
-        mask &= (df["MeetCountry"].astype(str).str.strip() == country)
+        mask &= (df["MeetCountry"].astype(str).str.strip().str.casefold() == str(country).strip().casefold())
     if region:
-        mask &= (df["State"].astype(str).str.strip() == region)
+        mask &= (df["State"].astype(str).str.strip().str.casefold() == str(region).strip().casefold())
     if equipment:
         mask &= (df["Equipment"].astype(str).str.strip() == equipment)
     if sex:

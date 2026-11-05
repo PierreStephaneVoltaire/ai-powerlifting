@@ -89,3 +89,8 @@ variable "github_app_private_key" {
   type      = string
   sensitive = true
 }
+
+variable "discord_bot_token" {
+  type      = string
+  sensitive = true
+}

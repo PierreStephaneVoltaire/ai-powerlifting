@@ -21,7 +21,7 @@ import { LogOut } from 'lucide-react'
 import LoginOptions from '@/components/auth/LoginOptions'
 import { AGE_CATEGORY_OPTIONS, type Sex, type WeekStartDay } from '@powerlifting/types'
 import { getSettings, updateAgeClass, updateRankingLocation } from '@/api/settings'
-import { fetchStatCategories } from '@/api/client'
+import { RankingLocationFields } from '@/components/settings/RankingLocationFields'
 
 const themeOptions: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -59,7 +59,6 @@ export default function SettingsDrawer() {
   // Ranking location state
   const [rankingCountry, setRankingCountry] = useState<string | null>(null)
   const [rankingRegion, setRankingRegion] = useState<string | null>(null)
-  const [rankingCategories, setRankingCategories] = useState<{ countries: string[]; country_regions: Record<string, string[]> } | null>(null)
   const [rankingSaving, setRankingSaving] = useState(false)
 
   // Age class state (pulled from /api/settings to get full record)
@@ -79,41 +78,6 @@ export default function SettingsDrawer() {
       setAgeClassState(s.age_class || 'open')
     }).catch(() => {})
   }, [isOpen, user])
-
-  // Load categories for dropdowns (reuse existing categories endpoint).
-  // Handles 503 (dataset loading) with a retry so the drawer doesn't silently
-  // fail to populate the country/region selectors.
-  useEffect(() => {
-    if (!isOpen || rankingCategories) return
-    let cancelled = false
-    const load = () => {
-      if (cancelled) return
-      fetchStatCategories().then((data: any) => {
-        if (cancelled) return
-        if (!data) return
-        if (data._status === 503 || data.error === 'DATASET_NOT_FOUND') {
-          setTimeout(load, 30000)
-          return
-        }
-        if (!data.error) {
-          setRankingCategories({ countries: data.countries || [], country_regions: data.country_regions || {} })
-        }
-      }).catch(() => {
-        if (!cancelled) setTimeout(load, 30000)
-      })
-    }
-    load()
-    return () => { cancelled = true }
-  }, [isOpen, rankingCategories])
-
-  const rankingRegionOptions: string[] = rankingCountry
-    ? (rankingCategories?.country_regions?.[rankingCountry] ?? [])
-    : []
-
-  const handleRankingCountryChange = useCallback((value: string | null) => {
-    setRankingCountry(value)
-    setRankingRegion(null)
-  }, [])
 
   const saveRankingLocation = useCallback(async () => {
     if (!user) return
@@ -311,27 +275,11 @@ export default function SettingsDrawer() {
               Options come from the OpenPowerlifting dataset.
             </Text>
             <Stack gap="xs">
-              <Select
-                label="Country"
-                placeholder="Select country"
-                data={rankingCategories?.countries ?? []}
-                value={rankingCountry}
-                onChange={handleRankingCountryChange}
-                searchable
-                clearable
-                disabled={!rankingCategories}
-                data-testid="settings-ranking-country"
-              />
-              <Select
-                label="Region / Province / State"
-                placeholder={rankingCountry ? 'Select region' : 'Select country first'}
-                data={rankingRegionOptions}
-                value={rankingRegion}
-                onChange={setRankingRegion}
-                searchable
-                clearable
-                disabled={!rankingCountry || rankingRegionOptions.length === 0}
-                data-testid="settings-ranking-region"
+              <RankingLocationFields
+                country={rankingCountry}
+                region={rankingRegion}
+                onChange={({ country, region }) => { setRankingCountry(country); setRankingRegion(region) }}
+                enabled={isOpen}
               />
               <Button
                 size="xs"

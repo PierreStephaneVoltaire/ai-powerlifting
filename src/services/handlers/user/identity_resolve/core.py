@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+import logging
 import os
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -14,6 +17,8 @@ from botocore.exceptions import ClientError
 from ..settings_get.core import _normalize_settings
 
 _table = None
+logger = logging.getLogger(__name__)
+DISCORD_CDN = "https://cdn.discordapp.com/avatars/"
 
 
 def _get_table():
@@ -71,6 +76,49 @@ def _legacy_person(table, provider: str, issuer: str, sub: str, discord_subjects
     return matches[0] if matches else None
 
 
+def _discord_user_avatar(user_id: str) -> str | None:
+    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    if not token or not user_id:
+        return None
+    request = urllib.request.Request(f"https://discord.com/api/v10/users/{user_id}", headers={"Authorization": f"Bot {token}", "User-Agent": "powerlifting-profile"})
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            avatar = json.load(response).get("avatar")
+    except Exception as exc:
+        logger.warning("[identity_resolve] Discord avatar lookup failed: %s", exc)
+        return None
+    if not avatar:
+        return None
+    extension = "gif" if str(avatar).startswith("a_") else "png"
+    return f"{DISCORD_CDN}{user_id}/{avatar}.{extension}?size=256"
+
+
+def _discord_avatar(args) -> str | None:
+    given = args.get("avatar_url")
+    if isinstance(given, str) and given.startswith(DISCORD_CDN):
+        return given
+    subjects = [str(subject) for subject in args.get("discord_subjects") or [] if subject]
+    if args.get("provider") == "discord" and args.get("sub"):
+        subjects.insert(0, str(args["sub"]))
+    return _discord_user_avatar(subjects[0]) if subjects else None
+
+
+def _uploaded(person) -> bool:
+    return person.get("avatar_source") == "upload" or str(person.get("avatar_url") or "").startswith("/api/")
+
+
+def _sync_avatar(table, person, avatar: str | None):
+    if not avatar or _uploaded(person) or person.get("avatar_url") == avatar:
+        return person
+    table.update_item(
+        Key={"pk": person["pk"]},
+        UpdateExpression="SET avatar_url = :avatar, avatar_source = :source",
+        ExpressionAttributeValues={":avatar": avatar, ":source": "discord"},
+        ConditionExpression="attribute_exists(pk)",
+    )
+    return {**person, "avatar_url": avatar, "avatar_source": "discord"}
+
+
 def _settings(item):
     result = _normalize_settings(_plain(item))
     for field in ("identity_issuer", "identity_provider", "identity_sub"):
@@ -85,11 +133,12 @@ def _resolve_sync(args):
     sub = args["sub"].strip()
     table = _get_table()
     key = _identity_key(issuer, sub)
+    avatar = _discord_avatar(args)
     pointer = table.get_item(Key={"pk": key}, ConsistentRead=True).get("Item")
     if pointer:
         person = table.get_item(Key={"pk": pointer["mapped_pk"]}, ConsistentRead=True).get("Item")
         if person:
-            return {"settings": _settings(person), "created": False}
+            return {"settings": _settings(_sync_avatar(table, person, avatar)), "created": False}
 
     person = _legacy_person(table, provider, issuer, sub, args.get("discord_subjects", []))
     if person:
@@ -113,7 +162,7 @@ def _resolve_sync(args):
             if not winner or winner["mapped_pk"] != person["pk"]:
                 raise ValueError("Provider subject linkage changed; retry authentication") from exc
         person = table.get_item(Key={"pk": person["pk"]}, ConsistentRead=True)['Item']
-        return {"settings": _settings(person), "created": False}
+        return {"settings": _settings(_sync_avatar(table, person, avatar)), "created": False}
 
     now = datetime.now(timezone.utc).isoformat()
     display_name = str(args.get("display_name") or "").strip()[:80]
@@ -129,7 +178,8 @@ def _resolve_sync(args):
         "identity_sub": sub,
         "discord_id": sub if provider == "discord" else "",
         "discord_username": display_name if provider == "discord" else "",
-        "avatar_url": args.get("avatar_url") if isinstance(args.get("avatar_url"), str) else None,
+        "avatar_url": avatar or (args.get("avatar_url") if isinstance(args.get("avatar_url"), str) else None),
+        "avatar_source": "discord" if avatar else None,
         "nickname": username,
         "profile_visibility": "private",
         "display_name": display_name or username,

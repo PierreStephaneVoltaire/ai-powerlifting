@@ -14,21 +14,23 @@ export default function LoginOptions({ compact = false }: LoginOptionsProps) {
         <Button
           size="md"
           onClick={signInDiscord}
-          style={{ flex: 1, minHeight: 44 }}
-          aria-label="Sign in with Discord"
+          style={{ flex: 1, minHeight: 44, height: 'auto' }}
+          styles={{ label: { whiteSpace: 'normal', textAlign: 'center' } }}
+          aria-label="Log in with Discord"
           data-testid="signin-discord"
         >
-          Discord
+          Log in with Discord
         </Button>
         <Button
           size="md"
           variant="default"
           onClick={signInAuthentik}
-          style={{ flex: 1, minHeight: 44 }}
-          aria-label="Sign in with Authentik"
+          style={{ flex: 1, minHeight: 44, height: 'auto' }}
+          styles={{ label: { whiteSpace: 'normal', textAlign: 'center' } }}
+          aria-label="Log in"
           data-testid="signin-authentik"
         >
-          Authentik
+          Log in
         </Button>
       </Group>
     )
@@ -42,7 +44,7 @@ export default function LoginOptions({ compact = false }: LoginOptionsProps) {
         style={{ width: '100%', minHeight: 44 }}
         data-testid="signin-discord"
       >
-        Sign in with Discord
+        Log in with Discord
       </Button>
 
       <Divider label="or" labelPosition="center" />
@@ -54,7 +56,7 @@ export default function LoginOptions({ compact = false }: LoginOptionsProps) {
         style={{ width: '100%', minHeight: 44 }}
         data-testid="signin-authentik"
       >
-        Sign in with Authentik
+        Log in
       </Button>
     </Stack>
   )

@@ -123,13 +123,13 @@ function normalizeAgeClass(value: unknown): AgeCategory {
     : 'open'
 }
 
-const TAG_RE = /^[a-z0-9_-]{1,30}$/
+const MAX_TAG_LENGTH = 50
 const MAX_TAGS = 20
 
 function normalizeTag(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
-  const tag = raw.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30)
-  return TAG_RE.test(tag) ? tag : null
+  const tag = raw.normalize('NFKC').replace(/\s+/g, ' ').trim()
+  return tag && tag.length <= MAX_TAG_LENGTH ? tag : null
 }
 
 function normalizeTags(raw: unknown): ProfileTag[] {
@@ -151,8 +151,8 @@ function normalizeTags(raw: unknown): ProfileTag[] {
     } else {
       continue
     }
-    if (!tag || seen.has(tag)) continue
-    seen.add(tag)
+    if (!tag || seen.has(tag.toLocaleLowerCase())) continue
+    seen.add(tag.toLocaleLowerCase())
     result.push({ tag, approved, proposed_by: proposedBy })
   }
   return result.slice(0, MAX_TAGS)

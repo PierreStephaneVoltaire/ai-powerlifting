@@ -209,9 +209,9 @@ async def settings_update_avatar(args: dict) -> dict:
         now = datetime.now(timezone.utc).isoformat()
         table.update_item(
             Key={"pk": existing["pk"]},
-            UpdateExpression="SET avatar_url = :avatar, updated_at = :now",
+            UpdateExpression="SET avatar_url = :avatar, avatar_source = :source, updated_at = :now",
             ConditionExpression="attribute_exists(pk)",
-            ExpressionAttributeValues={":avatar": s3_key, ":now": now},
+            ExpressionAttributeValues={":avatar": s3_key, ":source": "upload", ":now": now},
         )
         previous_key = _profile_avatar_key_from_url(existing.get("avatar_url"))
         if previous_key and previous_key != s3_key:

@@ -30,13 +30,13 @@ def _assert(cond, msg):
 def test_athlete_basics_validation_min():
     out = athlete_basics._validate_athlete_basics({
         "sex": "male",
-        "country": "us",
+        "country": " United Kingdom ",
         "region": " ca ",
         "bodyweight_kg": 82.5,
         "training_maxes": {"squat_kg": 180, "bench_kg": 120, "deadlift_kg": 220},
     })
     _assert(out["sex"] == "male", "sex normalised")
-    _assert(out["country"] == "US", "country uppercased")
+    _assert(out["country"] == "United Kingdom", "country kept as the dataset name")
     _assert(out["region"] == "ca", "region stripped")
     _assert(out["bodyweight_kg"] == 82.5, "bodyweight kept")
     _assert(out["training_maxes"]["squat_kg"] == 180, "squat kept")

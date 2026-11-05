@@ -42,18 +42,18 @@ def test_global_approval_is_operator_only_and_legacy_flags_never_publish(monkeyp
     own = {'pk': 'person-a', '_person_pk': 'person-a', '_access': {'settings_pk': 'person-a', 'permissions': ['settings:write']}}
     assert tags.selected_tags(users.items[('person-a', None)]['tags'])[0]['approved'] is False
     result = tags.select({**own, 'tag': '  Long   Arms  ', 'approved': True})
-    assert next(tag for tag in result['tags'] if tag['tag'] == 'long-arms')['approved'] is False
-    tags.select({**own, 'tag': 'long-arms'})
+    assert next(tag for tag in result['tags'] if tag['tag'] == 'Long Arms')['approved'] is False
+    tags.select({**own, 'tag': 'long arms'})
     assert len(catalog.items) == 1
     assert tags.handler({}, None)['tags'] == []
     assert tags.handler(own, None)['tags'][0]['status'] == 'pending'
-    decision = {'tag': 'long-arms', 'expected_revision': 1, 'idempotency_key': 'approve-1'}
+    decision = {'tag': 'long arms', 'expected_revision': 1, 'idempotency_key': 'approve-1'}
     with pytest.raises(OperationError, match='operator'):
         tags.decide({**own, **decision})
     operator = {**own, '_person_pk': 'operator-person', '_access': {'permissions': ['operator:write']}}
     approved = tags.decide({**operator, **decision})
     assert tags.decide({**operator, **decision}) == approved
-    assert tags.handler({}, None)['tags'] == [{'tag': 'long-arms', 'status': 'approved', 'revision': 2}]
+    assert tags.handler({}, None)['tags'] == [{'tag': 'Long Arms', 'status': 'approved', 'revision': 2}]
     assert tags.selected_tags(result['tags'])[1]['approved'] is True
     with pytest.raises(OperationError, match='changed'):
         tags.decide({**operator, **decision, 'idempotency_key': 'race', 'decision': 'rejected'})
@@ -64,8 +64,22 @@ def test_global_approval_is_operator_only_and_legacy_flags_never_publish(monkeyp
         tags.select({**own, 'tag': 'another', 'target_nickname': 'somebody-else'})
 
 
-def test_tag_limits_and_normalization():
-    assert tags.normalize_tag(' ＳＱＵＡＴ   Specialist ') == 'squat-specialist'
-    with pytest.raises(ValueError):
-        tags.normalize_tag('x' * 31)
-    assert len(tags.selected_tags(['same', ' Same ', *[f'tag-{index}' for index in range(30)]], {})) == 20
+def test_tags_allow_any_text_up_to_fifty_characters():
+    assert tags.normalize_tag("  doesn't   wash knee sleeves ") == "doesn't wash knee sleeves"
+    assert tags.normalize_tag(' ＳＱＵＡＴ   Specialist ') == 'SQUAT Specialist'
+    assert tags.normalize_tag('x' * 50) == 'x' * 50
+    for bad in ('x' * 51, '   ', 42):
+        with pytest.raises(ValueError):
+            tags.normalize_tag(bad)
+    assert len(tags.selected_tags(['same', ' Same ', *[f'tag {index}' for index in range(30)]], {})) == 20
+    assert [tag['tag'] for tag in tags.selected_tags(['Knee sleeves', 'knee sleeves'], {})] == ['Knee sleeves']
+    assert tags.canonical_tag('KNEE SLEEVES', {'knee sleeves': {}}) == 'knee sleeves'
+
+
+def test_profile_and_settings_readers_keep_sentence_tags():
+    from services.handlers.user.profile_get.core import _normalize_tag as profile_tag
+    from services.handlers.user.settings_get.core import _normalize_tag as settings_tag
+    from services.handlers.user.settings_update_profile.core import _normalize_tag as update_tag
+    for normalize in (profile_tag, settings_tag, update_tag):
+        assert normalize("doesn't wash knee sleeves") == "doesn't wash knee sleeves"
+        assert normalize('x' * 51) is None

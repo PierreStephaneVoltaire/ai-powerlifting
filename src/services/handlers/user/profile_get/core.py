@@ -40,8 +40,6 @@ AGE_CATEGORY_VALUES = (
     "master4",
 )
 MAX_TAGS = 20
-MAX_TAG_LENGTH = 30
-TAG_RE = re.compile(r"^[a-z0-9_-]{1,30}$")
 
 
 def _get_user_table():
@@ -90,8 +88,11 @@ def _sanitize_decimals(obj):
 
 
 def _normalize_tag(raw) -> Optional[str]:
-    tag = str(raw or "").strip().lower().replace(" ", "-")[:MAX_TAG_LENGTH]
-    return tag if TAG_RE.match(tag) else None
+    from services.tag_catalog import normalize_tag
+    try:
+        return normalize_tag(str(raw or ""))
+    except ValueError:
+        return None
 
 
 def _normalize_tags(raw_tags) -> list[dict]:
@@ -110,9 +111,9 @@ def _normalize_tags(raw_tags) -> list[dict]:
             proposed_by = ""
         else:
             continue
-        if not tag or tag in seen:
+        if not tag or tag.casefold() in seen:
             continue
-        seen.add(tag)
+        seen.add(tag.casefold())
         result.append({"tag": tag, "approved": approved, "proposed_by": proposed_by})
     return result[:MAX_TAGS]
 

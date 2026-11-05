@@ -137,12 +137,12 @@ export async function updateAgeClassHandler(req: Request, res: Response): Promis
 }
 
 
-const TAG_RE = /^[a-z0-9_-]{1,30}$/
+const MAX_TAG_LENGTH = 50
 
 function normalizeTagInput(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
-  const tag = raw.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, '-')
-  return TAG_RE.test(tag) ? tag : null
+  const tag = raw.normalize('NFKC').replace(/\s+/g, ' ').trim()
+  return tag && tag.length <= MAX_TAG_LENGTH ? tag : null
 }
 
 export async function addTagHandler(req: Request, res: Response): Promise<void> {

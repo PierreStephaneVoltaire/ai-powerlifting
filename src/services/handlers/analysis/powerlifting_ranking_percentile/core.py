@@ -156,10 +156,10 @@ def compute_ranking_percentiles(
     national_df: Optional[pd.DataFrame] = None
     regional_df: Optional[pd.DataFrame] = None
     if country and "MeetCountry" in global_df.columns:
-        nat_mask = global_df["MeetCountry"].astype(str).str.strip() == country
+        nat_mask = global_df["MeetCountry"].astype(str).str.strip().str.casefold() == str(country).strip().casefold()
         national_df = global_df[nat_mask].copy()
         if region and "State" in national_df.columns:
-            reg_mask = national_df["State"].astype(str).str.strip() == region
+            reg_mask = national_df["State"].astype(str).str.strip().str.casefold() == str(region).strip().casefold()
             regional_df = national_df[reg_mask].copy()
 
     def _card(scope_df: Optional[pd.DataFrame]) -> Dict[str, Any]:

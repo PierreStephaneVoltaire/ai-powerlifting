@@ -9,7 +9,7 @@ const DISCORD_ERROR_MESSAGES: Record<string, string> = {
 }
 
 const AUTHENTIK_ERROR_MESSAGES: Record<string, string> = {
-  authentik_failed: 'Authentik authentication failed. Please try again.',
+  authentik_failed: 'Login failed. Please try again.',
   no_code: 'Authorization code was not received.',
   invalid_state: 'Security verification failed. Please try again.',
 }
