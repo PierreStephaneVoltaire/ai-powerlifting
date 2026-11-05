@@ -1,4 +1,4 @@
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 
 export type GrantType = 'coach' | 'handler'
 export type GrantScope = 'read' | 'write'
@@ -76,8 +76,7 @@ export interface CheckGrantResult {
 }
 
 export async function createGrant(input: CreateGrantInput): Promise<Grant> {
-  const result = (await invokeLambda('pod_user', {
-    function: 'grant_create',
+  const result = (await callOperation('grant_create', {
     athlete_mapped_pk: input.athlete_mapped_pk,
     grantee_mapped_pk: input.grantee_mapped_pk,
     grantee_nickname: input.grantee_nickname ?? '',
@@ -97,8 +96,7 @@ export async function createGrant(input: CreateGrantInput): Promise<Grant> {
 }
 
 export async function revokeGrant(input: RevokeGrantInput): Promise<Grant | { error: string }> {
-  return (await invokeLambda('pod_user', {
-    function: 'grant_revoke',
+  return (await callOperation('grant_revoke', {
     athlete_mapped_pk: input.athlete_mapped_pk,
     sk: input.sk,
     revoked_by: input.revoked_by ?? input.athlete_mapped_pk,
@@ -106,8 +104,7 @@ export async function revokeGrant(input: RevokeGrantInput): Promise<Grant | { er
 }
 
 export async function listGrants(input: ListGrantsInput): Promise<GrantListResult> {
-  return (await invokeLambda('pod_user', {
-    function: 'grant_list',
+  return (await callOperation('grant_list', {
     athlete_mapped_pk: input.athlete_mapped_pk ?? '',
     grantee_mapped_pk: input.grantee_mapped_pk ?? '',
     include_inactive: Boolean(input.include_inactive),
@@ -115,8 +112,7 @@ export async function listGrants(input: ListGrantsInput): Promise<GrantListResul
 }
 
 export async function checkGrant(input: CheckGrantInput): Promise<CheckGrantResult> {
-  return (await invokeLambda('pod_user', {
-    function: 'grant_check',
+  return (await callOperation('grant_check', {
     athlete_mapped_pk: input.athlete_mapped_pk,
     actor_mapped_pk: input.actor_mapped_pk,
     grant_type: input.grant_type ?? '',

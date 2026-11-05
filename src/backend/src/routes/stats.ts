@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 import { cacheGet } from '../utils/cacheMiddleware'
 
@@ -7,7 +7,7 @@ export const statsRouter = Router()
 
 statsRouter.get('/categories', async (req, res, next) => {
   try {
-    const data = await invokeLambda('pod_analysis', { function: 'powerlifting_filter_categories', })
+    const data = await callOperation('powerlifting_filter_categories', { })
     // Return 503 while dataset is still loading
     if (typeof data === 'string' && data.includes('Dataset not ready')) {
       return res.status(503).set('Retry-After', '30').json({ error: 'DATASET_NOT_FOUND', message: data })
@@ -28,8 +28,7 @@ statsRouter.post('/analyze', async (req, res, next) => {
       sex_code, federation, country, region,
       equipment, sex, age_class, year, event_type, min_dots,
     } = req.body
-    const data = await invokeLambda('pod_analysis', { function: 'analyze_powerlifting_stats', 
-      squat_kg: squat,
+    const data = await callOperation('analyze_powerlifting_stats', { squat_kg: squat,
       bench_kg: bench,
       deadlift_kg: deadlift,
       bodyweight_kg: bodyweight,
@@ -61,8 +60,7 @@ statsRouter.get('/ranking_percentile', cacheGet(['stats:percentile']), async (re
     const toNum = (v: unknown) => v !== undefined && v !== '' ? Number(v) : undefined
     const toStr = (v: unknown) => v !== undefined && v !== '' ? String(v) : undefined
 
-    const data = await invokeLambda('pod_analysis', { function: 'powerlifting_ranking_percentile', 
-      squat_kg:     toNum(req.query.squat_kg),
+    const data = await callOperation('powerlifting_ranking_percentile', { squat_kg:     toNum(req.query.squat_kg),
       bench_kg:     toNum(req.query.bench_kg),
       deadlift_kg:  toNum(req.query.deadlift_kg),
       bodyweight_kg: toNum(req.query.bodyweight_kg),

@@ -6,7 +6,6 @@ from typing import Any
 
 LIFTS = ("squat", "bench", "deadlift")
 NOTES_LIMIT = 1000
-LEGACY_TEXT = (("style_notes", "Style"), ("sticking_points", "Sticking points"), ("primary_muscle", "Primary muscle"))
 DROPPED = ("style_notes", "sticking_points", "primary_muscle", "failure_nodes")
 
 
@@ -42,14 +41,6 @@ def clean_options(lift: str, options: Any) -> dict[str, str]:
     return cleaned
 
 
-def _legacy_notes(profile: dict) -> str:
-    lines = [f"{label}: {str(profile.get(key)).strip()}" for key, label in LEGACY_TEXT if str(profile.get(key) or "").strip()]
-    nodes = [str(node).strip() for node in profile.get("failure_nodes") or [] if str(node).strip()]
-    if nodes:
-        lines.append("Failure points: " + "; ".join(nodes))
-    return "\n".join(lines)
-
-
 def clean(profile: Any) -> dict | None:
     if not isinstance(profile, dict) or profile.get("lift") not in LIFTS:
         return None
@@ -57,11 +48,7 @@ def clean(profile: Any) -> dict | None:
     result = {key: value for key, value in profile.items() if key not in DROPPED}
     result["options"] = clean_options(lift, profile.get("options"))
     result["volume_tolerance"] = _valid(_common()["volume_tolerance"], profile.get("volume_tolerance")) or "moderate"
-    notes = str(profile.get("notes") or "").strip()
-    legacy = _legacy_notes(profile)
-    if legacy and legacy not in notes:
-        notes = f"{notes}\n{legacy}".strip() if notes else legacy
-    result["notes"] = notes[:NOTES_LIMIT]
+    result["notes"] = str(profile.get("notes") or "").strip()[:NOTES_LIMIT]
     return result
 
 

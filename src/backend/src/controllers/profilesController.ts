@@ -1,11 +1,10 @@
 import { Request, Response } from 'express'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 
 export async function searchProfilesHandler(req: Request, res: Response): Promise<void> {
   const query = typeof req.query.q === 'string' ? req.query.q : ''
-  const result = await invokeLambda('pod_user', { function: 'profile_search', 
-    query,
+  const result = await callOperation('profile_search', { query,
     viewer_username: req.actor_mapped_pk || undefined,
     tags: typeof req.query.tag === 'string' ? [req.query.tag] : Array.isArray(req.query.tag) ? req.query.tag : [],
     federations: typeof req.query.federation === 'string' ? [req.query.federation] : Array.isArray(req.query.federation) ? req.query.federation : [],
@@ -17,8 +16,7 @@ export async function searchProfilesHandler(req: Request, res: Response): Promis
 }
 
 export async function getCurrentProfileHandler(req: Request, res: Response): Promise<void> {
-  const profile = await invokeLambda('pod_user', { function: 'profile_get_current', 
-    mapped_pk: req.settings?.mapped_pk || req.actor_mapped_pk,
+  const profile = await callOperation('profile_get_current', { mapped_pk: req.settings?.mapped_pk || req.actor_mapped_pk,
     viewer_username: req.actor_mapped_pk || undefined,
   })
   if (!profile) {
@@ -28,8 +26,7 @@ export async function getCurrentProfileHandler(req: Request, res: Response): Pro
 }
 
 export async function getProfileHandler(req: Request, res: Response): Promise<void> {
-  const profile = await invokeLambda('pod_user', { function: 'profile_get', 
-    nickname: req.params.nickname,
+  const profile = await callOperation('profile_get', { nickname: req.params.nickname,
     viewer_username: req.actor_mapped_pk || undefined,
   })
   if (!profile) {

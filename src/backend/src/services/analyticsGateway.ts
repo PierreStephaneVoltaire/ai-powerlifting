@@ -1,4 +1,4 @@
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 
 export type AnalyticsOperationName =
   | 'analytics.manifest'
@@ -23,5 +23,5 @@ export async function invokeAnalyticsOperation<T>(
   pk: string,
   arguments_: Record<string, unknown> = {},
 ): Promise<T> {
-  return invokeLambda(operation, { ...arguments_, pk }) as Promise<T>
+  return callOperation(operation, { ...arguments_, pk }) as Promise<T>
 }

@@ -13,7 +13,7 @@ import {
   invalidateCache,
   type ProfileVisibility,
 } from '../services/userSettings'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 
 export async function getSettingsHandler(req: Request, res: Response): Promise<void> {
@@ -204,8 +204,7 @@ export async function updateAvatarHandler(req: Request, res: Response): Promise<
   }
 
   const fileB64 = Buffer.from(file.buffer).toString('base64')
-  const settings = await invokeLambda('pod_user', { function: 'settings_update_avatar', 
-    username: req.actor_mapped_pk!,
+  const settings = await callOperation('settings_update_avatar', { username: req.actor_mapped_pk!,
     mapped_pk: req.mapped_pk,
     file_b64: fileB64,
     mimetype: file.mimetype,

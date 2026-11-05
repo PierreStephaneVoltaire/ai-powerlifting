@@ -6,7 +6,7 @@ import {
   updateRole,
   ValidationError,
 } from '../services/userSettings'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 
 function sendError(res: Response, status: number, error: string): void {
   res.status(status).json({ data: null, error })
@@ -31,7 +31,7 @@ export async function getOnboardingStatusHandler(req: Request, res: Response): P
       sendError(res, 401, 'Authentication required')
       return
     }
-    res.json({ data: await invokeLambda('onboarding_status', {}) })
+    res.json({ data: await callOperation('onboarding_status', {}) })
   } catch (err) {
     handleValidation(res, err)
   }

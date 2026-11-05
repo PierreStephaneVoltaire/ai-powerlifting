@@ -54,11 +54,11 @@ def test_clean_validates_options_locks_sumo_hips_and_keeps_old_text_in_notes():
     cleaned = clean({
         "lift": "deadlift", "options": {"stance": "sumo", "hip_height": "high", "grip": "made_up"},
         "style_notes": "Sumo, wedge hard", "sticking_points": "Off the floor", "primary_muscle": "Quads",
-        "failure_nodes": ["hips shoot up"], "volume_tolerance": "extreme", "e1rm_multiplier": 1.02,
+        "failure_nodes": ["hips shoot up"], "volume_tolerance": "extreme", "e1rm_multiplier": 1.02, "notes": "Grip fails past 250",
     })
     assert cleaned["options"] == {"stance": "sumo", "hip_height": "low"}
     assert cleaned["volume_tolerance"] == "moderate"
-    assert cleaned["notes"] == "Style: Sumo, wedge hard\nSticking points: Off the floor\nPrimary muscle: Quads\nFailure points: hips shoot up"
+    assert cleaned["notes"] == "Grip fails past 250"
     assert not {"style_notes", "sticking_points", "primary_muscle", "failure_nodes"} & set(cleaned)
     assert cleaned["e1rm_multiplier"] == 1.02
     assert clean({**cleaned, "lift": "deadlift"})["notes"] == cleaned["notes"]
@@ -116,7 +116,7 @@ def test_lift_profile_update_cleans_profiles_and_keeps_known_angles():
     }, {"lift": "curl"}])
     assert len(normalized) == 1
     assert normalized[0]["options"] == {"bar_position": "low"}
-    assert normalized[0]["notes"] == "Failure points: hips rise"
+    assert normalized[0]["notes"] == ""
     assert list(normalized[0]["form_videos"]) == ["front"]
 
 

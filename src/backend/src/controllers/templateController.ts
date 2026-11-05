@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { invokeToolDirect } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 import { principalToken } from '../auth/principal'
@@ -43,7 +43,7 @@ function jobHeaders(req: Request, operation: string): Record<string, string> {
 export async function listTemplates(req: Request, res: Response) {
   const include_archived = req.query.includeArchived === 'true'
   try {
-    const data = await invokeLambda('pod_templates', { function: 'template_list',  include_archived, ...templateActor(req) })
+    const data = await callOperation('template_list', { include_archived, ...templateActor(req) })
     res.json(data)
   } catch (err: any) {
     throw new AppError(`List failed: ${err.message}`, 502)
@@ -53,7 +53,7 @@ export async function listTemplates(req: Request, res: Response) {
 export async function getTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const data = await invokeLambda('pod_templates', { function: 'template_get',  sk, ...templateActor(req) })
+    const data = await callOperation('template_get', { sk, ...templateActor(req) })
     res.json(data)
   } catch (err: any) {
     if (err.message?.includes('not found')) throw new AppError('Template not found', 404)
@@ -64,7 +64,7 @@ export async function getTemplate(req: Request, res: Response) {
 export async function createTemplateFromBlock(req: Request, res: Response) {
   const { name, program_sk } = req.body
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_create_from_block',  name, program_sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_create_from_block', { name, program_sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
     res.status(201).json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -75,8 +75,7 @@ export async function createTemplateFromBlock(req: Request, res: Response) {
 export async function createBlankTemplate(req: Request, res: Response) {
   const { name, description, estimated_weeks, days_per_week } = req.body
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_create_blank', 
-      name,
+    const result = await callOperation('template_create_blank', { name,
       description: description ?? '',
       estimated_weeks: estimated_weeks ?? 4,
       days_per_week: days_per_week ?? 3,
@@ -96,7 +95,7 @@ export async function updateTemplate(req: Request, res: Response) {
   const { expected_revision, idempotency_key, ...template } = req.body || {}
   try {
     const envelope = mutationEnvelope(req.body)
-    const result = await invokeLambda('pod_templates', { function: 'template_update',  sk, template, ...envelope, ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_update', { sk, template, ...envelope, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -109,7 +108,7 @@ export async function copyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const { new_name } = req.body
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_copy',  sk, new_name, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_copy', { sk, new_name, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
     res.status(201).json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -120,7 +119,7 @@ export async function copyTemplate(req: Request, res: Response) {
 export async function deleteTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_delete', sk, ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_delete', { sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -131,7 +130,7 @@ export async function deleteTemplate(req: Request, res: Response) {
 export async function archiveTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_archive',  sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_archive', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -142,7 +141,7 @@ export async function archiveTemplate(req: Request, res: Response) {
 export async function unarchiveTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_unarchive',  sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_unarchive', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -166,7 +165,7 @@ export async function applyTemplate(req: Request, res: Response) {
   const { target, start_date, week_start_day, block_id, block_name } = req.body
   try {
     const envelope = mutationEnvelope(req.body)
-    const result = await invokeLambda('pod_templates', { function: 'template_apply',  sk, target, start_date, week_start_day, block_id, block_name, ...envelope, ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_apply', { sk, target, start_date, week_start_day, block_id, block_name, ...envelope, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -179,8 +178,7 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
   const { backfilled_maxes, start_date, week_start_day, target, block_id, block_name } = req.body
   try {
     const envelope = mutationEnvelope(req.body)
-    const result = await invokeLambda('pod_templates', { function: 'template_apply_confirm', 
-      sk,
+    const result = await callOperation('template_apply_confirm', { sk,
       backfilled_maxes,
       start_date,
       week_start_day,
@@ -201,7 +199,7 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
 export async function publishTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_publish',  sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_publish', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -212,7 +210,7 @@ export async function publishTemplate(req: Request, res: Response) {
 export async function unpublishTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await invokeLambda('pod_templates', { function: 'template_unpublish',  sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_unpublish', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -285,6 +283,6 @@ export async function applyTemplateImport(req: Request, res: Response) {
   const importId = result?.import_id || result?.id
   if (!importId) throw new AppError('Template import result has no import id', 409, 'IMPORT_ID_MISSING')
   const { merge_strategy, conflict_resolutions, start_date, glossary_overrides, confirmed_auto_adds } = req.body || {}
-  const applied = await invokeLambda('pod_import', { function: 'import_apply', import_id: importId, classification_override: 'template', author: req.user.username || req.mapped_pk, pk: req.mapped_pk, merge_strategy, conflict_resolutions, start_date, glossary_overrides, confirmed_auto_adds })
+  const applied = await callOperation('import_apply', { import_id: importId, classification_override: 'template', author: req.user.username || req.mapped_pk, pk: req.mapped_pk, merge_strategy, conflict_resolutions, start_date, glossary_overrides, confirmed_auto_adds })
   res.json({ ...result, ...applied, job_id: job.job_id, status: 'succeeded', filename: job.request?.payload?.arguments?.filename, template_sk: applied?.target_sk || applied?.template_sk || applied?.sk })
 }

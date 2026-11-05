@@ -1,4 +1,4 @@
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import type { Competition, LiftResults, PostMeetReport, UserCompetition, UserCompetitionUpdate } from '@powerlifting/types'
 
 export interface CompetitionMutationEnvelope {
@@ -10,8 +10,7 @@ export async function getUserCompetitions(
   pk: string,
   filters: { country?: string; state?: string } = {},
 ): Promise<UserCompetition[]> {
-  const result = await invokeLambda('pod_competition', {
-    function: 'health_list_competitions',
+  const result = await callOperation('health_list_competitions', {
     op: 'list',
     pk,
     country: filters.country,
@@ -27,8 +26,7 @@ export async function patchUserCompetition(
   updates: UserCompetitionUpdate,
   envelope: CompetitionMutationEnvelope,
 ): Promise<UserCompetition> {
-  return (await invokeLambda('pod_competition', {
-    function: 'health_update_user_competition',
+  return (await callOperation('health_update_user_competition', {
     pk,
     master_id: masterId,
     patch: updates,
@@ -44,8 +42,7 @@ export async function completeUserCompetition(
   envelope: CompetitionMutationEnvelope,
   postMeetReport?: PostMeetReport,
 ): Promise<UserCompetition> {
-  return (await invokeLambda('pod_competition', {
-    function: 'health_complete_user_competition',
+  return (await callOperation('health_complete_user_competition', {
     pk,
     master_id: masterId,
     results,
@@ -65,7 +62,7 @@ export async function updateCompetitions(
   competitions: Competition[],
   envelope: CompetitionMutationEnvelope,
 ): Promise<{ revision: number }> {
-  const program = await invokeLambda('health_get_program', { pk })
+  const program = await callOperation('health_get_program', { pk })
   const existing = Array.isArray(program?.competitions) ? (program.competitions as Competition[]) : []
   let revision = envelope.expected_revision
 
@@ -79,8 +76,7 @@ export async function updateCompetitions(
       }
     }
     if (Object.keys(patch).length === 0) continue
-    const updated = await invokeLambda('pod_competition', {
-      function: 'health_update_competition',
+    const updated = await callOperation('health_update_competition', {
       pk,
       date: legacy.date,
       patch,
@@ -101,8 +97,7 @@ export async function completeCompetition(
   envelope: CompetitionMutationEnvelope,
   postMeetReport?: PostMeetReport,
 ): Promise<Competition> {
-  return invokeLambda('pod_competition', { function: 'health_complete_competition', 
-    pk,
+  return callOperation('health_complete_competition', { pk,
     date: compDate,
     results,
     body_weight_kg: bodyWeightKg,

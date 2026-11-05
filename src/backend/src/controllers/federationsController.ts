@@ -1,4 +1,4 @@
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import type {
   FederationDisplayOptions,
   FederationLibrary,
@@ -21,23 +21,22 @@ export type FederationUpdate = {
 }
 
 export async function listFederations(): Promise<MasterFederation[]> {
-  return (await invokeLambda('pod_federation', { function: 'federation_master_list', })) as MasterFederation[]
+  return (await callOperation('federation_master_list', { })) as MasterFederation[]
 }
 
 export async function updateFederation(masterId: string, updates: FederationUpdate): Promise<void> {
-  await invokeLambda('pod_federation', { function: 'federation_master_update',  master_id: masterId, updates })
+  await callOperation('federation_master_update', { master_id: masterId, updates })
 }
 
 export async function getFederationLibrary(pk: string): Promise<FederationLibrary> {
-  return (await invokeLambda('pod_federation', { function: 'federation_user_library_get',  pk })) as FederationLibrary
+  return (await callOperation('federation_user_library_get', { pk })) as FederationLibrary
 }
 
 export async function updateFederationLibrary(
   pk: string,
   library: Pick<FederationLibrary, 'federations' | 'qualification_standards'>,
 ): Promise<FederationLibrary> {
-  return (await invokeLambda('pod_federation', { function: 'federation_user_library_set', 
-    pk,
+  return (await callOperation('federation_user_library_set', { pk,
     federations: library.federations ?? [],
     qualification_standards: library.qualification_standards ?? [],
   })) as FederationLibrary

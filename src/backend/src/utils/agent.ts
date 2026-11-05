@@ -1,6 +1,6 @@
 import { operationScope } from './operationScope'
 import { randomUUID } from 'crypto'
-import { invokeLambda, pollJob } from './lambda'
+import { callOperation, pollJob } from './lambda'
 import { coachUrl } from './coachUrl'
 
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
@@ -22,7 +22,7 @@ async function invokeInference(payload: Record<string, unknown>, conversationId:
 }
 
 export function invokeToolDirect(toolName: string, args: Record<string, unknown>): Promise<any> {
-  return invokeLambda(toolName, args)
+  return callOperation(toolName, args)
 }
 
 export function invokeSpecialistJson(specialist: string, task: string, chatId?: string, useHealthHelperModel = false): Promise<any> {

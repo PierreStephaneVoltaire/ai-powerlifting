@@ -36,7 +36,7 @@ export async function pollJob(jobId: string, operation: string, person: string, 
   throw new Error(`Job still pending for ${operation}`)
 }
 
-export async function invokeLambda(functionName: string, args: Record<string, unknown>, waitForResult = true): Promise<any> {
+export async function callOperation(functionName: string, args: Record<string, unknown>, waitForResult = true): Promise<any> {
   if (!INTERNAL_API_TOKEN) throw new Error('INTERNAL_API_TOKEN is not set')
   const requestedName = typeof args.function === 'string' ? args.function : functionName
   const operation = operations.get(requestedName)

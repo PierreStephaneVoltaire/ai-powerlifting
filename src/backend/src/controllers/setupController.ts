@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 
 type InitializeBody = {
@@ -40,7 +40,7 @@ function setupError(error: unknown): AppError {
 
 export async function getSetupStatus(req: Request, res: Response): Promise<void> {
   try {
-    const result = await invokeLambda('pod_training_program', { function: 'health_setup_status',  pk: req.mapped_pk })
+    const result = await callOperation('health_setup_status', { pk: req.mapped_pk })
     res.json({
       data: {
         mapped_pk: req.mapped_pk ?? result.mapped_pk ?? 'operator',
@@ -65,8 +65,7 @@ export async function initializeSetup(req: Request, res: Response): Promise<void
   if (typeof body.expected_revision !== 'number' || !Number.isInteger(body.expected_revision) || body.expected_revision < 0) throw new AppError('expected_revision must be a nonnegative integer', 400)
   if (typeof body.idempotency_key !== 'string' || !body.idempotency_key.trim()) throw new AppError('idempotency_key must be a nonempty string', 400)
   try {
-    const result = await invokeLambda('pod_training_program', { function: 'health_setup_initialize', 
-      pk: req.mapped_pk,
+    const result = await callOperation('health_setup_initialize', { pk: req.mapped_pk,
       mode: body.mode,
       program_name: body.programName,
       start_date: body.startDate,

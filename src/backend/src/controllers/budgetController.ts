@@ -1,7 +1,7 @@
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { v4 as uuidv4 } from 'uuid'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { AppError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import type {
@@ -65,12 +65,12 @@ function normalizeConfig(raw: unknown, pk: string): BudgetConfig {
 }
 
 export async function getBudgetConfig(pk: string, blockId?: string): Promise<BudgetConfig> {
-  const result = await invokeLambda('pod_budget', { function: 'budget_get_config', pk, ...(blockId ? { block_id: blockId } : {}) })
+  const result = await callOperation('budget_get_config', { pk, ...(blockId ? { block_id: blockId } : {}) })
   return normalizeConfig(result, pk)
 }
 
 export async function putBudgetConfig(pk: string, raw: unknown, blockId?: string): Promise<BudgetConfig> {
-  const result = await invokeLambda('pod_budget', { function: 'budget_put_config', pk, config: raw, ...(blockId ? { block_id: blockId } : {}) })
+  const result = await callOperation('budget_put_config', { pk, config: raw, ...(blockId ? { block_id: blockId } : {}) })
   return normalizeConfig(result, pk)
 }
 
@@ -80,26 +80,26 @@ export async function listBudgetItems(pk: string, filters?: BudgetItemFilters): 
   if (filters?.category !== undefined) payload.category = filters.category
   if (filters?.priority !== undefined) payload.priority = filters.priority
   if (filters?.block_id !== undefined) payload.block_id = filters.block_id
-  const result = await invokeLambda('pod_budget', { function: 'budget_list_items', ...payload })
+  const result = await callOperation('budget_list_items', { ...payload })
   return Array.isArray(result?.items) ? result.items : []
 }
 
 export async function createBudgetItem(pk: string, raw: unknown, blockId?: string): Promise<BudgetItem> {
-  const result = await invokeLambda('pod_budget', { function: 'budget_create_item', pk, item: raw, ...(blockId ? { block_id: blockId } : {}) })
+  const result = await callOperation('budget_create_item', { pk, item: raw, ...(blockId ? { block_id: blockId } : {}) })
   if (!result) throw new AppError('Failed to create budget item', 500)
   logger.info({ pk, module: 'budget', fn: 'createBudgetItem', itemId: (result as BudgetItem).id }, 'budget item created via domain service')
   return result as BudgetItem
 }
 
 export async function updateBudgetItem(pk: string, itemId: string, raw: unknown, blockId?: string): Promise<BudgetItem> {
-  const result = await invokeLambda('pod_budget', { function: 'budget_update_item', pk, item_id: itemId, item: raw, ...(blockId ? { block_id: blockId } : {}) })
+  const result = await callOperation('budget_update_item', { pk, item_id: itemId, item: raw, ...(blockId ? { block_id: blockId } : {}) })
   if (!result) throw new AppError('Failed to update budget item', 500)
   logger.info({ pk, module: 'budget', fn: 'updateBudgetItem', itemId }, 'budget item updated via domain service')
   return result as BudgetItem
 }
 
 export async function deleteBudgetItem(pk: string, itemId: string, blockId?: string): Promise<void> {
-  await invokeLambda('pod_budget', { function: 'budget_delete_item', pk, item_id: itemId, ...(blockId ? { block_id: blockId } : {}) })
+  await callOperation('budget_delete_item', { pk, item_id: itemId, ...(blockId ? { block_id: blockId } : {}) })
   logger.info({ pk, module: 'budget', fn: 'deleteBudgetItem', itemId }, 'budget item deleted via domain service')
 }
 
@@ -115,7 +115,7 @@ export async function markItemCut(pk: string, itemId: string, cut: boolean): Pro
 }
 
 export async function getBudgetSummary(pk: string, month: string, blockId?: string): Promise<BudgetSummary> {
-  return invokeLambda('pod_budget', { function: 'budget_get_summary', pk, month, ...(blockId ? { block_id: blockId } : {}) }) as Promise<BudgetSummary>
+  return callOperation('budget_get_summary', { pk, month, ...(blockId ? { block_id: blockId } : {}) }) as Promise<BudgetSummary>
 }
 
 export async function getBudget(pk: string, blockId?: string): Promise<BudgetStore> {
@@ -267,7 +267,7 @@ export async function getBudgetAiAnalysis(
 
   logger.info({ pk, module: 'budget', fn: 'getBudgetAiAnalysis', refresh, itemCount: items.length }, 'budget AI analysis generating via domain service')
 
-  const result = (await invokeLambda('pod_budget', { function: 'budget_priority_timeline', ...payload })) as Partial<BudgetAiAnalysis>
+  const result = (await callOperation('budget_priority_timeline', { ...payload })) as Partial<BudgetAiAnalysis>
 
   const analysis: BudgetAiAnalysis = {
     overall_assessment: String(result?.overall_assessment ?? ''),

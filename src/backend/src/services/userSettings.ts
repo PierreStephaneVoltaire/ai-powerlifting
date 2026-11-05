@@ -1,5 +1,5 @@
 import { operationScope } from '../utils/operationScope'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { seedMasterCopiesForNewUser } from './masterCopy'
 import type { AgeCategory, Role } from '@powerlifting/types'
 import { APP_ROLE_VALUES } from '../auth/identity'
@@ -289,7 +289,7 @@ export async function getSettings(discordUsername: string): Promise<UserSettings
   const cached = cache.get(key)
   if (cached && cached.expires > Date.now()) return cached.settings
 
-  const result = await invokeLambda('pod_user', { function: 'settings_get',  username: discordUsername })
+  const result = await callOperation('settings_get', { username: discordUsername })
   if (!result) return null
   const settings = normalizeSettings(result as Record<string, unknown>)
   cache.set(key, { settings, expires: Date.now() + CACHE_TTL_MS })
@@ -301,7 +301,7 @@ export async function getSettingsByMappedPk(mappedPk: string): Promise<UserSetti
   const cached = cache.get(key)
   if (cached && cached.expires > Date.now()) return cached.settings
 
-  const result = await invokeLambda('pod_user', { function: 'settings_get',  mapped_pk: mappedPk })
+  const result = await callOperation('settings_get', { mapped_pk: mappedPk })
   if (!result) return null
   const settings = normalizeSettings(result as Record<string, unknown>)
   cache.set(key, { settings, expires: Date.now() + CACHE_TTL_MS })
@@ -310,7 +310,7 @@ export async function getSettingsByMappedPk(mappedPk: string): Promise<UserSetti
 
 export async function getSettingsByIdentity(provider: 'discord' | 'authentik', sub: string): Promise<UserSettings | null> {
   if (!sub.trim()) return null
-  const result = await invokeLambda('pod_user', { function: 'settings_get', identity_provider: provider, identity_sub: sub })
+  const result = await callOperation('settings_get', { identity_provider: provider, identity_sub: sub })
   if (!result) return null
   const settings = normalizeSettings(result as Record<string, unknown>)
   if (settings.identity_provider !== provider || settings.identity_sub !== sub) return null
@@ -323,7 +323,7 @@ export async function updateNickname(discordUsername: string, nickname: string):
     throw new Error('Invalid nickname: must be 2-32 chars, lowercase alphanumeric, hyphens, underscores only')
   }
 
-  const result = await invokeLambda('pod_user', { function: 'settings_update_nickname',  username: discordUsername, nickname })
+  const result = await callOperation('settings_update_nickname', { username: discordUsername, nickname })
   invalidateCache(discordUsername)
   return normalizeSettings(result as Record<string, unknown>)
 }
@@ -337,8 +337,7 @@ export async function updateProfile(
     public_training_summary_enabled?: boolean
   },
 ): Promise<UserSettings> {
-  const result = await invokeLambda('pod_user', { function: 'settings_update_profile', 
-    username: discordUsername,
+  const result = await callOperation('settings_update_profile', { username: discordUsername,
     profile_visibility: input.profile_visibility,
     display_name: input.display_name,
     bio: input.bio,
@@ -352,8 +351,7 @@ export async function updateRankingLocation(
   discordUsername: string,
   input: { ranking_country: string | null; ranking_region: string | null },
 ): Promise<UserSettings> {
-  const result = await invokeLambda('pod_user', { function: 'settings_update_ranking_location', 
-    username: discordUsername,
+  const result = await callOperation('settings_update_ranking_location', { username: discordUsername,
     ranking_country: input.ranking_country,
     ranking_region: input.ranking_region,
   })
@@ -365,8 +363,7 @@ export async function updateAgeClass(
   discordUsername: string,
   input: { age_class: AgeCategory | null },
 ): Promise<UserSettings> {
-  const result = await invokeLambda('pod_user', { function: 'settings_update_age_class', 
-    username: discordUsername,
+  const result = await callOperation('settings_update_age_class', { username: discordUsername,
     age_class: input.age_class,
   })
   invalidateCache(discordUsername)
@@ -375,8 +372,7 @@ export async function updateAgeClass(
 
 
 export async function addTag(discordUsername: string, tag: string): Promise<UserSettings> {
-  const result = await invokeLambda('pod_user', { function: 'settings_tag_add',
-    username: discordUsername,
+  const result = await callOperation('settings_tag_add', { username: discordUsername,
     tag,
   })
   invalidateCache(discordUsername)
@@ -384,8 +380,7 @@ export async function addTag(discordUsername: string, tag: string): Promise<User
 }
 
 export async function removeTag(discordUsername: string, tag: string): Promise<UserSettings> {
-  const result = await invokeLambda('pod_user', { function: 'settings_tag_remove',
-    username: discordUsername,
+  const result = await callOperation('settings_tag_remove', { username: discordUsername,
     tag,
   })
   invalidateCache(discordUsername)
@@ -397,8 +392,7 @@ export async function proposeTag(
   targetNickname: string,
   tag: string,
 ): Promise<UserSettings> {
-  const result = await invokeLambda('pod_user', { function: 'settings_tag_propose',
-    proposed_by: proposerUsername,
+  const result = await callOperation('settings_tag_propose', { proposed_by: proposerUsername,
     target_nickname: targetNickname,
     tag,
   })
@@ -413,8 +407,7 @@ export async function getOrCreateSettings(
   const existing = await getSettings(discordUsername)
   if (existing) return existing
 
-  const result = (await invokeLambda('pod_user', { function: 'settings_create', 
-    discord_id: discordId,
+  const result = (await callOperation('settings_create', { discord_id: discordId,
     discord_username: discordUsername,
     avatar_url: avatarUrl,
   })) as { settings: Record<string, unknown>; created: boolean }
@@ -442,7 +435,7 @@ export async function getOrCreateSettingsForIdentity(
   if (!issuer) throw new Error('Verified OIDC identity required')
   const identityIssuer = provider === 'authentik' ? issuer : 'https://discord.com'
   const identity = { issuer: identityIssuer, provider, sub, discord_subjects: discordSubjects }
-  const result = await operationScope.run({ athlete: '', person: '', identity }, () => invokeLambda('identity_resolve', {
+  const result = await operationScope.run({ athlete: '', person: '', identity }, () => callOperation('identity_resolve', {
     ...identity, display_name: username, avatar_url: avatarUrl,
   })) as { settings: Record<string, unknown>; created: boolean }
   return normalizeSettings(result.settings)
@@ -604,8 +597,7 @@ export async function updateAthleteBasics(
   input: unknown,
 ): Promise<UserSettings> {
   const validated = validateAthleteBasics(input)
-  const result = await invokeLambda('pod_user', {
-    function: 'settings_update_athlete_basics',
+  const result = await callOperation('settings_update_athlete_basics', {
     username: discordUsername,
     input: validated,
   })
@@ -668,8 +660,7 @@ export async function updateOnboardingProfile(
   input: unknown,
 ): Promise<UserSettings> {
   const validated = validateOnboardingProfile(input)
-  const result = await invokeLambda('pod_user', {
-    function: 'settings_update_onboarding_profile',
+  const result = await callOperation('settings_update_onboarding_profile', {
     username: discordUsername,
     input: validated,
   })
@@ -725,8 +716,7 @@ export async function updateRole(
   input: unknown,
 ): Promise<UserSettings> {
   const validated = validateRoleInput(input)
-  const result = await invokeLambda('pod_user', {
-    function: 'settings_update_role',
+  const result = await callOperation('settings_update_role', {
     username: discordUsername,
     ...validated,
   })

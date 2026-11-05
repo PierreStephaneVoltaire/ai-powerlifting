@@ -1,6 +1,6 @@
 import { estimateSetE1rmValue, calculateDots as sharedDots } from '../utils/calculations'
 import { logger } from '../utils/logger'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { createHash } from 'crypto'
 import { readAnalysisRecord, writeAnalysisRecord } from './analysisRecords'
 import { CACHE_SCHEMA_VERSION } from './analysisCache'
@@ -570,7 +570,7 @@ function goalTargetCompetitionDates(goal: AthleteGoal): string[] {
 }
 
 export async function loadGoals(pk: string): Promise<AthleteGoal[]> {
-  const items = (await invokeLambda('pod_goals', { function: 'goals_list',  pk })) as Record<string, unknown>[]
+  const items = (await callOperation('goals_list', { pk })) as Record<string, unknown>[]
   return items
     .map((it) => {
       const { sk: _sk, pk: _pk, created_at: _c, updated_at: _u, target_competition_ids: _t, ...rest } = it as Record<string, unknown>

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { invokeLambda } from './lambda'
+import { callOperation } from './lambda'
 
 export const DEFAULT_TTL = 120
 export const MATH_TTL = 1800
@@ -86,7 +86,7 @@ function cacheKey(pk: string, functionName: string, args: Record<string, unknown
   return `${pk}:${functionName}:${hash}`
 }
 
-export async function cachedInvokeLambda(
+export async function cachedCallOperation(
   functionName: string,
   args: Record<string, unknown>,
   pk: string,
@@ -104,7 +104,7 @@ export async function cachedInvokeLambda(
   }
   cache.delete(key)
 
-  const value = await invokeLambda(functionName, args)
+  const value = await callOperation(functionName, args)
   cache.set(key, { value, expires: now + ttl * 1000 })
 
   while (cache.size > CACHE_CAP) {
@@ -116,7 +116,7 @@ export async function cachedInvokeLambda(
   return value
 }
 
-export function invalidateLambdaCache(pk: string, functionNamePrefix?: string): number {
+export function invalidateOperationCache(pk: string, functionNamePrefix?: string): number {
   let removed = 0
   for (const key of Array.from(cache.keys())) {
     if (!key.startsWith(`${pk}:`)) continue

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import * as programController from '../controllers/programController'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { invalidateAfter } from '../utils/cacheMiddleware'
 import type { PlannedExercise, LiftProfile } from '@powerlifting/types'
 import { AppError } from '../middleware/errorHandler'
@@ -17,7 +17,7 @@ export const programsRouter = Router()
 
 programsRouter.post('/current/blocks/transition', invalidateAfter(['program:current', 'sessions:current', 'programs', 'analytics']), async (req, res, next) => {
   try {
-    const result = await invokeLambda('block_transition', req.body)
+    const result = await callOperation('block_transition', req.body)
     res.json({ data: result, error: null })
   } catch (error) { next(error) }
 })
@@ -169,7 +169,7 @@ programsRouter.put('/:version/lift-profiles', invalidateAfter((req) => [`program
     }
 
     const result = await programController.updateLiftProfiles(req.mapped_pk!, req.params.version, liftProfiles, envelope)
-    invokeLambda('pod_training_program', { function: 'health_invalidate_program_cache',  pk: req.mapped_pk }).catch((err) => {
+    callOperation('health_invalidate_program_cache', { pk: req.mapped_pk }).catch((err) => {
       console.warn('Failed to invalidate IF health program cache after lift profile update:', err)
     })
     res.json({ data: result, error: null })

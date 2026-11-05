@@ -1,4 +1,4 @@
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { invokeToolDirect } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 import type { GlossaryExercise, GlossaryStore } from '@powerlifting/types'
@@ -57,7 +57,7 @@ function normalizeStoredExercise(raw: GlossaryExercise): GlossaryExercise {
 }
 
 export async function getGlossary(pk: string): Promise<GlossaryStore> {
-  const glossary = await invokeLambda('pod_glossary', { function: 'exercise_get_glossary',  pk })
+  const glossary = await callOperation('exercise_get_glossary', { pk })
   return {
     pk,
     sk: 'glossary#v1',
@@ -73,11 +73,11 @@ export async function upsertExercise(pk: string, exercise: GlossaryExercise): Pr
   if (!exercise.id) {
     exercise.id = uuidv4()
   }
-  await invokeLambda('pod_glossary', { function: 'exercise_upsert',  pk, exercise })
+  await callOperation('exercise_upsert', { pk, exercise })
 }
 
 export async function removeExercise(pk: string, exerciseId: string): Promise<void> {
-  await invokeLambda('pod_glossary', { function: 'exercise_remove',  pk, id: exerciseId })
+  await callOperation('exercise_remove', { pk, id: exerciseId })
 }
 
 export async function getExerciseById(pk: string, exerciseId: string): Promise<GlossaryExercise | null> {
@@ -101,11 +101,11 @@ export async function searchExercises(pk: string, query: string): Promise<Glossa
 }
 
 export async function archiveExercise(pk: string, id: string): Promise<void> {
-  await invokeLambda('pod_glossary', { function: 'exercise_archive',  pk, id })
+  await callOperation('exercise_archive', { pk, id })
 }
 
 export async function unarchiveExercise(pk: string, id: string): Promise<void> {
-  await invokeLambda('pod_glossary', { function: 'exercise_unarchive',  pk, id })
+  await callOperation('exercise_unarchive', { pk, id })
 }
 
 export async function setE1rmEstimate(
@@ -114,7 +114,7 @@ export async function setE1rmEstimate(
   valueKg: number,
   method: 'manual' | 'ai_backfill' | 'logged' = 'manual',
 ): Promise<void> {
-  await invokeLambda('pod_glossary', { function: 'exercise_set_e1rm', pk, id, value_kg: valueKg, method })
+  await callOperation('exercise_set_e1rm', { pk, id, value_kg: valueKg, method })
 }
 
 export async function estimateExerciseE1rm(pk: string, id: string): Promise<any> {

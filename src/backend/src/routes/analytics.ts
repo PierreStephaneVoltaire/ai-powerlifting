@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express'
 import { invokeToolDirect } from '../utils/agent'
-import { invokeLambda, readGeneration } from '../utils/lambda'
+import { callOperation, readGeneration } from '../utils/lambda'
 import { readAnalysisRecord, writeAnalysisRecord } from '../services/analysisRecords'
 import { logger } from '../utils/logger'
 import { operationScope } from '../utils/operationScope'
@@ -69,7 +69,7 @@ async function invokeAnalysisTool(
 ): Promise<unknown> {
   if (POD_ANALYSIS_SUBFUNCTIONS.has(toolName)) {
     const { pk, ...rest } = args
-    return invokeLambda('pod_analysis', { function: toolName, ...rest, pk }, Boolean(operationScope.getStore()?.ifJobId) || !['correlation_analysis', 'program_evaluation', 'block_correlation_analysis', 'block_program_evaluation', 'multi_block_comparison_analysis'].includes(toolName))
+    return callOperation(toolName, { ...rest, pk }, Boolean(operationScope.getStore()?.ifJobId) || !['correlation_analysis', 'program_evaluation', 'block_correlation_analysis', 'block_program_evaluation', 'multi_block_comparison_analysis'].includes(toolName))
   }
   // Non-pod_analysis tools (e.g. health_rag_search) go through invokeToolDirect.
   return invokeToolDirect(toolName, args)
@@ -118,8 +118,7 @@ const SNAPSHOT_SECTION_KEYS = new Set<AnalysisSectionKey>(['overview', 'alerts']
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
   try {
-    await invokeLambda('pod_competition', { function: 'health_snapshot_competition_projection', 
-      date,
+    await callOperation('health_snapshot_competition_projection', { date,
       version: 'current',
       allow_retrospective: false,
       pk,
@@ -173,8 +172,7 @@ async function computeSection(
     let payload: unknown
     if (DETERMINISTIC_SECTION_SET.has(sectionKey)) {
       const window = context.windows[context.windowKey]
-      payload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
-        section: sectionKey,
+      payload = await callOperation('analysis_section', { section: sectionKey,
         weeks: window.weeks,
         block: 'current',
         window_start: window.start,
@@ -196,7 +194,7 @@ async function computeSection(
           cache_miss: false,
         }
       } else {
-        payload = await invokeLambda('block_correlation_analysis', {
+        payload = await callOperation('block_correlation_analysis', {
           weeks: window.weeks,
           program: { ...context.program, sessions: (context.program.sessions ?? []).filter(session => session.date >= window.start && session.date <= window.end) },
           sessions: (context.program.sessions ?? []).filter(session => session.date >= window.start && session.date <= window.end),
@@ -212,7 +210,7 @@ async function computeSection(
           cache_miss: false,
         }
       } else {
-        payload = await invokeLambda('block_program_evaluation', { program: { ...context.program, sessions: (context.program.sessions ?? []).filter(session => session.date <= context.asOfDate) }, refresh: true, cache_only: false, pk: context.pk }, Boolean(operationScope.getStore()?.ifJobId))
+        payload = await callOperation('block_program_evaluation', { program: { ...context.program, sessions: (context.program.sessions ?? []).filter(session => session.date <= context.asOfDate) }, refresh: true, cache_only: false, pk: context.pk }, Boolean(operationScope.getStore()?.ifJobId))
       }
     } else {
       payload = {}
@@ -291,8 +289,7 @@ async function runTargetedRegeneration(
     logger.info({ pk, window: key, weeks: window.weeks }, 'Computing weekly analysis window from sections')
     const merged: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
-        section: sectionKey,
+      const sectionPayload = await callOperation('analysis_section', { section: sectionKey,
         weeks: window.weeks,
         block: 'current',
         window_start: window.start,
@@ -329,8 +326,7 @@ async function runFullCurrentBlockRegeneration(
   const { generatedAt, windows, results } = await runTargetedRegeneration(pk, asOfDate)
 
   try {
-    await invokeLambda('pod_training_program', { function: 'export_program_markdown', 
-      version: 'current',
+    await callOperation('export_program_markdown', { version: 'current',
       include_analysis: true,
       analysis_weeks: windows.block.weeks,
       pk,
@@ -529,7 +525,7 @@ analyticsRouter.get('/analysis/markdown', async (req, res) => {
     const pk = req.mapped_pk!
     const cacheOnly = req.readOnly === true || req.query.cacheOnly === 'true' || req.query.cache_only === 'true'
 
-    const markdownResult = await invokeLambda('get_analysis_markdown', {
+    const markdownResult = await callOperation('get_analysis_markdown', {
       pk,
       refresh: req.readOnly ? false : req.query.refresh === 'true',
       cache_only: cacheOnly,
@@ -569,8 +565,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
     const snapshot = viewsOwnAthlete(req) ? await getProgramWithWeightLog(req.mapped_pk!, 'current', block) : null
     const data: Record<string, unknown> = {}
     for (const sectionKey of DETERMINISTIC_SECTION_KEYS) {
-      const sectionPayload = await invokeLambda('pod_analysis', { function: 'analysis_section', 
-        section: sectionKey,
+      const sectionPayload = await callOperation('analysis_section', { section: sectionKey,
         weeks,
         block,
         window_start: windowStart,
@@ -668,8 +663,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     }
 
     try {
-      const markdownResult = await invokeLambda('pod_training_program', { function: 'export_program_markdown', 
-        version: 'current',
+      const markdownResult = await callOperation('export_program_markdown', { version: 'current',
         include_analysis: false,
         pk,
       }) as { markdown?: string; content?: string } | null

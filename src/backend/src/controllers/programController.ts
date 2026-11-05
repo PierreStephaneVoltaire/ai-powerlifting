@@ -1,4 +1,4 @@
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import { randomUUID } from 'crypto'
 import type { Program, ProgramListItem, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
 import type { MutationEnvelope } from './sessionController'
@@ -10,8 +10,7 @@ export type ProgramLoadOptions = {
 }
 
 export async function getProgram(pk: string, version: string, options: ProgramLoadOptions = {}): Promise<Program> {
-  return (await invokeLambda('pod_training_program', {
-    function: 'program_get',
+  return (await callOperation('program_get', {
     pk,
     program_sk: version === "current" ? undefined : `program#${version}`,
     block: options.block,
@@ -21,7 +20,7 @@ export async function getProgram(pk: string, version: string, options: ProgramLo
 }
 
 export async function listPrograms(pk: string): Promise<ProgramListItem[]> {
-  return (await invokeLambda('pod_training_program', { function: 'program_list_full',  pk, include_archived: true })) as ProgramListItem[]
+  return (await callOperation('program_list_full', { pk, include_archived: true })) as ProgramListItem[]
 }
 
 export async function updateMetaField(
@@ -31,11 +30,11 @@ export async function updateMetaField(
   value: unknown,
   envelope: MutationEnvelope,
 ): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, program_sk: version === "current" ? undefined : `program#${version}`, field, value, ...envelope }) as Record<string, unknown>
+  return await callOperation('program_update_meta_field', { pk, program_sk: version === "current" ? undefined : `program#${version}`, field, value, ...envelope }) as Record<string, unknown>
 }
 
 export async function updateMetaFields(pk: string, version: string, updates: Record<string, unknown>, envelope: MutationEnvelope): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_update_meta_field', pk, program_sk: version === 'current' ? undefined : `program#${version}`, updates, ...envelope }) as Record<string, unknown>
+  return await callOperation('program_update_meta_field', { pk, program_sk: version === 'current' ? undefined : `program#${version}`, updates, ...envelope }) as Record<string, unknown>
 }
 
 export async function updateBodyWeight(
@@ -44,7 +43,7 @@ export async function updateBodyWeight(
   weightKg: number,
   envelope: MutationEnvelope,
 ): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, program_sk: version === "current" ? undefined : `program#${version}`, updates: { current_body_weight_kg: weightKg, current_body_weight_lb: Math.round(weightKg * 2.20462 * 10) / 10 }, ...envelope }) as Record<string, unknown>
+  return await callOperation('program_update_meta_field', { pk, program_sk: version === "current" ? undefined : `program#${version}`, updates: { current_body_weight_kg: weightKg, current_body_weight_lb: Math.round(weightKg * 2.20462 * 10) / 10 }, ...envelope }) as Record<string, unknown>
 }
 
 export async function updatePhases(
@@ -54,7 +53,7 @@ export async function updatePhases(
   block: string | undefined,
   envelope: MutationEnvelope,
 ): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_update_phases',  pk, program_sk: version === "current" ? undefined : `program#${version}`, phases, block, ...envelope }) as Record<string, unknown>
+  return await callOperation('program_update_phases', { pk, program_sk: version === "current" ? undefined : `program#${version}`, phases, block, ...envelope }) as Record<string, unknown>
 }
 
 export async function updateLiftProfiles(
@@ -63,15 +62,15 @@ export async function updateLiftProfiles(
   liftProfiles: LiftProfile[],
   envelope: MutationEnvelope,
 ): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_update_lift_profiles',  pk, program_sk: version === "current" ? undefined : `program#${version}`, lift_profiles: liftProfiles, ...envelope }) as Record<string, unknown>
+  return await callOperation('program_update_lift_profiles', { pk, program_sk: version === "current" ? undefined : `program#${version}`, lift_profiles: liftProfiles, ...envelope }) as Record<string, unknown>
 }
 
 export async function archiveProgram(pk: string, version: string, envelope: MutationEnvelope): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_archive',  pk, program_sk: version === "current" ? undefined : `program#${version}`, ...envelope }) as Record<string, unknown>
+  return await callOperation('program_archive', { pk, program_sk: version === "current" ? undefined : `program#${version}`, ...envelope }) as Record<string, unknown>
 }
 
 export async function unarchiveProgram(pk: string, version: string, envelope: MutationEnvelope): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_unarchive',  pk, program_sk: version === "current" ? undefined : `program#${version}`, ...envelope }) as Record<string, unknown>
+  return await callOperation('program_unarchive', { pk, program_sk: version === "current" ? undefined : `program#${version}`, ...envelope }) as Record<string, unknown>
 }
 
 export async function batchCreateWeek(
@@ -84,7 +83,7 @@ export async function batchCreateWeek(
   exercises: PlannedExercise[],
   envelope: MutationEnvelope,
 ): Promise<void> {
-  const result = (await invokeLambda('pod_sessions', { function: 'session_list',  pk, program_sk: version === "current" ? undefined : `program#${version}` })) as { sessions: Session[] }
+  const result = (await callOperation('session_list', { pk, program_sk: version === "current" ? undefined : `program#${version}` })) as { sessions: Session[] }
   for (const day of days) {
     const session: Session = {
       id: randomUUID(),
@@ -102,7 +101,7 @@ export async function batchCreateWeek(
       body_weight_kg: null,
       block: 'current',
     }
-    await invokeLambda('pod_sessions', { function: 'session_create',  pk, program_sk: version === "current" ? undefined : `program#${version}`, session, ...envelope })
+    await callOperation('session_create', { pk, program_sk: version === "current" ? undefined : `program#${version}`, session, ...envelope })
   }
 }
 
@@ -114,7 +113,7 @@ export async function updatePlannedExercises(
   plannedExercises: PlannedExercise[],
   envelope: MutationEnvelope,
 ): Promise<void> {
-  const existing = (await invokeLambda('pod_sessions', { function: 'session_get',  pk, program_sk: version === "current" ? undefined : `program#${version}`, date, index, session_id: envelope.session_id })) as Session
+  const existing = (await callOperation('session_get', { pk, program_sk: version === "current" ? undefined : `program#${version}`, date, index, session_id: envelope.session_id })) as Session
   const exerciseKey = (exercise: any) => String(exercise.glossary_id || exercise.exercise_id || exercise.name || '').trim().toLowerCase()
   const priorByKey = new Map((existing.exercises || []).map((exercise: any) => [exerciseKey(exercise), exercise]))
   const syncExercises = !existing.completed
@@ -146,8 +145,7 @@ export async function updatePlannedExercises(
     })()
     : existing.exercises
 
-  await invokeLambda('pod_sessions', { function: 'session_patch', 
-    pk, program_sk: version === "current" ? undefined : `program#${version}`,
+  await callOperation('session_patch', { pk, program_sk: version === "current" ? undefined : `program#${version}`,
     date,
     index,
     patch: {

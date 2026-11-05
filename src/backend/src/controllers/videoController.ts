@@ -1,6 +1,6 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { createReadStream, statSync } from 'fs'
-import { invokeLambda } from '../utils/lambda'
+import { callOperation } from '../utils/lambda'
 import type { LiftProfileVideoAngle, SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
 
 export interface VideoUploadPresign {
@@ -54,7 +54,7 @@ export async function presignSessionVideo(
   angle?: LiftProfileVideoAngle,
   targetRevision?: number,
 ): Promise<VideoUploadPresign> {
-  return (await invokeLambda('video_upload_presign', {
+  return (await callOperation('video_upload_presign', {
     pk,
     version,
     session_date: sessionDate,
@@ -85,7 +85,7 @@ export async function confirmSessionVideo(
   angle?: LiftProfileVideoAngle,
   targetRevision?: number,
 ): Promise<SessionVideo> {
-  return (await invokeLambda('video_upload_confirm', {
+  return (await callOperation('video_upload_confirm', {
     pk,
     version,
     session_date: sessionDate,
@@ -104,7 +104,7 @@ export async function confirmSessionVideo(
 }
 
 export async function resolveMedia(pk: string, key: string): Promise<string> {
-  return String(await invokeLambda('video_media_resolve', { pk, s3_key: key }))
+  return String(await callOperation('video_media_resolve', { pk, s3_key: key }))
 }
 
 export async function removeSessionVideo(
@@ -114,7 +114,7 @@ export async function removeSessionVideo(
   videoId: string,
   sessionId?: string,
 ): Promise<void> {
-  await invokeLambda('video_remove', {
+  await callOperation('video_remove', {
     pk,
     version,
     session_date: sessionDate,
@@ -129,7 +129,7 @@ export async function getVideoLibrary(
   exercise?: string,
   sort: VideoSort = 'newest',
 ): Promise<{ videos: VideoLibraryItem[]; exercises: string[] }> {
-  return (await invokeLambda('video_library_get', {
+  return (await callOperation('video_library_get', {
     pk,
     version,
     exercise,
@@ -145,7 +145,7 @@ export async function updateSessionVideoMetadata(
   updates: { exerciseName?: string; setNumber?: number; notes?: string },
   sessionId?: string,
 ): Promise<SessionVideo> {
-  return (await invokeLambda('video_update_metadata', {
+  return (await callOperation('video_update_metadata', {
     pk,
     version,
     session_date: sessionDate,
