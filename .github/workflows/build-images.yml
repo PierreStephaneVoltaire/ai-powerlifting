@@ -11,9 +11,9 @@ on:
       - "src/lambda/**"
       - "docker/**"
       - "terraform/**"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.json"
+      - "src/package.json"
+      - "src/package-lock.json"
+      - "src/tsconfig.json"
       - ".github/workflows/build-images.yml"
 
   pull_request:
@@ -77,17 +77,17 @@ jobs:
               - 'src/dependencies/**'
               - 'src/services/**'
               - 'docker/**'
-              - 'package.json'
-              - 'package-lock.json'
-              - 'tsconfig.json'
+              - 'src/package.json'
+              - 'src/package-lock.json'
+              - 'src/tsconfig.json'
               - '.github/workflows/build-images.yml'
             frontend:
               - 'src/frontend/**'
               - 'src/dependencies/**'
               - 'docker/**'
-              - 'package.json'
-              - 'package-lock.json'
-              - 'tsconfig.json'
+              - 'src/package.json'
+              - 'src/package-lock.json'
+              - 'src/tsconfig.json'
               - '.github/workflows/build-images.yml'
             services:
               - 'src/services/**'
@@ -95,9 +95,9 @@ jobs:
               - 'src/backend/package.json'
               - 'src/backend/tsconfig.json'
               - 'src/dependencies/**'
-              - 'package.json'
-              - 'package-lock.json'
-              - 'tsconfig.json'
+              - 'src/package.json'
+              - 'src/package-lock.json'
+              - 'src/tsconfig.json'
               - 'src/frontend/package.json'
               - '.github/workflows/build-images.yml'
             kubernetes:

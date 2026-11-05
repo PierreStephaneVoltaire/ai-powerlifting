@@ -23,6 +23,7 @@ working — this file is only layout + operating rules.
 ## Run
 
 ```bash
+cd src
 npm install
 npm run dev:backend    # Express API
 npm run dev:frontend   # Vite dev server

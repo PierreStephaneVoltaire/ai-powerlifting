@@ -46,16 +46,11 @@ build {
 
   provisioner "shell" {
     inline = [
-      "cd /workspace",
-      "test -d src/services/operations",
-      "test -f src/services/operations/program.json",
-      "if [ -f package.json ] && grep -q '\"workspaces\"' package.json; then",
-      "  npm ci || npm install",
-      "  if [ -f src/dependencies/types/package.json ]; then npm run build --workspace=src/dependencies/types || true; fi",
-      "  npm run build --workspace=src/backend",
-      "else",
-      "  cd src/backend && npm ci || npm install && npm run build",
-      "fi"
+      "cd /workspace/src",
+      "test -f services/operations/program.json",
+      "npm ci",
+      "npm run build --workspace=dependencies/types",
+      "npm run build --workspace=backend"
     ]
   }
 

@@ -36,8 +36,8 @@ build {
   }
 
   provisioner "file" {
-    sources     = ["../package.json", "../package-lock.json", "../tsconfig.json"]
-    destination = "/opt/powerlifting/"
+    sources     = ["../src/package.json", "../src/package-lock.json", "../src/tsconfig.json"]
+    destination = "/opt/powerlifting/src/"
   }
 
   provisioner "file" {
@@ -62,10 +62,10 @@ build {
 
   provisioner "shell" {
     inline = [
-      "cd /opt/powerlifting",
-      "npm ci --workspace=src/backend --workspace=src/dependencies/types",
-      "npm run build --workspace=src/backend",
-      "npm prune --omit=dev --workspace=src/backend --workspace=src/dependencies/types",
+      "cd /opt/powerlifting/src",
+      "npm ci --workspace=backend --workspace=dependencies/types",
+      "npm run build --workspace=backend",
+      "npm prune --omit=dev --workspace=backend --workspace=dependencies/types",
       "rm -rf /opt/powerlifting/src/backend/src /opt/powerlifting/src/frontend /root/.npm",
       "chown -R node:node /opt/powerlifting"
     ]

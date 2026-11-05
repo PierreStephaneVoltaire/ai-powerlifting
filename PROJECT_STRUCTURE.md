@@ -6,6 +6,7 @@ this file is the orientation guide.
 
 ```
 powerlifting-app/
+├── src/package.json         Workspace root (workspaces: dependencies/types, backend, frontend), plus package-lock.json, tsconfig.json, pytest.ini
 ├── src/backend/             Express API — thin transport layer over the typed services
 │   ├── package.json
 │   ├── tsconfig.json
@@ -81,8 +82,6 @@ powerlifting-app/
 │   ├── providers.tf, versions.tf, variables.tf, outputs.tf
 │   ├── k8s/                 Kubernetes stacks: core, perms (local), network, app (in-cluster runner)
 │   └── coach/               Coach and Discord bot workloads (local)
-├── package.json             Workspace root (workspaces: src/dependencies/types, src/backend, src/frontend)
-├── tsconfig.json
 ├── docs/
 │   ├── ARCHITECTURE.md      Software/technical architecture deep-dive
 │   ├── FORMULAS.md          Math-heavy formula breakdown and rationale
