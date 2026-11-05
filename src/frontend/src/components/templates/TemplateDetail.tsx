@@ -1,13 +1,13 @@
 import React, { useState } from 'react'
-import { Stack, Group, Title, Button, Text, Badge, Divider, LoadingOverlay, Grid } from '@mantine/core'
-import { Edit2, Eye, EyeOff } from 'lucide-react'
+import { Stack, Group, Title, Button, Text, Badge, Divider, LoadingOverlay, Grid, Modal, Alert } from '@mantine/core'
+import { Edit2, Eye, EyeOff, Trash2 } from 'lucide-react'
 import { Template } from '@powerlifting/types'
 import { SessionGrid } from './SessionGrid'
 import { EvaluationPanel } from './EvaluationPanel'
 import { TemplateMuscleWorkload } from './TemplateMuscleWorkload'
 import { ApplyModal } from './ApplyModal'
 import { MaxResolutionGate } from './MaxResolutionGate'
-import { confirmApplyTemplate, mutationEnvelope, publishTemplate, unpublishTemplate } from '../../api/client'
+import { confirmApplyTemplate, deleteTemplate, mutationEnvelope, publishTemplate, unpublishTemplate } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
 import { templateEditRoute } from '../../utils/templateRoutes'
 
@@ -23,6 +23,9 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
   const [missingMaxes, setMissingMaxes] = useState<string[] | null>(null)
   const [applyData, setApplyData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [deleteOpened, setDeleteOpened] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const navigate = useNavigate()
   const resolvedTemplateSk = template.sk || templateSk
   const canEdit = !readOnly && Boolean(resolvedTemplateSk) && template.is_owner === true
@@ -85,9 +88,33 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
     }
   }
 
+  const handleDelete = async () => {
+    if (!resolvedTemplateSk) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteTemplate(resolvedTemplateSk)
+      navigate('/designer/templates')
+    } catch (err: any) {
+      setDeleteError(err?.message ?? 'Delete failed')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <Stack gap="xl">
       <LoadingOverlay visible={loading} />
+      <Modal opened={deleteOpened} onClose={() => setDeleteOpened(false)} title="Delete template" centered>
+        <Stack gap="md">
+          <Text size="sm">Permanently delete “{template.meta.name}”? This cannot be undone. Programs already created from it are not affected.</Text>
+          {deleteError && <Alert color="red">{deleteError}</Alert>}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteOpened(false)} disabled={deleting}>Cancel</Button>
+            <Button color="red" onClick={handleDelete} loading={deleting}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Group justify="space-between">
         <Stack gap={4}>
           <Group gap="sm">
@@ -116,6 +143,15 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
             disabled={!canEdit}
           >
             Edit
+          </Button>
+          <Button
+            variant="default"
+            color="red"
+            leftSection={<Trash2 size={16} />}
+            onClick={() => setDeleteOpened(true)}
+            disabled={!canEdit}
+          >
+            Delete
           </Button>
           <Button
             size="lg"

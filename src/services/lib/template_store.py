@@ -333,6 +333,21 @@ class TemplateStore:
         self._write_template_index_sync({**template, "pk": self._pk, "sk": sk}, expected_revision=expected_revision)
         return result
 
+    def delete_template_sync(self, sk: str, actor_pk: str | None = None) -> dict:
+        template = self.get_template_sync(sk, actor_pk=actor_pk, include_hidden=True)
+        if not template:
+            raise TemplateNotFoundError(f"Template not found: {sk}")
+        self._assert_owner(template, actor_pk)
+        self.table.delete_item(Key={"pk": self._pk, "sk": sk})
+        current = self._read_index_item_sync()
+        remaining = [summary for summary in (current.get("templates") or []) if summary.get("sk") != sk]
+        if len(remaining) != len(current.get("templates") or []):
+            self._write_index_sync(remaining)
+        return {"status": "deleted", "sk": sk}
+
+    async def delete_template(self, sk: str, actor_pk: str | None = None) -> dict:
+        return await asyncio.get_running_loop().run_in_executor(None, lambda: self.delete_template_sync(sk, actor_pk))
+
     def archive_template_sync(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
         return self._set_archived_sync(sk, True, actor_pk, expected_revision, idempotency_key)
 

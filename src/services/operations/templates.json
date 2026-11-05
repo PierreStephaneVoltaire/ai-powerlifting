@@ -511,6 +511,48 @@
     ]
   },
   {
+    "name": "template_delete",
+    "domain": "templates",
+    "description": "Permanently delete an owned template.",
+    "handler": "services.handlers.templates.template_delete.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "deleted"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete",
+    "legacy": [
+      "pod_templates"
+    ]
+  },
+  {
     "name": "template_evaluate",
     "domain": "templates",
     "description": "Evaluate template suitability for the athlete and return a structured report.",

@@ -982,6 +982,11 @@ export async function copyTemplate(sk: string, newName: string, envelope: Mutati
   return res.data
 }
 
+export async function deleteTemplate(sk: string): Promise<{ status: 'deleted'; sk: string }> {
+  const res = await api.delete(templatePath(sk))
+  return res.data
+}
+
 export async function archiveTemplate(sk: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
   const res = await api.patch(templatePath(sk, '/archive'), requireMutationEnvelope(envelope))
   return res.data

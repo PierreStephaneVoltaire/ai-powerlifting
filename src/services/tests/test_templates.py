@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import json
 import sys
@@ -51,7 +52,7 @@ class FakeGlossaryStore:
 class TemplateContractTests(unittest.TestCase):
     def test_inventory_and_required_mutation_fields(self):
         operations = load_operations("templates")
-        self.assertEqual(len(operations), 14)
+        self.assertEqual(len(operations), 15)
         for name in ("template_archive", "template_publish", "template_unpublish", "template_apply_confirm"):
             with self.subTest(name=name):
                 with self.assertRaises(ValidationError):
@@ -211,3 +212,35 @@ def test_set_evaluation_updates_only_the_evaluation_field_for_the_owner():
     assert table.update_item.call_args.kwargs["ExpressionAttributeValues"][":context"] == "overreach"
     with pytest.raises(Exception):
         store.set_evaluation_sync("template#1", {"stance": "x"}, actor_pk="someone-else")
+
+
+def test_delete_template_removes_item_and_index_entry_for_the_owner_only():
+    from unittest.mock import MagicMock
+    import pytest
+    from services.lib.template_store import TemplateStore
+
+    store = TemplateStore("if-health-templates")
+    table = MagicMock()
+    store._table = table
+    store.get_template_sync = lambda sk, actor_pk=None, include_hidden=False: {"sk": sk, "meta": {"author_pk": "person-1"}}
+    store._read_index_item_sync = lambda: {"templates": [{"sk": "template#1"}, {"sk": "template#2"}]}
+    written = []
+    store._write_index_sync = lambda templates, updated_at=None: written.append(templates)
+
+    with pytest.raises(Exception):
+        store.delete_template_sync("template#1", actor_pk="someone-else")
+    table.delete_item.assert_not_called()
+
+    assert store.delete_template_sync("template#1", actor_pk="person-1") == {"status": "deleted", "sk": "template#1"}
+    table.delete_item.assert_called_once_with(Key={"pk": "template_library", "sk": "template#1"})
+    assert written == [[{"sk": "template#2"}]]
+
+
+def test_delete_requires_an_acting_person_and_is_hidden_from_the_coach():
+    import pytest
+    from services.access import permission_map
+    from services.handlers.templates.template_delete.core import template_delete
+
+    with pytest.raises(ValueError, match="Verified acting Person"):
+        asyncio.run(template_delete("template#1", None))
+    assert permission_map()["template_delete"] == {"permission": "templates:write", "internal_only": True}

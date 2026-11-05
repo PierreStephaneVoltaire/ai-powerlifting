@@ -117,6 +117,17 @@ export async function copyTemplate(req: Request, res: Response) {
   }
 }
 
+export async function deleteTemplate(req: Request, res: Response) {
+  const sk = normalizeTemplateSk(req.params.sk)
+  try {
+    const result = await invokeLambda('pod_templates', { function: 'template_delete', sk, ...templateActor(req), pk: req.mapped_pk })
+    res.json(result)
+  } catch (err: any) {
+    if (err instanceof AppError) throw err
+    throw new AppError(`Delete failed: ${err.message}`, 502)
+  }
+}
+
 export async function archiveTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {

@@ -576,6 +576,10 @@
   "template_create_from_payload": {
     "permission": "templates:write"
   },
+  "template_delete": {
+    "permission": "templates:write",
+    "internal_only": true
+  },
   "template_evaluate": {
     "permission": "templates:write"
   },

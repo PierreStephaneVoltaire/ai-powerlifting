@@ -35,6 +35,9 @@ templateRouter.post('/', templateController.createTemplateFromBlock)
 // POST /api/templates/:sk/copy
 templateRouter.post('/:sk/copy', templateController.copyTemplate)
 
+// DELETE /api/templates/:sk
+templateRouter.delete('/:sk', templateController.deleteTemplate)
+
 // PATCH /api/templates/:sk/archive
 templateRouter.patch('/:sk/archive', templateController.archiveTemplate)
 
