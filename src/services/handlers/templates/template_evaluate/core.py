@@ -8,11 +8,9 @@ from .metrics import strip_calendar, template_metrics
 _program_store: Optional[object] = None
 _template_store: Optional[object] = None
 
-LIFT_PROFILE_FIELDS = ("lift", "style", "primary_muscle", "sticking_points", "stance", "grip", "bar_position", "notes", "stimulus")
-
-
 def _lift_profiles(program):
-    return [{key: value for key, value in profile.items() if key in LIFT_PROFILE_FIELDS} for profile in program.get("lift_profiles") or []]
+    from services.lib.lift_profiles import describe
+    return [describe(profile) for profile in program.get("lift_profiles") or []]
 
 
 def _timeline(program, template_weeks):

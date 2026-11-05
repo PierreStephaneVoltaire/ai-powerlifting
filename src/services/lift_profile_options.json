@@ -1,0 +1,134 @@
+{
+  "bench": [
+    {"key": "grip_width", "label": "Grip width", "options": [
+      {"value": "close", "label": "Close (inside rings)"},
+      {"value": "medium", "label": "Medium"},
+      {"value": "wide", "label": "Wide"},
+      {"value": "max_legal", "label": "Max legal (index on ring)"}
+    ]},
+    {"key": "bar_in_hand", "label": "Bar in hand", "options": [
+      {"value": "low_palm_thumb_wrapped", "label": "Low in palm, thumb wrapped"},
+      {"value": "over_forearm_thumbless", "label": "Over forearm, thumbless"},
+      {"value": "high_toward_fingers", "label": "High toward fingers"}
+    ]},
+    {"key": "touch_point", "label": "Touch point", "options": [
+      {"value": "upper_chest", "label": "Upper chest"},
+      {"value": "mid_chest", "label": "Mid chest"},
+      {"value": "lower_chest", "label": "Lower chest"},
+      {"value": "below_chest", "label": "Below chest (ribs)"}
+    ]},
+    {"key": "arch", "label": "Arch", "options": [
+      {"value": "flat", "label": "Flat"},
+      {"value": "minimal", "label": "Minimal"},
+      {"value": "moderate", "label": "Moderate"},
+      {"value": "max", "label": "Max"}
+    ]},
+    {"key": "elbows_descent", "label": "Elbows on descent", "options": [
+      {"value": "tucked", "label": "Tucked"},
+      {"value": "45_degrees", "label": "~45°"},
+      {"value": "flared", "label": "Flared"}
+    ]},
+    {"key": "feet", "label": "Feet", "options": [
+      {"value": "heels_down", "label": "Heels down"},
+      {"value": "heels_up", "label": "Heels up"}
+    ]},
+    {"key": "leg_drive", "label": "Leg drive", "options": [
+      {"value": "none", "label": "None"},
+      {"value": "constant", "label": "Constant"},
+      {"value": "timed", "label": "Timed with the press"}
+    ]},
+    {"key": "descent_speed", "label": "Descent speed", "options": [
+      {"value": "fast", "label": "Fast"},
+      {"value": "controlled", "label": "Controlled"},
+      {"value": "slow", "label": "Slow"}
+    ]},
+    {"key": "at_chest", "label": "At chest", "options": [
+      {"value": "sink", "label": "Sink"},
+      {"value": "float", "label": "Float"}
+    ]},
+    {"key": "bar_path", "label": "Bar path", "options": [
+      {"value": "straight", "label": "Straight up"},
+      {"value": "j_curve", "label": "J-curve back toward face"}
+    ]},
+    {"key": "sticking_point", "label": "Sticking point", "options": [
+      {"value": "off_chest", "label": "Off chest"},
+      {"value": "few_inches_up", "label": "A few inches up"},
+      {"value": "mid_range", "label": "Mid-range"},
+      {"value": "lockout", "label": "Lockout"}
+    ]}
+  ],
+  "squat": [
+    {"key": "bar_position", "label": "Bar position", "options": [
+      {"value": "high", "label": "High"},
+      {"value": "low", "label": "Low"}
+    ]},
+    {"key": "hand_width", "label": "Hand width", "options": [
+      {"value": "narrow", "label": "Narrow"},
+      {"value": "medium", "label": "Medium"},
+      {"value": "wide", "label": "Wide"}
+    ]},
+    {"key": "stance", "label": "Stance", "options": [
+      {"value": "narrow", "label": "Narrow"},
+      {"value": "shoulder_width", "label": "Shoulder width"},
+      {"value": "wide", "label": "Wide"}
+    ]},
+    {"key": "toe_angle", "label": "Toe angle", "options": [
+      {"value": "forward", "label": "Forward"},
+      {"value": "slight_out", "label": "Slight out"},
+      {"value": "wide_out", "label": "Wide out"}
+    ]},
+    {"key": "descent", "label": "Descent", "options": [
+      {"value": "controlled_no_bounce", "label": "Controlled, no bounce"},
+      {"value": "controlled_bounce", "label": "Controlled, bounce"},
+      {"value": "controlled_accelerate", "label": "Controlled, then accelerate into the hole"},
+      {"value": "dive_bomb", "label": "Dive bomb"}
+    ]},
+    {"key": "knee_gear", "label": "Knee gear", "options": [
+      {"value": "none", "label": "None"},
+      {"value": "soft_sleeves", "label": "Soft sleeves"},
+      {"value": "stiff_sleeves", "label": "Stiff sleeves"},
+      {"value": "wraps", "label": "Wraps"}
+    ]},
+    {"key": "sticking_point", "label": "Sticking point", "options": [
+      {"value": "out_of_hole", "label": "Out of the hole"},
+      {"value": "mid_range", "label": "Mid-range"},
+      {"value": "near_lockout", "label": "Near lockout"}
+    ]}
+  ],
+  "deadlift": [
+    {"key": "stance", "label": "Stance", "options": [
+      {"value": "conventional_narrow", "label": "Conventional narrow"},
+      {"value": "conventional_hip_width", "label": "Conventional hip width"},
+      {"value": "semi_sumo", "label": "Semi-sumo"},
+      {"value": "sumo", "label": "Sumo"}
+    ]},
+    {"key": "grip", "label": "Grip", "options": [
+      {"value": "double_overhand", "label": "Double overhand"},
+      {"value": "mixed", "label": "Mixed"},
+      {"value": "hook", "label": "Hook"},
+      {"value": "straps", "label": "Straps"}
+    ]},
+    {"key": "start", "label": "Start", "options": [
+      {"value": "static_wedge", "label": "Static (wedge)"},
+      {"value": "dynamic", "label": "Dynamic (grip and rip)"}
+    ]},
+    {"key": "hip_height", "label": "Hip height", "locked": {"when": {"stance": "sumo"}, "value": "low"}, "options": [
+      {"value": "low", "label": "Low"},
+      {"value": "mid", "label": "Mid"},
+      {"value": "high", "label": "High"}
+    ]},
+    {"key": "sticking_point", "label": "Sticking point", "options": [
+      {"value": "off_floor", "label": "Off the floor"},
+      {"value": "below_knee", "label": "Below knee"},
+      {"value": "at_knee", "label": "At knee"},
+      {"value": "lockout", "label": "Lockout"}
+    ]}
+  ],
+  "common": [
+    {"key": "volume_tolerance", "label": "Volume tolerance", "options": [
+      {"value": "low", "label": "Low"},
+      {"value": "moderate", "label": "Moderate"},
+      {"value": "high", "label": "High"}
+    ]}
+  ]
+}

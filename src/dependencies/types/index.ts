@@ -491,10 +491,9 @@ export interface DietNote {
 
 export interface LiftProfile {
   lift: 'squat' | 'bench' | 'deadlift'
-  style_notes: string         // free-form technique/setup description
-  sticking_points: string     // where in the lift they struggle most
-  primary_muscle: string      // e.g. "quad dominant", "tricep dominant"
+  options?: Record<string, string>
   volume_tolerance: 'low' | 'moderate' | 'high'
+  notes?: string
   e1rm_multiplier?: number    // manual correction for raw estimates (0.85-1.10)
   stimulus_coefficient?: number
   stimulus_coefficient_reasoning?: string
@@ -502,7 +501,6 @@ export interface LiftProfile {
   stimulus_coefficient_updated_at?: string
   inol_low_threshold?: number
   inol_high_threshold?: number
-  failure_nodes?: string[]
   form_videos?: Partial<Record<LiftProfileVideoAngle, LiftProfileVideo>>
 }
 

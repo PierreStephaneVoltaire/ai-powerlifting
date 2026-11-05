@@ -23,20 +23,20 @@ import {
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useVideoUploadStore } from '@/store/videoUploadStore'
 import {
   estimateLiftProfileStimulus,
   fetchE1rmMultiplierSuggestions,
-  reviewLiftProfile,
-  rewriteLiftProfile,
-  type LiftProfileReview,
 } from '@/api/client'
+import { LiftProfileForm } from '@/components/lift-profiles/LiftProfileForm'
+import DraftNumberInput from '@/components/sessions/DraftNumberInput'
+import { defaultLiftProfile as defaultProfile, mergeLiftProfiles as mergeProfiles, missingOptions, normalizeLiftProfile as normalizeProfile } from '@/utils/liftProfile'
 import type { LiftProfile, LiftProfileVideoAngle } from '@powerlifting/types'
 import { toDisplayUnit } from '@/utils/units'
 import { useAuth } from '@/auth/AuthProvider'
 import { formatFileSize, isValidVideoType, MAX_VIDEO_SIZE, uploadVideo } from '@/utils/s3'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
-const PROFILE_ESTIMATE_READY_SCORE = 55
 const FORM_ANGLES: LiftProfileVideoAngle[] = ['front', 'side', 'diagonal']
 const FORM_ANGLE_LABELS: Record<LiftProfileVideoAngle, string> = { front: 'Front', side: 'Side', diagonal: 'Diagonal' }
 
@@ -53,65 +53,6 @@ const LIFT_LABELS: Record<LiftProfile['lift'], string> = {
   squat: 'Squat',
   bench: 'Bench',
   deadlift: 'Deadlift',
-}
-
-const LIFT_STYLE_PLACEHOLDERS: Record<LiftProfile['lift'], string> = {
-  squat: 'High bar or low bar, stance width, depth, torso angle, bar path, tempo/eccentric, and how ROM compares with competition standard.',
-  bench: 'Grip width, arch, touch point, leg drive, pause/sink, bar path, lockout, and how ROM compares with competition standard.',
-  deadlift: 'Conventional or sumo, stance/grip, wedge/start position, lockout style, tempo, and how ROM compares with competition standard.',
-}
-
-const STICKING_PLACEHOLDERS: Record<LiftProfile['lift'], string> = {
-  squat: 'Exact ROM where it slows/fails, e.g. out of the hole, above parallel, knee/hip shift, bracing loss, speed loss.',
-  bench: 'Exact ROM where it slows/fails, e.g. off chest, mid-range, lockout, elbow flare, bar drift, triceps/pec limit.',
-  deadlift: 'Exact ROM where it slows/fails, e.g. off floor, below knee, above knee, lockout, hips rise, bar drift.',
-}
-
-function defaultProfile(lift: LiftProfile['lift']): LiftProfile {
-  return {
-    lift,
-    style_notes: '',
-    sticking_points: '',
-    primary_muscle: '',
-    volume_tolerance: 'moderate',
-    stimulus_coefficient: 1,
-    e1rm_multiplier: 1.00,
-  }
-}
-
-function normalizeProfile(profile: LiftProfile): LiftProfile {
-  const multiplier = profile.e1rm_multiplier ?? 1.00
-  const clampedMultiplier = Math.max(0.85, Math.min(1.10, multiplier))
-
-  return {
-    ...defaultProfile(profile.lift),
-    ...profile,
-    stimulus_coefficient: Math.max(1, Math.min(2, profile.stimulus_coefficient ?? 1)),
-    e1rm_multiplier: Number(clampedMultiplier.toFixed(2)),
-    failure_nodes: normalizeFailureNodes(profile.failure_nodes),
-    form_videos: profile.form_videos,
-  }
-}
-
-function normalizeFailureNodes(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  const seen = new Set<string>()
-  return value.reduce<string[]>((nodes, item) => {
-    const node = String(item ?? '').trim().slice(0, 160)
-    const marker = node.toLocaleLowerCase()
-    if (node && !seen.has(marker) && nodes.length < 10) {
-      seen.add(marker)
-      nodes.push(node)
-    }
-    return nodes
-  }, [])
-}
-
-function mergeProfiles(profiles: LiftProfile[] | undefined, replacement: LiftProfile): LiftProfile[] {
-  return LIFT_ORDER.map((lift) => {
-    if (lift === replacement.lift) return normalizeProfile(replacement)
-    return normalizeProfile(profiles?.find((profile) => profile.lift === lift) ?? defaultProfile(lift))
-  })
 }
 
 function multiplierValue(value: string | number): number {
@@ -131,6 +72,7 @@ export default function LiftProfilePage() {
   const { program, version, updateLiftProfiles } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
+  const trackUpload = useVideoUploadStore((state) => state.track)
 
   const lift = LIFT_ORDER.includes(liftParam as LiftProfile['lift'])
     ? liftParam as LiftProfile['lift']
@@ -144,37 +86,18 @@ export default function LiftProfilePage() {
   const rawMax = lift ? program?.current_maxes?.[lift] ?? program?.meta.manual_maxes?.[lift] ?? 0 : 0
   const adjustedMax = rawMax * (draft?.e1rm_multiplier ?? 1.00)
 
-  const [review, setReview] = useState<LiftProfileReview | null>(null)
-  const [reviewing, setReviewing] = useState(false)
-  const [rewriting, setRewriting] = useState(false)
   const [estimating, setEstimating] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [failureNode, setFailureNode] = useState('')
   const [barWeight, setBarWeight] = useState('20')
   const [barUnit, setBarUnit] = useState<'kg' | 'lb'>('kg')
   const [uploadingAngle, setUploadingAngle] = useState<LiftProfileVideoAngle | null>(null)
   const uploadInput = useRef<HTMLInputElement>(null)
 
-  const runReview = async (profile: LiftProfile, showError = true) => {
-    setReviewing(true)
-    try {
-      setReview(await reviewLiftProfile(profile))
-    } catch (error) {
-      if (showError) pushToast({ message: 'AI profile review failed', type: 'error' })
-    } finally {
-      setReviewing(false)
-    }
-  }
-
   useEffect(() => {
     if (!lift || !program) return
     const initial = normalizeProfile(program.lift_profiles?.find((profile) => profile.lift === lift) ?? defaultProfile(lift))
     setDraft(initial)
-    setReview(null)
     setIgnoredSuggestion(false)
-    if (Math.abs((initial.stimulus_coefficient ?? 1) - 1) < 0.001) {
-      void runReview(initial, false)
-    }
 
     const loadSuggestions = async () => {
       try {
@@ -187,20 +110,8 @@ export default function LiftProfilePage() {
     void loadSuggestions()
   }, [lift, program])
 
-  const updateDraft = (updates: Partial<LiftProfile>, resetReview = true) => {
+  const updateDraft = (updates: Partial<LiftProfile>) => {
     setDraft((current) => current ? normalizeProfile({ ...current, ...updates }) : current)
-    if (resetReview) setReview(null)
-  }
-
-  const addFailureNode = () => {
-    if (!draft || !failureNode.trim()) return
-    updateDraft({ failure_nodes: normalizeFailureNodes([...(draft.failure_nodes ?? []), failureNode]) })
-    setFailureNode('')
-  }
-
-  const removeFailureNode = (node: string) => {
-    if (!draft) return
-    updateDraft({ failure_nodes: draft.failure_nodes?.filter((item) => item !== node) ?? [] })
   }
 
   const chooseFormVideo = (angle: LiftProfileVideoAngle) => {
@@ -230,14 +141,15 @@ export default function LiftProfilePage() {
         && existing?.source_filename === file.name
         && existing?.source_size === file.size
       const idempotencyKey = retrySameFile ? existing?.idempotency_key : undefined
-      const result = await uploadVideo(version, {
+      const result = await trackUpload({ file }, (onProgress) => uploadVideo(version, {
         file,
         sessionDate: new Date().toISOString().slice(0, 10),
         lift,
         angle,
         targetRevision,
         idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
-      })
+        onProgress,
+      }))
       const pending = {
         ...(existing ?? result.video),
         ...(!existing ? result.video : {}),
@@ -261,27 +173,10 @@ export default function LiftProfilePage() {
     }
   }
 
-  const runRewrite = async () => {
-    if (!draft) return
-    setRewriting(true)
-    try {
-      const result = await rewriteLiftProfile(draft)
-      const next = normalizeProfile({ ...draft, ...result })
-      setDraft(next)
-      setReview(null)
-      pushToast({ message: 'Lift profile rewritten', type: 'success' })
-    } catch (error) {
-      pushToast({ message: 'AI rewrite failed', type: 'error' })
-    } finally {
-      setRewriting(false)
-    }
-  }
-
   const runEstimate = async () => {
     if (!draft) return
-    const score = review?.completeness_score ?? 0
-    if (score < PROFILE_ESTIMATE_READY_SCORE) {
-      pushToast({ message: `Profile score needs ${PROFILE_ESTIMATE_READY_SCORE}% before estimating stimulus`, type: 'error' })
+    if (missingOptions(draft).length) {
+      pushToast({ message: 'Choose every technique option before estimating stimulus', type: 'error' })
       return
     }
     setEstimating(true)
@@ -296,7 +191,7 @@ export default function LiftProfilePage() {
       }))
       pushToast({ message: 'Stimulus coefficient applied', type: 'success' })
     } catch (error) {
-      pushToast({ message: 'AI stimulus estimate failed', type: 'error' })
+      pushToast({ message: error instanceof Error ? error.message : 'AI stimulus estimate failed', type: 'error' })
     } finally {
       setEstimating(false)
     }
@@ -316,8 +211,8 @@ export default function LiftProfilePage() {
     }
   }
 
-  const score = review?.completeness_score ?? 0
-  const canEstimate = score >= PROFILE_ESTIMATE_READY_SCORE
+  const missing = draft ? missingOptions(draft) : []
+  const canEstimate = Boolean(draft) && missing.length === 0
 
   const suggestion = lift ? suggestions[lift] : null
   const showSuggestion = suggestion && !ignoredSuggestion && Math.abs(suggestion.difference) >= 0.01
@@ -338,40 +233,10 @@ export default function LiftProfilePage() {
 
         <Stack gap="xs">
           <Badge color={canEstimate ? 'green' : 'yellow'} variant="light" w="fit-content">
-            {review ? (canEstimate ? 'Estimate ready' : `Needs ${PROFILE_ESTIMATE_READY_SCORE}%`) : 'Review needed'}
+            {canEstimate ? 'Estimate ready' : `${missing.length} option${missing.length === 1 ? '' : 's'} left`}
           </Badge>
-          {review && (
-            <Text size="sm" c="dimmed">
-              Score {review.completeness_score}%: style/setup 40, sticking point 35, primary driver 25.
-            </Text>
-          )}
+          {!canEstimate && <Text size="xs" c="dimmed">Still to choose: {missing.join(', ')}</Text>}
         </Stack>
-
-        {review?.score_breakdown && (
-          <Stack gap="xs">
-            {Object.entries(review.score_breakdown).map(([key, part]) => (
-              <Paper key={key} withBorder p="xs">
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" fw={500} tt="capitalize">{key.split('_').join(' ')}</Text>
-                  <Text size="sm" fw={700}>{part.score}/{part.max}</Text>
-                </Group>
-                {(part.notes ?? []).slice(0, 2).map((note) => (
-                  <Text key={note} size="xs" c="dimmed">{note}</Text>
-                ))}
-              </Paper>
-            ))}
-          </Stack>
-        )}
-
-        {review && (review.missing_details.length > 0 || review.suggestions.length > 0) && (
-          <Alert color={canEstimate ? 'blue' : 'yellow'} variant="light">
-            <Stack gap={4}>
-              {[...review.missing_details, ...review.suggestions].slice(0, 6).map((item) => (
-                <Text key={item} size="xs">{item}</Text>
-              ))}
-            </Stack>
-          </Alert>
-        )}
 
         {draft?.stimulus_coefficient_reasoning && (
           <Alert color="blue" variant="light">
@@ -385,12 +250,6 @@ export default function LiftProfilePage() {
         <Divider />
 
         <Stack gap="xs" mt="auto">
-          <Button variant="light" leftSection={<Sparkles size={16} />} loading={reviewing} onClick={() => draft && runReview(draft)} disabled={readOnly}>
-            Review
-          </Button>
-          <Button variant="light" leftSection={<Sparkles size={16} />} loading={rewriting} onClick={runRewrite} disabled={readOnly}>
-            Rewrite
-          </Button>
           <Button variant="light" leftSection={<Sparkles size={16} />} loading={estimating} disabled={!canEstimate || readOnly} onClick={runEstimate}>
             Estimate Stimulus
           </Button>
@@ -437,9 +296,9 @@ export default function LiftProfilePage() {
       <Grid gap="lg" align="flex-start">
         <Grid.Col span={{ base: 12, lg: 8 }}>
           <Stack gap="lg" style={{ minWidth: 0 }}>
+          {showSuggestion && suggestion && (
           <Paper withBorder p="md">
             <Stack gap="lg">
-              {showSuggestion && suggestion && (
                 <Alert 
                   color="blue" 
                   title="Suggested Calibration" 
@@ -455,7 +314,7 @@ export default function LiftProfilePage() {
                       <Button
                         size="compact-xs"
                         variant="filled"
-                        onClick={() => updateDraft({ e1rm_multiplier: suggestion.suggested_multiplier }, false)}
+                        onClick={() => updateDraft({ e1rm_multiplier: suggestion.suggested_multiplier })}
                         disabled={readOnly}
                       >
                         Apply
@@ -471,73 +330,11 @@ export default function LiftProfilePage() {
                     </Group>
                   </Stack>
                 </Alert>
-              )}
-
-              <Textarea
-                label="Style & Setup"
-                value={draft.style_notes}
-                onChange={(event) => updateDraft({ style_notes: event.currentTarget.value })}
-                placeholder={LIFT_STYLE_PLACEHOLDERS[lift]}
-                autosize={false}
-                styles={{ input: { minHeight: '44vh', width: '100%', resize: 'vertical', overflowY: 'auto' } }}
-                disabled={readOnly}
-              />
-              <Textarea
-                label="Sticking Points"
-                value={draft.sticking_points}
-                onChange={(event) => updateDraft({ sticking_points: event.currentTarget.value })}
-                placeholder={STICKING_PLACEHOLDERS[lift]}
-                autosize={false}
-                styles={{ input: { minHeight: '34vh', width: '100%', resize: 'vertical', overflowY: 'auto' } }}
-                disabled={readOnly}
-              />
-              <TextInput
-                label="Primary Muscle Driver"
-                value={draft.primary_muscle}
-                onChange={(event) => updateDraft({ primary_muscle: event.currentTarget.value })}
-                placeholder={lift === 'squat' ? 'Quad dominant' : lift === 'bench' ? 'Tricep dominant' : 'Glute dominant'}
-                disabled={readOnly}
-              />
             </Stack>
           </Paper>
+          )}
 
-          <Paper withBorder p="md">
-            <Stack gap="sm">
-              <Group justify="space-between">
-                <Stack gap={0}>
-                  <Text fw={600}>Failure nodes</Text>
-                  <Text size="xs" c="dimmed">Optional reminders for where this lift usually breaks down.</Text>
-                </Stack>
-                <Badge variant="light">{draft.failure_nodes?.length ?? 0}/10</Badge>
-              </Group>
-              <Group align="flex-end" wrap="nowrap">
-                <TextInput
-                  label="Add a node"
-                  value={failureNode}
-                  maxLength={160}
-                  onChange={(event) => setFailureNode(event.currentTarget.value)}
-                  onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addFailureNode() } }}
-                  placeholder="Hips rise out of the hole"
-                  disabled={readOnly || (draft.failure_nodes?.length ?? 0) >= 10}
-                  style={{ flex: 1 }}
-                />
-                <Button onClick={addFailureNode} disabled={readOnly || !failureNode.trim() || (draft.failure_nodes?.length ?? 0) >= 10}>Add</Button>
-              </Group>
-              {(draft.failure_nodes?.length ?? 0) > 0 ? (
-                <Group gap="xs">
-                  {draft.failure_nodes?.map((node) => (
-                    <Badge key={node} variant="light" rightSection={
-                      <ActionIcon size="xs" variant="transparent" color="red" onClick={() => removeFailureNode(node)} disabled={readOnly} aria-label={`Remove ${node}`}>
-                        <Trash2 size={12} />
-                      </ActionIcon>
-                    }>{node}</Badge>
-                  ))}
-                </Group>
-              ) : (
-                <Text size="sm" c="dimmed">No failure nodes recorded yet.</Text>
-              )}
-            </Stack>
-          </Paper>
+          <LiftProfileForm profile={draft} onChange={(next) => setDraft(normalizeProfile(next))} readOnly={readOnly} />
 
           <Paper withBorder p="md">
             <Stack gap="sm">
@@ -580,7 +377,7 @@ export default function LiftProfilePage() {
                   <Text size="xs" c="dimmed">Advisory only; it updates when your current max changes.</Text>
                 </Stack>
                 <Group gap="xs" align="flex-end">
-                  <TextInput label="Bar" type="number" min={0} step={0.5} value={barWeight} onChange={(event) => setBarWeight(event.currentTarget.value)} w={90} />
+                  <DraftNumberInput label="Bar" value={Number(barWeight)} isValid={(value) => value >= 0} onValueChange={(next) => setBarWeight(next === null ? '' : String(next))} w={90} />
                   <SegmentedControl size="xs" data={['kg', 'lb']} value={barUnit} onChange={(value) => setBarUnit(value as 'kg' | 'lb')} />
                 </Group>
               </Group>
@@ -603,18 +400,18 @@ export default function LiftProfilePage() {
                     variant="subtle"
                     color="gray"
                     size="sm"
-                    onClick={() => updateDraft({ e1rm_multiplier: 1.00 }, false)}
+                    onClick={() => updateDraft({ e1rm_multiplier: 1.00 })}
                     title="Reset to 1.00"
                     disabled={readOnly}
                   >
                     <RotateCcw size={14} />
                   </ActionIcon>
                 </Group>
-                <TextInput
-                  type="number"
-                  step={0.01}
+                <DraftNumberInput
                   value={draft.e1rm_multiplier ?? 1.00}
-                  onChange={(e) => updateDraft({ e1rm_multiplier: multiplierValue(Number(e.currentTarget.value)) }, false)}
+                  isValid={(value) => value >= 0.85 && value <= 1.10}
+                  commitOnlyValid
+                  onValueChange={(next) => updateDraft({ e1rm_multiplier: multiplierValue(next ?? 1) })}
                   disabled={readOnly}
                 />
                 <Text size="xs" c="dimmed">
@@ -662,11 +459,11 @@ export default function LiftProfilePage() {
             <Paper withBorder p="md">
               <Stack gap="xs">
                 <Text size="sm" fw={500}>Stimulus Coefficient</Text>
-                <TextInput
-                  type="number"
-                  step={0.05}
+                <DraftNumberInput
                   value={draft.stimulus_coefficient ?? 1}
-                  onChange={(e) => updateDraft({ stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) }, false)}
+                  isValid={(value) => value >= 1 && value <= 2}
+                  commitOnlyValid
+                  onValueChange={(next) => updateDraft({ stimulus_coefficient: coefficientValue(next ?? 1) })}
                   disabled={readOnly}
                 />
                 <Text size="xs" c="dimmed">Range is 1.00 to 2.00. Baseline competition-standard stimulus is 1.00.</Text>

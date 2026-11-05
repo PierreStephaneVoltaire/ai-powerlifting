@@ -11,6 +11,7 @@ import os
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from services.lib.lift_profiles import technique_text
 
 _HEADER_FONT = None
 _SECTION_FONT = None
@@ -1055,17 +1056,13 @@ def _md_lift_profiles(lift_profiles: list[dict]) -> str:
         lift = (profile.get("lift") or "Unknown").title()
         parts = []
 
-        style = profile.get("style_notes")
-        if not _is_blank(style):
-            parts.append(str(style))
+        technique = technique_text(profile)
+        if technique:
+            parts.append(technique)
 
-        sticking = profile.get("sticking_points")
-        if not _is_blank(sticking):
-            parts.append(f"Sticking point: {sticking}")
-
-        muscle = profile.get("primary_muscle")
-        if not _is_blank(muscle):
-            parts.append(f"Primary muscle: {muscle}")
+        notes = profile.get("notes")
+        if not _is_blank(notes):
+            parts.append(f"Notes: {notes}")
 
         vol = profile.get("volume_tolerance")
         if not _is_blank(vol):
@@ -1431,9 +1428,8 @@ def _write_lift_profiles_sheet(wb: Workbook, lift_profiles: list[dict]) -> None:
     ws = wb.create_sheet("Lift Profiles")
     headers = [
         "Lift",
-        "Style Notes",
-        "Sticking Points",
-        "Primary Muscle",
+        "Technique",
+        "Notes",
         "Volume Tolerance",
         "Stimulus Coefficient",
         "Coefficient Reasoning",
@@ -1444,9 +1440,8 @@ def _write_lift_profiles_sheet(wb: Workbook, lift_profiles: list[dict]) -> None:
     for p in lift_profiles:
         rows.append([
             (p.get("lift") or "").title(),
-            p.get("style_notes") or "",
-            p.get("sticking_points") or "",
-            p.get("primary_muscle") or "",
+            technique_text(p),
+            p.get("notes") or "",
             p.get("volume_tolerance") or "",
             p.get("stimulus_coefficient", ""),
             p.get("stimulus_coefficient_reasoning", ""),

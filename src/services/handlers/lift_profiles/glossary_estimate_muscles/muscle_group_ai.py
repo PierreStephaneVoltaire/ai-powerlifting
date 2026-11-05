@@ -162,10 +162,8 @@ def _format_lift_profiles(related_lifts: list[str], profiles: list[dict]) -> lis
     for profile in profiles:
         lines.append(f"")
         lines.append(f"Lift profile ({profile.get('lift', '?')}):")
-        for field in ("style_notes", "sticking_points", "primary_muscle", "volume_tolerance"):
-            value = profile.get(field)
-            if value:
-                lines.append(f"  {field}: {value}")
+        from services.lib.lift_profiles import technique_lines
+        lines.extend(f"  {line}" for line in technique_lines(profile))
     return lines
 
 def _build_user_message(

@@ -31,7 +31,6 @@ export const AI_READ_TOOLS = new Set<string>([
   'program_evaluation',
   'block_program_evaluation',
   'multi_block_comparison_analysis',
-  'lift_profile_review',
   'muscle_group_estimate',
   'glossary_generate_text',
   'fatigue_profile_estimate',

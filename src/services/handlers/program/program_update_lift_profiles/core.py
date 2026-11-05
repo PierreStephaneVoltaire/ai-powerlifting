@@ -5,27 +5,11 @@ LIFTS = {"squat", "bench", "deadlift"}
 ANGLES = {"front", "side", "diagonal"}
 
 
-def _failure_nodes(value):
-    if not isinstance(value, list):
-        return []
-    nodes = []
-    seen = set()
-    for item in value:
-        node = str(item or "").strip()[:160]
-        marker = node.casefold()
-        if node and marker not in seen:
-            nodes.append(node)
-            seen.add(marker)
-        if len(nodes) == 10:
-            break
-    return nodes
-
-
 def _profile(profile):
-    if not isinstance(profile, dict) or profile.get("lift") not in LIFTS:
+    from services.lib.lift_profiles import clean
+    result = clean(profile)
+    if result is None:
         return None
-    result = dict(profile)
-    result["failure_nodes"] = _failure_nodes(profile.get("failure_nodes"))
     videos = profile.get("form_videos")
     if isinstance(videos, dict):
         result["form_videos"] = {

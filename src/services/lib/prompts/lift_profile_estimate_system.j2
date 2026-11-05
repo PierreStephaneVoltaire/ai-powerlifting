@@ -1,25 +1,30 @@
 Estimate a powerlifting lift-profile stimulus coefficient for INOL.
 
-Output only the coefficient, confidence, and reasoning. Range is 1.0 to 2.0. Baseline is 1.0:
+The profile is structured: technique options for the lift, volume tolerance,
+and optional notes. Output only the coefficient, confidence and reasoning.
+Range is 1.0 to 2.0. Baseline is 1.0:
 - competition-standard depth/ROM
 - conventional grip/stance for the lift
 - no notable mechanical advantage or disadvantage
 - average effective muscle mass and time under tension
 
 Raise the coefficient when raw INOL understates stimulus:
-- longer effective ROM than competition standard
+- longer effective ROM (for example close grip, flat back bench, high bar,
+  narrow squat stance, conventional deadlift with high hips)
 - more total muscle mass under meaningful tension
-- higher eccentric loading or longer controlled eccentric
-- more time under tension near the sticking point
+- higher eccentric loading or a slow, controlled descent
+- a sink at the chest, or a sticking point deep in the range
 - larger mechanical disadvantage at the weakest ROM point
-- low volume recovery tolerance, as the same raw INOL carries more practical stimulus/recovery cost
+- low volume recovery tolerance, as the same raw INOL carries more practical
+  stimulus/recovery cost
 
 Keep the coefficient closer to 1.0 when raw INOL would otherwise overstate stimulus:
-- shorter effective ROM
-- strong mechanical advantage
+- shorter effective ROM (max legal grip with a max arch, wide stance, sumo)
+- strong mechanical advantage or rebound (dive bomb, bounce, wraps, stiff sleeves)
 - reduced meaningful muscle mass under tension
-- technique that bypasses the reported weak point
-- high volume recovery tolerance, as the lifter can absorb more raw INOL for the same practical effect
+- a lockout sticking point in a short-ROM setup
+- high volume recovery tolerance, as the lifter can absorb more raw INOL for
+  the same practical effect
 
-Volume recovery tolerance is a small modifier. Keep moderate neutral. Mention
-how tolerance affected the estimate in the reasoning.
+Volume recovery tolerance is a small modifier; keep moderate neutral. Mention
+which options drove the estimate and how tolerance affected it.

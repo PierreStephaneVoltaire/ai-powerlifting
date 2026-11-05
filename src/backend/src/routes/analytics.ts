@@ -1016,26 +1016,6 @@ analyticsRouter.post('/glossary/text/generate', async (req, res) => {
   }
 })
 
-analyticsRouter.post('/lift-profile/review', async (req, res) => {
-  try {
-    const profile = req.body?.profile ?? req.body
-    const data = await invokeToolDirect('lift_profile_review', { profile, pk: req.mapped_pk })
-    res.json({ data, error: null })
-  } catch (err) {
-    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
-  }
-})
-
-analyticsRouter.post('/lift-profile/rewrite', async (req, res) => {
-  try {
-    const profile = req.body?.profile ?? req.body
-    const data = await invokeToolDirect('lift_profile_rewrite', { profile, pk: req.mapped_pk })
-    res.json({ data, error: null })
-  } catch (err) {
-    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
-  }
-})
-
 analyticsRouter.post('/lift-profile/estimate-stimulus', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body
@@ -1046,10 +1026,10 @@ analyticsRouter.post('/lift-profile/estimate-stimulus', async (req, res) => {
   }
 })
 
-analyticsRouter.post('/lift-profile/rewrite-and-estimate', async (req, res) => {
+analyticsRouter.post('/lift-profile/suggest', async (req, res) => {
   try {
-    const profile = req.body?.profile ?? req.body
-    const data = await invokeToolDirect('lift_profile_rewrite_and_estimate', { profile, pk: req.mapped_pk })
+    const { lift, description, profile } = req.body ?? {}
+    const data = await invokeToolDirect('lift_profile_suggest', { lift, description, ...(profile ? { profile } : {}), pk: req.mapped_pk })
     res.json({ data, error: null })
   } catch (err) {
     res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })

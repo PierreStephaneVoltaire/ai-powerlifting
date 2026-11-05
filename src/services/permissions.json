@@ -393,13 +393,7 @@
   "lift_profile_estimate_stimulus": {
     "permission": "lift-profiles:write"
   },
-  "lift_profile_review": {
-    "permission": "lift-profiles:write"
-  },
-  "lift_profile_rewrite": {
-    "permission": "lift-profiles:write"
-  },
-  "lift_profile_rewrite_and_estimate": {
+  "lift_profile_suggest": {
     "permission": "lift-profiles:write"
   },
   "master_copy_seed_user": {

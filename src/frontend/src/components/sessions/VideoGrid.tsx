@@ -16,6 +16,7 @@ import {
 import { Play, Trash2, Loader2, Film, AlertCircle, Save, RotateCcw } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useProgramStore } from '@/store/programStore'
+import { useVideoUploadStore } from '@/store/videoUploadStore'
 import * as api from '@/api/client'
 import { getMediaUrl } from '@/utils/media'
 import { uploadVideo, isValidVideoType, MAX_VIDEO_SIZE, formatFileSize } from '@/utils/s3'
@@ -33,6 +34,7 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
   const version = useProgramStore(s => s.version)
   const removeSessionVideo = useProgramStore(s => s.removeSessionVideo)
   const updateSessionVideo = useProgramStore(s => s.updateSessionVideo)
+  const trackUpload = useVideoUploadStore(s => s.track)
   const [playingVideo, setPlayingVideo] = useState<SessionVideo | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -145,7 +147,7 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
     }
     setRetryingId(video.video_id)
     try {
-      const { video: updated } = await uploadVideo(version, {
+      const { video: updated } = await trackUpload({ file }, (onProgress) => uploadVideo(version, {
         file,
         sessionDate: session.date,
         sessionId: session.id,
@@ -153,7 +155,8 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
         setNumber: video.set_number,
         notes: video.notes,
         idempotencyKey: video.idempotency_key,
-      })
+        onProgress,
+      }))
       updateSessionVideo(session.date, video.video_id, updated)
       onVideoUpdated?.(updated)
       setPlayingVideo(updated)

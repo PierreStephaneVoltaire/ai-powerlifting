@@ -2,6 +2,7 @@ import { Button, Group } from '@mantine/core'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { Settings } from 'lucide-react'
+import { UploadIndicator } from './UploadIndicator'
 
 export default function TopBar() {
   const { unit, toggleUnit } = useSettingsStore()
@@ -10,6 +11,7 @@ export default function TopBar() {
   return (
     <Group justify="flex-end" h="100%" px="md" data-testid="topbar">
       <Group gap="xs">
+        <UploadIndicator />
         <Button variant="subtle" size="sm" onClick={toggleUnit} data-testid="unit-toggle">
           {unit.toUpperCase()}
         </Button>

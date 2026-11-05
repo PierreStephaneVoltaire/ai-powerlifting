@@ -845,7 +845,7 @@ function buildDataQualityFlags(
   const liftProfiles = program.lift_profiles ?? []
   const hasIncompleteLiftProfile = ['squat', 'bench', 'deadlift'].some((lift) => {
     const profile = liftProfiles.find((entry) => entry.lift === lift)
-    return !profile || profile.stimulus_coefficient == null || !profile.primary_muscle || !profile.volume_tolerance
+    return !profile || profile.stimulus_coefficient == null || !Object.keys(profile.options ?? {}).length || !profile.volume_tolerance
   })
   if (hasIncompleteLiftProfile) {
     flags.push(flag('missing_glossary_fatigue_metadata', 'Missing muscle or fatigue metadata', 'info'))

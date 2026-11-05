@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
+import { LiftProfileSummary } from '@/components/lift-profiles/LiftProfileSummary'
+import { describeLiftProfile, normalizeLiftProfiles as mergeLiftProfiles } from '@/utils/liftProfile'
 import { Link, useNavigate } from 'react-router-dom'
 import { differenceInCalendarDays, format, parse } from 'date-fns'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { useCompetitionsStore } from '@/store/competitionsStore'
-import { fetchWeightLog, updateMetaField, mutationEnvelope, reviewLiftProfile, rewriteLiftProfile, estimateLiftProfileStimulus, fetchRankingPercentile, type LiftProfileReview, type RankingPercentileResult, type RankingPercentileCard } from '@/api/client'
+import { fetchWeightLog, updateMetaField, mutationEnvelope, fetchRankingPercentile, type RankingPercentileResult, type RankingPercentileCard } from '@/api/client'
 import {
   fetchAnalysisManifest,
   fetchAnalysisSection,
@@ -54,7 +56,6 @@ type MaxDrafts = Record<BigThreeLift, string>
 
 const DASHBOARD_ANALYSIS_WINDOW = 'block'
 const DASHBOARD_ANALYSIS_SECTIONS: AnalysisSectionKey[] = ['overview', 'fatigue_readiness', 'workload']
-const PROFILE_ESTIMATE_READY_SCORE = 55
 const LIFT_ALIASES: Record<LiftProfile['lift'], string[]> = {
   squat: ['squat'],
   bench: ['bench'],
@@ -95,39 +96,6 @@ const LIFT_COLORS: Record<LiftProfile['lift'], string> = {
   bench: 'var(--lift-bench)',
   deadlift: 'var(--lift-deadlift)',
 }
-
-const LIFT_STYLE_PLACEHOLDERS: Record<LiftProfile['lift'], string> = {
-  squat: 'e.g. High bar, hip width stance, knees track over toes, upright torso. Belt squat occasionally for back relief.',
-  bench: 'e.g. Close grip for ROM, moderate arch, explosive leg drive, bar slightly below nipples, let bar sink slightly before explode.',
-  deadlift: 'e.g. Conventional, double overhand / mixed grip at heavy, slight wedge off floor, lockout hip drive.',
-}
-
-const STICKING_PLACEHOLDERS: Record<LiftProfile['lift'], string> = {
-  squat: 'e.g. Out of the hole just below parallel, hamstring activation drops',
-  bench: 'e.g. Off the chest - initial drive phase, first 2-3 inches',
-  deadlift: 'e.g. Below the knee transitioning off the floor, hip-hinge not engaged early enough',
-}
-
-const DEFAULT_PROFILE = (lift: LiftProfile['lift']): LiftProfile => ({
-  lift,
-  style_notes: '',
-  sticking_points: '',
-  primary_muscle: '',
-  volume_tolerance: 'moderate',
-  stimulus_coefficient: 1,
-})
-
-const normalizeLiftProfile = (profile: LiftProfile): LiftProfile => ({
-  ...DEFAULT_PROFILE(profile.lift),
-  ...profile,
-  stimulus_coefficient: Math.max(1, Math.min(2, profile.stimulus_coefficient ?? 1)),
-})
-
-const mergeLiftProfiles = (profiles: LiftProfile[] = []): LiftProfile[] =>
-  LIFT_ORDER.map(lift => normalizeLiftProfile(profiles.find(p => p.lift === lift) ?? DEFAULT_PROFILE(lift)))
-
-const coefficientValue = (value: string | number): number =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.min(2, value)) : 1
 
 const WELLNESS_METRICS: Array<{ key: keyof Omit<SessionWellness, 'recorded_at'>; label: string }> = [
   { key: 'sleep', label: 'Sleep' },
@@ -306,12 +274,6 @@ export default function Dashboard() {
   const [localHeight, setLocalHeight] = useState('')
   const [localWingspan, setLocalWingspan] = useState('')
   const [localLegLength, setLocalLegLength] = useState('')
-  const [profileGuideOpen, setProfileGuideOpen] = useState(false)
-  const [profileGuideDraft, setProfileGuideDraft] = useState<LiftProfile | null>(null)
-  const [profileGuideReview, setProfileGuideReview] = useState<LiftProfileReview | null>(null)
-  const [profileGuideLoading, setProfileGuideLoading] = useState(false)
-  const [profileGuideRewriting, setProfileGuideRewriting] = useState(false)
-  const [profileGuideEstimating, setProfileGuideEstimating] = useState(false)
   const [dashboardAnalysisWindow, setDashboardAnalysisWindow] = useState<AnalysisWindow | null>(null)
   const [dashboardSectionPayloads, setDashboardSectionPayloads] = useState<Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>>({})
   const [dashboardSectionStatuses, setDashboardSectionStatuses] = useState<Partial<Record<AnalysisSectionKey, string>>>({})
@@ -698,98 +660,10 @@ export default function Dashboard() {
     )
   }
 
-  const reviewProfileDraft = async (profile: LiftProfile) => {
-    setProfileGuideLoading(true)
-    try {
-      const review = await reviewLiftProfile(profile)
-      setProfileGuideReview(review)
-    } catch (err) {
-      pushToast({ message: 'AI profile review failed', type: 'error' })
-    } finally {
-      setProfileGuideLoading(false)
-    }
-  }
-
-  const openProfileGuide = async (profile: LiftProfile) => {
-    const merged = mergeLiftProfiles(localLiftProfiles.length ? localLiftProfiles : program?.lift_profiles)
-    const draft = normalizeLiftProfile(merged.find(p => p.lift === profile.lift) ?? profile)
-    const shouldAutoReview = Math.abs((draft.stimulus_coefficient ?? 1) - 1) < 0.001
-    setLocalLiftProfiles(merged)
-    setEditingLiftProfiles(true)
-    setProfileGuideDraft(draft)
-    setProfileGuideReview(null)
-    setProfileGuideOpen(true)
-    if (shouldAutoReview) {
-      await reviewProfileDraft(draft)
-    }
-  }
-
-  const updateProfileGuideDraft = (updates: Partial<LiftProfile>) => {
-    setProfileGuideDraft(prev => prev ? { ...prev, ...updates } : prev)
-  }
-
-  const runProfileGuideReview = async () => {
-    if (!profileGuideDraft) return
-    await reviewProfileDraft(profileGuideDraft)
-  }
-
-  const runRewriteProfile = async () => {
-    if (!profileGuideDraft) return
-    setProfileGuideRewriting(true)
-    try {
-      const result = await rewriteLiftProfile(profileGuideDraft)
-      const updated = normalizeLiftProfile({ ...profileGuideDraft, ...result })
-      setProfileGuideDraft(updated)
-      updateLocalProfile(updated.lift, updated)
-      await reviewProfileDraft(updated)
-      pushToast({ message: 'Lift profile rewritten', type: 'success' })
-    } catch (err) {
-      pushToast({ message: 'AI rewrite failed', type: 'error' })
-    } finally {
-      setProfileGuideRewriting(false)
-    }
-  }
-
-  const runEstimateStimulus = async () => {
-    if (!profileGuideDraft) return
-    const score = profileGuideReview?.completeness_score ?? 0
-    if (score < PROFILE_ESTIMATE_READY_SCORE) {
-      pushToast({ message: `Profile score needs ${PROFILE_ESTIMATE_READY_SCORE}% before estimating stimulus`, type: 'error' })
-      return
-    }
-    setProfileGuideEstimating(true)
-    try {
-      const result = await estimateLiftProfileStimulus(profileGuideDraft)
-      const updated = normalizeLiftProfile({
-        ...profileGuideDraft,
-        stimulus_coefficient: result.stimulus_coefficient,
-        stimulus_coefficient_confidence: result.stimulus_coefficient_confidence,
-        stimulus_coefficient_reasoning: result.stimulus_coefficient_reasoning,
-        stimulus_coefficient_updated_at: result.stimulus_coefficient_updated_at,
-      })
-      setProfileGuideDraft(updated)
-      updateLocalProfile(updated.lift, updated)
-      pushToast({ message: 'Stimulus coefficient applied', type: 'success' })
-    } catch (err) {
-      pushToast({ message: 'AI stimulus estimate failed', type: 'error' })
-    } finally {
-      setProfileGuideEstimating(false)
-    }
-  }
-
-  const applyProfileGuide = () => {
-    if (!profileGuideDraft) return
-    updateLocalProfile(profileGuideDraft.lift, profileGuideDraft)
-    setProfileGuideOpen(false)
-    pushToast({ message: 'Profile staged. Save lift profiles to persist it.', type: 'success' })
-  }
-
   const displayProfiles = (program?.lift_profiles?.length
     ? mergeLiftProfiles(program.lift_profiles)
     : mergeLiftProfiles()
   )
-  const profileGuideScore = profileGuideReview?.completeness_score ?? 0
-  const profileGuideCanEstimate = profileGuideScore >= PROFILE_ESTIMATE_READY_SCORE
   const currentBlockWeekly = mergeDashboardAnalysisSections(dashboardSectionPayloads)
   const currentBlockFatigue = currentBlockWeekly?.fatigue_index ?? null
   const currentBlockFatigueComponents = currentBlockWeekly?.fatigue_components ?? null
@@ -1308,17 +1182,13 @@ export default function Dashboard() {
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
             {displayProfiles.map((profile) => {
               const color = LIFT_COLORS[profile.lift]
-              const hasData = profile.style_notes || profile.sticking_points || profile.primary_muscle
+              const hasData = describeLiftProfile(profile).length > 0 || Boolean(profile.notes)
               return (
                 <div key={profile.lift} style={{ minWidth: 0 }}>
                   <div style={{ color, fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase' }}>{LIFT_LABELS[profile.lift]}</div>
                   {hasData ? (
                     <>
-                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, lineHeight: 1.6, marginBottom: 6 }}>{profile.style_notes || 'No style notes yet.'}</div>
-                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, letterSpacing: '0.07em', marginBottom: 4, textTransform: 'uppercase' }}>Sticking point</div>
-                      <div style={{ color: 'var(--color-text-warning)', fontSize: 11, lineHeight: 1.5, marginBottom: 6 }}>{profile.sticking_points || '--'}</div>
-                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, letterSpacing: '0.07em', marginBottom: 4, textTransform: 'uppercase' }}>Primary driver</div>
-                      <div style={{ color: 'var(--color-text-secondary)', fontSize: 11 }}>{profile.primary_muscle || '--'}</div>
+                      <LiftProfileSummary profile={profile} />
                       <div style={{ marginTop: 8 }}>
                         <span className="if-mock-pill" style={{ background: 'var(--color-background-warning)', borderColor: 'var(--color-border-warning)', color: 'var(--color-text-warning)' }}>
                           {profile.volume_tolerance} volume tolerance
@@ -1335,156 +1205,6 @@ export default function Dashboard() {
         </section>
       </div>
 
-      <Modal
-        opened={profileGuideOpen}
-        onClose={() => setProfileGuideOpen(false)}
-        title={profileGuideDraft ? `${LIFT_LABELS[profileGuideDraft.lift]} Lift Profile` : 'Lift Profile'}
-        size="lg"
-      >
-        {profileGuideDraft && (
-          <Stack gap="md">
-            {profileGuideReview && (
-              <Alert
-                variant="light"
-                color={profileGuideCanEstimate ? 'green' : 'yellow'}
-                icon={<Sparkles size={16} />}
-              >
-                <Group justify="space-between" align="center" mb={(profileGuideReview.missing_details ?? []).length ? 'xs' : 0}>
-                  <Text fw={500}>Profile score {profileGuideReview.completeness_score}%</Text>
-                  <Badge color={profileGuideCanEstimate ? 'green' : 'yellow'} variant="light">
-                    {profileGuideCanEstimate ? 'Estimate ready' : `Needs ${PROFILE_ESTIMATE_READY_SCORE}%`}
-                  </Badge>
-                </Group>
-                <Text size="xs" c="dimmed" mb="xs">
-                  {profileGuideReview.score_explanation ?? 'Score is 0-100 completeness for estimating a lift-specific INOL stimulus coefficient.'}
-                </Text>
-                {profileGuideReview.score_breakdown && (
-                  <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs" mb="xs">
-                    {Object.entries(profileGuideReview.score_breakdown).map(([key, part]) => (
-                      <Paper key={key} withBorder p="xs">
-                        <Text size="xs" fw={500} tt="capitalize">{key.split('_').join(' ')}</Text>
-                        <Text size="sm" fw={700}>{part.score}/{part.max}</Text>
-                        {(part.notes ?? []).slice(0, 2).map((note) => (
-                          <Text key={note} size="xs" c="dimmed">{note}</Text>
-                        ))}
-                      </Paper>
-                    ))}
-                  </SimpleGrid>
-                )}
-                {(profileGuideReview.missing_details ?? []).length > 0 && (
-                  <Stack gap={4}>
-                    {(profileGuideReview.missing_details ?? []).map((detail) => (
-                      <Text key={detail} size="xs">{detail}</Text>
-                    ))}
-                  </Stack>
-                )}
-                {(profileGuideReview.suggestions ?? []).length > 0 && (
-                  <Stack gap={4} mt="xs">
-                    {(profileGuideReview.suggestions ?? []).map((suggestion) => (
-                      <Text key={suggestion} size="xs" c="dimmed">{suggestion}</Text>
-                    ))}
-                  </Stack>
-                )}
-              </Alert>
-            )}
-
-            <Textarea
-              label="Style & Setup"
-              rows={3}
-              value={profileGuideDraft.style_notes}
-              onChange={(e) => updateProfileGuideDraft({ style_notes: e.currentTarget.value })}
-              placeholder={LIFT_STYLE_PLACEHOLDERS[profileGuideDraft.lift]}
-              styles={{ input: { maxWidth: '100%', minWidth: 0, width: '100%', maxHeight: '28vh', overflowY: 'auto', resize: 'vertical' } }}
-            />
-
-            <Textarea
-              label="Sticking Points"
-              rows={2}
-              value={profileGuideDraft.sticking_points}
-              onChange={(e) => updateProfileGuideDraft({ sticking_points: e.currentTarget.value })}
-              placeholder={STICKING_PLACEHOLDERS[profileGuideDraft.lift]}
-              styles={{ input: { maxWidth: '100%', minWidth: 0, width: '100%', maxHeight: '24vh', overflowY: 'auto', resize: 'vertical' } }}
-            />
-
-            <TextInput
-              label="Primary Muscle Driver"
-              value={profileGuideDraft.primary_muscle}
-              onChange={(e) => updateProfileGuideDraft({ primary_muscle: e.currentTarget.value })}
-              placeholder={profileGuideDraft.lift === 'squat' ? 'Quad dominant' : profileGuideDraft.lift === 'bench' ? 'Tricep dominant' : 'Glute dominant'}
-            />
-
-            <Group grow align="flex-end">
-              <SegmentedControl
-                fullWidth
-                data={[
-                  { label: 'Low', value: 'low' },
-                  { label: 'Moderate', value: 'moderate' },
-                  { label: 'High', value: 'high' },
-                ]}
-                value={profileGuideDraft.volume_tolerance}
-                onChange={(v) => updateProfileGuideDraft({ volume_tolerance: v as 'low' | 'moderate' | 'high' })}
-              />
-              <TextInput
-                type="number"
-                label="Stimulus Coefficient"
-                step={0.05}
-                value={profileGuideDraft.stimulus_coefficient ?? 1}
-                onChange={(e) => updateProfileGuideDraft({ stimulus_coefficient: coefficientValue(Number(e.currentTarget.value)) })}
-              />
-            </Group>
-
-            {profileGuideDraft.stimulus_coefficient_reasoning && (
-              <Alert variant="light" color="blue">
-                <Text size="sm">{profileGuideDraft.stimulus_coefficient_reasoning}</Text>
-                {profileGuideDraft.stimulus_coefficient_confidence && (
-                  <Badge mt="xs" variant="light" color="blue">
-                    {profileGuideDraft.stimulus_coefficient_confidence} confidence
-                  </Badge>
-                )}
-              </Alert>
-            )}
-
-            <Divider />
-
-            <Text size="xs" c="dimmed">
-              Estimate unlocks at {PROFILE_ESTIMATE_READY_SCORE}% profile score. Rewrite only cleans the text; estimate only applies the stimulus coefficient.
-            </Text>
-
-            <Group justify="space-between" gap="sm">
-              <Button
-                variant="light"
-                leftSection={<Sparkles size={16} />}
-                loading={profileGuideLoading}
-                onClick={runProfileGuideReview}
-                disabled={readOnly}
-              >
-                Review
-              </Button>
-              <Group gap="sm">
-                <Button
-                  variant="light"
-                  leftSection={<Sparkles size={16} />}
-                  loading={profileGuideRewriting}
-                  onClick={runRewriteProfile}
-                  disabled={readOnly}
-                >
-                  Rewrite
-                </Button>
-                <Button
-                  variant="light"
-                  leftSection={<Sparkles size={16} />}
-                  loading={profileGuideEstimating}
-                  disabled={!profileGuideCanEstimate || readOnly}
-                  onClick={runEstimateStimulus}
-                >
-                  Estimate Stimulus
-                </Button>
-                <Button onClick={applyProfileGuide} disabled={readOnly}>Apply</Button>
-              </Group>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
     </Stack>
   )
 }

@@ -94,10 +94,8 @@ def _format_lift_profile(profile: dict | None) -> list[str]:
     if not profile:
         return []
     lines = ["", f"Lift profile ({profile.get('lift', '?')}):"]
-    for field in ("style_notes", "sticking_points", "primary_muscle", "volume_tolerance"):
-        value = profile.get(field)
-        if value:
-            lines.append(f"  {field}: {value}")
+    from services.lib.lift_profiles import technique_lines
+    lines.extend(f"  {line}" for line in technique_lines(profile))
     return lines if len(lines) > 1 else []
 
 def _build_user_message(

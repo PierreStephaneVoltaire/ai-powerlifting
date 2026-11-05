@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { LiftProfileSummary } from '@/components/lift-profiles/LiftProfileSummary'
 import { useSearchParams } from 'react-router-dom'
 import {
   Activity, Download, AlertTriangle, CheckCircle, TrendingUp, Dumbbell, Trophy,
@@ -1924,24 +1925,7 @@ export default function AnalysisPage() {
                     <Text fw={500} fz="sm" tt="capitalize" pb="xs" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                       {LIFT_LABELS[profile.lift] || profile.lift}
                     </Text>
-                    {profile.style_notes && (
-                      <Stack gap={2}>
-                        <Text fz="xs" c="dimmed">Style &amp; Setup</Text>
-                        <Text fz="xs" lh="lg">{profile.style_notes}</Text>
-                      </Stack>
-                    )}
-                    {profile.sticking_points && (
-                      <Stack gap={2}>
-                        <Text fz="xs" c="dimmed">Sticking Points</Text>
-                        <Text fz="xs" lh="lg" c="orange">{profile.sticking_points}</Text>
-                      </Stack>
-                    )}
-                    {profile.primary_muscle && (
-                      <Stack gap={2}>
-                        <Text fz="xs" c="dimmed">Primary Driver</Text>
-                        <Text fz="xs" fw={500}>{profile.primary_muscle}</Text>
-                      </Stack>
-                    )}
+                    <LiftProfileSummary profile={profile} />
                     <Badge
                       color={profile.volume_tolerance === 'low' ? 'red' : profile.volume_tolerance === 'moderate' ? 'yellow' : 'green'}
                       variant="light"

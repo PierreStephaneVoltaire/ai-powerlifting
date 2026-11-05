@@ -5,6 +5,8 @@ prompt sections for correlation / block evaluation models.
 """
 from __future__ import annotations
 
+from services.lib.lift_profiles import describe as describe_lift_profile
+
 from datetime import date, datetime
 from typing import Any, Optional
 
@@ -84,13 +86,11 @@ def summarize_lift_profiles(lift_profiles: list[dict[str, Any]] | None) -> list[
             continue
         ordered.append({
             "lift": profile.get("lift"),
-            "style_notes": profile.get("style_notes") or "",
-            "sticking_points": profile.get("sticking_points") or "",
-            "primary_muscle": profile.get("primary_muscle") or "",
+            "technique": describe_lift_profile(profile)["technique"],
+            "notes": profile.get("notes") or "",
             "volume_tolerance": profile.get("volume_tolerance") or "moderate",
             "e1rm_multiplier": profile.get("e1rm_multiplier", 1.0),
             "stimulus_coefficient": profile.get("stimulus_coefficient", 1.0),
-            "failure_nodes": profile.get("failure_nodes") or [],
         })
     return ordered
 

@@ -217,7 +217,7 @@ def reserve_lift_profile_slot(table: Any, pk: str, program_sk: str, lift: str, a
         profiles = [dict(profile) for profile in program.get("lift_profiles") or []]
         profile = next((item for item in profiles if item.get("lift") == lift), None)
         if profile is None:
-            profile = {"lift": lift, "style_notes": "", "sticking_points": "", "primary_muscle": "", "volume_tolerance": "moderate"}
+            profile = {"lift": lift, "options": {}, "volume_tolerance": "moderate", "notes": ""}
             profiles.append(profile)
         videos = dict(profile.get("form_videos") or {})
         current = dict(videos.get(angle) or {})
