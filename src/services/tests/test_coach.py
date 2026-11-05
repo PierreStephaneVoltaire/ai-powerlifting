@@ -16,6 +16,8 @@ from services.coach.model import Reply
 SECRET = "s" * 40
 TOKEN = "internal-token"
 SERVICES = Path(__file__).resolve().parents[1]
+AI_OPERATIONS = [record["name"] for path in sorted((SERVICES / "operations").glob("*.json")) for record in json.loads(path.read_text()) if record.get("execution") == "ai"]
+OPERATION_AI = {name: {"provider": "openrouter" if name == "glossary_estimate_e1rm" else "chatgpt", "model": "estimate-model" if name == "glossary_estimate_e1rm" else "analysis-model", "effort": "high"} for name in AI_OPERATIONS}
 
 
 class FakeServices:
@@ -50,11 +52,12 @@ class FakeModel:
         self.completions = []
         self.app = None
 
-    async def complete(self, instructions, prompt):
-        self.completions.append((instructions, prompt))
+    async def complete(self, ai, instructions, prompt):
+        self.completions.append((instructions, prompt, ai))
         return "```json\n{\"e1rm_kg\": \"heavy\"}\n```" if len(self.completions) == 1 else "{\"e1rm_kg\": 200}"
 
-    async def converse(self, workspace, thread_id, instructions, prompt, tools):
+    async def converse(self, ai, workspace, thread_id, instructions, prompt, tools):
+        assert ai.effort == "medium"
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://coach") as client:
             headers = {"Authorization": "Bearer " + tools.token}
@@ -76,6 +79,10 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setenv("PL_SERVICES_DIR", str(SERVICES))
     monkeypatch.setenv("COACH_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("COACH_URL", "http://coach")
+    monkeypatch.setenv("COACH_PROVIDERS", json.dumps({"chatgpt": {"auth": "chatgpt", "max_concurrent": 1}, "openrouter": {"auth": "api_key", "base_url": "https://openrouter.example/v1", "max_concurrent": 1}}))
+    monkeypatch.setenv("COACH_PROVIDER_KEYS", json.dumps({"openrouter": "router-key"}))
+    monkeypatch.setenv("COACH_CONVERSATION_AI", json.dumps({"provider": "chatgpt", "model": "chat-model", "effort": "medium"}))
+    monkeypatch.setenv("COACH_OPERATION_AI", json.dumps(OPERATION_AI))
     from services.coach.services import PowerliftingServices
 
     settings = load()
@@ -111,6 +118,7 @@ def test_domain_job_answers_inference_challenges_and_returns_compatible_result(h
     assert job["status"] == "succeeded", job
     assert json.loads(job["result"]["content"])["estimate"]["e1rm_kg"] == 200
     assert len(model.completions) == 2 and "rejected" in model.completions[1][1]
+    assert {(ai.provider, ai.model, ai.effort) for _, _, ai in model.completions} == {("openrouter", "estimate-model", "high")}
 
 
 def test_domain_job_rejects_bad_principal_and_scope(harness):
@@ -145,3 +153,29 @@ def test_tools_refuse_finished_turns(harness):
     runner.store.update(job)
     response = client.post(f"/v1/jobs/{job.job_id}/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers={"Authorization": "Bearer " + runner.tool_token(job.job_id)})
     assert response.status_code == 409
+
+
+def test_coach_refuses_to_start_without_model_settings_for_every_ai_operation(harness, monkeypatch):
+    from services.coach.runner import Runner
+    settings = load()
+    with pytest.raises(ValueError, match="glossary_estimate_e1rm"):
+        Runner(replace(settings, operation_ai={k: v for k, v in settings.operation_ai.items() if k != "glossary_estimate_e1rm"}), FakeModel(), None, None)
+
+
+def test_coach_refuses_unknown_provider(harness):
+    from services.coach.runner import Runner
+    settings = load()
+    ai = settings.operation_ai["glossary_estimate_e1rm"]
+    with pytest.raises(ValueError, match="anthropic"):
+        Runner(replace(settings, operation_ai={**settings.operation_ai, "glossary_estimate_e1rm": replace(ai, provider="anthropic")}), FakeModel(), None, None)
+
+
+def test_api_key_provider_runs_codex_as_the_harness_with_its_own_key(harness, tmp_path):
+    from services.coach.model import CodexModel, PROVIDER_KEY_ENV
+    settings = load()
+    model = CodexModel(tmp_path, settings.providers)
+    routed = model._config(tmp_path, (), "openrouter")
+    assert routed.env[PROVIDER_KEY_ENV] == "router-key" and routed.env.get("COACH_PROVIDER_KEYS") == ""
+    assert 'model_provider="openrouter"' in routed.config_overrides
+    assert not any(item.startswith("forced_login_method") for item in routed.config_overrides)
+    assert 'forced_login_method="chatgpt"' in model._config(tmp_path, (), "chatgpt").config_overrides

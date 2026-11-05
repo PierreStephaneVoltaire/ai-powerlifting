@@ -1,6 +1,26 @@
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class Provider:
+    auth: str
+    max_concurrent: int
+    base_url: str | None = None
+    api_key: str = ""
+
+    @property
+    def subscription(self) -> bool:
+        return self.auth == "chatgpt"
+
+
+@dataclass(frozen=True)
+class AISettings:
+    provider: str
+    model: str
+    effort: str
 
 
 @dataclass(frozen=True)
@@ -13,9 +33,9 @@ class Settings:
     profile_url: str
     public_url: str
     state_dir: Path
-    model: str
-    effort: str
-    max_concurrent_turns: int
+    providers: dict[str, Provider]
+    conversation_ai: AISettings
+    operation_ai: dict[str, AISettings]
 
     @property
     def database(self) -> Path:
@@ -29,6 +49,11 @@ class Settings:
         return self.service_url_template.format(domain=domain).rstrip("/")
 
 
+def _providers() -> dict[str, Provider]:
+    keys = json.loads(os.getenv("COACH_PROVIDER_KEYS") or "{}")
+    return {name: Provider(**value, api_key=keys.get(name, "")) for name, value in json.loads(os.environ["COACH_PROVIDERS"]).items()}
+
+
 def load() -> Settings:
     root = Path(os.getenv("PL_SERVICES_DIR", Path(__file__).resolve().parents[1]))
     return Settings(
@@ -40,7 +65,7 @@ def load() -> Settings:
         profile_url=os.getenv("PL_PROFILE_URL", "http://pl-profile:8000"),
         public_url=os.getenv("COACH_URL", "http://127.0.0.1:8000").rstrip("/"),
         state_dir=Path(os.getenv("COACH_STATE_DIR", "./data")),
-        model=os.getenv("COACH_MODEL", "gpt-5.6-sol"),
-        effort=os.getenv("COACH_REASONING_EFFORT", "medium"),
-        max_concurrent_turns=int(os.getenv("COACH_MAX_CONCURRENT_TURNS", "2")),
+        providers=_providers(),
+        conversation_ai=AISettings(**json.loads(os.environ["COACH_CONVERSATION_AI"])),
+        operation_ai={name: AISettings(**value) for name, value in json.loads(os.environ["COACH_OPERATION_AI"]).items()},
     )

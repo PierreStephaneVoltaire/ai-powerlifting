@@ -9,7 +9,7 @@ from .model import CodexModel
 
 async def login() -> None:
     settings = load()
-    model = CodexModel(settings.model, settings.effort, settings.state_dir / "scratch")
+    model = CodexModel(settings.state_dir / "scratch", settings.providers)
     cwd = Path(settings.state_dir / "scratch")
     cwd.mkdir(parents=True, exist_ok=True)
     async with AsyncCodex(model._config(cwd)) as codex:
@@ -20,10 +20,11 @@ async def login() -> None:
         if not result.success:
             raise RuntimeError(result.error or "Subscription login failed")
         await model._check_subscription(codex)
-        models = await codex.models()
-        if settings.model not in {entry.model for entry in models.data}:
-            raise RuntimeError(f"{settings.model} is not available on this subscription")
-    print(f"ChatGPT subscription verified; {settings.model} available", flush=True)
+        available = {entry.model for entry in (await codex.models()).data}
+        wanted = {ai.model for ai in (settings.conversation_ai, *settings.operation_ai.values()) if settings.providers[ai.provider].subscription}
+        if wanted - available:
+            raise RuntimeError(f"Not available on this subscription: {', '.join(sorted(wanted - available))}")
+    print(f"ChatGPT subscription verified; {', '.join(sorted(wanted))} available", flush=True)
 
 
 if __name__ == "__main__":

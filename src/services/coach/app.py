@@ -48,7 +48,7 @@ def _athlete_from(conversation_id: str, person: str) -> str:
 def create_app(settings: Settings | None = None, model: Model | None = None, services: PowerliftingServices | None = None) -> FastAPI:
     settings = settings or load()
     services = services or PowerliftingServices(settings)
-    runner = Runner(settings, model or CodexModel(settings.model, settings.effort, settings.state_dir / "scratch"), services, Store(settings.database))
+    runner = Runner(settings, model or CodexModel(settings.state_dir / "scratch", settings.providers), services, Store(settings.database))
     app = FastAPI(title="Powerlifting Coach")
     app.state.runner = runner
 

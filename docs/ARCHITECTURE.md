@@ -18,6 +18,10 @@ and `perms` (namespace, secrets, RBAC, Actions runner) are applied locally;
 which resolves each image's `latest` digest. `terraform/coach` holds the Coach
 and the Discord bot.
 
+The AI workflow (use cases, models, request flow, concurrency, output
+validation and hallucination controls) is in the README's
+[AI components](../README.md#ai-components) section.
+
 The domain services share the `if-powerlifting-fns` image. The analytics
 reports sidecar is built from `docker/powerlifting-analytics.pkr.hcl` into
 `if-powerlifting-analytics`.

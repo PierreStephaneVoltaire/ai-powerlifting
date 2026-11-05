@@ -9,5 +9,29 @@ aws_credentials_secret_name = ""
 discord_operator_id    = ""
 operator_person        = ""
 discord_persons        = {}
-coach_model            = ""
-coach_reasoning_effort = ""
+coach_providers = {
+  chatgpt    = { auth = "chatgpt", max_concurrent = 0 }
+  openrouter = { auth = "api_key", base_url = "", max_concurrent = 0 }
+}
+coach_provider_api_keys = { openrouter = "" }
+conversation_ai = { provider = "", model = "", effort = "" }
+operation_ai = {
+  block_correlation_analysis      = { provider = "", model = "", effort = "" }
+  block_program_evaluation        = { provider = "", model = "", effort = "" }
+  correlation_analysis            = { provider = "", model = "", effort = "" }
+  multi_block_comparison_analysis = { provider = "", model = "", effort = "" }
+  program_evaluation              = { provider = "", model = "", effort = "" }
+  template_evaluate               = { provider = "", model = "", effort = "" }
+  import_parse_file               = { provider = "", model = "", effort = "" }
+  lift_profile_suggest            = { provider = "", model = "", effort = "" }
+  lift_profile_estimate_stimulus  = { provider = "", model = "", effort = "" }
+  glossary_estimate_muscles       = { provider = "", model = "", effort = "" }
+  muscle_group_estimate           = { provider = "", model = "", effort = "" }
+  glossary_estimate_fatigue       = { provider = "", model = "", effort = "" }
+  fatigue_profile_estimate        = { provider = "", model = "", effort = "" }
+  glossary_estimate_e1rm          = { provider = "", model = "", effort = "" }
+  glossary_generate_text          = { provider = "", model = "", effort = "" }
+  budget_advisor                  = { provider = "", model = "", effort = "" }
+  budget_priority_timeline        = { provider = "", model = "", effort = "" }
+}
+coach_replicas = 1

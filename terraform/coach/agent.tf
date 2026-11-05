@@ -26,13 +26,20 @@ resource "kubernetes_persistent_volume_claim_v1" "coach_state" {
 resource "kubernetes_deployment_v1" "coach" {
   wait_for_rollout = false
 
+  lifecycle {
+    precondition {
+      condition     = var.coach_replicas == 1 || alltrue([for provider in values(var.coach_providers) : provider.auth != "chatgpt"])
+      error_message = "The ChatGPT subscription login can only run in one Coach pod; set coach_replicas = 1 or move every operation to an api_key provider."
+    }
+  }
+
   metadata {
     name      = "pl-coach"
     namespace = var.namespace
   }
 
   spec {
-    replicas = 1
+    replicas = var.coach_replicas
 
     strategy {
       type = "Recreate"
@@ -82,13 +89,28 @@ resource "kubernetes_deployment_v1" "coach" {
           }
 
           env {
-            name  = "COACH_MODEL"
-            value = var.coach_model
+            name  = "COACH_PROVIDERS"
+            value = jsonencode(var.coach_providers)
           }
 
           env {
-            name  = "COACH_REASONING_EFFORT"
-            value = var.coach_reasoning_effort
+            name  = "COACH_CONVERSATION_AI"
+            value = jsonencode(var.conversation_ai)
+          }
+
+          env {
+            name  = "COACH_OPERATION_AI"
+            value = jsonencode(var.operation_ai)
+          }
+
+          env {
+            name = "COACH_PROVIDER_KEYS"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.provider_keys.metadata[0].name
+                key  = "COACH_PROVIDER_KEYS"
+              }
+            }
           }
 
           dynamic "env" {

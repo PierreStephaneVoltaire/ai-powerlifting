@@ -44,7 +44,7 @@ export async function updateBodyWeight(
   weightKg: number,
   envelope: MutationEnvelope,
 ): Promise<Record<string, unknown>> {
-  return await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, program_sk: version === "current" ? undefined : `program#${version}`, updates: { current_body_weight_kg: weightKg, current_body_weight_lb: weightKg * 2.20462 }, ...envelope }) as Record<string, unknown>
+  return await invokeLambda('pod_training_program', { function: 'program_update_meta_field',  pk, program_sk: version === "current" ? undefined : `program#${version}`, updates: { current_body_weight_kg: weightKg, current_body_weight_lb: Math.round(weightKg * 2.20462 * 10) / 10 }, ...envelope }) as Record<string, unknown>
 }
 
 export async function updatePhases(

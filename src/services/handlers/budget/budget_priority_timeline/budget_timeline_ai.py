@@ -12,7 +12,6 @@ import json
 import logging
 from typing import Any
 
-from services.lib.ai_config import ANALYSIS_MODEL, ANALYSIS_MODEL_THINKING_BUDGET
 from services.lib.prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -216,10 +215,10 @@ async def generate_budget_timeline(payload: dict[str, Any]) -> dict[str, Any]:
         return _default_timeline("No unpurchased budget items to schedule.")
 
     user_msg = json.dumps(_sanitize(payload), indent=2, default=str)
-    logger.info("[BudgetTimelineAI] model=%s payload_chars=%s items=%s", ANALYSIS_MODEL, len(user_msg), len(unpurchased))
+    logger.info("[BudgetTimelineAI] payload_chars=%s items=%s", len(user_msg), len(unpurchased))
 
     try:
-        resp = await completion({'model': ANALYSIS_MODEL, 'thinking': {'type': 'enabled', 'budget_tokens': ANALYSIS_MODEL_THINKING_BUDGET}, 'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': 'required'})
+        resp = await completion({'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': 'required'})
         resp.raise_for_status()
         data = resp.json()
 

@@ -6,7 +6,6 @@ import json
 import logging
 import re
 
-from services.lib.ai_config import GLOSSARY_TEXT_MODEL
 from services.lib.prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
@@ -85,9 +84,9 @@ async def generate_glossary_text(
 ) -> dict:
     """Generate short editable glossary text for one exercise."""
     user_msg = _build_user_message(exercise, lift_profiles=lift_profiles)
-    logger.info("[GlossaryTextAI] model=%s payload_chars=%s", GLOSSARY_TEXT_MODEL, len(user_msg))
+    logger.info("[GlossaryTextAI] payload_chars=%s", len(user_msg))
 
-    resp = await completion({'model': GLOSSARY_TEXT_MODEL, 'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'temperature': 0.2, 'max_tokens': 700, 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'generate_glossary_text'}}})
+    resp = await completion({'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'generate_glossary_text'}}})
     resp.raise_for_status()
     data = resp.json()
 

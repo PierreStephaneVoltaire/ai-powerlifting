@@ -9,11 +9,6 @@ from services.ai import completion
 import json
 import logging
 
-from services.lib.ai_config import (
-    ESTIMATE_MODEL,
-    ESTIMATE_MODEL_REASONING_EFFORT,
-    ESTIMATE_MODEL_VERBOSITY,
-)
 from services.lib.prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
@@ -123,7 +118,7 @@ async def estimate_fatigue_profile(
     """
     try:
         user_msg = _build_user_message(exercise, program_meta=program_meta, lift_profiles=lift_profiles)
-        resp = await completion({'model': ESTIMATE_MODEL, 'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'reasoning': {'enabled': True, 'effort': ESTIMATE_MODEL_REASONING_EFFORT}, 'verbosity': ESTIMATE_MODEL_VERBOSITY, 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'estimate_fatigue_profile'}}})
+        resp = await completion({'messages': [{'role': 'system', 'content': _SYSTEM_PROMPT}, {'role': 'user', 'content': user_msg}], 'tools': [_TOOL_SCHEMA], 'tool_choice': {'type': 'function', 'function': {'name': 'estimate_fatigue_profile'}}})
         resp.raise_for_status()
         data = resp.json()
 

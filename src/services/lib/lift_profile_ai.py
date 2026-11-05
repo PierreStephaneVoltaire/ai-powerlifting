@@ -3,7 +3,6 @@ import logging
 from typing import Any
 
 from services.ai import completion
-from services.lib.ai_config import ESTIMATE_MODEL, ESTIMATE_MODEL_REASONING_EFFORT, ESTIMATE_MODEL_VERBOSITY
 from services.lib.lift_profiles import LIFTS, clean, clean_options, describe, fields, missing, now, suggest_tool_schema
 from services.lib.prompts.loader import load_system_prompt
 
@@ -32,10 +31,7 @@ _ESTIMATE_TOOL_SCHEMA = {
 
 async def _call_tool(system_prompt: str, user_msg: str, tool_schema: dict, tool_name: str) -> dict | None:
     resp = await completion({
-        "model": ESTIMATE_MODEL,
         "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_msg}],
-        "reasoning": {"enabled": True, "effort": ESTIMATE_MODEL_REASONING_EFFORT},
-        "verbosity": ESTIMATE_MODEL_VERBOSITY,
         "tools": [tool_schema],
         "tool_choice": {"type": "function", "function": {"name": tool_name}},
     })

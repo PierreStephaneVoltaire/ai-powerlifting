@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import Operation, operations
-from .config import Settings
+from .config import AISettings, Provider, Settings
 from .model import Model, ModelError, ToolServer, workspace_for
 from .operations import run_operation
 from .services import PowerliftingServices, Scope, ServiceError
@@ -36,24 +36,29 @@ def _failure(exc: Exception) -> dict[str, Any]:
 
 
 class LimitedModel:
-    def __init__(self, model: Model, limit: int):
+    def __init__(self, model: Model, providers: dict[str, Provider]):
         self.model = model
-        self.completions = asyncio.Semaphore(limit)
-        self.conversations = asyncio.Semaphore(limit)
+        self.slots = {name: asyncio.Semaphore(provider.max_concurrent) for name, provider in providers.items()}
 
-    async def complete(self, instructions: str, prompt: str) -> str:
-        async with self.completions:
-            return await self.model.complete(instructions, prompt)
+    async def complete(self, ai: AISettings, instructions: str, prompt: str) -> str:
+        async with self.slots[ai.provider]:
+            return await self.model.complete(ai, instructions, prompt)
 
-    async def converse(self, *args, **kwargs):
-        async with self.conversations:
-            return await self.model.converse(*args, **kwargs)
+    async def converse(self, ai: AISettings, *args, **kwargs):
+        async with self.slots[ai.provider]:
+            return await self.model.converse(ai, *args, **kwargs)
 
 
 class Runner:
     def __init__(self, settings: Settings, model: Model, services: PowerliftingServices, store: Store):
+        missing = sorted(name for name, operation in operations(settings.operations_dir, settings.permissions_path).items() if operation.uses_inference and name not in settings.operation_ai)
+        if missing:
+            raise ValueError("COACH_OPERATION_AI has no model and effort for: " + ", ".join(missing))
+        unknown = sorted({ai.provider for ai in (settings.conversation_ai, *settings.operation_ai.values())} - settings.providers.keys())
+        if unknown:
+            raise ValueError("Unknown Coach providers: " + ", ".join(unknown))
         self.settings = settings
-        self.model = LimitedModel(model, settings.max_concurrent_turns)
+        self.model = LimitedModel(model, settings.providers)
         self.services = services
         self.store = store
         self.tasks: dict[str, asyncio.Task] = {}
@@ -88,7 +93,7 @@ class Runner:
         job = self.store.create(owner, athlete, "domain", f"powerlifting:{athlete}:{uuid.uuid4().hex}", payload)
         scope = Scope(person=owner, athlete=athlete)
         generation = {"generation_id": payload["generation_id"], "generation_attempt": payload.get("generation_attempt", 0)} if payload.get("generation_id") else None
-        self._spawn(job, lambda: run_operation(self.services, self.model, scope, operation, payload.get("arguments") or {}, job.job_id, generation))
+        self._spawn(job, lambda: run_operation(self.services, self.model, self.settings.operation_ai, scope, operation, payload.get("arguments") or {}, job.job_id, generation))
         return job
 
     def submit_turn(self, owner: str, athlete: str, conversation_id: str, messages: list[dict[str, Any]]) -> Job:
@@ -110,7 +115,7 @@ class Runner:
         context = json.dumps({"person": job.owner, "athlete": job.athlete, "today": date.today().isoformat()})
         tools = ToolServer(url=f"{self.settings.public_url}/v1/jobs/{job.job_id}/mcp", token=self.tool_token(job.job_id))
         workspace = workspace_for(self.settings.workspaces, job.owner, job.conversation_id)
-        reply = await self.model.converse(workspace, thread_id, INSTRUCTIONS + "\n\nScope for this conversation: " + context, prompt, tools)
+        reply = await self.model.converse(self.settings.conversation_ai, workspace, thread_id, INSTRUCTIONS + "\n\nScope for this conversation: " + context, prompt, tools)
         self.store.bind_thread(job.owner, job.conversation_id, reply.thread_id)
         return reply.text
 
@@ -120,7 +125,7 @@ class Runner:
             raise ModelError("unknown_tool", f"Unknown tool {name}")
         arguments = {key: value for key, value in arguments.items() if not key.startswith("_")}
         scope = Scope(person=job.owner, athlete=job.athlete)
-        return await run_operation(self.services, self.model, scope, operation, arguments, f"{job.job_id}-{uuid.uuid4().hex[:12]}")
+        return await run_operation(self.services, self.model.model, self.settings.operation_ai, scope, operation, arguments, f"{job.job_id}-{uuid.uuid4().hex[:12]}")
 
     def cancel(self, job_id: str) -> None:
         task = self.tasks.get(job_id)

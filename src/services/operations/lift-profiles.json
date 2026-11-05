@@ -412,18 +412,18 @@
               ]
             },
             "form_videos": {
-              "type": "object",
+              "type": ["object", "null"],
               "properties": {
                 "front": {
-                  "type": "object",
+                  "type": ["object", "null"],
                   "additionalProperties": true
                 },
                 "side": {
-                  "type": "object",
+                  "type": ["object", "null"],
                   "additionalProperties": true
                 },
                 "diagonal": {
-                  "type": "object",
+                  "type": ["object", "null"],
                   "additionalProperties": true
                 }
               },

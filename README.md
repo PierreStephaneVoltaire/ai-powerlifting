@@ -127,22 +127,93 @@ Highlights (full math and reasoning in [`docs/FORMULAS.md`](docs/FORMULAS.md)):
 
 ## AI components
 
-The AI is narrow and tool-scoped; the browser never calls a model. Every AI
-request runs on the **Coach** (`pl-coach`), a lightweight worker that uses a
-ChatGPT subscription through the pinned Codex SDK. Domain services hand it
-their inference steps, and chat turns get the typed operations as tools
-(details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)):
+The AI is narrow and tool-scoped. The browser never talks to a model, and
+neither do the domain services. Every AI request goes through the **Coach**, a
+small worker that uses OpenAI's **Codex** as its agent harness. Codex runs
+locked down: no shell, no file writes, no plugins, and no access to secrets.
+
+Right now the Coach runs on my ChatGPT subscription, but the harness and the
+model are separate. Each AI feature has its own provider, model and reasoning
+effort in the coach Terraform vars, so moving a feature to OpenRouter or API
+pricing is a config change, not a rewrite. The heavier reviews (program
+evaluation, multi-block comparison, template evaluation) run at high effort;
+everything else runs at medium.
+
+Where the AI shows up:
 
 - Exercise **ROI correlation** analysis
-- **Program evaluation** (full block: stance, strengths, strategy)
+- **Program evaluation** (full-block, structured stance/strengths/strategy)
 - **Multi-block lifetime comparison**
-- **Lift-profile option suggestions** and stimulus-coefficient estimation
+- **Template evaluation** against what the program is meant to do
+- **Lift-profile** option suggestions and stimulus-coefficient estimation
 - **Accessory e1RM backfill**
-- **Template evaluation** against the author's stated intent
-- **Spreadsheet import** (classify, parse, glossary-resolve)
-- **Glossary text generation** and muscle-group estimation
-- **Fatigue-profile estimation**
-- **Session note drafting** and **auto-regulation** suggestions
+- **Spreadsheet import** (classify / parse / glossary-resolve)
+- **Glossary text generation**, muscle-group and fatigue-profile estimation
+- **Budget** advice and purchase timeline
+- **Session note drafting**, **auto-regulation** suggestions, and the
+  **Discord** coach chat
+
+### How a request runs
+
+The domain code does the real work. It loads the data, computes the numbers,
+and only stops when it needs the model to interpret them. At that point it
+hands the Coach a prompt and the exact JSON shape it expects back, waits for
+the answer, then picks up where it left off. The frontend just polls until the
+job is done.
+
+```mermaid
+sequenceDiagram
+  participant UI as Browser
+  participant BE as Express backend
+  participant SVC as Domain service
+  participant C as Coach
+  participant M as Model
+  UI->>BE: request an AI feature
+  BE->>SVC: run the operation
+  SVC->>C: start a job
+  SVC-->>C: needs the model (prompt + JSON shape)
+  C->>M: prompt
+  M-->>C: JSON
+  C->>C: validate, retry up to 3 times
+  C->>SVC: resume with the answer
+  SVC-->>C: result
+  BE->>C: poll for the result
+  C-->>BE: result
+  BE-->>UI: result
+```
+
+The analysis reports are cached. If nothing about the data changed, you get
+the stored report, and two people opening the same report share one job.
+
+### Keeping it honest
+
+Every answer is checked against its JSON schema before anything uses it. A bad
+answer is sent back to the model with the error, and after three misses the
+job fails instead of passing on something half-valid.
+
+The shape being right doesn't make the content right, so the rest of the
+guard rails are about keeping the model away from making things up:
+
+- **Numbers come from the app, not the model.** Specificity, fatigue trends,
+  sets per muscle and % of max are all computed in code and handed over.
+- **Closed answers where possible.** Lift-profile suggestions can only pick
+  from the form's options, and muscle estimates can only name known muscles.
+- **Ranges are clamped in code**, like the 1.0–2.0 stimulus coefficient.
+  Fatigue estimates aren't bounded yet.
+- **Nothing is saved without you.** Suggestions pre-fill the form, imports are
+  staged for review, and the Discord coach only writes when asked.
+- **No silent retries.** If a job is interrupted, it's flagged so you can
+  check what happened instead of being re-run.
+
+What's not checked is whether a valid answer is a *good* one. The reports are
+advice, they cite the numbers they were given, and you can regenerate them.
+
+### Running things in parallel
+
+Each provider has its own limit on how many calls run at once; extra jobs
+just wait their turn. The ChatGPT subscription throttles at about two
+concurrent requests per account, so it stays at 2 and the Coach stays at one
+pod while it's in use. API-key providers can go higher.
 
 ---
 
@@ -205,25 +276,20 @@ flowchart LR
   Runner -.->|"terraform"| Cluster
 ```
 
-Everything runs in one namespace on a **bare-metal k3s** node to keep costs
-down, reached through a Cloudflare tunnel with no open ports. Each domain
-(sessions, program, competitions, templates, analytics, rankings, and so on)
-is its own small service generated from `src/services/operations/*.json`, so a
-heavy workload such as loading the OpenPowerlifting dataset for rankings can't
-take down the rest. AWS holds the data (DynamoDB, S3, CloudFront) and the two
-remaining Lambdas: master-sync, which copies the competition directory to every
-athlete, and video thumbnails.
+The stack runs on a **bare-metal k3s** node to keep costs down, behind a
+Cloudflare tunnel so nothing is exposed directly. Each domain (sessions,
+program, templates, analytics, rankings and so on) is its own small service, so
+something heavy like loading the OpenPowerlifting dataset for rankings can't
+take the rest down with it. AWS holds the data, plus two Lambdas that are still
+around: master-sync, which copies the competition directory to every athlete,
+and video thumbnails.
 
-Infrastructure is Terraform, split by concern:
+Infrastructure is Terraform, split into a few stacks: AWS and Cloudflare in
+`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`
+(network and app are applied by a runner inside the cluster), and the Coach in
+`terraform/coach`.
 
-| Stack | Holds | Applied by |
-|---|---|---|
-| `terraform/` | AWS resources, Cloudflare tunnel and DNS | CI |
-| `terraform/k8s/core`, `perms` | namespace, secrets, RBAC, Actions runner | operator, locally |
-| `terraform/k8s/network`, `app` | gateway, routes, tunnel connector, services, portal | in-cluster runner |
-| `terraform/coach` | Coach and Discord bot | operator, locally |
-
-For the request flow, data model, caching and AI execution model, see
+For more on the request flow, data model and caching, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### Target release form
@@ -285,10 +351,6 @@ when working in this repo.
 
 ## Image rollout
 
-Pushes run `.github/workflows/build-images.yml`. It builds the Packer images in
-`docker/` (backend, frontend, services, analytics reports, Coach, Discord bot),
-pushes them to ECR as `latest` and the commit SHA, and applies the AWS stack.
-The `kubernetes-apply` job then runs on the in-cluster runner, only for runs
-triggered by the repository owner, and applies `terraform/k8s/network` and
-`terraform/k8s/app`, which resolve each image's `latest` digest and roll the
-workloads.
+Every push builds the images in `docker/` with Packer and pushes them to ECR.
+When I'm the one pushing, a runner in the cluster then applies the network and
+app stacks, which picks up the new images and rolls the workloads.

@@ -13,7 +13,7 @@ import { Paper, Text } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { mergeBodyweightEntries } from '@/utils/bodyweight'
-import { displayWeight } from '@/utils/units'
+import { displayWeight, kgToLb } from '@/utils/units'
 import * as api from '@/api/client'
 import type { WeightEntry } from '@powerlifting/types'
 
@@ -42,7 +42,7 @@ export default function WeightChart() {
       .map((entry) => ({
         date: entry.date,
         kg: entry.kg,
-        lb: entry.kg * 2.20462,
+        lb: kgToLb(entry.kg),
       }))
   }, [entries, program?.sessions])
 

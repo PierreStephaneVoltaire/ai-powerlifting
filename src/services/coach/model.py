@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from .config import AISettings, Provider
 
-SECRET_ENV = ("INTERNAL_API_TOKEN", "PL_PRINCIPAL_SECRET", "DISCORD_TOKEN", "CODEX_API_KEY")
+
+SECRET_ENV = ("INTERNAL_API_TOKEN", "PL_PRINCIPAL_SECRET", "DISCORD_TOKEN", "CODEX_API_KEY", "COACH_PROVIDER_KEYS")
+PROVIDER_KEY_ENV = "CODEX_PROVIDER_API_KEY"
 SECRET_PREFIXES = ("AWS_", "OPENAI_", "OPENROUTER_")
 LOCKED_FEATURES = (
-    'forced_login_method="chatgpt"',
     "features.shell_tool=false",
     "features.apps=false",
     "features.plugins=false",
@@ -39,13 +41,20 @@ class Reply:
 
 
 class Model(Protocol):
-    async def complete(self, instructions: str, prompt: str) -> str: ...
+    async def complete(self, ai: AISettings, instructions: str, prompt: str) -> str: ...
 
-    async def converse(self, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply: ...
+    async def converse(self, ai: AISettings, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply: ...
 
 
 def _environment() -> dict[str, str]:
     return {key: "" if key in SECRET_ENV or key.startswith(SECRET_PREFIXES) else value for key, value in os.environ.items()}
+
+
+def _provider_overrides(name: str, provider: Provider) -> tuple[str, ...]:
+    if provider.subscription:
+        return ('forced_login_method="chatgpt"',)
+    definition = "{name=" + json.dumps(name) + ",base_url=" + json.dumps(provider.base_url) + ",env_key=" + json.dumps(PROVIDER_KEY_ENV) + ',wire_api="responses"}'
+    return ("model_providers." + name + "=" + definition, "model_provider=" + json.dumps(name))
 
 
 def _tool_overrides(tools: ToolServer) -> tuple[str, ...]:
@@ -63,17 +72,21 @@ def workspace_for(root: Path, owner: str, conversation_id: str) -> Path:
 
 
 class CodexModel:
-    def __init__(self, model: str, effort: str, scratch: Path):
-        self.model = model
-        self.effort = effort
+    def __init__(self, scratch: Path, providers: dict[str, Provider]):
         self.scratch = scratch
+        self.providers = providers
 
-    def _config(self, cwd: Path, overrides: tuple[str, ...] = ()):
+    def _config(self, cwd: Path, overrides: tuple[str, ...] = (), provider: str | None = None):
         from openai_codex import CodexConfig
 
         Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).mkdir(parents=True, exist_ok=True)
         trust = "projects={" + json.dumps(str(cwd)) + '={trust_level="trusted"}}'
-        return CodexConfig(cwd=str(cwd), env=_environment(), config_overrides=LOCKED_FEATURES + (trust,) + overrides)
+        env = _environment()
+        selected = self.providers[provider] if provider else None
+        if selected and not selected.subscription:
+            env[PROVIDER_KEY_ENV] = selected.api_key
+        chosen = _provider_overrides(provider, selected) if selected else ('forced_login_method="chatgpt"',)
+        return CodexConfig(cwd=str(cwd), env=env, config_overrides=LOCKED_FEATURES + chosen + (trust,) + overrides)
 
     async def _check_subscription(self, codex) -> None:
         try:
@@ -84,23 +97,25 @@ class CodexModel:
         if getattr(kind, "value", kind) != "chatgpt":
             raise ModelError("subscription_required", "Coach requires ChatGPT subscription login")
 
-    async def _run(self, cwd: Path, overrides: tuple[str, ...], thread_id: str | None, instructions: str, prompt: str, ephemeral: bool = False) -> Reply:
+    async def _run(self, ai: AISettings, cwd: Path, overrides: tuple[str, ...], thread_id: str | None, instructions: str, prompt: str, ephemeral: bool = False) -> Reply:
         from openai_codex import ApprovalMode, AsyncCodex, Sandbox
 
-        async with AsyncCodex(self._config(cwd, overrides)) as codex:
-            await self._check_subscription(codex)
-            options = dict(model=self.model, cwd=str(cwd), sandbox=Sandbox.read_only, approval_mode=ApprovalMode.deny_all, developer_instructions=instructions)
+        provider = self.providers[ai.provider]
+        async with AsyncCodex(self._config(cwd, overrides, ai.provider)) as codex:
+            if provider.subscription:
+                await self._check_subscription(codex)
+            options = dict(model=ai.model, model_provider=None if provider.subscription else ai.provider, cwd=str(cwd), sandbox=Sandbox.read_only, approval_mode=ApprovalMode.deny_all, developer_instructions=instructions)
             thread = await codex.thread_resume(thread_id, **options) if thread_id else await codex.thread_start(ephemeral=ephemeral, **options)
-            result = await thread.run(prompt, model=self.model, effort=self.effort)
+            result = await thread.run(prompt, model=ai.model, effort=ai.effort)
         if result.error:
             raise ModelError("model_failed", result.error.message)
         if getattr(result.status, "value", result.status) != "completed":
             raise ModelError("interrupted", "Coach turn did not complete; check side effects before retrying")
         return Reply(text=result.final_response or "", thread_id=thread.id)
 
-    async def complete(self, instructions: str, prompt: str) -> str:
+    async def complete(self, ai: AISettings, instructions: str, prompt: str) -> str:
         self.scratch.mkdir(parents=True, exist_ok=True)
-        return (await self._run(self.scratch, (), None, instructions, prompt, ephemeral=True)).text
+        return (await self._run(ai, self.scratch, (), None, instructions, prompt, ephemeral=True)).text
 
-    async def converse(self, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply:
-        return await self._run(workspace, _tool_overrides(tools), thread_id, instructions, prompt)
+    async def converse(self, ai: AISettings, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply:
+        return await self._run(ai, workspace, _tool_overrides(tools), thread_id, instructions, prompt)

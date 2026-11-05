@@ -4,6 +4,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, ValidationError
 
+from .config import AISettings
 from .model import Model, ModelError
 
 
@@ -30,18 +31,18 @@ def _parse(text: str) -> Any:
     return json.loads(FENCE.sub("", text.strip()))
 
 
-async def answer_challenge(model: Model, challenge: dict[str, Any]) -> Any:
+async def answer_challenge(model: Model, ai: AISettings, challenge: dict[str, Any]) -> Any:
     messages = challenge.get("messages") or []
     system = "\n\n".join(_text(m.get("content")) for m in messages if m.get("role") in {"system", "developer"})
     conversation = "\n\n".join(f"[{m.get('role')}]\n{_text(m.get('content'))}" for m in messages if m.get("role") not in {"system", "developer"})
     schema = challenge_schema(challenge)
     if not schema:
-        return await model.complete(system, conversation)
+        return await model.complete(ai, system, conversation)
     instructions = system + "\n\nReply with exactly one JSON object and nothing else. It must validate against this JSON Schema:\n" + json.dumps(schema)
     validator = Draft202012Validator(schema)
     prompt = conversation
     for _ in range(ATTEMPTS):
-        text = await model.complete(instructions, prompt)
+        text = await model.complete(ai, instructions, prompt)
         try:
             value = _parse(text)
             validator.validate(value)

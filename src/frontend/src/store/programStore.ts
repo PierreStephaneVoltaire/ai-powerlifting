@@ -3,6 +3,7 @@ import type { Program, Session, Exercise, Phase, MaxEntry, WeightEntry, ProgramL
 import * as api from '@/api/client'
 import { requestPartition } from '@/api/context'
 import { activeBlockId } from '@/utils/weekStart'
+import { kgToLb } from '@/utils/units'
 
 interface ProgramState {
   program: Program | null
@@ -315,7 +316,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
           meta: {
             ...state.program.meta,
             current_body_weight_kg: weightKg,
-            current_body_weight_lb: weightKg * 2.20462,
+            current_body_weight_lb: kgToLb(weightKg),
             revision: result.revision ?? state.program.meta.revision,
           },
         },
