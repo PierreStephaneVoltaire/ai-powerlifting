@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
 import { cacheGet } from '../utils/cacheMiddleware'
 

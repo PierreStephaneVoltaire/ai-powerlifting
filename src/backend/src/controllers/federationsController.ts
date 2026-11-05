@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type {
   FederationDisplayOptions,
   FederationLibrary,
@@ -6,7 +6,7 @@ import type {
   MasterFederation,
 } from '@powerlifting/types'
 
-export type FederationUpdate = {
+type FederationUpdate = {
   name?: string
   abbreviation?: string | null
   region?: string | null

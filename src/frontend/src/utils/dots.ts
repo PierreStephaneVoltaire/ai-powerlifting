@@ -41,7 +41,7 @@ export function dotsAcrossWeightClasses(
   }))
 }
 
-export const DOTS_LEVELS = {
+const DOTS_LEVELS = {
   male: [
     { name: 'Beginner', min: 0, max: 150, context: 'Just starting out' },
     { name: 'Novice', min: 150, max: 200, context: '6-18 months' },

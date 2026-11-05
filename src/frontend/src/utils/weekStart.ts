@@ -26,10 +26,6 @@ function isWeekStartDay(value: unknown): value is WeekStartDay {
   return typeof value === 'string' && WEEK_START_DAYS.includes(value as WeekStartDay)
 }
 
-export function normalizeWeekStartDay(value: unknown, fallback: WeekStartDay): WeekStartDay {
-  return isWeekStartDay(value) ? value : fallback
-}
-
 export function activeBlockId(program: Program | null | undefined): string | null {
   const meta = program?.meta
   if (meta?.current_block_id) return meta.current_block_id
@@ -47,7 +43,7 @@ export function weekStartForBlock(program: Program | null | undefined, block = '
   return candidates.find(isWeekStartDay) ?? 'Monday'
 }
 
-export function programWeekAnchorDate(programStart: string | undefined, weekStartDay: WeekStartDay): string {
+function programWeekAnchorDate(programStart: string | undefined, weekStartDay: WeekStartDay): string {
   const start = programStart || format(new Date(), 'yyyy-MM-dd')
   const parsed = parseLocalDate(start)
   const currentIndex = (parsed.getDay() + 6) % 7

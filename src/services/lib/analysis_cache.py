@@ -10,24 +10,17 @@ Schema (new, as of cache schema v5):
   sk  = markdown_export#{block_key}            → markdown export for a past block (no TTL)
   sk  = block_analysis#v1#{block_key}          → block analysis bundle (handled by blockAnalytics.ts)
   ...
-
-Legacy items (schema v4 and earlier) stored gzip+base64 in payload_gzip_b64.
-_hydrate_item() handles both formats for backward compat.
 """
 from __future__ import annotations
 
-import gzip
-import base64
 import json
 import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
-from boto3.dynamodb.conditions import Key, Attr
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +49,6 @@ class AnalysisCacheStore:
         return self._table
 
     def _hydrate_item(self, item: dict) -> Optional[Any]:
-        """Decode a DynamoDB item's payload — plain JSON (new) or gzip+b64 (legacy)."""
         payload_str = item.get("payload", "")
 
         if not payload_str:
@@ -69,36 +61,6 @@ class AnalysisCacheStore:
                     p_resp = self.table.get_item(Key={"pk": self._pk, "sk": shard_sk})
                     parts.append(p_resp.get("Item", {}).get("payload", ""))
                 payload_str = "".join(parts)
-
-        if not payload_str:
-            legacy_b64 = item.get("payload_gzip_b64", "")
-            if legacy_b64:
-                try:
-                    payload_str = gzip.decompress(
-                        base64.b64decode(legacy_b64)
-                    ).decode("utf-8")
-                except Exception as exc:
-                    logger.error("[AnalysisCacheStore] Legacy gzip decode failed: %s", exc)
-                    return None
-
-            if not payload_str:
-                shard_count = int(item.get("shard_count", 0))
-                sk = item.get("sk", "")
-                if shard_count > 0:
-                    parts = []
-                    for i in range(shard_count):
-                        part_sk = f"{sk}#part#{i:03d}"
-                        p_resp = self.table.get_item(Key={"pk": self._pk, "sk": part_sk})
-                        parts.append(p_resp.get("Item", {}).get("payload_gzip_b64", ""))
-                    legacy_joined = "".join(parts)
-                    if legacy_joined:
-                        try:
-                            payload_str = gzip.decompress(
-                                base64.b64decode(legacy_joined)
-                            ).decode("utf-8")
-                        except Exception as exc:
-                            logger.error("[AnalysisCacheStore] Legacy sharded gzip decode failed: %s", exc)
-                            return None
 
         if not payload_str:
             return None
@@ -130,65 +92,6 @@ class AnalysisCacheStore:
             item.update(extra_fields)
         self.table.put_item(Item=item)
 
-    def get_cached_block_analysis(self, block_key: str) -> Optional[dict]:
-        """Find the latest version of this block analysis in DynamoDB."""
-        try:
-            resp = self.table.query(
-                KeyConditionExpression=Key("pk").eq(self._pk)
-                & Key("sk").begins_with("block_analysis#"),
-                FilterExpression=Attr("sk").contains(f"#{block_key}"),
-            )
-            items = resp.get("Items", [])
-            if not items:
-                return None
-
-            items.sort(
-                key=lambda x: (
-                    int(x.get("schema_version", 0)),
-                    x.get("generated_at", ""),
-                ),
-                reverse=True,
-            )
-            return self._hydrate_item(items[0])
-        except Exception as exc:
-            logger.error("[AnalysisCacheStore] get_cached_block_analysis failed: %s", exc)
-            return None
-
-    def list_block_cache_statuses(self) -> Dict[str, dict]:
-        """List statuses for all cached block analyses."""
-        statuses: Dict[str, dict] = {}
-        try:
-            last_eval_key = None
-            while True:
-                params: dict = {
-                    "KeyConditionExpression": Key("pk").eq(self._pk)
-                    & Key("sk").begins_with("block_analysis#"),
-                    "ProjectionExpression": "sk, block_key, generated_at, schema_version",
-                }
-                if last_eval_key:
-                    params["ExclusiveStartKey"] = last_eval_key
-
-                resp = self.table.query(**params)
-                for item in resp.get("Items", []):
-                    bk = item.get("block_key")
-                    if bk:
-                        existing = statuses.get(bk)
-                        if not existing or (
-                            int(item.get("schema_version", 0)),
-                            item.get("generated_at", ""),
-                        ) > (
-                            int(existing.get("schema_version", 0)),
-                            existing.get("generated_at", ""),
-                        ):
-                            statuses[bk] = item
-
-                last_eval_key = resp.get("LastEvaluatedKey")
-                if not last_eval_key:
-                    break
-        except Exception as exc:
-            logger.error("[AnalysisCacheStore] list_block_cache_statuses failed: %s", exc)
-        return statuses
-
     def get_window_analysis(
         self,
         window_key: str,
@@ -211,25 +114,6 @@ class AnalysisCacheStore:
         except Exception as exc:
             logger.error("[AnalysisCacheStore] get_window_analysis failed: %s", exc)
             return None
-
-    def put_window_analysis(
-        self,
-        window_key: str,
-        payload: dict,
-        block_key: Optional[str] = None,
-        ttl_days: int = CURRENT_BLOCK_TTL_DAYS,
-    ) -> None:
-        """Write a per-window analysis result to cache."""
-        sk = (
-            f"weekly_analysis#{window_key}"
-            if not block_key
-            else f"weekly_analysis#{window_key}#{block_key}"
-        )
-        effective_ttl = ttl_days if not block_key else None
-        try:
-            self._put_json_item(sk, payload, ttl_days=effective_ttl)
-        except Exception as exc:
-            logger.error("[AnalysisCacheStore] put_window_analysis failed: %s", exc)
 
     def get_markdown_cache(self, block_key: str = "current") -> Optional[dict]:
         """Read cached markdown export. Returns {markdown, generated_at} or None."""

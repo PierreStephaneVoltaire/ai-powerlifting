@@ -14,7 +14,7 @@ function mutationEnvelope(body: unknown): competitionController.CompetitionMutat
 const USER_UPDATE_FIELDS = new Set([
   'units', 'user_status', 'weight_class_kg', 'body_weight_kg', 'targets', 'results', 'post_meet_report',
   'hotel_required', 'counts_toward_federation_ids', 'between_comp_plan', 'comp_day_protocol', 'decision_date',
-  'attempt_selection', 'attempt_strategy_mode', 'qualifying_standard_id', 'qualifying_total_kg',
+  'attempt_selection',
   'projected_at_t_minus_1w', 'projection_snapshot_date', 'notes',
 ])
 
@@ -73,54 +73,6 @@ competitionsRouter.post('/:masterId/complete', invalidateAfter(['competitions', 
       postMeetReport as PostMeetReport | undefined,
     )
     res.json({ data: updated, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-competitionsRouter.get('/:version', cacheGet((req) => [`competitions:${req.params.version}`, 'program:current']), async (req, res, next) => {
-  try {
-    const competitions = await competitionController.getCompetitions(req.mapped_pk!, req.params.version)
-    res.json({ data: competitions, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-competitionsRouter.put('/:version', invalidateAfter((req) => [`competitions:${req.params.version}`, 'program:current']), async (req, res, next) => {
-  try {
-    const { competitions } = req.body
-
-    if (!Array.isArray(competitions)) {
-      return res.status(400).json({ data: null, error: 'competitions must be an array' })
-    }
-
-    const result = await competitionController.updateCompetitions(req.mapped_pk!, req.params.version, competitions, mutationEnvelope(req.body))
-    res.json({ data: { success: true, ...result }, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-competitionsRouter.patch('/:version/:date/complete', invalidateAfter((req) => [`competitions:${req.params.version}`, 'program:current']), async (req, res, next) => {
-  try {
-    const { results, bodyWeightKg, postMeetReport } = req.body
-
-    if (!results || typeof bodyWeightKg !== 'number') {
-      return res.status(400).json({ data: null, error: 'Missing results or bodyWeightKg' })
-    }
-
-    const updatedCompetition = await competitionController.completeCompetition(
-      req.mapped_pk!,
-      req.params.version,
-      req.params.date,
-      results as LiftResults,
-      bodyWeightKg,
-      mutationEnvelope(req.body),
-      postMeetReport as PostMeetReport | undefined,
-    )
-
-    res.json({ data: updatedCompetition, error: null })
   } catch (err) {
     next(err)
   }

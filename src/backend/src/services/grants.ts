@@ -1,13 +1,9 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 
 export type GrantType = 'coach' | 'handler'
 export type GrantScope = 'read' | 'write'
 
-export interface GrantTiedCompetitionDateMap {
-  [competitionId: string]: string
-}
-
-export interface Grant {
+interface Grant {
   pk: string
   sk: string
   athlete_mapped_pk: string
@@ -29,30 +25,10 @@ export interface Grant {
   updated_at: string
 }
 
-export interface GrantListResult {
+interface GrantListResult {
   active: Grant[]
   inactive: Grant[]
   total: number
-}
-
-export interface CreateGrantInput {
-  athlete_mapped_pk: string
-  grantee_mapped_pk: string
-  grantee_nickname?: string
-  grantee_discord_id?: string
-  grantee_authentik_sub?: string
-  grant_type: GrantType
-  scope?: GrantScope
-  tied_competition_ids?: string[]
-  tied_competition_dates?: GrantTiedCompetitionDateMap
-  note?: string
-  created_by?: string
-}
-
-export interface RevokeGrantInput {
-  athlete_mapped_pk: string
-  sk: string
-  revoked_by?: string
 }
 
 export interface ListGrantsInput {
@@ -69,38 +45,10 @@ export interface CheckGrantInput {
   tied_competition_id?: string
 }
 
-export interface CheckGrantResult {
+interface CheckGrantResult {
   allowed: boolean
   reason: string
   grant?: Grant
-}
-
-export async function createGrant(input: CreateGrantInput): Promise<Grant> {
-  const result = (await callOperation('grant_create', {
-    athlete_mapped_pk: input.athlete_mapped_pk,
-    grantee_mapped_pk: input.grantee_mapped_pk,
-    grantee_nickname: input.grantee_nickname ?? '',
-    grantee_discord_id: input.grantee_discord_id ?? '',
-    grantee_authentik_sub: input.grantee_authentik_sub ?? '',
-    grant_type: input.grant_type,
-    scope: input.scope ?? 'read',
-    tied_competition_ids: input.tied_competition_ids ?? [],
-    tied_competition_dates: input.tied_competition_dates ?? {},
-    note: input.note ?? '',
-    created_by: input.created_by ?? input.athlete_mapped_pk,
-  })) as Grant | { error: string; message: string; existing?: Grant }
-  if (result && typeof result === 'object' && 'error' in result) {
-    return result as unknown as Grant
-  }
-  return result as Grant
-}
-
-export async function revokeGrant(input: RevokeGrantInput): Promise<Grant | { error: string }> {
-  return (await callOperation('grant_revoke', {
-    athlete_mapped_pk: input.athlete_mapped_pk,
-    sk: input.sk,
-    revoked_by: input.revoked_by ?? input.athlete_mapped_pk,
-  })) as Grant | { error: string }
 }
 
 export async function listGrants(input: ListGrantsInput): Promise<GrantListResult> {

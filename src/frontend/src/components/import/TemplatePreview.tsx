@@ -1,5 +1,5 @@
 import React from 'react'
-import { Stack, Title, Grid, Card, Text, Group, Badge } from '@mantine/core'
+import { Stack, Title, Grid, Card, Text, Group } from '@mantine/core'
 import { LoadTypeBadge } from '../shared/LoadTypeBadge'
 
 interface Props {

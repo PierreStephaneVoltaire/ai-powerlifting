@@ -1,7 +1,5 @@
 import importlib
 import json
-import os
-from decimal import Decimal
 from typing import Any
 
 from .contract import Operation

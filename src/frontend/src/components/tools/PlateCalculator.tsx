@@ -3,7 +3,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { useProgramStore } from '@/store/programStore'
 import { getPlateLoadout, closestLbLoadout, compAttempts, getPlateColor } from '@/utils/plates'
 import { BAR_WEIGHTS_KG, type BarPreset } from '@/constants/plates'
-import { displayWeight, kgToLb, toDisplayUnit } from '@/utils/units'
+import { displayWeight, kgToLb } from '@/utils/units'
 import {
   Paper,
   Button,

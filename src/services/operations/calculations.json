@@ -34,10 +34,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "public",
-    "legacy": [
-      "pod_calc"
-    ]
+    "ownership": "public"
   },
   {
     "name": "kg_to_lb",
@@ -74,10 +71,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "public",
-    "legacy": [
-      "pod_calc"
-    ]
+    "ownership": "public"
   },
   {
     "name": "pct_of_max",
@@ -133,10 +127,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "public",
-    "legacy": [
-      "pod_calc"
-    ]
+    "ownership": "public"
   },
   {
     "name": "ipf_weight_classes",
@@ -192,10 +183,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "public",
-    "legacy": [
-      "pod_calc"
-    ]
+    "ownership": "public"
   },
   {
     "name": "calculate_dots",
@@ -243,15 +231,12 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "public",
-    "legacy": [
-      "pod_calc"
-    ]
+    "ownership": "public"
   },
   {
     "name": "estimate_1rm",
     "domain": "calculations",
-    "description": "Estimate E1RM using the shared RPE table for 1\u20136 reps, or conservative percentages without RPE for 1\u20135 reps. Unsupported ranges return null; legacy epley/brzycki fields remain null.",
+    "description": "Estimate E1RM using the shared RPE table for 1–6 reps, or conservative percentages without RPE for 1–5 reps. Unsupported ranges return null; legacy epley/brzycki fields remain null.",
     "handler": "services.handlers.calculations.estimate_1rm.handler",
     "input_schema": {
       "type": "object",
@@ -327,10 +312,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "public",
-    "legacy": [
-      "pod_calc"
-    ]
+    "ownership": "public"
   },
   {
     "name": "days_until",
@@ -399,9 +381,6 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "public",
-    "legacy": [
-      "pod_calc"
-    ]
+    "ownership": "public"
   }
 ]

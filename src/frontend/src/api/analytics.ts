@@ -5,7 +5,7 @@ export interface InsufficientDataResponse {
   reason: string
 }
 
-export interface BanisterSeriesPoint {
+interface BanisterSeriesPoint {
   date: string
   ctl: number
   atl: number
@@ -32,7 +32,7 @@ export interface MonotonyStrainRow {
   flags: string[]
 }
 
-export interface DecouplingPoint {
+interface DecouplingPoint {
   week_start: string
   decoupling: number
   e1rm_slope_pct_per_week: number
@@ -344,16 +344,7 @@ export interface AnalysisWindow {
   currentWeek: number
 }
 
-export interface WeeklyAnalysisBundle {
-  schemaVersion: number
-  asOfDate: string
-  generatedAt: string
-  cached: boolean
-  windows: Record<AnalysisWindowKey, AnalysisWindow>
-  results: Record<AnalysisWindowKey, WeeklyAnalysis>
-}
-
-export interface AnalysisSectionStatus<T = Partial<WeeklyAnalysis> | CorrelationReport | ProgramEvaluationReport> {
+interface AnalysisSectionStatus<T = Partial<WeeklyAnalysis> | CorrelationReport | ProgramEvaluationReport> {
   sectionKey: AnalysisSectionKey
   status: 'missing' | 'pending' | 'running' | 'complete' | 'error'
   generatedAt?: string
@@ -366,7 +357,7 @@ export interface AnalysisSectionStatus<T = Partial<WeeklyAnalysis> | Correlation
   windowKey?: AnalysisWindowKey
 }
 
-export interface AnalysisManifest {
+interface AnalysisManifest {
   schemaVersion: number
   asOfDate: string
   windowKey: AnalysisWindowKey
@@ -423,14 +414,14 @@ export interface ProgramBlockIndexEntry {
   }
 }
 
-export interface BlockStrengthSummary {
+interface BlockStrengthSummary {
   squat: number | null
   bench: number | null
   deadlift: number | null
   total: number | null
 }
 
-export interface BlockStartMaxEntry {
+interface BlockStartMaxEntry {
   squat_kg: number | null
   bench_kg: number | null
   deadlift_kg: number | null
@@ -439,7 +430,7 @@ export interface BlockStartMaxEntry {
   updated_at: string
 }
 
-export interface BlockCompetitionOutcome {
+interface BlockCompetitionOutcome {
   competitionName: string
   competitionDate: string
   bodyweightKg: number | null
@@ -767,7 +758,7 @@ export interface ProgramEvaluationCompetitionStrategy {
   }>
 }
 
-export interface ProgramEvaluationWeightClassOption {
+interface ProgramEvaluationWeightClassOption {
   weight_class_kg: number
   suitability: 'best' | 'viable' | 'risky'
   reason: string
@@ -835,41 +826,6 @@ function normalizeProgramEvaluation(data: unknown): ProgramEvaluationReport {
     cached: Boolean(report.cached),
     cache_miss: Boolean((report as Partial<ProgramEvaluationReport> & { cache_miss?: boolean }).cache_miss),
   }
-}
-
-export async function fetchWeeklyAnalysis(
-  weeks = 1,
-  block = 'current',
-  windowStart?: string,
-  windowEnd?: string,
-  weekStart?: number,
-  weekEnd?: number,
-  refDate?: string,
-): Promise<WeeklyAnalysis> {
-  const params = new URLSearchParams({
-    weeks: String(weeks),
-    block,
-  })
-  if (windowStart) params.set('windowStart', windowStart)
-  if (windowEnd) params.set('windowEnd', windowEnd)
-  if (weekStart) params.set('weekStart', String(weekStart))
-  if (weekEnd) params.set('weekEnd', String(weekEnd))
-  if (refDate) params.set('refDate', refDate)
-  const res = await api.get(`/analytics/analysis/weekly?${params.toString()}`)
-  const body = res.data
-  if (body.error) throw new Error(body.error)
-  return body.data
-}
-
-export async function fetchWeeklyAnalysisBundle(asOfDate?: string, refresh = false): Promise<WeeklyAnalysisBundle> {
-  const params = new URLSearchParams()
-  if (asOfDate) params.set('asOfDate', asOfDate)
-  if (refresh) params.set('refresh', 'true')
-  const qs = params.toString()
-  const res = await api.get(`/analytics/analysis/weekly-bundle${qs ? `?${qs}` : ''}`)
-  const body = res.data
-  if (body.error) throw new Error(body.error)
-  return body.data
 }
 
 export async function fetchAnalysisManifest(
@@ -1018,18 +974,6 @@ export async function updateBlockStartMaxes(
   return body.data
 }
 
-export async function fetchBlockComparison(options: {
-  blockKeys?: string[]
-  includeCurrentFullBlock?: boolean
-  includeTrainingOnly?: boolean
-  cacheOnly?: boolean
-}): Promise<BlockComparisonResult> {
-  const res = await api.post('/analytics/block-comparison', options)
-  const body = res.data
-  if (body.error) throw new Error(body.error)
-  return body.data
-}
-
 export async function fetchAiBlockComparison(options: {
   blockKeys?: string[]
   refresh?: boolean
@@ -1082,18 +1026,4 @@ export async function fetchProgramEvaluation(refresh = false, cacheOnly = false)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return normalizeProgramEvaluation(await resolveReport(body.data, cacheOnly))
-}
-
-export async function regenerateAnalysis(windows?: string[]): Promise<{ success: boolean; generatedAt: string }> {
-  const res = await api.post('/analytics/analysis/regenerate', windows?.length ? { windows } : undefined)
-  const body = res.data
-  if (body.error) throw new Error(body.error)
-  return body.data
-}
-
-export async function regenerateBlockAnalysis(blockKey: string): Promise<{ success: boolean; generatedAt: string }> {
-  const res = await api.post(`/analytics/blocks/${encodeURIComponent(blockKey)}/regenerate`)
-  const body = res.data
-  if (body.error) throw new Error(body.error)
-  return body.data
 }

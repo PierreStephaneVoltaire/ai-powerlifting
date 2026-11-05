@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Text, Group, Paper, Stack, LoadingOverlay, Button } from '@mantine/core'
+import { Text, Group, Paper, Stack, LoadingOverlay } from '@mantine/core'
 import { uploadImport } from '../../api/client'
 
 interface Props {

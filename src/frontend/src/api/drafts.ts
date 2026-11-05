@@ -2,8 +2,8 @@ import { openDB, type IDBPDatabase } from 'idb'
 import { requestAthlete, requestPartition, requestPerson } from './context'
 
 export interface Draft<T = unknown> { id: string; partition: string; value: T; updated_at: string }
-export type MutationStatus = 'pending' | 'failed' | 'conflict' | 'blocked'
-export interface PendingMutation {
+type MutationStatus = 'pending' | 'failed' | 'conflict' | 'blocked'
+interface PendingMutation {
   id: string; partition: string; person_pk: string; athlete_pk: string; method: string; url: string; data: unknown
   expected_revision: number; idempotency_key: string; fingerprint: string; created_at: string; updated_at: string
   status: MutationStatus; error?: string
@@ -12,10 +12,6 @@ export interface PendingMutation {
 
 export function sessionDraftKey(version: string, sessionId: string): string {
   return `session:${version}:${sessionId}`
-}
-
-export function legacySessionDraftKey(version: string, date: string, index: number): string {
-  return `session:${version}:${date}:${index}`
 }
 
 let database: Promise<IDBPDatabase> | undefined
@@ -63,7 +59,7 @@ export async function removeDraftIfMatch<T>(record: string, expected: Draft<T>, 
   return true
 }
 
-export async function removeDraftIfValue<T>(record: string, value: T, partition = requestPartition()): Promise<boolean> {
+async function removeDraftIfValue<T>(record: string, value: T, partition = requestPartition()): Promise<boolean> {
   const current = await readDraft<T>(record, partition)
   return current ? removeDraftIfMatch(record, { ...current, value }, partition) : false
 }
@@ -80,7 +76,7 @@ export function mutationFingerprint(method: string, url: string, data: unknown):
   return JSON.stringify([method.toUpperCase(), url, ordered(payload)])
 }
 
-export interface MutationInput { method: string; url: string; data: unknown; expected_revision: number; idempotency_key: string }
+interface MutationInput { method: string; url: string; data: unknown; expected_revision: number; idempotency_key: string }
 export async function prepareMutation(input: MutationInput, partition = requestPartition()): Promise<PendingMutation> {
   const [person_pk, athlete_pk] = JSON.parse(partition) as [string, string]
   const fingerprint = mutationFingerprint(input.method, input.url, input.data)
@@ -101,17 +97,15 @@ export async function prepareMutation(input: MutationInput, partition = requestP
   return record
 }
 
-export async function listMutations(partition = requestPartition()): Promise<PendingMutation[]> {
+async function listMutations(partition = requestPartition()): Promise<PendingMutation[]> {
   return (await db()).getAllFromIndex('mutations', 'byPartition', partition)
 }
-export async function purgeConflictedMutations(partition = requestPartition()): Promise<void> {
+async function purgeConflictedMutations(partition = requestPartition()): Promise<void> {
   const conflicted = (await listMutations(partition)).filter(record => record.status === 'conflict')
   await Promise.all(conflicted.map(record => removeMutation(record.id)))
 }
-export async function pendingMutationCount(partition = requestPartition()): Promise<number> {
-  return (await listMutations(partition)).filter(record => record.status !== 'conflict').length
-}
-export async function updateMutation(id: string, patch: Partial<PendingMutation>): Promise<void> {
+
+async function updateMutation(id: string, patch: Partial<PendingMutation>): Promise<void> {
   const database = await db(); const current = await database.get('mutations', id)
   if (!current) return
   await database.put('mutations', { ...current, ...patch, updated_at: new Date().toISOString() })
@@ -124,7 +118,7 @@ export async function removeMutation(id: string): Promise<void> {
 export async function resumeMutations(partition = requestPartition()): Promise<void> {
   await Promise.all((await listMutations(partition)).filter(record => record.status === 'blocked' || record.status === 'failed').map(record => updateMutation(record.id, { status: 'pending', error: undefined })))
 }
-export async function markMutationFailure(id: string, error: string): Promise<void> { await updateMutation(id, { status: 'failed', error }) }
+async function markMutationFailure(id: string, error: string): Promise<void> { await updateMutation(id, { status: 'failed', error }) }
 export async function markMutationBlocked(id: string): Promise<void> { await updateMutation(id, { status: 'blocked', error: 'Access must be reauthorized before this change can sync' }) }
 export function isQueueableMutation(method: string, url: string, data: unknown): boolean {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) || typeof data !== 'object' || data === null || Array.isArray(data)) return false
@@ -136,7 +130,7 @@ export function isQueueableMutation(method: string, url: string, data: unknown):
   return /^\/competitions\/[^/]+(?:\/complete)?$/.test(url) || /^\/sessions\//.test(url) || /^\/programs\/[^/]+\/(meta|body-weight|phases|lift-profiles|archive|unarchive|blocks\/transition|designer\/)/.test(url) || /^\/(maxes|supplements|diet-notes|block-notes)\//.test(url) || /^\/authored-notes\/(private|share|detach)$/.test(url) || /^\/attempts\//.test(url)
 }
 
-export interface MutationSender { (record: PendingMutation): Promise<{ status: number; data?: unknown }> }
+interface MutationSender { (record: PendingMutation): Promise<{ status: number; data?: unknown }> }
 let synchronizing = false
 export async function synchronizePendingMutations(send: MutationSender, partition = requestPartition()): Promise<void> {
   if (synchronizing || !navigator.onLine) return

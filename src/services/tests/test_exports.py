@@ -29,7 +29,10 @@ def test_history_exports_are_scoped_and_isolated(monkeypatch):
         return filename, "export", "markdown" if format_value == "markdown" else "xlsx"
 
     monkeypatch.setattr(core, "_get_store", lambda args: Store(args["pk"]))
-    monkeypatch.setattr(competition_entries, "load_entries", lambda pk, *_args, **_kwargs: [])
+    monkeypatch.setattr(competition_entries, "load_entries", lambda pk, *_args, **_kwargs: [
+        {"sk": "COMP#old", "name": "old", "start_date": "2026-08-22", "user_status": "confirmed", "block_id": "block-2025"},
+        {"sk": "COMP#new", "name": "new", "start_date": "2026-11-07", "user_status": "confirmed"},
+    ])
     monkeypatch.setattr(core, "_write_program_export", write)
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda pk: core.export_program_history({"pk": pk, "format": "xlsx"}), ("athlete-a", "athlete-b")))
@@ -92,8 +95,7 @@ class TwoBlockStore(Store):
             "diet_notes": [{"date": "2025-01-07", "notes": "old", "block_id": "block-2025"}, {"date": "2026-10-06", "notes": "new", "block_id": "block-new"}],
             "supplements": [{"name": "old-creatine", "dose": "5g", "block_id": "block-2025"}, {"name": "current-creatine", "dose": "5g"}],
             "supplement_phases": [{"phase": 1, "block_id": "block-2025"}, {"phase": 2, "block_id": "block-new"}],
-            "competitions": [{"name": "old", "date": "2026-08-22", "block_id": "block-2025"}, {"name": "new", "date": "2026-11-07"}],
-            "meta": {"current_block_id": "block-new", "program_start": "2025-01-01", "comp_date": "2026-08-22", "blocks": [{"id": "block-2025", "status": "completed", "start_date": "2025-01-01", "completed_at": "2026-10-05"}, {"id": "block-new", "status": "active", "start_date": "2026-10-06"}], "block_notes": [{"date": "2026-05-01", "notes": "old"}, {"date": "2026-10-06", "notes": "new", "block_id": "block-new"}]},
+            "meta": {"current_block_id": "block-new", "program_start": "2025-01-01", "blocks": [{"id": "block-2025", "status": "completed", "start_date": "2025-01-01", "completed_at": "2026-10-05"}, {"id": "block-new", "status": "active", "start_date": "2026-10-06"}], "block_notes": [{"date": "2026-05-01", "notes": "old"}, {"date": "2026-10-06", "notes": "new", "block_id": "block-new"}]},
         }
 
 
@@ -107,7 +109,10 @@ def _capture_export(monkeypatch, args):
         return "out.md", "export", "markdown"
 
     monkeypatch.setattr(core, "_get_store", lambda a: TwoBlockStore(a["pk"]))
-    monkeypatch.setattr(competition_entries, "load_entries", lambda pk, *_args, **_kwargs: [])
+    monkeypatch.setattr(competition_entries, "load_entries", lambda pk, *_args, **_kwargs: [
+        {"sk": "COMP#old", "name": "old", "start_date": "2026-08-22", "user_status": "confirmed", "block_id": "block-2025"},
+        {"sk": "COMP#new", "name": "new", "start_date": "2026-11-07", "user_status": "confirmed"},
+    ])
     monkeypatch.setattr(core, "_write_program_export", write)
     core.export_program_history({"pk": "athlete", "format": "markdown", **args})
     return captured
@@ -121,7 +126,6 @@ def test_export_defaults_to_active_block_only(monkeypatch):
     assert [item["name"] for item in captured["program"]["competitions"]] == ["new"]
     assert [item["notes"] for item in captured["program"]["meta"]["block_notes"]] == ["new"]
     assert [item["phase"] for item in captured["program"]["supplement_phases"]] == [2]
-    assert captured["program"]["meta"]["comp_date"] == "2026-11-07"
     assert captured["session_block"] == "current"
 
 

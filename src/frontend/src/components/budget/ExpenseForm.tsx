@@ -16,7 +16,7 @@ import {
   fromPickerValue, fromMonthPickerValue, toPickerValue, toMonthPickerValue,
 } from './dateUtils'
 
-export interface ExpenseFormProps {
+interface ExpenseFormProps {
   item: BudgetItem
   readOnly: boolean
   currency: string

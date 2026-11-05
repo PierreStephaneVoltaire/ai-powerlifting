@@ -1,9 +1,7 @@
 from __future__ import annotations
 import logging
 import os
-from typing import Any, Optional
 logger = logging.getLogger(__name__)
-_store: Optional[Any] = None
 
 def _get_store():
     from services.handlers.federation._federation_store import FederationStore

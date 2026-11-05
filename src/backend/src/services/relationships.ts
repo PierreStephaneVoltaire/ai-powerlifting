@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 
 export async function requestRelationship(payload: Record<string, unknown>): Promise<unknown> {
   return callOperation('relationship_request', payload)

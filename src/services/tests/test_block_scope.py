@@ -58,18 +58,17 @@ def test_notes_nutrition_and_budget_use_record_dates_even_when_stamped_wrong():
     assert [item["name"] for item in scope_entries(records, "block-active", program, "budget")] == ["active"]
 
 
-def test_scope_program_filters_legacy_records_and_removes_stale_comp_date():
+def test_scope_program_filters_records_outside_the_block():
     program = {
         **program_with_ranges(),
         "competitions": [{"date": "2025-06-01", "name": "old"}],
         "supplements": [{"name": "creatine"}],
-        "meta": {**program_with_ranges()["meta"], "comp_date": "2025-06-01", "block_notes": [{"date": "2025-06-01", "notes": "old"}]},
+        "meta": {**program_with_ranges()["meta"], "block_notes": [{"date": "2025-06-01", "notes": "old"}]},
     }
     scoped = scope_program(program)
     assert scoped["competitions"] == []
     assert scoped["supplements"] == [{"name": "creatine"}]
     assert scoped["meta"]["block_notes"] == []
-    assert "comp_date" not in scoped["meta"]
 
 
 def test_session_listing_with_current_alias_keeps_stamped_active_sessions():

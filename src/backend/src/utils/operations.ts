@@ -5,7 +5,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { coachUrl } from './coachUrl'
 
-type Operation = { name: string; domain: string; legacy?: string[] }
+type Operation = { name: string; domain: string }
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 const SERVICE_BASE_URL = process.env.POWERLIFTING_SERVICE_BASE_URL
 const operations = new Map<string, Operation>()
@@ -36,13 +36,10 @@ export async function pollJob(jobId: string, operation: string, person: string, 
   throw new Error(`Job still pending for ${operation}`)
 }
 
-export async function callOperation(functionName: string, args: Record<string, unknown>, waitForResult = true): Promise<any> {
+export async function callOperation(name: string, payload: Record<string, unknown>, waitForResult = true): Promise<any> {
   if (!INTERNAL_API_TOKEN) throw new Error('INTERNAL_API_TOKEN is not set')
-  const requestedName = typeof args.function === 'string' ? args.function : functionName
-  const operation = operations.get(requestedName)
-  if (!operation) throw new Error(`Unknown powerlifting operation: ${functionName}`)
-  const payload = { ...args }
-  delete payload.function
+  const operation = operations.get(name)
+  if (!operation) throw new Error(`Unknown powerlifting operation: ${name}`)
   const scope = operationScope.getStore()
   if (!scope) throw new AppError('Authenticated operation context required', 401, 'AUTH_REQUIRED')
   const pk = scope.athlete
@@ -65,12 +62,12 @@ export async function callOperation(functionName: string, args: Record<string, u
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { detail?: { code?: string; message?: string; current_revision?: number; current_record?: unknown } }
     const detail = typeof body.detail === 'object' ? body.detail : {}
-    const error = new AppError(detail.message || `Operation ${functionName} failed`, response.status, detail.code)
+    const error = new AppError(detail.message || `Operation ${name} failed`, response.status, detail.code)
     Object.assign(error, { current_revision: detail.current_revision, current_record: detail.current_record })
     throw error
   }
   const result: any = await response.json()
-  return result?.job_id && waitForResult ? pollJob(result.job_id, requestedName, person, pk) : result
+  return result?.job_id && waitForResult ? pollJob(result.job_id, name, person, pk) : result
 }
 
 export async function readGeneration(generationId: string, athlete: string): Promise<any> {

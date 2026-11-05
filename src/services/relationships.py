@@ -8,13 +8,12 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.conditions import Attr
 
-from services.access import COACH_PERMISSIONS, HANDLER_PERMISSIONS, active_grants, grant_permissions
+from services.access import COACH_PERMISSIONS, HANDLER_PERMISSIONS, active_grants
 from .dispatch import OperationError
 
 
@@ -245,39 +244,7 @@ def _active_relationship_ids(athlete: str, role: str) -> set[str]:
         relationship_id = str(grant.get("relationship_id") or "")
         if relationship_id:
             result.add(relationship_id)
-        elif _is_legacy_grant(grant):
-            result.add(_legacy_relationship_id(grant))
     return result
-
-
-def _is_legacy_grant(grant: dict) -> bool:
-    return bool(str(grant.get("sk") or "").startswith("Grantee#") and not grant.get("relationship_id"))
-
-
-def _legacy_relationship_id(grant: dict) -> str:
-    original = f"{grant.get('pk', '')}:{grant.get('sk', '')}"
-    return f"legacy-{hashlib.sha256(original.encode()).hexdigest()}"
-
-
-def _legacy_grants(athlete: str, role: str) -> list[dict]:
-    table = _table()
-    if not hasattr(table, "query"):
-        return []
-    arguments = {"KeyConditionExpression": Key("pk").eq(f"Grant#{athlete}"), "ConsistentRead": True}
-    grants = []
-    while True:
-        response = table.query(**arguments)
-        grants.extend(item for item in response.get("Items", []) if (item.get("grant_type") or "") == role and _is_legacy_grant(item))
-        if not response.get("LastEvaluatedKey"):
-            break
-        arguments["ExclusiveStartKey"] = response["LastEvaluatedKey"]
-    ids = {str(value) for grant in grants for value in grant.get("tied_competition_ids") or []}
-    dates = _stored_competition_dates(athlete, sorted(ids))
-    return [grant for grant in grants if grant_permissions(grant, dates, datetime.now(timezone.utc))]
-
-
-def _legacy_grant(athlete: str, role: str, relationship_id: str) -> dict | None:
-    return next((grant for grant in _legacy_grants(athlete, role) if _legacy_relationship_id(grant) == relationship_id), None)
 
 
 def _request_key(request_id: str) -> dict[str, str]:
@@ -434,11 +401,6 @@ def create_request(args: dict) -> dict:
         if existing and existing.get("state") == "pending":
             return existing
     slot = _get({"pk": f"Grant#{athlete}", "sk": f"RelationshipSlot#{role}"}) if role in ("coach", "handler") and not incoming else None
-    legacy = _legacy_grants(athlete, role) if role in ("coach", "handler") and not incoming else []
-    if len(legacy) > 1:
-        raise ValueError("legacy_relationship_migration_required")
-    if slot and slot.get("state") == "active" and _slot_is_active(slot, athlete) and legacy:
-        raise ValueError("legacy_relationship_migration_required")
     if slot and slot.get("state") == "active" and _slot_is_active(slot, athlete):
         if str(args.get("replace_current_relationship_id") or "") != str(slot.get("relationship_id") or ""):
             raise ValueError("current_relationship_confirmation_required")
@@ -566,11 +528,6 @@ def respond_request(args: dict) -> dict:
     }
     slot_key = {"pk": f"Grant#{request['athlete_mapped_pk']}", "sk": f"RelationshipSlot#{role}"}
     slot = _get(slot_key)
-    legacy_active = _legacy_grants(request["athlete_mapped_pk"], role) if role in ("coach", "handler") else []
-    if len(legacy_active) > 1:
-        raise ValueError("legacy_relationship_migration_required")
-    if slot and slot.get("state") == "active" and _slot_is_active(slot, request["athlete_mapped_pk"]) and legacy_active:
-        raise ValueError("legacy_relationship_migration_required")
     replacement = str((args if incoming else request).get("replace_current_relationship_id") or "")
     if role in ("coach", "handler") and slot and slot.get("state") == "active":
         if _slot_is_active(slot, request["athlete_mapped_pk"]) and replacement != slot.get("relationship_id"):
@@ -580,8 +537,7 @@ def respond_request(args: dict) -> dict:
         if active_ids and replacement not in active_ids:
             raise ValueError("current_relationship_confirmation_required")
     old_request = _get(_request_key(replacement)) if replacement else None
-    legacy = _legacy_grant(request["athlete_mapped_pk"], role, replacement) if replacement and not old_request else None
-    if replacement and (not old_request and not legacy or old_request and (old_request.get("state") != "approved" or old_request.get("athlete_mapped_pk") != request.get("athlete_mapped_pk") or old_request.get("relationship_type") != role)):
+    if replacement and (not old_request or (old_request.get("state") != "approved" or old_request.get("athlete_mapped_pk") != request.get("athlete_mapped_pk") or old_request.get("relationship_type") != role)):
         raise ValueError("replacement_relationship_not_found")
     now = _now()
     approval_hash = _approval_hash(request_id, actor, {"scope": scope, "permissions": permissions, "tied_competition_ids": tied_ids, "replace_current_relationship_id": replacement}, request)
@@ -594,9 +550,6 @@ def respond_request(args: dict) -> dict:
             if old_request:
                 writes.append({"Update": {"TableName": table_name, "Key": _dynamo(_request_key(replacement)), "UpdateExpression": "SET #state=:replaced, replaced_by=:replacement, revoked_at=:at, revoked_by=:actor, updated_at=:at", "ConditionExpression": "#state=:approved", "ExpressionAttributeNames": {"#state": "state"}, "ExpressionAttributeValues": _dynamo({":approved": "approved", ":replaced": "replaced", ":replacement": request_id, ":at": now, ":actor": request["athlete_person_pk"]})}})
                 writes.extend(_notification_writes(_delegate(old_request), f"relationship:{replacement}:replaced", "relationship_replaced", {"relationship_id": replacement, "replaced_by": request_id, "relationship_type": role, "athlete_mapped_pk": request["athlete_mapped_pk"], "message": "Your relationship was replaced by a new relationship."}))
-        elif legacy:
-            legacy_key = {"pk": legacy["pk"], "sk": legacy["sk"]}
-            writes.append({"Update": {"TableName": table_name, "Key": _dynamo(legacy_key), "UpdateExpression": "SET #state=:replaced, relationship_id=:relationship, replaced_by=:replacement, revoked_at=:at, revoked_by=:actor, updated_at=:at", "ConditionExpression": "attribute_not_exists(#state) OR #state=:approved", "ExpressionAttributeNames": {"#state": "state"}, "ExpressionAttributeValues": _dynamo({":approved": "approved", ":replaced": "replaced", ":relationship": replacement, ":replacement": request_id, ":at": now, ":actor": request["athlete_person_pk"]})}})
         observed_relationship = str(slot.get("relationship_id") or "") if slot else ""
         observed_state = str(slot.get("state") or "") if slot else ""
         observed_revision = int(slot.get("revision") or 0) if slot else 0
@@ -659,7 +612,7 @@ def _query(index: str, key_name: str, key_value: str) -> list[dict]:
 
 
 _PUBLIC_REQUEST_FIELDS = (
-    "relationship_id", "state", "active", "legacy_relationship", "athlete_mapped_pk", "athlete_person_pk",
+    "relationship_id", "state", "active", "athlete_mapped_pk", "athlete_person_pk",
     "requester_person_pk", "recipient_person_pk", "request_direction", "relationship_type", "scope",
     "permissions", "tied_competition_ids", "expires_at", "note", "created_at", "updated_at",
     "responded_by", "responded_at", "replaced_by", "revoked_by", "revoked_at", "replace_current_relationship_id",
@@ -671,35 +624,10 @@ def _public_request(item: dict) -> dict:
     return {key: item[key] for key in _PUBLIC_REQUEST_FIELDS if key in item}
 
 
-def _legacy_request(grant: dict, athlete: str) -> dict:
-    owner = _athlete_owner(athlete) or {}
-    athlete_person = str(grant.get("athlete_person_pk") or owner.get("pk") or owner.get("mapped_pk") or athlete)
-    delegate = str(grant.get("grantee_person_pk") or grant.get("grantee_mapped_pk") or "")
-    return {
-        "relationship_id": _legacy_relationship_id(grant),
-        "state": "approved",
-        "active": True,
-        "legacy_relationship": True,
-        "athlete_mapped_pk": athlete,
-        "athlete_person_pk": athlete_person,
-        "requester_person_pk": athlete_person,
-        "recipient_person_pk": delegate,
-        "request_direction": "athlete_to_delegate",
-        "relationship_type": grant.get("grant_type"),
-        "scope": grant.get("scope") or "read",
-        "permissions": list(grant.get("permissions") or []),
-        "tied_competition_ids": [str(value) for value in grant.get("tied_competition_ids") or []],
-        "expires_at": str(grant.get("expires_at") or ""),
-        "note": str(grant.get("note") or ""),
-        "created_at": str(grant.get("created_at") or ""),
-        "updated_at": str(grant.get("updated_at") or grant.get("created_at") or ""),
-    }
-
-
 def list_requests(args: dict) -> dict:
     from services.access_store import current_context, person_record
     actor = _person(args)
-    now = datetime.now(timezone.utc)
+    datetime.now(timezone.utc)
     def current(items):
         result = []
         for indexed in items:
@@ -724,11 +652,6 @@ def list_requests(args: dict) -> dict:
         return result
     sent = current(_query(os.getenv('IF_POWERLIFTING_REQUESTS_SENT_INDEX', 'SentIndex'), 'sent_pk', f'Sent#{actor}'))
     received = current(_query(os.getenv('IF_POWERLIFTING_REQUESTS_INBOX_INDEX', 'InboxIndex'), 'inbox_pk', f'Inbox#{actor}'))
-    owner = person_record(actor) or {}
-    own_athlete = str(owner.get("mapped_pk") or owner.get("pk") or "")
-    for role in ("coach", "handler"):
-        for grant in _legacy_grants(own_athlete, role) if own_athlete else []:
-            sent.append(_legacy_request(grant, own_athlete))
     return {'sent': sent, 'received': received, 'history': sent + received}
 
 

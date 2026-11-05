@@ -22,7 +22,7 @@ export interface VideoUploadTarget {
   idempotencyKey?: string
 }
 
-export interface VideoUploadSession {
+interface VideoUploadSession {
   videoId: string
   s3Key: string
   uploadId: string

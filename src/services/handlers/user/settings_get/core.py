@@ -6,15 +6,13 @@ import os
 import re
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Attr
 
 from .._shared.settings_normalize import (
     SEX_VALUES,
-    ROLE_VALUES,
     _to_float,
     _normalize_role,
     _normalize_roles,

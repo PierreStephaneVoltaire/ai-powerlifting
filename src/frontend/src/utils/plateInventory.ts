@@ -19,7 +19,7 @@ export function normalizePlateInventory(plates: Array<number | null | undefined>
   return normalized.sort((a, b) => b - a)
 }
 
-export function defaultPlateInventory(unit: PlateUnit): number[] {
+function defaultPlateInventory(unit: PlateUnit): number[] {
   return unit === 'kg'
     ? [...DEFAULT_KG_PLATE_INVENTORY]
     : [...DEFAULT_LB_PLATE_INVENTORY]

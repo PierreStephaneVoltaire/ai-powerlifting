@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 
 export const exportRouter = Router()
 

@@ -13,7 +13,6 @@ class ProgramContractTests(unittest.TestCase):
 
     def test_program_result_shapes_cover_array_and_object_operations(self):
         operations = load_operations("program")
-        self.assertEqual(operations["health_get_phases"].result_schema["type"], "array")
         self.assertEqual(operations["program_list_full"].result_schema["type"], "array")
         self.assertEqual(operations["program_get"].result_schema["type"], "object")
 
@@ -68,10 +67,9 @@ class ProgramContractTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     operations[name].validate_input({})
 
-    def test_legacy_results_validate(self):
+    def test_simple_results_validate(self):
         operations = load_operations("program")
         operations["health_get_diet_notes"].validate_result([])
-        operations["health_delete_diet_note"].validate_result({"deleted": "2026-09-13"})
         operations["program_archive"].validate_result({"success": True})
 
 

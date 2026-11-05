@@ -17,11 +17,10 @@ import os
 import tempfile
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-_store: Optional[Any] = None
 
 
 def _get_store(args):
@@ -63,8 +62,7 @@ def _sanitize_decimals(obj: Any) -> Any:
 
 def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
     """Fetch glossary from DynamoDB for the active health partition."""
-    import boto3
-    from services.lib.aws import dynamodb_resource, client as aws_client
+    from services.lib.aws import dynamodb_resource
 
     dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
@@ -76,7 +74,6 @@ def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
 
 
 def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
-    import boto3
 
     dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
@@ -150,7 +147,6 @@ def _scope_program_to_current_block(program: dict) -> dict:
 
 def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
     """Return the cached correlation report for the current window, or None."""
-    import boto3
     from .config import IF_HEALTH_TABLE_NAME
 
     today = datetime.utcnow().date()

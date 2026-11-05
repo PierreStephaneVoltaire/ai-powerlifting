@@ -1,6 +1,6 @@
 import { fetchGlossary } from '@/api/client'
 import { useState, useMemo, useEffect } from 'react'
-import { PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Paper, Title, Text, Select, SimpleGrid, Stack, Group, Table } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'

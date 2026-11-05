@@ -25,8 +25,7 @@
           "type": "string",
           "minLength": 1
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "oneOf": [
@@ -75,10 +74,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "get_analysis_markdown"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "analysis_section",
@@ -108,8 +104,7 @@
           "type": "boolean",
           "description": "Force recompute instead of using cached value. Default false."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -136,10 +131,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "analyze_progression",
@@ -203,10 +195,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "analyze_rpe_drift",
@@ -264,10 +253,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "block_correlation_analysis",
@@ -297,8 +283,7 @@
           "type": "boolean",
           "default": false
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -335,10 +320,7 @@
       "additionalProperties": true
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "block_program_evaluation",
@@ -375,8 +357,7 @@
         "window_start": {
           "type": "string"
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -437,10 +418,7 @@
       "additionalProperties": true
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "correlation_analysis",
@@ -470,8 +448,7 @@
           "type": "boolean",
           "default": false
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -508,10 +485,7 @@
       "additionalProperties": true
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "multi_block_comparison_analysis",
@@ -541,8 +515,7 @@
           "type": "boolean",
           "default": false
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -605,10 +578,7 @@
       "additionalProperties": true
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_evaluation",
@@ -634,8 +604,7 @@
           "type": "boolean",
           "default": false
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -690,10 +659,7 @@
       "additionalProperties": true
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "regenerate_analysis",
@@ -715,8 +681,7 @@
           "type": "string",
           "description": "Block key to regenerate analysis for."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -746,10 +711,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "weekly_analysis",
@@ -775,8 +737,7 @@
           "type": "boolean",
           "description": "Force recompute. Default false."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -803,10 +764,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_suggest_e1rm_multipliers",
@@ -833,8 +791,7 @@
           "type": "string",
           "format": "date"
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -974,10 +931,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_suggest_e1rm_multipliers"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "analytics.manifest",
@@ -1133,8 +1087,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.sections_queue",
@@ -1219,8 +1172,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.sections_get",
@@ -1300,8 +1252,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.sections_invalidate",
@@ -1383,13 +1334,12 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.weekly",
     "domain": "analytics",
-    "description": "Return the legacy weekly analysis report for the requested window.",
+    "description": "Return the weekly analysis report for the requested window.",
     "handler": "services.handlers.analysis_reports.weekly",
     "input_schema": {
       "type": "object",
@@ -1632,8 +1582,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.bundle",
@@ -1741,8 +1690,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.blocks_list",
@@ -1809,8 +1757,7 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.blocks_get",
@@ -1880,8 +1827,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.blocks_regenerate",
@@ -1935,8 +1881,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.block_evaluation",
@@ -2090,8 +2035,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.correlation",
@@ -2209,8 +2153,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.export",
@@ -2264,8 +2207,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.compare",
@@ -2362,8 +2304,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.compare_ai",
@@ -2509,8 +2450,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": []
+    "ownership": "athlete"
   },
   {
     "name": "analytics.regenerate",
@@ -2601,10 +2541,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "analysis_regenerate"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "analytics.markdown",
@@ -2683,9 +2620,6 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "analysis_markdown"
-    ]
+    "ownership": "athlete"
   }
 ]

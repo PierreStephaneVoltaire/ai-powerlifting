@@ -5,7 +5,6 @@ import pytest
 
 
 @pytest.mark.parametrize("module_name", [
-    "services.handlers.competition.health_complete_competition.analytics",
     "services.handlers.competition.health_snapshot_competition_projection.analytics",
     "services.handlers.program.export_program_history.analytics",
     "services.handlers.program.export_program_markdown.analytics",

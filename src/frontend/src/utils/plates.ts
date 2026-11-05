@@ -71,13 +71,6 @@ export function getPlateColor(plateKg: number, unit: 'kg' | 'lb' = 'kg'): string
   return KG_PLATE_COLORS[plateKg] || '#6b7280'
 }
 
-export function formatPlateDenomination(plateKg: number, unit: 'kg' | 'lb' = 'kg'): string {
-  if (unit === 'lb') {
-    return kgToLbExact(plateKg).toString()
-  }
-  return plateKg.toString()
-}
-
 export function compAttempts(targetKg: number): {
   opener: number
   second: number

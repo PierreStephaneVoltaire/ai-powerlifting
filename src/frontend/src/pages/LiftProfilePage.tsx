@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, Film, RotateCcw, Save, Sparkles, Trash2, Upload } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Film, RotateCcw, Save, Sparkles, Upload } from 'lucide-react'
 import {
   Alert,
   Badge,
@@ -15,8 +15,6 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  Textarea,
-  TextInput,
   Title,
   ActionIcon,
 } from '@mantine/core'
@@ -40,7 +38,7 @@ const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 const FORM_ANGLES: LiftProfileVideoAngle[] = ['front', 'side', 'diagonal']
 const FORM_ANGLE_LABELS: Record<LiftProfileVideoAngle, string> = { front: 'Front', side: 'Side', diagonal: 'Diagonal' }
 
-export interface MultiplierSuggestion {
+interface MultiplierSuggestion {
   lift: string
   suggested_multiplier: number
   current_multiplier: number

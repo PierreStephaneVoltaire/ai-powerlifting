@@ -79,7 +79,6 @@ def test_every_analytics_copy_estimates_eight_rep_sets_without_rpe():
         "services.handlers.analysis_reports.analytics",
         "services.handlers.program.export_program_markdown.analytics",
         "services.handlers.program.export_program_history.analytics",
-        "services.handlers.competition.health_complete_competition.analytics",
         "services.handlers.competition.health_snapshot_competition_projection.analytics",
     ):
         module = importlib.import_module(name)

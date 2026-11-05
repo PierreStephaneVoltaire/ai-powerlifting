@@ -4,16 +4,13 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
-from botocore.exceptions import ClientError
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -24,22 +21,10 @@ class TemplatePermissionError(Exception):
     """Raised when an actor cannot mutate a template."""
 
 
-class TemplateRevisionConflictError(Exception):
-    def __init__(self, expected_revision: int, current_revision: int, current_record: dict | None = None):
-        self.expected_revision = expected_revision
-        self.current_revision = current_revision
-        self.current_record = current_record
-        super().__init__(f"revision conflict: expected {expected_revision}, current {current_revision}")
-
-
-def require_mutation_envelope(expected_revision: Any = None, idempotency_key: Any = None) -> tuple[int, str]:
-    return 0, idempotency_key if isinstance(idempotency_key, str) else ""
-
 class TemplateStore:
     """DynamoDB-backed store for global training templates."""
 
     INDEX_SK = "template#index"
-    LEGACY_INDEX_SK = "template#current_list"
     TEMPLATE_SK_PREFIX = "template#"
     IMPORT_JOB_SK_PREFIX = "template_import#"
 
@@ -129,8 +114,6 @@ class TemplateStore:
     def _read_index_sync(self) -> list[dict[str, Any]]:
         resp = self.table.get_item(Key={"pk": self._pk, "sk": self.INDEX_SK})
         if "Item" not in resp:
-            resp = self.table.get_item(Key={"pk": self._pk, "sk": self.LEGACY_INDEX_SK})
-        if "Item" not in resp:
             return []
         return list(resp["Item"].get("templates", []))
 
@@ -142,16 +125,10 @@ class TemplateStore:
             "updated_at": updated_at or self._now(),
         }))
 
-    def _transaction_canceled(self, exc: Exception) -> bool:
-        return isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") == "TransactionCanceledException"
-
     def _read_index_item_sync(self) -> dict[str, Any]:
-        current = self.table.get_item(Key={"pk": self._pk, "sk": self.INDEX_SK}, ConsistentRead=True).get("Item") or {}
-        if not current:
-            current = self.table.get_item(Key={"pk": self._pk, "sk": self.LEGACY_INDEX_SK}, ConsistentRead=True).get("Item") or {}
-        return current
+        return self.table.get_item(Key={"pk": self._pk, "sk": self.INDEX_SK}, ConsistentRead=True).get("Item") or {}
 
-    def _write_template_index_sync(self, template: dict, *, expected_revision: int | None = None, marker: dict | None = None) -> None:
+    def _write_template_index_sync(self, template: dict, *, marker: dict | None = None) -> None:
         self.table.put_item(Item=self._floats_to_decimals(template))
         self._upsert_index_summary_sync(self._summary(template))
 
@@ -161,9 +138,6 @@ class TemplateStore:
         templates.append(summary)
         templates.sort(key=lambda t: str(t.get("created_at") or ""))
         self._write_index_sync(templates, str(summary.get("updated_at") or self._now()))
-
-    def _conditional_put_sync(self, template: dict, expected_revision: int, current: dict) -> None:
-        self.table.put_item(Item=self._floats_to_decimals({**template, "pk": self._pk, "sk": template["sk"]}))
 
     def list_templates_sync(self, include_archived: bool = False, actor_pk: str | None = None) -> list[dict[str, Any]]:
         templates = self._read_index_sync()
@@ -203,8 +177,6 @@ class TemplateStore:
         published: bool = False,
         import_job_id: str | None = None,
         sk: str | None = None,
-        expected_revision: int | None = None,
-        idempotency_key: str | None = None,
         _idempotency_payload_hash: str | None = None,
     ) -> str:
         now = self._now()
@@ -245,8 +217,6 @@ class TemplateStore:
         published: bool = False,
         import_job_id: str | None = None,
         sk: str | None = None,
-        expected_revision: int | None = None,
-        idempotency_key: str | None = None,
         _idempotency_payload_hash: str | None = None,
     ) -> str:
         return await asyncio.get_running_loop().run_in_executor(
@@ -258,14 +228,10 @@ class TemplateStore:
                 published=published,
                 import_job_id=import_job_id,
                 sk=sk,
-                expected_revision=expected_revision,
-                idempotency_key=idempotency_key,
-                _idempotency_payload_hash=_idempotency_payload_hash,
-            ),
+                _idempotency_payload_hash=_idempotency_payload_hash),
         )
 
-    def update_template_sync(self, sk: str, template: dict, *, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
-        require_mutation_envelope(expected_revision, idempotency_key)
+    def update_template_sync(self, sk: str, template: dict, *, actor_pk: str | None = None, ) -> dict:
         existing = self.get_template_sync(sk, actor_pk=actor_pk)
         if not existing:
             raise TemplateNotFoundError(f"Template not found: {sk}")
@@ -292,12 +258,12 @@ class TemplateStore:
 
         template_item["pk"] = self._pk
         template_item["sk"] = sk
-        self._write_template_index_sync(template_item, expected_revision=expected_revision)
+        self._write_template_index_sync(template_item)
         return {"status": "updated", "sk": sk}
 
-    async def update_template(self, sk: str, template: dict, *, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+    async def update_template(self, sk: str, template: dict, *, actor_pk: str | None = None, ) -> dict:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.update_template_sync(sk, template, actor_pk=actor_pk, expected_revision=expected_revision, idempotency_key=idempotency_key)
+            None, lambda: self.update_template_sync(sk, template, actor_pk=actor_pk)
         )
 
     def set_evaluation_sync(self, sk: str, evaluation: dict, actor_pk: str | None = None, program_context: str | None = None) -> None:
@@ -319,8 +285,7 @@ class TemplateStore:
     async def set_evaluation(self, sk: str, evaluation: dict, actor_pk: str | None = None, program_context: str | None = None) -> None:
         await asyncio.get_running_loop().run_in_executor(None, lambda: self.set_evaluation_sync(sk, evaluation, actor_pk, program_context))
 
-    def _set_archived_sync(self, sk: str, archived: bool, actor_pk: str | None, expected_revision: int | None, idempotency_key: str | None) -> dict:
-        require_mutation_envelope(expected_revision, idempotency_key)
+    def _set_archived_sync(self, sk: str, archived: bool, actor_pk: str | None) -> dict:
         template = self.get_template_sync(sk, actor_pk=actor_pk)
         if not template:
             raise TemplateNotFoundError(f"Template not found: {sk}")
@@ -330,7 +295,7 @@ class TemplateStore:
         meta["archived"] = archived
         meta.pop("idempotency", None)
         meta["updated_at"] = self._now()
-        self._write_template_index_sync({**template, "pk": self._pk, "sk": sk}, expected_revision=expected_revision)
+        self._write_template_index_sync({**template, "pk": self._pk, "sk": sk})
         return result
 
     def delete_template_sync(self, sk: str, actor_pk: str | None = None) -> dict:
@@ -348,24 +313,23 @@ class TemplateStore:
     async def delete_template(self, sk: str, actor_pk: str | None = None) -> dict:
         return await asyncio.get_running_loop().run_in_executor(None, lambda: self.delete_template_sync(sk, actor_pk))
 
-    def archive_template_sync(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
-        return self._set_archived_sync(sk, True, actor_pk, expected_revision, idempotency_key)
+    def archive_template_sync(self, sk: str, actor_pk: str | None = None) -> dict:
+        return self._set_archived_sync(sk, True, actor_pk)
 
-    async def archive_template(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+    async def archive_template(self, sk: str, actor_pk: str | None = None) -> dict:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.archive_template_sync(sk, actor_pk, expected_revision, idempotency_key)
+            None, lambda: self.archive_template_sync(sk, actor_pk)
         )
 
-    def unarchive_template_sync(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
-        return self._set_archived_sync(sk, False, actor_pk, expected_revision, idempotency_key)
+    def unarchive_template_sync(self, sk: str, actor_pk: str | None = None) -> dict:
+        return self._set_archived_sync(sk, False, actor_pk)
 
-    async def unarchive_template(self, sk: str, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+    async def unarchive_template(self, sk: str, actor_pk: str | None = None) -> dict:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.unarchive_template_sync(sk, actor_pk, expected_revision, idempotency_key)
+            None, lambda: self.unarchive_template_sync(sk, actor_pk)
         )
 
-    def set_published_sync(self, sk: str, published: bool, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
-        require_mutation_envelope(expected_revision, idempotency_key)
+    def set_published_sync(self, sk: str, published: bool, actor_pk: str | None = None) -> dict:
         template = self.get_template_sync(sk, actor_pk=actor_pk)
         if not template:
             raise TemplateNotFoundError(f"Template not found: {sk}")
@@ -380,16 +344,15 @@ class TemplateStore:
             meta["published_at"] = now
         else:
             meta.pop("published_at", None)
-        self._write_template_index_sync({**template, "pk": self._pk, "sk": sk}, expected_revision=expected_revision)
+        self._write_template_index_sync({**template, "pk": self._pk, "sk": sk})
         return result
 
-    async def set_published(self, sk: str, published: bool, actor_pk: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+    async def set_published(self, sk: str, published: bool, actor_pk: str | None = None) -> dict:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.set_published_sync(sk, published, actor_pk, expected_revision, idempotency_key)
+            None, lambda: self.set_published_sync(sk, published, actor_pk)
         )
 
-    def copy_template_sync(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> str:
-        require_mutation_envelope(expected_revision, idempotency_key)
+    def copy_template_sync(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None, ) -> str:
         if not actor_pk:
             raise TemplatePermissionError("Template copy requires a signed-in author")
         template = self.get_template_sync(sk, actor_pk=actor_pk)
@@ -419,68 +382,7 @@ class TemplateStore:
         self._write_template_index_sync(new_template | {"pk": self._pk, "sk": new_sk})
         return new_sk
 
-    async def copy_template(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> str:
+    async def copy_template(self, sk: str, new_name: str, *, actor_pk: str | None = None, author: str | None = None, ) -> str:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.copy_template_sync(sk, new_name, actor_pk=actor_pk, author=author, expected_revision=expected_revision, idempotency_key=idempotency_key)
-        )
-
-    def create_import_job_sync(self, record: dict[str, Any]) -> str:
-        job_id = str(record.get("job_id") or uuid.uuid4())
-        now = self._now()
-        item = {
-            **copy.deepcopy(record),
-            "pk": self._pk,
-            "sk": f"{self.IMPORT_JOB_SK_PREFIX}{job_id}",
-            "job_id": job_id,
-            "status": record.get("status") or "queued",
-            "created_at": record.get("created_at") or now,
-            "updated_at": now,
-        }
-        self.table.put_item(Item=self._floats_to_decimals(item))
-        return job_id
-
-    async def create_import_job(self, record: dict[str, Any]) -> str:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.create_import_job_sync(record)
-        )
-
-    def update_import_job_sync(self, job_id: str, updates: dict[str, Any]) -> None:
-        existing = self.get_import_job_sync(job_id, include_hidden=True)
-        if not existing:
-            raise TemplateNotFoundError(f"Template import job not found: {job_id}")
-        existing.update(copy.deepcopy(updates))
-        existing["updated_at"] = self._now()
-        existing["pk"] = self._pk
-        existing["sk"] = f"{self.IMPORT_JOB_SK_PREFIX}{job_id}"
-        self.table.put_item(Item=self._floats_to_decimals(existing))
-
-    async def update_import_job(self, job_id: str, updates: dict[str, Any]) -> None:
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.update_import_job_sync(job_id, updates)
-        )
-
-    def get_import_job_sync(
-        self,
-        job_id: str,
-        actor_pk: str | None = None,
-        *,
-        include_hidden: bool = False,
-    ) -> dict | None:
-        resp = self.table.get_item(Key={"pk": self._pk, "sk": f"{self.IMPORT_JOB_SK_PREFIX}{job_id}"})
-        if "Item" not in resp:
-            return None
-        item = dict(resp["Item"])
-        if include_hidden:
-            return item
-        return item if self._owns(item, actor_pk) else None
-
-    async def get_import_job(
-        self,
-        job_id: str,
-        actor_pk: str | None = None,
-        *,
-        include_hidden: bool = False,
-    ) -> dict | None:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.get_import_job_sync(job_id, actor_pk, include_hidden=include_hidden)
+            None, lambda: self.copy_template_sync(sk, new_name, actor_pk=actor_pk, author=author)
         )

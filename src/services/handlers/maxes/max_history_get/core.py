@@ -5,8 +5,7 @@ import os
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 import hashlib
 import json
 from services.lib.competition_entries import load_entries

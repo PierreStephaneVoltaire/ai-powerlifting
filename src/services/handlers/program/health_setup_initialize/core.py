@@ -2,19 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import hashlib
-import json
 import logging
 import os
 import re
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
-_template_store: Optional[Any] = None
 
 
 def _get_store():
@@ -99,28 +94,6 @@ async def health_setup_status(args: dict | None = None) -> dict:
         "currentProgramSk": current_sk,
     }
 
-def _setup_last_comp() -> dict:
-    return {
-        "date": "",
-        "body_weight_kg": 0,
-        "body_weight_lb": 0,
-        "weight_class_kg": 0,
-        "results": {
-            "squat_kg": 0,
-            "bench_kg": 0,
-            "deadlift_kg": 0,
-            "total_kg": 0,
-        },
-        "past_comp_day_protocol": {
-            "caffeine_total_mg": 0,
-            "caffeine_sequence": [],
-            "carbs": "",
-            "l_theanine": "",
-            "outcome": "",
-            "notes": "",
-        },
-    }
-
 def _setup_goal() -> dict:
     return {
         "id": str(uuid.uuid4()),
@@ -186,8 +159,7 @@ def _setup_concretize_template(
     template: dict,
     maxes: dict[str, float],
     start_date: str,
-    week_start_day: str,
-) -> list[dict]:
+    week_start_day: str) -> list[dict]:
     from .template_apply import concretize
 
     sessions = concretize(
@@ -217,8 +189,7 @@ def _setup_program(
     week_start_day: str,
     maxes: dict[str, float],
     template: dict | None = None,
-    template_sk: str | None = None,
-) -> dict:
+    template_sk: str | None = None) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     squat = maxes.get("squat", 0)
     bench = maxes.get("bench", 0)
@@ -231,7 +202,6 @@ def _setup_program(
         "meta": {
             "program_name": (program_name or "").strip() or "Getting Started",
             "program_start": start_date,
-            "comp_date": "",
             "federation": "",
             "practicing_for": "",
             "version_label": "v001",
@@ -252,7 +222,6 @@ def _setup_program(
             }],
             "block_notes": [],
             "updated_at": now,
-            "last_comp": _setup_last_comp(),
             "manual_maxes": {
                 "squat": squat,
                 "bench": bench,
@@ -294,7 +263,6 @@ def _setup_program(
         },
         "phases": _setup_phases(template),
         "sessions": _setup_concretize_template(template, maxes, start_date, week_start_day) if template else [],
-        "competitions": [],
         "goals": [_setup_goal()],
         "diet_notes": [],
         "supplements": [],
@@ -316,54 +284,23 @@ def _setup_program(
         }
     return program
 
-def _write_initial_program_sync(store, program: dict, marker_sk: str, payload_hash: str, result: dict) -> None:
-    stage_sk = f"program#v001-{uuid.uuid4().hex}"
-    result["programSk"] = stage_sk
+def _write_initial_program_sync(store, program: dict, result: dict) -> None:
+    program_sk = f"program#v001-{uuid.uuid4().hex}"
+    result["programSk"] = program_sk
     program_item = copy.deepcopy(program)
     sessions = program_item.pop("sessions", [])
-    program_item["sk"] = stage_sk
-    program_item["published"] = False
-    if isinstance(sessions, list):
-        session_store = store._get_session_store()
-        if hasattr(session_store, "_ensure_unique_session_ids"):
-            session_store._ensure_unique_session_ids(sessions, stage_sk)
-    store.table.put_item(Item=_floats_to_decimals(program_item), ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)")
+    program_item["sk"] = program_sk
+    program_item["published"] = True
+    store.table.put_item(Item=_floats_to_decimals(program_item))
     if isinstance(sessions, list) and sessions:
-        session_store = store._get_session_store()
-        session_store.replace_program_sessions_sync(
-            stage_sk, sessions, program.get("phases", []) if isinstance(program.get("phases"), list) else [], bump_program_revision=False,
+        store._get_session_store().replace_program_sessions_sync(
+            program_sk, sessions, program.get("phases", []) if isinstance(program.get("phases"), list) else [],
         )
-    now = datetime.now(timezone.utc).isoformat()
-    marker = {
-        "pk": store.pk, "sk": marker_sk, "entity_type": "setup_idempotency",
-        "payload_hash": payload_hash, "result": result,
-    }
-    store.table.meta.client.transact_write_items(TransactItems=[
-        {"Put": {"TableName": store._table_name, "Item": _floats_to_decimals({
-            "pk": store.pk, "sk": store.POINTER_SK, "version": 1,
-            "ref_sk": stage_sk, "revision": 1, "updated_at": now,
-        }), "ConditionExpression": "attribute_not_exists(#pk)", "ExpressionAttributeNames": {"#pk": "pk"}}},
-        {"Put": {"TableName": store._table_name, "Item": _floats_to_decimals(marker), "ConditionExpression": "attribute_not_exists(#pk)", "ExpressionAttributeNames": {"#pk": "pk"}}},
-        {"Update": {"TableName": store._table_name, "Key": {"pk": store.pk, "sk": stage_sk}, "UpdateExpression": "SET #published = :published", "ConditionExpression": "attribute_exists(#pk) AND #published = :unpublished", "ExpressionAttributeNames": {"#pk": "pk", "#published": "published"}, "ExpressionAttributeValues": {":published": True, ":unpublished": False}}},
-    ])
+    store.table.put_item(Item=_floats_to_decimals({
+        "pk": store.pk, "sk": store.POINTER_SK, "version": 1, "ref_sk": program_sk, "updated_at": datetime.now(timezone.utc).isoformat(),
+    }))
     store.invalidate_cache()
 
-
-def _setup_idempotency_marker(store, idempotency_key: str) -> str:
-    digest = hashlib.sha256(idempotency_key.encode()).hexdigest()[:32]
-    return f"setup-idempotency#{digest}"
-
-
-def _setup_payload_hash(mode, start_date, week_start_day, program_name, template_sk, maxes) -> str:
-    payload = {
-        "mode": mode,
-        "start_date": start_date,
-        "week_start_day": week_start_day,
-        "program_name": program_name,
-        "template_sk": template_sk,
-        "maxes": maxes or {},
-    }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
 
 async def health_setup_initialize(
     args: dict | None = None,
@@ -372,10 +309,7 @@ async def health_setup_initialize(
     week_start_day: str | None = None,
     program_name: str | None = None,
     template_sk: str | None = None,
-    maxes: dict | None = None,
-    expected_revision: int | None = None,
-    idempotency_key: str | None = None,
-) -> dict:
+    maxes: dict | None = None) -> dict:
     """Initialize a no-data user's first training block for the active partition."""
     if isinstance(args, dict):
         if mode is None:
@@ -390,14 +324,6 @@ async def health_setup_initialize(
             template_sk = args.get("template_sk")
         if maxes is None:
             maxes = args.get("maxes")
-        if expected_revision is None:
-            expected_revision = args.get("expected_revision")
-        if idempotency_key is None:
-            idempotency_key = args.get("idempotency_key")
-    from services.lib.program_store import require_mutation_envelope
-    require_mutation_envelope(expected_revision, idempotency_key)
-    if expected_revision != 0:
-        raise ValueError("setup expected_revision must be 0")
     pk = args.get("pk") if isinstance(args, dict) else None
     if mode not in {"blank", "manual_sessions", "template"}:
         raise ValueError("INVALID_SETUP_MODE: mode must be blank, manual_sessions, or template")
@@ -407,16 +333,6 @@ async def health_setup_initialize(
         raise ValueError("INVALID_WEEK_START_DAY: week_start_day must be a weekday name")
 
     store = _store_for(pk)
-    marker_sk = _setup_idempotency_marker(store, idempotency_key)
-    payload_hash = _setup_payload_hash(mode, start_date, week_start_day, program_name, template_sk, maxes)
-    prior_marker = await asyncio.get_running_loop().run_in_executor(
-        None,
-        lambda: store.table.get_item(Key={"pk": store.pk, "sk": marker_sk}, ConsistentRead=True).get("Item"),
-    )
-    if prior_marker:
-        if prior_marker.get("payload_hash") != payload_hash:
-            raise ValueError("idempotency key was used with a different payload")
-        return copy.deepcopy(prior_marker.get("result") or {})
     status = await health_setup_status(args)
     if status["hasCurrentProgram"]:
         raise ValueError("ALREADY_INITIALIZED: Current program already exists")
@@ -454,27 +370,6 @@ async def health_setup_initialize(
         "status": "initialized", "mode": mode, "programSk": "program#v001",
         "sessionCount": len(program.get("sessions") or []), "revision": 1,
     }
-    try:
-        await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: _write_initial_program_sync(store, program, marker_sk, payload_hash, result),
-        )
-    except Exception as exc:
-        marker = await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: store.table.get_item(Key={"pk": store.pk, "sk": marker_sk}, ConsistentRead=True).get("Item"),
-        )
-        if marker:
-            if marker.get("payload_hash") != payload_hash:
-                raise ValueError("idempotency key was used with a different payload") from exc
-            store.invalidate_cache()
-            return copy.deepcopy(marker.get("result") or {})
-        if getattr(exc, "response", {}).get("Error", {}).get("Code") == "TransactionCanceledException":
-            pointer = store.table.get_item(Key={"pk": store.pk, "sk": store.POINTER_SK}, ConsistentRead=True).get("Item")
-            if pointer:
-                from services.lib.program_store import ProgramRevisionConflictError
-                record = store.table.get_item(Key={"pk": store.pk, "sk": pointer["ref_sk"]}, ConsistentRead=True).get("Item")
-                raise ProgramRevisionConflictError(0, int(pointer.get("revision", 1)), record) from exc
-        raise
+    await asyncio.get_running_loop().run_in_executor(None, lambda: _write_initial_program_sync(store, program, result))
 
     return result

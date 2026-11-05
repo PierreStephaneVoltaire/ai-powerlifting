@@ -8,21 +8,17 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import hashlib
-import json
 import logging
 import math
 import os
 import re
 import uuid
 from datetime import date, datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from typing import Any, Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key, Attr
-from botocore.exceptions import ClientError
 
 from services.lib.block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id, record_block, scope_program, stamp
 
@@ -32,22 +28,6 @@ class ProgramNotFoundError(Exception):
     """Raised when pointer item does not exist in DynamoDB."""
     pass
 
-class CurrentProgramHasFutureSessionsError(Exception):
-    """Raised when trying to archive a program that still has planned future sessions."""
-    pass
-
-class ProgramRevisionConflictError(Exception):
-    def __init__(self, expected_revision: int, current_revision: int, current_record: dict | None = None):
-        self.expected_revision = expected_revision
-        self.current_revision = current_revision
-        self.current_record = current_record
-        super().__init__(f"revision conflict: expected {expected_revision}, current {current_revision}")
-
-RevisionConflictError = ProgramRevisionConflictError
-
-
-def require_mutation_envelope(expected_revision: Any = None, idempotency_key: Any = None) -> tuple[int, str]:
-    return 0, idempotency_key if isinstance(idempotency_key, str) else ""
 
 class ProgramStore:
     """DynamoDB-backed store for training programs with versioning support.
@@ -138,14 +118,11 @@ class ProgramStore:
         program: dict,
         operation: str,
         payload: dict,
-        expected_revision: int,
-        idempotency_key: str,
-        result: dict,
-    ) -> dict:
+        result: dict) -> dict:
         program_sk = snapshot[2]
         sessions = program.get("sessions")
         if isinstance(sessions, list):
-            self._validate_session_identities(sessions, 0)
+            self._validate_session_identities(sessions)
         now = datetime.now(timezone.utc).isoformat()
         updated = copy.deepcopy(program)
         meta = updated.get("meta") if isinstance(updated.get("meta"), dict) else {}
@@ -162,11 +139,11 @@ class ProgramStore:
     async def _commit_source(self, *args, **kwargs) -> dict:
         return await asyncio.get_running_loop().run_in_executor(None, lambda: self._commit_source_sync(*args, **kwargs))
 
-    async def mutate_source(self, operation: str, payload: dict, expected_revision: int, idempotency_key: str, mutator) -> dict:
+    async def mutate_source(self, operation: str, payload: dict, mutator) -> dict:
         snapshot = await self._source_snapshot()
         program = copy.deepcopy(snapshot[0])
         result = mutator(program) or {}
-        return await self._commit_source(snapshot, program, operation, payload, expected_revision, idempotency_key, result)
+        return await self._commit_source(snapshot, program, operation, payload, result)
 
     def _invalidate_analysis_cache(self) -> None:
         try:
@@ -342,38 +319,7 @@ class ProgramStore:
         
         return program
     
-    async def update_session(self, date: str, patch: dict, expected_revision: int | None = None, idempotency_key: str | None = None, session_id: str | None = None) -> dict:
-        """Update a session by date with the given patch.
-        
-        Creates a new minor version of the program.
-        
-        Args:
-            date: ISO8601 date string of the session to update
-            patch: Dict with session fields to update
-            
-        Returns:
-            Updated program dict
-            
-        Raises:
-            ValueError: If session not found or patch invalid
-            RuntimeError: If DynamoDB operation fails
-        """
-        program = copy.deepcopy(await self.get_program())
-        program_sk = await asyncio.get_running_loop().run_in_executor(None, self._current_program_sk_sync)
-        await self._get_session_store().patch_session(
-            program_sk,
-            date,
-            patch,
-            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
-            None,
-            expected_revision,
-            idempotency_key,
-            session_id=session_id,
-        )
-        self.invalidate_cache()
-        return await self.get_program()
-    
-    async def new_version(self, patches: list[dict], change_reason: str, expected_revision: int, idempotency_key: str) -> dict:
+    async def new_version(self, patches: list[dict], change_reason: str) -> dict:
         """Create a new major version of the program with patches.
         
         Args:
@@ -388,16 +334,8 @@ class ProgramStore:
             ValueError: If patch path is invalid
             RuntimeError: If DynamoDB operation fails
         """
-        require_mutation_envelope(expected_revision, idempotency_key)
         self.invalidate_cache()
         program = await self.get_program()
-        payload_hash = hashlib.sha256(json.dumps({"patches": patches, "change_reason": change_reason}, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
-        marker = (program.get("meta", {}).get("new_version_idempotency") or {}).get(idempotency_key) if idempotency_key else None
-        if marker:
-            if marker != payload_hash:
-                raise ValueError("idempotency key was used with a different payload")
-            return program
-        
         new_program = copy.deepcopy(program)
         self._validate_version_patches(program, patches)
         
@@ -420,12 +358,8 @@ class ProgramStore:
             "reason": change_reason,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        if idempotency_key:
-            new_program["meta"].setdefault("new_version_idempotency", {})[idempotency_key] = payload_hash
-        
         updated_program = await self._write_new_version(
-            new_program, minor=False, expected_revision=expected_revision, idempotency_key=idempotency_key
-        )
+            new_program, minor=False)
         
         return updated_program
 
@@ -440,7 +374,7 @@ class ProgramStore:
         )
 
     @staticmethod
-    def _validate_session_identities(sessions: list[dict], current_revision: int) -> None:
+    def _validate_session_identities(sessions: list[dict]) -> None:
         from services.lib.session_store import SessionIdentityConflictError
 
         seen: set[str] = set()
@@ -451,12 +385,12 @@ class ProgramStore:
             if not session_id:
                 continue
             if session_id in seen:
-                raise SessionIdentityConflictError(session_id, current_revision, f"Session identity {session_id} occurs more than once")
+                raise SessionIdentityConflictError(session_id, f"Session identity {session_id} occurs more than once")
             seen.add(session_id)
 
     def _validate_version_patches(self, program: dict, patches: list[dict]) -> None:
         sessions = program.get("sessions") if isinstance(program.get("sessions"), list) else []
-        protected_meta = {"pk", "sk", "revision", "version_label", "updated_at", "published", "new_version_idempotency"}
+        protected_meta = {"pk", "sk", "version_label", "updated_at", "published"}
         for patch in patches:
             path = patch.get("path", "") if isinstance(patch, dict) else ""
             parts = re.split(r"[.\[]", path)
@@ -498,16 +432,12 @@ class ProgramStore:
         action: str,
         block_id: str,
         *,
-        expected_revision: int = 0,
-        idempotency_key: str = "",
         name: str | None = None,
         current_name: str | None = None,
         start_date: str | None = None,
         week_start_day: str | None = None,
         start_maxes_kg: dict | None = None,
         next_program: dict | None = None,
-        template_payload_hash: str | None = None,
-        template_preserved_sessions: int | None = None,
     ) -> dict:
         if action == "rename":
             if not isinstance(name, str) or not name.strip():
@@ -516,9 +446,6 @@ class ProgramStore:
             def mutate(program):
                 meta = program.setdefault("meta", {})
                 blocks = meta.get("blocks") or []
-                if not blocks:
-                    blocks = [self._legacy_current_block(program)]
-                    meta["blocks"] = blocks
                 block = next((item for item in blocks if str(item.get("id") or item.get("block_id")) == str(block_id)), None)
                 if block is None:
                     raise ValueError("block_id must identify an existing block")
@@ -528,11 +455,11 @@ class ProgramStore:
                 block["label"] = name.strip()
                 return {"action": action, "block_id": block_id, "name": block["name"]}
 
-            return await self.mutate_source("block_rename", {"action": action, "block_id": block_id, "name": name}, expected_revision, idempotency_key, mutate)
+            return await self.mutate_source("block_rename", {"action": action, "block_id": block_id, "name": name}, mutate)
         if action not in {"complete", "start_next", "complete_and_start"}:
             raise ValueError("action must be complete, start_next, complete_and_start, or rename")
-        if not block_id or not isinstance(idempotency_key, str) or not idempotency_key.strip():
-            raise ValueError("block_id and idempotency_key are required")
+        if not block_id:
+            raise ValueError("block_id is required")
         if action in {"start_next", "complete_and_start"}:
             self._validate_transition_start(start_date, week_start_day, start_maxes_kg)
         if action in {"complete", "complete_and_start"} and self._is_reserved_block_name(current_name):
@@ -541,37 +468,7 @@ class ProgramStore:
         self.invalidate_cache()
         program = copy.deepcopy(await self.get_program())
         meta = program.setdefault("meta", {})
-        revision = int(meta.get("revision", 0))
-        done = meta.setdefault("transition_idempotency", {})
-        existing = done.get(idempotency_key)
-        if isinstance(existing, dict) and template_payload_hash:
-            if existing.get("template_payload_hash") != template_payload_hash:
-                raise ValueError("idempotency key was used with a different payload")
-            replay = copy.deepcopy(existing.get("result") or {})
-            replay["program"] = program
-            return replay
-        payload_hash = hashlib.sha256(json.dumps({
-            "action": action,
-            "block_id": block_id,
-            "name": name,
-            "current_name": current_name,
-            "start_date": start_date,
-            "week_start_day": week_start_day,
-            "start_maxes_kg": start_maxes_kg,
-            "next_program": plan,
-        }, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
-        if idempotency_key in done:
-            stored = done[idempotency_key]
-            if isinstance(stored, dict) and "payload_hash" in stored:
-                if stored["payload_hash"] != payload_hash:
-                    raise ValueError("idempotency key was used with a different payload")
-                stored = stored["result"]
-            replay = copy.deepcopy(stored)
-            replay["program"] = program
-            return replay
         blocks = [copy.deepcopy(b) for b in (meta.get("blocks") or []) if isinstance(b, dict)]
-        if not blocks:
-            blocks = [self._legacy_current_block(program)]
         current_id = str(meta.get("current_block_id") or "")
         if not current_id:
             current_id = next(
@@ -598,7 +495,7 @@ class ProgramStore:
         phases = [copy.deepcopy(p) for p in (program.get("phases") or []) if isinstance(p, dict)]
         sessions = [copy.deepcopy(s) for s in (program.get("sessions") or []) if isinstance(s, dict)]
         source_id = str(source.get("id") or source.get("block_id"))
-        archive_id = source_id if source_id != "current" else self._archive_block_id(current_name or source.get("name"), blocks, phases, sessions, idempotency_key)
+        archive_id = source_id if source_id != "current" else self._archive_block_id(current_name or source.get("name"), blocks, phases, sessions)
         if action in {"complete", "complete_and_start"}:
             start_maxes = meta.setdefault("block_start_maxes", {})
             if not any(block_key in start_maxes for block_key in (source_id, "current")):
@@ -629,7 +526,7 @@ class ProgramStore:
 
         next_id = None
         if action in {"start_next", "complete_and_start"}:
-            next_id = f"block-{hashlib.sha256(idempotency_key.encode()).hexdigest()[:16]}"
+            next_id = f"block-{uuid.uuid4().hex[:16]}"
             next_sessions = []
             for session in plan["sessions"]:
                 prepared = copy.deepcopy(session)
@@ -675,26 +572,12 @@ class ProgramStore:
         meta["current_block_id"] = next_id
         program["phases"] = phases
         program["sessions"] = sessions
-        self._validate_session_identities(sessions, revision)
+        self._validate_session_identities(sessions)
         result = {"action": action, "block_id": block_id, "next_block_id": next_id, "warning": "Unfinished sessions were preserved"}
-        meta["transition_idempotency"][idempotency_key] = {"payload_hash": payload_hash, "result": copy.deepcopy(result), **({"template_payload_hash": template_payload_hash, "template_preserved_sessions": template_preserved_sessions} if template_payload_hash else {})}
         written = await self._write_new_version(program, minor=False)
         self.invalidate_cache()
         result["program"] = written
         return result
-
-    async def get_block_transition_replay(self, idempotency_key: str, template_payload_hash: str) -> dict | None:
-        program = await self.get_program()
-        marker = (program.get("meta") or {}).get("transition_idempotency", {}).get(idempotency_key)
-        if not marker:
-            return None
-        if marker.get("template_payload_hash") != template_payload_hash:
-            raise ValueError("idempotency key was used with a different payload")
-        result = copy.deepcopy(marker.get("result") or {})
-        if "revision" in result:
-            result["revision"] = int(result["revision"])
-        preserved = marker.get("template_preserved_sessions")
-        return {"result": result, "program": program, "template_preserved_sessions": int(preserved) if preserved is not None else None}
 
     @staticmethod
     def _validate_transition_start(start_date: str | None, week_start_day: str | None, start_maxes_kg: dict | None) -> None:
@@ -794,41 +677,14 @@ class ProgramStore:
         return {aliases.get(str(key), str(key)): value for key, value in maxes.items()}
 
     @staticmethod
-    def _legacy_current_block(program: dict) -> dict:
-        meta = program.get("meta") if isinstance(program.get("meta"), dict) else {}
-        phases = [phase for phase in program.get("phases", []) if isinstance(phase, dict)]
-        sessions = [session for session in program.get("sessions", []) if isinstance(session, dict)]
-        weeks = []
-        for phase in phases:
-            if str(phase.get("block") or "current") == "current":
-                weeks.extend([int(phase.get("start_week", 1) or 1), int(phase.get("end_week", 1) or 1)])
-        for session in sessions:
-            if str(session.get("block") or "current") == "current":
-                weeks.append(ProgramStore._session_week_number(session))
-        block_starts = meta.get("block_start_maxes") if isinstance(meta.get("block_start_maxes"), dict) else {}
-        week_starts = meta.get("block_week_start_days") if isinstance(meta.get("block_week_start_days"), dict) else {}
-        return {
-            "id": "current",
-            "block_id": "current",
-            "label": "current",
-            "name": meta.get("program_name") or "Current block",
-            "status": "active",
-            "start_week": min(weeks, default=1),
-            "end_week": max(weeks, default=1),
-            "start_date": meta.get("program_start"),
-            "week_start_day": week_starts.get("current") or meta.get("program_week_start_day"),
-            "start_maxes_kg": copy.deepcopy(block_starts.get("current") or program.get("current_maxes", {})),
-        }
-
-    @staticmethod
     def _is_reserved_block_name(name: Any) -> bool:
         return isinstance(name, str) and re.sub(r"[^a-z0-9]+", " ", name.lower()).strip() in {"current", "current block"}
 
     @staticmethod
-    def _archive_block_id(name: Any, blocks: list[dict], phases: list[dict], sessions: list[dict], idempotency_key: str) -> str:
+    def _archive_block_id(name: Any, blocks: list[dict], phases: list[dict], sessions: list[dict]) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", str(name or "").lower()).strip("-")[:48].strip("-")
         if not slug or ProgramStore._is_reserved_block_name(slug):
-            return f"block-{hashlib.sha256(f'current:archive:{idempotency_key}'.encode()).hexdigest()[:16]}"
+            return f"block-{uuid.uuid4().hex[:16]}"
         taken = {str(item.get(key)) for item in [*blocks, *phases, *sessions] for key in ("id", "block_id", "block") if item.get(key)}
         candidate, suffix = slug, 2
         while candidate in taken:
@@ -837,7 +693,7 @@ class ProgramStore:
 
     @staticmethod
     def _replace_active_block_records(program: dict, field: str, incoming: list) -> list:
-        active = current_block_id(program)
+        current_block_id(program)
         kept = [copy.deepcopy(item) for item in (program.get(field) or []) if isinstance(item, dict) and not ProgramStore._record_is_active_for_mutation(item, field, program)]
         replaced = [stamp(copy.deepcopy(item), program, field=field) for item in incoming if isinstance(item, dict) and ProgramStore._record_is_active_for_mutation(item, field, program)]
         return kept + replaced
@@ -878,7 +734,6 @@ class ProgramStore:
         
         Supports paths like:
             - "sessions[0].exercises[1].kg"
-            - "meta.comp_date"
             - "phases[2].end_week"
         
         Args:
@@ -930,7 +785,7 @@ class ProgramStore:
                 raise ValueError(f"Invalid path '{path}': expected dict at '{final_key}'")
             current[final_key] = value
     
-    async def _write_new_version(self, program: dict, minor: bool, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+    async def _write_new_version(self, program: dict, minor: bool) -> dict:
         """Write a new version of the program to DynamoDB.
         
         Args:
@@ -946,14 +801,14 @@ class ProgramStore:
         """
         try:
             result = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: self._write_new_version_sync(program, minor, expected_revision, idempotency_key)
+                None, lambda: self._write_new_version_sync(program, minor)
             )
             return result
         except (ValueError, LookupError):
             raise
         except Exception as e:
-            from services.lib.session_store import SessionRevisionConflictError
-            if isinstance(e, SessionRevisionConflictError):
+            from services.lib.session_store import SessionIdentityConflictError
+            if isinstance(e, SessionIdentityConflictError):
                 raise
             logger.error(f"[ProgramStore] Failed to write new version: {e}")
             raise RuntimeError(f"Failed to write new version to DynamoDB: {e}")
@@ -974,7 +829,7 @@ class ProgramStore:
             return [ProgramStore._floats_to_decimals(v) for v in obj]
         return obj
 
-    def _write_new_version_sync(self, program: dict, minor: bool, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict:
+    def _write_new_version_sync(self, program: dict, minor: bool) -> dict:
         """Synchronous version writing logic."""
         now = datetime.now(timezone.utc).isoformat()
         
@@ -1011,7 +866,7 @@ class ProgramStore:
         new_sk = f"{self.PROGRAM_SK_PREFIX}{new_version_int:03d}-{suffix}"
 
         sessions = copy.deepcopy(program.get("sessions", []))
-        self._validate_session_identities(sessions, 0)
+        self._validate_session_identities(sessions)
         program_without_sessions = copy.deepcopy(program)
         program_without_sessions.pop("sessions", None)
 
@@ -1046,133 +901,23 @@ class ProgramStore:
         self._invalidate_analysis_cache()
         return program
 
-    async def archive(self, sk: str, expected_revision: int, idempotency_key: str) -> dict:
+    async def archive(self, sk: str) -> dict:
         self._selected_program_sk = sk
         snapshot = await self._source_snapshot()
         program = copy.deepcopy(snapshot[0])
         meta = program.setdefault("meta", {})
         meta["archived"] = True
         meta["archived_at"] = datetime.now(timezone.utc).isoformat()
-        return await self._commit_source(snapshot, program, "program_archive", {"sk": sk, "archived": True}, expected_revision, idempotency_key, {"success": True, "archived": True, "sk": snapshot[2]})
+        return await self._commit_source(snapshot, program, "program_archive", {"sk": sk, "archived": True}, {"success": True, "archived": True, "sk": snapshot[2]})
 
-    async def archive_legacy(self, sk: str) -> None:
-        """Archive a program version.
-
-        If the program being archived is the current active program,
-        this will attempt to point 'program#current' to the most recent
-        non-archived version.
-
-        Args:
-            sk: SK of the program to archive (e.g. "program#v001")
-
-        Raises:
-            CurrentProgramHasFutureSessionsError: If current program has incomplete future sessions
-            ProgramNotFoundError: If program does not exist
-        """
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self._archive_sync(sk)
-        )
-        self.invalidate_cache()
-
-    def _archive_sync(self, sk: str) -> None:
-        """Synchronous archive logic."""
-        resp = self.table.get_item(Key={"pk": self._pk, "sk": sk})
-        if "Item" not in resp:
-            raise ProgramNotFoundError(f"Program not found: {sk}")
-        
-        program = resp["Item"]
-        
-        pointer_resp = self.table.get_item(Key={"pk": self._pk, "sk": self.POINTER_SK})
-        is_current = "Item" in pointer_resp and pointer_resp["Item"].get("ref_sk") == sk
-        
-        if is_current:
-            sessions = self._get_session_store().list_sessions_sync(
-                sk,
-                program.get("phases", []) if isinstance(program.get("phases"), list) else [],
-            )
-            has_future = any(
-                not s.get("completed", False) and s.get("date", "") >= datetime.now().strftime("%Y-%m-%d")
-                for s in sessions
-            )
-            if has_future:
-                raise CurrentProgramHasFutureSessionsError(
-                    "Cannot archive active program with incomplete future sessions. "
-                    "Mark them as completed or skipped first, or delete them."
-                )
-
-        now = datetime.now(timezone.utc).isoformat()
-        if "meta" not in program:
-            program["meta"] = {}
-        program["meta"]["archived"] = True
-        program["meta"]["archived_at"] = now
-        
-        self.table.put_item(Item=program)
-        logger.info(f"[ProgramStore] Archived program {sk}")
-        
-        if is_current:
-            self._repoint_current_to_latest_non_archived_sync()
-
-    def _repoint_current_to_latest_non_archived_sync(self) -> None:
-        """Find the latest non-archived program and update the pointer to it."""
-        programs = self._list_programs_sync(include_archived=False)
-        if not programs:
-            logger.warning("[ProgramStore] No non-archived programs found to repoint 'program#current'")
-            self.table.delete_item(Key={"pk": self._pk, "sk": self.POINTER_SK})
-            return
-
-        programs.sort(key=lambda p: p["sk"], reverse=True)
-        latest = programs[0]
-        
-        now = datetime.now(timezone.utc).isoformat()
-        version_str = latest["sk"][len(self.PROGRAM_SK_PREFIX):].split("-", 1)[0]
-        pointer_item = {
-            "pk": self._pk,
-            "sk": self.POINTER_SK,
-            "version": int(version_str),
-            "ref_sk": latest["sk"],
-            "updated_at": now,
-        }
-        self.table.put_item(Item=pointer_item)
-        logger.info(f"[ProgramStore] Repointed 'program#current' to {latest['sk']}")
-
-    async def unarchive(self, sk: str, expected_revision: int, idempotency_key: str) -> dict:
+    async def unarchive(self, sk: str) -> dict:
         self._selected_program_sk = sk
         snapshot = await self._source_snapshot()
         program = copy.deepcopy(snapshot[0])
         meta = program.setdefault("meta", {})
         meta["archived"] = False
         meta["archived_at"] = None
-        return await self._commit_source(snapshot, program, "program_unarchive", {"sk": sk, "archived": False}, expected_revision, idempotency_key, {"success": True, "archived": False, "sk": snapshot[2]})
-
-    async def unarchive_legacy(self, sk: str) -> None:
-        """Unarchive a program version.
-
-        Args:
-            sk: SK of the program to unarchive
-
-        Raises:
-            ProgramNotFoundError: If program does not exist
-        """
-        await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self._unarchive_sync(sk)
-        )
-        self.invalidate_cache()
-
-    def _unarchive_sync(self, sk: str) -> None:
-        """Synchronous unarchive logic."""
-        resp = self.table.get_item(Key={"pk": self._pk, "sk": sk})
-        if "Item" not in resp:
-            raise ProgramNotFoundError(f"Program not found: {sk}")
-        
-        program = resp["Item"]
-        if "meta" not in program:
-            program["meta"] = {}
-        
-        program["meta"]["archived"] = False
-        program["meta"]["archived_at"] = None
-        
-        self.table.put_item(Item=program)
-        logger.info(f"[ProgramStore] Unarchived program {sk}")
+        return await self._commit_source(snapshot, program, "program_unarchive", {"sk": sk, "archived": False}, {"success": True, "archived": False, "sk": snapshot[2]})
 
     async def list_programs(self, include_archived: bool = False) -> list[dict]:
         """List all program versions.
@@ -1211,7 +956,7 @@ class ProgramStore:
     # ─── In-place updates (no new version — matches the pre-refactor controller) ─
 
     ALLOWED_META_FIELDS = (
-        "program_name", "program_start", "comp_date", "federation", "practicing_for",
+        "program_name", "program_start", "federation", "practicing_for",
         "version_label", "sex", "weight_class_kg", "weight_classes_kg", "weight_class_confirm_by",
         "current_body_weight_kg", "current_body_weight_lb",
         "manual_maxes", "lift_attempt_settings",
@@ -1220,10 +965,10 @@ class ProgramStore:
         "block_start_maxes", "program_week_start_day", "block_week_start_days",
     )
 
-    async def update_meta_field(self, field: str, value: Any, expected_revision: int, idempotency_key: str) -> dict:
-        return await self.update_meta_fields({field: value}, expected_revision, idempotency_key)
+    async def update_meta_field(self, field: str, value: Any) -> dict:
+        return await self.update_meta_fields({field: value})
 
-    async def update_meta_fields(self, updates: dict[str, Any], expected_revision: int, idempotency_key: str) -> dict:
+    async def update_meta_fields(self, updates: dict[str, Any]) -> dict:
         if not isinstance(updates, dict) or not updates:
             raise ValueError("updates must be a nonempty object")
         unknown = set(updates) - set(self.ALLOWED_META_FIELDS)
@@ -1239,21 +984,9 @@ class ProgramStore:
             meta.update(copy.deepcopy(updates))
             return {"success": True, "meta": copy.deepcopy(meta)}
 
-        return await self.mutate_source("meta_update", {"updates": updates}, expected_revision, idempotency_key, mutate)
+        return await self.mutate_source("meta_update", {"updates": updates}, mutate)
 
-    def _update_meta_field_sync(self, field: str, value: Any) -> None:
-        if field not in self.ALLOWED_META_FIELDS:
-            raise ValueError(f"Cannot update field: {field}")
-        sk = self._current_program_sk_sync()
-        now = datetime.now(timezone.utc).isoformat()
-        self.table.update_item(
-            Key={"pk": self._pk, "sk": sk},
-            UpdateExpression="SET #meta.#field = :value, #meta.updated_at = :now",
-            ExpressionAttributeNames={"#meta": "meta", "#field": field},
-            ExpressionAttributeValues={":value": self._floats_to_decimals(value), ":now": now},
-        )
-
-    async def update_phases(self, phases: list, block: Optional[str], expected_revision: int, idempotency_key: str) -> dict:
+    async def update_phases(self, phases: list, block: Optional[str]) -> dict:
         if not isinstance(phases, list):
             raise ValueError("phases must be a list")
 
@@ -1267,27 +1000,9 @@ class ProgramStore:
                 program["phases"] = [stamp({**p, "block": p.get("block", "current")}, program, p.get("block")) for p in phases]
             return {"success": True, "phases": copy.deepcopy(program["phases"])}
 
-        return await self.mutate_source("phases_update", {"phases": phases, "block": block}, expected_revision, idempotency_key, mutate)
+        return await self.mutate_source("phases_update", {"phases": phases, "block": block}, mutate)
 
-    def _update_phases_sync(self, phases: list, block: Optional[str] = None) -> None:
-        sk = self._current_program_sk_sync()
-        if block:
-            resp = self.table.get_item(Key={"pk": self._pk, "sk": sk}, ProjectionExpression="phases")
-            existing = resp.get("Item", {}).get("phases", []) if "Item" in resp else []
-            other_blocks = [p for p in existing if (p.get("block") or "current") != block]
-            incoming = [{**p, "block": p.get("block", block)} for p in phases]
-            next_phases = other_blocks + incoming
-        else:
-            next_phases = [{**p, "block": p.get("block", "current")} for p in phases]
-        now = datetime.now(timezone.utc).isoformat()
-        self.table.update_item(
-            Key={"pk": self._pk, "sk": sk},
-            UpdateExpression="SET phases = :phases, #meta.updated_at = :now",
-            ExpressionAttributeNames={"#meta": "meta"},
-            ExpressionAttributeValues={":phases": self._floats_to_decimals(next_phases), ":now": now},
-        )
-
-    async def update_lift_profiles(self, profiles: list, expected_revision: int, idempotency_key: str) -> dict:
+    async def update_lift_profiles(self, profiles: list) -> dict:
         if not isinstance(profiles, list):
             raise ValueError("lift_profiles must be a list")
 
@@ -1295,9 +1010,9 @@ class ProgramStore:
             program["lift_profiles"] = copy.deepcopy(profiles)
             return {"success": True, "lift_profiles": copy.deepcopy(profiles)}
 
-        return await self.mutate_source("lift_profiles_update", {"lift_profiles": profiles}, expected_revision, idempotency_key, mutate)
+        return await self.mutate_source("lift_profiles_update", {"lift_profiles": profiles}, mutate)
 
-    async def update_diet_notes(self, notes: list, expected_revision: int, idempotency_key: str) -> dict:
+    async def update_diet_notes(self, notes: list) -> dict:
         if not isinstance(notes, list):
             raise ValueError("diet_notes must be a list")
 
@@ -1305,9 +1020,9 @@ class ProgramStore:
             program["diet_notes"] = self._replace_active_block_records(program, "diet_notes", notes)
             return {"success": True, "diet_notes": scope_program(program)["diet_notes"]}
 
-        return await self.mutate_source("diet_notes_update", {"diet_notes": notes}, expected_revision, idempotency_key, mutate)
+        return await self.mutate_source("diet_notes_update", {"diet_notes": notes}, mutate)
 
-    async def update_block_notes(self, notes: list, expected_revision: int, idempotency_key: str) -> dict:
+    async def update_block_notes(self, notes: list) -> dict:
         if not isinstance(notes, list):
             raise ValueError("block_notes must be a list")
 
@@ -1319,9 +1034,9 @@ class ProgramStore:
             meta["block_notes"] = kept + replaced
             return {"success": True, "block_notes": scope_program(program)["meta"]["block_notes"]}
 
-        return await self.mutate_source("block_notes_update", {"block_notes": notes}, expected_revision, idempotency_key, mutate)
+        return await self.mutate_source("block_notes_update", {"block_notes": notes}, mutate)
 
-    async def update_supplements(self, patch: dict, expected_revision: int, idempotency_key: str) -> dict:
+    async def update_supplements(self, patch: dict) -> dict:
         if not isinstance(patch, dict) or not patch or not set(patch) <= {"supplements", "supplement_phases"}:
             raise ValueError("patch must contain supplements or supplement_phases")
 
@@ -1333,45 +1048,7 @@ class ProgramStore:
             scoped = scope_program(program)
             return {key: copy.deepcopy(scoped.get(key, [])) for key in ("supplements", "supplement_phases")}
 
-        return await self.mutate_source("supplements_update", {"patch": patch}, expected_revision, idempotency_key, mutate)
+        return await self.mutate_source("supplements_update", {"patch": patch}, mutate)
 
-    async def update_supplement_phases(self, phases: list, expected_revision: int, idempotency_key: str) -> dict:
-        return await self.update_supplements({"supplement_phases": phases}, expected_revision, idempotency_key)
-
-    async def upsert_diet_note(self, note_date: str, notes: str, expected_revision: int, idempotency_key: str) -> dict:
-        def mutate(program):
-            active = current_block_id(program)
-            items = [copy.deepcopy(item) for item in (program.get("diet_notes") or []) if isinstance(item, dict)]
-            item = stamp({"date": note_date, "notes": notes}, program)
-            for index, existing in enumerate(items):
-                if existing.get("date") == note_date and record_block(existing, "diet_notes", program) == active:
-                    items[index] = item
-                    break
-            else:
-                items.append(item)
-            program["diet_notes"] = items
-            return {"success": True, "note": item, "diet_notes": scope_program(program)["diet_notes"]}
-
-        return await self.mutate_source("diet_note_upsert", {"date": note_date, "notes": notes}, expected_revision, idempotency_key, mutate)
-
-    async def delete_diet_note(self, note_date: str, expected_revision: int, idempotency_key: str) -> dict:
-        def mutate(program):
-            active = current_block_id(program)
-            notes = [copy.deepcopy(item) for item in (program.get("diet_notes") or []) if isinstance(item, dict)]
-            updated = [item for item in notes if not (item.get("date") == note_date and record_block(item, "diet_notes", program) == active)]
-            if len(updated) == len(notes):
-                raise ValueError(f"Diet note not found: {note_date}")
-            program["diet_notes"] = updated
-            return {"deleted": note_date, "diet_notes": scope_program(program)["diet_notes"]}
-
-        return await self.mutate_source("diet_note_delete", {"date": note_date}, expected_revision, idempotency_key, mutate)
-
-    def _update_lift_profiles_sync(self, profiles: list) -> None:
-        sk = self._current_program_sk_sync()
-        now = datetime.now(timezone.utc).isoformat()
-        self.table.update_item(
-            Key={"pk": self._pk, "sk": sk},
-            UpdateExpression="SET lift_profiles = :profiles, #meta.updated_at = :now",
-            ExpressionAttributeNames={"#meta": "meta"},
-            ExpressionAttributeValues={":profiles": self._floats_to_decimals(profiles), ":now": now},
-        )
+    async def update_supplement_phases(self, phases: list) -> dict:
+        return await self.update_supplements({"supplement_phases": phases})

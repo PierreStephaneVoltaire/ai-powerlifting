@@ -34,7 +34,7 @@ def _remove_lift_profile_video(table, pk: str, program_sk: str, lift: str, angle
         else:
             if slot.get("pending_media_id"):
                 replacement = dict(slot)
-                for key in ("video_id", "s3_key", "uploaded_at", "thumbnail_s3_key", "video_url", "thumbnail_url", "allocation_revision"):
+                for key in ("video_id", "s3_key", "uploaded_at", "thumbnail_s3_key", "allocation_revision"):
                     replacement.pop(key, None)
                 videos[angle] = replacement
             else:

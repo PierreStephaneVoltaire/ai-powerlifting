@@ -1,4 +1,4 @@
-export interface FormulaDescription {
+interface FormulaDescription {
   id: string
   title: string
   summary: string
@@ -154,7 +154,7 @@ FI = 0.10*fail + 0.12*spike + 0.15*rpe + 0.34*reservoir
       { name: 'failure_stress', description: 'Failed compound ratio clamped to 15%' },
       { name: 'acute_spike_stress', description: 'Normalized recent volume spike' },
       { name: 'rpe_stress', description: 'RMS of phase-relative RPE excess and 9+ frequency' },
-      { name: 'chronic_load_stress', description: 'Compatibility key for reservoir-based chronic pressure' },
+      { name: 'chronic_load_stress', description: 'Reservoir-based chronic training pressure' },
       { name: 'overload_streak', description: 'Consecutive weeks of high chronic load or intensity' },
       { name: 'intensity_density_stress', description: 'Ratio of heavy (85%+) and very heavy (90%+) sets' },
       { name: 'monotony_stress', description: 'Foster monotony and 4-week strain ratio' },

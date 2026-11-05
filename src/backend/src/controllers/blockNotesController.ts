@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { BlockNote } from '@powerlifting/types'
 
 export async function getBlockNotes(pk: string, version: string): Promise<BlockNote[]> {

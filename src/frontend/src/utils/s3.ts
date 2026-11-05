@@ -17,7 +17,7 @@ export interface VideoUploadOptions {
   targetRevision?: number
 }
 
-export interface VideoUploadResult {
+interface VideoUploadResult {
   video: SessionVideo
 }
 

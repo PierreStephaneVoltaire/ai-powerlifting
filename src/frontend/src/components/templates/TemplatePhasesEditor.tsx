@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Edit2, Trash2, Save } from 'lucide-react'
 import {
-  Stack, Group, Title, Text, Paper, Box, Button, ActionIcon,
+  Stack, Group, Text, Paper, Box, Button, ActionIcon,
   Modal, TextInput, Textarea, SimpleGrid,
 } from '@mantine/core'
 import type { TemplatePhase } from '@powerlifting/types'

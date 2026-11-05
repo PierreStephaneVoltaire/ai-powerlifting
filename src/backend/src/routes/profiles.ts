@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { getCurrentProfileHandler, getProfileHandler, searchProfilesHandler } from '../controllers/profilesController'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { serveStoredMedia } from '../utils/serveMedia'
 
 export const profilesRouter = Router()

@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  Group,
   Stack,
   Text,
-  Box,
   UnstyledButton,
   Select,
   ActionIcon,
@@ -25,14 +23,9 @@ import SetupOnboarding from '@/components/setup/SetupOnboarding'
 import { useAuth } from '@/auth/AuthProvider'
 
 type ViewType = 'Month' | 'Agenda' | 'Compact'
-const SESSION_DATE_PARAM = /^\d{4}-\d{2}-\d{2}$/
 
 function parseSessionView(raw: string | null): ViewType | null {
   return raw === 'Month' || raw === 'Compact' || raw === 'Agenda' ? raw : null
-}
-
-function parseDateParam(raw: string | null): string | null {
-  return raw && SESSION_DATE_PARAM.test(raw) ? raw : null
 }
 
 function countUniqueExerciseNames(session: Session): number {
@@ -51,7 +44,6 @@ export default function CalendarPage() {
   const hasScrolledAgendaRef = useRef(typeof location.state?.restoreScrollY === 'number')
   const [showScrollTop, setShowScrollTop] = useState(false)
   const view = parseSessionView(searchParams.get('view')) || defaultSessionsView
-  const calendarDate = parseDateParam(searchParams.get('date'))
   const sessionsBackTo = useMemo(() => {
     const query = searchParams.toString()
     return query ? `/sessions?${query}` : '/sessions'
@@ -90,19 +82,6 @@ export default function CalendarPage() {
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
-
-  const updateSessionParams = (updates: { date?: string | null }) => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-
-      if (updates.date !== undefined) {
-        updates.date ? next.set('date', updates.date) : next.delete('date')
-      }
-
-      return next
-    })
-  }
-
   const sessionsByDate = useMemo(() => {
     const map = new Map<string, Session[]>()
     if (!program) return map
@@ -147,18 +126,6 @@ export default function CalendarPage() {
       sessions,
     }))
   }, [currentSessions, program, block])
-
-  const dateColorMap = useMemo(() => {
-    const map = new Map<string, string>()
-    if (!program) return map
-    for (const session of currentSessions) {
-      const phase = program.phases.find((p) => p.name === session.phase?.name)
-      const color = phase ? phaseColor(phase, program.phases) : '#94a3b8'
-      map.set(session.date, color)
-    }
-    return map
-  }, [currentSessions, program])
-
   useEffect(() => {
     if (view !== 'Agenda' || hasScrolledAgendaRef.current || !closestAgendaSession) return
 

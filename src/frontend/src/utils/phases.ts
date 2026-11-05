@@ -1,4 +1,4 @@
-import type { Phase, Session } from '@powerlifting/types'
+import type { Phase } from '@powerlifting/types'
 
 const DEFAULT_BLOCK = 'current'
 
@@ -26,32 +26,4 @@ export function phaseColor(phase: Phase, allPhases: Phase[]): string {
   const blockPhases = allPhases.filter(p => phaseBlock(p) === block)
   const index = blockPhases.findIndex(p => p.name === phase.name)
   return PHASE_PALETTE[index >= 0 ? index % PHASE_PALETTE.length : 0]
-}
-
-export function buildPhaseMap(phases: Phase[], block: string = DEFAULT_BLOCK): Map<number, Phase> {
-  const map = new Map<number, Phase>()
-  for (const phase of phases) {
-    if (phaseBlock(phase) !== block) continue
-    for (let w = phase.start_week; w <= phase.end_week; w++) {
-      map.set(w, phase)
-    }
-  }
-  return map
-}
-
-export function sessionsByPhase(sessions: Session[], phaseName: string, block?: string): Session[] {
-  return sessions.filter(s => {
-    if (s.phase.name !== phaseName) return false
-    if (block === undefined) return true
-    return (s.block ?? DEFAULT_BLOCK) === block
-  })
-}
-
-export function uniquePhaseNames(sessions: Session[], block?: string): string[] {
-  const names = new Set<string>()
-  for (const s of sessions) {
-    if (block !== undefined && (s.block ?? DEFAULT_BLOCK) !== block) continue
-    names.add(s.phase.name)
-  }
-  return Array.from(names)
 }

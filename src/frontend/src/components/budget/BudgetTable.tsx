@@ -10,7 +10,7 @@ import { CATEGORY_OPTIONS, RECURRENCE_OPTIONS } from './budgetConstants'
 import ExpenseRow from './ExpenseRow'
 import { getMediaUrl } from '@/utils/media'
 
-export interface BudgetTableProps {
+interface BudgetTableProps {
   items: BudgetItem[]
   readOnly: boolean
   currency: string

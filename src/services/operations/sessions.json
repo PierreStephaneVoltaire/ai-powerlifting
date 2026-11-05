@@ -18,20 +18,10 @@
         "session": {
           "type": "object",
           "description": "Full session object with date, day, week_number, exercises, session_notes."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "session",
-        "expected_revision",
-        "idempotency_key"
+        "session"
       ]
     },
     "result_schema": {
@@ -39,10 +29,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_delete",
@@ -72,21 +59,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Stable Session.id used when the legacy date/index has changed."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "date",
-        "index",
-        "expected_revision",
-        "idempotency_key"
+        "index"
       ]
     },
     "result_schema": {
@@ -102,10 +79,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_get",
@@ -147,10 +121,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_list",
@@ -172,8 +143,7 @@
           "type": "string",
           "description": "Program sort key. Defaults to the current program."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -216,10 +186,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_list_full",
@@ -237,8 +204,7 @@
           "type": "string",
           "description": "Program sort key. Defaults to current."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "array",
@@ -248,10 +214,7 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_patch",
@@ -285,22 +248,12 @@
         "patch": {
           "type": "object",
           "description": "Dict with session fields to update. Allowed keys: completed, session_rpe, body_weight_kg, exercises, session_notes, day, week_number."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "date",
         "index",
-        "patch",
-        "expected_revision",
-        "idempotency_key"
+        "patch"
       ]
     },
     "result_schema": {
@@ -308,10 +261,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_patch_by_date",
@@ -341,21 +291,11 @@
         "patch": {
           "type": "object",
           "description": "Dict with session fields to update."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "date",
-        "patch",
-        "expected_revision",
-        "idempotency_key"
+        "patch"
       ]
     },
     "result_schema": {
@@ -363,10 +303,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_replace",
@@ -400,22 +337,12 @@
         "session": {
           "type": "object",
           "description": "Full session object to write."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "date",
         "index",
-        "session",
-        "expected_revision",
-        "idempotency_key"
+        "session"
       ]
     },
     "result_schema": {
@@ -423,15 +350,12 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "session_replace_all",
     "domain": "sessions",
-    "description": "Replace ALL sessions for a program. Deletes all existing sessions and writes the incoming array. Use with caution \u2014 this is a destructive full replace.",
+    "description": "Replace ALL sessions for a program. Deletes all existing sessions and writes the incoming array. Use with caution — this is a destructive full replace.",
     "handler": "services.handlers.sessions.session_replace_all.handler",
     "input_schema": {
       "type": "object",
@@ -447,20 +371,10 @@
         "sessions": {
           "type": "array",
           "description": "Full array of session objects to write."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "sessions",
-        "expected_revision",
-        "idempotency_key"
+        "sessions"
       ]
     },
     "result_schema": {
@@ -476,277 +390,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
-  },
-  {
-    "name": "health_add_exercise",
-    "domain": "sessions",
-    "description": "Add an exercise to an existing session by date. The exercise dict must have at least a name; sets, reps, kg, rpe, notes are optional.",
-    "handler": "services.handlers.sessions.health_add_exercise.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Session date (YYYY-MM-DD)."
-        },
-        "exercise": {
-          "type": "object",
-          "description": "Exercise dict with keys: name (required), sets, reps, kg, rpe, notes."
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Stable Session.id used when the legacy date has changed."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "exercise",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string"
-        },
-        "exercises": {
-          "type": "array"
-        }
-      },
-      "required": [
-        "date",
-        "exercises"
-      ],
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
-  },
-  {
-    "name": "health_remove_exercise",
-    "domain": "sessions",
-    "description": "Remove an exercise from a session by date and zero-based exercise index.",
-    "handler": "services.handlers.sessions.health_remove_exercise.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Session date (YYYY-MM-DD)."
-        },
-        "exercise_index": {
-          "type": "integer",
-          "description": "Zero-based index of the exercise to remove."
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Stable Session.id used when the legacy date has changed."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "exercise_index",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string"
-        },
-        "exercises": {
-          "type": "array"
-        }
-      },
-      "required": [
-        "date",
-        "exercises"
-      ],
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
-  },
-  {
-    "name": "health_create_session",
-    "domain": "sessions",
-    "description": "Create a new training session on a specific date. The session is added to the current program. Fails if a session already exists on that date.",
-    "handler": "services.handlers.sessions.health_create_session.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Session date (YYYY-MM-DD)."
-        },
-        "day": {
-          "type": "integer",
-          "description": "Day label as integer (e.g. 0 for Monday)."
-        },
-        "week_number": {
-          "type": "integer",
-          "description": "Training week number."
-        },
-        "exercises": {
-          "type": "array",
-          "description": "Optional list of exercise dicts with name, sets, reps, kg, rpe, notes."
-        },
-        "session_notes": {
-          "type": "string",
-          "description": "Optional session notes."
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "day",
-        "week_number",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
-  },
-  {
-    "name": "health_delete_session",
-    "domain": "sessions",
-    "description": "Delete a training session by date. Returns {\"deleted\": date}. Fails if the session is not found.",
-    "handler": "services.handlers.sessions.health_delete_session.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Session date (YYYY-MM-DD)."
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Stable Session.id used when the legacy date has changed."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
-  },
-  {
-    "name": "health_get_session",
-    "domain": "sessions",
-    "description": "Load a single session by date. Returns the session object with exercises and resolved phase object. Fails if not found.",
-    "handler": "services.handlers.sessions.health_get_session.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Session date (YYYY-MM-DD)."
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Stable Session.id used when the legacy date has changed."
-        }
-      },
-      "required": [
-        "date"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_get_sessions_range",
@@ -782,111 +426,6 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
-  },
-  {
-    "name": "health_reschedule_session",
-    "domain": "sessions",
-    "description": "Move a session from one date to another. Fails if the old session is not found or the new date already has a session.",
-    "handler": "services.handlers.sessions.health_reschedule_session.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "old_date": {
-          "type": "string",
-          "description": "Current session date (YYYY-MM-DD)."
-        },
-        "new_date": {
-          "type": "string",
-          "description": "Target date (YYYY-MM-DD)."
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Stable Session.id used when the legacy date has changed."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "old_date",
-        "new_date",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
-  },
-  {
-    "name": "health_update_session",
-    "domain": "sessions",
-    "description": "Update a session by date with a patch dict. Validates date format and patch keys before applying. Allowed patch keys: completed, session_rpe, body_weight_kg, exercises, session_notes, day, week_number.",
-    "handler": "services.handlers.sessions.health_update_session.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Session date (YYYY-MM-DD)."
-        },
-        "patch": {
-          "type": "object",
-          "description": "Dict with session fields to update."
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Stable Session.id used when the legacy date has changed."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "patch",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_sessions"
-    ]
+    "ownership": "athlete"
   }
 ]

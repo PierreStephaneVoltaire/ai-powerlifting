@@ -10,7 +10,6 @@ import json
 import logging
 import time as _time
 from datetime import datetime
-from decimal import Decimal
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
@@ -134,8 +133,7 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     import os
     import tempfile
-    import boto3
-    from services.lib.aws import dynamodb_resource, client as aws_client
+    from services.lib.aws import dynamodb_resource
     from .export import build_program_markdown
 
     from .config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
@@ -155,9 +153,6 @@ async def regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     cache_pk = f"analysis#{pk}"
     expires_at = int(_time.time()) + 7 * 86400
 
-    program_start = (program.get("meta") or {}).get("program_start") or next(
-        (s.get("date") for s in scope_program(program).get("sessions", []) if s.get("date")), None
-    ) or datetime.utcnow().date().isoformat()
 
     current_sessions = scope_program(program).get("sessions", [])
     current_week = max(

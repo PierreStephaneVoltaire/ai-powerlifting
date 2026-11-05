@@ -1,7 +1,6 @@
 import { ReactNode, useEffect } from 'react'
 import { AppShell as MantineAppShell } from '@mantine/core'
 import { useLocation } from 'react-router-dom'
-import { useAuth } from '@/auth/AuthProvider'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import SettingsDrawer from './SettingsDrawer'
@@ -14,7 +13,6 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
   const location = useLocation()
-  const { user } = useAuth()
   const isLogin = location.pathname === '/login' || location.pathname === '/auth/callback'
 
   useEffect(() => {

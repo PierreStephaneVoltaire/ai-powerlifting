@@ -200,7 +200,7 @@ def _flatten_rows(value: Any, prefix: str = "") -> list[tuple[str, Any]]:
     rows.append((prefix or "(root)", _truncate(_fmt(value))))
     return rows
 
-def _write_kv_sheet(ws, rows: list[tuple[str, Any]], section_width: int = 2) -> None:
+def _write_kv_sheet(ws, rows: list[tuple[str, Any]]) -> None:
     _write_sheet(ws, ["Field", "Value"], [[k, v] for k, v in rows], col_widths={1: 34, 2: 72})
     ws.freeze_panes = "A2"
 
@@ -397,7 +397,7 @@ def _build_program_workbook(
 
     prepared_sessions = _prepare_sessions_for_export(sessions, weight_log, meta, phases)
 
-    _write_meta_sheet(wb, meta, creator=creator, program_pk=program_pk, version_token=version_token, sex=sex)
+    _write_meta_sheet(wb, meta, creator=creator, program_pk=program_pk, version_token=version_token, sex=sex, competition_date=_next_competition_date(program))
     _write_goals_sheet(wb, meta, goals, competitions, sex, federation_library)
     _write_federation_standards_sheet(wb, federation_library)
     _write_current_maxes_sheet(wb, current_maxes)
@@ -502,7 +502,7 @@ def build_program_markdown(
     prepared_sessions = _prepare_sessions_for_export(sessions_raw, weight_log, meta, phases)
 
     sections = [
-        _md_overview(meta, creator, version_token, sex),
+        _md_overview(meta, creator, version_token, sex, _next_competition_date(program)),
         _md_goals(meta, goals, competitions, sex, federation_library),
         _md_current_maxes(current_maxes),
         _md_max_history(max_history, sex, meta),
@@ -551,7 +551,12 @@ def _first_line(value: Any) -> str:
     text = _txt(value)
     return text.split("\n")[0].strip() if text else ""
 
-def _md_overview(meta: dict, creator: str, version_token: str, sex: str) -> str:
+def _next_competition_date(program: dict) -> str:
+    from services.lib.competition_entries import next_competition
+    return str((next_competition(program.get("competitions") or []) or {}).get("date") or "")
+
+
+def _md_overview(meta: dict, creator: str, version_token: str, sex: str, competition_date: str) -> str:
     name = meta.get("program_name") or "Training Program"
     lines = [f"# {name}", ""]
 
@@ -562,8 +567,8 @@ def _md_overview(meta: dict, creator: str, version_token: str, sex: str) -> str:
         details.append(f"**Version:** {version_token}")
     if meta.get("program_start"):
         details.append(f"**Started:** {meta['program_start']}")
-    if meta.get("comp_date"):
-        details.append(f"**Competition:** {meta['comp_date']}")
+    if competition_date:
+        details.append(f"**Competition:** {competition_date}")
     if meta.get("federation"):
         details.append(f"**Federation:** {meta['federation']}")
     if meta.get("weight_class_kg"):
@@ -766,7 +771,7 @@ def _md_sessions(sessions: list[dict]) -> str:
             if exercises:
                 ex_rows = []
                 for ex in exercises:
-                    failed = " \u2717" if ex.get("failed") else ""
+                    failed = " \u2717" if "failed" in (ex.get("set_statuses") or []) else ""
                     failed_reason_suffix = _fmt_failed_set_reasons(ex.get("failed_set_reasons"))
                     notes_value = _first_line(ex.get("notes", "")) + failed
                     if failed_reason_suffix:
@@ -1913,6 +1918,7 @@ def _write_meta_sheet(
     program_pk: str,
     version_token: str,
     sex: str,
+    competition_date: str,
 ) -> None:
     ws = wb.active
     ws.title = "Meta"
@@ -1924,7 +1930,7 @@ def _write_meta_sheet(
         ["Version Label", meta.get("version_label", "")],
         ["Sex", sex],
         ["Program Start", meta.get("program_start", "")],
-        ["Competition Date", meta.get("comp_date", "")],
+        ["Competition Date", competition_date],
         ["Federation", meta.get("federation", "")],
         ["Practicing For", meta.get("practicing_for", "")],
         ["Weight Class (kg)", meta.get("weight_class_kg", "")],
@@ -1959,7 +1965,7 @@ def _write_goals_sheet(
     federation_library: dict[str, Any] | None = None,
 ) -> None:
     ws = wb.create_sheet("Goals")
-    legacy_target_total = _resolve_total_kg({
+    program_target_total = _resolve_total_kg({
         "squat_kg": meta.get("target_squat_kg"),
         "bench_kg": meta.get("target_bench_kg"),
         "deadlift_kg": meta.get("target_dl_kg"),
@@ -1973,8 +1979,8 @@ def _write_goals_sheet(
         ["Primary Goals", ", ".join(primary_goals) if primary_goals else ""],
         ["Current Weight Class (kg)", meta.get("weight_class_kg", "")],
         ["Current Body Weight (kg)", target_bodyweight],
-        ["Legacy Target Total (kg)", legacy_target_total],
-        ["Legacy Target DOTS", _calculate_dots_value(legacy_target_total, target_bodyweight, sex)],
+        ["Program Target Total (kg)", program_target_total],
+        ["Program Target DOTS", _calculate_dots_value(program_target_total, target_bodyweight, sex)],
         ["Attempt Pct", _serialize_json(meta.get("attempt_pct", {}))],
     ]
     for row_idx, (field, value) in enumerate(top_rows, 1):
@@ -2021,23 +2027,17 @@ def _write_goals_sheet(
             key=lambda item: (
                 priority_order.get(str(item.get("priority")), 9),
                 str(
-                    (list(item.get("target_competition_dates") or []) or [item.get("target_competition_date") or item.get("target_date") or ""])[0]
+                    (list(item.get("target_competition_dates") or []) or [item.get("target_date") or ""])[0]
                 ),
             ),
         ):
             target_standard_ids = [str(value or "").strip() for value in list(goal.get("target_standard_ids") or []) if str(value or "").strip()]
-            legacy_standard_id = str(goal.get("target_standard_id") or "").strip()
-            if legacy_standard_id and legacy_standard_id not in target_standard_ids:
-                target_standard_ids.append(legacy_standard_id)
             linked_standards = [standards.get(standard_id) for standard_id in target_standard_ids if standards.get(standard_id)]
             standard = linked_standards[0] if linked_standards else None
             federation = federations.get(str(goal.get("target_federation_id") or "")) or (
                 federations.get(str(standard.get("federation_id"))) if isinstance(standard, dict) else None
             )
             target_competition_dates = [str(value or "").strip() for value in list(goal.get("target_competition_dates") or []) if str(value or "").strip()]
-            legacy_competition_date = str(goal.get("target_competition_date") or "").strip()
-            if legacy_competition_date and legacy_competition_date not in target_competition_dates:
-                target_competition_dates.append(legacy_competition_date)
             competition_names = [competitions_by_date.get(target_date, {}).get("name", "") for target_date in target_competition_dates if competitions_by_date.get(target_date)]
             target_total = _first_non_blank(goal.get("target_total_kg"), (standard or {}).get("required_total_kg"))
             standard_label = "; ".join(
@@ -2065,7 +2065,7 @@ def _write_goals_sheet(
                 ws.cell(row=next_row, column=col_idx, value=_truncate(_fmt(value))).alignment = _WRAP
             next_row += 1
     else:
-        ws.cell(row=next_row, column=1, value="No explicit goals recorded. Legacy targets are shown in the header rows.")
+        ws.cell(row=next_row, column=1, value="No explicit goals recorded. Program targets are shown in the header rows.")
         next_row += 1
 
     next_row += 2
@@ -2329,11 +2329,8 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
             sets_f = float(ex.get("sets") or 0)
             reps_f = float(ex.get("reps") or 0)
             kg_f = float(ex.get("kg") or 0)
-            failed_sets = ex.get("failed_sets")
-            if isinstance(failed_sets, list):
-                failed_sets_val = "; ".join("1" if bool(v) else "0" for v in failed_sets)
-            else:
-                failed_sets_val = ""
+            statuses = ex.get("set_statuses") or []
+            failed_sets_val = "; ".join("1" if status == "failed" else "0" for status in statuses)
             rows.append([
                 session.get("date", ""),
                 session.get("week_number", ""),
@@ -2343,7 +2340,7 @@ def _write_exercises_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None
                 ex.get("sets", ""),
                 ex.get("reps", ""),
                 ex.get("kg", ""),
-                ex.get("failed", False),
+                "failed" in statuses,
                 failed_sets_val,
                 _fmt_failed_set_reasons(ex.get("failed_set_reasons")),
                 ex.get("rpe", ""),
@@ -2554,7 +2551,7 @@ def _write_exercise_glossary_sheet(wb: Workbook, glossary: list[dict[str, Any]])
 
 def _write_videos_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
     ws = wb.create_sheet("Videos")
-    headers = ["Session Date", "Block", "Exercise", "Set #", "Notes", "Uploaded At", "Video URL", "Thumbnail URL", "Thumbnail Status"]
+    headers = ["Session Date", "Block", "Exercise", "Set #", "Notes", "Uploaded At", "Video Key", "Thumbnail Key", "Thumbnail Status"]
     rows = []
     for session in sessions:
         for video in session.get("videos") or []:
@@ -2565,8 +2562,8 @@ def _write_videos_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
                 video.get("set_number", ""),
                 video.get("notes", ""),
                 video.get("uploaded_at", ""),
-                video.get("video_url", ""),
-                video.get("thumbnail_url", ""),
+                video.get("s3_key", ""),
+                video.get("thumbnail_s3_key", ""),
                 video.get("thumbnail_status", ""),
             ])
     if not rows:

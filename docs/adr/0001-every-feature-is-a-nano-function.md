@@ -22,7 +22,7 @@ compute-intensive features: each expensive capability is a nano function that
 scales up only when called and scales down when done.
 
 The question was whether to extend this pattern to **all** features — including
-the many that are thin CRUD (`health_get_session`, `budget_list_items`,
+the many that are thin CRUD (`session_get`, `budget_list_items`,
 `template_list`) or pure stdlib math (`kg_to_lb`, `calculate_dots`,
 `estimate_1rm`) — or to keep a two-tier architecture where only the expensive
 few are nano functions and the cheap ones live in a shared long-running process.
@@ -32,7 +32,7 @@ few are nano functions and the cheap ones live in a shared long-running process.
 **Every feature is a nano function.** All capabilities — analytics, CRUD,
 math utilities, AI — follow the same pattern: one function per capability,
 scale-to-zero, exposed as both an HTTP endpoint (called by the portal backend
-via `invokeLambda`) and an MCP tool (called by the Discord agent). The one
+via `callOperation`) and an MCP tool (called by the Discord agent). The one
 documented exception is `health_rag_search`, which needs local ChromaDB state
 on the IF Agent pod and goes through `invokeToolDirect` instead.
 

@@ -12,7 +12,7 @@ def test_trusted_scope_overrides_empty_pk_and_rejects_other_athlete():
 
 def test_template_actor_is_person_separate_from_selected_athlete():
     operation = load_operations('templates')['template_copy']
-    payload = {'sk': 'template#source', 'new_name': 'Copy', 'expected_revision': 2, 'idempotency_key': 'copy', 'actor_pk': 'person-a'}
+    payload = {'sk': 'template#source', 'new_name': 'Copy', 'actor_pk': 'person-a'}
     scoped = authorize(operation, payload, 'athlete-a', 'person-a')
     operation.validate_input(scoped)
     assert scoped['actor_pk'] == 'person-a' and scoped['pk'] == 'athlete-a'

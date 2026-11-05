@@ -6,7 +6,7 @@ import {
   updateRole,
   ValidationError,
 } from '../services/userSettings'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 
 function sendError(res: Response, status: number, error: string): void {
   res.status(status).json({ data: null, error })

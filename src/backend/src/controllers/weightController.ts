@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { WeightEntry, WeightLogStore } from '@powerlifting/types'
 
 export async function getWeightLog(pk: string, version: string, blockId?: string): Promise<WeightLogStore> {

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 
 
 def _get_store():
@@ -51,8 +49,7 @@ async def health_new_version(args: dict | None = None, change_reason: str | None
             patches = args.get("patches")
     pk = args.get("pk") if isinstance(args, dict) else None
     store = _store_for(pk)
-    payload = args or {}
-    updated_program = await store.new_version(patches or [], change_reason or "", payload.get("expected_revision"), payload.get("idempotency_key"))
+    updated_program = await store.new_version(patches or [], change_reason or "")
 
     version_label = updated_program.get("meta", {}).get("version_label", "unknown")
 

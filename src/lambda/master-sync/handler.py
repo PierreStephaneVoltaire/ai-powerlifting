@@ -1,5 +1,4 @@
 import os
-from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.types import TypeDeserializer

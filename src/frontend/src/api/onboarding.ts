@@ -24,7 +24,7 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   return res.data.data
 }
 
-export interface AthleteBasicsInput {
+interface AthleteBasicsInput {
   sex: 'male' | 'female'
   country: string
   region: string | null
@@ -41,7 +41,7 @@ export async function submitAthleteBasics(input: AthleteBasicsInput): Promise<Us
   return res.data.data
 }
 
-export interface OnboardingProfileInput {
+interface OnboardingProfileInput {
   display_name: string
   bio: string
   profile_visibility: 'private' | 'public'
@@ -56,7 +56,7 @@ export async function submitOnboardingProfile(
   return res.data.data
 }
 
-export interface UpdateRoleInput {
+interface UpdateRoleInput {
   roles: AppRole[]
   active_role: AppRole
 }

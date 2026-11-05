@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { invokeToolDirect } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 import { principalToken } from '../auth/principal'

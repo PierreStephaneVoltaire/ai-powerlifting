@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
-from datetime import datetime, timezone
 from decimal import Decimal
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +77,7 @@ async def max_target_update(args: dict) -> dict:
         "target_bench_kg": bench,
         "target_dl_kg": dl,
         "target_total_kg": total,
-    }, args.get("expected_revision"), args.get("idempotency_key"))
+    })
     meta = committed.get("meta") or {}
     return _sanitize_decimals({
         "version": version,

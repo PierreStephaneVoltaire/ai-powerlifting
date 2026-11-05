@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { AthleteGoal } from '@powerlifting/types'
 
 export async function getGoals(pk: string): Promise<AthleteGoal[]> {

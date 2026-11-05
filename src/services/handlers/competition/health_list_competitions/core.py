@@ -11,16 +11,12 @@ from __future__ import annotations
 
 import logging
 import copy
-import hashlib
-import json
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
-from botocore.exceptions import ClientError
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key
 
 from services.lib.block_scope import active_block_id_for, in_block, stamp
@@ -36,20 +32,6 @@ from .config import (
 logger = logging.getLogger(__name__)
 
 _table = None
-
-
-class CompetitionConflictError(Exception):
-    def __init__(self, expected_revision: int, current_revision: int, current_record: dict | None):
-        self.expected_revision = expected_revision
-        self.current_revision = current_revision
-        self.current_record = current_record
-        super().__init__(f"revision conflict: expected {expected_revision}, current {current_revision}")
-
-
-def _transaction_was_cancelled(exc: Exception) -> bool:
-    if exc.__class__.__name__ == "TransactionCanceledException":
-        return True
-    return isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") == "TransactionCanceledException"
 
 
 def _invalidate_analysis_cache(pk: str) -> None:
@@ -113,23 +95,10 @@ _MUTABLE_FIELDS = {
     "comp_day_protocol",
     "decision_date",
     "attempt_selection",
-    "attempt_strategy_mode",
-    "qualifying_standard_id",
-    "qualifying_total_kg",
     "projected_at_t_minus_1w",
     "projection_snapshot_date",
     "notes",
 }
-
-
-def _mutation_envelope(args: dict) -> tuple[int, str]:
-    key = args.get("idempotency_key")
-    return 0, key.strip() if isinstance(key, str) else ""
-
-
-def _payload_hash(operation: str, master_id: str, payload: dict) -> str:
-    body = {"operation": operation, "master_id": master_id, "payload": payload}
-    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
 
 
 def _attempt_id(master_id: str, lift: str, attempt_number: int) -> str:
@@ -237,7 +206,6 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
     patch = args.get("patch")
     if not isinstance(patch, dict):
         raise ValueError("patch must be an object")
-    expected_revision, idempotency_key = _mutation_envelope(args)
     unknown = set(patch) - _MUTABLE_FIELDS
     if unknown:
         raise ValueError(f"competition fields are not editable: {', '.join(sorted(unknown))}")
@@ -303,9 +271,7 @@ def complete_user_competition(args: dict) -> dict:
     return update_user_competition({
         "pk": pk,
         "master_id": master_id,
-        "patch": patch,
-        "expected_revision": args.get("expected_revision"),
-        "idempotency_key": args.get("idempotency_key"),
+        "patch": patch
     }, operation="complete")
 
 

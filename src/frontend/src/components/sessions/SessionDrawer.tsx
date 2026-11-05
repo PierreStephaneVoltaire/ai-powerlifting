@@ -1,18 +1,17 @@
-import { useState, useEffect, useMemo, Fragment, useRef } from 'react'
-import { Drawer, Button, Group, Stack, Paper, SimpleGrid, TextInput, Textarea, Autocomplete, ActionIcon, Text, Box, Table, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip, Checkbox } from '@mantine/core'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { Drawer, Button, Group, Stack, Paper, SimpleGrid, Textarea, Autocomplete, ActionIcon, Text, Box, Divider, SegmentedControl, Slider, Modal, Badge, Menu, Tooltip, Checkbox } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
-import { useRestTimerStore } from '@/store/restTimerStore'
 import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
 import { format } from 'date-fns'
-import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
+import { toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
-import { readDraft, removeDraftIfMatch, saveDraft, sessionDraftKey, legacySessionDraftKey, type Draft } from '@/api/drafts'
+import { readDraft, removeDraftIfMatch, saveDraft, sessionDraftKey, type Draft } from '@/api/drafts'
 import { requestPartition } from '@/api/context'
-import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Calendar, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal, AlertTriangle, Timer } from 'lucide-react'
+import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal, AlertTriangle } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -43,7 +42,6 @@ import { lastPerformance } from '@/utils/lastPerformance'
 import { formatPlannedExercise } from '@/utils/plannedPrescription'
 import { uploadBelongsTo, useVideoUploadStore } from '@/store/videoUploadStore'
 import { useAuth } from '@/auth/AuthProvider'
-import Num from '@/components/shared/Num'
 
 const WELLNESS_FIELDS: Array<{
   key: keyof Omit<SessionWellness, 'recorded_at'>
@@ -100,9 +98,7 @@ function normalizeSetStatuses(exercise: Exercise, sessionCompleted = false): Set
   const fallbackStatus: SetStatus = sessionCompleted ? 'completed' : 'pending'
   const source = Array.isArray(exercise.set_statuses)
     ? exercise.set_statuses
-    : Array.from({ length: setCount }, (_, index) =>
-        exercise.failed_sets?.[index] ? 'failed' : fallbackStatus
-      )
+    : Array.from({ length: setCount }, () => fallbackStatus)
   const normalized = source.slice(0, setCount).map((status) =>
     status === 'completed' || status === 'failed' || status === 'skipped' || status === 'pending'
       ? status
@@ -133,14 +129,11 @@ function normalizeFailedSetReasons(exercise: Exercise, statuses = normalizeSetSt
 
 function withSetStatusFields(exercise: Exercise, sessionCompleted = false): Exercise {
   const set_statuses = normalizeSetStatuses(exercise, sessionCompleted)
-  const failed_sets = set_statuses.map((status) => status === 'failed')
   const failed_set_reasons = normalizeFailedSetReasons(exercise, set_statuses)
   return {
     ...exercise,
     set_statuses,
-    failed_sets,
     failed_set_reasons,
-    failed: failed_sets.some(Boolean),
   }
 }
 
@@ -693,7 +686,6 @@ export default function SessionDrawer({
           reps: pe.reps,
           kg: pe.kg,
           notes: '',
-          failed_sets: Array(pe.sets).fill(false),
           set_statuses: Array(pe.sets).fill('pending'),
           failed_set_reasons: Array.from({ length: pe.sets }, () => []),
         }))
@@ -703,21 +695,11 @@ export default function SessionDrawer({
         id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       }))
       const draftKey = sessionId ? sessionDraftKey(version, sessionId) : ''
-      const legacyKey = sessionId ? legacySessionDraftKey(version, session.date, sessionArrayIndex) : ''
       draftKeyRef.current = draftKey
       draftPartitionRef.current = partition
-      void Promise.all([
-        draftKey ? readDraft<Session>(draftKey, partition) : Promise.resolve(undefined),
-        legacyKey ? readDraft<Session>(legacyKey, partition) : Promise.resolve(undefined),
-      ]).then(([draft, legacyDraft]) => {
+      void (draftKey ? readDraft<Session>(draftKey, partition) : Promise.resolve(undefined)).then((draft) => {
         if (!active || requestPartition() !== partition) return
-        const legacy = legacyDraft?.value?.id === sessionId && legacyDraft.value.date === session.date ? legacyDraft : undefined
-        const restored = draft?.value?.id === sessionId ? draft : legacy
-        if (legacy && !draft && draftKey) {
-          const migration = draftWriteRef.current.then(() => saveDraft(draftKey, legacy.value, partition))
-          draftWriteRef.current = migration.catch(() => undefined)
-          void migration.then(() => removeDraftIfMatch(legacyKey, legacy, partition)).catch(() => {})
-        }
+        const restored = draft?.value?.id === sessionId ? draft : undefined
         setLocalSession(restored ? {
           ...restored.value,
           exercises: restored.value.exercises.map((ex) => ({
@@ -952,7 +934,6 @@ export default function SessionDrawer({
             reps: 5,
             kg: null,
             notes: '',
-            failed_sets: [false, false, false],
             set_statuses: ['pending', 'pending', 'pending'],
             failed_set_reasons: [[], [], []],
           },
@@ -1051,9 +1032,8 @@ export default function SessionDrawer({
             sets_data.push({ reps: ex.reps || null, kg: ex.kg, rpe: ex.rpe ?? null })
           }
         }
-        const failed_sets = set_statuses.map((status) => status === 'failed')
         return withSetStatusFields(
-          { ...ex, sets: newSets, set_statuses, failed_sets, failed_set_reasons, sets_data },
+          { ...ex, sets: newSets, set_statuses, failed_set_reasons, sets_data },
           prev.completed,
         )
       })

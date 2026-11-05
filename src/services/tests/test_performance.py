@@ -17,7 +17,7 @@ class FakeProgramStore:
     async def get_program(self):
         return self.program
 
-    async def mutate_source(self, operation, payload, expected_revision, idempotency_key, mutate):
+    async def mutate_source(self, operation, payload, mutate):
         assert expected_revision == 0 and idempotency_key == "maxes-edit"
         return mutate(self.program) | {"revision": 1}
 
@@ -28,7 +28,7 @@ def test_performance_contract_requires_real_mutation_payloads():
         operations["health_update_current_maxes"].validate_input({})
     with pytest.raises(Exception):
         operations["max_target_update"].validate_input({"squat_kg": 180})
-    operations["max_history_add"].validate_input({"entry": {"date": "2026-09-13", "squat_kg": 180}, "expected_revision": 0, "idempotency_key": "history"})
+    operations["max_history_add"].validate_input({"entry": {"date": "2026-09-13", "squat_kg": 180}})
 
 
 def test_target_max_update_returns_committed_target_record(monkeypatch):
@@ -38,12 +38,12 @@ def test_target_max_update_returns_committed_target_record(monkeypatch):
         def __init__(self, *_args):
             pass
 
-        async def update_meta_fields(self, updates, expected_revision, idempotency_key):
+        async def update_meta_fields(self, updates):
             assert expected_revision == 4 and idempotency_key == "target-edit"
             return {"success": True, "meta": updates, "revision": 5, "sk": "program#v002", "updated_at": "2026-09-15T10:00:00+00:00"}
 
     monkeypatch.setitem(sys.modules, "services.lib.program_store", SimpleNamespace(ProgramStore=FakeStore))
-    result = asyncio.run(max_core.max_target_update({"pk": "athlete-1", "version": "v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230, "expected_revision": 4, "idempotency_key": "target-edit"}))
+    result = asyncio.run(max_core.max_target_update({"pk": "athlete-1", "version": "v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230}))
     load_operations("performance")["max_target_update"].validate_result(result)
     assert result == {"version": "v002", "sk": "program#v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230, "total_kg": 545, "updated_at": "2026-09-15T10:00:00+00:00", "revision": 5}
 
@@ -57,7 +57,7 @@ def test_current_maxes_dispatch_uses_fake_store_and_preserves_omitted_lifts(monk
     operations = load_operations("performance")
 
     assert dispatch(operations["health_get_current_maxes"], {"pk": "athlete-1"}) == {"squat": 180, "bench": 120}
-    assert dispatch(operations["health_update_current_maxes"], {"pk": "athlete-1", "deadlift_kg": 220, "expected_revision": 0, "idempotency_key": "maxes-edit"}) == {"squat": 180, "bench": 120, "deadlift": 220, "revision": 1}
+    assert dispatch(operations["health_update_current_maxes"], {"pk": "athlete-1", "deadlift_kg": 220}) == {"squat": 180, "bench": 120, "deadlift": 220, "revision": 1}
 
 
 def test_history_add_computes_total_and_get_filters_window(monkeypatch):
@@ -113,6 +113,6 @@ def test_handlers_return_json_for_decimal_results():
 def test_unset_targets_are_valid_and_invalid_history_is_rejected():
     operations = load_operations("performance")
     operations["max_target_get"].validate_result({"version": "v001", "sk": "program#v001", "squat_kg": None, "bench_kg": None, "deadlift_kg": None, "total_kg": None})
-    for payload in ({"entry": {}}, {"entry": {"date": "bad", "squat_kg": 100}, "expected_revision": 0, "idempotency_key": "x"}, {"date": "2026-09-13", "bench_kg": -1, "expected_revision": 0, "idempotency_key": "x"}):
+    for payload in ({"entry": {}}, {"entry": {"date": "bad", "squat_kg": 100}}, {"date": "2026-09-13", "bench_kg": -1}):
         with pytest.raises(Exception):
             operations["max_history_add"].validate_input(payload)

@@ -1,5 +1,4 @@
 import os
-from datetime import datetime, timezone
 
 from .._import_store import ImportStore
 

@@ -39,7 +39,7 @@ class FakeProgramStore:
     async def get_program(self):
         return self.program
 
-    async def _write_new_version(self, program, minor=False, expected_revision=None, idempotency_key=None):
+    async def _write_new_version(self, program, minor=False):
         self.saved = program
         return program
 
@@ -64,7 +64,7 @@ class TemplateContractTests(unittest.TestCase):
         handler = importlib.import_module("services.handlers.templates.template_create_blank.handler")
         store = FakeTemplateStore()
         with patch.object(module, "_get_template_store", return_value=store):
-            result = handler.handler({"name": "Strength", "pk": "athlete-1", "expected_revision": 0, "idempotency_key": "create-strength"}, None)
+            result = handler.handler({"name": "Strength", "pk": "athlete-1"}, None)
         body = json.loads(result["body"])
         self.assertEqual(body, {"status": "created", "sk": "template#1"})
         self.assertEqual(store.templates["template#1"]["meta"]["name"], "Strength")
@@ -76,7 +76,7 @@ class TemplateContractTests(unittest.TestCase):
         program_store = FakeProgramStore()
         template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}, "phases": [], "sessions": []}
         with patch.object(apply_core, "_get_template_store", return_value=template_store), patch.object(apply_core, "_get_store", return_value=program_store), patch.object(apply_core, "_get_glossary_store", return_value=FakeGlossaryStore()):
-            result = apply_handler.handler({"sk": "template#1", "start_date": "2026-09-14", "expected_revision": 0, "idempotency_key": "template-apply"}, None)
+            result = apply_handler.handler({"sk": "template#1", "start_date": "2026-09-14"}, None)
         self.assertEqual(json.loads(result["body"])["status"], "applied")
         self.assertEqual(program_store.saved["meta"]["template_lineage"]["applied_template_sk"], "template#1")
 

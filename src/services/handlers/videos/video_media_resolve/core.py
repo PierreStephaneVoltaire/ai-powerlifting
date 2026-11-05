@@ -17,13 +17,11 @@ async def video_media_resolve(args: dict) -> str:
         if not media and "/" in key:
             video_id = key.rsplit("/", 2)[-2]
             media = get_media(health_table, pk, video_id)
-        if not media or media.get("status") not in {"ready", "confirmed", "legacy"}:
+        if not media or media.get("status") not in {"ready", "confirmed"}:
             raise ValueError("Media key is not attached to this athlete")
         program_sk = str(media.get("program_sk") or "")
         phases = load_phases(health_table, pk, program_sk)
         allowed_keys = {media.get("processed_s3_key"), media.get("thumbnail_s3_key")}
-        if media.get("legacy"):
-            allowed_keys.add(media.get("s3_key"))
         if key not in allowed_keys:
             raise ValueError("Media key is not attached to this athlete")
         if media.get("lift"):

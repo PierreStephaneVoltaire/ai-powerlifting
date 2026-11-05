@@ -93,23 +93,3 @@ def derive_onboarding_status(settings: dict) -> dict:
         "has_athlete_basics": has_athlete_basics,
     }
 
-
-def extend_settings_with_onboarding(settings: dict) -> dict:
-    """Return a copy of the settings dict with the onboarding fields filled in.
-
-    Safe to call on legacy rows that have none of the new fields. Also
-    coerces floats to Decimal via _to_dynamo on the caller side, so we keep
-    values as plain floats here.
-    """
-    out = dict(settings)
-    out["sex"] = settings.get("sex") if settings.get("sex") in SEX_VALUES else None
-    bw = _to_float(settings.get("bodyweight_kg"))
-    out["bodyweight_kg"] = bw
-    out["training_maxes"] = _normalize_training_maxes(settings.get("training_maxes"))
-    out["federations"] = _normalize_federations(settings.get("federations"))
-    state = onboarding_state_for(settings)
-    out["roles"] = state["roles"]
-    out["active_role"] = state["active_role"]
-    out["athlete_basics_complete"] = state["athlete_basics_complete"]
-    out["profile_complete"] = state["profile_complete"]
-    return out

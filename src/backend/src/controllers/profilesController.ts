@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
 
 export async function searchProfilesHandler(req: Request, res: Response): Promise<void> {

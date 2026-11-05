@@ -27,7 +27,6 @@ class Operation(BaseModel):
     result_schema: dict[str, Any]
     execution: Literal["deterministic", "ai"] = "deterministic"
     ownership: Literal["athlete", "public", "person", "operator"] = "athlete"
-    legacy: list[str] = []
     permission: str | None = None
 
     def validate_input(self, arguments: dict[str, Any]) -> None:

@@ -25,30 +25,17 @@ import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
 import { resolveTrainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
-import Num from '@/components/shared/Num'
-import { Activity, Target, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, Sparkles, HeartPulse, User } from 'lucide-react'
+import { Activity, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, HeartPulse, User } from 'lucide-react'
 import {
   Stack,
   Group,
   Text,
-  Paper,
-  SimpleGrid,
-  Button,
-  ActionIcon,
   TextInput,
-  Textarea,
-  SegmentedControl,
-  Progress,
-  Badge,
   Loader,
-  Box,
-  Modal,
-  Alert,
-  Divider,
-  Table,
+  Box
 } from '@mantine/core'
 import { useAuth } from '@/auth/AuthProvider'
-import type { Exercise, PlannedExercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
+import type { Exercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 type BigThreeLift = typeof LIFT_ORDER[number]
@@ -73,15 +60,6 @@ function hasCompletedSet(exercise: Exercise): boolean {
     return false
   }
 
-  if (exercise.failed_sets?.length) {
-    const legacySetCount = Math.max(setCount, exercise.failed_sets.length)
-    for (let index = 0; index < legacySetCount; index += 1) {
-      if (exercise.failed_sets[index] !== true) return true
-    }
-    return false
-  }
-
-  if (exercise.failed) return false
   return setCount > 0
 }
 
@@ -257,18 +235,16 @@ function phaseState(phase: Phase, currentWeek: number): 'completed' | 'current' 
 export default function Dashboard() {
   const navigate = useNavigate()
   const { readOnly } = useAuth()
-  const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases, updateLiftProfiles } = useProgramStore()
+  const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
 
   const [editingMaxes, setEditingMaxes] = useState(false)
   const [editingWeight, setEditingWeight] = useState(false)
   const [editingPhases, setEditingPhases] = useState(false)
-  const [editingLiftProfiles, setEditingLiftProfiles] = useState(false)
   const [localMaxes, setLocalMaxes] = useState<MaxDrafts>({ squat: '', bench: '', deadlift: '' })
   const [localWeight, setLocalWeight] = useState('')
   const [localPhases, setLocalPhases] = useState<Phase[]>([])
-  const [localLiftProfiles, setLocalLiftProfiles] = useState<LiftProfile[]>([])
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
   const [editingMeasurements, setEditingMeasurements] = useState(false)
   const [localHeight, setLocalHeight] = useState('')
@@ -293,14 +269,6 @@ export default function Dashboard() {
         .catch((e) => console.error('Failed to load weight log:', e))
     }
   }, [version, program, needsSetup])
-
-  useEffect(() => {
-    if (program?.lift_profiles) {
-      setLocalLiftProfiles(mergeLiftProfiles(program.lift_profiles))
-    } else {
-      setLocalLiftProfiles(mergeLiftProfiles())
-    }
-  }, [program?.lift_profiles])
 
   useEffect(() => {
     let cancelled = false
@@ -638,28 +606,6 @@ export default function Dashboard() {
   }
 
   const removePhase = (index: number) => setLocalPhases(prev => prev.filter((_, i) => i !== index))
-
-  const startEditingLiftProfiles = () => {
-    setLocalLiftProfiles(mergeLiftProfiles(program?.lift_profiles))
-    setEditingLiftProfiles(true)
-  }
-
-  const saveLiftProfiles = async () => {
-    try {
-      await updateLiftProfiles(localLiftProfiles)
-      pushToast({ message: 'Lift profiles saved', type: 'success' })
-      setEditingLiftProfiles(false)
-    } catch (err) {
-      pushToast({ message: 'Failed to save lift profiles', type: 'error' })
-    }
-  }
-
-  const updateLocalProfile = (lift: LiftProfile['lift'], updates: Partial<LiftProfile>) => {
-    setLocalLiftProfiles(prev =>
-      prev.map(p => p.lift === lift ? { ...p, ...updates } : p)
-    )
-  }
-
   const displayProfiles = (program?.lift_profiles?.length
     ? mergeLiftProfiles(program.lift_profiles)
     : mergeLiftProfiles()
@@ -669,13 +615,6 @@ export default function Dashboard() {
   const currentBlockFatigueComponents = currentBlockWeekly?.fatigue_components ?? null
   const fatigueSectionLoading = sectionPending(dashboardSectionStatuses, dashboardSectionPayloads, 'fatigue_readiness')
   const workloadSectionLoading = sectionPending(dashboardSectionStatuses, dashboardSectionPayloads, 'workload')
-  const localMaxesKg = LIFT_ORDER.reduce((acc, lift) => {
-    acc[lift] = parseDisplayWeightDraft(localMaxes[lift], unit)
-    return acc
-  }, {} as Record<BigThreeLift, number | null>)
-  const localMaxTotalKg = LIFT_ORDER.every((lift) => localMaxesKg[lift] !== null)
-    ? LIFT_ORDER.reduce((sum, lift) => sum + (localMaxesKg[lift] ?? 0), 0)
-    : null
   const liftBreakdownRows = LIFT_ORDER.map((lift) => {
     const liftAnalysis = findLiftAnalysis(currentBlockWeekly, lift)
     const actualMax = actualMaxes[lift] > 0 ? actualMaxes[lift] : null

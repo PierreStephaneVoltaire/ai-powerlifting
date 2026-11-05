@@ -50,62 +50,6 @@ def test_is_active():
     _assert(not shared.is_active(g3), "expired grant should be inactive")
 
 
-def test_grant_create_validation():
-    err, _ = grant_create._validate_args({
-        "athlete_mapped_pk": "athlete-1",
-        "grantee_mapped_pk": "athlete-1",
-        "grant_type": "coach",
-    })
-    _assert(err == "cannot_grant_to_self", f"expected cannot_grant_to_self, got {err}")
-
-    err, _ = grant_create._validate_args({
-        "athlete_mapped_pk": "athlete-1",
-        "grantee_mapped_pk": "grantee-1",
-        "grant_type": "boss",
-    })
-    _assert(err == "invalid_grant_type", f"expected invalid_grant_type, got {err}")
-
-    err, _ = grant_create._validate_args({
-        "athlete_mapped_pk": "athlete-1",
-        "grantee_mapped_pk": "grantee-1",
-        "grant_type": "coach",
-        "scope": "admin",
-    })
-    _assert(err == "invalid_scope", f"expected invalid_scope, got {err}")
-
-    err, _ = grant_create._validate_args({
-        "athlete_mapped_pk": "!@#",
-        "grantee_mapped_pk": "grantee-1",
-        "grant_type": "coach",
-    })
-    _assert(err == "invalid_athlete_mapped_pk", f"got {err}")
-
-    future = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
-    err, grant = grant_create._validate_args({
-        "athlete_mapped_pk": "athlete-1",
-        "grantee_mapped_pk": "grantee-1",
-        "grant_type": "coach",
-        "scope": "read",
-        "tied_competition_ids": ["ipf-2026"],
-        "tied_competition_dates": {"ipf-2026": future},
-    })
-    _assert(err is None, f"unexpected validation error: {err}")
-    _assert(grant["pk"] == "Grant#athlete-1", f"bad pk: {grant['pk']}")
-    _assert(grant["grant_type"] == "coach", f"bad grant_type: {grant['grant_type']}")
-    _assert(grant["scope"] == "read", f"bad scope: {grant['scope']}")
-    exp = datetime.fromisoformat(grant["expires_at"].replace("Z", "+00:00"))
-    expected_exp = datetime.fromisoformat(future) + timedelta(days=grant_create.EXPIRY_TAIL_DAYS)
-    _assert(abs((exp - expected_exp).total_seconds()) < 2, f"expires_at drift: {exp} vs {expected_exp}")
-
-    err, grant = grant_create._validate_args({
-        "athlete_mapped_pk": "athlete-1",
-        "grantee_mapped_pk": "grantee-1",
-        "grant_type": "handler",
-    })
-    _assert(err == "competition_ties_required", f"unexpected validation result: {err}")
-    _assert(grant is None, "untied handler grant must not be created")
-
-
 def test_grant_check_self():
     result = asyncio.run(grant_check.grant_check({
         "athlete_mapped_pk": "athlete-1",

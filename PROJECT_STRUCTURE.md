@@ -31,8 +31,8 @@ powerlifting-app/
 │       │   └── masterCopy.ts          Operator→test data copy helper
 │       └── utils/
 │           ├── agent.ts      invokeToolDirect → Coach jobs (AI operations)
-│           ├── lambda.ts    invokeLambda → typed operation on the owning pl-<domain> service
-│           ├── lambdaCache.ts  In-process LRU cache + write invalidation (math/read TTLs; writes bypass + invalidate)
+│           ├── operations.ts  callOperation → typed operation on the owning pl-<domain> service
+│           ├── operationCache.ts  In-process LRU cache + write invalidation (math/read TTLs; writes bypass + invalidate)
 │           ├── logger.ts     pino logger
 │           ├── countries.ts  ISO country resolution (competitions)
 │           └── videoSort.ts  Video ordering helpers
@@ -107,7 +107,7 @@ When behavior and prose disagree, the code wins. The highest-signal files:
   `src/backend/src/services/analysisCache.ts`, `src/backend/src/services/userSettings.ts`
 - **Types:** `src/dependencies/types/index.ts`
 - **AI plumbing:** `src/backend/src/utils/agent.ts` (invokeToolDirect → Coach jobs)
-- **Service plumbing:** `src/backend/src/utils/lambda.ts` (invokeLambda HTTP call to the owning domain service) + `src/backend/src/utils/lambdaCache.ts` (in-process LRU cache + write invalidation)
+- **Service plumbing:** `src/backend/src/utils/operations.ts` (callOperation HTTP call to the owning domain service) + `src/backend/src/utils/operationCache.ts` (in-process LRU cache + write invalidation)
 - **Service runtime:** `src/services/` handlers and shared `src/services/lib/`, packaged by `docker/powerlifting-services.pkr.hcl`.
 - **AWS Lambda substrate:** `powerlifting-app/terraform/` retains only the master-sync and video-thumbnail Lambdas.
 - **Infra:** `terraform/` (root, local k3s) and `powerlifting-app/terraform/` (AWS-only)

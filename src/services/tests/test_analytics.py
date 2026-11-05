@@ -362,7 +362,7 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
     monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
     import boto3
     monkeypatch.setattr(boto3, "resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
-    monkeypatch.setitem(sys.modules, "services.lib.competition_entries", SimpleNamespace(with_competition_entries=lambda program, *args: program))
+    monkeypatch.setitem(sys.modules, "services.lib.competition_entries", SimpleNamespace(with_competition_entries=lambda program, *args: program, next_competition=lambda competitions: None))
     monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
 
     access = {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}

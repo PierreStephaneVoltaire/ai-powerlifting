@@ -1,13 +1,12 @@
 import {
   Dumbbell, Pill, Building2, Trophy, Users, Smartphone, Flag, Plane, Sandwich,
   UtensilsCrossed, Scale, CookingPot, HeartPulse, MoreHorizontal,
-  Repeat, Dot, Zap, Check, Pencil, Trash2, Plus, Filter as FilterIcon,
+  Repeat, Dot
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { BudgetCategory, BudgetRecurrence, BudgetPriorityTier } from '@powerlifting/types'
-import { BUDGET_PRIORITY_TIER_VALUES } from '@powerlifting/types'
 
-export interface OptionRow {
+interface OptionRow {
   value: BudgetCategory
   label: string
   icon: LucideIcon
@@ -30,7 +29,7 @@ export const CATEGORY_OPTIONS: OptionRow[] = [
   { value: 'other', label: 'Other', icon: MoreHorizontal },
 ]
 
-export const CATEGORY_BY_VALUE: Record<BudgetCategory, OptionRow> =
+const CATEGORY_BY_VALUE: Record<BudgetCategory, OptionRow> =
   Object.fromEntries(CATEGORY_OPTIONS.map((o) => [o.value, o])) as Record<BudgetCategory, OptionRow>
 
 export function categoryIcon(category: BudgetCategory): LucideIcon {
@@ -44,25 +43,11 @@ export const RECURRENCE_OPTIONS: { value: BudgetRecurrence; label: string }[] = 
   { value: 'ANNUAL', label: 'Annual' },
 ]
 
-export const RECURRENCE_BY_VALUE: Record<BudgetRecurrence, { value: BudgetRecurrence; label: string }> =
-  Object.fromEntries(RECURRENCE_OPTIONS.map((o) => [o.value, o])) as Record<BudgetRecurrence, { value: BudgetRecurrence; label: string }>
-
 export function recurrenceIcon(recurrence: BudgetRecurrence): LucideIcon {
   return recurrence === 'ONE_TIME' ? Dot : Repeat
 }
 
-export function recurrenceLabel(recurrence: BudgetRecurrence): string {
-  return RECURRENCE_BY_VALUE[recurrence]?.label ?? recurrence
-}
-
-export const RECURRENCE_SUFFIX: Record<BudgetRecurrence, string> = {
-  ONE_TIME: '',
-  MONTHLY: '/mo',
-  QUARTERLY: '/qtr',
-  ANNUAL: '/yr',
-}
-
-export interface PriorityStyle {
+interface PriorityStyle {
   label: string
   color: string
   variant: 'filled' | 'light' | 'outline'
@@ -73,8 +58,3 @@ export const PRIORITY_STYLES: Record<BudgetPriorityTier, PriorityStyle> = {
   IMPORTANT: { label: 'Important', color: 'indigo', variant: 'filled' },
   OPTIONAL: { label: 'Optional', color: 'gray', variant: 'outline' },
 }
-
-export const PRIORITY_OPTIONS: { value: BudgetPriorityTier; label: string }[] =
-  BUDGET_PRIORITY_TIER_VALUES.map((p) => ({ value: p, label: PRIORITY_STYLES[p].label }))
-
-export { Zap, Check, Pencil, Trash2, Plus, FilterIcon }

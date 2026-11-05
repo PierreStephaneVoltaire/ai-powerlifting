@@ -33,9 +33,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
-from boto3.dynamodb.conditions import Key
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +78,6 @@ def _now_iso() -> str:
 
 def build_pk(athlete_mapped_pk: str) -> str:
     return f"Grant#{athlete_mapped_pk}"
-
-
-def build_sk(grantee_mapped_pk: str, granted_at_iso: str, grant_type: str) -> str:
-    return f"Grantee#{grantee_mapped_pk}#{granted_at_iso}#{grant_type}"
 
 
 def normalize_grant(item: dict) -> dict:

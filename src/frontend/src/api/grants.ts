@@ -23,29 +23,10 @@ export interface Grant {
   updated_at: string
 }
 
-export interface GrantListResult {
+interface GrantListResult {
   active: Grant[]
   inactive: Grant[]
   total: number
-}
-
-export interface CreateGrantPayload {
-  athlete_mapped_pk?: string
-  grantee_mapped_pk: string
-  grantee_nickname?: string
-  grantee_discord_id?: string
-  grantee_authentik_sub?: string
-  grant_type: GrantType
-  scope?: GrantScope
-  tied_competition_ids?: string[]
-  tied_competition_dates?: Record<string, string>
-  note?: string
-}
-
-export interface CheckGrantResult {
-  allowed: boolean
-  reason: string
-  grant?: Grant
 }
 
 async function jsonOk<T>(res: Response): Promise<T> {
@@ -75,43 +56,4 @@ export async function listGrantsApi(params: { athlete_mapped_pk?: string; grante
     credentials: 'include',
   })
   return jsonOk<GrantListResult>(res)
-}
-
-export async function createGrantApi(payload: CreateGrantPayload): Promise<Grant> {
-  const res = await fetch('/api/grants', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return jsonOk<Grant>(res)
-}
-
-export async function revokeGrantApi(payload: { athlete_mapped_pk: string; sk: string }): Promise<Grant | { error: string }> {
-  const res = await fetch('/api/grants', {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return jsonOk<Grant | { error: string }>(res)
-}
-
-export async function checkGrantApi(params: {
-  athlete_mapped_pk: string
-  actor_mapped_pk?: string
-  grant_type?: GrantType
-  scope?: GrantScope
-  tied_competition_id?: string
-}): Promise<CheckGrantResult> {
-  const search = new URLSearchParams()
-  search.set('athlete_mapped_pk', params.athlete_mapped_pk)
-  if (params.actor_mapped_pk) search.set('actor_mapped_pk', params.actor_mapped_pk)
-  if (params.grant_type) search.set('grant_type', params.grant_type)
-  if (params.scope) search.set('scope', params.scope)
-  if (params.tied_competition_id) search.set('tied_competition_id', params.tied_competition_id)
-  const res = await fetch(`/api/grants/check?${search.toString()}`, {
-    credentials: 'include',
-  })
-  return jsonOk<CheckGrantResult>(res)
 }

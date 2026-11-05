@@ -15,8 +15,7 @@
           "type": "string",
           "description": "Program version. Defaults to current."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "oneOf": [
@@ -47,10 +46,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "powerlifting_filter_categories",
@@ -64,8 +60,7 @@
           "type": "string",
           "minLength": 1
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "oneOf": [
@@ -114,10 +109,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "powerlifting_ranking_percentile",
@@ -170,8 +162,7 @@
           "type": "string",
           "minLength": 1
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "oneOf": [
@@ -211,9 +202,6 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_analysis"
-    ]
+    "ownership": "athlete"
   }
 ]

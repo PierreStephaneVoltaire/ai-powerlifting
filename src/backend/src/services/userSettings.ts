@@ -1,6 +1,5 @@
 import { operationScope } from '../utils/operationScope'
-import { callOperation } from '../utils/lambda'
-import { seedMasterCopiesForNewUser } from './masterCopy'
+import { callOperation } from '../utils/operations'
 import type { AgeCategory, Role } from '@powerlifting/types'
 import { APP_ROLE_VALUES } from '../auth/identity'
 
@@ -16,13 +15,13 @@ const AGE_CATEGORY_VALUES: ReadonlyArray<AgeCategory> = [
 
 export type ProfileVisibility = 'private' | 'public'
 
-export interface ProfileTag {
+interface ProfileTag {
   tag: string
   approved: boolean
   proposed_by: string
 }
 
-export interface TrainingMaxes {
+interface TrainingMaxes {
   squat_kg: number
   bench_kg: number
   deadlift_kg: number
@@ -60,17 +59,6 @@ export interface UserSettings {
   updated_at: string
 }
 
-export interface PublicProfile {
-  nickname: string
-  display_name: string
-  avatar_url: string | null
-  bio: string
-  profile_visibility: ProfileVisibility
-  public_training_summary_enabled: boolean
-  is_self: boolean
-  tags: string[]
-}
-
 const CACHE_TTL_MS = 60_000
 const cache = new Map<string, { settings: UserSettings; expires: number }>()
 
@@ -92,10 +80,6 @@ function sanitizeUsername(username: string): string {
 
 function usernameKey(discordUsername: string): string {
   return sanitizeUsername(discordUsername)
-}
-
-function settingsUsernameKey(settings: UserSettings): string {
-  return settings.username || usernameKey(settings.discord_username || settings.nickname)
 }
 
 function normalizeVisibility(value: unknown): ProfileVisibility {
@@ -254,32 +238,6 @@ function normalizeSettings(raw: Record<string, unknown>): UserSettings {
   }
 }
 
-function isSelfProfile(settings: UserSettings, viewerUsername?: string): boolean {
-  const viewerKey = viewerUsername ? usernameKey(viewerUsername) : ''
-  return Boolean(viewerKey && viewerKey === (settings.username || ''))
-}
-
-function canViewProfile(settings: UserSettings, viewerUsername?: string): boolean {
-  return settings.profile_visibility === 'public' || isSelfProfile(settings, viewerUsername)
-}
-
-export function publicProfile(settings: UserSettings, viewerUsername?: string): PublicProfile {
-  return {
-    nickname: settings.nickname,
-    display_name: settings.display_name,
-    avatar_url: settings.avatar_url,
-    bio: settings.bio,
-    profile_visibility: settings.profile_visibility,
-    public_training_summary_enabled: settings.public_training_summary_enabled,
-    is_self: isSelfProfile(settings, viewerUsername),
-    tags: (settings.tags || []).filter((t) => t.approved).map((t) => t.tag),
-  }
-}
-
-export function mappedPkForSettings(settings: UserSettings): string {
-  return settings.mapped_pk || settings.pk
-}
-
 export function invalidateCache(discordUsername: string): void {
   cache.delete(usernameKey(discordUsername))
 }
@@ -305,16 +263,6 @@ export async function getSettingsByMappedPk(mappedPk: string): Promise<UserSetti
   if (!result) return null
   const settings = normalizeSettings(result as Record<string, unknown>)
   cache.set(key, { settings, expires: Date.now() + CACHE_TTL_MS })
-  return settings
-}
-
-export async function getSettingsByIdentity(provider: 'discord' | 'authentik', sub: string): Promise<UserSettings | null> {
-  if (!sub.trim()) return null
-  const result = await callOperation('settings_get', { identity_provider: provider, identity_sub: sub })
-  if (!result) return null
-  const settings = normalizeSettings(result as Record<string, unknown>)
-  if (settings.identity_provider !== provider || settings.identity_sub !== sub) return null
-  cache.set(`identity:${provider}:${sub}`, { settings, expires: Date.now() + CACHE_TTL_MS })
   return settings
 }
 
@@ -399,31 +347,6 @@ export async function proposeTag(
   return normalizeSettings(result as Record<string, unknown>)
 }
 
-export async function getOrCreateSettings(
-  discordId: string,
-  discordUsername: string,
-  avatarUrl: string | null,
-): Promise<UserSettings> {
-  const existing = await getSettings(discordUsername)
-  if (existing) return existing
-
-  const result = (await callOperation('settings_create', { discord_id: discordId,
-    discord_username: discordUsername,
-    avatar_url: avatarUrl,
-  })) as { settings: Record<string, unknown>; created: boolean }
-
-  const settings = normalizeSettings(result.settings)
-  cache.set(usernameKey(discordUsername), { settings, expires: Date.now() + CACHE_TTL_MS })
-
-  if (result.created) {
-    seedMasterCopiesForNewUser(mappedPkForSettings(settings)).catch((err) => {
-      console.error('[userSettings] Failed to seed master copies for new user', settings.username, err)
-    })
-  }
-
-  return settings
-}
-
 export async function getOrCreateSettingsForIdentity(
   provider: 'discord' | 'authentik',
   sub: string,
@@ -441,29 +364,11 @@ export async function getOrCreateSettingsForIdentity(
   return normalizeSettings(result.settings)
 }
 
-export async function resolveMappedPk(
-  discordId: string,
-  discordUsername: string,
-  avatarUrl: string | null,
-): Promise<string> {
-  const settings = await getOrCreateSettings(discordId, discordUsername, avatarUrl)
-  return mappedPkForSettings(settings)
-}
-
-export async function resolveMappedPkForIdentity(
-  provider: 'discord' | 'authentik',
-  sub: string,
-  username: string,
-  avatarUrl: string | null,
-): Promise<string> {
-  return mappedPkForSettings(await getOrCreateSettingsForIdentity(provider, sub, username, avatarUrl))
-}
-
 // =============================================================================
 // Epic 3 — Onboarding helpers + write paths
 // =============================================================================
 
-export interface OnboardingStatus {
+interface OnboardingStatus {
   is_onboarded: boolean
   next_step: 'role' | 'profile' | 'athlete_basics' | 'done' | null
   state: {
@@ -514,7 +419,7 @@ export class ValidationError extends Error {
   }
 }
 
-export interface UpdateAthleteBasicsInput {
+interface UpdateAthleteBasicsInput {
   sex: 'male' | 'female'
   country: string
   region: string | null
@@ -605,7 +510,7 @@ export async function updateAthleteBasics(
   return normalizeSettings(result as Record<string, unknown>)
 }
 
-export interface UpdateOnboardingProfileInput {
+interface UpdateOnboardingProfileInput {
   display_name: string
   bio?: string
   profile_visibility?: 'private' | 'public'
@@ -686,7 +591,7 @@ function validateRoles(input: unknown): Role[] {
   return seen
 }
 
-export interface UpdateRoleInput {
+interface UpdateRoleInput {
   roles: Role[]
   active_role?: Role
 }

@@ -1,5 +1,4 @@
 from __future__ import annotations
-import asyncio
 _store = None
 def _get_store():
     import os
@@ -132,6 +131,6 @@ def _prepare_template_payload(template):
     }
     return prepared
 
-async def template_unarchive(sk, actor_pk=None, expected_revision=None, idempotency_key=None):
+async def template_unarchive(sk, actor_pk=None):
     ts = _get_template_store()
-    return await ts.unarchive_template(sk, actor_pk=_template_actor(actor_pk), expected_revision=expected_revision, idempotency_key=idempotency_key)
+    return await ts.unarchive_template(sk, actor_pk=_template_actor(actor_pk))

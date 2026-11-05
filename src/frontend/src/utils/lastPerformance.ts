@@ -3,9 +3,9 @@ import { normalizeExerciseName } from './volume'
 
 const LOOKBACK_DAYS = 28
 
-export type PerformedSet = { reps: number | null; kg: number | null }
+type PerformedSet = { reps: number | null; kg: number | null }
 
-export type SetGroup = { sets: number; reps: number | null; kg: number | null }
+type SetGroup = { sets: number; reps: number | null; kg: number | null }
 
 function blockKey(session: Pick<Session, 'block_id' | 'block'>): string {
   return String(session.block_id || session.block || 'current')
@@ -25,7 +25,7 @@ function performedSets(exercise: Exercise): PerformedSet[] {
   return sets.filter((set, i) => statuses[i] !== 'skipped' && statuses[i] !== 'pending' && (set.reps ?? 0) > 0)
 }
 
-export function groupSets(sets: PerformedSet[]): SetGroup[] {
+function groupSets(sets: PerformedSet[]): SetGroup[] {
   const groups: SetGroup[] = []
   for (const set of sets) {
     const last = groups.at(-1)

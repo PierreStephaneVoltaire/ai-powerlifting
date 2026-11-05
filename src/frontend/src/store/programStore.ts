@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Program, Session, Exercise, Phase, MaxEntry, WeightEntry, ProgramListItem, SupplementPhase, DietNote, BlockNote, Competition, SessionVideo, LiftResults, LiftProfile, Sex, AthleteGoal, PostMeetReport, WeekStartDay } from '@powerlifting/types'
+import type { Program, Session, Exercise, Phase, WeightEntry, ProgramListItem, SupplementPhase, DietNote, BlockNote, SessionVideo, LiftProfile, Sex, AthleteGoal, WeekStartDay } from '@powerlifting/types'
 import * as api from '@/api/client'
 import { requestPartition } from '@/api/context'
 import { activeBlockId } from '@/utils/weekStart'
@@ -74,9 +74,6 @@ interface ProgramState {
   updateBlockNotes: (blockNotes: BlockNote[]) => Promise<void>
 
   // Competitions
-  updateCompetitions: (competitions: Competition[]) => Promise<void>
-  migrateLastComp: () => Promise<void>
-  completeCompetition: (date: string, results: LiftResults, bodyWeightKg: number, postMeetReport?: PostMeetReport) => Promise<void>
   updateGoals: (goals: AthleteGoal[]) => Promise<void>
 
   // Videos
@@ -252,7 +249,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   saveSession: async (date, index, sessionOverride) => {
-    const { program, version } = get()
+    const { program } = get()
     if (!program) throw new Error('Cannot save session before a program is loaded')
 
     const session = sessionOverride ?? program.sessions[index]
@@ -499,58 +496,6 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   // Competitions
-  updateCompetitions: async (competitions) => {
-    const { version, program } = get()
-    const result = await api.updateCompetitions(version, competitions, api.mutationEnvelope(program?.meta.revision ?? 0))
-
-    set((state) => {
-      if (!state.program) return state
-      return {
-        program: {
-          ...state.program,
-          competitions,
-          meta: { ...state.program.meta, revision: result.revision ?? state.program.meta.revision },
-        },
-      }
-    })
-  },
-
-  migrateLastComp: async () => {
-    const { version } = get()
-    const competitions = await api.migrateLastComp(version)
-
-    set((state) => {
-      if (!state.program) return state
-      return {
-        program: {
-          ...state.program,
-          competitions,
-        },
-      }
-    })
-  },
-
-  completeCompetition: async (date, results, bodyWeightKg, postMeetReport) => {
-    const { version, program } = get()
-    const updatedCompetition = await api.completeCompetition(version, date, results, bodyWeightKg, api.mutationEnvelope(program?.meta.revision ?? 0), postMeetReport)
-
-    set((state) => {
-      if (!state.program) return state
-      const competitions = state.program.competitions.map((c) =>
-        c.date === date
-          ? updatedCompetition
-          : c
-      )
-      return {
-        program: {
-          ...state.program,
-          competitions,
-          meta: { ...state.program.meta, revision: (updatedCompetition as Competition & { revision?: number }).revision ?? state.program.meta.revision },
-        },
-      }
-    })
-  },
-
   updateGoals: async (goals) => {
     await api.updateGoals(goals)
 

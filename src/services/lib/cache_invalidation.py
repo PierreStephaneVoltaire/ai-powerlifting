@@ -3,12 +3,9 @@ from __future__ import annotations
 
 import logging
 import os
-import time
-from datetime import datetime, timezone
 from typing import Iterable
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)
@@ -73,23 +70,6 @@ def invalidate_analysis_caches(
     if keys:
         _delete_keys(table, keys)
         logger.info("[AnalysisCache] invalidated %s records for %s", len(keys), cache_pk)
-
-def mark_markdown_export_dirty(
-    pk: str,
-    table_name: str | None = None,
-    region: str | None = None,
-    reason: str = "session_completion",
-) -> None:
-    table = _table(table_name, region)
-    now = datetime.now(timezone.utc).isoformat()
-    table.put_item(Item={
-        "pk": _analysis_pk(pk),
-        "sk": "markdown_export_dirty#current",
-        "reason": reason,
-        "dirty_at": now,
-        "updated_at": now,
-        "expires_at": int(time.time()) + 7 * 86400,
-    })
 
 def clear_markdown_export_dirty(
     pk: str,

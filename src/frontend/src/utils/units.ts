@@ -1,5 +1,5 @@
-export const KG_TO_LB = 2.20462
-export const LB_TO_KG = 1 / KG_TO_LB
+const KG_TO_LB = 2.20462
+const LB_TO_KG = 1 / KG_TO_LB
 
 export const kgToLb = (kg: number): number =>
   parseFloat((kg * KG_TO_LB).toFixed(1))

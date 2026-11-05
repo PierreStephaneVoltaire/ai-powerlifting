@@ -9,10 +9,9 @@ AI sections (program_evaluation, correlation) are intentionally omitted.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +54,7 @@ def _sanitize_decimals(obj: Any) -> Any:
 
 def _get_glossary_sync(table_name: str) -> list[dict]:
     """Fetch glossary from DynamoDB for the active health partition."""
-    import boto3
-    from services.lib.aws import dynamodb_resource, client as aws_client
+    from services.lib.aws import dynamodb_resource
 
     dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
     table = dynamodb.Table(table_name)
@@ -72,7 +70,8 @@ def _get_program_and_sessions(refresh_program: bool = False):
     store = _get_store()
     if refresh_program:
         store.invalidate_cache()
-    program = _run_async(store.get_program())
+    from services.lib.competition_entries import with_competition_entries
+    program = with_competition_entries(_run_async(store.get_program()), store.pk)
     sessions = program.get("sessions", [])
     program_start = program.get("meta", {}).get("program_start", "")
     return program, sessions, program_start

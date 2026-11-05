@@ -270,10 +270,7 @@
       ]
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_create_item",
@@ -488,10 +485,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_delete_item",
@@ -526,10 +520,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_get_config",
@@ -585,10 +576,7 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_get_summary",
@@ -652,10 +640,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_list_items",
@@ -807,10 +792,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_priority_timeline",
@@ -1078,10 +1060,7 @@
       ]
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_put_config",
@@ -1160,10 +1139,7 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "budget_update_item",
@@ -1298,9 +1274,6 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_budget"
-    ]
+    "ownership": "athlete"
   }
 ]

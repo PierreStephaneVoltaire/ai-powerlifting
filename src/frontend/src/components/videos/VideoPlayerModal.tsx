@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Modal, Group, Button, ActionIcon, Text, Box, Stack } from '@mantine/core'
+import { Modal, Group, Button, Text, Box, Stack } from '@mantine/core'
 import { Trash2 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { useProgramStore } from '@/store/programStore'

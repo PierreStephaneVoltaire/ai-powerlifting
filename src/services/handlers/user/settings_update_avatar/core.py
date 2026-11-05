@@ -1,7 +1,6 @@
 from __future__ import annotations
 from .._shared.settings_normalize import (
     SEX_VALUES,
-    ROLE_VALUES,
     _to_float,
     _normalize_role,
     _normalize_roles,
@@ -20,7 +19,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-import boto3
 from services.lib.aws import dynamodb_resource, client as aws_client
 
 logger = logging.getLogger(__name__)

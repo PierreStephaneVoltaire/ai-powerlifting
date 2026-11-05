@@ -7,15 +7,8 @@ import type {
 } from '@powerlifting/types'
 
 export type {
-  BudgetItem,
-  BudgetCategory,
-  BudgetRecurrence,
-  BudgetPriorityTier,
-  BudgetDatePrecision,
+  BudgetItem
 }
-
-export const PRIORITY_VALUES: ReadonlyArray<BudgetPriorityTier> = ['MANDATORY', 'IMPORTANT', 'OPTIONAL']
-
 export const PRIORITY_ORDER: Record<BudgetPriorityTier, number> = {
   MANDATORY: 0,
   IMPORTANT: 1,
@@ -26,13 +19,13 @@ export const COMP_LINK_CATEGORIES: ReadonlyArray<BudgetCategory> = [
   'competition_entry', 'transport', 'accommodation', 'food_comp_day', 'food_weigh_in',
 ]
 
-export function newItemId(): string {
+function newItemId(): string {
   return `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
 }
 
-export function nowIso(): string { return new Date().toISOString() }
+function nowIso(): string { return new Date().toISOString() }
 export function todayIso(): string { return new Date().toISOString().slice(0, 10) }
-export function currentMonth(): string { return new Date().toISOString().slice(0, 7) }
+function currentMonth(): string { return new Date().toISOString().slice(0, 7) }
 
 export function defaultRecurrence(category: BudgetCategory): BudgetRecurrence {
   switch (category) {

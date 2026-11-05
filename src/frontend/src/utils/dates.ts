@@ -1,61 +1,15 @@
-import { format, differenceInDays, parse, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns'
+import { format, differenceInDays, parse } from 'date-fns'
 import type { Session } from '@powerlifting/types'
 
 export const parseLocalDate = (dateStr: string): Date =>
   parse(dateStr, 'yyyy-MM-dd', new Date())
-
-export const formatDate = (dateStr: string): string =>
-  format(parseLocalDate(dateStr), 'EEE MMM d')
-
-export const formatDateLong = (dateStr: string): string =>
-  format(parseLocalDate(dateStr), 'EEEE, MMMM d, yyyy')
-
 export const formatDateShort = (dateStr: string): string =>
   format(parseLocalDate(dateStr), 'MMM d')
 
 export const daysUntil = (dateStr: string): number =>
   differenceInDays(parseLocalDate(dateStr), new Date())
-
-export const isToday = (dateStr: string): boolean =>
-  format(new Date(), 'yyyy-MM-dd') === dateStr
-
-export const isPast = (dateStr: string): boolean =>
-  parseLocalDate(dateStr) < new Date()
-
-export const isFuture = (dateStr: string): boolean =>
-  parseLocalDate(dateStr) > new Date()
-
-export const currentProgramWeek = (programStart: string): number => {
-  const days = differenceInDays(new Date(), parseLocalDate(programStart))
-  return Math.max(1, Math.floor(days / 7) + 1)
-}
-
 export const getDayOfWeek = (dateStr: string): string =>
   format(parseLocalDate(dateStr), 'EEEE')
-
-export const getWeekNumber = (dateStr: string, programStart: string): number => {
-  const days = differenceInDays(parseLocalDate(dateStr), parseLocalDate(programStart))
-  return Math.max(1, Math.floor(days / 7) + 1)
-}
-
-export function sessionsThisCalendarWeek(sessions: Session[]): Session[] {
-  const now = new Date()
-  const weekStart = startOfWeek(now, { weekStartsOn: 0 })
-  const weekEnd = endOfWeek(now, { weekStartsOn: 0 })
-
-  return sessions.filter(s => {
-    const sessionDate = parseLocalDate(s.date)
-    return isWithinInterval(sessionDate, { start: weekStart, end: weekEnd })
-  })
-}
-
-export function sessionsInDateRange(
-  sessions: Session[],
-  startDate: string,
-  endDate: string
-): Session[] {
-  return sessions.filter(s => s.date >= startDate && s.date <= endDate)
-}
 
 export function findClosestSessionToToday(sessions: Session[]): Session | null {
   const today = new Date()

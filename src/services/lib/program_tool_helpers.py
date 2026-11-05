@@ -2,10 +2,9 @@
 from __future__ import annotations
 import logging
 import os
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
-_store: Optional[Any] = None
 
 def get_store(args: Optional[dict] = None):
     from services.lib.program_store import ProgramStore as _PS

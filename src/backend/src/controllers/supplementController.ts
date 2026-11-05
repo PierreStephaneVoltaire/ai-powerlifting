@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { SupplementPhase } from '@powerlifting/types'
 
 export async function updateSupplementPhases(

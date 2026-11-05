@@ -7,13 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
@@ -102,12 +100,6 @@ class GlossaryStore:
         )
         return normalized
 
-    def _slugify(self, text: str) -> str:
-        text = text.lower()
-        text = re.sub(r"[^\w\s-]", "", text)
-        text = re.sub(r"[\s-]+", "_", text)
-        return text.strip("_")
-
     def _invalidate_analysis_cache(self) -> None:
         try:
             from services.lib.cache_invalidation import invalidate_analysis_caches
@@ -125,44 +117,6 @@ class GlossaryStore:
     async def get_glossary(self) -> list[dict]:
         return await asyncio.get_running_loop().run_in_executor(
             None, lambda: self.get_glossary_sync()
-        )
-
-    def add_exercise_sync(self, exercise: dict) -> str:
-        exercises = self.get_glossary_sync()
-        
-        name = exercise.get("name", "")
-        if not name:
-            raise ValueError("Exercise name is required")
-            
-        exercise_id = self._slugify(name)
-        
-        if any(ex.get("id") == exercise_id for ex in exercises):
-            i = 1
-            while any(ex.get("id") == f"{exercise_id}_{i}" for ex in exercises):
-                i += 1
-            exercise_id = f"{exercise_id}_{i}"
-            
-        new_exercise = self._normalize_exercise({
-            **exercise,
-            "id": exercise_id,
-            "name": name,
-        })
-        
-        exercises.append(new_exercise)
-        
-        self.table.put_item(Item=self._floats_to_decimals({
-            "pk": self._pk,
-            "sk": self.GLOSSARY_SK,
-            "exercises": exercises,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }))
-        self._invalidate_analysis_cache()
-        
-        return exercise_id
-
-    async def add_exercise(self, exercise: dict) -> str:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.add_exercise_sync(exercise)
         )
 
     def update_exercise_sync(self, exercise_id: str, fields: dict) -> None:

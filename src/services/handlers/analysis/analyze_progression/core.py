@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 from importlib import import_module
 from statistics import median
@@ -54,11 +54,6 @@ def _count_failed_sets(ex: dict) -> int:
     statuses = ex.get("set_statuses")
     if statuses and isinstance(statuses, list):
         return sum(1 for status in statuses if status == "failed")
-    failed_arr = ex.get("failed_sets")
-    if failed_arr and isinstance(failed_arr, list):
-        return sum(1 for f in failed_arr if f)
-    if ex.get("failed", False):
-        return int(_num(ex.get("sets", 0)))
     return 0
 
 
@@ -182,7 +177,6 @@ def _detect_deloads(
          - e1RM path: best e1RM dropped >= 10% vs prev 2 non-deload weeks
          - Stagnation is NOT a deload
     A week is a BREAK if zero volume load.
-    week_index == week_num (int) for backward compat.
     """
     if not program_start:
         program_start = _infer_program_start(sessions)
@@ -258,7 +252,6 @@ def _detect_deloads(
 
         results.append({
             "week_num": wk,
-            "week_index": wk,
             "is_deload": is_deload,
             "is_break": is_break,
             "volume_load": vl,

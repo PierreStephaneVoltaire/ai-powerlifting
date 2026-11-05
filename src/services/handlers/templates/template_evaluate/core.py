@@ -1,12 +1,9 @@
 import asyncio
 import os
 from datetime import date
-from typing import Optional
 
 from .metrics import strip_calendar, template_metrics
 
-_program_store: Optional[object] = None
-_template_store: Optional[object] = None
 
 def _lift_profiles(program):
     from services.lib.lift_profiles import describe
@@ -15,9 +12,7 @@ def _lift_profiles(program):
 
 def _timeline(program, template_weeks):
     from services.lib.competition_entries import next_competition
-    meta = program.get("meta") or {}
-    fallback = [{"date": meta.get("comp_date"), "status": "confirmed"}] if meta.get("comp_date") else []
-    competition = next_competition(program.get("competitions") or []) or next_competition(fallback)
+    competition = next_competition(program.get("competitions") or [])
     if not competition:
         return {"template_weeks": template_weeks, "next_confirmed_competition": None}
     competition_date = date.fromisoformat(str(competition.get("date") or competition.get("start_date"))[:10])

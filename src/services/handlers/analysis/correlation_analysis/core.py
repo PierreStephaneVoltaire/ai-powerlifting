@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -84,7 +83,8 @@ def correlation_analysis(args):
 
     store.invalidate_cache()
     source = args.get("_report_source", {})
-    program = source["program"] if "program" in source else _run_async(store.get_program())
+    from services.lib.competition_entries import with_competition_entries
+    program = source["program"] if "program" in source else with_competition_entries(_run_async(store.get_program()), store.pk)
     sessions = program.get("sessions", [])
     lift_profiles = program.get("lift_profiles", [])
 

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 
 export async function getPublication(_req: Request, res: Response): Promise<void> {
   res.json({ data: await callOperation('settings_publication_get', {}) })

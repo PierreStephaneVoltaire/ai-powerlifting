@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { MaxEntry, MaxHistoryStore } from '@powerlifting/types'
 
 type MutationEnvelope = { expected_revision: number; idempotency_key: string }

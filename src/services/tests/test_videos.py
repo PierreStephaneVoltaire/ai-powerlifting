@@ -361,7 +361,7 @@ def test_form_reservation_is_installed_before_confirm():
     s3 = FakeS3()
     args = {
         "pk": "athlete-1", "session_date": "2026-09-13", "filename": "form.mp4",
-        "mimetype": "video/mp4", "lift": "squat", "angle": "front", "idempotency_key": "form-1", "expected_size": 11,
+        "mimetype": "video/mp4", "lift": "squat", "angle": "front", "expected_size": 11
     }
     presign = _core("video_upload_presign")
     _patch_core(presign, store, s3)
@@ -387,7 +387,7 @@ def test_failed_processing_retry_reuses_id_and_advances_registry_revision():
     _patch_core(presign, store, s3)
     args = {
         "pk": "athlete-1", "session_date": "2026-09-13", "filename": "attempt.mp4",
-        "mimetype": "video/mp4", "idempotency_key": "retry-1", "expected_size": 11,
+        "mimetype": "video/mp4", "expected_size": 11
     }
     ticket = asyncio.run(presign.video_upload_presign(args))
     s3.add_object(ticket["s3_key"], ticket["metadata"])
@@ -414,7 +414,7 @@ def test_duplicate_confirmation_uses_completed_registry_after_source_disappears(
     _patch_core(presign, store, s3)
     args = {
         "pk": "athlete-1", "session_date": "2026-09-13", "filename": "attempt.mp4",
-        "mimetype": "video/mp4", "idempotency_key": "complete-1", "expected_size": 11,
+        "mimetype": "video/mp4", "expected_size": 11
     }
     ticket = asyncio.run(presign.video_upload_presign(args))
     s3.add_object(ticket["s3_key"], ticket["metadata"])

@@ -2,11 +2,7 @@ export const SCOPES = ['profile', 'program', 'sessions', 'competition', 'federat
 export type Scope = (typeof SCOPES)[number]
 export type Access = 'read' | 'write'
 export type HttpMethod = 'GET' | 'HEAD' | 'OPTIONS' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-export const scopeKey = (scope: Scope, access: Access): string => `${scope}:${access}`
-export const SCOPE_READ = Object.fromEntries(SCOPES.map(scope => [scope, scopeKey(scope, 'read')])) as Record<Scope, string>
-export const SCOPE_WRITE = Object.fromEntries(SCOPES.map(scope => [scope, scopeKey(scope, 'write')])) as Record<Scope, string>
-
-export const ROUTE_SCOPES: Record<string, Scope> = {
+const ROUTE_SCOPES: Record<string, Scope> = {
   programs: 'program', sessions: 'sessions', exercises: 'glossary', maxes: 'performance', weight: 'weight-log',
   supplements: 'program', 'diet-notes': 'program', 'block-notes': 'program', competitions: 'competition',
   goals: 'goals', federations: 'federation', budget: 'budget', analytics: 'analytics', videos: 'videos',

@@ -21,10 +21,6 @@ function mutationEnvelope(body: unknown, useBodyId = false): { expected_revision
 
 export const sessionsRouter = Router({ mergeParams: true })
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function fallbackNoteDraft(session: Session, answers: Record<string, unknown>): string {
   const parts: string[] = []
   const overall = String(answers.overall || '').trim()
@@ -99,7 +95,7 @@ function normalizeSetStatuses(exercise: Exercise, completed = false): Array<'pen
   const fallback = completed ? 'completed' : 'pending'
   const rawStatuses = Array.isArray((exercise as any).set_statuses)
     ? (exercise as any).set_statuses
-    : Array.from({ length: setCount }, (_, index) => exercise.failed_sets?.[index] ? 'failed' : fallback)
+    : Array.from({ length: setCount }, () => fallback)
   const statuses = rawStatuses.slice(0, setCount).map((status: unknown) =>
     typeof status === 'string' && SET_STATUSES.has(status) ? status as 'pending' | 'completed' | 'failed' | 'skipped' : fallback
   )
@@ -139,7 +135,6 @@ function sanitizeExercise(exercise: Exercise, completed = false): Exercise {
     ? null
     : Number(rawKg)
   const set_statuses = normalizeSetStatuses({ ...exercise, sets }, completed)
-  const failed_sets = set_statuses.map((status) => status === 'failed')
   const failed_set_reasons = normalizeFailedSetReasons({ ...exercise, sets }, set_statuses)
   return {
     name: String(exercise.name || '').slice(0, 160),
@@ -147,8 +142,6 @@ function sanitizeExercise(exercise: Exercise, completed = false): Exercise {
     reps,
     kg: typeof kg === 'number' && Number.isFinite(kg) ? kg : null,
     notes: String(exercise.notes || '').slice(0, 4000),
-    failed: failed_sets.some(Boolean),
-    failed_sets,
     set_statuses,
     failed_set_reasons,
     load_source: exercise.load_source,
@@ -186,8 +179,6 @@ function sanitizeProposedExercises(
   while (proposedReasons.length < proposed.sets) proposedReasons.push([])
   proposed.set_statuses = proposedStatuses.slice(0, proposed.sets)
   proposed.failed_set_reasons = proposedReasons.slice(0, proposed.sets)
-  proposed.failed_sets = proposed.set_statuses.map((status) => status === 'failed')
-  proposed.failed = proposed.failed_sets.some(Boolean)
 
   base[exerciseIndex] = proposed
   return base
@@ -594,10 +585,7 @@ sessionsRouter.post('/:version/:date/:index/exercise', async (req, res, next) =>
       })
     }
 
-    const newExercise: Exercise = {
-      ...exercise,
-      failed: exercise.failed ?? false,
-    }
+    const newExercise: Exercise = { ...exercise }
 
     const result = await sessionController.addExercise(
       req.mapped_pk!,

@@ -1,9 +1,9 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { randomUUID } from 'crypto'
 import type { Program, ProgramListItem, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
 import type { MutationEnvelope } from './sessionController'
 
-export type ProgramLoadOptions = {
+type ProgramLoadOptions = {
   block?: string
   windowStart?: string
   windowEnd?: string
@@ -83,7 +83,6 @@ export async function batchCreateWeek(
   exercises: PlannedExercise[],
   envelope: MutationEnvelope,
 ): Promise<void> {
-  const result = (await callOperation('session_list', { pk, program_sk: version === "current" ? undefined : `program#${version}` })) as { sessions: Session[] }
   for (const day of days) {
     const session: Session = {
       id: randomUUID(),
@@ -132,7 +131,6 @@ export async function updatePlannedExercises(
           reps: executed ? prior?.reps : pe.reps,
           kg: executed ? prior?.kg : pe.kg,
           notes: prior?.notes || '',
-          failed_sets: Array.from({ length: setCount }, (_, i) => prior?.failed_sets?.[i] ?? false),
           set_statuses: Array.from({ length: setCount }, (_, i) => priorSets[i] ?? 'pending'),
           failed_set_reasons: Array.from({ length: setCount }, (_, i) => prior?.failed_set_reasons?.[i] ?? []),
           set_ids: Array.from({ length: setCount }, (_, i) => prior?.set_ids?.[i] || randomUUID()),

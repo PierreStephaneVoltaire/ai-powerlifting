@@ -32,20 +32,10 @@
         },
         "week_start_day": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "sk",
-        "expected_revision",
-        "idempotency_key"
+        "sk"
       ],
       "additionalProperties": true
     },
@@ -111,10 +101,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_apply_confirm",
@@ -155,20 +142,10 @@
         },
         "block_name": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "sk",
-        "expected_revision",
-        "idempotency_key"
+        "sk"
       ],
       "additionalProperties": true
     },
@@ -204,10 +181,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_archive",
@@ -222,20 +196,10 @@
         },
         "sk": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "sk",
-        "expected_revision",
-        "idempotency_key"
+        "sk"
       ],
       "additionalProperties": true
     },
@@ -261,10 +225,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_copy",
@@ -283,21 +244,11 @@
         "new_name": {
           "type": "string",
           "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "sk",
-        "new_name",
-        "expected_revision",
-        "idempotency_key"
+        "new_name"
       ],
       "additionalProperties": true
     },
@@ -323,10 +274,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_create_blank",
@@ -354,20 +302,10 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 7
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "name",
-        "expected_revision",
-        "idempotency_key"
+        "name"
       ],
       "additionalProperties": true
     },
@@ -388,10 +326,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_create_from_block",
@@ -410,20 +345,10 @@
         },
         "program_sk": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "name",
-        "expected_revision",
-        "idempotency_key"
+        "name"
       ],
       "additionalProperties": true
     },
@@ -444,10 +369,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_create_from_payload",
@@ -471,20 +393,10 @@
         },
         "import_job_id": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "template",
-        "expected_revision",
-        "idempotency_key"
+        "template"
       ],
       "additionalProperties": true
     },
@@ -505,10 +417,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_delete",
@@ -547,10 +456,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_evaluate",
@@ -643,10 +549,7 @@
       "additionalProperties": true
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_get",
@@ -711,10 +614,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_list",
@@ -732,7 +632,6 @@
           "default": false
         }
       },
-      "required": [],
       "additionalProperties": true
     },
     "result_schema": {
@@ -766,10 +665,7 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_publish",
@@ -784,20 +680,10 @@
         },
         "sk": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "sk",
-        "expected_revision",
-        "idempotency_key"
+        "sk"
       ],
       "additionalProperties": true
     },
@@ -823,10 +709,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_unarchive",
@@ -841,20 +724,10 @@
         },
         "sk": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "sk",
-        "expected_revision",
-        "idempotency_key"
+        "sk"
       ],
       "additionalProperties": true
     },
@@ -880,10 +753,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_unpublish",
@@ -898,20 +768,10 @@
         },
         "sk": {
           "type": "string"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "sk",
-        "expected_revision",
-        "idempotency_key"
+        "sk"
       ],
       "additionalProperties": true
     },
@@ -937,10 +797,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "template_update",
@@ -958,21 +815,11 @@
         },
         "template": {
           "type": "object"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "sk",
-        "template",
-        "expected_revision",
-        "idempotency_key"
+        "template"
       ],
       "additionalProperties": true
     },
@@ -998,9 +845,6 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_templates"
-    ]
+    "ownership": "athlete"
   }
 ]

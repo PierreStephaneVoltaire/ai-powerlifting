@@ -128,9 +128,6 @@
     "permission": "calculations:read",
     "public": true
   },
-  "diet_notes_get": {
-    "permission": "program:read"
-  },
   "diet_notes_update": {
     "permission": "program:write"
   },
@@ -171,15 +168,6 @@
   "fatigue_profile_estimate": {
     "permission": "lift-profiles:write"
   },
-  "federation_library_get": {
-    "permission": "federation:read"
-  },
-  "federation_library_set": {
-    "permission": "federation:write"
-  },
-  "federation_list": {
-    "permission": "federation:read"
-  },
   "federation_master_list": {
     "permission": "federation:read",
     "public": true
@@ -200,9 +188,6 @@
     "permission": "analytics:write",
     "cache_read": "analytics:read"
   },
-  "glossary_add": {
-    "permission": "glossary:write"
-  },
   "glossary_estimate_e1rm": {
     "permission": "glossary:write"
   },
@@ -213,15 +198,6 @@
     "permission": "glossary:write"
   },
   "glossary_generate_text": {
-    "permission": "glossary:write"
-  },
-  "glossary_list_terms": {
-    "permission": "glossary:read"
-  },
-  "glossary_set_e1rm": {
-    "permission": "glossary:write"
-  },
-  "glossary_update": {
     "permission": "glossary:write"
   },
   "goals_list": {
@@ -242,56 +218,14 @@
   "grant_revoke": {
     "permission": "grants:write"
   },
-  "health_add_exercise": {
-    "permission": "sessions:write"
-  },
-  "health_complete_competition": {
-    "permission": "competition:write"
-  },
   "health_complete_user_competition": {
     "permission": "competition:write"
-  },
-  "health_create_competition": {
-    "permission": "competition:write"
-  },
-  "health_create_session": {
-    "permission": "sessions:write"
-  },
-  "health_delete_competition": {
-    "permission": "competition:write"
-  },
-  "health_delete_diet_note": {
-    "permission": "program:write"
-  },
-  "health_delete_session": {
-    "permission": "sessions:write"
-  },
-  "health_get_competition": {
-    "permission": "competition:read"
   },
   "health_get_current_maxes": {
     "permission": "performance:read"
   },
   "health_get_diet_notes": {
     "permission": "program:read"
-  },
-  "health_get_federation_library": {
-    "permission": "federation:read"
-  },
-  "health_get_goals": {
-    "permission": "goals:read"
-  },
-  "health_get_meta": {
-    "permission": "program:read"
-  },
-  "health_get_phases": {
-    "permission": "program:read"
-  },
-  "health_get_program": {
-    "permission": "program:read"
-  },
-  "health_get_session": {
-    "permission": "sessions:read"
   },
   "health_get_sessions_range": {
     "permission": "sessions:read"
@@ -308,12 +242,6 @@
   "health_new_version": {
     "permission": "program:write"
   },
-  "health_remove_exercise": {
-    "permission": "sessions:write"
-  },
-  "health_reschedule_session": {
-    "permission": "sessions:write"
-  },
   "health_setup_initialize": {
     "permission": "program:write"
   },
@@ -326,32 +254,8 @@
   "health_suggest_e1rm_multipliers": {
     "permission": "analytics:write"
   },
-  "health_update_competition": {
-    "permission": "competition:write"
-  },
   "health_update_current_maxes": {
     "permission": "performance:write"
-  },
-  "health_update_diet_note": {
-    "permission": "program:write"
-  },
-  "health_update_federation_library": {
-    "permission": "federation:write"
-  },
-  "health_update_goals": {
-    "permission": "goals:write"
-  },
-  "health_update_meta": {
-    "permission": "program:write"
-  },
-  "health_update_phases": {
-    "permission": "program:write"
-  },
-  "health_update_session": {
-    "permission": "sessions:write"
-  },
-  "health_update_supplements": {
-    "permission": "program:write"
   },
   "health_update_user_competition": {
     "permission": "competition:write"
@@ -452,9 +356,6 @@
   "program_get": {
     "permission": "program:read"
   },
-  "program_list": {
-    "permission": "program:read"
-  },
   "program_list_full": {
     "permission": "program:read"
   },
@@ -543,9 +444,6 @@
   "settings_update_role": {
     "permission": "settings:write"
   },
-  "supplement_phases_get": {
-    "permission": "program:read"
-  },
   "supplement_phases_update": {
     "permission": "program:write"
   },
@@ -618,12 +516,6 @@
   "weekly_analysis": {
     "permission": "analytics:read"
   },
-  "weight_add_entry": {
-    "permission": "weight-log:write"
-  },
-  "weight_get_log": {
-    "permission": "weight-log:read"
-  },
   "weight_log_add": {
     "permission": "weight-log:write"
   },
@@ -631,9 +523,6 @@
     "permission": "weight-log:read"
   },
   "weight_log_remove": {
-    "permission": "weight-log:write"
-  },
-  "weight_remove_entry": {
     "permission": "weight-log:write"
   },
   "profile_media_resolve": {

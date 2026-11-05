@@ -6,7 +6,6 @@ from typing import Any
 
 LIFTS = ("squat", "bench", "deadlift")
 NOTES_LIMIT = 1000
-DROPPED = ("style_notes", "sticking_points", "primary_muscle", "failure_nodes")
 
 
 @lru_cache(maxsize=1)
@@ -45,7 +44,7 @@ def clean(profile: Any) -> dict | None:
     if not isinstance(profile, dict) or profile.get("lift") not in LIFTS:
         return None
     lift = profile["lift"]
-    result = {key: value for key, value in profile.items() if key not in DROPPED}
+    result = dict(profile)
     result["options"] = clean_options(lift, profile.get("options"))
     result["volume_tolerance"] = _valid(_common()["volume_tolerance"], profile.get("volume_tolerance")) or "moderate"
     result["notes"] = str(profile.get("notes") or "").strip()[:NOTES_LIMIT]

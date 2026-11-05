@@ -3,18 +3,14 @@ from __future__ import annotations
 import asyncio
 from importlib import import_module
 import logging
-import os
 import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
 
 from .._shared.settings_normalize import (
     SEX_VALUES,
-    ROLE_VALUES,
     _to_float,
     _normalize_role,
     _normalize_roles,
@@ -40,36 +36,6 @@ AGE_CATEGORY_VALUES = (
     "master4",
 )
 MAX_TAGS = 20
-
-
-def _get_user_table():
-    global _user_table
-    if _user_table is None:
-        region = os.environ.get("AWS_REGION", "ca-central-1")
-        _user_table = dynamodb_resource("dynamodb", region_name=region).Table(
-            os.environ.get("IF_USER_TABLE", "if-user")
-        )
-    return _user_table
-
-
-def _get_health_table():
-    global _health_table
-    if _health_table is None:
-        region = os.environ.get("AWS_REGION", "ca-central-1")
-        _health_table = dynamodb_resource("dynamodb", region_name=region).Table(
-            os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
-        )
-    return _health_table
-
-
-def _get_session_table():
-    global _session_table
-    if _session_table is None:
-        region = os.environ.get("AWS_REGION", "ca-central-1")
-        _session_table = dynamodb_resource("dynamodb", region_name=region).Table(
-            os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions")
-        )
-    return _session_table
 
 
 def _sanitize_username(username: str) -> str:
@@ -163,17 +129,9 @@ def _normalize_settings(raw: dict) -> dict:
     return settings
 
 
-def _mapped_pk_for_settings(settings: dict) -> str:
-    return settings.get("mapped_pk") or settings.get("pk") or ""
-
-
 def _is_self(settings: dict, viewer_username: Optional[str]) -> bool:
     viewer_key = _sanitize_username(viewer_username) if viewer_username else ""
     return bool(viewer_key and viewer_key == (settings.get("username") or ""))
-
-
-def _can_view(settings: dict, viewer_username: Optional[str]) -> bool:
-    return settings.get("profile_visibility") == "public" or _is_self(settings, viewer_username)
 
 
 def _public_profile(settings: dict, viewer_username: Optional[str]) -> dict:
@@ -211,23 +169,6 @@ def _load_program_sync(health_table, pk: str, sk: str) -> Optional[dict]:
     return _sanitize_decimals(resp["Item"])
 
 
-def _load_sessions_sync(session_table, pk: str, program_sk: str) -> list[dict]:
-    prefix = f"session#{program_sk}#"
-    items: list[dict] = []
-    last_key = None
-    while True:
-        kwargs = {"KeyConditionExpression": boto3.dynamodb.conditions.Key("pk").eq(pk)
-                  & boto3.dynamodb.conditions.Key("sk").begins_with(prefix)}
-        if last_key:
-            kwargs["ExclusiveStartKey"] = last_key
-        resp = session_table.query(**kwargs)
-        items.extend(resp.get("Items") or [])
-        last_key = resp.get("LastEvaluatedKey")
-        if not last_key:
-            break
-    return [_sanitize_decimals(i) for i in items]
-
-
 def _has_completed_set(exercise: dict) -> bool:
     set_count = max(0, round(float(exercise.get("sets") or 0)))
     statuses = exercise.get("set_statuses") or []
@@ -235,15 +176,6 @@ def _has_completed_set(exercise: dict) -> bool:
         for i in range(set_count):
             if i < len(statuses) and (statuses[i] in (None, "completed")):
                 return True
-        return False
-    failed = exercise.get("failed_set") or []
-    if failed:
-        legacy = max(set_count, len(failed))
-        for i in range(legacy):
-            if i < len(failed) and failed[i] is not True:
-                return True
-        return False
-    if exercise.get("failed"):
         return False
     return set_count > 0
 
@@ -332,7 +264,6 @@ def _build_profile(settings: dict, viewer_username: Optional[str], program: Opti
     bodyweight = (
         _positive_number(meta.get("current_body_weight_kg"))
         or _latest_bodyweight(program)
-        or _positive_number((meta.get("last_comp") or {}).get("body_weight_kg"))
     )
     sex = meta.get("sex") or settings.get("sex")
     dots = _calculate_dots(total, bodyweight, sex) if total is not None and bodyweight is not None and sex in ("male", "female") else None
@@ -345,26 +276,6 @@ def _build_profile(settings: dict, viewer_username: Optional[str], program: Opti
         "summary": {"squat_kg": squat, "bench_kg": bench, "deadlift_kg": deadlift, "total_kg": total, "bodyweight_kg": bodyweight, "dots": dots},
         "lift_videos": video_items[:24],
     }
-
-
-def _get_settings_by_nickname_sync(user_table, nickname: str, viewer_username: Optional[str]) -> Optional[dict]:
-    normalized = (nickname or "").strip().lower()
-    if not NICKNAME_RE.match(normalized):
-        return None
-    last_key = None
-    while True:
-        kwargs = {}
-        if last_key:
-            kwargs["ExclusiveStartKey"] = last_key
-        resp = user_table.scan(**kwargs)
-        for item in resp.get("Items") or []:
-            settings = _normalize_settings(_sanitize_decimals(item))
-            if (settings.get("nickname") or "").lower() == normalized and _can_view(settings, viewer_username):
-                return settings
-        last_key = resp.get("LastEvaluatedKey")
-        if not last_key:
-            break
-    return None
 
 
 async def profile_get(args: dict) -> dict:

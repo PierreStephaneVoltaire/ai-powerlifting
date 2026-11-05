@@ -3,22 +3,20 @@ import importlib
 from datetime import date
 from decimal import Decimal
 
-merge_entries = importlib.import_module('services.lib.competition_entries').merge_entries
+normalize_entries = importlib.import_module('services.lib.competition_entries').normalize_entries
 with_competition_entries = importlib.import_module('services.lib.competition_entries').with_competition_entries
 
 
-def test_independent_results_replace_matching_legacy_view_without_copying_storage():
-    legacy = [{'name': 'Local Meet', 'date': '2026-08-01', 'status': 'completed', 'results': {'squat_kg': 150}}, {'name': 'Older Meet', 'date': '2025-01-01', 'status': 'completed', 'results': {'squat_kg': 140}}]
+def test_program_competitions_come_only_from_participation_entries():
     entries = [{'pk': 'athlete', 'sk': 'COMP#meet', 'name': 'Local Meet', 'start_date': '2026-08-01', 'user_status': 'completed', 'results': {'squat_kg': Decimal('180'), 'bench_kg': 100, 'deadlift_kg': 220}, 'revision': 3}, {'pk': 'athlete', 'sk': 'COMP#unused', 'name': 'Available Meet', 'start_date': '2026-08-02', 'user_status': 'available'}]
-    original = copy.deepcopy((legacy, entries))
-    program = with_competition_entries({'competitions': legacy}, 'athlete', entries)
-    assert len(program['competitions']) == 2
+    original = copy.deepcopy(entries)
+    program = with_competition_entries({'competitions': [{'name': 'Stale', 'date': '2025-01-01', 'status': 'completed'}]}, 'athlete', entries)
+    assert [c['master_id'] for c in program['competitions']] == ['meet']
     latest = program['competitions'][-1]
-    assert latest['master_id'] == 'meet' and latest['revision'] == 3 and 'pk' not in latest
-    assert merge_entries(program['competitions'], entries) == program['competitions']
+    assert latest['revision'] == 3 and 'pk' not in latest and latest['date'] == '2026-08-01'
     analytics = importlib.import_module('services.handlers.analysis_reports.analytics')
     assert analytics._estimate_maxes_from_comps(program['competitions'], date(2026, 9, 14)) == {'squat': 180, 'bench': 100, 'deadlift': 220}
-    assert (legacy, entries) == original
+    assert entries == original
 
 
 def test_load_entries_reads_only_participations_through_the_date_index():
@@ -39,35 +37,13 @@ def test_load_entries_reads_only_participations_through_the_date_index():
     assert "ConsistentRead" not in table.calls[0]
 
 
-def test_load_entries_falls_back_to_partition_query_until_index_exists():
-    from services.lib import competition_entries
-    from botocore.exceptions import ClientError
-
-    class Table:
-        def query(self, **arguments):
-            if arguments.get("IndexName"):
-                raise ClientError({"Error": {"Code": "ValidationException", "Message": "no index"}}, "Query")
-            return {"Items": [
-                {"pk": "a", "sk": "COMP#dir", "user_status": "available", "start_date": "2026-12-01"},
-                {"pk": "a", "sk": "COMP#old", "user_status": "completed", "start_date": "2025-03-01"},
-                {"pk": "a", "sk": "COMP#nats", "user_status": "confirmed", "start_date": "2026-11-01"},
-            ]}
-
-    entries = competition_entries.load_entries("a", "2026-01-01", None, table=Table())
-    assert [entry["sk"] for entry in entries] == ["COMP#nats"]
-
-
-def test_an_available_entry_supersedes_a_stale_legacy_participation_for_the_same_meet():
-    legacy = [
-        {'name': 'WRPF Nationals 2026', 'date': '2026-11-07', 'status': 'optional'},
-        {'name': 'Ottawa Open', 'date': '2025-10-04', 'status': 'completed', 'results': {'total_kg': 520}},
-    ]
+def test_available_directory_entries_are_not_participations():
     entries = [
         {'pk': 'athlete', 'sk': 'COMP#nationals', 'name': 'WRPF Nationals 2026', 'start_date': '2026-11-07', 'user_status': 'available'},
+        {'pk': 'athlete', 'sk': 'COMP#ottawa', 'name': 'Ottawa Open', 'start_date': '2025-10-04', 'user_status': 'completed'},
         {'pk': 'athlete', 'sk': 'COMP#rumble', 'name': 'Royal City Rumble 5', 'start_date': '2027-05-01', 'user_status': 'confirmed'},
     ]
-    merged = merge_entries(legacy, entries)
-    assert [(c['date'], c['name'], c['status']) for c in merged] == [
+    assert [(c['date'], c['name'], c['status']) for c in normalize_entries(entries)] == [
         ('2025-10-04', 'Ottawa Open', 'completed'),
         ('2027-05-01', 'Royal City Rumble 5', 'confirmed'),
     ]

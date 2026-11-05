@@ -12,10 +12,6 @@ here instead of federationsController doing direct DynamoDB):
    with shape {federations, qualification_standards}. get_library() reads it raw
    (returning an empty library when absent); set_user_library() replaces it.
    (federationsController.getFederationLibrary / updateFederationLibrary)
-
-NOTE: the AI-side per-user library (sk="federation_library#v1", shape
-{entries:[{federation_slug,...}]}) is a DIFFERENT feature owned by
-FederationLibraryStore (pl-federation-library layer) — not touched here.
 """
 from __future__ import annotations
 
@@ -24,10 +20,9 @@ import random
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 
 
 def _to_dynamo_value(obj: Any) -> Any:
@@ -162,44 +157,7 @@ class FederationStore:
             "category": cat.strip() if (isinstance(cat, str) and cat.strip()) else None,
             "qualifying_total": total,
         }
-
-    @classmethod
-    def _entries_from_brackets(cls, brackets: Any) -> list:
-        out = []
-        if not cls._is_plain_object(brackets):
-            return out
-        for sex in cls.SEX_VALUES:
-            sex_map = brackets.get(sex)
-            if not cls._is_plain_object(sex_map):
-                continue
-            for age_raw, wc_map in sex_map.items():
-                if not cls._is_plain_object(wc_map):
-                    continue
-                age = cls._pick_age_category(age_raw)
-                for weight_class, total in wc_map.items():
-                    out.append({
-                        "id": cls._new_entry_id(),
-                        "sex": sex,
-                        "age_class": age,
-                        "weight_class": weight_class,
-                        "qualifying_total": cls._to_finite_number(total),
-                    })
-        return out
-
-    @classmethod
-    def _entries_from_legacy_maps(cls, national: Any, regional: Any) -> list:
-        out = []
-        for level, mp in (("national", national), ("regional", regional)):
-            if not cls._is_plain_object(mp):
-                continue
-            for weight_class, total in mp.items():
-                out.append({
-                    "id": cls._new_entry_id(),
-                    "level": level,
-                    "weight_class": weight_class,
-                    "qualifying_total": cls._to_finite_number(total),
-                })
-        return out
+        return result
 
     @classmethod
     def _normalize_entries(cls, raw: Any) -> list:
@@ -210,11 +168,6 @@ class FederationStore:
                 if entry:
                     out.append(entry)
             return out
-        if cls._is_plain_object(raw):
-            if cls._is_plain_object(raw.get("male")) or cls._is_plain_object(raw.get("female")):
-                return cls._entries_from_brackets(raw)
-            if cls._is_plain_object(raw.get("national")) or cls._is_plain_object(raw.get("regional")):
-                return cls._entries_from_legacy_maps(raw.get("national"), raw.get("regional"))
         return []
 
     @classmethod
@@ -223,7 +176,7 @@ class FederationStore:
             return None
         start = standard.get("start_date")
         end = standard.get("end_date")
-        entries_src = standard.get("entries", standard)
+        entries_src = standard.get("entries")
         return {
             "start_date": start if (isinstance(start, str) and start) else "",
             "end_date": end if (isinstance(end, str) and end) else "",

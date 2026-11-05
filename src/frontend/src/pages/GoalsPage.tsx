@@ -150,7 +150,6 @@ export default function GoalsPage() {
   const [goals, setGoals] = useState<AthleteGoal[]>([])
   const [hasChanges, setHasChanges] = useState(false)
   const [federations, setFederations] = useState<MasterFederation[]>([])
-  const [loadingFederations, setLoadingFederations] = useState(false)
 
   const effectiveAgeClass: AgeCategory = authAgeClass || 'open'
 
@@ -176,7 +175,6 @@ export default function GoalsPage() {
 
   useEffect(() => {
     let cancelled = false
-    setLoadingFederations(true)
     api.fetchFederations({ country: ranking_country ?? undefined })
       .then((rows) => {
         if (cancelled) return
@@ -184,9 +182,6 @@ export default function GoalsPage() {
       })
       .catch(() => {
         if (!cancelled) setFederations([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingFederations(false)
       })
     return () => {
       cancelled = true
@@ -205,8 +200,6 @@ export default function GoalsPage() {
       label: competitionLabel(c),
     }))
   }, [targetableCompetitions])
-
-  const federationOptions = useMemo(() => federationsToOptions(federations), [federations])
 
   function updateGoal(goalId: string, patch: Partial<AthleteGoal>) {
     setGoals((current) => current.map((g) => (g.id === goalId ? { ...g, ...patch } : g)))

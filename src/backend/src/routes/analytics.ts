@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express'
 import { invokeToolDirect } from '../utils/agent'
-import { callOperation, readGeneration } from '../utils/lambda'
+import { callOperation, readGeneration } from '../utils/operations'
 import { readAnalysisRecord, writeAnalysisRecord } from '../services/analysisRecords'
 import { logger } from '../utils/logger'
 import { operationScope } from '../utils/operationScope'
@@ -8,12 +8,11 @@ import * as programController from '../controllers/programController'
 import * as competitionController from '../controllers/competitionController'
 import * as federationsController from '../controllers/federationsController'
 import * as weightController from '../controllers/weightController'
-import type { AthleteGoal, Program, WeightEntry } from '@powerlifting/types'
+import type { Program, WeightEntry } from '@powerlifting/types'
 import { ALL_BLOCKS, scopeProgramToBlock } from '../utils/blockScope'
 import {
   ALL_WINDOW_KEYS,
   ALL_SECTION_KEYS,
-  AI_SECTION_KEYS,
   DETERMINISTIC_SECTION_KEYS,
   buildAnalysisWindows,
   buildAnalysisSourceFingerprint,
@@ -662,16 +661,6 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
     }
 
-    try {
-      const markdownResult = await callOperation('export_program_markdown', { version: 'current',
-        include_analysis: false,
-        pk,
-      }) as { markdown?: string; content?: string } | null
-      const markdown = markdownResult?.markdown ?? markdownResult?.content ?? ''
-    } catch (mdErr) {
-      logger.warn({ err: mdErr, pk, blockKey }, 'Markdown export failed for block regeneration')
-    }
-
     res.json({
       data: {
         success: true,
@@ -1049,14 +1038,14 @@ analyticsRouter.post('/budget/timeline', async (req, res) => {
     let competitions: unknown[] = []
     let federation_memberships: unknown[] = []
     try {
-      const comps = await competitionController.getCompetitions(pk, 'current')
+      const comps = await competitionController.getUserCompetitions(pk)
       competitions = comps
-        .filter((c) => c.status !== 'completed' && c.status !== 'skipped')
+        .filter((c) => c.user_status === 'confirmed' || c.user_status === 'optional')
         .map((c) => ({
-          master_id: c.date,
+          master_id: c.master_id,
           name: c.name,
-          start_date: c.date,
-          user_status: c.status || 'optional',
+          start_date: c.start_date,
+          user_status: c.user_status,
         }))
     } catch (compErr) {
       logger.warn({ err: compErr, pk }, 'Failed to load competitions for budget timeline')

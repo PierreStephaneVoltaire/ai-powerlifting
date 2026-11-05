@@ -48,18 +48,16 @@ def test_option_definitions_match_the_requested_form():
     assert [option["value"] for option in definitions()["common"][0]["options"]] == ["low", "moderate", "high"]
 
 
-def test_clean_validates_options_locks_sumo_hips_and_keeps_old_text_in_notes():
+def test_clean_validates_options_and_locks_sumo_hips():
     from services.lib.lift_profiles import clean
 
     cleaned = clean({
         "lift": "deadlift", "options": {"stance": "sumo", "hip_height": "high", "grip": "made_up"},
-        "style_notes": "Sumo, wedge hard", "sticking_points": "Off the floor", "primary_muscle": "Quads",
-        "failure_nodes": ["hips shoot up"], "volume_tolerance": "extreme", "e1rm_multiplier": 1.02, "notes": "Grip fails past 250",
+        "volume_tolerance": "extreme", "e1rm_multiplier": 1.02, "notes": "Grip fails past 250",
     })
     assert cleaned["options"] == {"stance": "sumo", "hip_height": "low"}
     assert cleaned["volume_tolerance"] == "moderate"
     assert cleaned["notes"] == "Grip fails past 250"
-    assert not {"style_notes", "sticking_points", "primary_muscle", "failure_nodes"} & set(cleaned)
     assert cleaned["e1rm_multiplier"] == 1.02
     assert clean({**cleaned, "lift": "deadlift"})["notes"] == cleaned["notes"]
 

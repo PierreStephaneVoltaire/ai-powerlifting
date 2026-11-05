@@ -1,9 +1,9 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
 import type { Session, Exercise, SessionStatus, SessionWellness } from '@powerlifting/types'
 
 export interface MutationEnvelope { expected_revision: number; idempotency_key: string; session_id?: string }
-export interface SessionMutationResult {
+interface SessionMutationResult {
   session?: Session
   deleted?: string
   revision?: number

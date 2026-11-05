@@ -6,8 +6,7 @@ import json
 import os
 from datetime import date, datetime, timezone
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from botocore.exceptions import ClientError
 from services.lib.program_store import ProgramStore
 

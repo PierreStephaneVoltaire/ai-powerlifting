@@ -1,6 +1,6 @@
 import { estimateSetE1rmValue, calculateDots as sharedDots } from '../utils/calculations'
 import { logger } from '../utils/logger'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { createHash } from 'crypto'
 import { readAnalysisRecord, writeAnalysisRecord } from './analysisRecords'
 import { CACHE_SCHEMA_VERSION } from './analysisCache'
@@ -94,7 +94,7 @@ export interface DataQualityFlag {
   severity: DataQualitySeverity
 }
 
-export interface BlockCompetitionLink {
+interface BlockCompetitionLink {
   name: string
   date: string
   status: string
@@ -137,14 +137,14 @@ export interface ProgramBlockIndexEntry {
   }
 }
 
-export interface BlockStrengthSummary {
+interface BlockStrengthSummary {
   squat: number | null
   bench: number | null
   deadlift: number | null
   total: number | null
 }
 
-export interface BlockStartMaxEntry {
+interface BlockStartMaxEntry {
   squat_kg: number | null
   bench_kg: number | null
   deadlift_kg: number | null
@@ -201,7 +201,7 @@ export interface BlockAnalysisBundle<T = unknown> {
   historical: BlockHistoricalSummary
 }
 
-export interface BlockComparisonRow {
+interface BlockComparisonRow {
   blockKey: string
   label: string
   startDate: string
@@ -247,7 +247,7 @@ export interface BlockComparisonRow {
   }>
 }
 
-export interface BlockComparisonContext {
+interface BlockComparisonContext {
   sessions: Session[]
   weightLog: WeightEntry[]
   competitions: Competition[]
@@ -256,7 +256,7 @@ export interface BlockComparisonContext {
   fallbackBodyweightKg: number | null
 }
 
-export interface BlockComparisonResult {
+interface BlockComparisonResult {
   schemaVersion: number
   generatedAt: string
   selectedBlockKeys: string[]
@@ -369,7 +369,7 @@ export interface BlockComparisonResult {
   }>
 }
 
-export interface AiBlockComparisonResult {
+interface AiBlockComparisonResult {
   schemaVersion: number
   generatedAt: string
   cached: boolean
@@ -1174,16 +1174,6 @@ function analyticsSummaryFromWeekly(weekly: unknown): BlockHistoricalSummary['an
   }
 }
 
-function hasPastDateProjectionFailure(bundle: BlockAnalysisBundle, entry: ProgramBlockIndexEntry): boolean {
-  if (entry.isCurrent || !entry.linkedCompetition) return false
-  const report = recordFromUnknown(bundle.weekly)
-  const reason = typeof report.projection_reason === 'string' ? report.projection_reason.toLowerCase() : ''
-  if (reason.includes('competition date is in the past')) return true
-  const projections = Array.isArray(report.projections) ? report.projections : []
-  const outcome = bundle.historical?.competitionOutcome
-  return projections.length === 0 && Boolean(outcome?.results) && !outcome?.projectedAtTMinus1w
-}
-
 function makeHistoricalSummary(program: Program, entry: ProgramBlockIndexEntry, weekly: unknown): BlockHistoricalSummary {
   const sessions = analysisSessionsForBlock(program, entry)
   const manualStartMaxes = blockStartMaxes(program, entry.blockKey)
@@ -1198,7 +1188,7 @@ function makeHistoricalSummary(program: Program, entry: ProgramBlockIndexEntry, 
   }
 }
 
-export function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntry, allGoals: AthleteGoal[], options?: { normalizeToCurrent?: boolean; includeSyntheticCompetition?: boolean }): Program {
+function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntry, allGoals: AthleteGoal[], options?: { normalizeToCurrent?: boolean; includeSyntheticCompetition?: boolean }): Program {
   const sessions = analysisSessionsForBlock(program, entry, { includeSyntheticCompetition: options?.includeSyntheticCompetition })
   const phases = blockPhases(program, entry.block)
   const normalizeToCurrent = options?.normalizeToCurrent === true

@@ -1,30 +1,19 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { useDropzone } from 'react-dropzone'
-import { Wallet, Plus, Trash2, Save, Camera, CalendarClock, Sparkles, Loader2, Info } from 'lucide-react'
+import { Wallet, Save, Loader2 } from 'lucide-react'
 import {
-  ActionIcon,
   Badge,
-  Box,
   Button,
-  Card,
   Container,
-  FileButton,
   Group,
-  Image as MantineImage,
-  MultiSelect,
   NumberInput,
   Paper,
   Select,
-  SimpleGrid,
   Stack,
   Switch,
   Table,
   Tabs,
   Text,
-  TextInput,
-  Textarea,
-  Timeline,
   Title,
   Tooltip,
 } from '@mantine/core'
@@ -34,8 +23,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { useBudgetStore } from '@/store/budgetStore'
 import { useCompetitionsStore } from '@/store/competitionsStore'
 import { useFederationStore } from '@/store/federationStore'
-import { fetchFederations, putBudget as apiPutBudget, uploadBudgetItemPhoto, deleteBudgetItemPhoto, fetchBudgetTimeline } from '@/api/client'
-import { getMediaUrl } from '@/utils/media'
+import { fetchFederations, uploadBudgetItemPhoto, deleteBudgetItemPhoto } from '@/api/client'
 import { useProgramStore } from '@/store/programStore'
 import BudgetTimeline from '@/components/budget/BudgetTimeline'
 import { getSettings } from '@/api/settings'
@@ -51,94 +39,29 @@ import {
 } from '@/components/budget/budgetShared'
 import type {
   BudgetItem,
-  BudgetCategory,
-  BudgetPriority,
-  BudgetRecurrence,
-  EquipmentCondition,
-  BudgetTimeline as BudgetTimelineType,
   MasterFederation,
   UserCompetition,
   BudgetConfig,
 } from '@powerlifting/types'
-import {
-  BUDGET_CATEGORY_OPTIONS,
-  BUDGET_RECURRENCE_OPTIONS,
-  EQUIPMENT_CONDITION_OPTIONS,
-} from '@powerlifting/types'
 import { DatePickerInput } from '@mantine/dates'
-
-function newItemId(): string {
-  return `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`
-}
-
-function parseDateValue(value?: string | null): string | null {
-  if (typeof value !== 'string' || !value) return null
-  const [y, m, d] = value.slice(0, 10).split('-').map(Number)
-  if (!y || !m || !d) return null
-  const date = new Date(y, m - 1, d)
-  return Number.isNaN(date.getTime()) ? null : value.slice(0, 10)
-}
-
-function toPickerValue(value?: string | null): string | null {
-  return parseDateValue(value)
-}
-
-function fromPickerValue(value: string | null): string | null {
-  if (!value) return null
-  const parsed = parseDateValue(value)
-  return parsed ?? null
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function HelpLabel({ label, help }: { label: string; help: string }) {
-  return (
-    <Group gap={4} align="center" style={{ cursor: 'help' }}>
-      <Text size="xs" c="dimmed">{label}</Text>
-      <Tooltip label={help} position="top-start" multiline w={240} withArrow>
-        <Info size={12} color="var(--mantine-color-gray-6)" />
-      </Tooltip>
-    </Group>
-  )
-}
-
-function monthKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-}
-
-function monthLabel(key: string): string {
-  const [y, m] = key.split('-').map(Number)
-  if (!y || !m) return key
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-}
-
-function priorityColor(p: BudgetPriority): string {
-  return p === 'buy_now' ? 'red' : p === 'buy_later' ? 'orange' : p === 'optional' ? 'blue' : 'gray'
-}
 
 export default function BudgetPage() {
   const { readOnly, loading: authLoading } = useAuth()
   const { pushToast } = useUiStore()
   const { currency: profileCurrency } = useSettingsStore()
-  const { config, items, isLoading, loaded, load, save } = useBudgetStore()
+  const { config, items, load, save } = useBudgetStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const { library, loadLibrary, saveLibrary } = useFederationStore()
   const { program } = useProgramStore()
   const activeBlockId = program?.meta?.current_block_id || program?.meta?.blocks?.find((block) => block.status === 'active')?.id || 'current'
   const blockOptions = useMemo(() => (program?.meta?.blocks ?? []).map((block) => ({ value: block.id, label: block.name || block.id })), [program?.meta?.blocks])
 
-  const programStart = program?.meta?.program_start
-  const programEnd = program?.meta?.comp_date
 
   const [draftItems, setDraftItems] = useState<BudgetItem[]>([])
   const [draftConfig, setDraftConfig] = useState<BudgetConfig>(config)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [masterFeds, setMasterFeds] = useState<MasterFederation[]>([])
-  const [timeline, setTimeline] = useState<BudgetTimelineType | null>(null)
-  const [timelineLoading, setTimelineLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<string | null>('overview')
   const [athleteName, setAthleteName] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<string>(activeBlockId)
@@ -188,12 +111,6 @@ export default function BudgetPage() {
       .filter((c) => c.user_status !== 'completed' && c.user_status !== 'skipped' && (c.start_date ?? '') >= today)
       .sort((a, b) => a.start_date.localeCompare(b.start_date))
   }, [competitions])
-
-  const compOptions = useMemo(() => [
-    { value: '', label: 'None' },
-    ...upcomingComps.map((c) => ({ value: c.master_id, label: `${c.name} (${c.start_date})` })),
-  ], [upcomingComps])
-
   const handleAddItem = useCallback((item: BudgetItem) => {
     setDraftItems((prev) => [item, ...prev])
     setDirty(true)
@@ -245,19 +162,6 @@ export default function BudgetPage() {
       pushToast({ message: 'Failed to remove photo', type: 'error' })
     }
   }
-
-  const handleTimeline = async () => {
-    setTimelineLoading(true)
-    try {
-      const result = await fetchBudgetTimeline({ config: draftConfig, items: draftItems })
-      setTimeline(result)
-    } catch {
-      pushToast({ message: 'Failed to generate timeline', type: 'error' })
-    } finally {
-      setTimelineLoading(false)
-    }
-  }
-
   const monthSummary = useMemo(
     () => buildBudgetSummary(draftItems, draftConfig, currentMonthKey()),
     [draftItems, draftConfig],
@@ -569,88 +473,6 @@ function FederationTab({ masterFeds, library, readOnly, coverageGroups, onPay }:
 
       <Text size="xs" c="dimmed">Federation membership cost & paid status are saved automatically.
     </Text>
-    </Stack>
-  )
-}
-
-interface TimelineTabProps {
-  timeline: BudgetTimelineType | null
-  loading: boolean
-  readOnly: boolean
-  onGenerate: () => void
-  comps: UserCompetition[]
-}
-
-function TimelineTab({ timeline, loading, readOnly, onGenerate, comps }: TimelineTabProps) {
-  return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <Stack gap={2}>
-          <Text fw={600}>AI priority timeline</Text>
-          <Text size="xs" c="dimmed">Suggests when to buy each item to stay under your monthly cap, prioritising confirmed competitions.</Text>
-        </Stack>
-        <Button leftSection={loading ? <Loader2 size={16} /> : <Sparkles size={16} />} onClick={onGenerate} loading={loading} disabled={readOnly}>
-          Generate timeline
-        </Button>
-      </Group>
-
-      {comps.length > 0 && (
-        <Paper withBorder p="sm" radius="md">
-          <Text size="xs" c="dimmed" mb={4}>Competitions driving prioritisation:</Text>
-          <Group gap="xs">
-            {comps.map((c) => (
-              <Badge key={c.master_id} variant="light" color={c.user_status === 'confirmed' ? 'green' : 'gray'} leftSection={<CalendarClock size={10} />}>
-                {c.name} · {c.start_date}
-              </Badge>
-            ))}
-          </Group>
-        </Paper>
-      )}
-
-      {!timeline && !loading && (
-        <Paper withBorder p="xl" radius="md">
-          <Text c="dimmed" ta="center">No timeline generated yet. Click "Generate timeline" to plan purchases around your budget and competitions.</Text>
-        </Paper>
-      )}
-
-      {timeline && (
-        <Stack gap="md">
-          {timeline.notes.length > 0 && (
-            <Paper withBorder p="sm" radius="md">
-              <Stack gap={4}>
-                {timeline.notes.map((n, i) => (
-                  <Text key={i} size="sm">• {n}</Text>
-                ))}
-              </Stack>
-            </Paper>
-          )}
-          {timeline.months.map((m) => (
-            <Paper key={m.month} withBorder p="md" radius="md">
-              <Group justify="space-between" mb="sm">
-                <Text fw={600}>{monthLabel(m.month)}</Text>
-                <Group gap="xs">
-                  <Text size="xs" c="dimmed">due ${m.due.toFixed(2)}</Text>
-                  <Text size="xs" c="dimmed">cap ${m.budget.toFixed(2)}</Text>
-                  <Badge color={m.due <= m.budget ? 'green' : 'red'} variant="light" size="xs">
-                    {m.due <= m.budget ? 'Under' : 'Over'}
-                  </Badge>
-                </Group>
-              </Group>
-              <Timeline bulletSize={20} lineWidth={1}>
-                {m.entries.map((e, i) => (
-                  <Timeline.Item key={e.item_id + i} title={e.name} bullet={<Badge color={priorityColor(e.priority)} variant="light" size="xs">{e.cost.toFixed(0)}</Badge>}>
-                    <Group gap="xs">
-                      <Badge color={priorityColor(e.priority)} variant="light" size="xs">{e.priority.replace('_', ' ')}</Badge>
-                      <Text size="xs" c="dimmed">{e.category.replace('_', ' ')}</Text>
-                    </Group>
-                    <Text size="xs" c="dimmed" mt={2}>{e.reason}</Text>
-                  </Timeline.Item>
-                ))}
-              </Timeline>
-            </Paper>
-          ))}
-        </Stack>
-      )}
     </Stack>
   )
 }

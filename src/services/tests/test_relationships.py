@@ -100,7 +100,6 @@ def test_athlete_approval_authorizes_incoming_scope_and_ties(monkeypatch):
         "created_at": "2026-09-14T00:00:00+00:00",
     }
     writes = []
-    monkeypatch.setattr(relationships, "_legacy_grants", lambda *_args: [])
     monkeypatch.setattr(relationships, "_get", lambda _key: request)
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2027-01-01"})
     monkeypatch.setattr(relationships, "_active_relationship_ids", lambda _athlete, _role: set())
@@ -122,8 +121,8 @@ def test_athlete_approval_authorizes_incoming_scope_and_ties(monkeypatch):
     assert grant["expires_at"] == "2027-01-08T23:59:59.999999+00:00"
 
 
-def test_slotless_single_legacy_grant_counts_as_active_but_ambiguous_pair_does_not(monkeypatch):
-    grants = [{"entity": "grant", "relationship_id": "legacy", "grant_type": "coach", "state": "approved", "tied_competition_ids": ["meet"], "permissions": ["sessions:read"]}]
+def test_slotless_single_grant_counts_as_active_but_ambiguous_pair_does_not(monkeypatch):
+    grants = [{"entity": "grant", "relationship_id": "grant-1", "grant_type": "coach", "state": "approved", "tied_competition_ids": ["meet"], "permissions": ["sessions:read"]}]
 
     class Table:
         def query(self, **_kwargs):
@@ -131,32 +130,9 @@ def test_slotless_single_legacy_grant_counts_as_active_but_ambiguous_pair_does_n
 
     monkeypatch.setattr(relationships, "_table", lambda: Table())
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2027-01-01"})
-    assert relationships._active_relationship_ids("athlete", "coach") == {"legacy"}
-    grants.append({**grants[0], "relationship_id": "legacy-2"})
+    assert relationships._active_relationship_ids("athlete", "coach") == {"grant-1"}
+    grants.append({**grants[0], "relationship_id": "grant-2"})
     assert relationships._active_relationship_ids("athlete", "coach") == set()
-
-
-def test_slotless_grantee_key_legacy_grant_requires_explicit_current_relationship(monkeypatch):
-    legacy = {
-        "pk": "Grant#athlete", "sk": "Grantee#coach#2026-09-01T00:00:00+00:00#coach",
-        "grant_type": "coach", "state": "approved", "grantee_mapped_pk": "coach",
-        "tied_competition_ids": ["meet"], "permissions": ["sessions:read"],
-    }
-
-    class Table:
-        def query(self, **_kwargs):
-            return {"Items": [legacy]}
-
-    monkeypatch.setattr(relationships, "_table", lambda: Table())
-    monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2027-01-01"})
-    identifier = relationships._legacy_relationship_id(legacy)
-    assert relationships._active_relationship_ids("athlete", "coach") == {identifier}
-
-    request = {"relationship_id": "new", "state": "pending", "athlete_mapped_pk": "athlete", "athlete_person_pk": "athlete-person", "requester_person_pk": "athlete-person", "recipient_person_pk": "new-coach", "relationship_type": "coach", "scope": "write", "permissions": ["sessions:write"], "tied_competition_ids": ["meet"], "created_at": "2026-09-14T00:00:00+00:00"}
-    monkeypatch.setattr(relationships, "_get", lambda key: request if key["pk"] == "Relationship#new" else None)
-    monkeypatch.setattr(relationships, "_active_relationship_ids", lambda _athlete, _role: {identifier})
-    with pytest.raises(ValueError, match="current_relationship_confirmation_required"):
-        relationships.respond_request({"_person_pk": "new-coach", "relationship_id": "new", "action": "approve", "idempotency_key": "approve-new"})
 
 
 def test_approval_requires_explicit_replacement_for_an_active_role_slot(monkeypatch):
@@ -175,7 +151,6 @@ def test_approval_requires_explicit_replacement_for_an_active_role_slot(monkeypa
         "created_at": "2026-09-14T00:00:00+00:00",
     }
     slot = {"state": "active", "relationship_id": "old", "grant_sk": "Relationship#old"}
-    monkeypatch.setattr(relationships, "_legacy_grants", lambda *_args: [])
     monkeypatch.setattr(relationships, "_get", lambda key: request if key["pk"] == "Relationship#new" else slot)
     monkeypatch.setattr(relationships, "_slot_is_active", lambda _slot, _athlete: True)
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2026-12-01"})
@@ -373,7 +348,6 @@ def test_changed_competition_date_replaces_inactive_slot_with_observed_revision(
     request = {"relationship_id": "new", "state": "pending", "athlete_mapped_pk": "athlete", "athlete_person_pk": "athlete-person", "requester_person_pk": "athlete-person", "recipient_person_pk": "coach-person", "relationship_type": "coach", "scope": "write", "permissions": ["sessions:write"], "tied_competition_ids": ["meet"], "created_at": "2026-09-01T00:00:00+00:00"}
     slot = {"state": "active", "relationship_id": "old", "grant_sk": "Relationship#old", "revision": 7, "expires_at": "2026-12-08T23:59:59+00:00"}
     writes = []
-    monkeypatch.setattr(relationships, "_legacy_grants", lambda *_args: [])
     monkeypatch.setattr(relationships, "_get", lambda key: request if key["pk"] == "Relationship#new" else slot)
     monkeypatch.setattr(relationships, "_slot_is_active", lambda _slot, _athlete: False)
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2026-09-01"})
@@ -395,7 +369,6 @@ def test_approval_aliases_reserved_permissions_attribute(monkeypatch):
     writes = []
     monkeypatch.setattr(relationships, "_get", lambda key: request if key.get("pk") == "Relationship#new" else None)
     monkeypatch.setattr(relationships, "_stored_competition_dates", lambda _athlete, _ids: {"meet": "2026-12-01"})
-    monkeypatch.setattr(relationships, "_legacy_grants", lambda _athlete, _role: [])
     monkeypatch.setattr(relationships, "_active_relationship_ids", lambda _athlete, _role: set())
     monkeypatch.setattr(relationships, "_transact", writes.extend)
     relationships.respond_request({"_person_pk": "coach-person", "relationship_id": "new", "action": "approve", "idempotency_key": "approve-new"})

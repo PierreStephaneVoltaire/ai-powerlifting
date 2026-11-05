@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Edit2, Trash2, X, Save, ExternalLink } from 'lucide-react'
+import { Plus, Edit2, Trash2, Save, ExternalLink } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { useUiStore } from '@/store/uiStore'

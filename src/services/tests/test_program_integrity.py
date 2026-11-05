@@ -81,7 +81,7 @@ def setup_fixture(monkeypatch):
     monkeypatch.setattr(setup, '_store_for', lambda pk: store)
     monkeypatch.setattr(setup, '_setup_template', lambda sk, person: {'required_maxes': []} if person == 'person' else None)
     monkeypatch.setattr(setup, '_setup_concretize_template', lambda *args: [{'id': 'one', 'date': '2026-09-01'}, {'id': 'two', 'date': '2026-09-02'}])
-    args = {'pk': 'athlete', '_person_pk': 'person', 'mode': 'template', 'template_sk': 'template#one', 'start_date': '2026-09-01', 'week_start_day': 'Monday', 'maxes': {'squat': 100, 'bench': 70, 'deadlift': 120}, 'expected_revision': 0, 'idempotency_key': 'setup'}
+    args = {'pk': 'athlete', '_person_pk': 'person', 'mode': 'template', 'template_sk': 'template#one', 'start_date': '2026-09-01', 'week_start_day': 'Monday', 'maxes': {'squat': 100, 'bench': 70, 'deadlift': 120}}
     return table, store, sessions, args
 
 
@@ -121,7 +121,7 @@ def test_racing_initializations_have_one_published_program(monkeypatch, same_key
     table.barrier = threading.Barrier(2)
     def initialize(key):
         try:
-            return asyncio.run(setup.health_setup_initialize({**args, 'idempotency_key': key}))
+            return asyncio.run(setup.health_setup_initialize({**args}))
         except ProgramRevisionConflictError as error:
             return error
     with ThreadPoolExecutor(max_workers=2) as pool:

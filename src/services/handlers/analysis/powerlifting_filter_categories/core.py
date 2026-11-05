@@ -5,12 +5,11 @@ Copied verbatim (trimmed) from tools/health/powerlifting_stats.py.
 Only the intra-package config import is adjusted to the layer copy.
 """
 
-import os
 import logging
 import pandas as pd
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
-from services.lib.opl_dataset import DatasetNotReadyError, warm_cache
+from services.lib.opl_dataset import warm_cache
 from services.lib import opl_dataset
 
 

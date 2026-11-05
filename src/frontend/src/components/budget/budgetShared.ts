@@ -1,19 +1,13 @@
-import type { BudgetItem, BudgetConfig, BudgetPriorityTier, BudgetRecurrence } from '@powerlifting/types'
+import type { BudgetItem, BudgetConfig, BudgetPriorityTier } from '@powerlifting/types'
 
-export type { BudgetPriorityTier, BudgetRecurrence }
+export type { BudgetPriorityTier }
 
-export const BUDGET_TIER_VALUES: ReadonlyArray<BudgetPriorityTier> = [
-  'MANDATORY',
-  'IMPORTANT',
-  'OPTIONAL',
-]
-
-export interface TierTotals {
+interface TierTotals {
   count: number
   total: number
 }
 
-export interface BudgetSummaryLocal {
+interface BudgetSummaryLocal {
   monthly_cap: number
   currency: string
   spent_this_month: number
@@ -102,7 +96,7 @@ function monthOf(value?: string | null): string {
   return (value ?? '').slice(0, 7)
 }
 
-export function purchasedInMonth(item: BudgetItem, month: string): boolean {
+function purchasedInMonth(item: BudgetItem, month: string): boolean {
   if (!item.purchased) return false
   return monthOf(item.purchased_date) === month
 }
@@ -157,7 +151,7 @@ export function buildBudgetSummary(
   }
 }
 
-export interface MonthSpendPoint {
+interface MonthSpendPoint {
   month: string
   label: string
   spent: number

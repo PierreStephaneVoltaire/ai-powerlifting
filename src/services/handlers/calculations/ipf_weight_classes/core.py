@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
 
-_store: Optional[object] = None
 
 
 def ipf_weight_classes(sex: str) -> dict:
@@ -32,19 +30,6 @@ def ipf_weight_classes(sex: str) -> dict:
     }
 
     operator_class_kg = None
-    if _store is not None:
-        try:
-            import asyncio
-            loop = asyncio.get_running_loop()
-            future = asyncio.ensure_future(_store.get_program())
-            try:
-                program = loop.run_until_complete(future)
-                operator_class_kg = program.get("meta", {}).get("weight_class_kg")
-            except:
-                pass
-        except RuntimeError:
-            if _store._cache is not None:
-                operator_class_kg = _store._cache.get("meta", {}).get("weight_class_kg")
 
     return {
         "sex": sex,

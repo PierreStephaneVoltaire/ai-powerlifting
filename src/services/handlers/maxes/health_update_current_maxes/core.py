@@ -49,4 +49,4 @@ async def health_update_current_maxes(
         maxes = program.setdefault("current_maxes", {})
         maxes.update(updates)
         return dict(maxes)
-    return await store.mutate_source("current_maxes", updates, values.get("expected_revision"), values.get("idempotency_key"), mutate)
+    return await store.mutate_source("current_maxes", updates, mutate)

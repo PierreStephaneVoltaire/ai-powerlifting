@@ -61,7 +61,7 @@ def handler(args, _context):
     if person:
         owner = database().Table(os.getenv('IF_USER_TABLE', 'if-user')).get_item(Key={'pk': person}, ConsistentRead=True).get('Item') or {}
         personal = {item['tag'] for item in selected_tags(owner.get('tags'), {})}
-    return {'tags': [{'tag': row['tag'], 'status': row['status'], 'revision': int(row.get('revision', 0))} for row in sorted(catalog().values(), key=lambda row: row['tag']) if include_pending or row['status'] == 'approved' or row['tag'] in personal]}
+    return {'tags': [{'tag': row['tag'], 'status': row['status']} for row in sorted(catalog().values(), key=lambda row: row['tag']) if include_pending or row['status'] == 'approved' or row['tag'] in personal]}
 
 
 def decide(args):
@@ -74,22 +74,8 @@ def decide(args):
     key = {'pk': 'Catalog', 'sk': 'Tag#' + name}
     store = table()
     current = store.get_item(Key=key, ConsistentRead=True).get('Item') or {}
-    revision = int(current.get('revision', 0))
-    mutation = args['idempotency_key']
-    if current.get('mutation') == mutation:
-        if current['status'] != decision:
-            raise OperationError(409, 'conflict', 'This decision key was already used')
-        return {'tag': name, 'status': decision, 'revision': revision}
-    if args['expected_revision'] != revision:
-        raise OperationError(409, 'conflict', 'Catalog entry changed', current_revision=revision)
-    item = {**current, **key, 'tag': name, 'status': decision, 'revision': revision + 1, 'mutation': mutation, 'decided_by': args['_person_pk'], 'updated_at': datetime.now(timezone.utc).isoformat()}
-    try:
-        store.put_item(Item=item, ConditionExpression='attribute_not_exists(pk) OR #revision = :revision', ExpressionAttributeNames={'#revision': 'revision'}, ExpressionAttributeValues={':revision': revision})
-    except ClientError as exc:
-        if exc.response['Error']['Code'] != 'ConditionalCheckFailedException':
-            raise
-        raise OperationError(409, 'conflict', 'Catalog entry changed; reload it') from exc
-    return {'tag': name, 'status': decision, 'revision': revision + 1}
+    store.put_item(Item={**current, **key, 'tag': name, 'status': decision, 'decided_by': args['_person_pk'], 'updated_at': datetime.now(timezone.utc).isoformat()})
+    return {'tag': name, 'status': decision}
 
 
 def select(args, remove=False):
@@ -111,7 +97,7 @@ def select(args, remove=False):
     if not remove and tag_key(name) not in {tag_key(tag['tag']) for tag in selected} and len(selected) >= 20:
         raise ValueError('A profile can have at most twenty tags')
     if not remove and name not in vocabulary:
-        pending = {'pk': 'Catalog', 'sk': 'Tag#' + name, 'tag': name, 'status': 'pending', 'revision': 1, 'requested_by': person, 'created_at': datetime.now(timezone.utc).isoformat()}
+        pending = {'pk': 'Catalog', 'sk': 'Tag#' + name, 'tag': name, 'status': 'pending', 'requested_by': person, 'created_at': datetime.now(timezone.utc).isoformat()}
         try:
             table().put_item(Item=pending, ConditionExpression='attribute_not_exists(pk)')
         except ClientError as exc:
@@ -121,14 +107,5 @@ def select(args, remove=False):
     if not remove:
         tags.append({'tag': name})
     values = {':tags': tags, ':now': datetime.now(timezone.utc).isoformat()}
-    condition = 'attribute_exists(pk) AND attribute_not_exists(tags)'
-    if 'tags' in current:
-        condition = 'attribute_exists(pk) AND tags = :previous'
-        values[':previous'] = current['tags']
-    try:
-        users.update_item(Key={'pk': person}, UpdateExpression='SET tags = :tags, updated_at = :now', ConditionExpression=condition, ExpressionAttributeValues=values)
-    except ClientError as exc:
-        if exc.response['Error']['Code'] != 'ConditionalCheckFailedException':
-            raise
-        raise OperationError(409, 'conflict', 'Profile tags changed; reload them') from exc
+    users.update_item(Key={'pk': person}, UpdateExpression='SET tags = :tags, updated_at = :now', ExpressionAttributeValues=values)
     return normalize({**current, 'tags': selected_tags(tags), 'updated_at': values[':now']})

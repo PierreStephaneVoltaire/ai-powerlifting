@@ -1,9 +1,8 @@
 
 from __future__ import annotations
 
-import math
 from datetime import date, timedelta
-from typing import Any, Literal, List
+from typing import Any
 
 from .training_weeks import WEEKDAY_INDEX, normalize_week_start_day, week_start_date
 

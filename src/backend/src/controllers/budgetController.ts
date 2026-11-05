@@ -1,7 +1,7 @@
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { v4 as uuidv4 } from 'uuid'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import type {
@@ -15,26 +15,6 @@ import type {
 } from '@powerlifting/types'
 
 const BUDGET_MEDIA_BUCKET = process.env.BUDGET_MEDIA_BUCKET || 'powerlifting-budget-media'
-
-export const CATEGORY_VALUES: ReadonlyArray<BudgetCategory> = [
-  'equipment',
-  'supplement',
-  'gym_membership',
-  'federation_membership',
-  'coaching',
-  'app_subscription',
-  'competition_entry',
-  'transport',
-  'accommodation',
-  'food_comp_day',
-  'food_weigh_in',
-  'food_prep',
-  'recovery',
-  'other',
-]
-
-export const PRIORITY_TIER_VALUES: ReadonlyArray<BudgetPriorityTier> = ['MANDATORY', 'IMPORTANT', 'OPTIONAL']
-
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'ca-central-1',
   credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
@@ -219,7 +199,7 @@ export async function deleteItemPhoto(pk: string, itemId: string): Promise<void>
   await updateBudgetItem(pk, itemId, updated)
 }
 
-export interface BudgetAiCompetition {
+interface BudgetAiCompetition {
   master_id: string
   name: string
   start_date: string

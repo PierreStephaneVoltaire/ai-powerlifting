@@ -26,33 +26,25 @@ class FakeWeightStore:
         return log
 
 
-def test_weight_operations_round_trip_and_aliases(monkeypatch):
+def test_weight_operations_round_trip(monkeypatch):
     store = FakeWeightStore()
-    for name in ("weight_log_add", "weight_add_entry", "weight_log_get", "weight_get_log", "weight_log_remove", "weight_remove_entry"):
-        module_name = {
-            "weight_log_add": "services.handlers.weight_log.weight_log_add.core",
-            "weight_add_entry": "services.handlers.weight_log.weight_add_entry.core",
-            "weight_log_get": "services.handlers.weight_log.weight_log_get.core",
-            "weight_get_log": "services.handlers.weight_log.weight_get_log.core",
-            "weight_log_remove": "services.handlers.weight_log.weight_log_remove.core",
-            "weight_remove_entry": "services.handlers.weight_log.weight_remove_entry.core",
-        }[name]
+    for module_name in (
+        "services.handlers.weight_log.weight_log_add.core",
+        "services.handlers.weight_log.weight_log_get.core",
+        "services.handlers.weight_log.weight_log_remove.core",
+    ):
         monkeypatch.setattr(importlib.import_module(module_name), "get_store", lambda: store)
 
     operations = load_operations("weight-log")
     result = dispatch(operations["weight_log_add"], {"pk": "athlete-1", "version": "v001", "date": "2026-09-13", "weight_kg": 76.25})
     assert result["entries"] == [{"date": "2026-09-13", "kg": 76.25}]
-    assert dispatch(operations["weight_get_log"], {"pk": "athlete-1", "version": "v001"})["entries"] == result["entries"]
-
-    dispatch(operations["weight_add_entry"], {"pk": "athlete-1", "version": "v001", "entry": {"date": "2026-09-13", "kg": 77.0, "body_fat_pct": 15.2}})
-    assert dispatch(operations["weight_log_get"], {"pk": "athlete-1", "version": "v001"})["entries"][0]["kg"] == 77
+    assert dispatch(operations["weight_log_get"], {"pk": "athlete-1", "version": "v001"})["entries"] == result["entries"]
     assert dispatch(operations["weight_log_remove"], {"pk": "athlete-1", "version": "v001", "date": "2026-09-13"})["entries"] == []
-    assert dispatch(operations["weight_remove_entry"], {"pk": "athlete-1", "version": "v001", "date": "2026-09-13"})["entries"] == []
 
 
 def test_weight_mutations_require_their_fields():
     operations = load_operations("weight-log")
-    for name in ("weight_log_add", "weight_add_entry", "weight_log_remove", "weight_remove_entry"):
+    for name in ("weight_log_add", "weight_log_remove"):
         with __import__("pytest").raises(Exception):
             operations[name].validate_input({})
 

@@ -16,7 +16,6 @@ export interface ProgramMeta {
   blocks?: TrainingBlock[]
   program_name: string
   program_start: string         // YYYY-MM-DD
-  comp_date: string             // YYYY-MM-DD
   federation: string
   practicing_for: string
   weight_classes_kg?: number[]
@@ -39,7 +38,6 @@ export interface ProgramMeta {
   change_log: ChangeLogEntry[]
   block_notes: BlockNote[]
   updated_at: string
-  last_comp: LastComp
   height_cm?: number
   arm_wingspan_cm?: number
   leg_length_cm?: number
@@ -135,15 +133,6 @@ export interface BlockNote {
   block?: string
 }
 
-export interface LastComp {
-  date: string
-  body_weight_kg: number
-  body_weight_lb: number
-  weight_class_kg: number
-  results: LiftResults
-  past_comp_day_protocol: CompDayProtocol
-}
-
 export interface LiftResults {
   squat_kg: number
   bench_kg: number
@@ -234,9 +223,6 @@ export interface Competition {
   status: 'confirmed' | 'optional' | 'completed' | 'skipped'
   weight_class_kg: number
   body_weight_kg?: number  // Actual weigh-in weight for completed competitions
-  qualifying_standard_id?: string  // deprecated: goals own qualification standards
-  qualifying_total_kg?: number  // deprecated: goals own qualifying totals
-  attempt_strategy_mode?: AttemptStrategyMode  // deprecated: goals own meet strategy
   targets?: LiftResults    // For upcoming competitions
   projected_at_t_minus_1w?: LiftResults
   projection_snapshot_date?: string
@@ -328,9 +314,7 @@ export interface Exercise {
   reps: number
   kg: number | null
   notes: string
-  failed?: boolean          // deprecated — kept for backwards compat
-  failed_sets?: boolean[]   // per-set: [false, false, true, false] = set 3 failed
-  set_statuses?: SetStatus[] // per-set execution state; failed_sets is derived for legacy readers
+  set_statuses?: SetStatus[]
   failed_set_reasons?: FailedSetReason[][] // per failed set, aligned to set_statuses
   load_source?: LoadSource
   rpe_target?: number | null
@@ -419,10 +403,6 @@ export interface SessionVideo {
   video_id: string
   s3_key: string
   thumbnail_s3_key?: string
-  /** @deprecated Frontend now resolves this from s3_key via VITE_CLOUDFRONT_MEDIA_BASE_URL */
-  video_url?: string
-  /** @deprecated Frontend now resolves this from thumbnail_s3_key via VITE_CLOUDFRONT_MEDIA_BASE_URL */
-  thumbnail_url?: string
   exercise_name?: string
   set_number?: number
   notes?: string
@@ -809,7 +789,6 @@ export interface ApiResponse<T> {
 export interface ProgramListItem {
   version: string           // 'v001' or 'current'
   sk: string                // 'program#v001'
-  comp_date: string
   updated_at: string
   version_label: string
   is_current?: boolean      // true if this is the current/active version
@@ -960,23 +939,12 @@ export interface UserCompetition {
   comp_day_protocol: CompDayProtocol | null
   decision_date: string | null
   attempt_selection: AttemptSelection | null
-  attempt_strategy_mode: AttemptStrategyMode | null
-  qualifying_standard_id: string | null
-  qualifying_total_kg: number | null
   projected_at_t_minus_1w: LiftResults | null
   projection_snapshot_date: string | null
   notes: string
   created_at: string
   updated_at: string
 }
-
-export type AttemptStrategyMode =
-  | 'max_total'
-  | 'qualify'
-  | 'minimum_total'
-  | 'podium'
-  | 'train_through'
-  | 'conservative_pr'
 
 export type AgeCategory =
   | 'open'
@@ -1223,9 +1191,6 @@ export interface UserCompetitionUpdate {
   comp_day_protocol?: CompDayProtocol | null
   decision_date?: string | null
   attempt_selection?: AttemptSelection | null
-  attempt_strategy_mode?: AttemptStrategyMode | null
-  qualifying_standard_id?: string | null
-  qualifying_total_kg?: number | null
   projected_at_t_minus_1w?: LiftResults | null
   projection_snapshot_date?: string | null
   notes?: string

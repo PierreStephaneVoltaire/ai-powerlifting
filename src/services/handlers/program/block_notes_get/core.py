@@ -3,10 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from decimal import Decimal
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +60,7 @@ async def block_notes_get(args: dict) -> dict:
         if not item:
             raise ValueError(f"Program version {version} not found")
         meta = item.get("meta") or {}
-        meta_notes = meta.get("block_notes")
-        legacy_notes = item.get("block_notes")
-        if isinstance(meta_notes, list) and (len(meta_notes) > 0 or not isinstance(legacy_notes, list)):
-            notes = meta_notes
-        else:
-            notes = legacy_notes if isinstance(legacy_notes, list) else []
+        notes = meta.get("block_notes") if isinstance(meta.get("block_notes"), list) else []
         return {"version": version, "sk": sk, "block_notes": notes}
 
     return await asyncio.get_running_loop().run_in_executor(None, _sync)

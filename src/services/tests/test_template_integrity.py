@@ -67,7 +67,7 @@ def test_index_keeps_templates_created_by_different_people():
 def test_update_with_stale_revision_still_applies():
     result = store()
     seed(result)
-    result.update_template_sync("template#1", template("Changed"), actor_pk="alice", expected_revision=0)
+    result.update_template_sync("template#1", template("Changed"), actor_pk="alice")
     assert result.table.items[(result.pk, "template#1")]["meta"]["name"] == "Changed"
     assert "revision" not in result.table.items[(result.pk, "template#1")]["meta"]
 
@@ -76,7 +76,7 @@ def test_private_copy_cannot_be_replayed_or_retrieved_by_other_person():
     result = store()
     seed(result, item=template("Private", author="alice", published=False))
     with pytest.raises(Exception):
-        result.copy_template_sync("template#1", "Copy", actor_pk="bob", expected_revision=0, idempotency_key="copy")
+        result.copy_template_sync("template#1", "Copy", actor_pk="bob")
 
 
 def test_template_applications_get_fresh_stable_session_ids():
@@ -128,7 +128,7 @@ def test_template_apply_confirm_replays_before_changed_current_block_and_canonic
     monkeypatch.setattr(core, "_get_template_store", lambda: Templates())
     monkeypatch.setattr(core, "_get_store", lambda _actor: store)
     monkeypatch.setattr(core, "_get_glossary_store", lambda _actor: type("Glossary", (), {"get_glossary": lambda self: asyncio.sleep(0, result=[])})())
-    event = {"sk": "template#1", "backfilled_maxes": {"squat": 100, "bench": 120}, "start_date": "2026-09-22", "week_start_day": "Monday", "target": "new_block", "expected_revision": 4, "idempotency_key": "template-replay"}
+    event = {"sk": "template#1", "backfilled_maxes": {"squat": 100, "bench": 120}, "start_date": "2026-09-22", "week_start_day": "Monday", "target": "new_block"}
     first = handler.handler(event, None)
     second = handler.handler(json.loads(json.dumps(event)), None)
     assert first == second

@@ -11,27 +11,12 @@ import { DatePickerInput } from '@mantine/dates'
 import type { DietNote } from '@powerlifting/types'
 import { recordsInBlock } from '@/utils/blockScope'
 
-function parseDateString(ds: string): Date | null {
-  if (!ds) return null
-  const parts = ds.split('-')
-  if (parts.length !== 3) return null
-  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-}
-
-function toDateString(d: Date): string {
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
-
 export default function BiometricsPage() {
   const { readOnly } = useAuth()
   const { program, updateDietNotes } = useProgramStore()
   const { pushToast } = useUiStore()
   const [notes, setNotes] = useState<DietNote[]>([])
   const [hasChanges, setHasChanges] = useState(false)
-  const [editingDate, setEditingDate] = useState<string | null>(null)
 
   useEffect(() => {
     if (program?.diet_notes) {
@@ -55,7 +40,6 @@ export default function BiometricsPage() {
     }
     setNotes((prev) => [{ date: today, notes: '' }, ...prev])
     setHasChanges(true)
-    setEditingDate(today)
   }
 
   function removeNote(date: string) {

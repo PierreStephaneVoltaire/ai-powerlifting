@@ -10,8 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from botocore.exceptions import ClientError
 
 from ..settings_get.core import _normalize_settings
@@ -57,19 +56,14 @@ def _scan(table, **kwargs):
             return
 
 
-def _legacy_person(table, provider: str, issuer: str, sub: str, discord_subjects: list[str]):
+def _linked_person(table, issuer: str, sub: str, discord_subjects: list[str]):
     matches = []
     for item in _scan(table, ConsistentRead=True):
         if str(item.get("pk", "")).startswith("Identity#"):
             continue
         exact = item.get("identity_issuer") == issuer and str(item.get("identity_sub", "")) == sub
-        legacy_authentik = (provider == "authentik"
-            and issuer == os.environ.get("AUTHENTIK_ISSUER_URL", os.environ.get("AUTHENTIK_ISSUER", ""))
-            and str(item.get("authentik_sub", "")) == sub
-            and item.get("identity_provider", "authentik") == "authentik"
-            and not item.get("identity_issuer"))
         verified_discord = bool(item.get("discord_id") and str(item["discord_id"]) in discord_subjects)
-        if exact or legacy_authentik or verified_discord:
+        if exact or verified_discord:
             matches.append(item)
     if len(matches) > 1:
         raise ValueError("Provider subject is linked to multiple Persons; operator repair required")
@@ -140,7 +134,7 @@ def _resolve_sync(args):
         if person:
             return {"settings": _settings(_sync_avatar(table, person, avatar)), "created": False}
 
-    person = _legacy_person(table, provider, issuer, sub, args.get("discord_subjects", []))
+    person = _linked_person(table, issuer, sub, args.get("discord_subjects", []))
     if person:
         pointer = {"pk": key, "mapped_pk": person["pk"], "identity_issuer": issuer, "identity_provider": provider, "identity_sub": sub}
         try:

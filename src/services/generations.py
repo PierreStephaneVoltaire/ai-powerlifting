@@ -6,8 +6,7 @@ import time
 from datetime import date
 from importlib import import_module
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 import httpx
 from fastapi.encoders import jsonable_encoder
 from botocore.exceptions import ClientError

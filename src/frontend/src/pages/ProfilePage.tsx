@@ -4,7 +4,6 @@ import {
   Alert,
   Avatar,
   Badge,
-  Box,
   Button,
   FileButton,
   Group,
@@ -19,7 +18,7 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core'
-import { AlertCircle, Calendar, Check, Film, Plus, Save, Upload, User, X } from 'lucide-react'
+import { AlertCircle, Calendar, Film, Save, Upload, User } from 'lucide-react'
 import ProfileTrainingView, { type ProfileTrainingTab } from '@/components/profile/ProfileTrainingView'
 import {
   getSettings,
@@ -81,15 +80,6 @@ function hasCompletedSet(exercise: Session['exercises'][number]): boolean {
     return false
   }
 
-  if (exercise.failed_sets?.length) {
-    const legacySetCount = Math.max(setCount, exercise.failed_sets.length)
-    for (let index = 0; index < legacySetCount; index += 1) {
-      if (exercise.failed_sets[index] !== true) return true
-    }
-    return false
-  }
-
-  if (exercise.failed) return false
   return setCount > 0
 }
 
@@ -264,7 +254,7 @@ export default function ProfilePage() {
     const bench = positiveNumber(current?.bench) ?? positiveNumber(meta?.manual_maxes?.bench) ?? bestSessionLift(sessions, 'bench') ?? positiveNumber(meta?.target_bench_kg) ?? 0
     const deadlift = positiveNumber(current?.deadlift) ?? positiveNumber(meta?.manual_maxes?.deadlift) ?? bestSessionLift(sessions, 'deadlift') ?? positiveNumber(meta?.target_dl_kg) ?? 0
     const total = squat + bench + deadlift
-    const bodyweight = positiveNumber(meta?.current_body_weight_kg) ?? latestSessionBodyweight(sessions) ?? positiveNumber(meta?.last_comp?.body_weight_kg) ?? 0
+    const bodyweight = positiveNumber(meta?.current_body_weight_kg) ?? latestSessionBodyweight(sessions) ?? 0
     const scoreSex = meta?.sex ?? sex
     const dots = scoreSex && total > 0 && bodyweight > 0
       ? calculateDotsFromLifts(squat, bench, deadlift, bodyweight, scoreSex).dots

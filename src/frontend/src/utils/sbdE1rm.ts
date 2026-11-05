@@ -2,7 +2,7 @@ import type { Exercise } from '@powerlifting/types'
 import { estimateSetE1rm } from './rpe'
 import { normalizeExerciseName } from './volume'
 
-export type MainLift = 'squat' | 'bench' | 'deadlift'
+type MainLift = 'squat' | 'bench' | 'deadlift'
 
 const BENCH_NAMES = new Set(['bench press', 'bench', 'pause bench press', 'paused bench press', 'competition bench press'])
 

@@ -1,6 +1,6 @@
 /**
  * Smoke tests for the identity helpers (groupsFromSettings, isAppRole,
- * legacy-compat path). Run with:  npx tsx src/auth/__tests__/identity.test.ts
+ * role group path). Run with:  npx tsx src/auth/__tests__/identity.test.ts
  */
 import {
   groupsFromSettings,
@@ -96,12 +96,12 @@ check('APP_ROLE_VALUES has three entries', APP_ROLE_VALUES.length === 3)
   )
 }
 
-// 4. legacy groups preserved
+// 4. non-role groups preserved
 {
   const out = groupsFromSettings(['discord-admins', ATHLETES_GROUP], ['admin'], ['coach'], 'coach')
-  check('legacy non-role groups preserved', out.groups.includes('discord-admins'), out)
+  check('non-role groups preserved', out.groups.includes('discord-admins'), out)
   check(
-    'legacy athlete group replaced by coach group',
+    'athlete group replaced by coach group',
     !out.groups.includes(ATHLETES_GROUP) && out.groups.includes(COACHES_GROUP),
     out,
   )

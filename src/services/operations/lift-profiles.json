@@ -58,10 +58,7 @@
       "additionalProperties": false
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_lift_profile_ai"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "muscle_group_estimate",
@@ -134,10 +131,7 @@
       "additionalProperties": false
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_lift_profile_ai"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "lift_profile_estimate_stimulus",
@@ -239,10 +233,7 @@
       "additionalProperties": false
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_lift_profile_ai"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "lift_profile_suggest",
@@ -356,10 +347,7 @@
       "additionalProperties": false
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_lift_profile_ai"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_update_lift_profiles",
@@ -383,21 +371,10 @@
           "items": {
             "$ref": "#/$defs/liftProfile"
           }
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
         }
       },
       "required": [
-        "lift_profiles",
-        "expected_revision",
-        "idempotency_key"
+        "lift_profiles"
       ],
       "$defs": {
         "liftProfile": {
@@ -412,18 +389,30 @@
               ]
             },
             "form_videos": {
-              "type": ["object", "null"],
+              "type": [
+                "object",
+                "null"
+              ],
               "properties": {
                 "front": {
-                  "type": ["object", "null"],
+                  "type": [
+                    "object",
+                    "null"
+                  ],
                   "additionalProperties": true
                 },
                 "side": {
-                  "type": ["object", "null"],
+                  "type": [
+                    "object",
+                    "null"
+                  ],
                   "additionalProperties": true
                 },
                 "diagonal": {
-                  "type": ["object", "null"],
+                  "type": [
+                    "object",
+                    "null"
+                  ],
                   "additionalProperties": true
                 }
               },
@@ -466,9 +455,6 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   }
 ]

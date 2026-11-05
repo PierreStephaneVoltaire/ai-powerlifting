@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type RestTimerStatus = 'idle' | 'running' | 'paused' | 'finished'
+type RestTimerStatus = 'idle' | 'running' | 'paused' | 'finished'
 
 interface RestTimerState {
   status: RestTimerStatus

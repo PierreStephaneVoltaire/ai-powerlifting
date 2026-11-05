@@ -6,8 +6,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Attr, Key
 
 
@@ -75,12 +74,6 @@ class ImportStore:
 
     async def stage_import(self, record):
         return await asyncio.to_thread(self.stage_import_sync, record)
-
-    def existing_by_hash_sync(self, file_hash, import_type):
-        return next(iter(self._query(Attr("source_file_hash").eq(file_hash) & Attr("import_type").eq(import_type))), None)
-
-    async def existing_by_hash(self, file_hash, import_type):
-        return await asyncio.to_thread(self.existing_by_hash_sync, file_hash, import_type)
 
     def claim_apply_sync(self, import_id, claim_id, at):
         return self.table.update_item(

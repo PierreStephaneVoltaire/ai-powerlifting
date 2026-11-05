@@ -2,12 +2,11 @@ import { useState, useMemo, useEffect } from 'react'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
-import { displayWeight, toDisplayUnit, fromDisplayUnit, kgToLb } from '@/utils/units'
+import { displayWeight, fromDisplayUnit, kgToLb } from '@/utils/units'
 import { daysUntil, formatDateShort } from '@/utils/dates'
 import { format, parse, subDays } from 'date-fns'
 import {
   Paper,
-  Button,
   Group,
   Stack,
   SimpleGrid,
@@ -23,7 +22,7 @@ import type { WeightEntry } from '@powerlifting/types'
 import * as api from '@/api/client'
 
 export default function WeightTracker() {
-  const { program, version, addWeightEntry, removeWeightEntry } = useProgramStore()
+  const { program, version } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
 

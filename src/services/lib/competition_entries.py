@@ -2,10 +2,8 @@ import copy
 import os
 from datetime import date
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
 
 
 ENTRIES_BY_DATE_INDEX = 'entries-by-date'
@@ -38,16 +36,10 @@ def load_entries(pk: str, start: str | None = None, end: str | None = None, tabl
         condition &= Key('entry_date').gte(start)
     elif end:
         condition &= Key('entry_date').lte(end)
-    try:
-        return _query_all(table, {'IndexName': ENTRIES_BY_DATE_INDEX, 'KeyConditionExpression': condition})
-    except ClientError as error:
-        if error.response.get('Error', {}).get('Code') not in {'ValidationException', 'ResourceNotFoundException'}:
-            raise
-    entries = _query_all(table, {'KeyConditionExpression': Key('pk').eq(pk) & Key('sk').begins_with('COMP#'), 'ConsistentRead': True})
-    return [entry for entry in entries if (date := participation_date(entry)) and (not start or date >= start) and (not end or date <= end)]
+    return _query_all(table, {'IndexName': ENTRIES_BY_DATE_INDEX, 'KeyConditionExpression': condition})
 
 
-def merge_entries(legacy: list[dict], entries: list[dict]) -> list[dict]:
+def normalize_entries(entries: list[dict]) -> list[dict]:
     normalized = []
     for entry in entries:
         status = entry.get('user_status') or entry.get('status')
@@ -64,17 +56,11 @@ def merge_entries(legacy: list[dict], entries: list[dict]) -> list[dict]:
         current['body_weight_kg'] = entry.get('body_weight_kg')
         current['units'] = entry.get('units') or 'kg'
         normalized.append(current)
-    identifiers = {entry.get('master_id') or str(entry.get('sk', '')).removeprefix('COMP#') for entry in entries} - {''}
-    dated_names = {(entry.get('start_date') or entry.get('date'), str(entry.get('name') or '').strip().casefold()) for entry in entries}
-    retained = [copy.deepcopy(entry) for entry in legacy if entry.get('master_id') not in identifiers and (entry.get('date'), str(entry.get('name') or '').strip().casefold()) not in dated_names]
-    return sorted([*retained, *normalized], key=lambda entry: (str(entry.get('date') or ''), str(entry.get('master_id') or entry.get('name') or '')))
+    return sorted(normalized, key=lambda entry: (str(entry.get('date') or ''), str(entry.get('master_id') or '')))
 
 
 def with_competition_entries(program: dict, pk: str, entries: list[dict] | None = None, start: str | None = None, end: str | None = None) -> dict:
-    legacy = program.get('competitions') or []
-    if start or end:
-        legacy = [entry for entry in legacy if (date := participation_date(entry)) and (not start or date >= start) and (not end or date <= end)]
-    return {**program, 'competitions': merge_entries(legacy, load_entries(pk, start, end) if entries is None else entries)}
+    return {**program, 'competitions': normalize_entries(load_entries(pk, start, end) if entries is None else entries)}
 
 
 def next_competition(competitions: list[dict], today: date | None = None) -> dict | None:

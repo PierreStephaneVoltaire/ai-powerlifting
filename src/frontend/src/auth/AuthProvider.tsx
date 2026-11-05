@@ -7,9 +7,9 @@ import { resumeMutations } from '@/api/drafts'
 import { synchronizeOfflineQueue } from '@/api/offlineQueue'
 import { shouldRestoreOwnContext } from './contextRestore'
 
-export type IdentityProvider = 'discord' | 'authentik'
+type IdentityProvider = 'discord' | 'authentik'
 export type ActiveRole = 'athlete' | 'coach' | 'handler'
-export interface AuthUser {
+interface AuthUser {
   provider: IdentityProvider
   sub: string
   username: string

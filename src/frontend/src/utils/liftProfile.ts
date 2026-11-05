@@ -1,7 +1,7 @@
 import type { LiftProfile } from '@powerlifting/types'
 import definitions from '../../../services/lift_profile_options.json'
 
-export type Lift = LiftProfile['lift']
+type Lift = LiftProfile['lift']
 
 export interface LiftProfileOption {
   value: string
@@ -17,7 +17,7 @@ export interface LiftProfileField {
 
 const DEFINITIONS = definitions as Record<Lift | 'common', LiftProfileField[]>
 
-export const LIFTS: Lift[] = ['squat', 'bench', 'deadlift']
+const LIFTS: Lift[] = ['squat', 'bench', 'deadlift']
 export const VOLUME_TOLERANCE_FIELD = DEFINITIONS.common.find((field) => field.key === 'volume_tolerance') as LiftProfileField
 
 export function liftProfileFields(lift: Lift): LiftProfileField[] {

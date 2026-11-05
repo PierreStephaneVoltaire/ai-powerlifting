@@ -87,7 +87,7 @@ def test_cross_domain_metadata_and_note_permissions_are_checked():
     with pytest.raises(OperationError, match='competition:write'):
         check_context('program_update_meta_field', {'field': 'attempt_pct', 'value': {}}, claims, context)
     with pytest.raises(OperationError, match='weight-log:write'):
-        check_context('health_update_meta', {'updates': {'current_body_weight_kg': 80}}, claims, context)
+        check_context('program_update_meta_field', {'updates': {'current_body_weight_kg': 80}}, claims, context)
     with pytest.raises(OperationError, match='lift-profiles:write'):
         check_context('video_upload_presign', {'lift': 'squat'}, claims, context)
     assert check_context('note_list_attachments', {'context_domain': 'competition'}, claims, context) is context
@@ -127,7 +127,7 @@ def test_competition_ties_limit_writes_and_peer_reads_remain_independent():
     context = evaluate_facts('handler', 'athlete', owner, actor, [grant], dates)
     claims = {'iss': 'powerlifting-gateway', 'athlete': 'athlete'}
     assert check_context('health_update_user_competition', {'master_id': 'meet-a'}, claims, context) is context
-    for operation, arguments in [('health_update_user_competition', {'master_id': 'meet-b'}), ('health_complete_competition', {'date': '2099-01-01'}), ('health_list_competitions', {'op': 'update', 'master_id': 'meet-b'})]:
+    for operation, arguments in [('health_update_user_competition', {'master_id': 'meet-b'}), ('health_list_competitions', {'op': 'update', 'master_id': 'meet-b'})]:
         with pytest.raises(OperationError, match='outside the current grant'):
             check_context(operation, arguments, claims, context)
     entries = [{'master_id': 'meet-a'}, {'master_id': 'meet-b'}]

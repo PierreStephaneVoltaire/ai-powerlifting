@@ -2,16 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import {
-  calculateDots,
   calculateDotsFromLifts,
   totalForTargetDots,
   dotsAcrossWeightClasses,
   getDotsLevel,
 } from '@/utils/dots'
-import { displayWeight, kgToLb, toDisplayUnit } from '@/utils/units'
+import { displayWeight, toDisplayUnit } from '@/utils/units'
 import {
   Paper,
-  Button,
   Group,
   Stack,
   SimpleGrid,

@@ -47,7 +47,7 @@ def test_global_approval_is_operator_only_and_legacy_flags_never_publish(monkeyp
     assert len(catalog.items) == 1
     assert tags.handler({}, None)['tags'] == []
     assert tags.handler(own, None)['tags'][0]['status'] == 'pending'
-    decision = {'tag': 'long arms', 'expected_revision': 1, 'idempotency_key': 'approve-1'}
+    decision = {'tag': 'long arms'}
     with pytest.raises(OperationError, match='operator'):
         tags.decide({**own, **decision})
     operator = {**own, '_person_pk': 'operator-person', '_access': {'permissions': ['operator:write']}}
@@ -56,8 +56,8 @@ def test_global_approval_is_operator_only_and_legacy_flags_never_publish(monkeyp
     assert tags.handler({}, None)['tags'] == [{'tag': 'Long Arms', 'status': 'approved', 'revision': 2}]
     assert tags.selected_tags(result['tags'])[1]['approved'] is True
     with pytest.raises(OperationError, match='changed'):
-        tags.decide({**operator, **decision, 'idempotency_key': 'race', 'decision': 'rejected'})
-    tags.decide({**operator, **decision, 'expected_revision': 2, 'idempotency_key': 'reject-2', 'decision': 'rejected'})
+        tags.decide({**operator, **decision, 'decision': 'rejected'})
+    tags.decide({**operator, **decision, 'decision': 'rejected'})
     assert tags.handler({}, None)['tags'] == []
     assert all(not tag['approved'] for tag in tags.selected_tags(result['tags']))
     with pytest.raises(OperationError, match='own profile'):

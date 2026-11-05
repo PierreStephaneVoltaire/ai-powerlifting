@@ -5,43 +5,6 @@ import pytest
 
 from services.contract import load_operations
 from services.dispatch import dispatch
-from services.lib.session_store import SessionIdentityConflictError
-
-
-def test_competition_program_writers_validate_sessions_before_program_put(monkeypatch):
-    class Table:
-        def __init__(self):
-            self.puts = 0
-
-        def put_item(self, **_kwargs):
-            self.puts += 1
-
-    class Store:
-        pk = "athlete"
-
-        def __init__(self, table):
-            self.table = table
-
-        def invalidate_cache(self):
-            pass
-
-    class Sessions:
-        def _ensure_unique_session_ids(self, _sessions, _program_sk):
-            raise SessionIdentityConflictError("duplicate", 4, "Session identity duplicate occurs more than once")
-
-    table = Table()
-    store = Store(table)
-    session_module = importlib.import_module("services.lib.session_store")
-    monkeypatch.setattr(session_module, "SessionStore", lambda **_kwargs: Sessions())
-    for module_name in (
-        "services.handlers.competition.health_complete_competition.core",
-        "services.handlers.competition.health_snapshot_competition_projection.core",
-    ):
-        module = importlib.import_module(module_name)
-        monkeypatch.setattr(module, "_get_table_and_pk", lambda: (table, "athlete", store))
-        with pytest.raises(SessionIdentityConflictError):
-            module._save_program_version({"sessions": [{"id": "duplicate"}, {"id": "duplicate"}]}, "program#v002")
-        assert table.puts == 0
 
 
 class FakeProgramStore:
@@ -57,37 +20,15 @@ class FakeProgramStore:
     async def _write_new_version(self, program, minor=True):
         self.program = program
 
-    async def mutate_source(self, operation, payload, expected_revision, idempotency_key, mutator):
+    async def mutate_source(self, operation, payload, mutator):
         if expected_revision != self.revision:
             from services.lib.program_store import ProgramRevisionConflictError
-            raise ProgramRevisionConflictError(expected_revision, self.revision, self.program)
+            raise ProgramRevisionConflictError(self.revision, self.program)
         updated = copy.deepcopy(self.program)
         result = mutator(updated)
         self.program = updated
         self.revision += 1
         return {**result, "revision": self.revision}
-
-
-def test_legacy_competition_round_trip_through_dispatch(monkeypatch):
-    store = FakeProgramStore()
-    modules = [
-        "health_create_competition",
-        "health_get_competition",
-        "health_update_competition",
-        "health_delete_competition",
-    ]
-    for name in modules:
-        module = importlib.import_module(f"services.handlers.competition.{name}.core")
-        monkeypatch.setattr(module, "_get_store", lambda: store)
-
-    operations = load_operations("competition")
-    created = dispatch(operations["health_create_competition"], {"pk": "athlete-1", "expected_revision": 0, "idempotency_key": "create", "competition": {"name": "Meet", "date": "2026-10-01", "federation": "IPF"}})
-    assert created["date"] == "2026-10-01"
-    updated = dispatch(operations["health_update_competition"], {"pk": "athlete-1", "date": "2026-10-01", "patch": {"status": "completed"}, "expected_revision": 1, "idempotency_key": "update"})
-    assert updated["status"] == "completed"
-    loaded = dispatch(operations["health_get_competition"], {"pk": "athlete-1", "date": "2026-10-01"})
-    assert loaded["name"] == "Meet"
-    assert dispatch(operations["health_delete_competition"], {"pk": "athlete-1", "date": "2026-10-01", "expected_revision": 2, "idempotency_key": "delete"}) == {"deleted": "2026-10-01", "revision": 3}
 
 
 def test_attempt_calculation_is_validated_and_structured(monkeypatch):
@@ -218,7 +159,7 @@ def test_competition_update_is_a_plain_last_write_wins_save(monkeypatch):
     monkeypatch.setattr(module, "_get_table", lambda: table)
     monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
     first = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "first"}})
-    second = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "second"}, "expected_revision": 0})
+    second = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "second"}})
     assert (first["notes"], second["notes"]) == ("first", "second")
     assert "revision" not in second
     assert table.items[("athlete-1", "COMP#meet")]["notes"] == "second"
@@ -254,3 +195,18 @@ def test_entering_a_meet_indexes_it_by_date_and_block_and_withdrawing_unindexes_
     withdrawn = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "available"}})
     assert "entry_date" not in withdrawn
     assert "entry_date" not in table.items[("athlete-1", "COMP#meet")]
+
+
+def test_projection_snapshot_targets_entries_one_week_out(monkeypatch):
+    module = importlib.import_module("services.handlers.competition.health_snapshot_competition_projection.core")
+    analytics = importlib.import_module("services.handlers.competition.health_snapshot_competition_projection.analytics")
+    monkeypatch.setattr(analytics, "meet_projection", lambda *_args, **_kwargs: {"squat": 200, "bench": 125, "deadlift": 240, "total": 565})
+    from datetime import date
+    entries = [
+        {"sk": "COMP#rumble", "name": "Royal City Rumble 5", "start_date": "2027-05-01", "user_status": "confirmed"},
+        {"sk": "COMP#done", "name": "Already", "start_date": "2027-05-01", "user_status": "confirmed", "projected_at_t_minus_1w": {"total_kg": 1}},
+        {"sk": "COMP#dir", "name": "Directory", "start_date": "2027-05-01", "user_status": "available"},
+        {"sk": "COMP#later", "name": "Later", "start_date": "2027-06-01", "user_status": "confirmed"},
+    ]
+    updates = module.snapshot_entries({"sessions": []}, entries, date(2027, 4, 24))
+    assert [(u["sk"], u["projected_at_t_minus_1w"]["total_kg"], u["projection_snapshot_date"]) for u in updates] == [("COMP#rumble", 565, "2027-04-24")]

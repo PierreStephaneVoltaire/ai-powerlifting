@@ -8,10 +8,10 @@ import type { BudgetItem } from './types'
 import {
   PRIORITY_STYLES, categoryIcon, recurrenceIcon, CATEGORY_OPTIONS,
 } from './budgetConstants'
-import { datePeriodLabel, formatCost, recurrenceCostSuffix } from './dateUtils'
+import { datePeriodLabel, formatCost } from './dateUtils'
 import ExpenseForm from './ExpenseForm'
 
-export interface ExpenseRowProps {
+interface ExpenseRowProps {
   item: BudgetItem
   readOnly: boolean
   currency: string
@@ -46,7 +46,6 @@ export default function ExpenseRow({
     ? compOptions.find((c) => c.value === item.competition_id)?.label ?? ''
     : ''
   const periodLabel = datePeriodLabel(item)
-  const suffix = recurrenceCostSuffix(item.recurrence)
   const costLabel = formatCost(item.cost, currency, item.recurrence)
   const cut = (item as BudgetItem & { cut_by_ai?: boolean }).cut_by_ai
 

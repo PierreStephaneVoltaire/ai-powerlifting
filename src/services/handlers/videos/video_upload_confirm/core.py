@@ -17,7 +17,7 @@ async def video_upload_confirm(args: dict) -> dict:
     pk = resolve_pk(args)
     version = args.get("version") or "current"
     session_date = args.get("session_date") or ""
-    session_id = str(args.get("session_id") or "").strip() or None
+    str(args.get("session_id") or "").strip() or None
     video_id = args.get("video_id") or ""
     s3_key = args.get("s3_key") or ""
     requested_session_id = str(args.get("session_id") or "").strip() or None
@@ -31,7 +31,7 @@ async def video_upload_confirm(args: dict) -> dict:
             raise ValueError("Video upload allocation not found")
         if table_media.get("readonly"):
             raise ValueError("Video is read-only")
-        if table_media.get("status") in {"failed", "removed", "legacy"}:
+        if table_media.get("status") in {"failed", "removed"}:
             raise ValueError("Video upload must be retried after processing failure")
         if str(table_media.get("program_sk")) != program_sk or str(table_media.get("session_date")) != session_date:
             raise ValueError("Video upload allocation does not match the requested session")
@@ -48,9 +48,8 @@ async def video_upload_confirm(args: dict) -> dict:
             pending = slot and str(slot.get("pending_media_id") or "") == video_id
             if not slot or (not published and not pending) or str(slot.get("target_revision") or "") != str(table_media.get("target_revision") or ""):
                 raise ValueError("Form video reservation is no longer current")
-            session = None
         else:
-            session = session_for_date(store, program_sk, phases, session_date, session_id)
+            session_for_date(store, program_sk, phases, session_date, session_id)
         if str(table_media.get("s3_key")) != s3_key:
             raise ValueError("Uploaded video key does not match its allocation")
         completed = table_media.get("status") in {"ready", "confirmed"} and table_media.get("processed_s3_key")
@@ -98,11 +97,9 @@ async def video_upload_confirm(args: dict) -> dict:
                 "target_revision": int(table_media.get("target_revision", 0)),
                 "allocation_revision": int(table_media.get("allocation_revision", 0)),
             }
-            for key in ("processed_s3_key", "thumbnail_s3_key", "video_url", "thumbnail_url"):
+            for key in ("processed_s3_key", "thumbnail_s3_key"):
                 if table_media.get(key):
                     result[key] = table_media[key]
-            if table_media.get("idempotency_key") or args.get("idempotency_key"):
-                result["idempotency_key"] = table_media.get("idempotency_key") or args.get("idempotency_key")
 
         def update(videos):
             nonlocal result
@@ -119,7 +116,7 @@ async def video_upload_confirm(args: dict) -> dict:
                         "thumbnail_status": "pending",
                         "allocation_revision": allocation_revision,
                     }
-                    for key in ("processed_s3_key", "thumbnail_s3_key", "video_url", "thumbnail_url"):
+                    for key in ("processed_s3_key", "thumbnail_s3_key"):
                         existing.pop(key, None)
                     for key in ("exercise_name", "set_number", "notes", "lift", "angle", "target_revision"):
                         if args.get(key) is not None:
@@ -135,9 +132,7 @@ async def video_upload_confirm(args: dict) -> dict:
                 "thumbnail_status": "ready" if table_media.get("processed_s3_key") else "pending",
                 "allocation_revision": int(table_media.get("allocation_revision", 0)),
             }
-            if table_media.get("idempotency_key") or args.get("idempotency_key"):
-                video["idempotency_key"] = table_media.get("idempotency_key") or args.get("idempotency_key")
-            for key in ("processed_s3_key", "thumbnail_s3_key", "video_url", "thumbnail_url"):
+            for key in ("processed_s3_key", "thumbnail_s3_key"):
                 if table_media.get(key):
                     video[key] = table_media[key]
             for key in ("exercise_name", "set_number", "notes", "lift", "angle", "target_revision"):

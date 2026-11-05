@@ -37,7 +37,7 @@ function blocks(program: ProgramScope): BlockMetadata[] {
     .sort((a, b) => `${a.start_date || ''}|${blockId(a)}`.localeCompare(`${b.start_date || ''}|${blockId(b)}`))
 }
 
-export function currentBlockId(program: ProgramScope): string {
+function currentBlockId(program: ProgramScope): string {
   const configured = String(program?.meta?.current_block_id || '')
   if (configured && configured !== 'current') return configured
   const active = blocks(program).filter((block) => block.status === 'active')
@@ -84,12 +84,6 @@ export function recordBlock(record: BlockScoped, field: string, program: Program
   return active
 }
 
-export function isInBlock(record: BlockScoped, blockId: string, activeBlockId: string): boolean {
-  const key = record.block_id || record.block || ''
-  if (blockId === activeBlockId || blockId === 'current') return key === activeBlockId || key === 'current'
-  return key === blockId
-}
-
 const SCOPED_PROGRAM_LISTS = ['phases', 'sessions', 'diet_notes', 'supplements', 'supplement_phases', 'competitions'] as const
 
 export function scopeProgramToBlock<T extends Program & { weight_log?: BlockScoped[] }>(program: T, blockId = 'current'): T {
@@ -103,10 +97,5 @@ export function scopeProgramToBlock<T extends Program & { weight_log?: BlockScop
   for (const field of SCOPED_PROGRAM_LISTS) scoped[field] = keep(program[field], field) as never
   if (program.weight_log) scoped.weight_log = keep(program.weight_log, 'weight_log') as never
   if (program.meta?.block_notes) scoped.meta = { ...program.meta, block_notes: keep(program.meta.block_notes, 'meta.block_notes') as never }
-  if (Array.isArray(scoped.competitions)) {
-    const dates = scoped.competitions.map((entry) => String(entry.date || '').slice(0, 10)).filter(Boolean).sort()
-    scoped.meta = { ...(scoped.meta || program.meta), ...(dates.length ? { comp_date: dates[0] } : {}) }
-    if (!dates.length) delete (scoped.meta as unknown as Record<string, unknown>).comp_date
-  }
   return scoped
 }

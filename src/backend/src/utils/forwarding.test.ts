@@ -7,10 +7,10 @@ process.env.PL_PRINCIPAL_SECRET = 'principal-test-secret-never-used-outside-test
 process.env.POWERLIFTING_SERVICE_BASE_URL = 'http://service'
 process.env.IF_API_URL = 'http://if'
 
-let callOperation: typeof import('./lambda').callOperation
+let callOperation: typeof import('./operations').callOperation
 let invokeSpecialistJson: typeof import('./agent').invokeSpecialistJson
 async function load() {
-  callOperation = (await import('./lambda')).callOperation
+  callOperation = (await import('./operations')).callOperation
   invokeSpecialistJson = (await import('./agent')).invokeSpecialistJson
 }
 
@@ -30,7 +30,7 @@ test('denied current operation permissions prevent gateway forwarding', async ()
   } finally { globalThis.fetch = original }
 })
 
-test('dispatches legacy pod calls through the registry with scoped body', async () => {
+test('dispatches operation calls through the registry with scoped body', async () => {
   await load()
   const calls: Request[] = []
   const original = globalThis.fetch
@@ -39,10 +39,10 @@ test('dispatches legacy pod calls through the registry with scoped body', async 
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   }) as typeof fetch
   try {
-    await operationScope.run({ athlete: 'athlete-1', person: 'person-1' }, () => callOperation('health_get_program', { pk: 'athlete-1' }))
+    await operationScope.run({ athlete: 'athlete-1', person: 'person-1' }, () => callOperation('program_get', { pk: 'athlete-1' }))
     assert.equal(calls[0].url, 'http://service/profile/internal/access')
-    assert.deepEqual(await calls[0].json(), { operation: 'health_get_program', arguments: { pk: 'athlete-1' } })
-    assert.equal(calls[1].url, 'http://service/program/operations/health_get_program')
+    assert.deepEqual(await calls[0].json(), { operation: 'program_get', arguments: { pk: 'athlete-1' } })
+    assert.equal(calls[1].url, 'http://service/program/operations/program_get')
     assert.equal(calls[1].headers.get('X-Athlete-Pk'), 'athlete-1')
     assert.ok(calls[1].headers.get('X-PL-Principal'))
     assert.deepEqual(await calls[1].json(), { pk: 'athlete-1' })
@@ -104,7 +104,7 @@ test('uses the authenticated scope instead of a forwarded athlete payload', asyn
   try {
     await operationScope.run(
       { athlete: 'athlete-1', person: 'person-1' },
-      () => callOperation('health_get_program', { pk: 'athlete-2' }),
+      () => callOperation('program_get', { pk: 'athlete-2' }),
     )
     assert.equal(calls[1].headers.get('X-Athlete-Pk'), 'athlete-1')
     assert.equal(calls[1].headers.get('X-Person-Pk'), 'person-1')

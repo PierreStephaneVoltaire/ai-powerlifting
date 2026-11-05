@@ -5,8 +5,7 @@ import logging
 import os
 from decimal import Decimal
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 

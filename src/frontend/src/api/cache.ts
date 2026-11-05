@@ -14,7 +14,7 @@ interface SessionMeta {
   permissions: string
 }
 
-export interface CachedIdentity<T = unknown> {
+interface CachedIdentity<T = unknown> {
   partition: string
   person_pk: string
   athlete_pk: string
@@ -50,7 +50,7 @@ function getDB(): Promise<IDBPDatabase> {
 }
 
 
-export async function clearContextCache(partition = requestPartition()): Promise<void> {
+async function clearContextCache(partition = requestPartition()): Promise<void> {
   const db = await getDB()
   const tx = db.transaction(STORE_RESPONSES, 'readwrite')
   let cursor = await tx.store.index('byPartition').openCursor(partition)
@@ -97,7 +97,7 @@ export async function clearCache(): Promise<void> {
 }
 
 
-export async function getCached<T = unknown>(url: string): Promise<T | undefined> {
+async function getCached<T = unknown>(url: string): Promise<T | undefined> {
   const key = requestPartition() + '\0' + url
   try {
     const db = await getDB()
@@ -106,7 +106,7 @@ export async function getCached<T = unknown>(url: string): Promise<T | undefined
   } catch { return undefined }
 }
 
-export async function setCached(url: string, data: unknown, domains: string[]): Promise<void> {
+async function setCached(url: string, data: unknown, domains: string[]): Promise<void> {
   const partition = requestPartition()
   try {
     const db = await getDB()

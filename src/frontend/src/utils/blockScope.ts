@@ -79,12 +79,6 @@ export function recordBlock(record: BlockScoped, field: string, program: Program
   return active
 }
 
-export function isInBlock(record: BlockScoped, blockId: string, activeBlockId: string): boolean {
-  const key = record.block_id || record.block || ''
-  if (blockId === activeBlockId || blockId === 'current') return key === activeBlockId || key === 'current'
-  return key === blockId
-}
-
 export function recordsInBlock<T extends BlockScoped>(records: T[] | null | undefined, program: Program | null | undefined, blockId = 'current', field = ''): T[] {
   const target = blockId === 'current' ? currentBlockId(program) : blockId
   return (records ?? []).filter((record) => recordBlock(record, field, program) === target)

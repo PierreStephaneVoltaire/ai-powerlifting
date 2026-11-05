@@ -15,8 +15,6 @@ import type {
   Session,
   PlannedExercise,
   Exercise,
-  MaxEntry,
-  MaxHistoryStore,
   WeightEntry,
   GlossaryExercise,
   ApiResponse,
@@ -24,13 +22,11 @@ import type {
   SupplementPhase,
   DietNote,
   BlockNote,
-  Competition,
   AthleteGoal,
   FederationLibrary,
   SessionVideo,
   LiftResults,
   VideoLibraryItem,
-  VideoLibraryResponse,
   VideoSort,
   FatigueProfile,
   LiftProfile,
@@ -51,7 +47,6 @@ import type {
   BudgetItem,
   BudgetConfig,
   BudgetStore,
-  BudgetTimeline,
   BudgetAiAnalysis,
   BlockTransitionInput,
   BlockTransitionResult,
@@ -65,13 +60,13 @@ function templatePath(sk: string, suffix = ''): string {
   return `/templates/${encodeURIComponent(sk)}${suffix}`
 }
 
-export interface MutationEnvelope {
+interface MutationEnvelope {
   expected_revision: number
   idempotency_key: string
   session_id?: string
 }
 
-export interface SessionMutationResult {
+interface SessionMutationResult {
   session?: Session
   deleted?: string
   revision?: number
@@ -221,17 +216,6 @@ export async function deleteSession(
   return res.data.data
 }
 
-export async function fetchSession(
-  version: string,
-  date: string,
-  index: number
-): Promise<Session | null> {
-  const res = await api.get<ApiResponse<Session | null>>(
-    `/sessions/${version}/${date}/${index}`
-  )
-  return res.data.data
-}
-
 export async function updateSession(
   version: string,
   date: string,
@@ -335,65 +319,7 @@ export async function requestAutoRegulation(
   return res.data.data
 }
 
-export async function addExercise(
-  version: string,
-  date: string,
-  index: number,
-  exercise: Exercise,
-  envelope?: MutationEnvelope,
-): Promise<Session> {
-  const res = await api.post<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(`/sessions/${version}/${date}/${index}/exercise`, { ...exercise, ...requireMutationEnvelope(envelope) })
-  const result = res.data.data
-  const updated = result.session
-  if (!updated) throw new Error('Exercise add response did not include the updated session')
-  await cacheSessionMutation(version, date, index, result, updated)
-  return updated
-}
-
-export async function updateExerciseField(
-  version: string,
-  date: string,
-  index: number,
-  exerciseIndex: number,
-  field: keyof Exercise,
-  value: unknown,
-  envelope?: MutationEnvelope,
-): Promise<Session> {
-  const res = await api.patch<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(
-    `/sessions/${version}/${date}/${index}/exercise/${exerciseIndex}`,
-    { field, value, ...requireMutationEnvelope(envelope) }
-  )
-  const result = res.data.data
-  const updated = result.session
-  if (!updated) throw new Error('Exercise update response did not include the updated session')
-  await cacheSessionMutation(version, date, index, result, updated)
-  return updated
-}
-
-export async function removeExercise(
-  version: string,
-  date: string,
-  index: number,
-  exerciseIndex: number,
-  envelope?: MutationEnvelope,
-): Promise<Session> {
-  const res = await api.delete<ApiResponse<{ success: boolean; session: Session; revision?: number }>>(`/sessions/${version}/${date}/${index}/exercise/${exerciseIndex}`, { data: requireMutationEnvelope(envelope) })
-  const result = res.data.data
-  const updated = result.session
-  if (!updated) throw new Error('Exercise removal response did not include the updated session')
-  await cacheSessionMutation(version, date, index, result, updated)
-  return updated
-}
-
 // ─── Maxes ───────────────────────────────────────────────────────────────────
-
-export async function fetchMaxes(version: string): Promise<{
-  targets: { squat_kg: number; bench_kg: number; deadlift_kg: number; total_kg: number }
-  history: MaxHistoryStore
-}> {
-  const data = await cachedGet(api, `/maxes/${version}`, [`maxes:${version}`])
-  return data.data
-}
 
 export async function updateTargetMaxes(
   version: string,
@@ -426,16 +352,6 @@ export async function updatePhases(
   const res = await api.put<ApiResponse<{ revision?: number }>>(`/programs/${version}/phases`, body)
   await invalidateDomain(`program:${version}`)
   return res.data.data
-}
-
-export async function addMaxEntry(
-  version: string,
-  entry: MaxEntry,
-  envelope: MutationEnvelope,
-): Promise<MaxHistoryStore> {
-  const response = await api.post<ApiResponse<MaxHistoryStore>>(`/maxes/${version}/history`, { ...entry, ...requireMutationEnvelope(envelope) })
-  await invalidateDomain(`maxes:${version}`)
-  return response.data.data
 }
 
 // ─── Weight Log ──────────────────────────────────────────────────────────────
@@ -495,13 +411,6 @@ export async function deleteExercise(exerciseId: string): Promise<void> {
 
 // ─── Supplements ──────────────────────────────────────────────────────────────
 
-export async function fetchSupplementPhases(
-  version: string
-): Promise<SupplementPhase[]> {
-  const data = await cachedGet(api, `/supplements/${version}`, [`supplements:${version}`])
-  return data.data
-}
-
 export async function updateSupplementPhases(
   version: string,
   phases: SupplementPhase[],
@@ -514,11 +423,6 @@ export async function updateSupplementPhases(
 
 // ─── Diet Notes ───────────────────────────────────────────────────────────────
 
-export async function fetchDietNotes(version: string): Promise<DietNote[]> {
-  const data = await cachedGet(api, `/diet-notes/${version}`, [`diet-notes:${version}`])
-  return data.data
-}
-
 export async function updateDietNotes(
   version: string,
   dietNotes: DietNote[],
@@ -530,11 +434,6 @@ export async function updateDietNotes(
 }
 
 // ─── Block Notes ───────────────────────────────────────────────────────────────
-
-export async function fetchBlockNotes(version: string): Promise<BlockNote[]> {
-  const data = await cachedGet(api, `/block-notes/${version}`, [`block-notes:${version}`])
-  return data.data
-}
 
 export async function updateBlockNotes(
   version: string,
@@ -575,11 +474,6 @@ export async function updateFederationLibrary(
 
 // ─── Competitions ─────────────────────────────────────────────────────────────
 
-export async function fetchCompetitions(version: string): Promise<Competition[]> {
-  const data = await cachedGet(api, `/competitions/${version}`, [`competitions:${version}`, 'program:current'])
-  return data.data
-}
-
 export async function fetchUserCompetitions(filters?: { country?: string; state?: string }): Promise<UserCompetition[]> {
   const params = new URLSearchParams()
   if (filters?.country) params.set('country', filters.country)
@@ -608,38 +502,6 @@ export async function completeUserCompetition(
 ): Promise<UserCompetition> {
   const res = await api.post<ApiResponse<UserCompetition>>(`/competitions/${masterId}/complete`, { results, bodyWeightKg, postMeetReport, ...requireMutationEnvelope(envelope) })
   await invalidateDomains(['competitions', 'program:current'])
-  return res.data.data
-}
-
-export async function updateCompetitions(
-  version: string,
-  competitions: Competition[],
-  envelope: MutationEnvelope,
-): Promise<{ revision?: number }> {
-  const res = await api.put<ApiResponse<{ revision?: number }>>(`/competitions/${version}`, { competitions, ...requireMutationEnvelope(envelope) })
-  await invalidateDomains([`competitions:${version}`, 'program:current'])
-  return res.data.data
-}
-
-export async function migrateLastComp(version: string): Promise<Competition[]> {
-  const res = await api.post<ApiResponse<Competition[]>>(`/competitions/${version}/migrate`)
-  await invalidateDomains([`competitions:${version}`, 'program:current'])
-  return res.data.data
-}
-
-export async function completeCompetition(
-  version: string,
-  date: string,
-  results: LiftResults,
-  bodyWeightKg: number,
-  envelope: MutationEnvelope,
-  postMeetReport?: PostMeetReport,
-): Promise<Competition> {
-  const res = await api.patch<ApiResponse<Competition>>(
-    `/competitions/${version}/${date}/complete`,
-    { results, bodyWeightKg, postMeetReport, ...requireMutationEnvelope(envelope) }
-  )
-  await invalidateDomains([`competitions:${version}`, 'program:current'])
   return res.data.data
 }
 
@@ -713,14 +575,14 @@ export async function removeSessionVideo(
 
 // ─── Lift Profiles ────────────────────────────────────────────────────────────
 
-export type LiftProfileStimulusEstimate = Pick<LiftProfile, 'lift'> & {
+type LiftProfileStimulusEstimate = Pick<LiftProfile, 'lift'> & {
   stimulus_coefficient: number
   stimulus_coefficient_confidence: 'low' | 'medium' | 'high'
   stimulus_coefficient_reasoning: string
   stimulus_coefficient_updated_at: string
 }
 
-export interface LiftProfileSuggestion {
+interface LiftProfileSuggestion {
   lift: LiftProfile['lift']
   options: Record<string, string>
   volume_tolerance: LiftProfile['volume_tolerance'] | null
@@ -866,11 +728,6 @@ export async function fetchPendingImport(importId: string): Promise<ImportPendin
   return res.data
 }
 
-export async function listPendingImports(type?: ImportType): Promise<ImportPending[]> {
-  const res = await api.get('/import/pending', { params: { type } })
-  return res.data
-}
-
 export async function applyImport(importId: string, body: {
   merge_strategy: MergeStrategy;
   conflict_resolutions?: ConflictResolution[];
@@ -881,10 +738,6 @@ export async function applyImport(importId: string, body: {
 }): Promise<any> {
   const res = await api.post(`/import/${importId}/apply`, body)
   return res.data
-}
-
-export async function rejectImport(importId: string, reason?: string): Promise<void> {
-  await api.post(`/import/${importId}/reject`, { reason })
 }
 
 // ─── Templates ────────────────────────────────────────────────────────────────
@@ -899,28 +752,8 @@ export async function fetchTemplate(sk: string): Promise<Template> {
   return { ...res.data, sk: res.data?.sk ?? sk }
 }
 
-export async function createTemplateFromBlock(name: string, program_sk: string | undefined, envelope: MutationEnvelope): Promise<{ sk: string; revision?: number }> {
-  const res = await api.post('/templates', { name, program_sk, ...requireMutationEnvelope(envelope) })
-  return res.data
-}
-
-export async function copyTemplate(sk: string, newName: string, envelope: MutationEnvelope): Promise<{ sk: string; revision?: number }> {
-  const res = await api.post(templatePath(sk, '/copy'), { new_name: newName, ...requireMutationEnvelope(envelope) })
-  return res.data
-}
-
 export async function deleteTemplate(sk: string): Promise<{ status: 'deleted'; sk: string }> {
   const res = await api.delete(templatePath(sk))
-  return res.data
-}
-
-export async function archiveTemplate(sk: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
-  const res = await api.patch(templatePath(sk, '/archive'), requireMutationEnvelope(envelope))
-  return res.data
-}
-
-export async function unarchiveTemplate(sk: string, envelope: MutationEnvelope): Promise<{ revision?: number }> {
-  const res = await api.patch(templatePath(sk, '/unarchive'), requireMutationEnvelope(envelope))
   return res.data
 }
 
@@ -1019,10 +852,6 @@ export async function unarchiveExercise(id: string): Promise<void> {
   await api.patch(`/exercises/${id}/unarchive`)
 }
 
-export async function setExerciseE1rm(id: string, value_kg: number, method: string = 'manual'): Promise<void> {
-  await api.post(`/exercises/${id}/e1rm`, { value_kg, method })
-}
-
 export async function estimateExerciseE1rm(id: string): Promise<any> {
   const res = await api.post(`/exercises/${id}/estimate-e1rm`)
   return res.data.data
@@ -1089,7 +918,7 @@ export interface RankingPercentileResult {
   }
 }
 
-export interface RankingPercentileParams {
+interface RankingPercentileParams {
   squat_kg?: number
   bench_kg?: number
   deadlift_kg?: number
@@ -1141,14 +970,6 @@ export async function deleteBudgetItemPhoto(itemId: string): Promise<void> {
   await api.delete(`/budget/items/${itemId}/photo`)
 }
 
-export async function fetchBudgetTimeline(payload: {
-  config: BudgetConfig
-  items: BudgetItem[]
-}): Promise<BudgetTimeline> {
-  const res = await api.post<ApiResponse<BudgetTimeline>>('/analytics/budget/timeline', payload)
-  return res.data.data
-}
-
 export async function fetchBudgetAiAnalysis(refresh = false): Promise<BudgetAiAnalysis> {
   const params = new URLSearchParams({ refresh: String(refresh) })
   const res = await api.post<ApiResponse<BudgetAiAnalysis>>(`/budget/ai-analysis?${params.toString()}`)
@@ -1160,42 +981,6 @@ export async function markBudgetItemCut(id: string, cut: boolean): Promise<Budge
   const res = await api.patch<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}/cut`, { cut })
   await invalidateDomain('budget')
   return res.data.data
-}
-
-export async function fetchBudgetItems(params?: {
-  comp_id?: string
-  category?: string
-  priority?: string
-  block_id?: string
-}): Promise<BudgetItem[]> {
-  const query = new URLSearchParams()
-  if (params?.comp_id) query.set('comp_id', params.comp_id)
-  if (params?.category) query.set('category', params.category)
-  if (params?.priority) query.set('priority', params.priority)
-  if (params?.block_id) query.set('block_id', params.block_id)
-  const qs = query.toString()
-  const res = await api.get<ApiResponse<BudgetItem[]>>(`/budget/items${qs ? `?${qs}` : ''}`)
-  return res.data.data
-}
-
-export async function createBudgetItem(item: BudgetItem, blockId?: string): Promise<BudgetItem> {
-  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
-  const res = await api.post<ApiResponse<BudgetItem>>(`/budget/items${query}`, item)
-  await invalidateDomain('budget')
-  return res.data.data
-}
-
-export async function updateBudgetItem(id: string, patch: Partial<BudgetItem>, blockId?: string): Promise<BudgetItem> {
-  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
-  const res = await api.put<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}${query}`, patch)
-  await invalidateDomain('budget')
-  return res.data.data
-}
-
-export async function deleteBudgetItem(id: string, blockId?: string): Promise<void> {
-  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
-  await api.delete(`/budget/items/${encodeURIComponent(id)}${query}`)
-  await invalidateDomain('budget')
 }
 
 export default api

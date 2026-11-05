@@ -6,7 +6,7 @@ import {
   Select, Autocomplete, Box, SegmentedControl
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
-import { addDays, differenceInCalendarDays, format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import {
   DndContext,
   closestCenter,

@@ -13,7 +13,7 @@ import {
   invalidateCache,
   type ProfileVisibility,
 } from '../services/userSettings'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
 
 export async function getSettingsHandler(req: Request, res: Response): Promise<void> {

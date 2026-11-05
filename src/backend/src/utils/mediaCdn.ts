@@ -3,7 +3,7 @@ import { createSign } from 'node:crypto'
 const HOUR_SECONDS = 3600
 const DAY_SECONDS = 24 * HOUR_SECONDS
 
-export interface MediaCdnConfig {
+interface MediaCdnConfig {
   baseUrl: string
   keyPairId: string
   privateKey: string

@@ -1,4 +1,3 @@
-import React from 'react'
 import { ImportWizard } from '../components/import/ImportWizard'
 import { useAuth } from '@/auth/AuthProvider'
 

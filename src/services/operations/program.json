@@ -57,21 +57,11 @@
             }
           },
           "additionalProperties": true
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "action",
-        "block_id",
-        "expected_revision",
-        "idempotency_key"
+        "block_id"
       ],
       "additionalProperties": true
     },
@@ -85,51 +75,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
-  },
-  {
-    "name": "health_delete_diet_note",
-    "domain": "program",
-    "description": "Delete a diet note by date.",
-    "handler": "services.handlers.health.delete_diet_note.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Diet note date to delete (YYYY-MM-DD)"
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_delete_diet_note"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_get_diet_notes",
@@ -155,8 +101,7 @@
           "type": "string",
           "description": "Training block id; defaults to the active block."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "array",
@@ -165,83 +110,7 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_get_diet_notes"
-    ]
-  },
-  {
-    "name": "health_get_meta",
-    "domain": "program",
-    "description": "Get program metadata (name, dates, weight class, etc.).",
-    "handler": "services.handlers.health.get_meta.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": []
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_get_meta"
-    ]
-  },
-  {
-    "name": "health_get_phases",
-    "domain": "program",
-    "description": "Get the training phases from the program.",
-    "handler": "services.handlers.health.get_phases.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "result_schema": {
-      "type": "array"
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_get_phases"
-    ]
-  },
-  {
-    "name": "health_get_program",
-    "domain": "program",
-    "description": "Get the full training program from DynamoDB. Returns the cached program dict with all sessions, phases, meta, and preferences.",
-    "handler": "services.handlers.health.get_program.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": []
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_get_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_get_supplements",
@@ -259,189 +128,14 @@
           "type": "string",
           "description": "Training block id; defaults to the active block."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_get_supplements"
-    ]
-  },
-  {
-    "name": "health_update_diet_note",
-    "domain": "program",
-    "description": "Create or replace a diet note for a date.",
-    "handler": "services.handlers.health.update_diet_note.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "description": "Date for the diet note (YYYY-MM-DD)"
-        },
-        "notes": {
-          "type": "string",
-          "description": "The diet notes content"
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "notes",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_update_diet_note"
-    ]
-  },
-  {
-    "name": "health_update_meta",
-    "domain": "program",
-    "description": "Update program metadata fields, including sex for DOTS calculations.",
-    "handler": "services.handlers.health.update_meta.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "updates": {
-          "type": "object",
-          "description": "Dict of meta fields to update"
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "updates",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_update_meta"
-    ]
-  },
-  {
-    "name": "health_update_phases",
-    "domain": "program",
-    "description": "Replace the full phases list.",
-    "handler": "services.handlers.health.update_phases.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "phases": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          },
-          "description": "Complete phases list. Each: {name, start_week, end_week, intent}"
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "phases",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "array"
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_update_phases"
-    ]
-  },
-  {
-    "name": "health_update_supplements",
-    "domain": "program",
-    "description": "Update the supplement protocol.",
-    "handler": "services.handlers.health.update_supplements.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "patch": {
-          "type": "object",
-          "description": "{\"supplements\": [...]} or {\"supplement_phases\": [...]}"
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "patch",
-        "expected_revision",
-        "idempotency_key"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "health_update_supplements"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_get",
@@ -471,47 +165,14 @@
           "type": "string",
           "description": "Inclusive YYYY-MM-DD session and competition window end."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
-  },
-  {
-    "name": "program_list",
-    "domain": "program",
-    "description": "List all program versions for a user, newest first. Returns summaries (version number, created date, archived status). Use include_archived=true to include archived versions.",
-    "handler": "services.handlers.program.program_list.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "include_archived": {
-          "type": "boolean",
-          "description": "Include archived versions in the list. Default false."
-        }
-      },
-      "required": []
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_list_full",
@@ -533,17 +194,13 @@
           "type": "boolean",
           "description": "Include archived versions. Default false."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "array"
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_archive",
@@ -560,30 +217,15 @@
         "program_sk": {
           "type": "string",
           "description": "Program sort key to archive."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
-      },
-      "required": [
-        "expected_revision",
-        "idempotency_key"
-      ]
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_unarchive",
@@ -600,30 +242,15 @@
         "program_sk": {
           "type": "string",
           "description": "Program sort key to unarchive."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
-      },
-      "required": [
-        "expected_revision",
-        "idempotency_key"
-      ]
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_update_meta_field",
@@ -648,24 +275,12 @@
         "value": {
           "description": "The new value for the field. Type depends on the field being updated."
         },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
         "updates": {
           "type": "object",
           "minProperties": 1,
           "description": "Multiple meta fields to update at once, keyed by field name."
         }
       },
-      "required": [
-        "expected_revision",
-        "idempotency_key"
-      ],
       "anyOf": [
         {
           "required": [
@@ -685,10 +300,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "program_update_phases",
@@ -713,20 +325,10 @@
         "block": {
           "type": "string",
           "description": "Optional block key to update a single block within phases instead of replacing all."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "phases",
-        "expected_revision",
-        "idempotency_key"
+        "phases"
       ]
     },
     "result_schema": {
@@ -734,10 +336,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "block_notes_get",
@@ -755,18 +354,14 @@
           "type": "string",
           "description": "Program version. Defaults to \"current\"."
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "block_notes_update",
@@ -787,20 +382,10 @@
         "block_notes": {
           "type": "array",
           "description": "Full array of block note dicts to write."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "block_notes",
-        "expected_revision",
-        "idempotency_key"
+        "block_notes"
       ]
     },
     "result_schema": {
@@ -808,39 +393,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
-  },
-  {
-    "name": "diet_notes_get",
-    "domain": "program",
-    "description": "Get the diet notes array for a program version. Diet notes are free-form per-date nutrition notes.",
-    "handler": "services.handlers.program.diet_notes_get.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
-        }
-      },
-      "required": []
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "diet_notes_update",
@@ -863,20 +416,10 @@
           "items": {
             "type": "object"
           }
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "notes",
-        "expected_revision",
-        "idempotency_key"
+        "notes"
       ]
     },
     "result_schema": {
@@ -884,39 +427,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
-  },
-  {
-    "name": "supplement_phases_get",
-    "domain": "program",
-    "description": "Get the supplement phases array for a program version. Supplement phases define per-phase supplement protocols.",
-    "handler": "services.handlers.program.supplement_phases_get.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
-        }
-      },
-      "required": []
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "supplement_phases_update",
@@ -937,20 +448,10 @@
         "phases": {
           "type": "array",
           "description": "Full array of supplement phase dicts to write."
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
-        "phases",
-        "expected_revision",
-        "idempotency_key"
+        "phases"
       ]
     },
     "result_schema": {
@@ -958,10 +459,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "export_program_markdown",
@@ -975,18 +473,14 @@
           "type": "string",
           "minLength": 1
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_new_version",
@@ -1007,21 +501,11 @@
         "pk": {
           "type": "string",
           "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "change_reason",
-        "patches",
-        "expected_revision",
-        "idempotency_key"
+        "patches"
       ]
     },
     "result_schema": {
@@ -1029,10 +513,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_setup_initialize",
@@ -1069,22 +550,12 @@
         "pk": {
           "type": "string",
           "minLength": 1
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
         }
       },
       "required": [
         "mode",
         "start_date",
-        "week_start_day",
-        "expected_revision",
-        "idempotency_key"
+        "week_start_day"
       ]
     },
     "result_schema": {
@@ -1092,10 +563,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_setup_status",
@@ -1109,18 +577,14 @@
           "type": "string",
           "minLength": 1
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_invalidate_program_cache",
@@ -1134,17 +598,13 @@
           "type": "string",
           "minLength": 1
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   }
 ]

@@ -16,7 +16,7 @@ function matchOption(value: string | null | undefined, options: string[]): strin
   return options.find((option) => option.toLocaleLowerCase() === wanted) ?? null
 }
 
-export function useRankingCategories(enabled = true): RankingCategories | null {
+function useRankingCategories(enabled = true): RankingCategories | null {
   const [categories, setCategories] = useState<RankingCategories | null>(cached)
   useEffect(() => {
     if (!enabled || categories) return

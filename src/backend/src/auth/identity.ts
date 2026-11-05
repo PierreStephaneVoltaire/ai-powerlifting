@@ -1,10 +1,5 @@
 export type IdentityProvider = 'discord' | 'authentik'
 
-export interface AuthGroups {
-  groups: string[]
-  roles: string[]
-}
-
 export interface AuthIdentity {
   issuer: string
   discord_subjects?: string[]
@@ -23,19 +18,9 @@ export const ATHLETES_GROUP = 'athletes'
 export const COACHES_GROUP = 'coaches'
 export const HANDLERS_GROUP = 'handlers'
 
-export const ATHLETE_ROLE = 'athletes'
-export const COACH_ROLE = 'coaches'
-export const HANDLER_ROLE = 'handlers'
-
-export const OPERATOR_MAPPED_PK = 'operator'
-
-// =============================================================================
-// Self-declared app role (settings.roles + settings.active_role).
-// These functions compute the derived Discord group name from the user's
-// onboarding choices. They DO NOT replace the legacy guild-based `groups` and
-// `roles` checks above; they're additive so existing flows keep working.
-// =============================================================================
-
+const ATHLETE_ROLE = 'athletes'
+const COACH_ROLE = 'coaches'
+const HANDLER_ROLE = 'handlers'
 export type AppRole = 'athlete' | 'coach' | 'handler'
 
 export const APP_ROLE_VALUES: ReadonlyArray<AppRole> = ['athlete', 'coach', 'handler']
@@ -78,11 +63,9 @@ export function groupsFromSettings(
   }
   const ar: AppRole | null = isAppRole(activeRole) ? activeRole : null
   const effectiveActive: AppRole | null = ar && validAppRoles.includes(ar) ? ar : (validAppRoles[0] ?? null)
-  // Strip the legacy plural groups — they'll be re-added based on app roles.
-  const legacyGroupsStripped = existingGroups.filter(
+  const groups = existingGroups.filter(
     (g) => g !== ATHLETES_GROUP && g !== COACHES_GROUP && g !== HANDLERS_GROUP,
   )
-  const groups = [...legacyGroupsStripped]
   for (const role of validAppRoles) {
     if (!groups.includes(appRoleToGroup(role))) groups.push(appRoleToGroup(role))
   }
@@ -106,12 +89,4 @@ export function isHandler(identity: AuthIdentity | null | undefined): boolean {
 export function isAthlete(identity: AuthIdentity | null | undefined): boolean {
   if (!identity) return false
   return identity.groups.includes(ATHLETES_GROUP) || identity.roles.includes(ATHLETE_ROLE) || (!isCoach(identity) && !isHandler(identity))
-}
-
-export function primaryGroup(identity: AuthIdentity | null | undefined): 'athlete' | 'coach' | 'handler' | 'guest' {
-  if (!identity) return 'guest'
-  if (isCoach(identity)) return 'coach'
-  if (isHandler(identity)) return 'handler'
-  if (isAthlete(identity)) return 'athlete'
-  return 'guest'
 }

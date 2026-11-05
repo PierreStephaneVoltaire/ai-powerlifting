@@ -1,5 +1,5 @@
 import api from './http'
-import { cachedGet, invalidateDomain, invalidateDomains } from './cache'
+import { cachedGet, invalidateDomains } from './cache'
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -149,14 +149,5 @@ export async function addTag(tag: string): Promise<UserSettings> {
 export async function removeTag(tag: string): Promise<UserSettings> {
   const res = await api.delete<{ data: UserSettings }>(`/settings/tags/${encodeURIComponent(tag)}`)
   await invalidateDomains(['settings', 'profile:current'])
-  return res.data.data
-}
-
-export async function proposeTag(targetNickname: string, tag: string): Promise<unknown> {
-  const res = await api.post<{ data: unknown }>('/settings/tags/propose', {
-    target_nickname: targetNickname,
-    tag,
-  })
-  await invalidateDomains(['profiles:search'])
   return res.data.data
 }

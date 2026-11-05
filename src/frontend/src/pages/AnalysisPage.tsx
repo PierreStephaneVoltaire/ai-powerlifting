@@ -20,17 +20,17 @@ import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { useCompetitionsStore } from '@/store/competitionsStore'
 import { fetchWeightLog, fetchGlossary } from '@/api/client'
-import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
+import { executedSets } from '@/utils/volume'
 import { useSettingsStore } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
 import { estimateSetE1rm } from '@/utils/rpe'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
-import { toDisplayUnit, displayWeight } from '@/utils/units'
+import { toDisplayUnit } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { parseWeekNumber, programWeekEndDate, programWeekStartDate, resolveTrainingWeekForDate, trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { userCompToCompetition } from '@/utils/competitions'
 import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
-import type { WeightEntry, GlossaryExercise, ExerciseCategory, Session, WeekStartDay } from '@powerlifting/types'
+import type { WeightEntry, GlossaryExercise, Session, WeekStartDay } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
 import {
   Stack, Group, Paper, SimpleGrid, Text, Badge, Table,
@@ -335,7 +335,7 @@ function mergeWeeklySections(
 export default function AnalysisPage() {
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
-  const { readOnly, ranking_country, ranking_region } = useAuth()
+  const { readOnly } = useAuth()
   const { competitions: userCompetitions, loadAll: loadUserCompetitions } = useCompetitionsStore()
 
   useEffect(() => {

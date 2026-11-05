@@ -3,7 +3,7 @@ import { executedSets, normalizeExerciseName } from './volume'
 
 type WorkoutEntry = Pick<Session['exercises'][number], 'name' | 'sets' | 'set_statuses' | 'reps' | 'kg'>
 
-export const MUSCLE_CONTRIBUTION_MULTIPLIERS = {
+const MUSCLE_CONTRIBUTION_MULTIPLIERS = {
   primary: 1,
   secondary: 0.5,
   tertiary: 0.25,
@@ -58,8 +58,4 @@ export function sessionMuscleSets(
   }
 
   return volumes
-}
-
-export function sessionEntriesFromSession(session: Session): WorkoutEntry[] {
-  return session.exercises.length > 0 ? session.exercises : session.planned_exercises ?? []
 }

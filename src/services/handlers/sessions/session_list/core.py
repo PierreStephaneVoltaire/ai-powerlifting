@@ -4,10 +4,9 @@ import asyncio
 import logging
 import os
 from decimal import Decimal
-from typing import Any, List, Optional
+from typing import List
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)

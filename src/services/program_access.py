@@ -7,7 +7,7 @@ from .dispatch import OperationError
 def authorize_program_change(operation: str, arguments: dict, context: dict) -> None:
     required = set()
     fields = set()
-    if operation in ('program_update_meta_field', 'health_update_meta'):
+    if operation == 'program_update_meta_field':
         if isinstance(arguments.get('updates'), dict):
             fields.update(arguments['updates'])
         else:

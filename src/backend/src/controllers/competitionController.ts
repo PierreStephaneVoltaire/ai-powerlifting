@@ -1,5 +1,5 @@
-import { callOperation } from '../utils/lambda'
-import type { Competition, LiftResults, PostMeetReport, UserCompetition, UserCompetitionUpdate } from '@powerlifting/types'
+import { callOperation } from '../utils/operations'
+import type { LiftResults, PostMeetReport, UserCompetition, UserCompetitionUpdate } from '@powerlifting/types'
 
 export interface CompetitionMutationEnvelope {
   expected_revision: number
@@ -50,60 +50,4 @@ export async function completeUserCompetition(
     post_meet_report: postMeetReport,
     ...envelope,
   })) as UserCompetition
-}
-
-export async function getCompetitions(pk: string, _version: string): Promise<Competition[]> {
-  return getUserCompetitions(pk) as unknown as Competition[]
-}
-
-export async function updateCompetitions(
-  pk: string,
-  _version: string,
-  competitions: Competition[],
-  envelope: CompetitionMutationEnvelope,
-): Promise<{ revision: number }> {
-  const program = await callOperation('health_get_program', { pk })
-  const existing = Array.isArray(program?.competitions) ? (program.competitions as Competition[]) : []
-  let revision = envelope.expected_revision
-
-  for (const legacy of competitions) {
-    const match = existing.find((c) => c.date === legacy.date)
-    if (!match) continue
-    const patch: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(legacy)) {
-      if (value !== undefined && key !== 'date') {
-        patch[key] = value
-      }
-    }
-    if (Object.keys(patch).length === 0) continue
-    const updated = await callOperation('health_update_competition', {
-      pk,
-      date: legacy.date,
-      patch,
-      expected_revision: revision,
-      idempotency_key: `${envelope.idempotency_key}:${legacy.date}`,
-    })
-    if (typeof updated?.revision === 'number') revision = updated.revision
-  }
-  return { revision }
-}
-
-export async function completeCompetition(
-  pk: string,
-  version: string,
-  compDate: string,
-  results: LiftResults,
-  bodyWeightKg: number,
-  envelope: CompetitionMutationEnvelope,
-  postMeetReport?: PostMeetReport,
-): Promise<Competition> {
-  return callOperation('health_complete_competition', { pk,
-    date: compDate,
-    results,
-    body_weight_kg: bodyWeightKg,
-    post_meet_report: postMeetReport,
-    version,
-    allow_retrospective: true,
-    ...envelope,
-  }) as Promise<Competition>
 }

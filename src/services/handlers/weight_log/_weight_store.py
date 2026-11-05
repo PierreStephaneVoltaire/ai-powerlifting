@@ -6,8 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from botocore.exceptions import ClientError
 from services.lib.block_scope import ALL_BLOCKS, active_block_id_for, current_program_for, scope_entries, stamp
 from services.lib.cache_invalidation import invalidate_analysis_caches

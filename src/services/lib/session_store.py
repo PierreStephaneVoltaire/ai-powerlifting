@@ -8,31 +8,19 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key
 
 DEFAULT_BLOCK = "current"
 SESSION_SK_PREFIX = "session#"
 
 
-class SessionRevisionConflictError(Exception):
-    def __init__(self, expected_revision: int, current_revision: int, current_record: dict | None = None):
-        self.expected_revision = expected_revision
-        self.current_revision = current_revision
-        self.current_record = current_record
-        super().__init__(f"revision conflict: expected {expected_revision}, current {current_revision}")
-
-class SessionIdentityConflictError(SessionRevisionConflictError):
+class SessionIdentityConflictError(Exception):
     code = "session_identity_conflict"
 
-    def __init__(self, session_id: str, current_revision: int, message: str | None = None):
+    def __init__(self, session_id: str, message: str):
         self.session_id = session_id
-        super().__init__(current_revision, current_revision, None)
-        self.args = (message or f"Session {session_id} no longer exists",)
-
-def require_mutation_envelope(expected_revision: Any = None, idempotency_key: Any = None) -> tuple[int, str]:
-    return 0, idempotency_key if isinstance(idempotency_key, str) else ""
+        super().__init__(message)
 
 def _to_dynamo(obj: Any) -> Any:
     if isinstance(obj, float):
@@ -155,7 +143,6 @@ def _public_session(item: dict[str, Any], phases: Optional[list[dict[str, Any]]]
         "program_version_number",
         "source_index",
         "same_day_ordinal",
-        "migrated_at",
         "phase_ref",
         "session_id",
     ):
@@ -185,8 +172,7 @@ class SessionStore:
         table_name: str,
         pk: str = "operator",
         region: str = "ca-central-1",
-        source_table_name: str = "if-health",
-    ):
+        source_table_name: str = "if-health"):
         self._table_name = table_name
         from services.lib.storage_scope import current_athlete
         self._pk = current_athlete.get() or pk
@@ -294,8 +280,7 @@ class SessionStore:
         window_start: str | None = None,
         window_end: str | None = None,
         block_id: str | None = None,
-        active_block_id: str = DEFAULT_BLOCK,
-    ) -> list[dict[str, Any]]:
+        active_block_id: str = DEFAULT_BLOCK) -> list[dict[str, Any]]:
         return await asyncio.get_running_loop().run_in_executor(
             None, lambda: self.list_sessions_sync(program_sk, phases, window_start, window_end, block_id, active_block_id)
         )
@@ -307,8 +292,7 @@ class SessionStore:
         window_start: str | None = None,
         window_end: str | None = None,
         block_id: str | None = None,
-        active_block_id: str = DEFAULT_BLOCK,
-    ) -> list[dict[str, Any]]:
+        active_block_id: str = DEFAULT_BLOCK) -> list[dict[str, Any]]:
         items = self._query_items_in_window_sync(program_sk, window_start, window_end) if window_start or window_end else self._query_items_sync(program_sk)
         sessions = [_public_session(item, phases) for item in items]
         if not block_id:
@@ -331,7 +315,7 @@ class SessionStore:
             if not session_id:
                 continue
             if session_id in seen:
-                raise SessionIdentityConflictError(session_id, 0, f"Session identity {session_id} occurs more than once")
+                raise SessionIdentityConflictError(session_id, f"Session identity {session_id} occurs more than once")
             seen.add(session_id)
 
     def _build_item(
@@ -342,8 +326,7 @@ class SessionStore:
         source_index: int = 0,
         same_day_ordinal: int | None = None,
         existing_item: dict[str, Any] | None = None,
-        preserve_media: bool = True,
-    ) -> dict[str, Any]:
+        preserve_media: bool = True) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         session_copy = copy.deepcopy(session)
         date_value = str(session_copy.get("date") or "undated")
@@ -409,8 +392,6 @@ class SessionStore:
             "phase_ref": _phase_ref(phase),
             "updated_at": now,
         }
-        if existing_item and existing_item.get("migrated_at"):
-            item["migrated_at"] = existing_item["migrated_at"]
         return item
 
     def _find_item_sync(self, program_sk: str, date_value: str, index: int | None = None, session_id: str | None = None) -> dict[str, Any]:
@@ -434,21 +415,6 @@ class SessionStore:
             raise ValueError(f"Several Sessions are on {date_value}; choose one by id")
         raise ValueError(f"Session not found with date={date_value}")
 
-    async def get_session(self, program_sk: str, date_value: str, phases: Optional[list[dict[str, Any]]] = None, session_id: str | None = None) -> dict[str, Any]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: _public_session(self._find_item_sync(program_sk, date_value, session_id=session_id), phases)
-        )
-
-    async def get_sessions_range(
-        self,
-        program_sk: str,
-        start_date: str,
-        end_date: str,
-        phases: Optional[list[dict[str, Any]]] = None,
-    ) -> list[dict[str, Any]]:
-        sessions = await self.list_sessions(program_sk, phases)
-        return [s for s in sessions if start_date <= str(s.get("date") or "") <= end_date]
-
     def _invalidate_caches(self):
         from services.lib.cache_invalidation import invalidate_analysis_caches
         invalidate_analysis_caches(self._pk, region=self._region)
@@ -460,12 +426,12 @@ class SessionStore:
             self.table.put_item(Item=_to_dynamo(session_item))
         self._invalidate_caches()
 
-    async def create_session(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict[str, Any]:
+    async def create_session(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.create_session_sync(program_sk, session, phases, expected_revision, idempotency_key)
+            None, lambda: self.create_session_sync(program_sk, session, phases)
         )
 
-    def create_session_sync(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None, expected_revision: int | None = None, idempotency_key: str | None = None) -> dict[str, Any]:
+    def create_session_sync(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
         date_value = str(session.get("date") or "")
         if not date_value:
             raise ValueError("Session date is required")
@@ -474,7 +440,7 @@ class SessionStore:
         existing_ids = {str(candidate.get("session_id") or candidate.get("id") or "").strip() for candidate in existing}
         session_id = str(item.get("session_id") or "").strip()
         if session_id and session_id in existing_ids:
-            raise SessionIdentityConflictError(session_id, 0, f"Session identity {session_id} already exists")
+            raise SessionIdentityConflictError(session_id, f"Session identity {session_id} already exists")
         self._write_sync(item, None)
         result = _public_session(item, None)
         result["phase"] = resolve_phase(result, phases)
@@ -487,13 +453,10 @@ class SessionStore:
         patch: dict[str, Any],
         phases: Optional[list[dict[str, Any]]] = None,
         index: int | None = None,
-        expected_revision: int | None = None,
-        idempotency_key: str | None = None,
         session_id: str | None = None,
-        media_update: bool = False,
-    ) -> dict[str, Any]:
+        media_update: bool = False) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.patch_session_sync(program_sk, date_value, patch, phases, index, expected_revision, idempotency_key, media_update, session_id)
+            None, lambda: self.patch_session_sync(program_sk, date_value, patch, phases, index, media_update, session_id)
         )
 
     def patch_session_sync(
@@ -503,11 +466,8 @@ class SessionStore:
         patch: dict[str, Any],
         phases: Optional[list[dict[str, Any]]] = None,
         index: int | None = None,
-        expected_revision: int | None = None,
-        idempotency_key: str | None = None,
         media_update: bool = False,
-        session_id: str | None = None,
-    ) -> dict[str, Any]:
+        session_id: str | None = None) -> dict[str, Any]:
         existing = self._find_item_sync(program_sk, date_value, index, session_id)
         for key in ("id", "session_id"):
             if key in patch and str(patch[key]) != str(existing.get("session_id")):
@@ -522,12 +482,12 @@ class SessionStore:
         result["phase"] = resolve_phase(result, phases)
         return result
 
-    async def delete_session(self, program_sk: str, date_value: str, index: int | None = None, expected_revision: int | None = None, idempotency_key: str | None = None, session_id: str | None = None) -> dict[str, Any]:
+    async def delete_session(self, program_sk: str, date_value: str, index: int | None = None, session_id: str | None = None) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.delete_session_sync(program_sk, date_value, index, expected_revision, idempotency_key, session_id)
+            None, lambda: self.delete_session_sync(program_sk, date_value, index, session_id)
         )
 
-    def delete_session_sync(self, program_sk: str, date_value: str, index: int | None = None, expected_revision: int | None = None, idempotency_key: str | None = None, session_id: str | None = None) -> dict[str, Any]:
+    def delete_session_sync(self, program_sk: str, date_value: str, index: int | None = None, session_id: str | None = None) -> dict[str, Any]:
         existing = self._find_item_sync(program_sk, date_value, index, session_id)
         self._write_sync(None, existing, delete=True)
         return {"deleted": date_value}
@@ -537,12 +497,9 @@ class SessionStore:
         program_sk: str,
         sessions: list[dict[str, Any]],
         phases: Optional[list[dict[str, Any]]] = None,
-        bump_program_revision: bool = True,
-        expected_revision: int | None = None,
-        idempotency_key: str | None = None,
-    ) -> dict[str, Any] | None:
+        bump_program_revision: bool = True) -> dict[str, Any] | None:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.replace_program_sessions_sync(program_sk, sessions, phases, bump_program_revision, expected_revision, idempotency_key)
+            None, lambda: self.replace_program_sessions_sync(program_sk, sessions, phases, bump_program_revision)
         )
 
     def replace_program_sessions_sync(
@@ -550,10 +507,7 @@ class SessionStore:
         program_sk: str,
         sessions: list[dict[str, Any]],
         phases: Optional[list[dict[str, Any]]] = None,
-        bump_program_revision: bool = True,
-        expected_revision: int | None = None,
-        idempotency_key: str | None = None,
-    ) -> dict[str, Any] | None:
+        bump_program_revision: bool = True) -> dict[str, Any] | None:
         existing = self._query_items_sync(program_sk)
         self._ensure_unique_session_ids(existing, program_sk)
         ordinals: dict[str, int] = {}

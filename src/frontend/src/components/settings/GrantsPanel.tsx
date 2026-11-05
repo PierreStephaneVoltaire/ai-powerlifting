@@ -141,7 +141,7 @@ export function GrantsPanel() {
     setError(null)
     try {
       const relationshipId = (g as Grant & { relationship_id?: string }).relationship_id
-      if (!relationshipId) throw new Error('This legacy grant must be migrated before it can be revoked')
+      if (!relationshipId) throw new Error('This grant has no relationship to revoke')
       await revokeRelationshipApi(relationshipId)
       await load()
     } catch (err) {

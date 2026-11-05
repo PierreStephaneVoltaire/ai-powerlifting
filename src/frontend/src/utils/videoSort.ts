@@ -13,7 +13,7 @@ function safeNumber(value: number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-export function videoVolumeKg(item: VideoLibraryItem): number {
+function videoVolumeKg(item: VideoLibraryItem): number {
   const sets = safeNumber(item.exercise_sets)
   const reps = safeNumber(item.exercise_reps)
   const kg = safeNumber(item.exercise_kg)

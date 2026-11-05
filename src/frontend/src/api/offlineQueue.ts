@@ -1,8 +1,6 @@
 import api from './http'
-import { listMutations, pendingMutationCount, synchronizePendingMutations, type PendingMutation } from './drafts'
+import { synchronizePendingMutations } from './drafts'
 import { requestPartition } from './context'
-
-export { listMutations, pendingMutationCount, type PendingMutation }
 
 export async function synchronizeOfflineQueue(): Promise<void> {
   await synchronizePendingMutations(async (record) => {

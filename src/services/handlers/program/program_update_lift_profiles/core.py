@@ -44,4 +44,4 @@ async def program_update_lift_profiles(args: dict):
             profile["form_videos"] = current_by_lift[profile["lift"]]
         else:
             profile.pop("form_videos", None)
-    return await store.update_lift_profiles(normalized, args.get("expected_revision"), args.get("idempotency_key"))
+    return await store.update_lift_profiles(normalized)

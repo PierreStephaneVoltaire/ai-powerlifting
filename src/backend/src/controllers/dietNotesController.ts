@@ -1,4 +1,4 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { DietNote } from '@powerlifting/types'
 
 export async function updateDietNotes(

@@ -31,9 +31,7 @@ function normalizeNotes(rawNotes: BlockNote[] | undefined, fallbackDate: string)
   for (const raw of rawNotes ?? []) {
     const date = normalizeDate(raw, fallbackDate)
     const updatedAt = raw.updated_at || new Date().toISOString()
-    const text = (raw.notes || '').trim()
-    const legacyBlock = raw.block ? (raw.block === 'current' ? 'Current block' : `Block ${raw.block}`) : ''
-    const notes = legacyBlock && !raw.date ? [`[${legacyBlock}]`, text].filter(Boolean).join('\n') : text
+    const notes = (raw.notes || '').trim()
     const existing = byDate.get(date)
 
     if (!existing) {

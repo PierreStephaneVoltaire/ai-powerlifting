@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { Modal, Text, Stack, TextInput, Button, Group, Table, Alert, Badge } from '@mantine/core'
+import { Modal, Stack, TextInput, Button, Group, Table, Alert } from '@mantine/core'
 import { Info } from 'lucide-react'
-import { estimateExerciseE1rm, setExerciseE1rm } from '../../api/client'
+import { estimateExerciseE1rm } from '../../api/client'
 
 interface Props {
   missingMaxes: string[]

@@ -39,8 +39,7 @@
           "type": "string",
           "minLength": 1
         }
-      },
-      "required": []
+      }
     },
     "result_schema": {
       "type": "object",
@@ -66,9 +65,6 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_training_program"
-    ]
+    "ownership": "athlete"
   }
 ]

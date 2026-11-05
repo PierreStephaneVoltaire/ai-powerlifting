@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 
 
 def _get_store():

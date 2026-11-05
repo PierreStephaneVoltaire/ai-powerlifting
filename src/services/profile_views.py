@@ -14,10 +14,10 @@ def people():
 
 
 def _current_program(athlete):
-    legacy = importlib.import_module('services.handlers.user.profile_get.core')
+    profile_core = importlib.import_module('services.handlers.user.profile_get.core')
     health = database().Table(os.getenv('IF_HEALTH_TABLE_NAME', 'if-health'))
-    program_sk = legacy._resolve_program_sk_sync(health, athlete)
-    program = legacy._load_program_sync(health, athlete, program_sk)
+    program_sk = profile_core._resolve_program_sk_sync(health, athlete)
+    program = profile_core._load_program_sync(health, athlete, program_sk)
     return (program_sk, program) if program and program.get('published', True) else (program_sk, None)
 
 
@@ -54,13 +54,13 @@ def visible_profile(owner, actor, vocabulary, details=False):
     meta = program.get('meta') or {}
     result['federation'] = meta.get('federation') or result['federation']
     if 'competition:read' in allowed:
-        legacy = importlib.import_module('services.handlers.user.profile_get.core')
-        result.update(weight_class_kg=legacy._positive_number(meta.get('weight_class_kg')), practicing_for=meta.get('practicing_for') or None)
+        profile_core = importlib.import_module('services.handlers.user.profile_get.core')
+        result.update(weight_class_kg=profile_core._positive_number(meta.get('weight_class_kg')), practicing_for=meta.get('practicing_for') or None)
     if details and allowed.intersection({'performance:read', 'sessions:read', 'lift-profiles:read'}):
-        legacy = importlib.import_module('services.handlers.user.profile_get.core')
+        profile_core = importlib.import_module('services.handlers.user.profile_get.core')
         from services.lib.session_store import SessionStore
         sessions = SessionStore(os.getenv('IF_SESSIONS_TABLE_NAME', 'if-sessions'), pk=athlete, region=os.getenv('AWS_REGION', 'ca-central-1')).list_sessions_sync(program_sk, program.get('phases', [])) if 'sessions:read' in allowed or 'performance:read' in allowed else []
-        derived = legacy._build_profile(owner, None, program, sessions)
+        derived = profile_core._build_profile(owner, None, program, sessions)
         if 'performance:read' in allowed:
             result['summary'] = derived['summary']
             if 'weight-log:read' not in allowed:

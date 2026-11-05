@@ -10,7 +10,6 @@ import json
 import logging
 import time as _time
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Any, Dict
 from services.lib.aws import dynamodb_resource
 from services.lib.block_scope import scope_program
@@ -29,7 +28,6 @@ def _get_store():
     logger.info("[HealthTools] ProgramStore initialised from env vars")
     return store
 
-
 def _get_glossary_store():
     import os
     from services.lib.glossary_store import GlossaryStore
@@ -39,7 +37,6 @@ def _get_glossary_store():
         region=os.environ.get("AWS_REGION", "ca-central-1"),
     )
     return store
-
 
 def _run_async(coro):
     try:
@@ -52,7 +49,6 @@ def _run_async(coro):
             return pool.submit(asyncio.run, coro).result()
     return asyncio.run(coro)
 
-
 def _floats_to_decimals(obj):
     """Recursively convert float values to Decimal for DynamoDB compatibility."""
     from decimal import Decimal
@@ -64,9 +60,7 @@ def _floats_to_decimals(obj):
         return [_floats_to_decimals(v) for v in obj]
     return obj
 
-
 _DETERMINISTIC_ANALYSIS_SECTIONS = ["overview", "fatigue_readiness", "peaking", "workload", "alerts"]
-
 
 def _build_sectioned_analysis(
     program: dict,
@@ -100,7 +94,6 @@ def _build_sectioned_analysis(
         ))
     return result
 
-
 def _build_sectioned_week_analysis(
     program: dict,
     sessions: list[dict],
@@ -121,15 +114,12 @@ def _build_sectioned_week_analysis(
         ref_date=ref_date,
     )
 
-
 def _scope_program_to_current_block(program: dict) -> dict:
     return scope_program(program)
-
 
 def _shared_cache_allowed(args: Dict[str, Any]) -> bool:
     access = args.get("_access")
     return not isinstance(access, dict) or bool(access.get("is_self"))
-
 
 def _markdown_source_requirements(args: Dict[str, Any]) -> dict:
     from services.source_access import read_requirements
@@ -143,7 +133,6 @@ def _markdown_source_requirements(args: Dict[str, Any]) -> dict:
         requirements["competition_ids"] = sorted(competition_ids)
     return requirements
 
-
 def _markdown_cache_key(args: Dict[str, Any]) -> str:
     if _shared_cache_allowed(args):
         return "current"
@@ -151,13 +140,11 @@ def _markdown_cache_key(args: Dict[str, Any]) -> str:
     digest = hashlib.sha256(json.dumps(requirements, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return f"current#scope#{digest}"
 
-
 def _authorize_markdown_cache(cached: dict | None, args: Dict[str, Any]) -> None:
     if _shared_cache_allowed(args):
         return
     from services.source_access import authorize_source
     authorize_source((cached or {}).get("access_requirements"), args.get("_access") or {})
-
 
 def _visible_program(program: dict, args: Dict[str, Any]) -> dict:
     access = args.get("_access")
@@ -181,13 +168,11 @@ def _visible_program(program: dict, args: Dict[str, Any]) -> dict:
         visible["settings"] = {"sex": settings["sex"]} if "profile:read" in permissions and "sex" in settings else {}
     return visible
 
-
 def _markdown_export_sex(program: dict, args: Dict[str, Any]) -> str:
     access = args.get("_access")
     if isinstance(access, dict) and not access.get("is_self") and "profile:read" not in access.get("permissions", []):
         return "undisclosed"
     return str((program.get("meta") or {}).get("sex") or (program.get("settings") or {}).get("sex") or "male").lower()
-
 
 async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     """Regenerate deterministic current-block analysis caches and markdown export.
@@ -198,8 +183,7 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     import os
     import tempfile
-    import boto3
-    from services.lib.aws import dynamodb_resource, client as aws_client
+    from services.lib.aws import dynamodb_resource
     from .export import build_program_markdown
 
     from .config import ANALYSIS_CACHE_TABLE_NAME, AWS_REGION
@@ -223,10 +207,6 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
     table = dynamodb.Table(ANALYSIS_CACHE_TABLE_NAME)
     cache_pk = f"analysis#{pk}"
     expires_at = int(_time.time()) + 7 * 86400
-
-    program_start = (program.get("meta") or {}).get("program_start") or next(
-        (s.get("date") for s in scope_program(program).get("sessions", []) if s.get("date")), None
-    ) or datetime.utcnow().date().isoformat()
 
     current_sessions = scope_program(program).get("sessions", [])
     current_week = max(
@@ -315,10 +295,8 @@ async def _regenerate_analysis(args: Dict[str, Any]) -> Dict[str, Any]:
         ),
     }
 
-
 def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     """Return cached markdown export, regenerating only when stale or dirty."""
-    import boto3
     import tempfile
     import os
     from .export import build_program_markdown

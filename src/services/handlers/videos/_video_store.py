@@ -5,7 +5,6 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-import boto3
 from services.lib.aws import dynamodb_resource, client as aws_client
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
@@ -209,7 +208,7 @@ def media_metadata(item: dict) -> dict[str, str]:
     return metadata
 
 
-def reserve_lift_profile_slot(table: Any, pk: str, program_sk: str, lift: str, angle: str, video_id: str, s3_key: str, uploaded_at: str, idempotency_key: str = "", source_filename: str = "", source_size: int | None = None) -> int:
+def reserve_lift_profile_slot(table: Any, pk: str, program_sk: str, lift: str, angle: str, video_id: str, s3_key: str, uploaded_at: str, source_filename: str = "", source_size: int | None = None) -> int:
     for _ in range(5):
         program = table.get_item(Key={"pk": pk, "sk": program_sk}, ConsistentRead=True).get("Item")
         if not program:
@@ -240,8 +239,6 @@ def reserve_lift_profile_slot(table: Any, pk: str, program_sk: str, lift: str, a
             "processing_status": "pending",
             "thumbnail_status": "pending",
         })
-        if idempotency_key:
-            current["idempotency_key"] = idempotency_key
         if source_filename:
             current["source_filename"] = source_filename
         if source_size is not None:

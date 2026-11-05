@@ -1,6 +1,6 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 
-export type AnalyticsOperationName =
+type AnalyticsOperationName =
   | 'analytics.manifest'
   | 'analytics.sections_queue'
   | 'analytics.sections_get'

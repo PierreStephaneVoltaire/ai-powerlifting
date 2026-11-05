@@ -25,7 +25,7 @@ interface WizardState extends WizardOverrides {
   error: string | null
 }
 
-export type WizardAction =
+type WizardAction =
   | { type: 'SET_STEP'; payload: number }
   | { type: 'UPLOAD_SUCCESS'; payload: string }
   | { type: 'IMPORT_LOADED'; payload: ImportPending }
@@ -90,8 +90,6 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 }
 
 // Steps: Upload(0) → Classify(1) → Glossary(2) → AutoAdd(3) → Preview(4) → Completed
-const STEP_COUNT = 5 // 5 rendered steps → Completed triggers at index 5
-
 export const ImportWizard: React.FC<{ readOnly?: boolean }> = ({ readOnly }) => {
   const [state, dispatch] = useReducer(wizardReducer, initialState)
   const [searchParams, setSearchParams] = useSearchParams()

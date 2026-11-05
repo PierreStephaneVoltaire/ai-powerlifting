@@ -132,14 +132,6 @@ def scope_program(program: dict, block_id: str | None = None) -> dict:
         scoped["meta"] = {**meta, "block_notes": scope_entries(meta["block_notes"], target, program, "meta.block_notes")}
     if isinstance(program.get("block_notes"), list):
         scoped["block_notes"] = scope_entries(program["block_notes"], target, program, "block_notes")
-    if isinstance(scoped.get("competitions"), list):
-        competition_dates = sorted(str(item.get("date") or "")[:10] for item in scoped["competitions"] if item.get("date"))
-        scoped_meta = dict(scoped.get("meta") or {})
-        if competition_dates:
-            scoped_meta["comp_date"] = competition_dates[0]
-        else:
-            scoped_meta.pop("comp_date", None)
-        scoped["meta"] = scoped_meta
     if isinstance(program.get("weight_log"), list):
         scoped["weight_log"] = scope_entries(program["weight_log"], target, program, "weight_log")
     return scoped

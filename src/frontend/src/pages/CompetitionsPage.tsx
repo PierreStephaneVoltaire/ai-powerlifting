@@ -32,9 +32,7 @@ import type {
   PostMeetReport,
   CompetitionLift,
   CompetitionAttempt,
-  CompetitionAttemptResult,
-  CompetitionMissCategory,
-  CompetitionMissReason,
+  CompetitionAttemptResult
 } from '@powerlifting/types'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -144,8 +142,7 @@ const EMPTY_COMP: UserCompetition = {
   user_status: 'available', weight_class_kg: null, body_weight_kg: null,
   targets: null, results: null, post_meet_report: null, hotel_required: false,
   counts_toward_federation_ids: [], between_comp_plan: null, comp_day_protocol: null,
-  decision_date: null, attempt_selection: null, attempt_strategy_mode: null,
-  qualifying_standard_id: null, qualifying_total_kg: null,
+  decision_date: null, attempt_selection: null,
   projected_at_t_minus_1w: null, projection_snapshot_date: null,
   notes: '', created_at: '', updated_at: '',
   units: 'kg',

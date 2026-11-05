@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { BudgetItem, BudgetConfig, BudgetStore } from '@powerlifting/types'
+import type { BudgetItem, BudgetConfig } from '@powerlifting/types'
 import * as api from '@/api/client'
 
 interface BudgetState {
@@ -61,5 +61,3 @@ export const useBudgetStore = create<BudgetState>((set, get) => ({
 
   reset: () => set({ config: DEFAULT_CONFIG, items: [], isLoading: false, error: null, loaded: false }),
 }))
-
-export type { BudgetStore }

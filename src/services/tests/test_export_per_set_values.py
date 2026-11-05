@@ -8,7 +8,7 @@ from services.lib.performed_sets import expand_performed_sets, expand_session_se
 
 BENCH = {
     "id": "bench", "name": "Bench Press", "sets": 3, "reps": 6, "kg": 83.915, "rpe": 9, "notes": "first set heavy",
-    "set_statuses": ["completed", "completed", "completed"], "failed_sets": [False, False, False], "failed_set_reasons": [[], [], []],
+    "set_statuses": ["completed", "completed", "completed"], "failed_set_reasons": [[], [], []],
     "sets_data": [
         {"kg": 83.915, "rpe": 9, "reps": 6},
         {"kg": 86.183, "rpe": 8, "reps": 6},
@@ -17,12 +17,12 @@ BENCH = {
 }
 PUSHDOWN = {
     "id": "push", "name": "Triceps Pushdown", "sets": 2, "reps": 10, "kg": 36.287, "rpe": 10,
-    "set_statuses": ["completed", "failed"], "failed_sets": [False, True], "failed_set_reasons": [[], ["strength_failure"]],
+    "set_statuses": ["completed", "failed"], "failed_set_reasons": [[], ["strength_failure"]],
     "sets_data": [{"kg": 36.287, "rpe": 10, "reps": 10}, {"kg": 27.216, "rpe": 9.5, "reps": 8}],
 }
 RDL = {
     "id": "rdl", "name": "Romanian Deadlift", "sets": 2, "reps": 8, "kg": 80, "rpe": 9,
-    "set_statuses": ["completed", "completed"], "failed_sets": [False, False],
+    "set_statuses": ["completed", "completed"],
     "sets_data": [{"kg": 83.915, "rpe": 8.5, "reps": 8}, {"kg": 83.915, "rpe": 8.5, "reps": 8}],
 }
 SESSION = {"date": "2026-10-19", "week_number": 3, "block": "current", "status": "completed", "exercises": [BENCH, PUSHDOWN, RDL]}
@@ -38,8 +38,9 @@ def test_varied_sets_become_one_row_per_set_with_their_own_values():
 
 def test_each_set_keeps_its_status_and_failure():
     first, second = expand_performed_sets(PUSHDOWN)
-    assert (first["failed"], first["set_statuses"]) == (False, ["completed"])
-    assert (second["failed"], second["failed_sets"], second["failed_set_reasons"], second["set_statuses"], second["rpe"]) == (True, [True], [["strength_failure"]], ["failed"], 9.5)
+    assert first["set_statuses"] == ["completed"]
+    assert (second["failed_set_reasons"], second["set_statuses"], second["rpe"]) == ([["strength_failure"]], ["failed"], 9.5)
+    assert "failed_sets" not in second and "failed" not in second
 
 
 def test_identical_sets_stay_straight_with_per_set_values():

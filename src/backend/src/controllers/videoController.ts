@@ -1,9 +1,9 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { createReadStream, statSync } from 'fs'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { LiftProfileVideoAngle, SessionVideo, VideoLibraryItem, VideoSort } from '@powerlifting/types'
 
-export interface VideoUploadPresign {
+interface VideoUploadPresign {
   video_id: string
   s3_key: string
   metadata: Record<string, string>

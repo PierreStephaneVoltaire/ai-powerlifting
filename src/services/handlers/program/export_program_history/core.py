@@ -12,18 +12,17 @@ import logging
 from importlib import import_module
 
 from services.lib.performed_sets import expand_session_sets
-from services.lib.block_scope import ACTIVE, current_block_id, in_block, resolve_block_id, scope_entries, scope_program
+from services.lib.block_scope import ACTIVE, current_block_id, resolve_block_id, scope_entries, scope_program
 import os
 import re
 import tempfile
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any
 from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
-_store: Optional[Any] = None
 
 
 def _get_store(args):
@@ -153,19 +152,6 @@ def _scope_export_program(program: dict, block: str | None, window: dict) -> tup
     return scoped, session_block
 
 
-def _block_date_range(program: dict, block: str | None) -> tuple[str | None, str | None]:
-    target = resolve_block_id(program, block)
-    active = current_block_id(program)
-    session_dates = [(str(s.get("date"))[:10], in_block(s, target, active)) for s in program.get("sessions", []) if s.get("date")]
-    block_dates = sorted(date for date, inside in session_dates if inside)
-    if not block_dates:
-        return None, None
-    if target == active:
-        return block_dates[0], None
-    following = sorted(date for date, inside in session_dates if not inside and date > block_dates[-1])
-    return block_dates[0], following[0] if following else None
-
-
 def _export_window(args: dict) -> dict:
     window = {key: args.get(key) for key in ("window_key", "window_start", "window_end", "week_start", "week_end")}
     window = {key: value for key, value in window.items() if value not in (None, "")}
@@ -177,7 +163,6 @@ def _export_window(args: dict) -> dict:
 
 def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
     """Return the cached correlation report for the current window, or None."""
-    import boto3
     from .config import IF_HEALTH_TABLE_NAME
 
     today = datetime.utcnow().date()

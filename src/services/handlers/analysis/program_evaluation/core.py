@@ -51,8 +51,7 @@ def _floats_to_decimals(obj):
 
 
 def program_evaluation(args):
-    import boto3
-    from services.lib.aws import dynamodb_resource, client as aws_client
+    from services.lib.aws import dynamodb_resource
     from .config import AWS_REGION, IF_HEALTH_TABLE_NAME
     from .program_evaluation_ai import generate_program_evaluation_report
 
@@ -62,7 +61,8 @@ def program_evaluation(args):
     store = _get_store()
     store.invalidate_cache()
     source = args.get("_report_source", {})
-    program = source["program"] if "program" in source else _run_async(store.get_program())
+    from services.lib.competition_entries import with_competition_entries
+    program = source["program"] if "program" in source else with_competition_entries(_run_async(store.get_program()), store.pk)
     federation_library = source["federation_library"] if "federation_library" in source else _run_async(_get_federation_store().get_library())
     active_pk = store.pk
     sessions = scope_program(program).get("sessions", [])

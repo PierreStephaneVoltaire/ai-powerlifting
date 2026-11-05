@@ -14,10 +14,9 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key
 
 from services.lib.block_scope import active_block_id_for, current_program_for, scope_entries

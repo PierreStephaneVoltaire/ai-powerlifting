@@ -8,10 +8,7 @@ import os
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
-from botocore.exceptions import ClientError
-from services.lib.program_store import ProgramRevisionConflictError, require_mutation_envelope
+from services.lib.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
 
@@ -48,31 +45,12 @@ def _to_dynamo(obj):
 def _max_history_sk(version: str) -> str:
     return f"max_history#{version}"
 
-def _marker_sk(actor_pk: str, version: str, key: str) -> str:
-    import hashlib
-    return f"max-history-idempotency#{hashlib.sha256(f'{actor_pk}:{version}:{key}'.encode()).hexdigest()[:32]}"
-
 def _payload_hash(actor_pk: str, version: str, entry: dict) -> str:
     import hashlib
     import json
     return hashlib.sha256(json.dumps({"actor_pk": actor_pk, "version": version, "entry": entry}, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
 
 ENTRY_FIELDS = {"id", "entry_id", "date", "squat_kg", "bench_kg", "deadlift_kg", "total_kg", "bodyweight_kg", "context"}
-
-
-def _get_history_sync(table, pk: str, version: str) -> dict:
-    sk = _max_history_sk(version)
-    resp = table.get_item(Key={"pk": pk, "sk": sk})
-    item = resp.get("Item")
-    if not item:
-        return {
-            "pk": pk,
-            "sk": sk,
-            "version": version,
-            "entries": [],
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-    return _sanitize_decimals(item)
 
 
 async def max_history_add(args: dict) -> dict:
@@ -86,7 +64,6 @@ async def max_history_add(args: dict) -> dict:
     table = _get_table()
     pk = _resolve_pk(args)
     version = args.get("version") or "current"
-    expected_revision, idempotency_key = require_mutation_envelope(args.get("expected_revision"), args.get("idempotency_key"))
     raw_entry = dict(args.get("entry") or {})
     if not raw_entry and args.get("date"):
         raw_entry = args
@@ -103,9 +80,7 @@ async def max_history_add(args: dict) -> dict:
     if entry.get("total_kg") is None:
         entry["total_kg"] = sum(entry.get(key, 0) or 0 for key in ("squat_kg", "bench_kg", "deadlift_kg"))
 
-    import hashlib
-    actor_pk = str(args.get("_person_pk") or pk)
-    entry.setdefault("id", hashlib.sha256(f"{actor_pk}:{version}:{idempotency_key}".encode()).hexdigest()[:24] if idempotency_key else uuid.uuid4().hex[:24])
+    entry.setdefault("id", uuid.uuid4().hex[:24])
     def _sync():
         current = table.get_item(Key={"pk": pk, "sk": _max_history_sk(version)}, ConsistentRead=True).get("Item") or {"entries": []}
         entries = [item for item in (current.get("entries") or []) if item.get("id") != entry["id"]] + [_to_dynamo(entry)]

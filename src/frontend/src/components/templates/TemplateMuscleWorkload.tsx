@@ -5,12 +5,12 @@ import { MuscleWorkloadMap } from '@/components/analysis/MuscleWorkloadMap'
 import { sessionMuscleSets } from '@/utils/sessionWorkload'
 import { fetchGlossary } from '@/api/client'
 
-export function templateWeekCount(template: Template): number {
+function templateWeekCount(template: Template): number {
   const lastWeek = Math.max(0, ...template.sessions.map((session) => session.week_number || 0))
   return Math.max(1, lastWeek || template.meta.estimated_weeks || 1)
 }
 
-export function templateAvgWeeklyMuscleSets(template: Template, glossary: GlossaryExercise[]): Partial<Record<MuscleGroup, number>> {
+function templateAvgWeeklyMuscleSets(template: Template, glossary: GlossaryExercise[]): Partial<Record<MuscleGroup, number>> {
   const entries = template.sessions.flatMap((session) =>
     session.exercises.map((exercise) => ({ name: exercise.name, sets: exercise.sets, reps: exercise.reps, kg: null }))
   )

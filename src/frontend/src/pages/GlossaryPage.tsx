@@ -148,7 +148,6 @@ export default function GlossaryPage() {
   const [exercises, setExercises] = useState<GlossaryExercise[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState<GlossaryExercise | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
 

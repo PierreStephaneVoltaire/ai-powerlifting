@@ -78,7 +78,6 @@ export default function RankingsPage() {
   const [ageClass, setAgeClass] = useState<string | null>(null)
   const [year, setYear] = useState<string | null>(null)
   const [eventType, setEventType] = useState<string | null>(null)
-  const [minDots, setMinDots] = useState<number | ''>('')
 
   // User stats
   const [squat, setSquat] = useState<number | ''>('')
@@ -162,7 +161,6 @@ export default function RankingsPage() {
         age_class: ageClass || undefined,
         year: year ? parseInt(year) : undefined,
         event_type: eventType || undefined,
-        min_dots: minDots !== '' ? minDots : undefined
       }
 
       const data = await analyzeStats(payload)

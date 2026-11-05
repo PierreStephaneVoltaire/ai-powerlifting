@@ -7,7 +7,7 @@ import { createClient } from 'redis'
 import { discovery, randomState } from 'openid-client'
 import { logger } from '../utils/logger'
 import { Strategy as AuthentikPassportStrategy, type AuthenticateOptions, type VerifyFunction } from 'openid-client/passport'
-import { getOrCreateSettingsForIdentity } from '../services/userSettings'
+import { getOrCreateSettingsForIdentity, type UserSettings } from '../services/userSettings'
 import { groupsFromSettings, type AuthIdentity } from '../auth/identity'
 import { operationScope } from '../utils/operationScope'
 import { AppError } from './errorHandler'
@@ -16,7 +16,7 @@ import { AppError } from './errorHandler'
 declare global { namespace Express { interface User {
   discord_id: string; username: string; avatar: string | null; actor_mapped_pk: string; identity: AuthIdentity
 } interface Request {
-  mapped_pk?: string; actor_mapped_pk?: string; readOnly?: boolean; settings?: import('../services/userSettings').UserSettings
+  mapped_pk?: string; actor_mapped_pk?: string; readOnly?: boolean; settings?: UserSettings
 } } }
 
 
@@ -28,8 +28,8 @@ const discordClientId = process.env.DISCORD_CLIENT_ID
 const discordClientSecret = process.env.DISCORD_CLIENT_SECRET
 const discordCallbackURL = process.env.DISCORD_REDIRECT_URI
 
-export function isAuthentikEnabled(): boolean { return Boolean(issuer && clientId && clientSecret && callbackURL) }
-export function isDiscordEnabled(): boolean { return Boolean(discordClientId && discordClientSecret && discordCallbackURL) }
+function isAuthentikEnabled(): boolean { return Boolean(issuer && clientId && clientSecret && callbackURL) }
+function isDiscordEnabled(): boolean { return Boolean(discordClientId && discordClientSecret && discordCallbackURL) }
 class DiscordStrategy extends OAuth2Strategy {
   name = 'discord'
   userProfile(accessToken: string, done: (error?: unknown, profile?: unknown) => void): void {

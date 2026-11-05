@@ -23,7 +23,7 @@ class Table:
 
 
 def args(key="one", squat=180, person="person-a", **extra):
-    return {"pk": "athlete", "_person_pk": person, "version": "current", "idempotency_key": key, "entry": {"date": "2026-09-14", "squat_kg": squat, "_access": "forged"}, **extra}
+    return {"pk": "athlete", "_person_pk": person, "version": "current", "entry": {"date": "2026-09-14", "squat_kg": squat, "_access": "forged"}, **extra}
 
 
 def test_max_history_add_is_a_plain_write_without_revision(monkeypatch):
@@ -41,7 +41,7 @@ def test_max_history_stale_revision_does_not_block_a_second_entry(monkeypatch):
     table = Table()
     monkeypatch.setattr(core, "_get_table", lambda: table)
     asyncio.run(core.max_history_add(args("one")))
-    second = asyncio.run(core.max_history_add(args("two", squat=190, expected_revision=0)))
+    second = asyncio.run(core.max_history_add(args("two", squat=190)))
     assert sorted(entry["squat_kg"] for entry in second["entries"]) == [180, 190]
     assert len({entry["id"] for entry in second["entries"]}) == 2
 

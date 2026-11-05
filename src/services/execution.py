@@ -2,7 +2,6 @@ import asyncio
 import os
 import uuid
 import time
-import json
 
 from .generations import GenerationStore, REPORTS, fingerprint, report_source
 
@@ -53,7 +52,7 @@ async def submit(operation, arguments, athlete, person):
             response = await client.post(
                 os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs",
                 headers={"X-Internal-Token": os.environ["INTERNAL_API_TOKEN"], "X-Person-Pk": person, "X-PL-Principal": principal_token(person, athlete, operation.name)},
-                json={"conversation_id": f"powerlifting:{athlete}:{key}", "kind": "domain", "payload": {"domain": operation.domain, "operation": operation.name, "arguments": arguments, "athlete": athlete, **({"generation_id": generation["generation_id"], "generation_attempt": int(generation["attempt"])} if generation else {})}, "idempotency_key": key},
+                json={"conversation_id": f"powerlifting:{athlete}:{key}", "kind": "domain", "payload": {"domain": operation.domain, "operation": operation.name, "arguments": arguments, "athlete": athlete, **({"generation_id": generation["generation_id"], "generation_attempt": int(generation["attempt"])} if generation else {})}},
             )
             if response.is_error:
                 raise OperationError(response.status_code, "busy" if response.status_code == 429 else "execution_failed", response.text)

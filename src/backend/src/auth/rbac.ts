@@ -1,9 +1,8 @@
 import type { Request } from 'express'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
 import type { Scope, Access } from './scopes'
 import type { AccessContext } from '@powerlifting/types'
-export type { AccessContext } from '@powerlifting/types'
 
 export async function evaluateRbac(_req: Request): Promise<AccessContext> {
   return callOperation('access_context', {})

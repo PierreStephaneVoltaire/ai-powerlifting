@@ -49,7 +49,7 @@ def test_http_and_mcp_recheck_grants_and_reject_forged_identity(monkeypatch):
         from services.dispatch import unwrap
         conflict = {'code': 'conflict', 'message': 'Program changed', 'current_revision': 8, 'current_record': {'meta': {'revision': 8}}}
         monkeypatch.setattr(module, 'dispatch', lambda *args: unwrap({'statusCode': 409, 'body': conflict}))
-        arguments = {'action': 'complete', 'block_id': 'current', 'expected_revision': 7, 'idempotency_key': 'transition'}
+        arguments = {'action': 'complete', 'block_id': 'current'}
         response = client.post('/operations/block_transition', headers=headers('block_transition', 'owner'), json=arguments)
         assert response.status_code == 409 and response.json()['detail'] == conflict
         response = client.post('/mcp', headers=headers('block_transition', 'owner'), json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'block_transition', 'arguments': arguments}})
@@ -58,6 +58,6 @@ def test_http_and_mcp_recheck_grants_and_reject_forged_identity(monkeypatch):
         grants[0].pop('revoked_at')
         grants[0]['permissions'] = ['program:read', 'program:write']
         conflict['current_record'] = {'meta': {'program_name': 'Visible', 'manual_maxes': {'squat': 200}, 'current_body_weight_kg': 90}}
-        response = client.post('/operations/program_update_meta_field', headers=headers('program_update_meta_field'), json={'field': 'program_name', 'value': 'Edit', 'expected_revision': 7, 'idempotency_key': 'edit'})
+        response = client.post('/operations/program_update_meta_field', headers=headers('program_update_meta_field'), json={'field': 'program_name', 'value': 'Edit'})
         assert response.status_code == 409
         assert response.json()['detail']['current_record']['meta'] == {'program_name': 'Visible'}

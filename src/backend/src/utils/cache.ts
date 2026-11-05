@@ -125,26 +125,3 @@ export async function invalidateDomains(
     await Promise.all(idxKeys.map((k) => client.del(k)))
   }, undefined)
 }
-
-export async function invalidateAllForUser(mappedPk: string): Promise<void> {
-  return safe(async () => {
-    const client = await getClient()
-    let cursor = 0
-    const toDelete: string[] = []
-    do {
-      const res = await client.scan(cursor, { MATCH: `${KEY_PREFIX}${mappedPk}:*`, COUNT: 200 })
-      cursor = Number(res.cursor)
-      toDelete.push(...res.keys)
-    } while (cursor !== 0)
-    if (toDelete.length > 0) {
-      await client.del(toDelete)
-    }
-  }, undefined)
-}
-
-export async function ping(): Promise<boolean> {
-  return safe(async () => {
-    const client = await getClient()
-    return (await client.ping()) === 'PONG'
-  }, false)
-}

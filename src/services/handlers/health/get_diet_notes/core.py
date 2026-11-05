@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from services.lib.block_scope import scope_program
 logger = logging.getLogger(__name__)
-_store: Optional["ProgramStore"] = None  # type: ignore[name-defined]
 def _get_store():
     """Lazily create and return the ProgramStore singleton."""
     import os

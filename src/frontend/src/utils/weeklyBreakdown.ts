@@ -1,9 +1,9 @@
 import type { ExerciseCategory, GlossaryExercise, Session } from '@powerlifting/types'
 import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 
-export type MuscleLookup = Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>
-export type CategoryLookup = Map<string, ExerciseCategory>
-export type PerLiftDetails = Record<string, { frequency: number; raw_sets: number; accessories: { name: string; sets: number; volume: number }[] }>
+type MuscleLookup = Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>
+type CategoryLookup = Map<string, ExerciseCategory>
+type PerLiftDetails = Record<string, { frequency: number; raw_sets: number; accessories: { name: string; sets: number; volume: number }[] }>
 
 export function glossaryMuscleLookup(glossary: GlossaryExercise[]): MuscleLookup {
   const lookup: MuscleLookup = new Map()

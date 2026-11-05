@@ -7,20 +7,6 @@ export function defaultWeightClassesForSex(sex: FederationSex): number[] {
   return sex === 'female' ? [...DEFAULT_WEIGHT_CLASSES_FEMALE] : [...DEFAULT_WEIGHT_CLASSES_MALE]
 }
 
-export function normalizeWeightClasses(values: Array<number | string | null | undefined>): number[] {
-  const seen = new Set<number>()
-  for (const raw of values) {
-    if (raw === null || raw === undefined) continue
-    const num = typeof raw === 'number' ? raw : Number(raw)
-    if (Number.isFinite(num) && num > 0) seen.add(num)
-  }
-  return [...seen].sort((a, b) => a - b)
-}
-
-export function defaultWeightClassStringList(sex: FederationSex): string {
-  return defaultWeightClassesForSex(sex).join(', ')
-}
-
 export function newEntryId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return `std-${crypto.randomUUID()}`

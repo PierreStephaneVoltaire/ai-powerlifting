@@ -5,7 +5,6 @@ export interface RelationshipRequest {
   relationship_id: string
   state: string
   active?: boolean
-  legacy_relationship?: boolean
   athlete_display_name?: string
   athlete_mapped_pk: string
   athlete_person_pk: string
@@ -54,7 +53,7 @@ export function setFavoriteApi(athlete_mapped_pk: string, action: 'add' | 'remov
   return api.post<ApiResponse<unknown>>('/grants/favorites', { athlete_mapped_pk, action }).then(response => response.data.data)
 }
 
-export interface RelationshipNotification {
+interface RelationshipNotification {
   notification_id: string
   kind: string
   payload: Record<string, unknown>

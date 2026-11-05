@@ -97,8 +97,6 @@ def _update_lift_profile_video(media, status, processed_key='', thumbnail_key=''
                 'video_id': media['video_id'],
                 's3_key': processed_key,
                 'thumbnail_s3_key': thumbnail_key,
-                'video_url': f'/api/videos/media/{processed_key}',
-                'thumbnail_url': f'/api/videos/media/{thumbnail_key}',
                 'thumbnail_status': 'ready',
                 'processing_status': 'ready',
                 'allocation_revision': int(media.get('allocation_revision', 0)),
@@ -175,8 +173,6 @@ def _complete_media(pk, video_id, revision, source_size, processed_key, thumbnai
         'source_size': source_size,
         'processed_s3_key': processed_key,
         'thumbnail_s3_key': thumbnail_key,
-        'video_url': f'/api/videos/media/{processed_key}',
-        'thumbnail_url': f'/api/videos/media/{thumbnail_key}',
         'completed_at': datetime.now(timezone.utc).isoformat(),
         'updated_at': datetime.now(timezone.utc).isoformat(),
     }
@@ -243,8 +239,6 @@ def _process_record(bucket, key):
             raise ValueError('Media allocation metadata does not match registry')
     if str(media.get('source_s3_key') or media.get('s3_key')) != key or int(media.get('allocation_revision', 0)) != revision:
         raise ValueError('Stale media allocation')
-    if media.get('status') == 'legacy':
-        return media
     if media.get('expected_size') is not None and metadata.get('expected_size') != str(media['expected_size']):
         raise ValueError('Uploaded video metadata does not match allocation')
     if media.get('status') == 'removed':
@@ -255,8 +249,7 @@ def _process_record(bucket, key):
             return media
         update_video_metadata(
             metadata['pk'], metadata['sk'], metadata['session_date'], video_id,
-            f"/api/videos/media/{media['processed_s3_key']}", media['processed_s3_key'],
-            f"/api/videos/media/{media['thumbnail_s3_key']}", media['thumbnail_s3_key'], 'ready',
+            media['processed_s3_key'], media['thumbnail_s3_key'], 'ready',
             session_id=metadata['session_id'],
             allocation_revision=revision,
         )
@@ -306,8 +299,7 @@ def _process_record(bucket, key):
         return completed
     update_video_metadata(
         metadata['pk'], metadata['sk'], metadata['session_date'], video_id,
-        f'/api/videos/media/{target_video_key}', target_video_key,
-        f'/api/videos/media/{thumbnail_key}', thumbnail_key, 'ready', session_id=metadata['session_id'],
+        target_video_key, thumbnail_key, 'ready', session_id=metadata['session_id'],
         allocation_revision=revision,
     )
     _notify_media_ready(completed)
@@ -331,14 +323,14 @@ def handler(event, context):
                     _update_lift_profile_video(_media(_table(), metadata['pk'], metadata['video_id']), 'failed', failure=error)
                     update_video_metadata(
                         metadata['pk'], metadata.get('sk', ''), metadata.get('session_date', ''), metadata['video_id'],
-                        '', '', '', '', 'failed', session_id=metadata.get('session_id', ''),
+                        '', '', 'failed', session_id=metadata.get('session_id', ''),
                         allocation_revision=int(metadata['allocation_revision']),
                     )
             finally:
                 raise
 
 
-def update_video_metadata(pk, program_sk, session_date, video_id, video_url, video_s3_key, thumbnail_url, thumbnail_s3_key, status, _attempt=0, session_id=None, allocation_revision=None):
+def update_video_metadata(pk, program_sk, session_date, video_id, video_s3_key, thumbnail_s3_key, status, _attempt=0, session_id=None, allocation_revision=None):
     media = _media(_table(), pk, video_id)
     if allocation_revision is not None and (
         int(media.get('allocation_revision', 0)) != int(allocation_revision)
@@ -362,12 +354,8 @@ def update_video_metadata(pk, program_sk, session_date, video_id, video_url, vid
             return
         if video_s3_key:
             video['s3_key'] = video_s3_key
-        if video_url:
-            video['video_url'] = video_url
         if thumbnail_s3_key:
             video['thumbnail_s3_key'] = thumbnail_s3_key
-        if thumbnail_url:
-            video['thumbnail_url'] = thumbnail_url
         video['thumbnail_status'] = status
         break
     else:
@@ -387,5 +375,5 @@ def update_video_metadata(pk, program_sk, session_date, video_id, video_url, vid
         )
     except ClientError as error:
         if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException' and _attempt < 4:
-            return update_video_metadata(pk, program_sk, session_date, video_id, video_url, video_s3_key, thumbnail_url, thumbnail_s3_key, status, _attempt + 1, session_id, allocation_revision)
+            return update_video_metadata(pk, program_sk, session_date, video_id, video_s3_key, thumbnail_s3_key, status, _attempt + 1, session_id, allocation_revision)
         raise

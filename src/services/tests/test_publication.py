@@ -19,16 +19,16 @@ def test_publication_owner_cas_and_nested_domain_projection(monkeypatch):
         def Table(self, name):
             return Table()
     monkeypatch.setattr(publication, 'database', Database)
-    args = {'_access': {'settings_pk': owner['pk']}, 'domains': ['program'], 'expected_revision': 0, 'idempotency_key': 'publish'}
+    args = {'_access': {'settings_pk': owner['pk']}, 'domains': ['program']}
     current = publication.handler(args, None)
     assert current['domains'] == ['program'] and current['revision'] == 1
     assert publication.handler(args, None) == current
     with pytest.raises(OperationError, match='changed'):
-        publication.handler({**args, 'idempotency_key': 'stale'}, None)
+        publication.handler({**args}, None)
     owner['roles'] = ['coach']
     with pytest.raises(OperationError, match='Athletes'):
-        publication.handler({**args, 'expected_revision': 1, 'idempotency_key': 'coach'}, None)
-    program = {'sessions': [{'id': 'session1', 'body_weight_kg': 83, 'videos': ['video']}], 'competitions': ['meet'], 'lift_profiles': ['profile'], 'meta': {'program_name': 'Block', 'last_comp': {'private': True}, 'current_body_weight_kg': 83, 'manual_maxes': {}, 'blocks': [{'id': 'block1', 'start_maxes_kg': {'squat': 150}}]}}
+        publication.handler({**args}, None)
+    program = {'sessions': [{'id': 'session1', 'body_weight_kg': 83, 'videos': ['video']}], 'competitions': ['meet'], 'lift_profiles': ['profile'], 'meta': {'program_name': 'Block', 'current_body_weight_kg': 83, 'manual_maxes': {}, 'blocks': [{'id': 'block1', 'start_maxes_kg': {'squat': 150}}]}}
     access = {'permissions': ['program:read', 'sessions:read']}
     visible = publication.program_view(program, access)
     assert visible['sessions'] == [{'id': 'session1'}]
@@ -45,7 +45,7 @@ def test_operation_result_fails_closed_without_access():
 
 def test_publication_get_projects_internal_metadata(monkeypatch):
     owner = {'pk': 'athlete-person', 'roles': ['athlete'], 'publication': {
-        'domains': ['competition'], 'revision': 3, 'idempotency_key': 'private-key', 'updated_at': '2026-09-15T00:00:00Z',
+        'domains': ['competition'], 'revision': 3, 'updated_at': '2026-09-15T00:00:00Z'
     }}
 
     class Table:

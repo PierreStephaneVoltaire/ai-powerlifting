@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_glossary_store: Optional[Any] = None
 
 
 def _get_glossary_store():

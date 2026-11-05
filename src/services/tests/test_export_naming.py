@@ -33,4 +33,4 @@ def test_program_name_is_only_a_fallback():
 def test_markdown_title_uses_the_block_name(tmp_path):
     export = importlib.import_module("services.handlers.program.export_program_history.export")
     program = {**PROGRAM, "meta": {**PROGRAM["meta"], "program_name": core._export_block_name(PROGRAM, core.ACTIVE)}}
-    assert export._md_overview(program["meta"], "", "current", "male").splitlines()[0] == "# offseason session"
+    assert export._md_overview(program["meta"], "", "current", "male", "").splitlines()[0] == "# offseason session"

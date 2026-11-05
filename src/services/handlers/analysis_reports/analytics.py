@@ -13,29 +13,9 @@ import math
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from statistics import median
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
-try:
-    from scipy.stats import kendalltau, theilslopes
-except ModuleNotFoundError:
-    from types import SimpleNamespace
-
-    def kendalltau(xs, ys, nan_policy=None):
-        pairs = [(x, y) for x, y in zip(xs, ys) if math.isfinite(x) and math.isfinite(y)]
-        concordant = discordant = 0
-        for index, (x, y) in enumerate(pairs):
-            for other_x, other_y in pairs[index + 1:]:
-                product = (other_x - x) * (other_y - y)
-                concordant += product > 0
-                discordant += product < 0
-        total = concordant + discordant
-        return SimpleNamespace(statistic=(concordant - discordant) / total if total else 0.0)
-
-    def theilslopes(ys, xs):
-        slopes = [(ys[j] - ys[i]) / (xs[j] - xs[i]) for i in range(len(xs)) for j in range(i + 1, len(xs)) if xs[j] != xs[i]]
-        slope = median(slopes) if slopes else 0.0
-        intercept = median([y - slope * x for x, y in zip(xs, ys)]) if xs else 0.0
-        return slope, intercept, slope, slope
+from scipy.stats import kendalltau, theilslopes
 
 from services.lib.lift_calculations import DOTS_COEFFICIENTS as _DOTS_COEFFICIENTS, RPE_PERCENT as _RPE_PERCENT, calculate_dots as _calculate_dots, estimate_1rm as _estimate_1rm, estimate_1rm_value as _estimate_1rm_value
 from services.lib.block_scope import current_block_id, in_block
@@ -159,11 +139,6 @@ def _count_failed_sets(ex: dict) -> int:
     statuses = ex.get("set_statuses")
     if statuses and isinstance(statuses, list):
         return sum(1 for status in statuses if status == "failed")
-    failed_arr = ex.get("failed_sets")
-    if failed_arr and isinstance(failed_arr, list):
-        return sum(1 for f in failed_arr if f)
-    if ex.get("failed", False):
-        return int(_num(ex.get("sets", 0)))
     return 0
 
 def _executed_sets(ex: dict) -> float:
@@ -329,14 +304,6 @@ def _session_date_bounds(sessions: list[dict]) -> tuple[Optional[date], Optional
         return None, None
     return dates[0], dates[-1]
 
-def _week_index(session: dict, program_start: str) -> Optional[float]:
-    """Float week offset — kept for legacy callers; use _session_week_num for grouping."""
-    d = _parse_date(session.get("date", ""))
-    start = _parse_date(program_start)
-    if d is None or start is None:
-        return None
-    return (d - start).days / 7.0
-
 def _get_exercise_sessions(sessions: list[dict], exercise_name: str) -> list[dict]:
     name_lower = exercise_name.lower()
     out = []
@@ -348,20 +315,6 @@ def _get_exercise_sessions(sessions: list[dict], exercise_name: str) -> list[dic
                 out.append(s)
                 break
     return out
-
-def _compute_weekly_volume_load(sessions: list[dict], program_start: str) -> dict[int, float]:
-    weekly: dict[int, float] = {}
-    for s in sessions:
-        if not (s.get("completed") or s.get("status") in ("logged", "completed")):
-            continue
-        wk = _session_week_num(s, program_start)
-        if wk is None:
-            continue
-        week_load = 0.0
-        for ex in s.get("exercises", []):
-            week_load += _executed_volume(ex)
-        weekly[wk] = weekly.get(wk, 0.0) + week_load
-    return weekly
 
 def _best_primary_e1rm_for_sessions(w_sessions: list[dict]) -> Optional[float]:
     best: Optional[float] = None
@@ -399,7 +352,6 @@ def _detect_deloads(
          - e1RM path: best e1RM dropped >= 10% vs prev 2 non-deload weeks
          - Stagnation is NOT a deload
     A week is a BREAK if zero volume load.
-    week_index == week_num (int) for backward compat.
     """
     if not program_start:
         program_start = _infer_program_start(sessions)
@@ -475,7 +427,6 @@ def _detect_deloads(
 
         results.append({
             "week_num": wk,
-            "week_index": wk,
             "is_deload": is_deload,
             "is_break": is_break,
             "volume_load": vl,
@@ -494,21 +445,6 @@ def _detect_deloads(
             eff_idx += 1
 
     return results
-
-def _effective_training_data(
-    sessions: list[dict],
-    program_start: str,
-) -> tuple[list[dict], dict[int, int]]:
-    deload_info = _detect_deloads(sessions, program_start)
-    excluded_weeks: set[int] = set()
-    effective_map: dict[int, int] = {}
-    for d in deload_info:
-        if d["is_deload"] or d["is_break"]:
-            excluded_weeks.add(d["week_num"])
-        else:
-            effective_map[d["week_num"]] = d["effective_index"]
-    filtered = [s for s in sessions if _session_week_num(s, program_start) not in excluded_weeks]
-    return filtered, effective_map
 
 logger = logging.getLogger(__name__)
 
@@ -1232,7 +1168,7 @@ def fatigue_index(
     for wk in all_wks:
         wk_sessions = weeks_dict.get(wk, [])
         baseline, conf = get_baseline_for_week(wk)
-        cur_dims = weekly_dims.get(wk, {"axial": 0, "neural": 0, "peripheral": 0, "systemic": 0})
+        weekly_dims.get(wk, {"axial": 0, "neural": 0, "peripheral": 0, "systemic": 0})
         
         failed_sets = 0
         total_compound_sets = 0
@@ -1727,14 +1663,6 @@ def _next_competition(program: dict, reference_date: date | None = None) -> dict
         comp_date = _parse_date(comp.get("date", ""))
         if comp_date is not None and comp_date > ref:
             return comp
-    meta = program.get("meta", {})
-    meta_comp_date = _parse_date(meta.get("comp_date", ""))
-    if meta_comp_date is not None and meta_comp_date > ref:
-        return {
-            "date": meta.get("comp_date"),
-            "status": "confirmed",
-            "weight_class_kg": meta.get("weight_class_kg"),
-        }
     return None
 
 def _readiness_bodyweight_component(
@@ -1856,7 +1784,6 @@ def _estimate_maxes_from_sessions(
             canonical = {"squat": "squat", "bench press": "bench", "bench": "bench", "deadlift": "deadlift"}.get(name)
             if canonical is None:
                 continue
-            rpe = session_rpe
             e1rm = _estimate_1rm_value(kg, reps, session_rpe)
             if e1rm is not None:
                 all_estimates[canonical].append(e1rm)
@@ -1905,34 +1832,6 @@ def _resolve_projection_lambda_multiplier(program: dict, reference_date: date | 
         "median_prr": median_prr,
         "lambda_multiplier": lambda_multiplier,
     }
-
-def compute_prr(results: dict, projected_at_t_minus_1w: dict | None = None) -> dict:
-    snapshot = projected_at_t_minus_1w
-    if snapshot is None and isinstance(results, dict):
-        snapshot = results.get("projected_at_t_minus_1w")
-    snapshot = snapshot if isinstance(snapshot, dict) else {}
-
-    prr: dict[str, float | None] = {"squat": None, "bench": None, "deadlift": None, "total": None}
-    valid_lifts = 0
-    actual_total = 0.0
-    projected_total = 0.0
-
-    for lift in ("squat", "bench", "deadlift"):
-        actual = _num(results.get(f"{lift}_kg"))
-        projected = _num(snapshot.get(f"{lift}_kg"))
-        if actual > 0 and projected > 0:
-            prr[lift] = round(actual / projected, 3)
-            valid_lifts += 1
-            actual_total += actual
-            projected_total += projected
-
-    if valid_lifts == 3:
-        actual_total = _num(results.get("total_kg")) or actual_total
-        projected_total = _num(snapshot.get("total_kg")) or projected_total
-        if projected_total > 0 and actual_total > 0:
-            prr["total"] = round(actual_total / projected_total, 3)
-
-    return prr
 
 def _calendar_week_num(session_date: date, start_day: date) -> int:
     return max(1, ((session_date - start_day).days // 7) + 1)
@@ -2170,8 +2069,6 @@ def meet_projection(
       ceiling_pct = 10% + 0.5% per week beyond 8 (max 20%)
     """
     meta = program.get("meta", {})
-    if comp_date is None:
-        comp_date = meta.get("comp_date", "")
     if not comp_date:
         return {**INSUFFICIENT_DATA, "reason": "No competition date set"}
     comp = _parse_date(comp_date)
@@ -2851,22 +2748,6 @@ def _weekly_sbd_e1rm_total(week_sessions: list[dict]) -> float | None:
         return None
     return sum(weekly_totals.values())
 
-def _weekly_top_intensity(week_sessions: list[dict], current_maxes: dict) -> float | None:
-    best = 0.0
-    for session in week_sessions:
-        for ex in session.get("exercises", []):
-            canonical = _canonical_lift_from_name(ex.get("name", ""))
-            if canonical is None:
-                continue
-            max_val = _num(current_maxes.get(canonical, 0))
-            if max_val <= 0:
-                continue
-            kg = _num(ex.get("kg", 0))
-            if kg <= 0:
-                continue
-            best = max(best, kg / max_val)
-    return best if best > 0 else None
-
 def compute_decoupling(
     sessions: list[dict],
     glossary: list[dict] | None = None,
@@ -3378,13 +3259,6 @@ def _select_specificity_target_competition(program: dict, ref_date: date) -> dic
     ]
 
     if not competitions:
-        meta_date = program.get("meta", {}).get("comp_date")
-        if meta_date and (d := _parse_date(meta_date)) and d > ref_date:
-            return {
-                "name": program.get("meta", {}).get("program_name") or "Upcoming Meet",
-                "date": meta_date,
-                "selection_reason": "meta_comp_date",
-            }
         return None
 
     goal_dates = set()
@@ -3394,8 +3268,6 @@ def _select_specificity_target_competition(program: dict, ref_date: date) -> dic
         for key in ("target_competition_dates",):
             for value in goal.get(key, []) or []:
                 goal_dates.add(str(value))
-        if goal.get("target_competition_date"):
-            goal_dates.add(str(goal.get("target_competition_date")))
 
     for comp in sorted(competitions, key=lambda c: c.get("date", "")):
         if comp.get("date") in goal_dates:
@@ -3798,16 +3670,6 @@ def _analysis_projection_payload(ctx: dict[str, Any], current_maxes_out: dict[st
 
     if projections:
         projection_reason = None
-
-    if not projections and not to_project and meta.get("comp_date"):
-        proj = meet_projection(program, sessions, comp_date=meta["comp_date"], ref_date=end)
-        if "total" in proj:
-            projections.append({"total": proj["total"], "confidence": proj["confidence"],
-                                 "weeks_to_comp": proj.get("weeks_to_comp"), "method": proj.get("method"),
-                                 "comp_name": None, "lifts": proj.get("lifts", {}),
-                                 "projection_calibration": proj.get("projection_calibration")})
-        else:
-            projection_reason = proj.get("reason", "Insufficient data for projection")
 
     attempt_selection = None
     if projections:
@@ -4548,16 +4410,6 @@ def weekly_analysis(
     if projections:
         projection_reason = None
 
-    if not projections and not to_project and meta.get("comp_date"):
-        proj = meet_projection(program, sessions, comp_date=meta["comp_date"], ref_date=end)
-        if "total" in proj:
-            projections.append({"total": proj["total"], "confidence": proj["confidence"],
-                                 "weeks_to_comp": proj.get("weeks_to_comp"), "method": proj.get("method"),
-                                 "comp_name": None, "lifts": proj.get("lifts", {}),
-                                 "projection_calibration": proj.get("projection_calibration")})
-        else:
-            projection_reason = proj.get("reason", "Insufficient data for projection")
-
     attempt_selection = None
     if projections:
         attempt_pct = meta.get("attempt_pct")
@@ -4759,12 +4611,6 @@ def _planned_overreach_for_week(phases: list[dict], current_week: int | None, pr
 def _competition_qualifying_total(competition: dict) -> float | None:
     if not isinstance(competition, dict):
         return None
-    for key in ("qualifying_total_kg", "qualifying_total"):
-        value = competition.get(key)
-        if value is not None:
-            total = _num(value)
-            if total > 0:
-                return round(total, 1)
     qualifying_totals = competition.get("qualifying_totals")
     if isinstance(qualifying_totals, dict):
         total = _num(qualifying_totals.get("total_kg"))
@@ -4780,16 +4626,10 @@ def _competition_goal_qualifying_total(program: dict, competition_date: str) -> 
     candidates: list[tuple[int, float]] = []
     for goal in program.get("goals", []) or []:
         target_dates = [str(value or "").strip() for value in list(goal.get("target_competition_dates") or []) if str(value or "").strip()]
-        legacy_target_date = str(goal.get("target_competition_date") or "").strip()
-        if legacy_target_date and legacy_target_date not in target_dates:
-            target_dates.append(legacy_target_date)
         if competition_date not in target_dates:
             continue
         goal_type = str(goal.get("goal_type") or "")
         target_standard_ids = [str(value or "").strip() for value in list(goal.get("target_standard_ids") or []) if str(value or "").strip()]
-        legacy_target_standard_id = str(goal.get("target_standard_id") or "").strip()
-        if legacy_target_standard_id and legacy_target_standard_id not in target_standard_ids:
-            target_standard_ids.append(legacy_target_standard_id)
         if goal_type != "qualify_for_federation" and not target_standard_ids:
             continue
         total = _num(goal.get("target_total_kg"))
@@ -5000,14 +4840,6 @@ def _build_peaking_timeline(
     ]
 
     comp = competitions[0] if competitions else None
-    if comp is None and meta.get("comp_date"):
-        comp_dt = _parse_date(meta.get("comp_date", ""))
-        if comp_dt is not None and comp_dt > ref_date:
-            comp = {
-                "name": meta.get("program_name") or "Upcoming Meet",
-                "date": meta["comp_date"],
-                "status": "confirmed",
-            }
 
     if comp is None:
         return {

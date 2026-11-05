@@ -1,6 +1,6 @@
 import type { Session, WeightEntry } from '@powerlifting/types'
 
-export interface BodyweightTrend {
+interface BodyweightTrend {
   latest: number
   oldest: number
   change: number

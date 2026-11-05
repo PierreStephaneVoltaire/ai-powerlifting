@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Stack, Title, Paper, Text, SimpleGrid, TextInput, Group, Loader, Center, Switch, Divider, Badge } from '@mantine/core'
+import { Stack, Title, Paper, Text, SimpleGrid, TextInput, Group, Switch, Divider, Badge } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
 import { updateMetaField, mutationEnvelope } from '@/api/client'
-import { Trophy, ArrowUpCircle, Percent } from 'lucide-react'
+import { Trophy, Percent } from 'lucide-react'
 
 interface LiftSettings {
   max: number;
@@ -12,7 +12,6 @@ interface LiftSettings {
 
 export default function AttemptSelector() {
   const { program, version } = useProgramStore()
-  const [loading, setLoading] = useState(false)
   
   const [maxes, setMaxes] = useState({ squat: 0, bench: 0, deadlift: 0 })
   const [liftSettings, setLiftSettings] = useState<Record<string, LiftSettings>>({

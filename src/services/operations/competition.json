@@ -82,10 +82,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_list_competitions",
@@ -122,14 +119,6 @@
           "type": "number"
         },
         "post_meet_report": {},
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -146,10 +135,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_update_user_competition",
@@ -166,14 +152,6 @@
         "patch": {
           "type": "object"
         },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -181,9 +159,7 @@
       },
       "required": [
         "master_id",
-        "patch",
-        "expected_revision",
-        "idempotency_key"
+        "patch"
       ],
       "additionalProperties": true
     },
@@ -192,10 +168,7 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_complete_user_competition",
@@ -216,14 +189,6 @@
           "type": "number"
         },
         "post_meet_report": {},
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -232,9 +197,7 @@
       "required": [
         "master_id",
         "results",
-        "body_weight_kg",
-        "expected_revision",
-        "idempotency_key"
+        "body_weight_kg"
       ],
       "additionalProperties": true
     },
@@ -243,200 +206,12 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
-  },
-  {
-    "name": "health_complete_competition",
-    "domain": "competition",
-    "description": "Complete a legacy competition entry and compute its post-meet report.",
-    "handler": "services.handlers.competition.health_complete_competition.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "minLength": 10
-        },
-        "results": {
-          "type": "object"
-        },
-        "body_weight_kg": {
-          "type": "number"
-        },
-        "post_meet_report": {},
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
-        "version": {
-          "type": "string"
-        },
-        "allow_retrospective": {
-          "type": "boolean"
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "results",
-        "body_weight_kg",
-        "expected_revision",
-        "idempotency_key"
-      ],
-      "additionalProperties": true
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
-  },
-  {
-    "name": "health_create_competition",
-    "domain": "competition",
-    "description": "Create a legacy competition entry.",
-    "handler": "services.handlers.competition.health_create_competition.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "competition": {
-          "type": "object"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "competition",
-        "expected_revision",
-        "idempotency_key"
-      ],
-      "additionalProperties": true
-    },
-    "result_schema": {
-      "type": "object",
-      "required": [
-        "name",
-        "date",
-        "federation"
-      ],
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
-  },
-  {
-    "name": "health_delete_competition",
-    "domain": "competition",
-    "description": "Delete a legacy competition entry by date.",
-    "handler": "services.handlers.competition.health_delete_competition.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "minLength": 10
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "expected_revision",
-        "idempotency_key"
-      ],
-      "additionalProperties": true
-    },
-    "result_schema": {
-      "type": "object",
-      "required": [
-        "deleted"
-      ],
-      "properties": {
-        "deleted": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
-  },
-  {
-    "name": "health_get_competition",
-    "domain": "competition",
-    "description": "Load a legacy competition entry by date.",
-    "handler": "services.handlers.competition.health_get_competition.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "minLength": 10
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date"
-      ],
-      "additionalProperties": true
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "health_snapshot_competition_projection",
     "domain": "competition",
-    "description": "Snapshot projected totals one week before a legacy competition.",
+    "description": "Snapshot projected totals one week before each confirmed or optional competition entry.",
     "handler": "services.handlers.competition.health_snapshot_competition_projection.handler",
     "input_schema": {
       "type": "object",
@@ -486,55 +261,6 @@
       "additionalProperties": true
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
-  },
-  {
-    "name": "health_update_competition",
-    "domain": "competition",
-    "description": "Patch a legacy competition entry by date.",
-    "handler": "services.handlers.competition.health_update_competition.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "date": {
-          "type": "string",
-          "minLength": 10
-        },
-        "patch": {
-          "type": "object"
-        },
-        "expected_revision": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "idempotency_key": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "date",
-        "patch",
-        "expected_revision",
-        "idempotency_key"
-      ],
-      "additionalProperties": true
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_competition"
-    ]
+    "ownership": "athlete"
   }
 ]

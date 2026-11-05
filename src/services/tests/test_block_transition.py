@@ -93,13 +93,10 @@ def test_complete_and_start_preserves_history_resets_numbering_and_sessions():
         store,
         action="complete_and_start",
         block_id="current",
-        expected_revision=4,
-        idempotency_key="transition-1",
         name="Strength",
         start_date="2026-09-22",
         week_start_day="Wednesday",
-        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
-    )
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
 
     program = result["program"]
     meta = program["meta"]
@@ -135,14 +132,11 @@ def test_empty_new_block_template_preserves_external_session_rows():
         store,
         action="complete_and_start",
         block_id="current",
-        expected_revision=4,
-        idempotency_key="empty-template-1",
         name="Empty next block",
         start_date="2026-09-22",
         week_start_day="Wednesday",
         start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
-        next_program={"phases": [], "sessions": []},
-    )
+        next_program={"phases": [], "sessions": []})
     preserved = next(session for session in result["program"]["sessions"] if session["id"] == "logged")
     assert preserved["session_notes"] == "kept"
     assert preserved["completed"] is True
@@ -154,12 +148,10 @@ def test_retry_is_idempotent_and_creates_one_archive_and_next_block():
     args = {
         "action": "complete_and_start",
         "block_id": "current",
-        "expected_revision": 4,
-        "idempotency_key": "transition-retry",
         "name": "Strength",
         "start_date": "2026-09-22",
         "week_start_day": "Wednesday",
-        "start_maxes_kg": {"squat": 190, "bench": 120, "deadlift": 225},
+        "start_maxes_kg": {"squat": 190, "bench": 120, "deadlift": 225}
     }
     first = transition(store, **args)
     second = transition(store, **args)
@@ -174,14 +166,12 @@ def test_template_replay_uses_outer_payload_before_current_block_changes():
     args = {
         "action": "complete_and_start",
         "block_id": "current",
-        "expected_revision": 4,
-        "idempotency_key": "template-replay",
         "start_date": "2026-09-22",
         "week_start_day": "Wednesday",
         "start_maxes_kg": {"squat": 190},
         "next_program": {"phases": [], "sessions": []},
         "template_payload_hash": "outer-payload",
-        "template_preserved_sessions": 3,
+        "template_preserved_sessions": 3
     }
     first = transition(store, **args)
     replay = transition(store, **{**args, "block_id": first["next_block_id"], "template_payload_hash": "outer-payload"})
@@ -196,7 +186,7 @@ def test_template_replay_uses_outer_payload_before_current_block_changes():
 
 def test_stale_expected_revision_no_longer_blocks_transition():
     store, table, _ = make_store()
-    result = transition(store, action="complete", block_id="current", expected_revision=0, idempotency_key="stale-revision")
+    result = transition(store, action="complete", block_id="current")
     assert result["program"]["meta"]["current_block_id"] is None
     pointer = table.items[("athlete-1", "program#current")]
     assert pointer["ref_sk"].startswith("program#v008")
@@ -212,12 +202,9 @@ def test_complete_and_start_backfills_historical_start_maxes_from_block():
         store,
         action="complete_and_start",
         block_id="current",
-        expected_revision=4,
-        idempotency_key="transition-old-maxes",
         start_date="2026-09-22",
         week_start_day="Wednesday",
-        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
-    )
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
     archive_id = next(block["id"] for block in result["program"]["meta"]["blocks"] if block["status"] == "completed")
     assert result["program"]["meta"]["block_start_maxes"][archive_id] == {"squat": 175, "bench": 105, "deadlift": 205}
 
@@ -229,20 +216,15 @@ def test_start_next_requires_completed_block_and_uses_designer_plan():
             store,
             action="start_next",
             block_id="current",
-            expected_revision=4,
-            idempotency_key="start-too-soon",
             start_date="2026-09-22",
             week_start_day="Wednesday",
-            start_maxes_kg={"squat": 190},
-        )
-    completed = transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="complete-first")
+            start_maxes_kg={"squat": 190})
+    completed = transition(store, action="complete", block_id="current")
     archive_id = completed["program"]["meta"]["blocks"][0]["id"]
     result = transition(
         store,
         action="start_next",
         block_id=archive_id,
-        expected_revision=5,
-        idempotency_key="start-second",
         name="Strength",
         start_date="2026-09-22",
         week_start_day="Wednesday",
@@ -250,8 +232,7 @@ def test_start_next_requires_completed_block_and_uses_designer_plan():
         next_program={
             "phases": [{"name": "Strength", "start_week": 1, "end_week": 3}],
             "sessions": [{"id": "next-session", "date": "2026-09-22", "week_number": 1, "status": "planned"}],
-        },
-    )
+        })
     next_id = result["next_block_id"]
     assert result["program"]["meta"]["current_block_id"] == next_id
     assert [phase["start_week"] for phase in result["program"]["phases"] if phase["block"] == "current"] == [1]
@@ -266,19 +247,16 @@ def test_start_next_requires_completed_block_and_uses_designer_plan():
 def test_unknown_block_and_invalid_next_plan_are_rejected():
     store, _, _ = make_store()
     with pytest.raises(ValueError, match="active current"):
-        transition(store, action="complete", block_id="missing", expected_revision=4, idempotency_key="unknown")
+        transition(store, action="complete", block_id="missing")
     with pytest.raises(ValueError, match="completed sessions"):
         transition(
             store,
             action="complete_and_start",
             block_id="current",
-            expected_revision=4,
-            idempotency_key="bad-plan",
             start_date="2026-09-22",
             week_start_day="Wednesday",
             start_maxes_kg={"squat": 190},
-            next_program={"sessions": [{"date": "2026-09-22", "status": "logged"}]},
-        )
+            next_program={"sessions": [{"date": "2026-09-22", "status": "logged"}]})
 
 
 def test_transition_rejects_next_session_id_colliding_with_archived_history():
@@ -288,13 +266,10 @@ def test_transition_rejects_next_session_id_colliding_with_archived_history():
             store,
             action="complete_and_start",
             block_id="current",
-            expected_revision=4,
-            idempotency_key="collision-transition",
             start_date="2026-09-22",
             week_start_day="Wednesday",
             start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
-            next_program={"sessions": [{"id": "logged", "date": "2026-09-22", "week_number": 1}]},
-        )
+            next_program={"sessions": [{"id": "logged", "date": "2026-09-22", "week_number": 1}]})
     assert not sessions_store.replacements
     assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v")]) == 1
 
@@ -305,7 +280,7 @@ def test_new_version_rejects_full_program_duplicate_before_staging():
     duplicate["sessions"] = [{"id": "same", "date": "2026-09-10"}, {"id": "same", "date": "2026-09-11"}]
 
     with pytest.raises(SessionIdentityConflictError, match="occurs more than once"):
-        store._write_new_version_sync(duplicate, minor=False, expected_revision=4, idempotency_key="duplicate-stage")
+        store._write_new_version_sync(duplicate, minor=False)
     assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v")]) == 1
 
 
@@ -330,7 +305,7 @@ def test_ordinary_new_version_writes_next_version_without_revision_check():
 def test_complete_archives_current_block_under_name_slug():
     store, _table, _sessions = make_store()
 
-    result = transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="archive-1", current_name="Sunny Daze + APEX Prep")
+    result = transition(store, action="complete", block_id="current", current_name="Sunny Daze + APEX Prep")
 
     meta = result["program"]["meta"]
     archived = meta["blocks"][0]
@@ -346,12 +321,12 @@ def test_archived_block_cannot_be_named_current(name):
     store, _table, _sessions = make_store()
 
     with pytest.raises(ValueError, match="cannot be named current"):
-        transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="archive-2", current_name=name)
+        transition(store, action="complete", block_id="current", current_name=name)
 
-    archived = transition(store, action="complete", block_id="current", expected_revision=4, idempotency_key="archive-3")
+    archived = transition(store, action="complete", block_id="current")
     archive_id = archived["program"]["meta"]["blocks"][0]["id"]
     with pytest.raises(ValueError, match="cannot be named current"):
-        transition(store, action="rename", block_id=archive_id, expected_revision=5, idempotency_key="rename-1", name=name)
+        transition(store, action="rename", block_id=archive_id, name=name)
 
 
 def _apply_mutations_in_memory(store):
@@ -386,24 +361,16 @@ def test_complete_and_start_archives_notes_and_supplements_with_the_block():
         store,
         action="complete_and_start",
         block_id="current",
-        expected_revision=4,
-        idempotency_key="transition-records",
         name="Strength",
         start_date="2026-09-22",
         week_start_day="Wednesday",
-        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
-    )
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
     program = result["program"]
     archive_id = next(block["id"] for block in program["meta"]["blocks"] if block["status"] == "completed")
     assert program["diet_notes"][0]["block_id"] == archive_id
     assert program["supplements"][0]["block_id"] == archive_id
     assert program["supplement_phases"][0]["block"] == archive_id
 
-    store.get_program = _returning(program)
-    _apply_mutations_in_memory(store)
-    upserted = asyncio.run(store.upsert_diet_note("2026-09-05", "new block note", 5, "note-1"))
-    assert [note["notes"] for note in upserted["diet_notes"]] == ["new block note"]
-    assert upserted["note"]["block_id"] == program["meta"]["current_block_id"]
 
 
 def test_replacing_current_block_supplements_keeps_archived_ones():
@@ -412,13 +379,10 @@ def test_replacing_current_block_supplements_keeps_archived_ones():
         store,
         action="complete_and_start",
         block_id="current",
-        expected_revision=4,
-        idempotency_key="transition-supps",
         name="Strength",
         start_date="2026-09-22",
         week_start_day="Wednesday",
-        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
-    )
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
     store.get_program = _returning(transitioned["program"])
     _apply_mutations_in_memory(store)
     result = asyncio.run(store.update_supplements({"supplements": [{"name": "caffeine", "dose": "200mg"}]}, 5, "supps-1"))

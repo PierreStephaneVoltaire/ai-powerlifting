@@ -134,10 +134,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_import"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "import_get_pending",
@@ -234,10 +231,7 @@
       ]
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_import"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "import_list",
@@ -258,7 +252,6 @@
           "default": 100
         }
       },
-      "required": [],
       "additionalProperties": false
     },
     "result_schema": {
@@ -300,10 +293,7 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_import"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "import_list_pending",
@@ -325,7 +315,6 @@
           "minLength": 1
         }
       },
-      "required": [],
       "additionalProperties": false
     },
     "result_schema": {
@@ -364,10 +353,7 @@
       }
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_import"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "import_parse_file",
@@ -425,10 +411,7 @@
       "additionalProperties": false
     },
     "execution": "ai",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_import"
-    ]
+    "ownership": "athlete"
   },
   {
     "name": "import_reject",
@@ -472,9 +455,6 @@
       "additionalProperties": false
     },
     "execution": "deterministic",
-    "ownership": "athlete",
-    "legacy": [
-      "pod_import"
-    ]
+    "ownership": "athlete"
   }
 ]

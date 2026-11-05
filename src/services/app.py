@@ -14,8 +14,7 @@ from .dispatch import OperationError, authorize, dispatch
 from . import execution
 from .authorization import authorize_request
 from .access import permission_map
-from services.lib.program_store import ProgramRevisionConflictError
-from services.lib.session_store import SessionRevisionConflictError
+from services.lib.session_store import SessionIdentityConflictError
 
 
 DOMAIN = os.environ["PL_DOMAIN"]
@@ -72,14 +71,8 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
             elif operation.domain == 'sessions':
                 details['current_record'] = session_view(record, access)
         raise HTTPException(exc.status, jsonable_encoder({"code": exc.code, "message": exc.message, **details}))
-    except ProgramRevisionConflictError as exc:
-        from .publication import program_view
-        record = program_view(exc.current_record, access) if isinstance(exc.current_record, dict) else exc.current_record
-        raise HTTPException(409, jsonable_encoder({'code': getattr(exc, 'code', 'conflict'), 'message': str(exc), 'current_revision': exc.current_revision, 'current_record': record}))
-    except SessionRevisionConflictError as exc:
-        from .publication import session_view
-        record = session_view(exc.current_record, access) if isinstance(exc.current_record, dict) else exc.current_record
-        raise HTTPException(409, jsonable_encoder({'code': getattr(exc, 'code', 'conflict'), 'message': str(exc), 'current_revision': exc.current_revision, 'current_record': record}))
+    except SessionIdentityConflictError as exc:
+        raise HTTPException(409, jsonable_encoder({'code': exc.code, 'message': str(exc)}))
     except ValidationError as exc:
         raise HTTPException(422, {"code": "validation", "message": exc.message})
     except ValueError as exc:

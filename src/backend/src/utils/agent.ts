@@ -1,6 +1,6 @@
 import { operationScope } from './operationScope'
 import { randomUUID } from 'crypto'
-import { callOperation, pollJob } from './lambda'
+import { callOperation, pollJob } from './operations'
 import { coachUrl } from './coachUrl'
 
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''

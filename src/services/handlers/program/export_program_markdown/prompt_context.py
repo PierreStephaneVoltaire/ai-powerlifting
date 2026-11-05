@@ -47,12 +47,9 @@ def _serialize_wellness(wellness: dict[str, Any] | None) -> dict[str, Any] | Non
     return values
 
 def summarize_program_meta(meta: dict[str, Any]) -> dict[str, Any]:
-    last_comp = meta.get("last_comp") or {}
-    last_results = last_comp.get("results") or {}
     return {
         "program_name": meta.get("program_name"),
         "program_start": meta.get("program_start"),
-        "comp_date": meta.get("comp_date"),
         "federation": meta.get("federation"),
         "practicing_for": meta.get("practicing_for"),
         "version_label": meta.get("version_label"),
@@ -68,12 +65,6 @@ def summarize_program_meta(meta: dict[str, Any]) -> dict[str, Any]:
         "arm_wingspan_cm": meta.get("arm_wingspan_cm"),
         "leg_length_cm": meta.get("leg_length_cm"),
         "attempt_pct": meta.get("attempt_pct"),
-        "last_comp": {
-            "date": last_comp.get("date"),
-            "body_weight_kg": last_comp.get("body_weight_kg"),
-            "weight_class_kg": last_comp.get("weight_class_kg"),
-            "results": last_results or None,
-        } if last_comp else None,
     }
 
 def summarize_lift_profiles(lift_profiles: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -348,12 +339,12 @@ def _group_goals_by_eligible_opportunity(goals: list[dict[str, Any]] | None) -> 
 def _goal_target_competition_dates(goal: dict[str, Any] | None) -> list[str]:
     if not isinstance(goal, dict):
         return []
-    return _string_list(list(goal.get("target_competition_dates") or []) + [goal.get("target_competition_date")])
+    return _string_list(list(goal.get("target_competition_dates") or []))
 
 def _goal_target_standard_ids(goal: dict[str, Any] | None) -> list[str]:
     if not isinstance(goal, dict):
         return []
-    return _string_list(list(goal.get("target_standard_ids") or []) + [goal.get("target_standard_id")])
+    return _string_list(list(goal.get("target_standard_ids") or []))
 
 def _goal_linked_standards(goal: dict[str, Any], standards_by_id: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     linked: list[dict[str, Any]] = []
@@ -527,9 +518,7 @@ def summarize_goals(
                 "strategy_mode": goal.get("strategy_mode"),
                 "risk_tolerance": goal.get("risk_tolerance"),
                 "target_competition_dates": target_competition_dates,
-                "target_competition_date": target_competition_dates[0] if target_competition_dates else goal.get("target_competition_date"),
                 "target_standard_ids": [str(standard.get("id")) for standard in linked_standards if standard.get("id")],
-                "target_standard_id": str((primary_standard or {}).get("id") or goal.get("target_standard_id") or "") or None,
                 "target_date": target_date,
                 "weeks_to_target": round(((target_date_obj - reference_date).days / 7.0), 1) if target_date_obj else None,
                 "target_total_kg": target_total,
@@ -1067,8 +1056,6 @@ def summarize_completed_sessions(
                     "reps": ex.get("reps"),
                     "kg": ex.get("kg"),
                     "rpe": ex.get("rpe"),
-                    "failed": ex.get("failed", False),
-                    "failed_sets": ex.get("failed_sets"),
                     "failed_set_reasons": ex.get("failed_set_reasons"),
                     "set_statuses": ex.get("set_statuses"),
                 }

@@ -1,6 +1,6 @@
 import crypto from 'crypto'
-import { callOperation } from '../utils/lambda'
-import type { AthleteGoal, Program, Session, WeightEntry } from '@powerlifting/types'
+import { callOperation } from '../utils/operations'
+import type { AthleteGoal, Program, WeightEntry } from '@powerlifting/types'
 
 export type AnalysisWindowKey =
   | 'current'
@@ -19,9 +19,7 @@ export type AnalysisSectionKey =
   | 'ai_correlation'
   | 'program_evaluation'
 
-export type AnalysisJobStatus = 'pending' | 'running' | 'complete' | 'error'
-
-export interface AnalysisWindow {
+interface AnalysisWindow {
   key: AnalysisWindowKey
   label: string
   start: string
@@ -32,7 +30,7 @@ export interface AnalysisWindow {
   currentWeek: number
 }
 
-export interface WeeklyAnalysisBundle<T = unknown> {
+interface WeeklyAnalysisBundle<T = unknown> {
   schemaVersion: number
   asOfDate: string
   generatedAt: string
@@ -41,44 +39,8 @@ export interface WeeklyAnalysisBundle<T = unknown> {
   results: Record<AnalysisWindowKey, T>
 }
 
-export interface CachedAnalysisSection<T = unknown> {
-  schemaVersion: number
-  asOfDate: string
-  windowKey: AnalysisWindowKey
-  sectionKey: AnalysisSectionKey
-  sourceFingerprint: string
-  generatedAt: string
-  payload: T
-  cached: boolean
-}
-
-export interface AnalysisSectionStatus<T = unknown> {
-  sectionKey: AnalysisSectionKey
-  status: AnalysisJobStatus | 'missing'
-  generatedAt?: string
-  updatedAt?: string
-  error?: string
-  sourceFingerprint?: string
-  cached: boolean
-  payload?: T
-}
-
-export interface AnalysisSectionJob {
-  sectionKey: AnalysisSectionKey
-  status: AnalysisJobStatus
-  asOfDate: string
-  windowKey: AnalysisWindowKey
-  sourceFingerprint: string
-  queuedAt: string
-  updatedAt: string
-  startedAt?: string
-  completedAt?: string
-  error?: string
-  attempts?: number
-}
-
 export const CACHE_SCHEMA_VERSION = 5
-export const SECTION_CACHE_SCHEMA_VERSION = 2
+const SECTION_CACHE_SCHEMA_VERSION = 2
 // Current-block window caches expire after 7 days. Past-block caches have no TTL.
 // Shard size: keep individual DynamoDB string attributes under 400KB.
 // ~350_000 JSON chars is a safe ceiling before sharding kicks in.
@@ -95,7 +57,6 @@ const WINDOW_SPECS: Array<{ key: AnalysisWindowKey; label: string; mode: number 
 export const ALL_WINDOW_KEYS: AnalysisWindowKey[] = WINDOW_SPECS.map((spec) => spec.key)
 
 // Windows that receive correlation AI analysis (4+ weeks needed)
-export const CORRELATION_WINDOW_KEYS: AnalysisWindowKey[] = ['previous_4', 'previous_8', 'block']
 export const DETERMINISTIC_SECTION_KEYS: AnalysisSectionKey[] = [
   'overview',
   'fatigue_readiness',
@@ -103,10 +64,9 @@ export const DETERMINISTIC_SECTION_KEYS: AnalysisSectionKey[] = [
   'workload',
   'alerts',
 ]
-export const AI_SECTION_KEYS: AnalysisSectionKey[] = ['ai_correlation', 'program_evaluation']
+const AI_SECTION_KEYS: AnalysisSectionKey[] = ['ai_correlation', 'program_evaluation']
 export const ALL_SECTION_KEYS: AnalysisSectionKey[] = [...DETERMINISTIC_SECTION_KEYS, ...AI_SECTION_KEYS]
 
-const DETERMINISTIC_SECTION_SET = new Set(DETERMINISTIC_SECTION_KEYS)
 const ALL_WINDOW_KEY_SET = new Set(ALL_WINDOW_KEYS)
 const ALL_SECTION_KEY_SET = new Set(ALL_SECTION_KEYS)
 

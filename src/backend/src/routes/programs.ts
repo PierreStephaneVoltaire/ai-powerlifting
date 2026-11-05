@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import * as programController from '../controllers/programController'
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import { invalidateAfter } from '../utils/cacheMiddleware'
 import type { PlannedExercise, LiftProfile } from '@powerlifting/types'
 import { AppError } from '../middleware/errorHandler'

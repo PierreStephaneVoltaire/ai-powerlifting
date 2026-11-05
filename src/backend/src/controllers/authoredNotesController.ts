@@ -1,6 +1,6 @@
-import { callOperation } from '../utils/lambda'
+import { callOperation } from '../utils/operations'
 import type { NoteAttachment, NoteContextDomain, NoteMutation, PrivateNote } from '@powerlifting/types'
-export type { NoteAttachment, NoteContextDomain, NoteMutation, PrivateNote }
+export type { NoteAttachment }
 
 export async function listPrivateNotes(): Promise<{ notes: PrivateNote[]; next_cursor: string | null }> {
   const result = await callOperation('note_list_private', { })

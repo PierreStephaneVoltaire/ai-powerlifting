@@ -1,5 +1,4 @@
 from __future__ import annotations
-import asyncio
 _store = None
 def _get_store():
     import os

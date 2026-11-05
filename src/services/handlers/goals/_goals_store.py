@@ -17,10 +17,9 @@ import random
 import uuid as _uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Optional
 
-import boto3
-from services.lib.aws import dynamodb_resource, client as aws_client
+from services.lib.aws import dynamodb_resource
 from boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)
@@ -206,9 +205,6 @@ class GoalsStore:
             if not last_key:
                 break
         return items
-
-    async def _query_goals(self, pk: str) -> list:
-        return await asyncio.get_running_loop().run_in_executor(None, lambda: self._query_goals_sync(pk))
 
     def list_goals_sync(self, pk: str) -> list:
         stored = self._query_goals_sync(pk)
