@@ -20,3 +20,23 @@ variable "cloudflare_account_id" {
 variable "tunnel_origin_url" {
   type = string
 }
+
+variable "app_domain" {
+  type = string
+}
+
+variable "app_zone" {
+  type = string
+}
+
+variable "cloudflare_zone_plan" {
+  type = string
+}
+
+variable "auth_domain" {
+  type = string
+}
+
+variable "auth_origin_url" {
+  type = string
+}

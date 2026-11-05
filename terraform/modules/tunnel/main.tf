@@ -1,6 +1,7 @@
-data "cloudflare_zone" "this" {
+resource "cloudflare_zone" "this" {
   account_id = var.account_id
-  name       = var.zone
+  zone       = var.zone
+  plan       = var.zone_plan
 }
 
 resource "random_id" "secret" {
@@ -27,14 +28,30 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
     }
 
     ingress_rule {
+      hostname = var.auth_hostname
+      service  = var.auth_origin_url
+      origin_request {
+        http_host_header = var.auth_hostname
+      }
+    }
+
+    ingress_rule {
       service = "http_status:404"
     }
   }
 }
 
 resource "cloudflare_record" "app" {
-  zone_id = data.cloudflare_zone.this.id
+  zone_id = cloudflare_zone.this.id
   name    = var.hostname
+  type    = "CNAME"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.this.id}.cfargotunnel.com"
+  proxied = true
+}
+
+resource "cloudflare_record" "auth" {
+  zone_id = cloudflare_zone.this.id
+  name    = trimsuffix(var.auth_hostname, ".${var.zone}")
   type    = "CNAME"
   content = "${cloudflare_zero_trust_tunnel_cloudflared.this.id}.cfargotunnel.com"
   proxied = true

@@ -81,7 +81,6 @@ powerlifting-app/
 │   ├── providers.tf, versions.tf, variables.tf, outputs.tf
 │   ├── k8s/                 Kubernetes stacks: core, perms (local), network, app (in-cluster runner)
 │   └── coach/               Coach and Discord bot workloads (local)
-├── domain.yaml              Domain config
 ├── package.json             Workspace root (workspaces: src/dependencies/types, src/backend, src/frontend)
 ├── tsconfig.json
 ├── docs/

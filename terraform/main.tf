@@ -56,17 +56,16 @@ module "powerlifting_master_sync" {
   source = "./modules/powerlifting_master_sync"
 }
 
-locals {
-  app_domain = yamldecode(file("${path.module}/../domain.yaml"))
-}
-
 module "tunnel" {
   source = "./modules/tunnel"
 
   account_id           = var.cloudflare_account_id
   name                 = "powerlifting"
-  zone                 = local.app_domain.zone
-  hostname             = local.app_domain.domain
+  zone                 = var.app_zone
+  hostname             = var.app_domain
   origin_url           = var.tunnel_origin_url
+  zone_plan            = var.cloudflare_zone_plan
+  auth_hostname        = var.auth_domain
+  auth_origin_url      = var.auth_origin_url
   token_parameter_name = "/powerlifting/k8s/tunnel-token"
 }

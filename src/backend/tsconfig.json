@@ -1,12 +1,12 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
     "module": "CommonJS",
     "moduleResolution": "Node",
     "paths": {
-      "openid-client/passport": ["../../node_modules/openid-client/build/passport.d.ts"]
+      "openid-client/passport": ["../node_modules/openid-client/build/passport.d.ts"]
     }
   },
   "include": ["src/**/*"]
