@@ -8,11 +8,11 @@ working — this file is only layout + operating rules.
 
 - `src/frontend/` — React + Vite app
 - `src/backend/` — Express API (Node)
-- `src/services/` — sixteen typed HTTP/MCP domain services; handlers and shared `lib/`,
+- `src/services/` — eighteen typed HTTP/MCP domain services; handlers and shared `lib/`,
   with manifests in `operations/`.
 - `src/lambda/` — the retained `video-thumbnail` and `master-sync` AWS Lambdas only.
-- `terraform/` — AWS-only (Lambdas, S3, API Gateway, SSM). Applied separately from
-  the root infra.
+- `terraform/` — AWS and Cloudflare (applied by CI), plus `k8s/` and `coach/`
+  Kubernetes stacks (see "Terraform scopes" below).
 
 ## Terraform scopes — do not cross them
 

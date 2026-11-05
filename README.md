@@ -91,11 +91,10 @@ the roadmap.
 
 ### The UI is just one interface
 
-Every feature calculations, analytics, AI skills is also reachable through
-**Discord**. The web portal is one possible interface; you can interact with the
-same training data by talking to the agent in Discord. The backend is a thin
-transport layer that calls the same health tools the agent exposes, so nothing is
-locked behind the UI.
+The portal is one way in. The same training data is available through the
+**Discord bot**, which relays your messages to the Coach, and through **MCP**:
+every domain operation is a typed tool. The backend is a thin transport layer
+over those same operations, so nothing is locked behind the UI.
 
 ---
 
@@ -128,17 +127,19 @@ Highlights (full math and reasoning in [`docs/FORMULAS.md`](docs/FORMULAS.md)):
 
 ## AI components
 
-The AI is narrow and tool-scoped it never calls the model directly from the
-browser. Every AI request goes through the IF Agent API as a specialist tool
-invoke. There are 10+ AI surfaces (details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)):
+The AI is narrow and tool-scoped; the browser never calls a model. Every AI
+request runs on the **Coach** (`pl-coach`), a lightweight worker that uses a
+ChatGPT subscription through the pinned Codex SDK. Domain services hand it
+their inference steps, and chat turns get the typed operations as tools
+(details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)):
 
 - Exercise **ROI correlation** analysis
-- **Program evaluation** (full-block, structured stance/strengths/strategy)
+- **Program evaluation** (full block: stance, strengths, strategy)
 - **Multi-block lifetime comparison**
-- **Lift-profile** review / rewrite / stimulus-coefficient estimation
+- **Lift-profile option suggestions** and stimulus-coefficient estimation
 - **Accessory e1RM backfill**
-- **Template evaluation**
-- **Spreadsheet import** (classify / parse / glossary-resolve)
+- **Template evaluation** against the author's stated intent
+- **Spreadsheet import** (classify, parse, glossary-resolve)
 - **Glossary text generation** and muscle-group estimation
 - **Fatigue-profile estimation**
 - **Session note drafting** and **auto-regulation** suggestions
@@ -149,48 +150,80 @@ invoke. There are 10+ AI surfaces (details in [`docs/ARCHITECTURE.md`](docs/ARCH
 
 ```mermaid
 flowchart LR
-  subgraph Client[Client interfaces]
-    UI[React PWA Vite + Mantine 9]
-    Discord[Discord
-agent channel]
+  subgraph Clients["Clients"]
+    UI["React PWA<br/>Vite + Mantine"]
+    DiscordApp["Discord"]
   end
-  subgraph K3S[Bare-metal k3s cluster]
-    BE[Express API
-thin transport + LRU cache]
-    Agent[IF Agent API
-specialist routing + MCP]
+
+  subgraph Edge["Edge"]
+    CF["Cloudflare<br/>DNS + tunnel"]
   end
-  subgraph Runtime[Powerlifting runtime]
-    DDB[(DynamoDB
-if-health, if-sessions,
-if-powerlifting-*)]
-    S3[(S3
-videos, budget media)]
-    Service[16 typed HTTP/MCP services]
-    Thumbnails[Lambda
-video thumbnails]
+
+  subgraph Cluster["k3s cluster, powerlifting namespace"]
+    Tunnel["cloudflared"]
+    Gateway["NGINX Gateway Fabric"]
+    FE["Frontend<br/>static PWA"]
+    BE["Express API<br/>sessions, auth, cache"]
+    Valkey[("Valkey<br/>cache + sessions")]
+    Services["18 typed domain services<br/>HTTP + MCP"]
+    Analytics["pl-analytics<br/>+ reports sidecar"]
+    Rankings["pl-rankings<br/>OpenPowerlifting data"]
+    Coach["pl-coach<br/>Codex worker"]
+    Bot["pl-coach-discord<br/>gateway bot"]
+    Runner["Actions runner<br/>applies network + app"]
   end
-  UI -->|/api| BE
-  Discord --> Agent
-  BE -->|typed operations| Service
-  Agent -->|typed operations| Service
-  Service --> DDB
-  Service --> S3
-  BE -.->|invokeToolDirect (health_rag_search only)| Agent
-  BE --> DDB
-  BE --> S3
-  S3 -->|S3 event| Thumbnails
-  Thumbnails --> DDB
+
+  subgraph AWS["AWS"]
+    DDB[("DynamoDB")]
+    S3[("S3<br/>videos, media, dataset")]
+    CDN["CloudFront<br/>signed media"]
+    Sync["Lambda<br/>master-sync"]
+    Thumbs["Lambda<br/>video thumbnails"]
+  end
+
+  Auth["Authentik + Discord OAuth"]
+
+  UI --> CF --> Tunnel --> Gateway
+  Gateway -->|"/"| FE
+  Gateway -->|"/api"| BE
+  BE --> Valkey
+  BE -->|"typed operations"| Services
+  BE -->|"AI jobs"| Coach
+  BE --> Auth
+  Services --- Analytics
+  Services --- Rankings
+  Services -->|"inference steps"| Coach
+  Coach -->|"tools"| Services
+  DiscordApp <-->|"websocket"| Bot
+  Bot --> Coach
+  Services --> DDB
+  Services --> S3
+  Rankings --> S3
+  S3 --> CDN --> UI
+  S3 -->|"upload event"| Thumbs --> DDB
+  DDB -->|"stream"| Sync --> DDB
+  Runner -.->|"terraform"| Cluster
 ```
 
-The stack runs on a **bare-metal k3s** cluster for cost savings. The sixteen
-typed services expose the same HTTP and MCP operations to the portal backend
-and IF specialists. Only the master-sync and video-thumbnail workers remain
-AWS Lambdas. The stack is designed so I can spin up more nodes in AWS or any
-other cloud with an NFS server that provides secure access to my local master
-node.
+Everything runs in one namespace on a **bare-metal k3s** node to keep costs
+down, reached through a Cloudflare tunnel with no open ports. Each domain
+(sessions, program, competitions, templates, analytics, rankings, and so on)
+is its own small service generated from `src/services/operations/*.json`, so a
+heavy workload such as loading the OpenPowerlifting dataset for rankings can't
+take down the rest. AWS holds the data (DynamoDB, S3, CloudFront) and the two
+remaining Lambdas: master-sync, which copies the competition directory to every
+athlete, and video thumbnails.
 
-For more on the request flow, data model, caching, and AI execution model, see
+Infrastructure is Terraform, split by concern:
+
+| Stack | Holds | Applied by |
+|---|---|---|
+| `terraform/` | AWS resources, Cloudflare tunnel and DNS | CI |
+| `terraform/k8s/core`, `perms` | namespace, secrets, RBAC, Actions runner | operator, locally |
+| `terraform/k8s/network`, `app` | gateway, routes, tunnel connector, services, portal | in-cluster runner |
+| `terraform/coach` | Coach and Discord bot | operator, locally |
+
+For the request flow, data model, caching and AI execution model, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### Target release form
@@ -242,7 +275,7 @@ powerlifting-app/
 │   ├── lambda/               Retained AWS Lambdas: master-sync and video-thumbnail
 │   └── dependencies/types/   Shared TypeScript types
 ├── docker/         Container build context
-├── terraform/      Powerlifting-specific AWS resources (ECR, S3, Lambda, API Gateway, SSM params, budget table)
+├── terraform/      AWS + Cloudflare (main), k8s/ stacks (core, perms, network, app), coach/
 └── docs/           Architecture, formulas, and the implementation reference
 ```
 
@@ -252,14 +285,10 @@ when working in this repo.
 
 ## Image rollout
 
-The existing `build-services` workflow job builds both `docker/powerlifting-services.pkr.hcl` and
-`docker/powerlifting-analytics.pkr.hcl`. On pushes it publishes the services image to
-`if-powerlifting-fns` and the reports sidecar to `if-powerlifting-analytics`,
-using `latest` and the 12-character commit SHA. Pull requests build both images
-without AWS credentials or pushes. When Terraform changes create the analytics
-repository, the job waits for the existing `terraform-apply` job before pushing.
-
-After CI, resolve both image digests. Set the services and reports digest
-variables in the root Terraform rollout. Set
-`powerlifting_analytics_reports_image_repository` once to the analytics ECR URL,
-review the targeted plan, and apply the same targeted workload resources.
+Pushes run `.github/workflows/build-images.yml`. It builds the Packer images in
+`docker/` (backend, frontend, services, analytics reports, Coach, Discord bot),
+pushes them to ECR as `latest` and the commit SHA, and applies the AWS stack.
+The `kubernetes-apply` job then runs on the in-cluster runner, only for runs
+triggered by the repository owner, and applies `terraform/k8s/network` and
+`terraform/k8s/app`, which resolve each image's `latest` digest and roll the
+workloads.

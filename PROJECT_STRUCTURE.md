@@ -6,7 +6,7 @@ this file is the orientation guide.
 
 ```
 powerlifting-app/
-├── src/backend/             Express API — thin transport layer (delegates to IF Agent API)
+├── src/backend/             Express API — thin transport layer over the typed services
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── src/
@@ -29,8 +29,8 @@ powerlifting-app/
 │       │   ├── userSettings.ts        if-user profile/settings reads
 │       │   └── masterCopy.ts          Operator→test data copy helper
 │       └── utils/
-│           ├── agent.ts      invokeToolDirect / invokeChat → IF Agent API (health_rag_search only)
-│           ├── lambda.ts    invokeLambda → HTTP API Gateway per-tool POST (94 health tools)
+│           ├── agent.ts      invokeToolDirect → Coach jobs (AI operations)
+│           ├── lambda.ts    invokeLambda → typed operation on the owning pl-<domain> service
 │           ├── lambdaCache.ts  In-process LRU cache + write invalidation (math/read TTLs; writes bypass + invalidate)
 │           ├── logger.ts     pino logger
 │           ├── countries.ts  ISO country resolution (competitions)
@@ -73,21 +73,14 @@ powerlifting-app/
 │   ├── master-sync/          Master data sync AWS Lambda
 │   └── video-thumbnail/      S3-triggered thumbnail AWS Lambda
 ├── docker/                  Container build context
-├── terraform/               Powerlifting-specific AWS resources (see AGENTS.md)
-│   ├── main.tf              ECR repos + lifecycle policy
-│   ├── videos.tf            S3 video bucket + video-thumbnail Lambda + ffmpeg layer + S3 trigger
-│   ├── budget.tf            Budget media S3 bucket + if-powerlifting-budget DynamoDB table
-│   ├── cloudfront.tf        CloudFront distribution for media
-│   ├── backend.tf           S3 state backend (separate key from root stack)
-│   ├── lambda.tf            Retained AWS Lambda resources and shared environment
-│   ├── layers.tf            Retained Lambda packaging resources
-│   ├── apigateway.tf        AWS API Gateway resources
-│   ├── authorizer.tf        AWS API Gateway authorization resources
-│   ├── ssm.tf               Plain-String aws_ssm_parameter (OPENROUTER_API_KEY, INTERNAL_API_TOKEN — no KMS) + data.aws_ssm_parameter sources for both
-│   ├── iam.tf               IAM roles and policies
-│   ├── variables.tf         Region, ECR prefix, DynamoDB table names, OPENROUTER_API_KEY, INTERNAL_API_TOKEN
-│   ├── versions.tf          Provider versions
-│   └── outputs.tf
+├── terraform/               Main stack, applied by CI (see AGENTS.md)
+│   ├── main.tf              Module wiring: ECR, media buckets, CloudFront, DynamoDB, dataset, Lambdas, tunnel
+│   ├── modules/             ecr, session_videos, budget_media, cloudfront, powerlifting_dynamodb,
+│   │                        powerlifting_dataset, powerlifting_master_sync, video_thumbnail_lambda, tunnel
+│   ├── backend.tf           S3 state backend
+│   ├── providers.tf, versions.tf, variables.tf, outputs.tf
+│   ├── k8s/                 Kubernetes stacks: core, perms (local), network, app (in-cluster runner)
+│   └── coach/               Coach and Discord bot workloads (local)
 ├── domain.yaml              Domain config
 ├── package.json             Workspace root (workspaces: src/dependencies/types, src/backend, src/frontend)
 ├── tsconfig.json
@@ -115,8 +108,8 @@ When behavior and prose disagree, the code wins. The highest-signal files:
 - **Backend services:** `src/backend/src/services/blockAnalytics.ts`,
   `src/backend/src/services/analysisCache.ts`, `src/backend/src/services/userSettings.ts`
 - **Types:** `src/dependencies/types/index.ts`
-- **Agent plumbing:** `src/backend/src/utils/agent.ts` (invokeToolDirect → IF Agent API; still used for `health_rag_search`)
-- **Lambda plumbing:** `src/backend/src/utils/lambda.ts` (invokeLambda HTTP wrapper against the API Gateway) + `src/backend/src/utils/lambdaCache.ts` (in-process LRU cache + write invalidation)
+- **AI plumbing:** `src/backend/src/utils/agent.ts` (invokeToolDirect → Coach jobs)
+- **Service plumbing:** `src/backend/src/utils/lambda.ts` (invokeLambda HTTP call to the owning domain service) + `src/backend/src/utils/lambdaCache.ts` (in-process LRU cache + write invalidation)
 - **Service runtime:** `src/services/` handlers and shared `src/services/lib/`, packaged by `docker/powerlifting-services.pkr.hcl`.
 - **AWS Lambda substrate:** `powerlifting-app/terraform/` retains only the master-sync and video-thumbnail Lambdas.
 - **Infra:** `terraform/` (root, local k3s) and `powerlifting-app/terraform/` (AWS-only)
