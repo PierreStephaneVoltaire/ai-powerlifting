@@ -379,33 +379,6 @@ def test_form_reservation_is_installed_before_confirm():
     assert result["video_id"] == ticket["video_id"]
 
 
-def test_failed_processing_retry_reuses_id_and_advances_registry_revision():
-    store = FakeStore()
-    store.health_table = FakeHealthTable()
-    s3 = FakeS3()
-    presign = _core("video_upload_presign")
-    _patch_core(presign, store, s3)
-    args = {
-        "pk": "athlete-1", "session_date": "2026-09-13", "filename": "attempt.mp4",
-        "mimetype": "video/mp4", "expected_size": 11
-    }
-    ticket = asyncio.run(presign.video_upload_presign(args))
-    s3.add_object(ticket["s3_key"], ticket["metadata"])
-    confirm = _core("video_upload_confirm")
-    _patch_core(confirm, store, s3)
-    asyncio.run(confirm.video_upload_confirm({**args, "video_id": ticket["video_id"], "s3_key": ticket["s3_key"]}))
-    current = store.health_table.items[("athlete-1", f"Media#{ticket['video_id']}")]
-    store.health_table.items[("athlete-1", f"Media#{ticket['video_id']}")] = {**current, "status": "failed"}
-    retry = asyncio.run(presign.video_upload_presign(args))
-    assert retry["video_id"] == ticket["video_id"]
-    assert retry["metadata"]["allocation_revision"] == "2"
-    s3.add_object(retry["s3_key"], retry["metadata"])
-    video = asyncio.run(confirm.video_upload_confirm({**args, "video_id": retry["video_id"], "s3_key": retry["s3_key"]}))
-    assert video["allocation_revision"] == 2
-    assert video["thumbnail_status"] == "pending"
-    assert video["idempotency_key"] == args["idempotency_key"]
-
-
 def test_duplicate_confirmation_uses_completed_registry_after_source_disappears():
     store = FakeStore()
     store.health_table = FakeHealthTable()

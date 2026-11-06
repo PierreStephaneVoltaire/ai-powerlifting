@@ -1,7 +1,6 @@
 import { callOperation } from '../utils/operations'
 import type { MaxEntry, MaxHistoryStore } from '@powerlifting/types'
 
-type MutationEnvelope = { expected_revision: number; idempotency_key: string }
 
 export async function getMaxHistory(pk: string, version: string): Promise<MaxHistoryStore> {
   const result = await callOperation('max_history_get', { pk, version })
@@ -9,31 +8,27 @@ export async function getMaxHistory(pk: string, version: string): Promise<MaxHis
     pk,
     sk: `max_history#${version}`,
     entries: Array.isArray(result?.entries) ? result.entries : [],
-    revision: Number(result?.revision || 0),
     updated_at: result?.updated_at || new Date().toISOString(),
   }
 }
 
-export async function addMaxEntry(pk: string, version: string, entry: MaxEntry, envelope: MutationEnvelope): Promise<MaxHistoryStore> {
+export async function addMaxEntry(pk: string, version: string, entry: MaxEntry): Promise<MaxHistoryStore> {
   return await callOperation('max_history_add', { pk,
     version,
-    entry,
-    ...envelope,
+    entry
   }) as MaxHistoryStore
 }
 
 export async function updateTargetMaxes(
   pk: string,
   version: string,
-  maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number },
-  envelope: { expected_revision: number; idempotency_key: string },
+  maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number }
 ): Promise<Record<string, unknown>> {
   return await callOperation('max_target_update', { pk,
     version,
     squat_kg: maxes.squat_kg,
     bench_kg: maxes.bench_kg,
-    deadlift_kg: maxes.deadlift_kg,
-    ...envelope,
+    deadlift_kg: maxes.deadlift_kg
   }) as Record<string, unknown>
 }
 

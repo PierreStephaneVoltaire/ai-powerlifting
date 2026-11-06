@@ -11,10 +11,8 @@ export interface VideoUploadOptions {
   setNumber?: number
   notes?: string
   onProgress?: (percent: number) => void
-  idempotencyKey?: string
   lift?: 'squat' | 'bench' | 'deadlift'
   angle?: LiftProfileVideoAngle
-  targetRevision?: number
 }
 
 interface VideoUploadResult {
@@ -36,18 +34,15 @@ interface UploadedPart {
 
 const PART_ATTEMPTS = 3
 
-function uploadHeaders(idempotencyKey?: string): Record<string, string> {
-  return {
-    'X-Selected-Athlete-Pk': requestAthlete(),
-    ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
-  }
+function uploadHeaders(): Record<string, string> {
+  return { 'X-Selected-Athlete-Pk': requestAthlete() }
 }
 
-async function uploadRequest<T>(url: string, method: string, body: unknown, idempotencyKey?: string): Promise<T> {
+async function uploadRequest<T>(url: string, method: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...uploadHeaders(idempotencyKey) },
+    headers: { 'Content-Type': 'application/json', ...uploadHeaders() },
     body: JSON.stringify(body),
   })
   const payload = await response.json().catch(() => null)
@@ -91,12 +86,12 @@ export async function uploadVideo(
   version: string,
   options: VideoUploadOptions,
 ): Promise<VideoUploadResult> {
-  const { file, sessionDate, sessionId, exerciseName, setNumber, notes, onProgress, idempotencyKey, lift, angle, targetRevision } = options
+  const { file, sessionDate, sessionId, exerciseName, setNumber, notes, onProgress, lift, angle } = options
   const base = `${API_BASE}/videos/${encodeURIComponent(version)}/${encodeURIComponent(sessionDate)}/uploads`
-  const target = { sessionId, lift, angle, targetRevision, idempotencyKey }
+  const target = { sessionId, lift, angle }
   const session = await uploadRequest<VideoUploadSession>(base, 'POST', {
     ...target, filename: file.name, mimeType: file.type, size: file.size,
-  }, idempotencyKey)
+  })
   const ref = `uploadId=${encodeURIComponent(session.uploadId)}&s3Key=${encodeURIComponent(session.s3Key)}`
   const videoBase = `${base}/${encodeURIComponent(session.videoId)}`
   const loaded = new Array<number>(session.partCount).fill(0)
@@ -115,7 +110,7 @@ export async function uploadVideo(
   }
   const video = await uploadRequest<SessionVideo>(`${videoBase}/complete`, 'POST', {
     ...target, uploadId: session.uploadId, s3Key: session.s3Key, parts, exerciseName, setNumber, notes,
-  }, idempotencyKey)
+  })
   if (!video.video_id) throw new Error('Invalid video upload response')
   onProgress?.(100)
   return { video }

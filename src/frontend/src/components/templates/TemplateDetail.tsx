@@ -7,7 +7,7 @@ import { EvaluationPanel } from './EvaluationPanel'
 import { TemplateMuscleWorkload } from './TemplateMuscleWorkload'
 import { ApplyModal } from './ApplyModal'
 import { MaxResolutionGate } from './MaxResolutionGate'
-import { confirmApplyTemplate, deleteTemplate, mutationEnvelope, publishTemplate, unpublishTemplate } from '../../api/client'
+import { confirmApplyTemplate, deleteTemplate, publishTemplate, unpublishTemplate } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
 import { templateEditRoute } from '../../utils/templateRoutes'
 
@@ -42,9 +42,7 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         const applied = await confirmApplyTemplate(resolvedTemplateSk, {
           start_date: res.start_date,
           week_start_day: res.week_start_day,
-          target: res.target,
-          expected_revision: res.expected_revision,
-          idempotency_key: res.idempotency_key,
+          target: res.target
         })
         navigate(`/designer/sessions?version=${applied.program_sk}`)
       } finally {
@@ -58,9 +56,9 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
     setLoading(true)
     try {
       if (template.meta.published === false) {
-        await publishTemplate(resolvedTemplateSk, mutationEnvelope((template.meta as any).revision ?? 0))
+        await publishTemplate(resolvedTemplateSk)
       } else {
-        await unpublishTemplate(resolvedTemplateSk, mutationEnvelope((template.meta as any).revision ?? 0))
+        await unpublishTemplate(resolvedTemplateSk)
       }
       onRefresh()
     } finally {
@@ -76,9 +74,7 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         backfilled_maxes,
         start_date: applyData.start_date,
         week_start_day: applyData.week_start_day,
-        target: applyData.target,
-        expected_revision: applyData.expected_revision,
-        idempotency_key: applyData.confirmKey,
+        target: applyData.target
       })
       navigate(`/designer/sessions?version=${res.program_sk}`)
     } catch (err) {

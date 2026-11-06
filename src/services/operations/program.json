@@ -69,8 +69,7 @@
       "type": "object",
       "required": [
         "action",
-        "block_id",
-        "revision"
+        "block_id"
       ],
       "additionalProperties": true
     },

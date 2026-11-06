@@ -372,7 +372,7 @@ export default function ProfilePage() {
           federation: mainFederation.trim(),
           weight_class_kg: selectedWeightClasses[0] ?? null,
           weight_classes_kg: selectedWeightClasses,
-        }, api.mutationEnvelope(program.meta.revision ?? 0))
+        })
         await useProgramStore.getState().loadProgram(version)
       }
 

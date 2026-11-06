@@ -87,5 +87,4 @@ async def max_target_update(args: dict) -> dict:
         "deadlift_kg": meta.get("target_dl_kg"),
         "total_kg": meta.get("target_total_kg"),
         "updated_at": committed["updated_at"],
-        "revision": committed.get("revision"),
     })

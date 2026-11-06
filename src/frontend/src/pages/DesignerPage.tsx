@@ -550,7 +550,7 @@ export default function DesignerPage() {
             session_notes: '',
             session_rpe: null,
             body_weight_kg: null,
-          }, api.mutationEnvelope(useProgramStore.getState().program?.meta.revision ?? 0))
+          }, api.sessionTarget())
         } catch (err: any) {
           // If 400 "already exists", fallback to updating
           if (err.response?.status === 400 && err.response?.data?.error?.includes('already exists')) {
@@ -565,7 +565,7 @@ export default function DesignerPage() {
                   week_number: selectedWeek,
                   phase: selectedPhase || existing.phase,
                   planned_exercises: src.planned_exercises || [],
-                }, api.mutationEnvelope(useProgramStore.getState().program?.meta.revision ?? 0, undefined, existing.id))
+                }, api.sessionTarget(existing.id))
               } else {
                 const combined = [...(existing.planned_exercises || []), ...(src.planned_exercises || [])]
                 await api.updateSession(version, targetDate, existingIndex, {
@@ -574,7 +574,7 @@ export default function DesignerPage() {
                   week_number: selectedWeek,
                   phase: selectedPhase || existing.phase,
                   planned_exercises: combined,
-                }, api.mutationEnvelope(useProgramStore.getState().program?.meta.revision ?? 0, undefined, existing.id))
+                }, api.sessionTarget(existing.id))
               }
             }
           } else {
@@ -659,10 +659,10 @@ export default function DesignerPage() {
         if (editingSessionGlobalIndex < 0) {
           throw new Error('Could not resolve the session index for update')
         }
-        await api.updatePlannedExercises(version, editingSessionDate, editingSessionGlobalIndex, exercisesToSave, api.mutationEnvelope(useProgramStore.getState().program?.meta.revision ?? 0, undefined, editingSession.id))
+        await api.updatePlannedExercises(version, editingSessionDate, editingSessionGlobalIndex, exercisesToSave, api.sessionTarget(editingSession.id))
         if (dateStr !== editingSessionDate) {
           await useProgramStore.getState().loadProgram(version)
-          await api.rescheduleSession(version, editingSessionDate, editingSessionGlobalIndex, dateStr, day, api.mutationEnvelope(useProgramStore.getState().program?.meta.revision ?? 0, undefined, editingSession.id))
+          await api.rescheduleSession(version, editingSessionDate, editingSessionGlobalIndex, dateStr, day, api.sessionTarget(editingSession.id))
         }
       } else {
         await createSession(sessionData)
@@ -982,7 +982,7 @@ export default function DesignerPage() {
                 onClick={async () => {
                   if (confirm('Are you sure you want to delete this session? This cannot be undone.')) {
                     try {
-                      await api.deleteSession(version, editingSessionDate, editingSessionGlobalIndex, api.mutationEnvelope(useProgramStore.getState().program?.meta.revision ?? 0, undefined, editingSession.id))
+                      await api.deleteSession(version, editingSessionDate, editingSessionGlobalIndex, api.sessionTarget(editingSession.id))
                       pushToast({ message: 'Session deleted successfully', type: 'success' })
                       closeSessionEditor()
                       useProgramStore.getState().loadProgram(version)

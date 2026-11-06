@@ -7,7 +7,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { useCompetitionsStore } from '@/store/competitionsStore'
-import { fetchWeightLog, updateMetaField, mutationEnvelope, fetchRankingPercentile, type RankingPercentileResult, type RankingPercentileCard } from '@/api/client'
+import { fetchWeightLog, updateMetaField, fetchRankingPercentile, type RankingPercentileResult, type RankingPercentileCard } from '@/api/client'
 import {
   fetchAnalysisManifest,
   fetchAnalysisSection,
@@ -563,10 +563,8 @@ export default function Dashboard() {
     }
 
     try {
-      let revision = useProgramStore.getState().program?.meta.revision ?? 0
       for (const [field, value] of [['height_cm', height], ['arm_wingspan_cm', wingspan], ['leg_length_cm', legLength]] as const) {
-        const result = await updateMetaField(version, field, value, mutationEnvelope(revision))
-        revision = result.revision ?? revision
+        await updateMetaField(version, field, value)
       }
       await useProgramStore.getState().loadProgram(version)
       pushToast({ message: 'Measurements updated', type: 'success' })

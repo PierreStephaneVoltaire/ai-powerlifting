@@ -9,8 +9,6 @@ type InitializeBody = {
   weekStartDay?: string
   templateSk?: string
   maxes?: Record<string, number>
-  expected_revision?: number
-  idempotency_key?: string
 }
 
 function setupError(error: unknown): AppError {
@@ -62,8 +60,6 @@ export async function initializeSetup(req: Request, res: Response): Promise<void
   }
 
   const body = req.body as InitializeBody
-  if (typeof body.expected_revision !== 'number' || !Number.isInteger(body.expected_revision) || body.expected_revision < 0) throw new AppError('expected_revision must be a nonnegative integer', 400)
-  if (typeof body.idempotency_key !== 'string' || !body.idempotency_key.trim()) throw new AppError('idempotency_key must be a nonempty string', 400)
   try {
     const result = await callOperation('health_setup_initialize', { pk: req.mapped_pk,
       mode: body.mode,
@@ -72,8 +68,6 @@ export async function initializeSetup(req: Request, res: Response): Promise<void
       week_start_day: body.weekStartDay,
       template_sk: body.templateSk,
       maxes: body.maxes,
-      expected_revision: body.expected_revision,
-      idempotency_key: body.idempotency_key,
     })
 
     const status = result?.status

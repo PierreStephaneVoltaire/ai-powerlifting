@@ -49,7 +49,6 @@ videosRouter.post('/:version/:sessionDate', receiveVideo, async (req, res, next)
         req.mapped_pk!, req.params.version, req.params.sessionDate, req.file.path, req.file.originalname,
         req.file.mimetype, req.body.exerciseName || undefined,
         req.body.setNumber ? Number(req.body.setNumber) : undefined, req.body.notes || undefined,
-      req.get('Idempotency-Key') || req.body.idempotencyKey || undefined,
         sessionId,
         req.body.lift || undefined,
         req.body.angle as LiftProfileVideoAngle | undefined,
@@ -90,14 +89,13 @@ videosRouter.head(/^\/media\/(.+)$/, serveMedia)
 
 videosRouter.post('/:version/:sessionDate/confirm', async (req, res, next) => {
   try {
-      const { videoId, s3Key, exerciseName, setNumber, notes, expectedSize, idempotencyKey, sessionId, lift, angle, targetRevision } = (req.body || {}) as {
+      const { videoId, s3Key, exerciseName, setNumber, notes, expectedSize, sessionId, lift, angle, targetRevision } = (req.body || {}) as {
       videoId?: string
       s3Key?: string
       exerciseName?: string
       setNumber?: number
       notes?: string
       expectedSize?: number
-      idempotencyKey?: string
       sessionId?: string
       lift?: 'squat' | 'bench' | 'deadlift'
       angle?: LiftProfileVideoAngle
@@ -116,7 +114,6 @@ videosRouter.post('/:version/:sessionDate/confirm', async (req, res, next) => {
       typeof setNumber === 'number' ? setNumber : undefined,
       notes || undefined,
       typeof expectedSize === 'number' ? expectedSize : undefined,
-      idempotencyKey || req.get('Idempotency-Key') || undefined,
       sessionId || req.get('X-Session-Id') || undefined,
       lift,
       angle,

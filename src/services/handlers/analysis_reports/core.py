@@ -161,7 +161,7 @@ def _visible_program(program: dict, args: Dict[str, Any]) -> dict:
     if "profile:read" in permissions:
         allowed_meta.add("sex")
     if "program:read" in permissions:
-        allowed_meta.update({"program_start", "version_label", "training_notes", "change_log", "block_notes", "program_week_start_day", "block_week_start_days"})
+        allowed_meta.update({"program_start", "version_label", "training_notes", "change_log", "block_notes"})
     visible["meta"] = {key: value for key, value in (visible.get("meta") or {}).items() if key in allowed_meta}
     settings = visible.get("settings")
     if isinstance(settings, dict):

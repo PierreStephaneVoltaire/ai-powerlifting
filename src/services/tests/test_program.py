@@ -107,7 +107,7 @@ def test_source_mutation_is_a_plain_put_that_invalidates_analysis():
     def remove(program):
         return {"removed": program["competitions"].pop()["date"]}
 
-    result = asyncio.run(store.mutate_source("delete_competition", {"date": "2026-09-01"}, 0, "", remove))
+    result = asyncio.run(store.mutate_source("delete_competition", {"date": "2026-09-01"}, remove))
     assert result["removed"] == "2026-09-01" and "revision" not in result
     assert table.puts == ["program#v001"]
     assert table.items["program#v001"]["competitions"] == []

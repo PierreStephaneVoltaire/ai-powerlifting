@@ -133,11 +133,8 @@ function activeBlockId(program: Program): string | null {
 function weekStartForBlock(program: Program, block = 'current'): WeekStartDay {
   const blockValue = block || 'current'
   const blockId = blockValue === 'current' ? activeBlockId(program) ?? 'current' : blockValue
-  const stored = program.meta?.block_week_start_days ?? {}
   const blockRecord = (program.meta?.blocks ?? []).find((candidate) => String(candidate?.id ?? candidate?.block_id ?? '') === blockId)
-  const candidates = [stored[blockId], blockRecord?.week_start_day, stored[blockValue], blockValue === 'current' ? program.meta?.program_week_start_day : undefined]
-  const found = candidates.find((value) => typeof value === 'string' && WEEK_START_DAYS.includes(value as WeekStartDay))
-  return normalizeWeekStartDay(found, 'Monday')
+  return normalizeWeekStartDay(blockRecord?.week_start_day, 'Monday')
 }
 
 function parseIsoDate(value: string): Date {

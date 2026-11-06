@@ -33,4 +33,4 @@ async def template_apply(sk, target="new_block", start_date=None, week_start_day
         return {"status":"gate_blocked","missing_exercises":missing,"missing_maxes":missing,"target":target,"start_date":start_date,"week_start_day":rwsd}
     s_date=date.fromisoformat(start_date) if start_date else date.today()
     sessions=concretize(template, current_maxes, glossary, s_date, rwsd)
-    return {"status":"ready","preview_sessions":sessions[:5],"target":target,"start_date":s_date.isoformat(),"week_start_day":rwsd,"block_id":block_id,"block_name":block_name,"revision":int(program.get("meta", {}).get("revision", 0))}
+    return {"status":"ready","preview_sessions":sessions[:5],"target":target,"start_date":s_date.isoformat(),"week_start_day":rwsd,"block_id":block_id,"block_name":block_name}

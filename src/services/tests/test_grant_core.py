@@ -32,12 +32,9 @@ def _assert(cond, msg):
         raise AssertionError(msg)
 
 
-def test_build_pk_and_sk():
+def test_build_pk():
     pk = shared.build_pk("athlete-1")
     _assert(pk == "Grant#athlete-1", f"unexpected pk: {pk}")
-    sk = shared.build_sk("grantee-1", "2024-01-01T00:00:00+00:00", "coach")
-    _assert(sk.startswith("Grantee#grantee-1#2024-01-01T00:00:00"), f"unexpected sk: {sk}")
-    _assert(sk.endswith("#coach"), f"sk should end with type, got: {sk}")
 
 
 def test_is_active():

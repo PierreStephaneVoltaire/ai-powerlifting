@@ -37,10 +37,8 @@ export function activeBlockId(program: Program | null | undefined): string | nul
 export function weekStartForBlock(program: Program | null | undefined, block = 'current'): WeekStartDay {
   const blockValue = block || 'current'
   const blockId = blockValue === 'current' ? activeBlockId(program) ?? 'current' : blockValue
-  const stored = program?.meta?.block_week_start_days ?? {}
   const blockRecord = program?.meta?.blocks?.find((candidate) => String(candidate.id ?? candidate.block_id ?? '') === blockId)
-  const candidates = [stored[blockId], blockRecord?.week_start_day, stored[blockValue], blockValue === 'current' ? program?.meta?.program_week_start_day : undefined]
-  return candidates.find(isWeekStartDay) ?? 'Monday'
+  return isWeekStartDay(blockRecord?.week_start_day) ? blockRecord.week_start_day : 'Monday'
 }
 
 function programWeekAnchorDate(programStart: string | undefined, weekStartDay: WeekStartDay): string {

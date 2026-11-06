@@ -43,11 +43,11 @@ export default function VideoUploadModal({
   const [setNumber, setSetNumber] = useState<number | undefined>()
   const [notes, setNotes] = useState('')
   const [isUploading, setIsUploading] = useState(false)
-  const [idempotencyKey, setIdempotencyKey] = useState(() => globalThis.crypto.randomUUID())
+  const [uploadId, setUploadId] = useState(() => globalThis.crypto.randomUUID())
   const startUpload = useVideoUploadStore((state) => state.start)
-  const uploadProgress = useVideoUploadStore((state) => state.uploads.find((upload) => upload.id === idempotencyKey)?.progress ?? 0)
-  const activeKeyRef = useRef(idempotencyKey)
-  activeKeyRef.current = idempotencyKey
+  const uploadProgress = useVideoUploadStore((state) => state.uploads.find((upload) => upload.id === uploadId)?.progress ?? 0)
+  const activeKeyRef = useRef(uploadId)
+  activeKeyRef.current = uploadId
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Reset all form state whenever the modal is closed so a second upload
@@ -59,7 +59,7 @@ export default function VideoUploadModal({
       setSetNumber(undefined)
       setNotes('')
       setIsUploading(false)
-      setIdempotencyKey(globalThis.crypto.randomUUID())
+      setUploadId(globalThis.crypto.randomUUID())
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -126,7 +126,7 @@ export default function VideoUploadModal({
 
   async function handleUpload() {
     if (!file) return
-    const key = idempotencyKey
+    const key = uploadId
     setIsUploading(true)
     const video = await startUpload(version, {
       file,
@@ -135,7 +135,7 @@ export default function VideoUploadModal({
       exerciseName,
       setNumber,
       notes: notes || undefined,
-      idempotencyKey: key,
+      uploadId: key,
     })
     if (activeKeyRef.current !== key) return
     setIsUploading(false)

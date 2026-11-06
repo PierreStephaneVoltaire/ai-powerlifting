@@ -1,3 +1,4 @@
+import type { SessionTarget } from '../controllers/sessionController'
 import { Router } from 'express'
 import crypto from 'crypto'
 import * as sessionController from '../controllers/sessionController'
@@ -5,18 +6,11 @@ import * as programController from '../controllers/programController'
 import { invokeSpecialistJson } from '../utils/agent'
 import { invalidateAfter } from '../utils/cacheMiddleware'
 import type { Session, Exercise, SessionStatus, SessionWellness, FailedSetReason } from '@powerlifting/types'
-import { AppError } from '../middleware/errorHandler'
 
-function mutationEnvelope(body: unknown, useBodyId = false): { expected_revision: number; idempotency_key: string; session_id?: string } {
+function sessionTarget(body: unknown, useBodyId = false): SessionTarget {
   const input = body && typeof body === 'object' ? body as Record<string, unknown> : {}
-  if (typeof input.expected_revision !== 'number' || !Number.isInteger(input.expected_revision) || input.expected_revision < 0) {
-    throw new AppError('expected_revision must be a nonnegative integer', 400)
-  }
-  if (typeof input.idempotency_key !== 'string' || !input.idempotency_key.trim()) {
-    throw new AppError('idempotency_key must be a nonempty string', 400)
-  }
   const session_id = typeof input.session_id === 'string' ? input.session_id : useBodyId && typeof input.id === 'string' ? input.id : undefined
-  return { expected_revision: input.expected_revision, idempotency_key: input.idempotency_key, ...(session_id ? { session_id } : {}) }
+  return session_id ? { session_id } : {}
 }
 
 export const sessionsRouter = Router({ mergeParams: true })
@@ -85,7 +79,7 @@ const FAILED_SET_REASONS = new Set([
 function mutationData(result: unknown): Record<string, unknown> {
   if (result && typeof result === 'object' && 'id' in result) {
     const session = result as Session
-    return { success: true, session, revision: session.revision }
+    return { success: true, session }
   }
   return { success: true, ...(result && typeof result === 'object' ? result : {}) }
 }
@@ -233,7 +227,7 @@ sessionsRouter.get('/:version/:date/:index', async (req, res, next) => {
 sessionsRouter.post('/:version', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const session = req.body as Partial<Session>
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
 
     if (!session.date) {
       return res.status(400).json({
@@ -260,7 +254,7 @@ sessionsRouter.post('/:version', invalidateAfter((req) => [`program:${req.params
       wellness: session.wellness ?? undefined,
     }
 
-    const result = await sessionController.createSession(req.mapped_pk!, req.params.version, newSession, envelope)
+    const result = await sessionController.createSession(req.mapped_pk!, req.params.version, newSession, target)
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
     next(err)
@@ -271,13 +265,13 @@ sessionsRouter.post('/:version', invalidateAfter((req) => [`program:${req.params
 sessionsRouter.delete('/:version/:date/:index', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
     const result = await sessionController.deleteSession(
       req.mapped_pk!,
       req.params.version,
       req.params.date,
       index,
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
@@ -288,10 +282,10 @@ sessionsRouter.delete('/:version/:date/:index', invalidateAfter((req) => [`progr
 // PUT /api/sessions/:version/:date/:index - Replace entire session
 sessionsRouter.put('/:version/:date/:index', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
   try {
-    const { expected_revision: _expectedRevision, idempotency_key: _idempotencyKey, ...rawSession } = req.body as Record<string, unknown>
+    const rawSession = req.body as Record<string, unknown>
     const session = rawSession as unknown as Session
     const index = parseInt(req.params.index, 10)
-    const envelope = mutationEnvelope(req.body, true)
+    const target = sessionTarget(req.body, true)
 
     if (!session || !session.date) {
       return res.status(400).json({
@@ -306,7 +300,7 @@ sessionsRouter.put('/:version/:date/:index', invalidateAfter((req) => [`program:
       req.params.date,
       index,
       session,
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
@@ -319,7 +313,7 @@ sessionsRouter.patch('/:version/:date/:index/reschedule', invalidateAfter((req) 
   try {
     const { newDate, newDay } = req.body
     const index = parseInt(req.params.index, 10)
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
 
     if (!newDate) {
       return res.status(400).json({
@@ -335,7 +329,7 @@ sessionsRouter.patch('/:version/:date/:index/reschedule', invalidateAfter((req) 
       index,
       newDate,
       newDay || 'Monday',
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
@@ -348,7 +342,7 @@ sessionsRouter.patch('/:version/:date/:index/status', invalidateAfter((req) => [
   try {
     const { status } = req.body as { status: SessionStatus }
     const index = parseInt(req.params.index, 10)
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
 
     const validStatuses: SessionStatus[] = ['planned', 'logged', 'completed', 'skipped']
     if (!status || !validStatuses.includes(status)) {
@@ -364,7 +358,7 @@ sessionsRouter.patch('/:version/:date/:index/status', invalidateAfter((req) => [
       req.params.date,
       index,
       status,
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
@@ -382,7 +376,7 @@ sessionsRouter.patch('/:version/:date/:index/complete', invalidateAfter((req) =>
       wellness?: SessionWellness | null
     }
     const index = parseInt(req.params.index, 10)
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
 
     const result = await sessionController.completeSession(
       req.mapped_pk!,
@@ -390,7 +384,7 @@ sessionsRouter.patch('/:version/:date/:index/complete', invalidateAfter((req) =>
       req.params.date,
       index,
       { rpe, bodyWeightKg, notes, wellness: wellness ?? undefined },
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
@@ -573,10 +567,10 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
 // POST /api/sessions/:version/:date/:index/exercise - Add exercise to session
 sessionsRouter.post('/:version/:date/:index/exercise', async (req, res, next) => {
   try {
-    const { expected_revision: _expectedRevision, idempotency_key: _idempotencyKey, session_id: _sessionId, ...rawExercise } = req.body as Record<string, unknown>
+    const { session_id: _sessionId, ...rawExercise } = req.body as Record<string, unknown>
     const exercise = rawExercise as unknown as Exercise
     const index = parseInt(req.params.index, 10)
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
 
     if (!exercise || !exercise.name) {
       return res.status(400).json({
@@ -593,7 +587,7 @@ sessionsRouter.post('/:version/:date/:index/exercise', async (req, res, next) =>
       req.params.date,
       index,
       newExercise,
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
@@ -607,7 +601,7 @@ sessionsRouter.patch('/:version/:date/:index/exercise/:exerciseIndex', async (re
     const { field, value } = req.body
     const index = parseInt(req.params.index, 10)
     const exerciseIndex = parseInt(req.params.exerciseIndex, 10)
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
 
     if (!field || value === undefined) {
       return res.status(400).json({
@@ -624,7 +618,7 @@ sessionsRouter.patch('/:version/:date/:index/exercise/:exerciseIndex', async (re
       exerciseIndex,
       field as keyof Exercise,
       value,
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
@@ -637,7 +631,7 @@ sessionsRouter.delete('/:version/:date/:index/exercise/:exerciseIndex', async (r
   try {
     const index = parseInt(req.params.index, 10)
     const exerciseIndex = parseInt(req.params.exerciseIndex, 10)
-    const envelope = mutationEnvelope(req.body)
+    const target = sessionTarget(req.body)
 
     const result = await sessionController.removeExercise(
       req.mapped_pk!,
@@ -645,7 +639,7 @@ sessionsRouter.delete('/:version/:date/:index/exercise/:exerciseIndex', async (r
       req.params.date,
       index,
       exerciseIndex,
-      envelope
+      target
     )
     res.json({ data: mutationData(result), error: null })
   } catch (err) {

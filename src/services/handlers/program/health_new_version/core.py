@@ -56,5 +56,4 @@ async def health_new_version(args: dict | None = None, change_reason: str | None
     return {
         "new_version": version_label,
         "change_reason": change_reason,
-        "revision": updated_program.get("meta", {}).get("revision"),
     }

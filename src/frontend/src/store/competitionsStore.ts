@@ -44,7 +44,7 @@ export const useCompetitionsStore = create<CompetitionsState>((set, get) => ({
   patch: async (masterId, updates) => {
     const current = get().competitions.find((competition) => competition.master_id === masterId)
     if (!current) throw new Error('Competition is no longer loaded')
-    const updated = await api.patchUserCompetition(masterId, updates, api.mutationEnvelope((current as UserCompetition & { revision?: number }).revision ?? 0))
+    const updated = await api.patchUserCompetition(masterId, updates)
     set((state) => ({
       competitions: state.competitions.map((c) =>
         c.master_id === masterId ? updated : c
@@ -55,7 +55,7 @@ export const useCompetitionsStore = create<CompetitionsState>((set, get) => ({
   complete: async (masterId, results, bodyWeightKg, postMeetReport) => {
     const current = get().competitions.find((competition) => competition.master_id === masterId)
     if (!current) throw new Error('Competition is no longer loaded')
-    const updated = await api.completeUserCompetition(masterId, results, bodyWeightKg, api.mutationEnvelope((current as UserCompetition & { revision?: number }).revision ?? 0), postMeetReport)
+    const updated = await api.completeUserCompetition(masterId, results, bodyWeightKg, postMeetReport)
     set((state) => ({
       competitions: state.competitions.map((c) =>
         c.master_id === masterId

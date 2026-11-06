@@ -739,19 +739,17 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
       updated_at: new Date().toISOString(),
     }
 
-    const currentStartMaxes = (program.meta as { block_start_maxes?: Record<string, unknown> }).block_start_maxes || {}
+    const blockId = block.blockKey === 'current' ? program.meta.current_block_id ?? 'current' : block.blockKey
+    const records = program.meta.blocks ?? []
+    if (!records.some((record) => String(record.id ?? record.block_id ?? '') === blockId)) {
+      return res.status(404).json({ data: null, error: `Block ${req.params.blockKey} has no block record` })
+    }
+    const startMaxesKg = Object.fromEntries(Object.entries({ squat, bench, deadlift }).filter((entry): entry is [string, number] => entry[1] != null))
     await programController.updateMetaField(
       req.mapped_pk!,
       'current',
-      'block_start_maxes',
-      {
-        ...currentStartMaxes,
-        [block.blockKey]: startMaxes,
-      },
-      {
-        expected_revision: Number(req.body?.expected_revision),
-        idempotency_key: String(req.body?.idempotency_key || ''),
-      },
+      'blocks',
+      records.map((record) => String(record.id ?? record.block_id ?? '') === blockId ? { ...record, start_maxes_kg: startMaxesKg } : record),
     )
 
     res.json({ data: startMaxes, error: null })

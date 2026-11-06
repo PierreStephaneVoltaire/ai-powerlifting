@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Stack, Title, Paper, Text, SimpleGrid, TextInput, Group, Switch, Divider, Badge } from '@mantine/core'
 import { useProgramStore } from '@/store/programStore'
-import { updateMetaField, mutationEnvelope } from '@/api/client'
+import { updateMetaField } from '@/api/client'
 import { Trophy, Percent } from 'lucide-react'
 
 interface LiftSettings {
@@ -49,16 +49,13 @@ export default function AttemptSelector() {
     // Auto-save to meta
     setSaving(true)
     try {
-      let revision = program?.meta.revision ?? 0
-      const updated = await updateMetaField(version, 'lift_attempt_settings', nextSettings, mutationEnvelope(revision))
-      revision = updated.revision ?? revision
-      useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, lift_attempt_settings: nextSettings, revision } } } : state)
+      await updateMetaField(version, 'lift_attempt_settings', nextSettings)
+      useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, lift_attempt_settings: nextSettings } } } : state)
       if (field === 'max') {
         const nextMaxes = { ...maxes, [lift]: value }
         setMaxes(nextMaxes)
-        const maxesResult = await updateMetaField(version, 'manual_maxes', nextMaxes, mutationEnvelope(revision))
-        revision = maxesResult.revision ?? revision
-        useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, manual_maxes: nextMaxes, revision } } } : state)
+        await updateMetaField(version, 'manual_maxes', nextMaxes)
+        useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, manual_maxes: nextMaxes } } } : state)
       }
     } finally {
       setSaving(false)
@@ -70,8 +67,8 @@ export default function AttemptSelector() {
     setAttemptPct(nextPct)
     setSaving(true)
     try {
-      const result = await updateMetaField(version, 'attempt_pct', nextPct, mutationEnvelope(program?.meta.revision ?? 0))
-      useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, attempt_pct: nextPct, revision: result.revision ?? state.program.meta.revision } } } : state)
+      await updateMetaField(version, 'attempt_pct', nextPct)
+      useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, attempt_pct: nextPct } } } : state)
     } finally {
       setSaving(false)
     }

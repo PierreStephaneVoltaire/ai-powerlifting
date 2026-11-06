@@ -475,7 +475,6 @@ class SessionStore:
         session = _public_session(existing, phases)
         session.update(copy.deepcopy(patch))
         item = self._build_item(program_sk, session, phases, existing_item=existing, preserve_media=not media_update)
-        item.pop("revision", None)
         item.pop("media_revision", None)
         self._write_sync(item, existing)
         result = _public_session(item, None)
@@ -496,18 +495,16 @@ class SessionStore:
         self,
         program_sk: str,
         sessions: list[dict[str, Any]],
-        phases: Optional[list[dict[str, Any]]] = None,
-        bump_program_revision: bool = True) -> dict[str, Any] | None:
+        phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any] | None:
         return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.replace_program_sessions_sync(program_sk, sessions, phases, bump_program_revision)
+            None, lambda: self.replace_program_sessions_sync(program_sk, sessions, phases)
         )
 
     def replace_program_sessions_sync(
         self,
         program_sk: str,
         sessions: list[dict[str, Any]],
-        phases: Optional[list[dict[str, Any]]] = None,
-        bump_program_revision: bool = True) -> dict[str, Any] | None:
+        phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any] | None:
         existing = self._query_items_sync(program_sk)
         self._ensure_unique_session_ids(existing, program_sk)
         ordinals: dict[str, int] = {}
@@ -529,7 +526,6 @@ class SessionStore:
                 if str(item["sk"]) not in prepared_keys:
                     batch.delete_item(Key={"pk": self._pk, "sk": item["sk"]})
             for item in prepared:
-                item.pop("revision", None)
-                batch.put_item(Item=_to_dynamo(item))
+                        batch.put_item(Item=_to_dynamo(item))
         self._invalidate_caches()
         return None

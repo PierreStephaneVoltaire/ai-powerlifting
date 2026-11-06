@@ -177,7 +177,6 @@ class TemplateStore:
         published: bool = False,
         import_job_id: str | None = None,
         sk: str | None = None,
-        _idempotency_payload_hash: str | None = None,
     ) -> str:
         now = self._now()
         new_sk = sk or self._new_template_sk()
@@ -201,7 +200,6 @@ class TemplateStore:
         meta.setdefault("author", meta.get("author_pk") or "operator")
         if import_job_id:
             meta["import_job_id"] = import_job_id
-        meta.setdefault("revision", 0)
 
         template_item["pk"] = self._pk
         template_item["sk"] = new_sk
@@ -217,7 +215,6 @@ class TemplateStore:
         published: bool = False,
         import_job_id: str | None = None,
         sk: str | None = None,
-        _idempotency_payload_hash: str | None = None,
     ) -> str:
         return await asyncio.get_running_loop().run_in_executor(
             None,
@@ -227,8 +224,7 @@ class TemplateStore:
                 author=author,
                 published=published,
                 import_job_id=import_job_id,
-                sk=sk,
-                _idempotency_payload_hash=_idempotency_payload_hash),
+                sk=sk),
         )
 
     def update_template_sync(self, sk: str, template: dict, *, actor_pk: str | None = None, ) -> dict:
@@ -248,7 +244,6 @@ class TemplateStore:
         incoming_meta["author_pk"] = existing_meta.get("author_pk")
         incoming_meta["author"] = existing_meta.get("author")
         incoming_meta["published"] = bool(existing_meta.get("published", True))
-        incoming_meta.pop("idempotency", None)
         if existing_meta.get("published_at"):
             incoming_meta["published_at"] = existing_meta.get("published_at")
         else:
@@ -293,7 +288,6 @@ class TemplateStore:
         meta = template.setdefault("meta", {})
         result = {"status": "archived" if archived else "unarchived", "sk": sk}
         meta["archived"] = archived
-        meta.pop("idempotency", None)
         meta["updated_at"] = self._now()
         self._write_template_index_sync({**template, "pk": self._pk, "sk": sk})
         return result
@@ -338,7 +332,6 @@ class TemplateStore:
         meta = template.setdefault("meta", {})
         result = {"status": "published" if published else "unpublished", "sk": sk}
         meta["published"] = published
-        meta.pop("idempotency", None)
         meta["updated_at"] = now
         if published:
             meta["published_at"] = now
@@ -370,9 +363,6 @@ class TemplateStore:
         meta["published"] = False
         meta["author_pk"] = actor_pk
         meta["author"] = author or actor_pk
-        meta["revision"] = 0
-        meta.pop("idempotency", None)
-        meta.pop("template_apply_idempotency", None)
         new_template.pop("pk", None)
         new_template.pop("sk", None)
         now = self._now()

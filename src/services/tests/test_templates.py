@@ -80,34 +80,20 @@ class TemplateContractTests(unittest.TestCase):
         self.assertEqual(json.loads(result["body"])["status"], "applied")
         self.assertEqual(program_store.saved["meta"]["template_lineage"]["applied_template_sk"], "template#1")
 
-    def test_template_mutations_require_revision_and_idempotency_envelope(self):
-        operations = load_operations("templates")
-        for name, payload in {
-            "template_apply": {"sk": "template#1"},
-            "template_apply_confirm": {"sk": "template#1"},
-        }.items():
-            with self.subTest(name=name):
-                with self.assertRaises(ValidationError):
-                    operations[name].validate_input(payload)
-
-    def test_template_mutation_results_require_authoritative_revision(self):
+    def test_template_mutation_results_validate_without_revision(self):
         operations = load_operations("templates")
         results = {
-            "template_archive": {"status": "archived", "sk": "template#1", "revision": 1},
-            "template_unarchive": {"status": "unarchived", "sk": "template#1", "revision": 2},
-            "template_publish": {"status": "published", "sk": "template#1", "revision": 3},
-            "template_unpublish": {"status": "unpublished", "sk": "template#1", "revision": 4},
-            "template_update": {"status": "updated", "sk": "template#1", "revision": 5},
-            "template_copy": {"status": "copied", "new_sk": "template#2", "revision": 0},
-            "template_apply_confirm": {"status": "applied", "program_version": "v002", "program_sk": "program#v002", "revision": 6},
+            "template_archive": {"status": "archived", "sk": "template#1"},
+            "template_unarchive": {"status": "unarchived", "sk": "template#1"},
+            "template_publish": {"status": "published", "sk": "template#1"},
+            "template_unpublish": {"status": "unpublished", "sk": "template#1"},
+            "template_update": {"status": "updated", "sk": "template#1"},
+            "template_copy": {"status": "copied", "new_sk": "template#2"},
+            "template_apply_confirm": {"status": "applied", "program_version": "v002", "program_sk": "program#v002"},
         }
         for name, result in results.items():
             with self.subTest(name=name):
                 operations[name].validate_result(result)
-                missing = dict(result)
-                missing.pop("revision")
-                with self.assertRaises(ValidationError):
-                    operations[name].validate_result(missing)
 
     def _evaluate(self, program, entries, **extra):
         core = importlib.import_module("services.handlers.templates.template_evaluate.core")

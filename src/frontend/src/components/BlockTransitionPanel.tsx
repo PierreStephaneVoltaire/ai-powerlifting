@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Button, Group, Modal, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core'
 import { useNavigate } from 'react-router-dom'
 import type { BlockTransitionInput, TemplateListEntry, WeekStartDay } from '@powerlifting/types'
 import { confirmApplyTemplate, fetchTemplates, transitionBlock } from '@/api/client'
 import { useAuth } from '@/auth/AuthProvider'
 import { useProgramStore } from '@/store/programStore'
+import { weekStartForBlock } from '@/utils/weekStart'
 
 const weekdays: WeekStartDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const lifts = ['squat', 'bench', 'deadlift'] as const
@@ -24,7 +25,6 @@ export default function BlockTransitionPanel() {
   const [template, setTemplate] = useState('designer')
   const [templates, setTemplates] = useState<TemplateListEntry[]>([])
   const [renameId, setRenameId] = useState('')
-  const attempt = useRef({ payload: '', key: '' })
   useEffect(() => {
     if (action && permissions.includes('templates:read')) void fetchTemplates().then(setTemplates).catch(() => setError('Templates could not be loaded. Retry when connected.'))
   }, [action, permissions])
@@ -37,7 +37,7 @@ export default function BlockTransitionPanel() {
 
   function open(nextAction: BlockTransitionInput['action']) {
     setAction(nextAction)
-    setWeekStart(program!.meta.program_week_start_day || 'Monday')
+    setWeekStart(weekStartForBlock(program))
     setCurrentName(blocks.find(block => block.id === sourceId)?.name || program!.meta.program_name || '')
     setRenameId(sourceId || 'current')
     setMaxes(Object.fromEntries(lifts.map(lift => [lift, program!.current_maxes?.[lift] || 0])))
@@ -48,20 +48,18 @@ export default function BlockTransitionPanel() {
     if (!action || !sourceId) return
     const starting = action === 'start_next' || action === 'complete_and_start'
     const payload = {
-      action, block_id: action === 'rename' ? renameId : sourceId, expected_revision: program!.meta.revision ?? 0,
+      action, block_id: action === 'rename' ? renameId : sourceId,
       current_name: currentName.trim() || undefined,
       ...(action === 'rename' ? { name: currentName.trim() } : {}),
       ...(starting ? { name: name.trim(), start_date: startDate, week_start_day: weekStart, start_maxes_kg: maxes, next_program: { phases: [], sessions: [] } } : {}),
     }
-    const serialized = JSON.stringify([payload, template])
-    if (attempt.current.payload !== serialized) attempt.current = { payload: serialized, key: crypto.randomUUID() }
     setPending(true)
     setError('')
     try {
       if (starting && template !== 'designer') {
-        await confirmApplyTemplate(template, { target: 'new_block', block_name: name.trim(), start_date: startDate, week_start_day: weekStart, backfilled_maxes: maxes, expected_revision: payload.expected_revision, idempotency_key: attempt.current.key })
+        await confirmApplyTemplate(template, { target: 'new_block', block_name: name.trim(), start_date: startDate, week_start_day: weekStart, backfilled_maxes: maxes })
       } else {
-        await transitionBlock({ ...payload, idempotency_key: attempt.current.key })
+        await transitionBlock(payload)
       }
       await loadProgram('current')
       await loadVersions()
@@ -97,7 +95,7 @@ export default function BlockTransitionPanel() {
           <Text size="sm">Confirm best-known current maxes in kg. Week numbering restarts at 1.</Text>
           {lifts.map(lift => <NumberInput key={lift} label={`${lift[0].toUpperCase()}${lift.slice(1)} 1RM (kg${maxes[lift] ? ` / ${(maxes[lift] * 2.20462).toFixed(1)} lb` : ''})`} min={0.5} step={2.5} value={maxes[lift] || ''} onChange={value => setMaxes(previous => ({ ...previous, [lift]: Number(value) }))} required />)}
         </>}
-        {error && <Alert color="red">{error}<Button variant="subtle" onClick={() => loadProgram('current')}>Reload current revision</Button></Alert>}
+        {error && <Alert color="red">{error}<Button variant="subtle" onClick={() => loadProgram('current')}>Reload program</Button></Alert>}
         <Group justify="flex-end">
           <Button variant="default" mih={44} disabled={pending} onClick={() => setAction(null)}>Cancel</Button>
           <Button mih={44} loading={pending} disabled={action === 'rename' ? !currentName.trim() : action !== 'complete' && (!name.trim() || !startDate || lifts.some(lift => !(maxes[lift] > 0)))} onClick={submit}>

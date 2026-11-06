@@ -22,14 +22,13 @@ export async function uploadSessionVideo(
   exerciseName?: string,
   setNumber?: number,
   notes?: string,
-  idempotencyKey?: string,
   sessionId?: string,
   lift?: 'squat' | 'bench' | 'deadlift',
   angle?: LiftProfileVideoAngle,
   targetRevision?: number,
 ): Promise<SessionVideo> {
   const expectedSize = statSync(filePath).size
-  const presign = await presignSessionVideo(pk, version, sessionDate, filename, mimeType, idempotencyKey, expectedSize, sessionId, lift, angle, targetRevision)
+  const presign = await presignSessionVideo(pk, version, sessionDate, filename, mimeType, expectedSize, sessionId, lift, angle, targetRevision)
   await s3Client.send(new PutObjectCommand({
     Bucket: videosBucket,
     Key: presign.s3_key,
@@ -38,7 +37,7 @@ export async function uploadSessionVideo(
     ContentLength: expectedSize,
     Metadata: presign.metadata,
   }))
-  return confirmSessionVideo(pk, version, sessionDate, presign.video_id, presign.s3_key, exerciseName, setNumber, notes, undefined, idempotencyKey, sessionId, lift, angle, targetRevision)
+  return confirmSessionVideo(pk, version, sessionDate, presign.video_id, presign.s3_key, exerciseName, setNumber, notes, undefined, sessionId, lift, angle, targetRevision)
 }
 
 export async function presignSessionVideo(
@@ -47,7 +46,6 @@ export async function presignSessionVideo(
   sessionDate: string,
   filename: string,
   mimeType: string,
-  idempotencyKey?: string,
   expectedSize?: number,
   sessionId?: string,
   lift?: 'squat' | 'bench' | 'deadlift',
@@ -60,7 +58,6 @@ export async function presignSessionVideo(
     session_date: sessionDate,
     filename,
     mimetype: mimeType,
-    idempotency_key: idempotencyKey,
     expected_size: expectedSize,
     session_id: sessionId,
     lift,
@@ -79,7 +76,6 @@ export async function confirmSessionVideo(
   setNumber?: number,
   notes?: string,
   expectedSize?: number,
-  idempotencyKey?: string,
   sessionId?: string,
   lift?: 'squat' | 'bench' | 'deadlift',
   angle?: LiftProfileVideoAngle,
@@ -95,7 +91,6 @@ export async function confirmSessionVideo(
     set_number: setNumber,
     notes,
     expected_size: expectedSize,
-    idempotency_key: idempotencyKey,
     session_id: sessionId,
     lift,
     angle,

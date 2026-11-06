@@ -176,7 +176,6 @@ def list_competitions(args: dict) -> list[dict]:
             comp.pop("pk", None)
             sk = str(comp.pop("sk", "") or "")
             comp["master_id"] = comp.get("master_id") or sk.removeprefix("COMP#") or None
-            comp["revision"] = int(comp.get("revision", 0))
             comp["units"] = comp.get("units") if comp.get("units") in {"kg", "lb"} else "kg"
             if country and country_code(comp.get("venue_country")) != country:
                 continue
@@ -234,7 +233,7 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
         elif applied["post_meet_report"] is not None:
             applied["post_meet_report"] = _normalise_report(master_id, applied["post_meet_report"], current.get("post_meet_report"))
     now = datetime.now(timezone.utc).isoformat()
-    result = {**{key: value for key, value in current.items() if key not in removed and key != "revision"}, **copy.deepcopy(applied), "updated_at": now}
+    result = {**{key: value for key, value in current.items() if key not in removed}, **copy.deepcopy(applied), "updated_at": now}
     result.pop("pk", None)
     result.pop("sk", None)
     names = {"#updated_at": "updated_at"}

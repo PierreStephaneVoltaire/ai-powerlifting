@@ -651,7 +651,6 @@ function blockScopedMeta(
   const meta: Record<string, unknown> = {
     ...program.meta,
     program_start: entry.startDate || program.meta.program_start,
-    comp_date: primaryCompetition?.date ?? '',
     current_body_weight_kg: primaryCompetition?.body_weight_kg ?? program.meta.current_body_weight_kg,
     weight_class_kg: primaryCompetition?.weight_class_kg ?? program.meta.weight_class_kg,
   }
@@ -677,19 +676,21 @@ function blockScopedMeta(
 }
 
 function blockStartMaxes(program: Program, blockKey: string): BlockStartMaxEntry | null {
-  const startMaxes = (program.meta as { block_start_maxes?: Record<string, BlockStartMaxEntry> })?.block_start_maxes
-  const entry = startMaxes?.[blockKey]
-  if (!entry || typeof entry !== 'object') return null
-  const squat = typeof entry.squat_kg === 'number' ? entry.squat_kg : null
-  const bench = typeof entry.bench_kg === 'number' ? entry.bench_kg : null
-  const deadlift = typeof entry.deadlift_kg === 'number' ? entry.deadlift_kg : null
+  const blockId = blockKey === DEFAULT_BLOCK ? program.meta.current_block_id ?? DEFAULT_BLOCK : blockKey
+  const record = (program.meta.blocks ?? []).find((candidate) => String(candidate.id ?? candidate.block_id ?? '') === blockId)
+  const maxes = record?.start_maxes_kg
+  if (!maxes || typeof maxes !== 'object') return null
+  const squat = typeof maxes.squat === 'number' ? maxes.squat : null
+  const bench = typeof maxes.bench === 'number' ? maxes.bench : null
+  const deadlift = typeof maxes.deadlift === 'number' ? maxes.deadlift : null
+  if (squat == null && bench == null && deadlift == null) return null
   return {
     squat_kg: squat,
     bench_kg: bench,
     deadlift_kg: deadlift,
-    total_kg: typeof entry.total_kg === 'number' ? entry.total_kg : totalFromStrength({ squat, bench, deadlift }),
+    total_kg: totalFromStrength({ squat, bench, deadlift }),
     source: 'manual',
-    updated_at: typeof entry.updated_at === 'string' ? entry.updated_at : '',
+    updated_at: '',
   }
 }
 
@@ -1203,14 +1204,7 @@ function buildBlockProgram(program: Program, entry: ProgramBlockIndexEntry, allG
   const goals = goalsForCompetitions(allGoals, competitions)
   const meta = blockScopedMeta(program, entry, analysisEndDate, competitions, goals)
   meta.block_notes = blockProgramNotes(program, entry.startDate, analysisEndDate)
-  if (normalizeToCurrent) {
-    const storedWeekStarts = { ...(program.meta.block_week_start_days ?? {}) }
-    const entryWeekStart = storedWeekStarts[entry.block]
-    meta.block_week_start_days = {
-      ...storedWeekStarts,
-      ...(entryWeekStart ? { [DEFAULT_BLOCK]: entryWeekStart } : {}),
-    }
-  }
+  if (normalizeToCurrent) meta.current_block_id = entry.block
   return {
     ...program,
     sessions: normalizeToCurrent

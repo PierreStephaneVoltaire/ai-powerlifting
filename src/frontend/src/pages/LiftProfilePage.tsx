@@ -133,19 +133,12 @@ export default function LiftProfilePage() {
     const existing = draft.form_videos?.[angle]
     if (existing?.video_id && !globalThis.confirm(`Replace the existing ${FORM_ANGLE_LABELS[angle].toLowerCase()} recording?`)) return
     setUploadingAngle(angle)
-    const targetRevision = program?.revision ?? program?.meta.revision ?? 0
     try {
-      const retrySameFile = existing?.processing_status === 'failed'
-        && existing?.source_filename === file.name
-        && existing?.source_size === file.size
-      const idempotencyKey = retrySameFile ? existing?.idempotency_key : undefined
       const result = await trackUpload({ file }, (onProgress) => uploadVideo(version, {
         file,
         sessionDate: new Date().toISOString().slice(0, 10),
         lift,
         angle,
-        targetRevision,
-        idempotencyKey: idempotencyKey ?? globalThis.crypto.randomUUID(),
         onProgress,
       }))
       const pending = {
@@ -154,7 +147,6 @@ export default function LiftProfilePage() {
         lift,
         angle,
         pending_media_id: result.video.video_id,
-        target_revision: targetRevision,
         processing_status: 'pending' as const,
         thumbnail_status: 'pending' as const,
         source_filename: file.name,

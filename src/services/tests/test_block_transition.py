@@ -62,13 +62,9 @@ def make_store():
         "pk": "athlete-1",
         "sk": "program#v007",
         "meta": {
-            "revision": 4,
             "version_label": "7.0",
-            "program_week_start_day": "Monday",
-            "block_week_start_days": {"current": "Tuesday"},
-            "block_start_maxes": {"current": {"squat_kg": 180, "bench_kg": 110, "deadlift_kg": 210}},
             "block_notes": [{"date": "2026-09-01", "notes": "keep this history", "updated_at": "2026-09-01T00:00:00+00:00", "block": "current"}],
-            "blocks": [{"id": "current", "name": "Accumulation", "status": "active", "start_week": 1, "end_week": 4}],
+            "blocks": [{"id": "current", "name": "Accumulation", "status": "active", "start_week": 1, "end_week": 4, "week_start_day": "Tuesday", "start_maxes_kg": {"squat": 180, "bench": 110, "deadlift": 210}}],
         },
         "phases": [{"name": "Volume", "intent": "base", "start_week": 2, "end_week": 4, "notes": "phase history", "block": "current"}],
         "current_maxes": {"squat": 185, "bench": 115, "deadlift": 220},
@@ -100,7 +96,8 @@ def test_complete_and_start_preserves_history_resets_numbering_and_sessions():
 
     program = result["program"]
     meta = program["meta"]
-    next_id = f"block-{hashlib.sha256(b'transition-1').hexdigest()[:16]}"
+    next_id = result["next_block_id"]
+    assert next_id.startswith("block-")
     archive_id = next(block["id"] for block in meta["blocks"] if block["status"] == "completed")
     assert meta["current_block_id"] == next_id
     assert [block["label"] for block in meta["blocks"]].count("current") == 1
@@ -109,9 +106,11 @@ def test_complete_and_start_preserves_history_resets_numbering_and_sessions():
     assert next(block["status"] for block in meta["blocks"] if block["id"] == archive_id) == "completed"
     assert next(block["start_week"] for block in meta["blocks"] if block["id"] == next_id) == 1
     assert next(block["end_week"] for block in meta["blocks"] if block["id"] == next_id) == 0
-    assert meta["block_start_maxes"][archive_id] == {"squat_kg": 180, "bench_kg": 110, "deadlift_kg": 210}
-    assert meta["block_start_maxes"][next_id] == {"squat": 190, "bench": 120, "deadlift": 225}
-    assert meta["block_week_start_days"] == {archive_id: "Tuesday", next_id: "Wednesday"}
+    blocks_by_id = {block["id"]: block for block in meta["blocks"]}
+    assert blocks_by_id[archive_id]["start_maxes_kg"] == {"squat": 180, "bench": 110, "deadlift": 210}
+    assert blocks_by_id[next_id]["start_maxes_kg"] == {"squat": 190, "bench": 120, "deadlift": 225}
+    assert (blocks_by_id[archive_id]["week_start_day"], blocks_by_id[next_id]["week_start_day"]) == ("Tuesday", "Wednesday")
+    assert not {"block_start_maxes", "block_week_start_days", "program_week_start_day"} & set(meta)
     assert meta["block_notes"][0]["notes"] == "keep this history"
     assert meta["block_notes"][0]["block"] == archive_id
     phases = [phase for phase in program["phases"] if phase["block"] == next_id]
@@ -143,48 +142,7 @@ def test_empty_new_block_template_preserves_external_session_rows():
     assert sessions_store.sessions["program#v007"][0]["id"] == "logged"
 
 
-def test_retry_is_idempotent_and_creates_one_archive_and_next_block():
-    store, table, _ = make_store()
-    args = {
-        "action": "complete_and_start",
-        "block_id": "current",
-        "name": "Strength",
-        "start_date": "2026-09-22",
-        "week_start_day": "Wednesday",
-        "start_maxes_kg": {"squat": 190, "bench": 120, "deadlift": 225}
-    }
-    first = transition(store, **args)
-    second = transition(store, **args)
-    assert "revision" not in second
-    assert second["next_block_id"] == first["next_block_id"]
-    assert len(second["program"]["meta"]["blocks"]) == 2
-    assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v")]) == 2
-
-
-def test_template_replay_uses_outer_payload_before_current_block_changes():
-    store, table, _ = make_store()
-    args = {
-        "action": "complete_and_start",
-        "block_id": "current",
-        "start_date": "2026-09-22",
-        "week_start_day": "Wednesday",
-        "start_maxes_kg": {"squat": 190},
-        "next_program": {"phases": [], "sessions": []},
-        "template_payload_hash": "outer-payload",
-        "template_preserved_sessions": 3
-    }
-    first = transition(store, **args)
-    replay = transition(store, **{**args, "block_id": first["next_block_id"], "template_payload_hash": "outer-payload"})
-    assert "revision" not in replay
-    assert replay["next_block_id"] == first["next_block_id"]
-    assert replay["program"]["meta"]["current_block_id"] == first["next_block_id"]
-    assert len(replay["program"]["meta"]["blocks"]) == 2
-    assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v")]) == 2
-    with pytest.raises(ValueError, match="different payload"):
-        transition(store, **{**args, "template_payload_hash": "changed-payload"})
-
-
-def test_stale_expected_revision_no_longer_blocks_transition():
+def test_complete_publishes_a_new_version_with_no_active_block():
     store, table, _ = make_store()
     result = transition(store, action="complete", block_id="current")
     assert result["program"]["meta"]["current_block_id"] is None
@@ -193,11 +151,10 @@ def test_stale_expected_revision_no_longer_blocks_transition():
     assert table.items[("athlete-1", pointer["ref_sk"])]["published"] is True
 
 
-def test_complete_and_start_backfills_historical_start_maxes_from_block():
+def test_completing_a_block_without_start_maxes_records_the_current_maxes():
     store, _, _ = make_store()
     program = store._table.items[("athlete-1", "program#v007")]
-    del program["meta"]["block_start_maxes"]
-    program["meta"]["blocks"][0]["start_maxes_kg"] = {"squat": 175, "bench": 105, "deadlift": 205}
+    del program["meta"]["blocks"][0]["start_maxes_kg"]
     result = transition(
         store,
         action="complete_and_start",
@@ -206,7 +163,8 @@ def test_complete_and_start_backfills_historical_start_maxes_from_block():
         week_start_day="Wednesday",
         start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
     archive_id = next(block["id"] for block in result["program"]["meta"]["blocks"] if block["status"] == "completed")
-    assert result["program"]["meta"]["block_start_maxes"][archive_id] == {"squat": 175, "bench": 105, "deadlift": 205}
+    archived = next(block for block in result["program"]["meta"]["blocks"] if block["id"] == archive_id)
+    assert archived["start_maxes_kg"] == {"squat": 185, "bench": 115, "deadlift": 220}
 
 
 def test_start_next_requires_completed_block_and_uses_designer_plan():
@@ -296,7 +254,7 @@ def test_unpublished_stages_are_hidden_from_lists_and_reads():
 
 def test_ordinary_new_version_writes_next_version_without_revision_check():
     store, table, _ = make_store()
-    result = asyncio.run(store.new_version([], "ordinary change", 0, "ordinary-change"))
+    result = asyncio.run(store.new_version([], "ordinary change"))
     pointer = table.items[("athlete-1", "program#current")]
     assert pointer["ref_sk"].startswith("program#v008")
     assert result["meta"]["version_label"] != "7.0"
@@ -330,7 +288,7 @@ def test_archived_block_cannot_be_named_current(name):
 
 
 def _apply_mutations_in_memory(store):
-    async def mutate_source(_name, _payload, _expected_revision, _idempotency_key, mutate):
+    async def mutate_source(_name, _payload, mutate):
         program = copy.deepcopy(await store.get_program())
         result = mutate(program)
         store.get_program = _returning(program)
@@ -385,7 +343,7 @@ def test_replacing_current_block_supplements_keeps_archived_ones():
         start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
     store.get_program = _returning(transitioned["program"])
     _apply_mutations_in_memory(store)
-    result = asyncio.run(store.update_supplements({"supplements": [{"name": "caffeine", "dose": "200mg"}]}, 5, "supps-1"))
+    result = asyncio.run(store.update_supplements({"supplements": [{"name": "caffeine", "dose": "200mg"}]}))
     assert [item["name"] for item in result["supplements"]] == ["caffeine"]
     stored = asyncio.run(store.get_program())
     assert sorted(item["name"] for item in stored["supplements"]) == ["caffeine", "creatine"]

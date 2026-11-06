@@ -4,7 +4,7 @@ import { Save, X } from 'lucide-react'
 import {
   Stack, Group, Title, Text, Button, Alert, LoadingOverlay, Divider,
 } from '@mantine/core'
-import { fetchTemplate, mutationEnvelope, updateTemplate } from '../api/client'
+import { fetchTemplate, updateTemplate } from '../api/client'
 import { TemplateMetaEditor } from '../components/templates/TemplateMetaEditor'
 import { TemplatePhasesEditor } from '../components/templates/TemplatePhasesEditor'
 import { TemplateSessionsEditor } from '../components/templates/TemplateSessionsEditor'
@@ -43,7 +43,7 @@ export default function TemplateEditPage() {
     setSaving(true)
     setError(null)
     try {
-      await updateTemplate(resolvedSk, template, mutationEnvelope((template.meta as any).revision ?? 0))
+      await updateTemplate(resolvedSk, template)
       navigate(templateDetailRoute(resolvedSk))
     } catch (e: any) {
       setError(e?.message ?? 'Failed to save template')

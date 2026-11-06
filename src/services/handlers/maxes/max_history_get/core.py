@@ -79,7 +79,6 @@ async def max_history_get(args: dict) -> dict:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     item = _sanitize_decimals(item)
-    item["revision"] = int(item.get("revision", 0))
     history = {str(entry.get('entry_id')): entry for entry in item.get('entries', []) if entry.get('entry_id')}
     unkeyed = []
     for entry in item.get('entries', []):

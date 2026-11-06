@@ -23,13 +23,6 @@ function templateActor(req: Request): Record<string, string> {
   }
 }
 
-function mutationEnvelope(body: unknown): { expected_revision: number; idempotency_key: string } {
-  const input = body && typeof body === 'object' ? body as Record<string, unknown> : {}
-  if (typeof input.expected_revision !== 'number' || !Number.isInteger(input.expected_revision) || input.expected_revision < 0) throw new AppError('expected_revision must be a nonnegative integer', 400)
-  if (typeof input.idempotency_key !== 'string' || !input.idempotency_key.trim()) throw new AppError('idempotency_key must be a nonempty string', 400)
-  return { expected_revision: input.expected_revision, idempotency_key: input.idempotency_key }
-}
-
 function jobHeaders(req: Request, operation: string): Record<string, string> {
   if (!req.actor_mapped_pk || !req.mapped_pk) throw new AppError('Authenticated Person and Athlete scope required', 401, 'AUTH_REQUIRED')
   return {
@@ -64,7 +57,7 @@ export async function getTemplate(req: Request, res: Response) {
 export async function createTemplateFromBlock(req: Request, res: Response) {
   const { name, program_sk } = req.body
   try {
-    const result = await callOperation('template_create_from_block', { name, program_sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_create_from_block', { name, program_sk, ...templateActor(req), pk: req.mapped_pk })
     res.status(201).json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -79,7 +72,6 @@ export async function createBlankTemplate(req: Request, res: Response) {
       description: description ?? '',
       estimated_weeks: estimated_weeks ?? 4,
       days_per_week: days_per_week ?? 3,
-      ...mutationEnvelope(req.body),
       ...templateActor(req),
       pk: req.mapped_pk,
     })
@@ -92,10 +84,9 @@ export async function createBlankTemplate(req: Request, res: Response) {
 
 export async function updateTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
-  const { expected_revision, idempotency_key, ...template } = req.body || {}
+  const template = req.body || {}
   try {
-    const envelope = mutationEnvelope(req.body)
-    const result = await callOperation('template_update', { sk, template, ...envelope, ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_update', { sk, template, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -108,7 +99,7 @@ export async function copyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const { new_name } = req.body
   try {
-    const result = await callOperation('template_copy', { sk, new_name, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_copy', { sk, new_name, ...templateActor(req), pk: req.mapped_pk })
     res.status(201).json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -130,7 +121,7 @@ export async function deleteTemplate(req: Request, res: Response) {
 export async function archiveTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await callOperation('template_archive', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_archive', { sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -141,7 +132,7 @@ export async function archiveTemplate(req: Request, res: Response) {
 export async function unarchiveTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await callOperation('template_unarchive', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_unarchive', { sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -164,8 +155,7 @@ export async function applyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const { target, start_date, week_start_day, block_id, block_name } = req.body
   try {
-    const envelope = mutationEnvelope(req.body)
-    const result = await callOperation('template_apply', { sk, target, start_date, week_start_day, block_id, block_name, ...envelope, ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_apply', { sk, target, start_date, week_start_day, block_id, block_name, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -177,7 +167,6 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const { backfilled_maxes, start_date, week_start_day, target, block_id, block_name } = req.body
   try {
-    const envelope = mutationEnvelope(req.body)
     const result = await callOperation('template_apply_confirm', { sk,
       backfilled_maxes,
       start_date,
@@ -185,7 +174,6 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
       target,
       block_id,
       block_name,
-      ...envelope,
       ...templateActor(req),
       pk: req.mapped_pk,
     })
@@ -199,7 +187,7 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
 export async function publishTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await callOperation('template_publish', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_publish', { sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -210,7 +198,7 @@ export async function publishTemplate(req: Request, res: Response) {
 export async function unpublishTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   try {
-    const result = await callOperation('template_unpublish', { sk, ...mutationEnvelope(req.body), ...templateActor(req), pk: req.mapped_pk })
+    const result = await callOperation('template_unpublish', { sk, ...templateActor(req), pk: req.mapped_pk })
     res.json(result)
   } catch (err: any) {
     if (err instanceof AppError) throw err
@@ -233,7 +221,6 @@ export async function uploadTemplateImport(req: Request, res: Response) {
       conversation_id: `template-import:${req.mapped_pk}`,
       kind: 'domain',
       payload: { domain: 'imports', athlete: req.mapped_pk, operation: 'import_parse_file', arguments: { base64_content: req.file.buffer.toString('base64'), filename: req.file.originalname, pk: req.mapped_pk } },
-      idempotency_key: `${req.actor_mapped_pk}:${req.mapped_pk}:${req.file.originalname}:${req.file.size}:${Date.now()}`,
     }),
   })
   if (!response.ok) {

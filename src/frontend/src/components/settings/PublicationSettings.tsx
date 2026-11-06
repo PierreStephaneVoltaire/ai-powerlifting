@@ -12,8 +12,8 @@ const domains = [
   ['budget', 'Competition budget'], ['glossary', 'Exercise library'], ['templates', 'Templates'],
   ['federation', 'Federation library'], ['imports', 'Imported training files'],
 ] as const
-interface Publication { domains: string[]; revision: number }
-interface PublicationMutation { domains: string[]; expected_revision: number; idempotency_key: string }
+interface Publication { domains: string[] }
+interface PublicationMutation { domains: string[] }
 interface PublicationDraft { current: Publication; selected: string[]; pending: PublicationMutation | null }
 
 export default function PublicationSettings() {
@@ -51,7 +51,7 @@ export default function PublicationSettings() {
     if (!current) return
     if (!navigator.onLine) { setError('Connect to publish changes. Your selections are preserved.'); return }
     setSaving(true)
-    const payload = pending || { domains: selected, expected_revision: current.revision, idempotency_key: crypto.randomUUID() }
+    const payload = pending || { domains: selected }
     setPending(payload)
     try {
       const response = await api.put('/settings/publication', payload)

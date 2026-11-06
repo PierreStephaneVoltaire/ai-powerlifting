@@ -171,20 +171,20 @@ another Athlete's view must restore the previous context, including on small scr
 - Dates are `YYYY-MM-DD`; timestamps are ISO8601.
 - Weights are stored in **kilograms**; frontend unit switching is display-only.
 - Powerlifting weeks are program/block-defined, not calendar weeks — analysis
-  uses stored `block_week_start_days[block]` plus the caller's `asOfDate`.
+  uses the block record's `week_start_day` plus the caller's `asOfDate`.
 
 ### Program meta
 
 `Program.meta` carries identity/versioning, timeline, training-week boundaries,
 federation/class context, bodyweight, targets, attempt defaults, anthropometrics,
-manual maxes, per-block start maxes, program history, template lineage, and
+manual maxes, block records (dates, week start and start maxes), program history, template lineage, and
 `sex` for DOTS/IPF GL.
 
 ### Block and version publication
 
-Blocks have stable identities and editable names. Complete, Start next and the
-combined transition require an expected Program revision and idempotency key.
-Completing a Block preserves unfinished Session statuses. A new Block captures
+Blocks have stable identities and editable names. Each block record carries its
+start date, week-start day and start maxes. Complete, Start next and the
+combined transition are plain writes. Completing a Block preserves unfinished Session statuses. A new Block captures
 its dates, week-start preference and confirmed start maxes, with weeks reset to
 one. Template targets preserve logged work and independent Competition Entries.
 

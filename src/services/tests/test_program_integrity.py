@@ -2,12 +2,11 @@ import copy
 import importlib
 import asyncio
 import threading
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from botocore.exceptions import ClientError
 
-from services.lib.program_store import ProgramStore, ProgramRevisionConflictError
+from services.lib.program_store import ProgramStore
 setup = importlib.import_module("services.handlers.program.health_setup_initialize.core")
 
 
@@ -85,53 +84,15 @@ def setup_fixture(monkeypatch):
     return table, store, sessions, args
 
 
-@pytest.mark.parametrize('failure', ['sessions', 'transaction'])
-def test_setup_interruption_and_retry_publish_only_complete_sessions(monkeypatch, failure):
+def test_setup_writes_program_and_pointer_then_refuses_a_second_setup(monkeypatch):
     table, store, sessions, args = setup_fixture(monkeypatch)
-    if failure == 'sessions':
-        sessions.fail_once = True
-    else:
-        table.transaction_error = ClientError({'Error': {'Code': 'TransactionCanceledException'}}, 'TransactWriteItems')
-    with pytest.raises(ClientError):
-        asyncio.run(setup.health_setup_initialize(args))
-    assert not table.get_item(Key={'pk': 'athlete', 'sk': 'program#current'})
-    assert setup._setup_current_program_sk(store) is None
-    table.transaction_error = None
     result = asyncio.run(setup.health_setup_initialize(args))
     assert result['programSk'].startswith(store.PROGRAM_SK_PREFIX)
-    assert len(sessions.records[result['programSk']]) == 2
-    assert sum(item.get('published') is True for item in table.items.values()) == 1
-    assert asyncio.run(setup.health_setup_initialize(args)) == result
-
-
-def test_setup_lost_reply_and_same_key_retry_recover_committed_result(monkeypatch):
-    table, store, sessions, args = setup_fixture(monkeypatch)
-    table.lose_reply = True
-    result = asyncio.run(setup.health_setup_initialize(args))
-    assert asyncio.run(setup.health_setup_initialize(args)) == result
-    assert len(sessions.records) == 1
     assert table.items[('athlete', 'program#current')]['ref_sk'] == result['programSk']
-    with pytest.raises(ValueError, match='different payload'):
-        asyncio.run(setup.health_setup_initialize({**args, 'program_name': 'Different'}))
-
-
-@pytest.mark.parametrize('same_key', [False, True])
-def test_racing_initializations_have_one_published_program(monkeypatch, same_key):
-    table, store, sessions, args = setup_fixture(monkeypatch)
-    table.barrier = threading.Barrier(2)
-    def initialize(key):
-        try:
-            return asyncio.run(setup.health_setup_initialize({**args}))
-        except ProgramRevisionConflictError as error:
-            return error
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(initialize, ['setup', 'setup' if same_key else 'other']))
-    successes = [result for result in results if isinstance(result, dict)]
-    assert len(successes) == (2 if same_key else 1)
-    assert len({result['programSk'] for result in successes}) == 1
-    assert sum(item.get('published') is True for item in table.items.values()) == 1
-    if not same_key:
-        assert next(result for result in results if isinstance(result, ProgramRevisionConflictError)).current_revision == 1
+    assert table.items[('athlete', result['programSk'])]['published'] is True
+    assert len(sessions.records[result['programSk']]) == 2
+    with pytest.raises(ValueError, match='ALREADY_INITIALIZED'):
+        asyncio.run(setup.health_setup_initialize(args))
 
 
 def test_setup_status_scans_past_hidden_stages_in_both_handlers(monkeypatch):
@@ -146,7 +107,7 @@ def test_setup_status_scans_past_hidden_stages_in_both_handlers(monkeypatch):
 
 def test_new_version_rejects_whole_meta_and_missing_logged_id():
     store = ProgramStore.__new__(ProgramStore)
-    for path in ('meta', 'meta.revision', 'meta.new_version_idempotency', 'meta.transition_idempotency', 'meta.current_block_id', 'meta.blocks'):
+    for path in ('meta', 'meta.current_block_id', 'meta.blocks'):
         with pytest.raises(ValueError, match="Protected"):
             store._validate_version_patches({"meta": {}}, [{"path": path, "value": {}}])
     store._validate_version_patches({"meta": {}}, [{"path": "meta.program_name", "value": "Next cycle"}])

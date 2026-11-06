@@ -22,7 +22,7 @@ class Table:
         self.puts += 1
 
 
-def args(key="one", squat=180, person="person-a", **extra):
+def args(squat=180, person="person-a", **extra):
     return {"pk": "athlete", "_person_pk": person, "version": "current", "entry": {"date": "2026-09-14", "squat_kg": squat, "_access": "forged"}, **extra}
 
 
@@ -40,8 +40,8 @@ def test_max_history_add_is_a_plain_write_without_revision(monkeypatch):
 def test_max_history_stale_revision_does_not_block_a_second_entry(monkeypatch):
     table = Table()
     monkeypatch.setattr(core, "_get_table", lambda: table)
-    asyncio.run(core.max_history_add(args("one")))
-    second = asyncio.run(core.max_history_add(args("two", squat=190)))
+    asyncio.run(core.max_history_add(args()))
+    second = asyncio.run(core.max_history_add(args(squat=190)))
     assert sorted(entry["squat_kg"] for entry in second["entries"]) == [180, 190]
     assert len({entry["id"] for entry in second["entries"]}) == 2
 
@@ -49,8 +49,11 @@ def test_max_history_stale_revision_does_not_block_a_second_entry(monkeypatch):
 def test_max_history_resaving_an_entry_replaces_it(monkeypatch):
     table = Table()
     monkeypatch.setattr(core, "_get_table", lambda: table)
-    asyncio.run(core.max_history_add(args("shared")))
-    resaved = asyncio.run(core.max_history_add(args("shared", squat=185)))
+    first = asyncio.run(core.max_history_add(args()))
+    entry_id = first["entries"][0]["id"]
+    resaved_args = args(squat=185)
+    resaved_args["entry"]["id"] = entry_id
+    resaved = asyncio.run(core.max_history_add(resaved_args))
     assert [entry["squat_kg"] for entry in resaved["entries"]] == [185]
 
 

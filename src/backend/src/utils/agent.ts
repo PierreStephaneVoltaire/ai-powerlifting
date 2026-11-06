@@ -14,7 +14,7 @@ async function invokeInference(payload: Record<string, unknown>, conversationId:
   const response = await fetch(`${coachUrl()}/v1/conversations/${encodeURIComponent(conversation)}/turns`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': scope.person },
-    body: JSON.stringify({ messages: payload.messages, specialist: payload.specialist, model: 'gpt-5.6-sol', idempotency_key: randomUUID() }),
+    body: JSON.stringify({ messages: payload.messages, specialist: payload.specialist, model: 'gpt-5.6-sol' }),
   })
   if (!response.ok) throw new Error(`IF job submission failed ${response.status}: ${await response.text()}`)
   const job: any = await response.json()

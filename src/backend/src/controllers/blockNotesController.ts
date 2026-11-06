@@ -6,6 +6,6 @@ export async function getBlockNotes(pk: string, version: string): Promise<BlockN
   return Array.isArray(result?.block_notes) ? result.block_notes : []
 }
 
-export async function updateBlockNotes(pk: string, version: string, blockNotes: BlockNote[], envelope: { expected_revision: number; idempotency_key: string }): Promise<Record<string, unknown>> {
-  return await callOperation('block_notes_update', { pk, version, block_notes: blockNotes, ...envelope }) as Record<string, unknown>
+export async function updateBlockNotes(pk: string, version: string, blockNotes: BlockNote[]): Promise<Record<string, unknown>> {
+  return await callOperation('block_notes_update', { pk, version, block_notes: blockNotes }) as Record<string, unknown>
 }

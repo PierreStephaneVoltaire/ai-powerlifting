@@ -190,24 +190,6 @@ export async function removeSessionFromCachedProgram(
   } catch { await invalidateDomain('program:current').catch(() => {}) }
 }
 
-export async function updateProgramRevisionInCachedProgram(
-  programUrl: string,
-  revision: number | undefined,
-): Promise<void> {
-  if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return
-  try {
-    const db = await getDB()
-    const entry = (await db.get(STORE_RESPONSES, requestPartition() + '\0' + programUrl)) as CacheEntry | undefined
-    if (!entry) return
-    const envelope = entry.data as any
-    if (!envelope?.data?.meta) return
-    envelope.data.meta = { ...envelope.data.meta, revision }
-    entry.data = envelope
-    await db.put(STORE_RESPONSES, entry)
-  } catch { await invalidateDomain('program:current').catch(() => {}) }
-}
-
-
 export async function cachedGet(
   axiosInstance: any,
   url: string,

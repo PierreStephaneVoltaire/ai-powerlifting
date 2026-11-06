@@ -1,11 +1,6 @@
 import { callOperation } from '../utils/operations'
 import type { LiftResults, PostMeetReport, UserCompetition, UserCompetitionUpdate } from '@powerlifting/types'
 
-export interface CompetitionMutationEnvelope {
-  expected_revision: number
-  idempotency_key: string
-}
-
 export async function getUserCompetitions(
   pk: string,
   filters: { country?: string; state?: string } = {},
@@ -23,14 +18,12 @@ export async function getUserCompetitions(
 export async function patchUserCompetition(
   pk: string,
   masterId: string,
-  updates: UserCompetitionUpdate,
-  envelope: CompetitionMutationEnvelope,
+  updates: UserCompetitionUpdate
 ): Promise<UserCompetition> {
   return (await callOperation('health_update_user_competition', {
     pk,
     master_id: masterId,
-    patch: updates,
-    ...envelope,
+    patch: updates
   })) as UserCompetition
 }
 
@@ -39,7 +32,6 @@ export async function completeUserCompetition(
   masterId: string,
   results: LiftResults,
   bodyWeightKg: number,
-  envelope: CompetitionMutationEnvelope,
   postMeetReport?: PostMeetReport,
 ): Promise<UserCompetition> {
   return (await callOperation('health_complete_user_competition', {
@@ -47,7 +39,6 @@ export async function completeUserCompetition(
     master_id: masterId,
     results,
     body_weight_kg: bodyWeightKg,
-    post_meet_report: postMeetReport,
-    ...envelope,
+    post_meet_report: postMeetReport
   })) as UserCompetition
 }

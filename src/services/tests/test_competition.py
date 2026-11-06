@@ -11,24 +11,10 @@ class FakeProgramStore:
     pk = "operator"
 
     def __init__(self):
-        self.program = {"competitions": []}
-        self.revision = 0
+        self.program = {}
 
     async def get_program(self):
         return self.program
-
-    async def _write_new_version(self, program, minor=True):
-        self.program = program
-
-    async def mutate_source(self, operation, payload, mutator):
-        if expected_revision != self.revision:
-            from services.lib.program_store import ProgramRevisionConflictError
-            raise ProgramRevisionConflictError(self.revision, self.program)
-        updated = copy.deepcopy(self.program)
-        result = mutator(updated)
-        self.program = updated
-        self.revision += 1
-        return {**result, "revision": self.revision}
 
 
 def test_attempt_calculation_is_validated_and_structured(monkeypatch):
@@ -57,7 +43,7 @@ def test_user_competitions_use_a_partition_query(monkeypatch):
 
     monkeypatch.setattr(module, "_get_table", lambda: Table())
     monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
-    assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet", "master_id": "meet", "revision": 0, "units": "kg"}]
+    assert module.list_competitions({"pk": "athlete-1"}) == [{"name": "Meet", "master_id": "meet", "units": "kg"}]
 
 
 def test_user_competitions_show_every_participation_unless_a_block_is_requested(monkeypatch):

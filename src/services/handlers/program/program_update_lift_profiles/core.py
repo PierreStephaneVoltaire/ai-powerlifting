@@ -31,7 +31,7 @@ def normalize_lift_profiles(profiles):
 
 async def program_update_lift_profiles(args: dict):
     store = get_store(args)
-    profiles = args.get("lift_profiles") or args.get("profiles") or []
+    profiles = args.get("lift_profiles") or []
     current = await store.get_program()
     current_by_lift = {
         profile.get("lift"): profile.get("form_videos")

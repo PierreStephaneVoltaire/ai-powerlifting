@@ -42,10 +42,9 @@ api.interceptors.request.use(async config => {
   const url = config.url || ''
   if (!isQueueableMutation(method, url, config.data)) return config
   const body = config.data as Record<string, unknown>
-  const mutation = await prepareMutation({ method, url, data: body, expected_revision: Number(body.expected_revision), idempotency_key: String(body.idempotency_key) }, partition)
+  const mutation = await prepareMutation({ method, url, data: body }, partition)
   if (partition !== requestPartition()) throw new CanceledError('The change remains saved for the original Person and Athlete')
   config.powerliftingMutationId = mutation.id
-  config.data = { ...body, idempotency_key: mutation.idempotency_key }
   if (mutation.status === 'blocked') throw new CanceledError('This change needs access reauthorization before retrying')
   if (!navigator.onLine) throw new OfflineQueuedError(mutation.id)
   return config

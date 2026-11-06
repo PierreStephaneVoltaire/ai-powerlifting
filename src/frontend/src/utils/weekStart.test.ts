@@ -7,18 +7,16 @@ function program(meta: Record<string, unknown>): Program {
   return { meta, sessions: [], phases: [] } as unknown as Program
 }
 
-test('the active block id wins over a stale current key', () => {
-  const stale = program({
+test('week start comes from the block record', () => {
+  const blocks = program({
     current_block_id: 'block-new',
-    block_week_start_days: { current: 'Saturday', 'block-new': 'Sunday', 'old-block': 'Saturday' },
+    blocks: [{ id: 'old-block', status: 'completed', week_start_day: 'Saturday' }, { id: 'block-new', status: 'active', week_start_day: 'Sunday' }],
   })
-  assert.equal(weekStartForBlock(stale, 'current'), 'Sunday')
-  assert.equal(weekStartForBlock(stale, 'old-block'), 'Saturday')
+  assert.equal(weekStartForBlock(blocks, 'current'), 'Sunday')
+  assert.equal(weekStartForBlock(blocks, 'old-block'), 'Saturday')
 })
 
-test('falls back to the active block record, then current, then the program default', () => {
+test('falls back to the active block record, then Monday', () => {
   assert.equal(weekStartForBlock(program({ blocks: [{ id: 'b1', status: 'active', week_start_day: 'Tuesday' }] })), 'Tuesday')
-  assert.equal(weekStartForBlock(program({ block_week_start_days: { current: 'Friday' } })), 'Friday')
-  assert.equal(weekStartForBlock(program({ program_week_start_day: 'Wednesday' })), 'Wednesday')
   assert.equal(weekStartForBlock(program({})), 'Monday')
 })

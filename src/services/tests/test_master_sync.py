@@ -8,7 +8,6 @@ HANDLER = Path(__file__).resolve().parents[2] / "lambda" / "master-sync" / "hand
 
 
 def _load(monkeypatch):
-    monkeypatch.setenv("COMP_MASTER_TABLE", "master")
     monkeypatch.setenv("COMP_USER_TABLE", "user")
     monkeypatch.setenv("USER_INDEX_TABLE", "index")
     monkeypatch.setattr(boto3, "resource", MagicMock())

@@ -34,7 +34,7 @@ function forward(path: (req: Request) => string, method: string) {
         principalOperation = body.payload.operation
         body = {
           kind: 'domain', conversation_id: `powerlifting:${athlete}`,
-          idempotency_key: body.idempotency_key, priority: 0,
+          priority: 0,
           payload: { domain: body.payload.domain, operation: body.payload.operation, arguments: body.payload.arguments || {}, athlete },
         }
       }

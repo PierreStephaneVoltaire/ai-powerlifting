@@ -87,7 +87,7 @@ def test_session_identity_collisions_are_rejected_before_writes(monkeypatch):
     with pytest.raises(SessionIdentityConflictError, match="occurs more than once"):
         store.replace_program_sessions_sync(
             "program#v001", [{"id": "new", "date": "2026-09-15"}, {"id": "new", "date": "2026-09-16"}],
-            [], bump_program_revision=False,
+            [],
         )
     assert len(sessions.items) == 1
 
@@ -304,21 +304,6 @@ def test_store_rejects_a_replacement_with_a_different_id():
 
     with pytest.raises(ValueError, match="identity"):
         store.patch_session_sync("program#v001", "2026-09-13", {"id": "different-id"}, [], 0, 0, "different-id")
-
-
-def test_session_mutations_require_revision_and_idempotency_envelope():
-    operations = load_operations("sessions")
-    for name, payload in {
-        "session_create": {"session": {}},
-        "session_patch": {"date": "2026-09-13", "patch": {}},
-        "session_delete": {"date": "2026-09-13"},
-        "session_replace": {"date": "2026-09-13", "session": {}},
-        "session_reschedule": {"date": "2026-09-13", "new_date": "2026-09-14"},
-        "health_add_exercise": {"date": "2026-09-13", "exercise": {}},
-        "health_remove_exercise": {"date": "2026-09-13", "exercise_index": 0},
-    }.items():
-        with pytest.raises(Exception):
-            operations[name].validate_input(payload)
 
 
 def test_context_aliases_resolve_current_and_preserve_history():

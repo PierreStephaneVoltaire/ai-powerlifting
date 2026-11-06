@@ -19,7 +19,6 @@ export interface VideoUploadTarget {
   lift?: 'squat' | 'bench' | 'deadlift'
   angle?: LiftProfileVideoAngle
   targetRevision?: number
-  idempotencyKey?: string
 }
 
 interface VideoUploadSession {
@@ -40,7 +39,7 @@ export async function startVideoUpload(
   target: VideoUploadTarget,
 ): Promise<VideoUploadSession> {
   const presign = await presignSessionVideo(
-    pk, version, sessionDate, filename, mimeType, target.idempotencyKey, size,
+    pk, version, sessionDate, filename, mimeType, size,
     target.sessionId, target.lift, target.angle, target.targetRevision,
   )
   const created = await s3Client.send(new CreateMultipartUploadCommand({
@@ -105,7 +104,7 @@ export async function completeVideoUpload(
   }
   return confirmSessionVideo(
     pk, version, sessionDate, videoId, s3Key, details.exerciseName, details.setNumber, details.notes,
-    undefined, target.idempotencyKey, target.sessionId, target.lift, target.angle, target.targetRevision,
+    undefined, target.sessionId, target.lift, target.angle, target.targetRevision,
   )
 }
 

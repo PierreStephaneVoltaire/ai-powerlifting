@@ -138,4 +138,4 @@ async def template_copy(sk, new_name, actor_pk=None, author=None):
     require = require_mutation_envelope
     require()
     new_sk = await ts.copy_template(sk, new_name, actor_pk=resolved_actor, author=_template_author(author, resolved_actor))
-    return {"status": "copied", "new_sk": new_sk, "revision": 0}
+    return {"status": "copied", "new_sk": new_sk}

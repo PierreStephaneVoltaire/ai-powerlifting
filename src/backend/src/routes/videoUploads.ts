@@ -19,7 +19,6 @@ interface UploadBody {
   exerciseName?: string
   setNumber?: number
   notes?: string
-  idempotencyKey?: string
   sessionId?: string
   lift?: 'squat' | 'bench' | 'deadlift'
   angle?: LiftProfileVideoAngle
@@ -32,7 +31,6 @@ function uploadTarget(req: Request<Params>, body: UploadBody): uploads.VideoUplo
     lift: body.lift || undefined,
     angle: body.angle || undefined,
     targetRevision: typeof body.targetRevision === 'number' ? body.targetRevision : undefined,
-    idempotencyKey: body.idempotencyKey || req.get('Idempotency-Key') || undefined,
   }
 }
 

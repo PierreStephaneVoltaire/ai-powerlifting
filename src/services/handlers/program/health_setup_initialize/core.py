@@ -227,18 +227,6 @@ def _setup_program(
                 "bench": bench,
                 "deadlift": deadlift,
             },
-            "block_start_maxes": {
-                "current": {
-                    "squat_kg": squat or None,
-                    "bench_kg": bench or None,
-                    "deadlift_kg": deadlift or None,
-                    "total_kg": total or None,
-                    "source": "manual",
-                    "updated_at": now,
-                }
-            },
-            "program_week_start_day": week_start_day,
-            "block_week_start_days": {"current": week_start_day},
             "blocks": [{
                 "id": "current",
                 "block_id": "current",
@@ -249,17 +237,9 @@ def _setup_program(
                 "end_week": max([int(phase.get("end_week", 1)) for phase in _setup_phases(template)] + [1]),
                 "start_date": start_date,
                 "week_start_day": week_start_day,
-                "start_maxes_kg": {
-                    "squat_kg": squat or None,
-                    "bench_kg": bench or None,
-                    "deadlift_kg": deadlift or None,
-                    "total_kg": total or None,
-                    "source": "manual",
-                    "updated_at": now,
-                },
+                "start_maxes_kg": {lift: value for lift, value in (("squat", squat), ("bench", bench), ("deadlift", deadlift)) if value},
             }],
             "current_block_id": "current",
-            "revision": 1,
         },
         "phases": _setup_phases(template),
         "sessions": _setup_concretize_template(template, maxes, start_date, week_start_day) if template else [],
@@ -368,7 +348,7 @@ async def health_setup_initialize(
 
     result = {
         "status": "initialized", "mode": mode, "programSk": "program#v001",
-        "sessionCount": len(program.get("sessions") or []), "revision": 1,
+        "sessionCount": len(program.get("sessions") or []),
     }
     await asyncio.get_running_loop().run_in_executor(None, lambda: _write_initial_program_sync(store, program, result))
 

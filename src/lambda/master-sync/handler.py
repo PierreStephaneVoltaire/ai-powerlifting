@@ -6,7 +6,6 @@ from boto3.dynamodb.types import TypeDeserializer
 dynamodb = boto3.resource("dynamodb")
 dynamodb_client = boto3.client("dynamodb")
 
-COMP_MASTER_TABLE = os.environ["COMP_MASTER_TABLE"]
 COMP_USER_TABLE = os.environ["COMP_USER_TABLE"]
 USER_INDEX_TABLE = os.environ["USER_INDEX_TABLE"]
 

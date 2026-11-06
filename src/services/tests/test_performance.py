@@ -18,8 +18,7 @@ class FakeProgramStore:
         return self.program
 
     async def mutate_source(self, operation, payload, mutate):
-        assert expected_revision == 0 and idempotency_key == "maxes-edit"
-        return mutate(self.program) | {"revision": 1}
+        return mutate(self.program)
 
 
 def test_performance_contract_requires_real_mutation_payloads():
@@ -39,13 +38,12 @@ def test_target_max_update_returns_committed_target_record(monkeypatch):
             pass
 
         async def update_meta_fields(self, updates):
-            assert expected_revision == 4 and idempotency_key == "target-edit"
-            return {"success": True, "meta": updates, "revision": 5, "sk": "program#v002", "updated_at": "2026-09-15T10:00:00+00:00"}
+            return {"success": True, "meta": updates, "sk": "program#v002", "updated_at": "2026-09-15T10:00:00+00:00"}
 
     monkeypatch.setitem(sys.modules, "services.lib.program_store", SimpleNamespace(ProgramStore=FakeStore))
     result = asyncio.run(max_core.max_target_update({"pk": "athlete-1", "version": "v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230}))
     load_operations("performance")["max_target_update"].validate_result(result)
-    assert result == {"version": "v002", "sk": "program#v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230, "total_kg": 545, "updated_at": "2026-09-15T10:00:00+00:00", "revision": 5}
+    assert result == {"version": "v002", "sk": "program#v002", "squat_kg": 190, "bench_kg": 125, "deadlift_kg": 230, "total_kg": 545, "updated_at": "2026-09-15T10:00:00+00:00"}
 
 
 def test_current_maxes_dispatch_uses_fake_store_and_preserves_omitted_lifts(monkeypatch):
@@ -57,7 +55,7 @@ def test_current_maxes_dispatch_uses_fake_store_and_preserves_omitted_lifts(monk
     operations = load_operations("performance")
 
     assert dispatch(operations["health_get_current_maxes"], {"pk": "athlete-1"}) == {"squat": 180, "bench": 120}
-    assert dispatch(operations["health_update_current_maxes"], {"pk": "athlete-1", "deadlift_kg": 220}) == {"squat": 180, "bench": 120, "deadlift": 220, "revision": 1}
+    assert dispatch(operations["health_update_current_maxes"], {"pk": "athlete-1", "deadlift_kg": 220}) == {"squat": 180, "bench": 120, "deadlift": 220}
 
 
 def test_history_add_computes_total_and_get_filters_window(monkeypatch):

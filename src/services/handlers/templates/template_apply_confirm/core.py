@@ -129,9 +129,9 @@ async def template_apply_confirm(sk, backfilled_maxes=None, start_date=None, wee
     new_program = copy.deepcopy(program)
     new_program["sessions"] = merged
     new_program.setdefault("meta", {})["template_lineage"] = {"applied_template_sk": sk, "applied_at": datetime.now(timezone.utc).isoformat(), "week_start_day": resolved_week_start, "start_date": start.isoformat()}
-    new_program["meta"]["program_week_start_day"] = resolved_week_start
-    starts = dict(new_program["meta"].get("block_week_start_days") or {})
-    starts[target_id] = resolved_week_start
-    new_program["meta"]["block_week_start_days"] = starts
+    new_program["meta"]["blocks"] = [
+        {**block, "week_start_day": resolved_week_start} if str(block.get("id") or block.get("block_id")) == target_id else block
+        for block in new_program["meta"].get("blocks") or []
+    ]
     await store._write_new_version(new_program, minor=False)
     return {"status": "applied", "program_version": new_program["meta"].get("version_label"), "program_sk": new_program.get("sk") or new_program["meta"].get("version_label"), "target": target, "block_id": target_id, "preserved_sessions": len(existing)}

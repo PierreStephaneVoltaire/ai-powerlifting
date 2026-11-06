@@ -20,15 +20,13 @@ class Table:
 
     def put_item(self, Item, **kwargs):
         key = (Item['pk'], Item.get('sk'))
-        current = self.items.get(key)
-        expected = kwargs.get('ExpressionAttributeValues', {}).get(':revision')
-        if current and (expected is None or current.get('revision') != expected):
+        if key in self.items and kwargs.get('ConditionExpression') == 'attribute_not_exists(pk)':
             raise ClientError({'Error': {'Code': 'ConditionalCheckFailedException'}}, 'PutItem')
         self.items[key] = copy.deepcopy(Item)
 
     def update_item(self, Key, ExpressionAttributeValues, **kwargs):
         current = self.items[(Key['pk'], Key.get('sk'))]
-        assert current.get('tags') == ExpressionAttributeValues.get(':previous')
+        assert 'ConditionExpression' not in kwargs
         current['tags'] = copy.deepcopy(ExpressionAttributeValues[':tags'])
 
 
@@ -53,10 +51,8 @@ def test_global_approval_is_operator_only_and_legacy_flags_never_publish(monkeyp
     operator = {**own, '_person_pk': 'operator-person', '_access': {'permissions': ['operator:write']}}
     approved = tags.decide({**operator, **decision})
     assert tags.decide({**operator, **decision}) == approved
-    assert tags.handler({}, None)['tags'] == [{'tag': 'Long Arms', 'status': 'approved', 'revision': 2}]
+    assert tags.handler({}, None)['tags'] == [{'tag': 'Long Arms', 'status': 'approved'}]
     assert tags.selected_tags(result['tags'])[1]['approved'] is True
-    with pytest.raises(OperationError, match='changed'):
-        tags.decide({**operator, **decision, 'decision': 'rejected'})
     tags.decide({**operator, **decision, 'decision': 'rejected'})
     assert tags.handler({}, None)['tags'] == []
     assert all(not tag['approved'] for tag in tags.selected_tags(result['tags']))

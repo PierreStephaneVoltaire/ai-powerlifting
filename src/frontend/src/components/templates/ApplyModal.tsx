@@ -36,9 +36,7 @@ export const ApplyModal: React.FC<Props> = ({ opened, onClose, sk, onApply }) =>
       const res = await applyTemplate(sk, {
         target,
         start_date: startDate || undefined,
-        week_start_day: weekStartDay,
-        expected_revision: program.meta.revision ?? 0,
-        idempotency_key: idempotencyKey.current,
+        week_start_day: weekStartDay
       })
       onApply(res)
     } catch (err) {

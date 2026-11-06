@@ -119,11 +119,10 @@ resource "aws_lambda_function" "powerlifting_master_sync" {
 
   environment {
     variables = {
-      COMP_MASTER_TABLE = "if-powerlifting-master-competitions"
-      COMP_USER_TABLE   = "if-powerlifting-user-competitions"
-      FED_MASTER_TABLE  = "if-powerlifting-master-federations"
-      FED_USER_TABLE    = "if-powerlifting-user-federations"
-      USER_INDEX_TABLE  = "if-user"
+      COMP_USER_TABLE  = "if-powerlifting-user-competitions"
+      FED_MASTER_TABLE = "if-powerlifting-master-federations"
+      FED_USER_TABLE   = "if-powerlifting-user-federations"
+      USER_INDEX_TABLE = "if-user"
     }
   }
 

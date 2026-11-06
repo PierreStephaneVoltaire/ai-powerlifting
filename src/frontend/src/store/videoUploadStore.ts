@@ -23,7 +23,7 @@ interface TrackedUpload {
 
 interface VideoUploadState {
   uploads: BackgroundUpload[]
-  start: (version: string, options: Omit<VideoUploadOptions, 'onProgress'>) => Promise<SessionVideo | null>
+  start: (version: string, options: Omit<VideoUploadOptions, 'onProgress'> & { uploadId?: string }) => Promise<SessionVideo | null>
   track: <T>(upload: TrackedUpload, run: (onProgress: (progress: number) => void) => Promise<T>) => Promise<T>
   consume: (id: string) => void
 }
@@ -67,11 +67,12 @@ export const useVideoUploadStore = create<VideoUploadState>()((set, get) => {
     uploads: [],
     track,
     start: async (version, options) => {
-      const id = options.idempotencyKey || globalThis.crypto.randomUUID()
+      const { uploadId, ...upload } = options
+      const id = uploadId || globalThis.crypto.randomUUID()
       try {
         const { uploadVideo } = await import('@/utils/s3')
         const { video } = await track({ id, file: options.file, sessionDate: options.sessionDate, sessionId: options.sessionId }, (onProgress) =>
-          uploadVideo(version, { ...options, idempotencyKey: id, onProgress }))
+          uploadVideo(version, { ...upload, onProgress }))
         patch(id, { video })
         useUiStore.getState().pushToast({ message: `Video uploaded: ${options.file.name}`, type: 'success' })
         return video

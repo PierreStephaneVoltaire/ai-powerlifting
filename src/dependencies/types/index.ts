@@ -11,7 +11,6 @@ export interface AccessContext {
 }
 
 export interface ProgramMeta {
-  revision?: number
   current_block_id?: string | null
   blocks?: TrainingBlock[]
   program_name: string
@@ -46,14 +45,6 @@ export interface ProgramMeta {
     bench: number
     deadlift: number
   }
-  block_start_maxes?: Record<string, {
-    squat_kg: number | null
-    bench_kg: number | null
-    deadlift_kg: number | null
-    total_kg: number | null
-    source: 'manual'
-    updated_at: string
-  }>
   lift_attempt_settings?: Record<string, {
     max: number
     incremental: boolean
@@ -62,8 +53,6 @@ export interface ProgramMeta {
   archived?: boolean
   archived_at?: string | null
   template_lineage?: TemplateLineage
-  program_week_start_day?: WeekStartDay
-  block_week_start_days?: Record<string, WeekStartDay>
 }
 
 export type WeekStartDay =
@@ -92,8 +81,6 @@ export interface TrainingBlock {
 export interface BlockTransitionInput {
   action: 'complete' | 'start_next' | 'complete_and_start' | 'rename'
   block_id: string
-  expected_revision: number
-  idempotency_key: string
   name?: string
   current_name?: string
   start_date?: string
@@ -106,7 +93,6 @@ export interface BlockTransitionResult {
   action: BlockTransitionInput['action']
   block_id: string
   next_block_id: string | null
-  revision: number
   program: Program
   warning?: string
 }
@@ -377,7 +363,6 @@ export interface SessionWellness {
 }
 
 export interface Session {
-  revision?: number
   block_id?: string
   id?: string
   date: string              // YYYY-MM-DD
@@ -408,7 +393,6 @@ export interface SessionVideo {
   notes?: string
   uploaded_at: string
   session_id?: string
-  idempotency_key?: string
   thumbnail_status?: 'pending' | 'ready' | 'failed'
 }
 
@@ -435,7 +419,6 @@ export type VideoSort = 'newest' | 'oldest' | 'volume' | 'weight'
 
 
 export interface Program {
-  revision?: number
   pk: string
   sk: string
   meta: ProgramMeta
@@ -808,7 +791,6 @@ export interface MaxHistoryStore {
   pk: string
   sk: string
   entries: MaxEntry[]
-  revision: number
   updated_at: string
 }
 
@@ -902,7 +884,6 @@ export interface MasterCompetition {
 }
 
 export interface UserCompetition {
-  revision?: number
   units?: 'kg' | 'lb'
   master_id: string
   name: string

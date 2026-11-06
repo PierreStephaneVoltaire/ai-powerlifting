@@ -6,14 +6,14 @@ from services import publication
 from services.dispatch import OperationError
 
 
-def test_publication_owner_cas_and_nested_domain_projection(monkeypatch):
+def test_publication_is_a_plain_write_and_projects_nested_domains(monkeypatch):
     owner = {'pk': 'athlete-person', 'roles': ['athlete']}
     class Table:
         def get_item(self, **kwargs):
             assert kwargs['Key'] == {'pk': owner['pk']}
             return {'Item': copy.deepcopy(owner)}
         def update_item(self, **kwargs):
-            assert 'publication.revision = :expected' in kwargs['ConditionExpression']
+            assert 'ConditionExpression' not in kwargs
             owner['publication'] = copy.deepcopy(kwargs['ExpressionAttributeValues'][':publication'])
     class Database:
         def Table(self, name):
@@ -21,10 +21,8 @@ def test_publication_owner_cas_and_nested_domain_projection(monkeypatch):
     monkeypatch.setattr(publication, 'database', Database)
     args = {'_access': {'settings_pk': owner['pk']}, 'domains': ['program']}
     current = publication.handler(args, None)
-    assert current['domains'] == ['program'] and current['revision'] == 1
+    assert current == {'domains': ['program']}
     assert publication.handler(args, None) == current
-    with pytest.raises(OperationError, match='changed'):
-        publication.handler({**args}, None)
     owner['roles'] = ['coach']
     with pytest.raises(OperationError, match='Athletes'):
         publication.handler({**args}, None)
@@ -45,7 +43,7 @@ def test_operation_result_fails_closed_without_access():
 
 def test_publication_get_projects_internal_metadata(monkeypatch):
     owner = {'pk': 'athlete-person', 'roles': ['athlete'], 'publication': {
-        'domains': ['competition'], 'revision': 3, 'updated_at': '2026-09-15T00:00:00Z'
+        'domains': ['competition'], 'updated_at': '2026-09-15T00:00:00Z'
     }}
 
     class Table:
@@ -57,7 +55,7 @@ def test_publication_get_projects_internal_metadata(monkeypatch):
             return Table()
 
     monkeypatch.setattr(publication, 'database', Database)
-    assert publication.handler({'_access': {'settings_pk': 'athlete-person'}}, None) == {'domains': ['competition'], 'revision': 3}
+    assert publication.handler({'_access': {'settings_pk': 'athlete-person'}}, None) == {'domains': ['competition']}
 
 
 def test_public_viewers_see_only_current_block_sessions():

@@ -8,9 +8,9 @@ def test_handler_context_filters_competition_ties_and_training_domains(monkeypat
     from services.lib import program_tool_helpers
     owner = {'pk': 'owner-person', 'mapped_pk': 'athlete'}
     actor = {'pk': 'handler-person'}
-    entries = [{'pk': 'athlete', 'sk': 'COMP#tied', 'date': '2099-01-01', 'post_meet_report': {'attempts': [{'lift': 'squat', 'attempt_number': 1, 'kg': 150, 'result': 'made'}]}}, {'pk': 'athlete', 'sk': 'COMP#other', 'date': '2099-02-01'}]
+    entries = [{'pk': 'athlete', 'sk': 'COMP#tied', 'date': '2099-01-01', 'post_meet_report': {'attempts': [{'lift': 'squat', 'attempt_number': 1, 'kg': 150, 'result': 'made'}]}}, {'pk': 'athlete', 'sk': 'COMP#other', 'date': '2099-02-01'}, {'pk': 'athlete', 'sk': 'COMP#done', 'start_date': '2020-01-01', 'user_status': 'completed', 'results': {'squat_kg': 180, 'bench_kg': 100, 'deadlift_kg': 220}}]
     grant = {'grantee_person_pk': 'handler-person', 'grant_type': 'handler', 'tied_competition_ids': ['tied']}
-    program = {'meta': {'current_block_id': 'block-1', 'blocks': [{'id': 'block-1', 'name': 'Strength', 'status': 'active'}], 'block_notes': [{'notes': 'Athlete-owned'}]}, 'sessions': [{'date': '2099-01-01', 'block': 'current', 'phase': {'name': 'Peak'}, 'videos': ['private-media']}], 'competitions': [{'date': '2020-01-01', 'results': {'squat_kg': 180, 'bench_kg': 100, 'deadlift_kg': 220}}]}
+    program = {'meta': {'current_block_id': 'block-1', 'blocks': [{'id': 'block-1', 'name': 'Strength', 'status': 'active'}], 'block_notes': [{'notes': 'Athlete-owned'}]}, 'sessions': [{'date': '2099-01-01', 'block': 'current', 'phase': {'name': 'Peak'}, 'videos': ['private-media']}]}
     async def get_program():
         return program
     monkeypatch.setattr(program_tool_helpers, 'get_store', lambda _args: SimpleNamespace(get_program=get_program))

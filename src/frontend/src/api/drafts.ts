@@ -2,12 +2,11 @@ import { openDB, type IDBPDatabase } from 'idb'
 import { requestAthlete, requestPartition, requestPerson } from './context'
 
 export interface Draft<T = unknown> { id: string; partition: string; value: T; updated_at: string }
-type MutationStatus = 'pending' | 'failed' | 'conflict' | 'blocked'
+type MutationStatus = 'pending' | 'failed' | 'blocked'
 interface PendingMutation {
   id: string; partition: string; person_pk: string; athlete_pk: string; method: string; url: string; data: unknown
-  expected_revision: number; idempotency_key: string; fingerprint: string; created_at: string; updated_at: string
+  fingerprint: string; created_at: string; updated_at: string
   status: MutationStatus; error?: string
-  conflict?: { status: number; code?: string; current_revision?: number; current_record?: unknown }
 }
 
 export function sessionDraftKey(version: string, sessionId: string): string {
@@ -71,25 +70,21 @@ function ordered(value: unknown): unknown {
 }
 
 export function mutationFingerprint(method: string, url: string, data: unknown): string {
-  const payload = data && typeof data === 'object' ? { ...(data as Record<string, unknown>) } : data
-  if (payload && typeof payload === 'object') delete (payload as Record<string, unknown>).idempotency_key
-  return JSON.stringify([method.toUpperCase(), url, ordered(payload)])
+  return JSON.stringify([method.toUpperCase(), url, ordered(data)])
 }
 
-interface MutationInput { method: string; url: string; data: unknown; expected_revision: number; idempotency_key: string }
+interface MutationInput { method: string; url: string; data: unknown }
 export async function prepareMutation(input: MutationInput, partition = requestPartition()): Promise<PendingMutation> {
   const [person_pk, athlete_pk] = JSON.parse(partition) as [string, string]
   const fingerprint = mutationFingerprint(input.method, input.url, input.data)
   const transaction = (await db()).transaction('mutations', 'readwrite')
   const store = transaction.store
   const existing = (await store.index('byPartition').getAll(partition)).find(record => record.fingerprint === fingerprint)
-  if (existing && existing.status !== 'conflict') return existing
-  if (existing) await store.delete(existing.id)
+  if (existing) return existing
   const now = new Date().toISOString()
   const record: PendingMutation = {
-    id: `${partition}\0${input.idempotency_key}`, partition, person_pk, athlete_pk,
-    method: input.method.toUpperCase(), url: input.url, data: input.data, expected_revision: input.expected_revision,
-    idempotency_key: input.idempotency_key, fingerprint, created_at: now, updated_at: now, status: 'pending',
+    id: `${partition}\0${globalThis.crypto.randomUUID()}`, partition, person_pk, athlete_pk,
+    method: input.method.toUpperCase(), url: input.url, data: input.data, fingerprint, created_at: now, updated_at: now, status: 'pending',
   }
   await store.put(record)
   await transaction.done
@@ -99,10 +94,6 @@ export async function prepareMutation(input: MutationInput, partition = requestP
 
 async function listMutations(partition = requestPartition()): Promise<PendingMutation[]> {
   return (await db()).getAllFromIndex('mutations', 'byPartition', partition)
-}
-async function purgeConflictedMutations(partition = requestPartition()): Promise<void> {
-  const conflicted = (await listMutations(partition)).filter(record => record.status === 'conflict')
-  await Promise.all(conflicted.map(record => removeMutation(record.id)))
 }
 
 async function updateMutation(id: string, patch: Partial<PendingMutation>): Promise<void> {
@@ -123,7 +114,6 @@ export async function markMutationBlocked(id: string): Promise<void> { await upd
 export function isQueueableMutation(method: string, url: string, data: unknown): boolean {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) || typeof data !== 'object' || data === null || Array.isArray(data)) return false
   const body = data as Record<string, unknown>
-  if (!Number.isInteger(body.expected_revision) || Number(body.expected_revision) < 0 || typeof body.idempotency_key !== 'string' || !body.idempotency_key.trim()) return false
   const hasSessionId = typeof body.session_id === 'string' && body.session_id.trim().length > 0
   if (/^\/sessions\//.test(url) && !(method.toUpperCase() === 'POST' && /^\/sessions\/[^/]+$/.test(url)) && !hasSessionId) return false
   if (/^\/programs\/[^/]+\/designer\//.test(url) && !hasSessionId) return false
@@ -136,7 +126,6 @@ export async function synchronizePendingMutations(send: MutationSender, partitio
   if (synchronizing || !navigator.onLine) return
   synchronizing = true
   try {
-    await purgeConflictedMutations(partition)
     for (const record of (await listMutations(partition)).filter(item => item.status === 'pending' || item.status === 'failed').sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id))) {
       if (record.person_pk !== requestPerson() || record.athlete_pk !== requestAthlete()) continue
       try {
@@ -153,12 +142,12 @@ export async function synchronizePendingMutations(send: MutationSender, partitio
               return itemMatch?.[1] === sessionMatch[1] && (itemData?.id ?? itemData?.session_id) === sessionId
             }
             if (!(await listMutations(record.partition)).some(sameSession)) {
-              const { expected_revision: _expected_revision, idempotency_key: _idempotency_key, session_id: _session_id, ...session } = sessionData
+              const { session_id: _session_id, ...session } = sessionData
               await removeDraftIfValue(sessionDraftKey(sessionMatch[1], sessionId), session, record.partition)
             }
           }
           if (record.url === '/authored-notes/private' && record.data && typeof record.data === 'object') {
-            const { expected_revision: _expected_revision, idempotency_key: _idempotency_key, ...note } = record.data as Record<string, unknown>
+            const { expected_revision: _expectedRevision, idempotency_key: _idempotencyKey, ...note } = record.data as Record<string, unknown>
             const noteId = String(note.note_id || '')
             const sameNote = (item: PendingMutation) => item.url === record.url && item.data && typeof item.data === 'object' && (item.data as Record<string, unknown>).note_id === noteId
             if (!(await listMutations(record.partition)).some(sameNote)) await removeDraftIfValue(noteId ? `authored-note:${noteId}` : 'authored-note:new', note, record.partition)

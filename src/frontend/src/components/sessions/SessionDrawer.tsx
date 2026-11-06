@@ -613,7 +613,6 @@ export default function SessionDrawer({
   const latestSaveRef = useRef<{ session: Session; version: number; notify: boolean; close: boolean; draftKey: string; partition: string; lookupDate: string } | null>(null)
   const saveInFlightRef = useRef(false)
   const flushRef = useRef<Promise<void>>(Promise.resolve())
-  const revisionRef = useRef(0)
   const savedSessionRef = useRef<Session | null>(null)
   const savedAnythingRef = useRef(false)
   const pendingSaveRef = useRef(false)
@@ -670,7 +669,6 @@ export default function SessionDrawer({
     const program = useProgramStore.getState().program
     const session = program?.sessions[sessionArrayIndex]
     if (session) {
-      revisionRef.current = program?.meta.revision ?? 0
       savedSessionRef.current = session
       let active = true
       const partition = requestPartition()
@@ -808,8 +806,7 @@ export default function SessionDrawer({
 
         const lookupDate = job.lookupDate
         const draft = job.draftKey ? await enqueueDraft(job.session, job.draftKey, job.partition) : undefined
-        const saved = await persistSession(lookupDate, sessionArrayIndex, job.session, revisionRef.current)
-        revisionRef.current = saved.revision ?? revisionRef.current
+        const saved = await persistSession(lookupDate, sessionArrayIndex, job.session)
         savedSessionRef.current = saved
         savedAnythingRef.current = true
         if (draft) await removeDraftIfMatch(job.draftKey, draft, job.partition)

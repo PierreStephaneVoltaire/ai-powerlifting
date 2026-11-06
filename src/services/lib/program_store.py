@@ -90,7 +90,7 @@ class ProgramStore:
         self._cache = None
         self._cache_version = None
 
-    def _source_snapshot_sync(self) -> tuple[dict, dict, str, bool, int]:
+    def _source_snapshot_sync(self) -> tuple[dict, dict, str, bool]:
         pointer = self.table.get_item(
             Key={"pk": self._pk, "sk": self.POINTER_SK}, ConsistentRead=True
         ).get("Item") or {}
@@ -104,17 +104,15 @@ class ProgramStore:
         ).get("Item")
         if not isinstance(program, dict):
             raise ProgramNotFoundError(f"Program not found: {selected}")
-        meta = program.get("meta") if isinstance(program.get("meta"), dict) else {}
         current = bool(pointer and str(pointer.get("ref_sk")) == str(selected))
-        revision = int(pointer.get("revision", meta.get("revision", 0))) if current else int(meta.get("revision", 0))
-        return copy.deepcopy(program), copy.deepcopy(pointer), str(selected), current, revision
+        return copy.deepcopy(program), copy.deepcopy(pointer), str(selected), current
 
-    async def _source_snapshot(self) -> tuple[dict, dict, str, bool, int]:
+    async def _source_snapshot(self) -> tuple[dict, dict, str, bool]:
         return await asyncio.get_running_loop().run_in_executor(None, self._source_snapshot_sync)
 
     def _commit_source_sync(
         self,
-        snapshot: tuple[dict, dict, str, bool, int],
+        snapshot: tuple[dict, dict, str, bool],
         program: dict,
         operation: str,
         payload: dict,
@@ -306,7 +304,6 @@ class ProgramStore:
         if not isinstance(meta, dict):
             meta = {}
             program["meta"] = meta
-        meta.setdefault("revision", int(pointer.get("revision", 0)))
         program.pop("pk", None)
         program.pop("sk", None)
         program["sessions"] = self._get_session_store().list_sessions_sync(
@@ -390,7 +387,7 @@ class ProgramStore:
 
     def _validate_version_patches(self, program: dict, patches: list[dict]) -> None:
         sessions = program.get("sessions") if isinstance(program.get("sessions"), list) else []
-        protected_meta = {"pk", "sk", "version_label", "updated_at", "published"}
+        protected_meta = {"pk", "sk", "version_label", "updated_at", "published", "blocks", "current_block_id"}
         for patch in patches:
             path = patch.get("path", "") if isinstance(patch, dict) else ""
             parts = re.split(r"[.\[]", path)
@@ -497,12 +494,7 @@ class ProgramStore:
         source_id = str(source.get("id") or source.get("block_id"))
         archive_id = source_id if source_id != "current" else self._archive_block_id(current_name or source.get("name"), blocks, phases, sessions)
         if action in {"complete", "complete_and_start"}:
-            start_maxes = meta.setdefault("block_start_maxes", {})
-            if not any(block_key in start_maxes for block_key in (source_id, "current")):
-                start_maxes[source_id] = copy.deepcopy(source.get("start_maxes_kg") or program.get("current_maxes", {}))
-            week_starts = meta.setdefault("block_week_start_days", {})
-            if not any(block_key in week_starts for block_key in (source_id, "current")):
-                week_starts[source_id] = source.get("week_start_day") or meta.get("program_week_start_day")
+            source.setdefault("start_maxes_kg", copy.deepcopy(program.get("current_maxes", {})))
             for phase in phases:
                 if str(phase.get("block") or "current") == "current" or str(phase.get("block_id") or "") == source_id:
                     phase["block"] = archive_id
@@ -560,10 +552,7 @@ class ProgramStore:
                 "start_maxes_kg": copy.deepcopy(start_maxes_kg),
             }
             blocks.append(next_block)
-            meta.setdefault("block_week_start_days", {})[next_id] = week_start_day
-            meta.setdefault("block_start_maxes", {})[next_id] = copy.deepcopy(start_maxes_kg)
             meta["program_start"] = start_date
-            meta["program_week_start_day"] = week_start_day
             program["current_maxes"] = self._canonical_maxes(start_maxes_kg)
 
         if action in {"complete", "complete_and_start"}:
@@ -713,15 +702,6 @@ class ProgramStore:
 
     @staticmethod
     def _remap_block_meta(meta: dict, source_id: str, archive_id: str) -> None:
-        for field in ("block_start_maxes", "block_week_start_days"):
-            values = meta.get(field)
-            if not isinstance(values, dict):
-                continue
-            for old_id in {source_id, "current"}:
-                if old_id in values and archive_id not in values:
-                    values[archive_id] = copy.deepcopy(values[old_id])
-                if old_id != archive_id:
-                    values.pop(old_id, None)
         notes = meta.get("block_notes")
         if isinstance(notes, list):
             for note in notes:
@@ -881,7 +861,6 @@ class ProgramStore:
             new_sk,
             sessions if isinstance(sessions, list) else [],
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
-            bump_program_revision=False,
         )
         
         pointer_item = {
@@ -962,7 +941,7 @@ class ProgramStore:
         "manual_maxes", "lift_attempt_settings",
         "target_squat_kg", "target_bench_kg", "target_dl_kg", "target_total_kg",
         "attempt_pct", "height_cm", "arm_wingspan_cm", "leg_length_cm",
-        "block_start_maxes", "program_week_start_day", "block_week_start_days",
+        "blocks",
     )
 
     async def update_meta_field(self, field: str, value: Any) -> dict:

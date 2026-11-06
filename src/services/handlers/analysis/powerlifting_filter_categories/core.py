@@ -9,7 +9,7 @@ import logging
 import pandas as pd
 from typing import Dict, Any, List
 
-from services.lib.opl_dataset import warm_cache
+from services.lib.opl_dataset import DatasetNotReadyError as DatasetNotReadyError, warm_cache
 from services.lib import opl_dataset
 
 

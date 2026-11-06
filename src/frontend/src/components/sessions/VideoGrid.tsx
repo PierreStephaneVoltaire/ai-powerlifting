@@ -133,10 +133,7 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
     const file = event.target.files?.[0]
     const video = retryVideoRef.current
     event.target.value = ''
-    if (!file || !video?.idempotency_key) {
-      pushToast({ message: 'This upload cannot be retried until its original request is restored', type: 'error' })
-      return
-    }
+    if (!file || !video) return
     if (!isValidVideoType(file)) {
       pushToast({ message: 'Invalid file type. Please use MP4, MOV, or WebM.', type: 'error' })
       return
@@ -154,9 +151,9 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
         exerciseName: video.exercise_name,
         setNumber: video.set_number,
         notes: video.notes,
-        idempotencyKey: video.idempotency_key,
         onProgress,
       }))
+      await api.removeSessionVideo(version, session.date, video.video_id, session.id)
       updateSessionVideo(session.date, video.video_id, updated)
       onVideoUpdated?.(updated)
       setPlayingVideo(updated)

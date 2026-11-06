@@ -13,7 +13,7 @@ PROGRAM_FIELDS = {'phases': 'program', 'diet_notes': 'program', 'supplements': '
 META_DOMAINS = {
     'competition': ('practicing_for', 'weight_class_kg', 'weight_class_confirm_by', 'attempt_pct', 'lift_attempt_settings'),
     'weight-log': ('current_body_weight_kg', 'current_body_weight_lb', 'height_cm', 'arm_wingspan_cm', 'leg_length_cm'),
-    'performance': ('target_squat_kg', 'target_bench_kg', 'target_dl_kg', 'target_total_kg', 'manual_maxes', 'block_start_maxes'),
+    'performance': ('target_squat_kg', 'target_bench_kg', 'target_dl_kg', 'target_total_kg', 'manual_maxes'),
     'federation': ('federation',),
 }
 

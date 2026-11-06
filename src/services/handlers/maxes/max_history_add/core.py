@@ -86,7 +86,6 @@ async def max_history_add(args: dict) -> dict:
         entries = [item for item in (current.get("entries") or []) if item.get("id") != entry["id"]] + [_to_dynamo(entry)]
         entries.sort(key=lambda item: item["date"], reverse=True)
         result = {**current, "pk": pk, "sk": _max_history_sk(version), "version": version, "entries": entries, "updated_at": datetime.now(timezone.utc).isoformat()}
-        result.pop("revision", None)
         table.put_item(Item=_to_dynamo(result))
         return result
 

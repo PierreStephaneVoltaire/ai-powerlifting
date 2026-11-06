@@ -4,13 +4,6 @@ import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { LiftResults, PostMeetReport, UserCompetitionUpdate } from '@powerlifting/types'
 import { AppError } from '../middleware/errorHandler'
 
-function mutationEnvelope(body: unknown): competitionController.CompetitionMutationEnvelope {
-  const input = body && typeof body === 'object' ? body as Record<string, unknown> : {}
-  if (typeof input.expected_revision !== 'number' || !Number.isInteger(input.expected_revision) || input.expected_revision < 0) throw new AppError('expected_revision must be a nonnegative integer', 400)
-  if (typeof input.idempotency_key !== 'string' || !input.idempotency_key.trim()) throw new AppError('idempotency_key must be a nonempty string', 400)
-  return { expected_revision: input.expected_revision, idempotency_key: input.idempotency_key }
-}
-
 const USER_UPDATE_FIELDS = new Set([
   'units', 'user_status', 'weight_class_kg', 'body_weight_kg', 'targets', 'results', 'post_meet_report',
   'hotel_required', 'counts_toward_federation_ids', 'between_comp_plan', 'comp_day_protocol', 'decision_date',
@@ -22,7 +15,6 @@ function userCompetitionUpdates(body: unknown): UserCompetitionUpdate {
   const input = body && typeof body === 'object' ? body as Record<string, unknown> : {}
   const updates: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input)) {
-    if (key === 'expected_revision' || key === 'idempotency_key') continue
     if (!USER_UPDATE_FIELDS.has(key)) throw new AppError(`competition field is not editable: ${key}`, 400)
     updates[key] = value
   }
@@ -49,8 +41,7 @@ competitionsRouter.patch('/:masterId', invalidateAfter(['competitions', 'program
     const updated = await competitionController.patchUserCompetition(
       req.mapped_pk!,
       req.params.masterId,
-      updates,
-      mutationEnvelope(req.body),
+      updates
     )
     res.json({ data: updated, error: null })
   } catch (err) {
@@ -69,7 +60,6 @@ competitionsRouter.post('/:masterId/complete', invalidateAfter(['competitions', 
       req.params.masterId,
       results as LiftResults,
       bodyWeightKg,
-      mutationEnvelope(req.body),
       postMeetReport as PostMeetReport | undefined,
     )
     res.json({ data: updated, error: null })

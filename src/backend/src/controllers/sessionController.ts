@@ -2,11 +2,10 @@ import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
 import type { Session, Exercise, SessionStatus, SessionWellness } from '@powerlifting/types'
 
-export interface MutationEnvelope { expected_revision: number; idempotency_key: string; session_id?: string }
+export interface SessionTarget { session_id?: string }
 interface SessionMutationResult {
   session?: Session
   deleted?: string
-  revision?: number
   success?: boolean
 }
 
@@ -20,9 +19,9 @@ export async function createSession(
   pk: string,
   _version: string,
   session: Session,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
-  return await callOperation('session_create', { pk, session, ...envelope }) as Session
+  return await callOperation('session_create', { pk, session, ...target }) as Session
 }
 
 export async function deleteSession(
@@ -30,9 +29,9 @@ export async function deleteSession(
   _version: string,
   date: string,
   index: number,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<SessionMutationResult> {
-  return await callOperation('session_delete', { pk, date, index, ...envelope }) as SessionMutationResult
+  return await callOperation('session_delete', { pk, date, index, ...target }) as SessionMutationResult
 }
 
 export async function getSession(
@@ -50,9 +49,9 @@ export async function updateSession(
   date: string,
   index: number,
   session: Session,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
-  return await callOperation('session_replace', { pk, date, index, session, ...envelope }) as Session
+  return await callOperation('session_replace', { pk, date, index, session, ...target }) as Session
 }
 
 export async function rescheduleSession(
@@ -62,9 +61,9 @@ export async function rescheduleSession(
   index: number,
   newDate: string,
   newDay: string,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
-  return await callOperation('session_patch', { pk, date, index, patch: { date: newDate, day: newDay }, ...envelope }) as Session
+  return await callOperation('session_patch', { pk, date, index, patch: { date: newDate, day: newDay }, ...target }) as Session
 }
 
 export async function completeSession(
@@ -73,9 +72,9 @@ export async function completeSession(
   date: string,
   index: number,
   data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | undefined },
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
-  const current = await fetchCurrent(pk, date, index, envelope.session_id)
+  const current = await fetchCurrent(pk, date, index, target.session_id)
   return await callOperation('session_patch', { pk,
     date,
     index,
@@ -87,7 +86,7 @@ export async function completeSession(
       session_notes: data.notes ?? current.session_notes,
       wellness: data.wellness ?? current.wellness,
     },
-    ...envelope,
+    ...target,
   })
 }
 
@@ -97,7 +96,7 @@ export async function updateSessionStatus(
   date: string,
   index: number,
   status: SessionStatus,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
   return await callOperation('session_patch', { pk,
     date,
@@ -106,7 +105,7 @@ export async function updateSessionStatus(
       status,
       completed: status === 'completed' || status === 'logged',
     },
-    ...envelope,
+    ...target,
   })
 }
 
@@ -116,14 +115,14 @@ export async function addExercise(
   date: string,
   index: number,
   exercise: Exercise,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
-  const current = await fetchCurrent(pk, date, index, envelope.session_id)
+  const current = await fetchCurrent(pk, date, index, target.session_id)
   return await callOperation('session_patch', { pk,
     date,
     index,
     patch: { exercises: [...(current.exercises || []), exercise] },
-    ...envelope,
+    ...target,
   })
 }
 
@@ -133,15 +132,15 @@ export async function removeExercise(
   date: string,
   index: number,
   exerciseIndex: number,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
-  const current = await fetchCurrent(pk, date, index, envelope.session_id)
+  const current = await fetchCurrent(pk, date, index, target.session_id)
   const exercises = [...(current.exercises || [])]
   if (exerciseIndex < 0 || exerciseIndex >= exercises.length) {
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
   exercises.splice(exerciseIndex, 1)
-  return await callOperation('session_patch', { pk, date, index, patch: { exercises }, ...envelope }) as Session
+  return await callOperation('session_patch', { pk, date, index, patch: { exercises }, ...target }) as Session
 }
 
 export async function updateExerciseField(
@@ -152,13 +151,13 @@ export async function updateExerciseField(
   exerciseIndex: number,
   field: keyof Exercise,
   value: unknown,
-  envelope: MutationEnvelope,
+  target: SessionTarget,
 ): Promise<Session> {
-  const current = await fetchCurrent(pk, date, index, envelope.session_id)
+  const current = await fetchCurrent(pk, date, index, target.session_id)
   const exercises = [...(current.exercises || [])]
   if (exerciseIndex < 0 || exerciseIndex >= exercises.length) {
     throw new AppError(`Exercise index ${exerciseIndex} out of range`, 400)
   }
   ;(exercises[exerciseIndex] as any)[field] = value
-  return await callOperation('session_patch', { pk, date, index, patch: { exercises }, ...envelope }) as Session
+  return await callOperation('session_patch', { pk, date, index, patch: { exercises }, ...target }) as Session
 }

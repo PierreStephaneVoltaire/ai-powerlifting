@@ -50,9 +50,8 @@ browser-to-storage uploads, account lifecycle features, or Postgres migration.
   same evaluator. Read-cached reports need read; generation needs write.
 - Keep operation manifests in `src/services/operations/*.json`, and register new
   operations in an existing domain. Coordinator owns shared TypeScript types.
-- Mutation envelopes use `expected_revision` (nonnegative integer) and
-  `idempotency_key` (nonempty string). Conflict responses are HTTP 409 with
-  `code: conflict`, current revision and current record where permitted.
+- Saves are plain writes: no revision checks or idempotency keys. Only
+  authored notes and relationships keep their own revision and key checks.
 - Block transitions use `block_transition` with `action` equal to `complete`,
   `start_next`, or `complete_and_start`; stable `block_id`, editable name,
   confirmed start maxes in kg, dates and week-start preference. Never change

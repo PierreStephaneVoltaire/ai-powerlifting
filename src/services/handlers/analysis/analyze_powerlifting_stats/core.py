@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional
 
-from services.lib.opl_dataset import warm_cache
+from services.lib.opl_dataset import DatasetNotReadyError as DatasetNotReadyError, warm_cache
 from services.lib import opl_dataset
 
 

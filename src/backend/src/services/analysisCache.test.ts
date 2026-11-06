@@ -9,7 +9,7 @@ function session(date: string, week_number: number): Session {
 
 test('analysis windows include every session labelled with the selected weeks', () => {
   const program = {
-    meta: { program_start: '2026-10-06', block_week_start_days: { current: 'Saturday' } },
+    meta: { program_start: '2026-10-06', blocks: [{ id: 'current', status: 'active', week_start_day: 'Saturday' }] },
     sessions: [
       session('2026-10-10', 1),
       session('2026-10-12', 2),
@@ -27,12 +27,12 @@ test('analysis windows include every session labelled with the selected weeks', 
   assert.equal(windows.block.start, '2026-10-06')
 })
 
-test('analysis weeks use the active block week start, not a stale current key', () => {
+test('analysis weeks use the active block record week start', () => {
   const program = {
     meta: {
       program_start: '2026-10-06',
       current_block_id: 'block-new',
-      block_week_start_days: { current: 'Saturday', 'block-new': 'Sunday' },
+      blocks: [{ id: 'old-block', status: 'completed', week_start_day: 'Saturday' }, { id: 'block-new', status: 'active', week_start_day: 'Sunday' }],
     },
     sessions: [session('2026-10-25', 4), session('2026-10-31', 4)],
   } as unknown as Program
