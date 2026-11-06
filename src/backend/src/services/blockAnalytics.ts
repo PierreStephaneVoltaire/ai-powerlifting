@@ -1255,7 +1255,9 @@ export async function getOrCreateBlockAnalysisBundle(
   const entry = analysisScopedBlockEntry(program, rawEntry)
 
   const cacheKey = `native_block#${CACHE_SCHEMA_VERSION}#${blockKey}#${entry.sourceFingerprint}`
+  const latestKey = `native_block#${CACHE_SCHEMA_VERSION}#${blockKey}#latest`
   const saved = await readAnalysisRecord<BlockAnalysisBundle>(userPk, cacheKey)
+    ?? (cacheOnly ? await readAnalysisRecord<BlockAnalysisBundle>(userPk, latestKey) : null)
   if (saved) return { ...saved, block: { ...saved.block, label: entry.label, isCurrent: entry.isCurrent }, cached: true }
   if (cacheOnly) return null
 
@@ -1291,6 +1293,7 @@ export async function getOrCreateBlockAnalysisBundle(
     historical: makeHistoricalSummary(program, entry, weekly),
   }
   await writeAnalysisRecord(userPk, cacheKey, bundle)
+  await writeAnalysisRecord(userPk, latestKey, bundle)
   return bundle
 }
 

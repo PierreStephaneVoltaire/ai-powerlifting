@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react';
 import { Paper, Text, Box, Table, Group, Button, Badge, SimpleGrid, Stack, Tooltip as MantineTooltip } from '@mantine/core';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts';
 import type { WeeklyAnalysis } from '@/api/analytics';
-import { toDisplayUnit } from '@/utils/units';
+import { toDisplayUnit, formatDisplayWeight } from '@/utils/units';
 import { Unit } from '@/store/settingsStore';
 import { MuscleWorkloadMap } from '@/components/analysis/MuscleWorkloadMap';
 
@@ -82,7 +82,7 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                         <Table.Td ta="right">{details ? <Text span fz="sm">{details.raw_sets}</Text> : <Text span fz="sm" c="dimmed">--</Text>}</Table.Td>
                         <Table.Td ta="right">
                           {lift.progression_rate_kg_per_week !== undefined && lift.progression_rate_kg_per_week !== null
-                            ? <Text span fz="sm" c={lift.progression_rate_kg_per_week >= 0 ? 'green' : 'red'}>{lift.progression_rate_kg_per_week >= 0 ? '+' : ''}{toDisplayUnit(lift.progression_rate_kg_per_week, unit).toFixed(1)} {unit}/wk</Text>
+                            ? <Text span fz="sm" c={lift.progression_rate_kg_per_week >= 0 ? 'green' : 'red'}>{lift.progression_rate_kg_per_week >= 0 ? '+' : ''}{formatDisplayWeight(lift.progression_rate_kg_per_week, unit)} {unit}/wk</Text>
                             : <Text span fz="sm" c="dimmed">--</Text>}
                         </Table.Td>
                         <Table.Td ta="right" visibleFrom="sm">
@@ -161,7 +161,7 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                         <Table.Td fw={500}>{name}</Table.Td>
                         <Table.Td ta="right">{s.total_sets}</Table.Td>
                         <Table.Td ta="right">{Math.round(toDisplayUnit(s.total_volume, unit)).toLocaleString()}</Table.Td>
-                        <Table.Td ta="right">{toDisplayUnit(s.max_kg, unit).toFixed(1)}</Table.Td>
+                        <Table.Td ta="right">{formatDisplayWeight(s.max_kg, unit)}</Table.Td>
                       </Table.Tr>
                     ))}
                 </Table.Tbody>

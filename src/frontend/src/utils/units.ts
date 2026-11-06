@@ -7,11 +7,14 @@ export const kgToLb = (kg: number): number =>
 export const lbToKg = (lb: number): number =>
   parseFloat((lb * LB_TO_KG).toFixed(3))
 
-export const displayWeight = (kg: number, unit: 'kg' | 'lb'): string =>
-  unit === 'lb' ? `${kgToLb(kg)} lb` : `${kg} kg`
-
 export const toDisplayUnit = (kg: number, unit: 'kg' | 'lb'): number =>
-  unit === 'lb' ? kgToLb(kg) : kg
+  unit === 'lb' ? Math.round(kg * KG_TO_LB) : kg
+
+export const formatDisplayWeight = (kg: number, unit: 'kg' | 'lb'): string =>
+  unit === 'lb' ? String(toDisplayUnit(kg, unit)) : toDisplayUnit(kg, unit).toFixed(1)
+
+export const displayWeight = (kg: number, unit: 'kg' | 'lb'): string =>
+  unit === 'lb' ? `${toDisplayUnit(kg, unit)} lb` : `${kg} kg`
 
 export const fromDisplayUnit = (value: number, unit: 'kg' | 'lb'): number =>
   unit === 'lb' ? lbToKg(value) : value

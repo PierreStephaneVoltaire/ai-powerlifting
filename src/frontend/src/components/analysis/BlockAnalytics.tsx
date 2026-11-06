@@ -56,7 +56,7 @@ import {
   type ProgramEvaluationReport,
   type ProgramBlockIndexEntry,
 } from '@/api/analytics'
-import { toDisplayUnit } from '@/utils/units'
+import { toDisplayUnit, formatDisplayWeight } from '@/utils/units'
 import { BlockWeeklySurface } from '@/components/analysis/BlockWeeklySurface'
 import type { Program } from '@powerlifting/types'
 
@@ -76,7 +76,7 @@ function cacheBadge(block: ProgramBlockIndexEntry) {
 }
 
 function kg(value: number | null | undefined, unit: WeightUnit): string {
-  return typeof value === 'number' ? `${toDisplayUnit(value, unit).toFixed(1)} ${unit}` : '--'
+  return typeof value === 'number' ? `${formatDisplayWeight(value, unit)} ${unit}` : '--'
 }
 
 function percent(value: number | null | undefined, multiplier = 1): string {
@@ -682,7 +682,7 @@ function trendChartData(
     const row = weeks.get(point.weekNumber) ?? { week: `W${point.weekNumber}`, weekNumber: point.weekNumber }
     const value = point[metricKey]
     row[point.blockKey] = typeof value === 'number'
-      ? (metricKey === 'e1rmTotalKg' || metricKey === 'volumeKg' ? Number(toDisplayUnit(value, unit).toFixed(1)) : value)
+      ? (metricKey === 'e1rmTotalKg' || metricKey === 'volumeKg' ? Number(formatDisplayWeight(value, unit)) : value)
       : null
     weeks.set(point.weekNumber, row)
   }

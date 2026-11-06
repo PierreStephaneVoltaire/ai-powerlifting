@@ -34,7 +34,7 @@ import type { Unit } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
 import { bestSetE1rm, mainLiftFor } from '@/utils/sbdE1rm'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
-import { toDisplayUnit } from '@/utils/units'
+import { toDisplayUnit, formatDisplayWeight } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { fetchGlossary, fetchWeightLog } from '@/api/client'
 import { fetchViewedWeightLog } from '@/api/profiles'
@@ -116,7 +116,7 @@ function getAcwrZoneMeta(zone?: string | null) {
 }
 
 function formatSignedDeltaKg(deltaKg: number, unit: Unit) {
-  const value = toDisplayUnit(Math.abs(deltaKg), unit).toFixed(1)
+  const value = formatDisplayWeight(Math.abs(deltaKg), unit)
   return `${deltaKg >= 0 ? '+' : '-'}${value} ${unit}`
 }
 
@@ -484,9 +484,9 @@ export function BlockWeeklySurface({
           {highestMaxes ? (
             <Stack gap="xs">
               <SimpleGrid cols={3}>
-                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Squat</Text><Text fz="lg" fw={700}>{highestMaxes.squat !== null ? toDisplayUnit(highestMaxes.squat, unit).toFixed(1) : '--'}</Text></Stack>
-                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Bench</Text><Text fz="lg" fw={700}>{highestMaxes.bench !== null ? toDisplayUnit(highestMaxes.bench, unit).toFixed(1) : '--'}</Text></Stack>
-                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Deadlift</Text><Text fz="lg" fw={700}>{highestMaxes.deadlift !== null ? toDisplayUnit(highestMaxes.deadlift, unit).toFixed(1) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Squat</Text><Text fz="lg" fw={700}>{highestMaxes.squat !== null ? formatDisplayWeight(highestMaxes.squat, unit) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Bench</Text><Text fz="lg" fw={700}>{highestMaxes.bench !== null ? formatDisplayWeight(highestMaxes.bench, unit) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Deadlift</Text><Text fz="lg" fw={700}>{highestMaxes.deadlift !== null ? formatDisplayWeight(highestMaxes.deadlift, unit) : '--'}</Text></Stack>
               </SimpleGrid>
               {highestMaxes.dots !== null && <Text fz="sm" c="dimmed">Est. DOTS: <Text span fw={500}>{highestMaxes.dots.toFixed(2)}</Text></Text>}
               <Text fz="xs" c="dimmed">via session e1RM</Text>
@@ -494,9 +494,9 @@ export function BlockWeeklySurface({
           ) : bundle.weekly.current_maxes ? (
             <Stack gap="xs">
               <SimpleGrid cols={3}>
-                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Squat</Text><Text fz="lg" fw={700}>{bundle.weekly.current_maxes.squat ? toDisplayUnit(bundle.weekly.current_maxes.squat, unit).toFixed(1) : '--'}</Text></Stack>
-                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Bench</Text><Text fz="lg" fw={700}>{bundle.weekly.current_maxes.bench ? toDisplayUnit(bundle.weekly.current_maxes.bench, unit).toFixed(1) : '--'}</Text></Stack>
-                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Deadlift</Text><Text fz="lg" fw={700}>{bundle.weekly.current_maxes.deadlift ? toDisplayUnit(bundle.weekly.current_maxes.deadlift, unit).toFixed(1) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Squat</Text><Text fz="lg" fw={700}>{bundle.weekly.current_maxes.squat ? formatDisplayWeight(bundle.weekly.current_maxes.squat, unit) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Bench</Text><Text fz="lg" fw={700}>{bundle.weekly.current_maxes.bench ? formatDisplayWeight(bundle.weekly.current_maxes.bench, unit) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Deadlift</Text><Text fz="lg" fw={700}>{bundle.weekly.current_maxes.deadlift ? formatDisplayWeight(bundle.weekly.current_maxes.deadlift, unit) : '--'}</Text></Stack>
               </SimpleGrid>
               {bundle.weekly.estimated_dots !== null && <Text fz="sm" c="dimmed">Est. DOTS: <Text span fw={500}>{bundle.weekly.estimated_dots.toFixed(2)}</Text></Text>}
             </Stack>
@@ -695,12 +695,12 @@ export function BlockWeeklySurface({
             {bundle.weekly.projections.filter((p) => p && typeof p === 'object').map((proj, i) => (
               <Paper key={i} withBorder p="md">
                 <Group gap="xs" mb="xs"><TrendingUp size={18} /><Text fw={500}>{proj.comp_name || 'Projected Total'}</Text></Group>
-                <Text fz="2rem" fw={700}>{toDisplayUnit(proj.total || 0, unit).toFixed(1)} {unit}</Text>
+                <Text fz="2rem" fw={700}>{formatDisplayWeight(proj.total || 0, unit)} {unit}</Text>
                 <Text fz="sm" c="dimmed" mt="xs">Confidence: {((proj.confidence || 0) * 100).toFixed(0)}%{typeof proj.weeks_to_comp === 'number' && ` (${proj.weeks_to_comp.toFixed(1)} wks out)`}</Text>
                 {proj.method && <Text fz="xs" c="dimmed">via {proj.method === 'session_estimated' ? 'session e1RM' : proj.method}</Text>}
                 {actualProjectedTotalKg !== null && proj.total !== null && (
                   <Text fz="xs" c={actualProjectedTotalKg - proj.total >= 0 ? 'green' : 'red'} mt={4}>
-                    Actual: {toDisplayUnit(actualProjectedTotalKg, unit).toFixed(1)} {unit}
+                    Actual: {formatDisplayWeight(actualProjectedTotalKg, unit)} {unit}
                     {' '}• Delta: {formatSignedDeltaKg(actualProjectedTotalKg - proj.total, unit)}
                   </Text>
                 )}
@@ -722,7 +722,7 @@ export function BlockWeeklySurface({
           </Group>
           <Table fz="sm">
             <Table.Thead><Table.Tr><Table.Th>W</Table.Th><Table.Th ta="right">Squat</Table.Th><Table.Th ta="right">Bench</Table.Th><Table.Th ta="right">Deadlift</Table.Th><Table.Th ta="right" visibleFrom="sm">Total</Table.Th><Table.Th ta="right">DOTS</Table.Th><Table.Th ta="right">IPF GL</Table.Th></Table.Tr></Table.Thead>
-            <Table.Tbody>{dotsTrend.rows.map((r) => <Table.Tr key={r.week}><Table.Td fw={500}>W{r.week}</Table.Td><Table.Td ta="right">{r.squat !== null ? toDisplayUnit(r.squat, unit).toFixed(1) : '--'}</Table.Td><Table.Td ta="right">{r.bench !== null ? toDisplayUnit(r.bench, unit).toFixed(1) : '--'}</Table.Td><Table.Td ta="right">{r.deadlift !== null ? toDisplayUnit(r.deadlift, unit).toFixed(1) : '--'}</Table.Td><Table.Td ta="right" fw={500} visibleFrom="sm">{r.total !== null ? toDisplayUnit(r.total, unit).toFixed(1) : '--'}</Table.Td><Table.Td ta="right" fw={700} c="blue">{r.dots?.toFixed(2) ?? '--'}</Table.Td><Table.Td ta="right">{r.ipfGl !== null && r.ipfGlMode !== null ? <Stack gap={0} align="flex-end"><Text span fw={700} fz="sm">{r.ipfGl.toFixed(2)}</Text><Text span fz="xs" c="dimmed">{getIpfGlModeLabel(r.ipfGlMode)}</Text></Stack> : <Text span fz="sm" c="dimmed">--</Text>}</Table.Td></Table.Tr>)}</Table.Tbody>
+            <Table.Tbody>{dotsTrend.rows.map((r) => <Table.Tr key={r.week}><Table.Td fw={500}>W{r.week}</Table.Td><Table.Td ta="right">{r.squat !== null ? formatDisplayWeight(r.squat, unit) : '--'}</Table.Td><Table.Td ta="right">{r.bench !== null ? formatDisplayWeight(r.bench, unit) : '--'}</Table.Td><Table.Td ta="right">{r.deadlift !== null ? formatDisplayWeight(r.deadlift, unit) : '--'}</Table.Td><Table.Td ta="right" fw={500} visibleFrom="sm">{r.total !== null ? formatDisplayWeight(r.total, unit) : '--'}</Table.Td><Table.Td ta="right" fw={700} c="blue">{r.dots?.toFixed(2) ?? '--'}</Table.Td><Table.Td ta="right">{r.ipfGl !== null && r.ipfGlMode !== null ? <Stack gap={0} align="flex-end"><Text span fw={700} fz="sm">{r.ipfGl.toFixed(2)}</Text><Text span fz="xs" c="dimmed">{getIpfGlModeLabel(r.ipfGlMode)}</Text></Stack> : <Text span fz="sm" c="dimmed">--</Text>}</Table.Td></Table.Tr>)}</Table.Tbody>
           </Table>
         </Paper>
       )}
@@ -731,8 +731,8 @@ export function BlockWeeklySurface({
         <Paper withBorder p="md">
           <Group gap="xs" mb="sm"><Scale size={18} /><Text fw={500}>Body Weight Trend</Text></Group>
           <Group align="baseline" gap="md">
-            <Text fz="2rem" fw={700}>{toDisplayUnit(weightTrend.latest, unit).toFixed(1)} {unit}</Text>
-            <Text fz="sm" fw={500} c={weightTrend.change >= 0 ? 'yellow' : 'green'}>{weightTrend.change >= 0 ? '+' : ''}{toDisplayUnit(Math.abs(weightTrend.change), unit).toFixed(1)} {unit} over {analysisWindow.weeks} wk{analysisWindow.weeks !== 1 ? 's' : ''}</Text>
+            <Text fz="2rem" fw={700}>{formatDisplayWeight(weightTrend.latest, unit)} {unit}</Text>
+            <Text fz="sm" fw={500} c={weightTrend.change >= 0 ? 'yellow' : 'green'}>{weightTrend.change >= 0 ? '+' : ''}{formatDisplayWeight(Math.abs(weightTrend.change), unit)} {unit} over {analysisWindow.weeks} wk{analysisWindow.weeks !== 1 ? 's' : ''}</Text>
           </Group>
         </Paper>
       )}

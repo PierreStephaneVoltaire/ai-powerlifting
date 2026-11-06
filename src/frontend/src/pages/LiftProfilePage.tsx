@@ -30,7 +30,7 @@ import { LiftProfileForm } from '@/components/lift-profiles/LiftProfileForm'
 import DraftNumberInput from '@/components/sessions/DraftNumberInput'
 import { defaultLiftProfile as defaultProfile, mergeLiftProfiles as mergeProfiles, missingOptions, normalizeLiftProfile as normalizeProfile } from '@/utils/liftProfile'
 import type { LiftProfile, LiftProfileVideoAngle } from '@powerlifting/types'
-import { toDisplayUnit } from '@/utils/units'
+import { toDisplayUnit, formatDisplayWeight } from '@/utils/units'
 import { useAuth } from '@/auth/AuthProvider'
 import { formatFileSize, isValidVideoType, MAX_VIDEO_SIZE, uploadVideo } from '@/utils/s3'
 
@@ -376,7 +376,7 @@ export default function LiftProfilePage() {
                 const barKg = Number.isFinite(enteredBar) && enteredBar >= 0 ? barUnit === 'kg' ? enteredBar : enteredBar / 2.2046226218 : 20
                 const platesPerSide = Math.max(0, Math.floor((rawMax - barKg) / 50))
                 const recommendedKg = platesPerSide < 2 ? barKg : barKg + (platesPerSide - 1) * 50
-                return <Text size="sm">For a {toDisplayUnit(rawMax, unit).toFixed(1)} {unit} max: <b>{platesPerSide < 2 ? 'empty bar' : `${toDisplayUnit(recommendedKg, unit).toFixed(1)} ${unit}`}</b> ({platesPerSide < 2 ? 0 : platesPerSide - 1} red plate{platesPerSide - 1 === 1 ? '' : 's'} per side).</Text>
+                return <Text size="sm">For a {formatDisplayWeight(rawMax, unit)} {unit} max: <b>{platesPerSide < 2 ? 'empty bar' : `${formatDisplayWeight(recommendedKg, unit)} ${unit}`}</b> ({platesPerSide < 2 ? 0 : platesPerSide - 1} red plate{platesPerSide - 1 === 1 ? '' : 's'} per side).</Text>
               })()}
             </Stack>
           </Paper>
@@ -415,11 +415,11 @@ export default function LiftProfilePage() {
                     <Group justify="space-between">
                       <Stack gap={0}>
                         <Text size="10px" tt="uppercase" c="dimmed">Raw e1RM</Text>
-                        <Text size="sm" fw={700}>{toDisplayUnit(rawMax, unit).toFixed(1)} {unit}</Text>
+                        <Text size="sm" fw={700}>{formatDisplayWeight(rawMax, unit)} {unit}</Text>
                       </Stack>
                       <Stack gap={0} ta="right">
                         <Text size="10px" tt="uppercase" c="dimmed">Adjusted e1RM</Text>
-                        <Text size="sm" fw={700} c="blue">{toDisplayUnit(adjustedMax, unit).toFixed(1)} {unit}</Text>
+                        <Text size="sm" fw={700} c="blue">{formatDisplayWeight(adjustedMax, unit)} {unit}</Text>
                       </Stack>
                     </Group>
                   </Box>
