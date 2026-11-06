@@ -87,3 +87,16 @@ def test_legacy_onboarding_prefills_only_owned_known_values(monkeypatch):
     assert result['prefill'] == {'bodyweight_kg': 73.5, 'training_maxes': {'squat_kg': 150, 'bench_kg': 90, 'deadlift_kg': 180}}
     assert result['next_step'] == 'role' and not result['has_athlete_basics']
     assert len(reads) == 2 and 'sex' not in result['prefill']
+
+
+def test_basics_accept_missing_country_and_long_country_names():
+    core = importlib.import_module('services.handlers.user.settings_update_athlete_basics.core')
+    base = {'sex': 'male', 'bodyweight_kg': 90, 'training_maxes': {'squat_kg': 200, 'bench_kg': 130, 'deadlift_kg': 240}}
+    assert core._validate_athlete_basics(base)['country'] is None
+    assert core._validate_athlete_basics({**base, 'country': '  '})['country'] is None
+    assert core._validate_athlete_basics({**base, 'country': 'New Zealand'})['country'] == 'New Zealand'
+    from pathlib import Path
+    operations = json.loads((Path(core.__file__).parents[3] / 'operations' / 'profile.json').read_text())
+    schema = next(op for op in operations if op['name'] == 'settings_update_athlete_basics')['input_schema']['properties']['input']
+    assert 'country' not in schema['required']
+    assert schema['properties']['country']['maxLength'] >= len('Bosnia and Herzegovina')

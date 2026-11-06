@@ -15,6 +15,7 @@ export function findRouteRule(method: HttpMethod, path: string, query: Record<st
   let scope = ROUTE_SCOPES[segments[1]]
   if (segments[1] === 'programs' && segments[3] === 'lift-profiles') scope = 'lift-profiles'
   if (segments[1] === 'grants' && segments.length > 2 && !path.endsWith('/requests/revoke')) scope = 'settings'
+  if (segments[1] === 'stats' && segments[2] === 'categories') scope = 'settings'
   if (!scope) return null
   let access: Access = ['GET', 'HEAD', 'OPTIONS'].includes(method) ? 'read' : 'write'
   if (segments[1] === 'templates' && segments[3] === 'apply') access = 'read'

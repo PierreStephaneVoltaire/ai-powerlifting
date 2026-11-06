@@ -265,10 +265,6 @@ export default function OnboardingPage() {
 
   async function handleBasicsNext() {
     if (!sex) { setError('Select sex for competition calculations.'); return }
-    if (!country.trim()) {
-      setError('Country is required.')
-      return
-    }
     const bw = typeof bodyweight === 'string' ? parseFloat(bodyweight) : bodyweight
     const sq = typeof squat === 'string' ? parseFloat(squat) : squat
     const be = typeof bench === 'string' ? parseFloat(bench) : bench
@@ -286,7 +282,7 @@ export default function OnboardingPage() {
     try {
       const next = await submitAthleteBasics({
         sex,
-        country: country.trim(),
+        country: country.trim() || null,
         region: region.trim() || null,
         bodyweight_kg: bw,
         training_maxes: { squat_kg: sq, bench_kg: be, deadlift_kg: dl },
@@ -708,7 +704,6 @@ function AthleteBasicsStep(props: {
           country={country || null}
           region={region || null}
           onChange={(location) => { setCountry(location.country ?? ''); setRegion(location.region ?? '') }}
-          required
           disabled={disabled}
         />
       </Group>

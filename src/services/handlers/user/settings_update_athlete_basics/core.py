@@ -40,10 +40,10 @@ def _validate_athlete_basics(input_data: dict) -> dict:
     if sex not in SEX_VALUES:
         raise ValueError("sex must be 'male' or 'female'")
     country = input_data.get("country")
-    if not isinstance(country, str) or not country.strip():
-        raise ValueError("country is required")
-    country_v = country.strip()
-    if len(country_v) > 64:
+    if country is not None and not isinstance(country, str):
+        raise ValueError("country must be a string")
+    country_v = country.strip() if isinstance(country, str) and country.strip() else None
+    if country_v and len(country_v) > 64:
         raise ValueError("country must be at most 64 characters")
     region = input_data.get("region")
     if region is not None and not isinstance(region, str):

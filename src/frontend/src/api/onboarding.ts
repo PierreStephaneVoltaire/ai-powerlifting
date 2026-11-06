@@ -26,7 +26,7 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
 
 interface AthleteBasicsInput {
   sex: 'male' | 'female'
-  country: string
+  country: string | null
   region: string | null
   bodyweight_kg: number
   training_maxes: TrainingMaxes

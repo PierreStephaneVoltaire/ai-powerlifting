@@ -845,7 +845,6 @@
           "type": "object",
           "required": [
             "sex",
-            "country",
             "bodyweight_kg",
             "training_maxes"
           ],
@@ -857,9 +856,11 @@
               ]
             },
             "country": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 64
             },
             "region": {
               "type": [
