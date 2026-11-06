@@ -330,7 +330,7 @@
     "public": true
   },
   "powerlifting_filter_categories": {
-    "permission": "settings:read"
+    "permission": "analytics:read"
   },
   "powerlifting_ranking_percentile": {
     "permission": "analytics:read"

@@ -19,6 +19,9 @@ from services.lib.session_store import SessionIdentityConflictError
 
 DOMAIN = os.environ["PL_DOMAIN"]
 OPERATIONS = load_operations(DOMAIN)
+if DOMAIN == "rankings":
+    from .lib.opl_dataset import warm_cache
+    warm_cache()
 app = FastAPI(title=f"Powerlifting {DOMAIN}")
 
 

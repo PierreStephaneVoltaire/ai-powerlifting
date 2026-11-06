@@ -19,10 +19,10 @@ import { AlertCircle, Clock } from 'lucide-react'
 import { fetchStatCategories, analyzeStats } from '@/api/client'
 import { calculateDots } from '@/utils/dots'
 import { useSettingsStore } from '@/store/settingsStore'
+import rankingLocations from '@/data/ranking-locations.json'
 
 interface FilterCategories {
   federations: string[]
-  countries: string[]
   regions: string[]
   equipment: string[]
   sex: string[]
@@ -218,7 +218,7 @@ export default function RankingsPage() {
               <Select
                 label="Country"
                 placeholder="All"
-                data={categories?.countries || []}
+                data={rankingLocations.countries}
                 value={country}
                 onChange={setCountry}
                 searchable
