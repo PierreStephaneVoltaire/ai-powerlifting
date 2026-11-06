@@ -161,33 +161,10 @@ def _export_window(args: dict) -> dict:
     return window
 
 
-def _read_cached_correlation(pk: str, weeks: int = 4) -> dict | None:
-    """Return the cached correlation report for the current window, or None."""
-    from .config import IF_HEALTH_TABLE_NAME
-
-    today = datetime.utcnow().date()
-    raw_cutoff = today - timedelta(weeks=weeks)
-    window_start = (raw_cutoff - timedelta(days=raw_cutoff.weekday())).isoformat()
-    cache_sk = f"corr_report#{window_start}_{weeks}w"
-
-    table = dynamodb_resource("dynamodb", region_name="ca-central-1").Table(IF_HEALTH_TABLE_NAME)
-    item = table.get_item(Key={"pk": pk, "sk": cache_sk}).get("Item")
-    if not item or not item.get("report"):
-        return None
-
-    report = item["report"]
-    if isinstance(report, dict):
-        report["cached"] = True
-        report["generated_at"] = item.get("generated_at", "")
-        report["window_start"] = window_start
-        report["weeks"] = weeks
-    return _sanitize_decimals(report)
-
-
 def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, session_block: str = ACTIVE, window: dict | None = None) -> dict:
     """Assemble the analysis bundle threaded into the XLSX export.
 
-    Uses cached AI reports (no forced regeneration) and the pure weekly_analysis
+    Uses the pure weekly_analysis
     function. Missing pieces degrade gracefully.
 
     NOTE: program_evaluation AI call is omitted in the lambda (AI-excluded).
@@ -291,12 +268,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
             )
     except Exception as e:
         logger.warning("export: weekly_analysis failed: %s", e)
-
-    try:
-        if session_block == ACTIVE and (getattr(store, "export_access", None) or {}).get("is_self"):
-            bundle["correlation"] = _read_cached_correlation(active_pk, weeks=effective_weeks)
-    except Exception as e:
-        logger.warning("export: correlation cache read failed: %s", e)
 
 
     access = getattr(store, 'export_access', None)

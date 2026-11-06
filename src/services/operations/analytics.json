@@ -412,7 +412,7 @@
   {
     "name": "correlation_analysis",
     "domain": "analytics",
-    "description": "Generate a correlation analysis report across training variables. Analyzes how volume, intensity, RPE, and other factors correlate with progression. Uses cached DynamoDB values for deterministic sections.",
+    "description": "Generate a correlation analysis report across training variables. Analyzes how volume, intensity, RPE, and other factors correlate with progression. Results are reused while the source data is unchanged; refresh forces a new report.",
     "handler": "services.handlers.analysis.correlation_analysis.handler",
     "input_schema": {
       "type": "object",
@@ -572,7 +572,7 @@
   {
     "name": "program_evaluation",
     "domain": "analytics",
-    "description": "Generate an AI program evaluation report for the current program. Assesses overall design, volume, intensity, exercise selection, and progression. Caches results in DynamoDB for fast retrieval.",
+    "description": "Generate an AI program evaluation report for the current program. Assesses overall design, volume, intensity, exercise selection, and progression. Results are reused while the source data is unchanged; refresh forces a new report.",
     "handler": "services.handlers.analysis.program_evaluation.handler",
     "input_schema": {
       "type": "object",

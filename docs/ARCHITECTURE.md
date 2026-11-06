@@ -126,7 +126,7 @@ erDiagram
 
 | Store | Backend | Purpose |
 |-------|---------|---------|
-| `if-health` | DynamoDB | Program document, glossary, max history, weight log, analysis cache refs, AI report caches (ROI/program-eval) |
+| `if-health` | DynamoDB | Program document, glossary, max history, weight log |
 | `if-sessions` | DynamoDB | Sessions (separate from program; merged by version in `programController.getProgram()`) |
 | `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
 | `if-powerlifting-analysis-cache` | DynamoDB | AI generation records |

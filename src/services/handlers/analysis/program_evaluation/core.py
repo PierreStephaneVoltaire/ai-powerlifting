@@ -1,10 +1,6 @@
 import asyncio
-import hashlib
-import json
 import os
-import time as _time
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 from services.lib.block_scope import scope_program
 
 
@@ -38,25 +34,8 @@ def _get_federation_store():
     )
 
 
-def _floats_to_decimals(obj):
-    if isinstance(obj, bool):
-        return obj
-    if isinstance(obj, float):
-        return Decimal(str(obj))
-    if isinstance(obj, dict):
-        return {k: _floats_to_decimals(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_floats_to_decimals(v) for v in obj]
-    return obj
-
-
 def program_evaluation(args):
-    from services.lib.aws import dynamodb_resource
-    from .config import AWS_REGION, IF_HEALTH_TABLE_NAME
     from .program_evaluation_ai import generate_program_evaluation_report
-
-    refresh = args.get("refresh", False)
-    cache_only = args.get("cache_only", False)
 
     store = _get_store()
     store.invalidate_cache()
@@ -64,7 +43,6 @@ def program_evaluation(args):
     from services.lib.competition_entries import with_competition_entries
     program = source["program"] if "program" in source else with_competition_entries(_run_async(store.get_program()), store.pk)
     federation_library = source["federation_library"] if "federation_library" in source else _run_async(_get_federation_store().get_library())
-    active_pk = store.pk
     sessions = scope_program(program).get("sessions", [])
 
     completed_weeks = sorted({
@@ -83,53 +61,9 @@ def program_evaluation(args):
         }
 
     today = date.today()
-    week_start = today - timedelta(days=today.weekday())
-    window_start = week_start.isoformat()
-    notes_fingerprint = hashlib.sha1(
-        json.dumps(program.get("meta", {}).get("block_notes", []), sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()[:12]
-    cache_sk = f"program_eval#{window_start}#{notes_fingerprint}"
-
-    table = dynamodb_resource("dynamodb", region_name=AWS_REGION).Table(IF_HEALTH_TABLE_NAME)
-
-    if not refresh:
-        cached = table.get_item(Key={"pk": active_pk, "sk": cache_sk}).get("Item")
-        if cached and cached.get("report"):
-            report = cached["report"]
-            if isinstance(report, dict):
-                report["cached"] = True
-                report["generated_at"] = cached.get("generated_at", "")
-                report["window_start"] = window_start
-                report["weeks"] = len(completed_weeks)
-                return report
-
-    if cache_only:
-        return {
-            "insufficient_data": True,
-            "insufficient_data_reason": "No cached program evaluation exists. Generate it to run AI analysis.",
-            "cache_miss": True,
-            "cached": False,
-            "generated_at": "",
-            "window_start": window_start,
-            "weeks": len(completed_weeks),
-        }
-
     report = _run_async(generate_program_evaluation_report(program, federation_library=federation_library))
-    generated_at = datetime.utcnow().isoformat() + "Z"
     report["cached"] = False
-    report["generated_at"] = generated_at
-    report["window_start"] = window_start
+    report["generated_at"] = datetime.utcnow().isoformat() + "Z"
+    report["window_start"] = (today - timedelta(days=today.weekday())).isoformat()
     report["weeks"] = len(completed_weeks)
-
-    if not (report.get("insufficient_data") and str(report.get("insufficient_data_reason", "")).startswith("AI evaluation failed")):
-        table.put_item(Item=_floats_to_decimals({
-            "pk": active_pk,
-            "sk": cache_sk,
-            "report": report,
-            "generated_at": generated_at,
-            "window_start": window_start,
-            "weeks": len(completed_weeks),
-            "expires_at": int(_time.time()) + 7 * 86400,
-        }))
-
     return report
