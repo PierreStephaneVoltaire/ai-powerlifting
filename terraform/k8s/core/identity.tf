@@ -85,7 +85,7 @@ resource "authentik_source_oauth" "discord" {
   enabled             = true
   user_path_template  = "authentik:%%(username)s"
   group_matching_mode = "name_link"
-  user_matching_mode  = "identifier"
+  user_matching_mode  = "email_link"
   additional_scopes   = "email identify"
   policy_engine_mode  = "any"
 }

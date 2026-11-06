@@ -241,7 +241,7 @@ flowchart LR
     Rankings["pl-rankings<br/>OpenPowerlifting data"]
     Coach["pl-coach<br/>Codex worker"]
     Bot["pl-coach-discord<br/>gateway bot"]
-    Runner["Actions runner<br/>applies network + app"]
+    Runner["Actions runner<br/>applies k8s stacks"]
     Auth["Authentik + Discord OAuth"]
     Postgres[("Postgres<br/>CNPG, Authentik data")]
     Monitoring["Prometheus, Loki,<br/>Grafana"]
@@ -292,11 +292,10 @@ CNPG Postgres cluster in the same k3s node. Prometheus, Loki and Grafana watch
 the cluster; Grafana is reached by port-forward on `localhost:3000`.
 
 Infrastructure is Terraform, split into a few stacks: AWS and Cloudflare in
-`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`, and
-the Coach in `terraform/coach`. In `terraform/k8s/`, `core` (namespaces,
-secrets, the Actions runner, Authentik, Postgres and monitoring) and `perms`
-are applied locally because they hold secrets; `network` and `app` are applied
-by the runner inside the cluster. See
+`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`
+(applied by a runner inside the cluster; `core` holds namespaces, secrets, the
+Actions runner, Authentik, Postgres and monitoring),
+and the Coach in `terraform/coach`. See
 [`terraform/k8s/README.md`](terraform/k8s/README.md).
 
 For more on the request flow, data model and caching, see
@@ -362,5 +361,5 @@ when working in this repo.
 ## Image rollout
 
 Every push builds the images in `docker/` with Packer and pushes them to ECR.
-When I'm the one pushing, a runner in the cluster then applies the network and
-app stacks, which picks up the new images and rolls the workloads.
+When I'm the one pushing, a runner in the cluster then applies the Kubernetes
+stacks, which picks up the new images and rolls the workloads.

@@ -432,7 +432,7 @@ jobs:
           terraform_wrapper: false
 
       - env:
-          K8S_TFVARS: ${{ vars.K8S_TFVARS }}
+          K8S_TFVARS: ${{ secrets.K8S_TFVARS }}
         run: printf '%s' "$K8S_TFVARS" > "$RUNNER_TEMP/k8s.tfvars"
 
       - env:
@@ -440,7 +440,7 @@ jobs:
         working-directory: terraform/k8s
         run: |
           set -euo pipefail
-          for stack in network app; do
+          for stack in core perms network app; do
             terraform -chdir="$stack" init -input=false \
               -backend-config="bucket=$TF_STATE_BUCKET" \
               -backend-config="key=powerlifting-app/k8s/$stack.tfstate" \

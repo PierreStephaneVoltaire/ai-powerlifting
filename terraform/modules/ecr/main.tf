@@ -16,7 +16,21 @@ resource "aws_ecr_lifecycle_policy" "keep_5" {
 
   repository = aws_ecr_repository.this[each.key].name
 
-  policy = jsonencode({
+  policy = contains(var.untagged_expiry_repository_names, each.value) ? jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Expire untagged images after 1 day"
+      selection = {
+        tagStatus   = "untagged"
+        countType   = "sinceImagePushed"
+        countUnit   = "days"
+        countNumber = 1
+      }
+      action = {
+        type = "expire"
+      }
+    }]
+    }) : jsonencode({
     rules = concat(
       each.value == "powerlifting-app-backend" ? [{
         rulePriority = 1

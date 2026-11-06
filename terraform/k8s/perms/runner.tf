@@ -5,68 +5,6 @@ resource "kubernetes_service_account_v1" "runner" {
   }
 }
 
-resource "kubernetes_role_v1" "runner_namespace" {
-  metadata {
-    name      = "powerlifting-deployer"
-    namespace = var.namespace
-  }
-
-  rule {
-    api_groups = ["*"]
-    resources  = ["*"]
-    verbs      = ["*"]
-  }
-}
-
-resource "kubernetes_role_binding_v1" "runner_namespace" {
-  metadata {
-    name      = "powerlifting-deployer"
-    namespace = var.namespace
-  }
-
-  subject {
-    kind      = "ServiceAccount"
-    name      = kubernetes_service_account_v1.runner.metadata[0].name
-    namespace = var.runner_namespace
-  }
-
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "Role"
-    name      = kubernetes_role_v1.runner_namespace.metadata[0].name
-  }
-}
-
-resource "kubernetes_cluster_role_v1" "runner_cluster" {
-  metadata {
-    name = "powerlifting-deployer"
-  }
-
-  rule {
-    api_groups = [""]
-    resources  = ["namespaces"]
-    verbs      = ["get", "list", "watch"]
-  }
-
-  rule {
-    api_groups = ["apiextensions.k8s.io"]
-    resources  = ["customresourcedefinitions"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch"]
-  }
-
-  rule {
-    api_groups = ["rbac.authorization.k8s.io"]
-    resources  = ["clusterroles", "clusterrolebindings"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"]
-  }
-
-  rule {
-    api_groups = ["gateway.networking.k8s.io"]
-    resources  = ["gatewayclasses"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
-  }
-}
-
 resource "kubernetes_cluster_role_binding_v1" "runner_cluster" {
   metadata {
     name = "powerlifting-deployer"
@@ -81,6 +19,6 @@ resource "kubernetes_cluster_role_binding_v1" "runner_cluster" {
   role_ref {
     api_group = "rbac.authorization.k8s.io"
     kind      = "ClusterRole"
-    name      = kubernetes_cluster_role_v1.runner_cluster.metadata[0].name
+    name      = "cluster-admin"
   }
 }
