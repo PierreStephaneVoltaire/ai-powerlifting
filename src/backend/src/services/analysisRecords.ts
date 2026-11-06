@@ -1,24 +1,15 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
-import { gzipSync, gunzipSync } from 'node:zlib'
+import { valkey } from '../utils/valkey'
 
-const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION || 'ca-central-1' }), { marshallOptions: { removeUndefinedValues: true } })
-const TableName = process.env.ANALYSIS_CACHE_TABLE_NAME || 'if-powerlifting-analysis-cache'
+function recordKey(athlete: string, key: string): string {
+  return `pl:analysis:${athlete}:${key}`
+}
 
 export async function readAnalysisRecord<T>(athlete: string, key: string): Promise<T | null> {
-  const { Item } = await client.send(new GetCommand({ TableName, Key: { pk: `analysis#${athlete}`, sk: key }, ConsistentRead: true }))
-  if (!Item?.payload) return null
-  return JSON.parse(gunzipSync(Buffer.from(Item.payload, 'base64')).toString()) as T
+  const raw = await (await valkey()).get(recordKey(athlete, key))
+  return raw ? JSON.parse(raw) as T : null
 }
 
 export async function writeAnalysisRecord(athlete: string, key: string, value: unknown, createOnly = false): Promise<boolean> {
-  const payload = gzipSync(JSON.stringify(value)).toString('base64')
-  if (Buffer.byteLength(payload) > 350000) throw new Error('Analysis record exceeds the storage limit')
-  try {
-    await client.send(new PutCommand({ TableName, Item: { pk: `analysis#${athlete}`, sk: key, payload }, ...(createOnly ? { ConditionExpression: 'attribute_not_exists(pk)' } : {}) }))
-    return true
-  } catch (error) {
-    if (createOnly && error instanceof Error && error.name === 'ConditionalCheckFailedException') return false
-    throw error
-  }
+  const result = await (await valkey()).set(recordKey(athlete, key), JSON.stringify(value), createOnly ? { NX: true } : {})
+  return result === 'OK'
 }

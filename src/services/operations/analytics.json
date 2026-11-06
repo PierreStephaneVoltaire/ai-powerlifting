@@ -2,7 +2,7 @@
   {
     "name": "get_analysis_markdown",
     "domain": "analytics",
-    "description": "Return the cached markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Use the cache unless it is stale, dirty, or refresh is true.",
+    "description": "Return the markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Served from cache while the program and glossary are unchanged; refresh forces regeneration.",
     "handler": "services.handlers.analysis_reports.handler",
     "input_schema": {
       "type": "object",
@@ -11,11 +11,6 @@
           "type": "boolean",
           "description": "Force regeneration before returning markdown",
           "default": false
-        },
-        "max_age_hours": {
-          "type": "integer",
-          "description": "Maximum cache age before regeneration",
-          "default": 72
         },
         "cache_only": {
           "type": "boolean",
@@ -44,12 +39,6 @@
               "type": "string"
             },
             "cached": {
-              "type": "boolean"
-            },
-            "dirty": {
-              "type": "boolean"
-            },
-            "regenerated": {
               "type": "boolean"
             }
           },
@@ -659,58 +648,6 @@
       "additionalProperties": true
     },
     "execution": "ai",
-    "ownership": "athlete"
-  },
-  {
-    "name": "regenerate_analysis",
-    "domain": "analytics",
-    "description": "Regenerate deterministic current-block analysis caches and markdown export. AI reports are intentionally excluded — they are regenerated only through explicit AI section tools. NEVER touches past-block caches.",
-    "handler": "services.handlers.analysis.regenerate_analysis.handler",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
-        },
-        "block_key": {
-          "type": "string",
-          "description": "Block key to regenerate analysis for."
-        }
-      }
-    },
-    "result_schema": {
-      "type": "object",
-      "required": [
-        "success",
-        "generated_at",
-        "windows_regenerated",
-        "errors"
-      ],
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "generated_at": {
-          "type": "string"
-        },
-        "windows_regenerated": {
-          "type": "integer"
-        },
-        "errors": {
-          "type": "array"
-        },
-        "message": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "execution": "deterministic",
     "ownership": "athlete"
   },
   {
@@ -2562,10 +2499,6 @@
         "cache_only": {
           "type": "boolean",
           "default": false
-        },
-        "max_age_hours": {
-          "type": "integer",
-          "minimum": 1
         }
       },
       "required": [
@@ -2590,12 +2523,6 @@
               "type": "string"
             },
             "cached": {
-              "type": "boolean"
-            },
-            "dirty": {
-              "type": "boolean"
-            },
-            "regenerated": {
               "type": "boolean"
             }
           },

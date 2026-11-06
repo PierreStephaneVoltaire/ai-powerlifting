@@ -10,7 +10,7 @@ from services.dispatch import dispatch
 
 def test_analytics_contracts_have_structured_results():
     operations = load_operations("analytics")
-    assert len(operations) == 28
+    assert len(operations) == 27
     assert all(operation.result_schema for operation in operations.values())
 
 
@@ -18,6 +18,28 @@ def test_rankings_operations_live_in_their_own_domain():
     rankings = load_operations("rankings")
     assert set(rankings) == {"analyze_powerlifting_stats", "powerlifting_filter_categories", "powerlifting_ranking_percentile"}
     assert not set(rankings) & set(load_operations("analytics"))
+
+
+def test_ranking_percentiles_are_cached_per_dataset_athlete_numbers_and_filter(monkeypatch):
+    handler = importlib.import_module("services.handlers.analysis.powerlifting_ranking_percentile.handler")
+    records = {}
+    computed = []
+    identity = ["dataset-a"]
+    monkeypatch.setattr(handler, "load_data", lambda: object())
+    monkeypatch.setattr(handler.opl_dataset, "identity", lambda: identity[0])
+    monkeypatch.setattr(handler.valkey, "get_json", records.get)
+    monkeypatch.setattr(handler.valkey, "set_json", records.__setitem__)
+    monkeypatch.setattr(handler, "compute_ranking_percentiles", lambda _df, **kwargs: computed.append(kwargs) or {"global": {"total": len(computed)}})
+    args = {"pk": "athlete-a", "squat_kg": 200, "bench_kg": 130, "deadlift_kg": 250, "bodyweight_kg": 82, "sex_code": "M", "equipment": "Raw"}
+
+    assert handler.handler({"args": args}, None)["body"] == handler.handler({"args": args}, None)["body"]
+    assert len(computed) == 1
+    handler.handler({"args": {**args, "equipment": "Wraps"}}, None)
+    handler.handler({"args": {**args, "squat_kg": 205}}, None)
+    handler.handler({"args": {**args, "pk": "athlete-b"}}, None)
+    identity[0] = "dataset-b"
+    handler.handler({"args": args}, None)
+    assert len(computed) == 5
 
 
 def test_analysis_section_uses_supplied_snapshot(monkeypatch):
@@ -214,7 +236,7 @@ def test_composite_inputs_match_their_routes():
         "analytics.compare": {"pk", "blockKeys"},
         "analytics.compare_ai": {"pk", "blockKeys", "refresh", "cacheOnly", "read_only"},
         "analytics.regenerate": {"pk", "asOfDate", "window", "windows", "sections"},
-        "analytics.markdown": {"pk", "refresh", "cache_only", "max_age_hours"},
+        "analytics.markdown": {"pk", "refresh", "cache_only"},
     }
     for name, fields in expected.items():
         schema = operations[name].input_schema
@@ -246,10 +268,10 @@ def test_markdown_export_formatter_remains_available_to_lazy_report_imports(tmp_
     assert output.read_text(encoding="utf-8").startswith("# Athlete A")
 
 
-def test_markdown_report_handler_lazily_loads_the_restored_formatter(monkeypatch):
-    core = importlib.import_module("services.handlers.analysis_reports.core")
+def _markdown_sources(monkeypatch, core, program, glossary=None, glossary_reads=None):
     competition_entries = importlib.import_module("services.lib.competition_entries")
-    writes = []
+    valkey = importlib.import_module("services.lib.valkey")
+    records = {}
 
     class Store:
         pk = "athlete-a"
@@ -258,112 +280,74 @@ def test_markdown_report_handler_lazily_loads_the_restored_formatter(monkeypatch
             return None
 
         async def get_program(self):
-            return {"meta": {"program_name": "Athlete A"}, "sessions": [], "phases": [], "goals": [], "competitions": []}
+            return program
 
     class Glossary:
         async def get_glossary(self):
-            return []
-
-    class Table:
-        def put_item(self, **kwargs):
-            writes.append(kwargs["Item"])
-
-        def query(self, **kwargs):
-            return {'Items': []}
+            if glossary_reads is not None:
+                glossary_reads.append(True)
+            return glossary or []
 
     monkeypatch.setattr(core, "_get_store", Store)
     monkeypatch.setattr(core, "_get_glossary_store", Glossary)
-    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: Table()))
-    monkeypatch.setattr(competition_entries, "with_competition_entries", lambda program, _pk: program)
-    monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: {})
-    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: Table())))
-    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("cache unavailable"))))
-
-    result = core.get_analysis_markdown({"pk": "athlete-a"})
-    assert result["markdown"].startswith("# Athlete A")
-    assert writes[0]["pk"] == "analysis#athlete-a"
+    monkeypatch.setattr(competition_entries, "with_competition_entries", lambda program, *_args: program)
+    monkeypatch.setattr(valkey, "get_json", records.get)
+    monkeypatch.setattr(valkey, "set_json", records.__setitem__)
+    return records
 
 
-def test_markdown_cache_only_returns_a_miss_without_regenerating(monkeypatch):
+def test_markdown_is_cached_until_the_program_changes(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
+    renders = []
+    program = {"meta": {"program_name": "Athlete A"}, "sessions": [], "phases": [], "goals": [], "competitions": []}
+    records = _markdown_sources(monkeypatch, core, program)
+    monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: renders.append(True) or {})
 
-    class Store:
-        pk = "athlete-a"
+    first = core.get_analysis_markdown({"pk": "athlete-a"})
+    second = core.get_analysis_markdown({"pk": "athlete-a"})
+    assert first["markdown"].startswith("# Athlete A") and first["cached"] is False
+    assert second["markdown"] == first["markdown"] and second["cached"] is True
+    assert len(renders) == 1 and len(records) == 1
 
-    class CacheStore:
-        def __init__(self, **kwargs):
-            pass
+    program["meta"]["program_name"] = "Athlete B"
+    changed = core.get_analysis_markdown({"pk": "athlete-a"})
+    assert changed["markdown"].startswith("# Athlete B") and changed["cached"] is False
+    assert len(renders) == 2
 
-        def get_markdown_cache(self, window):
-            return None
+    refreshed = core.get_analysis_markdown({"pk": "athlete-a", "refresh": True})
+    assert refreshed["cached"] is False and len(renders) == 3
 
-        def get_markdown_dirty(self, window):
-            return False
 
-    monkeypatch.setattr(core, "_get_store", Store)
-    monkeypatch.setattr(core, "_regenerate_analysis", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("cache-only regenerated")))
-    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
-    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None)))
-    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
+def test_markdown_cache_only_returns_a_miss_without_rendering(monkeypatch):
+    core = importlib.import_module("services.handlers.analysis_reports.core")
+    _markdown_sources(monkeypatch, core, {"meta": {}, "sessions": [], "competitions": []})
+    monkeypatch.setattr(core, "_render_markdown", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("cache-only rendered")))
 
     assert core.get_analysis_markdown({"pk": "athlete-a", "cache_only": True}) == {"cached": False, "cache_miss": True}
 
 
 def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
-    records = {}
     analysis_inputs = []
     glossary_reads = []
+    program = {
+        "meta": {"program_name": "Visible", "training_notes": ["private profile note"], "current_body_weight_kg": 90},
+        "settings": {"sex": "female", "private_setting": "private value"},
+        "phases": [{"name": "Private phase", "block": "current"}],
+        "sessions": [{"date": "2026-09-14", "block": "current", "session_notes": "visible session"}],
+        "goals": [{"title": "Private goal", "priority": "primary"}],
+        "diet_notes": [{"date": "2026-09-14", "notes": "private diet"}],
+        "supplements": [{"name": "private supplement"}],
+        "lift_profiles": [{"lift": "squat", "style": "private style"}],
+        "competitions": [],
+    }
+    records = _markdown_sources(monkeypatch, core, program, [{"term": "private glossary"}], glossary_reads)
 
-    class Store:
-        pk = "athlete-a"
-
-        def invalidate_cache(self):
-            return None
-
-        async def get_program(self):
-            return {
-                "meta": {"program_name": "Visible", "training_notes": ["private profile note"], "current_body_weight_kg": 90},
-                "settings": {"sex": "female", "private_setting": "private value"},
-                "phases": [{"name": "Private phase", "block": "current"}],
-                "sessions": [{"date": "2026-09-14", "block": "current", "session_notes": "visible session"}],
-                "goals": [{"title": "Private goal", "priority": "primary"}],
-                "diet_notes": [{"date": "2026-09-14", "notes": "private diet"}],
-                "supplements": [{"name": "private supplement"}],
-                "lift_profiles": [{"lift": "squat", "style": "private style"}],
-                "competitions": [],
-            }
-
-    class Glossary:
-        async def get_glossary(self):
-            glossary_reads.append(True)
-            return [{"term": "private glossary"}]
-
-    class CacheStore:
-        def __init__(self, **kwargs):
-            pass
-
-        def get_markdown_cache(self, block_key):
-            return records.get(block_key)
-
-        def get_markdown_dirty(self, block_key):
-            return False
-
-        def put_markdown_cache(self, markdown, block_key, access_requirements=None):
-            records[block_key] = {"markdown": markdown, "generated_at": "2026-09-14T12:00:00+00:00", "access_requirements": access_requirements}
-
-    monkeypatch.setattr(core, "_get_store", Store)
-    monkeypatch.setattr(core, "_get_glossary_store", Glossary)
     def build_analysis(program, sessions, glossary, **kwargs):
         analysis_inputs.append((program, sessions, glossary))
         return {}
 
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", build_analysis)
-    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
-    import boto3
-    monkeypatch.setattr(boto3, "resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
-    monkeypatch.setitem(sys.modules, "services.lib.competition_entries", SimpleNamespace(with_competition_entries=lambda program, *args: program, next_competition=lambda competitions: None))
-    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
 
     access = {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}
     operations = load_operations("analytics")
@@ -385,58 +369,34 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
     assert analysis_inputs[-1][2] == [{"term": "private glossary"}]
     assert len(glossary_reads) == 1
 
-    cached = dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "cache_only": True, "_access": access})
+    read_access = {"is_self": False, "permissions": ["analytics:read", "sessions:read"]}
+    cached = dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "cache_only": True, "_access": read_access})
     assert cached["markdown"] == result["markdown"] and cached["cached"] is True
 
-    records["current"] = {"markdown": "# Private legacy report", "generated_at": "2026-09-14T12:00:00+00:00"}
     for isolated in (
         {"is_self": False, "permissions": ["analytics:read"]},
         {"is_self": False, "permissions": ["analytics:read", "profile:read", "sessions:read"]},
     ):
         assert dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "cache_only": True, "_access": isolated}) == {"cached": False, "cache_miss": True}
 
-    read_access = {"is_self": False, "permissions": ["analytics:read", "sessions:read"]}
-    cached_again = dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "cache_only": True, "_access": read_access})
-    assert cached_again["markdown"] == result["markdown"] and cached_again["cached"] is True
-
     import pytest
-    broader_access = {"is_self": False, "permissions": ["analytics:read", "sessions:read", "goals:read"]}
-    read_cache_key = core._markdown_cache_key({"_access": read_access})
-    records.pop(read_cache_key)
-    records[core._markdown_cache_key({"_access": broader_access})] = {"markdown": "# Broad report", "generated_at": "2026-09-14T12:00:00+00:00", "access_requirements": {"permissions": ["sessions:read", "goals:read"], "competition_ids": []}}
-    assert dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "cache_only": True, "_access": read_access}) == {"cached": False, "cache_miss": True}
-
-    read_cache_key = core._markdown_cache_key({"_access": read_access})
-    records[read_cache_key] = {**cached, "access_requirements": {"permissions": ["sessions:read", "goals:read"], "competition_ids": []}}
-    assert read_cache_key in records
+    read_key = next(key for key in records if core._markdown_cache_key({"_access": read_access}) in key)
+    records[read_key] = {**records[read_key], "access_requirements": {"permissions": ["sessions:read", "goals:read"], "competition_ids": []}}
     with pytest.raises(Exception, match="Access to this saved result has changed"):
         dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "cache_only": True, "_access": read_access})
 
 
-def test_markdown_dispatch_preserves_athlete_cache_reads(monkeypatch):
+def test_markdown_athlete_reads_never_share_delegate_records(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
-
-    class Store:
-        pk = "athlete-a"
-
-    class CacheStore:
-        def __init__(self, **kwargs):
-            pass
-
-        def get_markdown_cache(self, window):
-            return {"markdown": "# Full private report", "generated_at": "2026-09-14T12:00:00+00:00"}
-
-        def get_markdown_dirty(self, window):
-            return False
-
-    monkeypatch.setattr(core, "_get_store", Store)
-    monkeypatch.setattr(core, "dynamodb_resource", lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None))
-    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(resource=lambda *args, **kwargs: SimpleNamespace(Table=lambda _name: None)))
-    monkeypatch.setitem(sys.modules, "services.lib.analysis_cache", SimpleNamespace(AnalysisCacheStore=CacheStore))
+    _markdown_sources(monkeypatch, core, {"meta": {"program_name": "Mine"}, "sessions": [], "phases": [], "goals": [], "competitions": []})
+    monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: {})
     operations = load_operations("analytics")
+    dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "_access": {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}})
+    assert dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "cache_only": True, "_access": {"is_self": True}}) == {"cached": False, "cache_miss": True}
+    dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "_access": {"is_self": True}})
     for name in ("analytics.markdown", "get_analysis_markdown"):
         result = dispatch(operations[name], {"pk": "athlete-a", "cache_only": True, "_access": {"is_self": True}})
-        assert result["markdown"] == "# Full private report" and result["cached"] is True
+        assert result["markdown"].startswith("# Mine") and result["cached"] is True
 
 
 

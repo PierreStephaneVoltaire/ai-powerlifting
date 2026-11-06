@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import copy
-import os
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
@@ -32,18 +31,6 @@ from .config import (
 logger = logging.getLogger(__name__)
 
 _table = None
-
-
-def _invalidate_analysis_cache(pk: str) -> None:
-    try:
-        from services.lib.cache_invalidation import invalidate_analysis_caches
-        invalidate_analysis_caches(
-            pk,
-            os.getenv("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"),
-            os.getenv("AWS_REGION", AWS_REGION),
-        )
-    except Exception as exc:
-        logger.warning("competition analysis cache invalidation failed: %s", exc)
 
 
 def _get_table():
@@ -251,7 +238,6 @@ def update_user_competition(args: dict, operation: str = "update") -> dict:
         ExpressionAttributeNames=names,
         ExpressionAttributeValues=values,
     )
-    _invalidate_analysis_cache(pk)
     return result
 
 

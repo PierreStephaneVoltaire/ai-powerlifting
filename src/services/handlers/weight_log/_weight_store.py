@@ -9,7 +9,6 @@ from typing import Any
 from services.lib.aws import dynamodb_resource
 from botocore.exceptions import ClientError
 from services.lib.block_scope import ALL_BLOCKS, active_block_id_for, current_program_for, scope_entries, stamp
-from services.lib.cache_invalidation import invalidate_analysis_caches
 
 
 def _decimalize(value: Any) -> Any:
@@ -59,7 +58,6 @@ class WeightStore:
                 from services.dispatch import OperationError
                 raise OperationError(409, "concurrent_update", "Weight Log changed; reload before retrying") from exc
             raise
-        invalidate_analysis_caches(log["pk"], region=self.region)
 
     async def add_entry(self, pk: str, version: str, entry: dict) -> dict:
         def write() -> dict:

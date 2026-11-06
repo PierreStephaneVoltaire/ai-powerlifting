@@ -44,7 +44,6 @@ def test_session_writes_are_plain_puts_to_the_session_table_only(monkeypatch):
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
-    monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
     created = store.create_session_sync("program#v001", {"date": "2026-09-14", "week_number": 1, "exercises": [{"sets": 1, "kg": 100.5}]})
     assert created["id"]
@@ -78,7 +77,6 @@ def test_session_identity_collisions_are_rejected_before_writes(monkeypatch):
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
-    monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
     with pytest.raises(SessionIdentityConflictError, match="already exists"):
         store.create_session_sync(
@@ -124,7 +122,6 @@ def test_training_patch_preserves_stored_media(monkeypatch):
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
-    monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
     result = store.patch_session_sync("program#v001", "2026-09-14", {"session_notes": "logged", "videos": []})
     assert result["videos"] == [{"video_id": "worker-ready", "thumbnail_status": "ready"}]
@@ -176,7 +173,6 @@ def test_stable_session_id_wins_when_same_day_order_changes(monkeypatch):
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
-    monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
     first, second = sessions.items.values()
     first["same_day_ordinal"], second["same_day_ordinal"] = 2, 1
@@ -204,7 +200,6 @@ def test_patching_a_deleted_session_reports_it_is_gone(monkeypatch):
     store = SessionStore("if-sessions", "athlete", source_table_name="if-health")
     store._table = sessions
     store._source_table = source
-    monkeypatch.setattr(store, "_invalidate_caches", lambda: None)
 
     with pytest.raises(ValueError, match="no longer exists"):
         store.patch_session_sync("program#v001", "2026-09-13", {"session_notes": "keep draft"}, session_id="deleted-session")

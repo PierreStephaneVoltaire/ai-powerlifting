@@ -1,8 +1,19 @@
 import asyncio
+import hashlib
 import json
+from datetime import date
 from decimal import Decimal
 
+from services.lib import opl_dataset, valkey
 from .core import load_data, compute_ranking_percentiles, DatasetNotReadyError
+
+_RANKING_INPUTS = ("squat_kg", "bench_kg", "deadlift_kg", "bodyweight_kg", "sex_code", "country", "region", "age_class", "equipment")
+
+
+def _cache_key(args) -> str:
+    inputs = json.dumps({name: args.get(name) for name in _RANKING_INPUTS}, sort_keys=True, default=_json_default)
+    digest = hashlib.sha256(inputs.encode()).hexdigest()
+    return f"pl:rankings:{opl_dataset.identity()}:{date.today().year}:{args.get('pk', '')}:{digest}"
 
 
 async def _run(args):
@@ -13,7 +24,11 @@ async def _run(args):
     except FileNotFoundError as e:
         return f"ERROR: Dataset missing. {str(e)}"
 
-    return compute_ranking_percentiles(
+    key = _cache_key(args)
+    cached = valkey.get_json(key)
+    if cached is not None:
+        return cached
+    result = compute_ranking_percentiles(
         df,
         squat_kg=args.get("squat_kg"),
         bench_kg=args.get("bench_kg"),
@@ -25,6 +40,8 @@ async def _run(args):
         age_class=args.get("age_class"),
         equipment=args.get("equipment"),
     )
+    valkey.set_json(key, result)
+    return result
 
 
 

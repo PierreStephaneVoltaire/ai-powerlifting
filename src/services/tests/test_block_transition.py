@@ -74,7 +74,6 @@ def make_store():
     sessions_store = FakeSessionStore(sessions)
     store = ProgramStore("if-health", "athlete-1")
     store._table = table
-    store._invalidate_analysis_cache = lambda: None
     store._get_session_store = lambda: sessions_store
     return store, table, sessions_store
 

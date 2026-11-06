@@ -101,8 +101,6 @@ def test_source_mutation_is_a_plain_put_that_invalidates_analysis():
 
     store = ProgramStore("if-health", "athlete")
     store._table = table = Table()
-    invalidations = []
-    store._invalidate_analysis_cache = lambda: invalidations.append(store.pk)
 
     def remove(program):
         return {"removed": program["competitions"].pop()["date"]}
@@ -112,4 +110,3 @@ def test_source_mutation_is_a_plain_put_that_invalidates_analysis():
     assert table.puts == ["program#v001"]
     assert table.items["program#v001"]["competitions"] == []
     assert "revision" not in table.items["program#v001"]["meta"]
-    assert invalidations == ["athlete"]

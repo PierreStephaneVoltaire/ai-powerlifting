@@ -10,37 +10,11 @@
  * see each other's data. Domains mirror the frontend's IndexedDB tagging scheme.
  */
 
-import { createClient, type RedisClientType } from 'redis'
+import { valkey as getClient } from './valkey'
 import { logger } from './logger'
 
-const VALKEY_URL = process.env.VALKEY_URL || 'redis://pl-valkey:6379'
 const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60 // 1 week
 const KEY_PREFIX = 'pl:cache:'
-
-let clientPromise: Promise<RedisClientType> | null = null
-let connected = false
-
-function getClient(): Promise<RedisClientType> {
-  if (!clientPromise) {
-    const client = createClient({ url: VALKEY_URL }) as RedisClientType
-    client.on('error', (err) => {
-      if (connected) logger.warn({ err }, 'Valkey cache connection error')
-    })
-    client.on('connect', () => {
-      connected = true
-      logger.info({ url: VALKEY_URL }, 'Valkey cache connected')
-    })
-    client.on('end', () => {
-      connected = false
-    })
-    clientPromise = client.connect().then(() => client).catch((err) => {
-      logger.warn({ err, url: VALKEY_URL }, 'Valkey cache unavailable - reads/writes will be skipped')
-      clientPromise = null
-      throw err
-    })
-  }
-  return clientPromise
-}
 
 function keyFor(mappedPk: string, domain: string): string {
   return `${KEY_PREFIX}${mappedPk}:domain:${domain}`
@@ -58,7 +32,7 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await fn()
   } catch (err) {
-    if (connected) logger.warn({ err }, 'Valkey cache op failed')
+    logger.warn({ err }, 'Valkey cache op failed')
     return fallback
   }
 }

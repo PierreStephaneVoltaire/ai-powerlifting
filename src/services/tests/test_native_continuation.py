@@ -5,8 +5,18 @@ import json
 import pytest
 from jsonschema import ValidationError
 
-from services import execution
+from services import ai, execution
 from services.ai import completion
+from services.lib import prompt_cache
+
+
+@pytest.fixture(autouse=True)
+def prompt_cache_store(monkeypatch):
+    store = {"exact": None, "similar": [], "remembered": []}
+    monkeypatch.setattr(prompt_cache, "exact", lambda *_args: store["exact"])
+    monkeypatch.setattr(prompt_cache, "similar", lambda *_args: store["similar"])
+    monkeypatch.setattr(prompt_cache, "remember", lambda *args: store["remembered"].append(args))
+    return store
 from services.contract import Operation
 from services.dispatch import dispatch
 
@@ -54,7 +64,7 @@ def test_nested_operation_uses_the_root_execution_for_native_inference(monkeypat
         execution.executions[root.execution_id] = root
         execution.job_executions[root.job_id] = root
         try:
-            nested = asyncio.create_task(execution.dispatch_nested(None, {'pk': 'athlete-a'}, 'athlete-a', 'job-a'))
+            nested = asyncio.create_task(execution.dispatch_nested(None, {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a'))
             for _ in range(100):
                 if root.challenge:
                     break
@@ -95,3 +105,71 @@ def test_dispatch_keeps_private_execution_metadata_out_of_public_contract_valida
     assert result['_if_job_id'] == 'job-a'
     with pytest.raises(ValidationError):
         dispatch(operation, {'pk': 'athlete-a', 'unexpected': True})
+
+
+ANSWER_TOOLS = [{'type': 'function', 'function': {'name': 'answer', 'parameters': {'type': 'object', 'properties': {'value': {'type': 'number'}}, 'required': ['value']}}}]
+CACHED = {'choices': [{'message': {'role': 'assistant', 'content': '{"value": 7}', 'tool_calls': [{'id': 'saved', 'type': 'function', 'function': {'name': 'answer', 'arguments': '{"value": 7}'}}]}, 'finish_reason': 'tool_calls'}]}
+
+
+def _value_operation(monkeypatch):
+    def handler(operation, arguments):
+        response = asyncio.run(completion({'messages': [{'role': 'user', 'content': 'Return a value'}], 'tools': ANSWER_TOOLS}))
+        return json.loads(response.json()['choices'][0]['message']['tool_calls'][0]['function']['arguments'])
+
+    monkeypatch.setattr(execution, 'dispatch', handler)
+
+
+async def _finish(result, execution_id):
+    while result['status'] == 'running':
+        await asyncio.sleep(0.01)
+        result = await execution.resume(execution_id, 'job-a', 'athlete-a')
+    return result
+
+
+def test_identical_prompt_reuses_the_saved_answer_without_delegating(monkeypatch, prompt_cache_store):
+    _value_operation(monkeypatch)
+    prompt_cache_store["exact"] = CACHED
+
+    async def check():
+        started = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a')
+        assert started['status'] != 'needs_inference'
+        return started if started['status'] == 'succeeded' else await _finish(started, started['execution_id'])
+
+    assert asyncio.run(check()) == {'status': 'succeeded', 'result': {'value': 7}}
+    assert prompt_cache_store["remembered"] == []
+
+
+def test_similar_prompt_is_judged_by_luna_before_reuse(monkeypatch, prompt_cache_store):
+    _value_operation(monkeypatch)
+    prompt_cache_store["similar"] = [prompt_cache.Candidate('saved-1', {'messages': []}, CACHED, 0.93)]
+
+    async def check():
+        pending = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a')
+        assert pending['status'] == 'needs_inference' and pending['instruction'] == ai.JUDGE_INSTRUCTION
+        assert 'saved-1' in pending['messages'][1]['content']
+        result = await execution.resume(pending['execution_id'], 'job-a', 'athlete-a', pending['challenge_id'], {'match_id': 'saved-1', 'confidence': 0.95})
+        return await _finish(result, pending['execution_id'])
+
+    assert asyncio.run(check()) == {'status': 'succeeded', 'result': {'value': 7}}
+    assert prompt_cache_store["remembered"] == []
+
+
+def test_unconfident_judge_falls_through_to_the_specialist_and_saves_its_answer(monkeypatch, prompt_cache_store):
+    _value_operation(monkeypatch)
+    prompt_cache_store["similar"] = [prompt_cache.Candidate('saved-1', {'messages': []}, CACHED, 0.9)]
+
+    async def check():
+        judge = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a')
+        pending = await execution.resume(judge['execution_id'], 'job-a', 'athlete-a', judge['challenge_id'], {'match_id': 'saved-1', 'confidence': 0.4})
+        while pending['status'] == 'running':
+            await asyncio.sleep(0.01)
+            pending = await execution.resume(judge['execution_id'], 'job-a', 'athlete-a')
+        assert pending['status'] == 'needs_inference' and pending['instruction'] == ai.SPECIALIST_INSTRUCTION
+        result = await execution.resume(judge['execution_id'], 'job-a', 'athlete-a', pending['challenge_id'], {'value': 3})
+        return await _finish(result, judge['execution_id'])
+
+    assert asyncio.run(check()) == {'status': 'succeeded', 'result': {'value': 3}}
+    [(athlete, operation, request, response)] = prompt_cache_store["remembered"]
+    assert (athlete, operation) == ('athlete-a', 'test_operation')
+    assert request['messages'] == [{'role': 'user', 'content': 'Return a value'}]
+    assert json.loads(response['choices'][0]['message']['content']) == {'value': 3}

@@ -129,7 +129,9 @@ erDiagram
 | `if-health` | DynamoDB | Program document, glossary, max history, weight log, analysis cache refs, AI report caches (ROI/program-eval) |
 | `if-sessions` | DynamoDB | Sessions (separate from program; merged by version in `programController.getProgram()`) |
 | `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
-| `if-powerlifting-analysis-cache` | DynamoDB | Pre-computed window/section/job/block/markdown analytics (7-day TTL) |
+| `if-powerlifting-analysis-cache` | DynamoDB | AI generation records |
+| `pl-valkey` | Valkey | Deterministic analysis sections, block bundles, markdown exports and ranking percentiles, keyed by source fingerprint, no TTL (LRU eviction) |
+| `pl-prompt-cache` | pgvector + text-embeddings-inference (emptyDir) | Domain AI prompts and answers scoped by Athlete and operation for semantic reuse |
 | `if-powerlifting-user-competitions` | DynamoDB | Independent Athlete-owned Competition Entries and Attempts |
 | `if-powerlifting-master-competitions` | DynamoDB | Master competition directory |
 | `if-powerlifting-master-federations` | DynamoDB | Federation library + qualification standards |
@@ -223,9 +225,9 @@ reasoning), and INOL low/high thresholds. Used two ways:
 flowchart TB
   Req[Analytics request] --> Manifest[GET analysis/manifest\nsection status, no payloads]
   Manifest --> Need{Section cached?}
-  Need -- yes --> Read[read from\nif-powerlifting-analysis-cache]
+  Need -- yes --> Read[read from\npl-valkey]
   Need -- no --> Queue[queue analysis_section]
-  Queue --> Write[write cache, 7-day TTL]
+  Queue --> Write[write pl-valkey, no TTL]
   Read --> FE[frontend renders]
   Write --> FE
   Regen[POST analysis/regenerate\nor Regenerate button] --> Inv[invalidate + requeue\nselected window only]
@@ -236,8 +238,19 @@ flowchart TB
   tooling; the Weekly tab reads sections instead.
 - AI correlation and program-evaluation reports cache separately and only
   regenerate on explicit refresh (never via the main regenerate endpoint).
-- Native report references use a fingerprint of their permitted source snapshot
-  and window. Source writes invalidate derived caches. Persisted requirements
+- Section, block and markdown keys contain a fingerprint of every input the
+  calculation reads (current-block sessions up to the window end, phases, meta,
+  Competition Entries, goals, lift profiles, weight log, glossary) plus the
+  as-of date for current-block windows. Unchanged data is always a hit; any
+  relevant write produces a new key, so nothing is explicitly invalidated and
+  orphaned keys age out under LRU. Past blocks are date-independent.
+- Ranking percentiles key on the OpenPowerlifting file identity (name, size,
+  mtime), the comparison year, the Athlete, their numbers and the filter.
+- Domain AI calls (`services/ai.py`) first look in `pl-prompt-cache`: an
+  identical request for the same Athlete and operation is reused directly; similar
+  requests (cosine ≥ 0.85, top 3) go to a Luna Specialist judge, and only a
+  confident match is reused. Otherwise the normal Specialist answers and the
+  result is stored. Persisted requirements
   record the source domains and Competition Entry scope; every reference/job
   read checks them against current permissions. Legacy results without source
   requirements are readable only by the Athlete until regenerated.

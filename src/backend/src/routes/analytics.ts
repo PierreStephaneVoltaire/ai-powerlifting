@@ -59,7 +59,6 @@ const POD_ANALYSIS_SUBFUNCTIONS = new Set([
   'powerlifting_filter_categories',
   'powerlifting_ranking_percentile',
   'program_evaluation',
-  'regenerate_analysis',
 ])
 
 async function invokeAnalysisTool(
@@ -250,11 +249,13 @@ export async function analysisSectionStatusDirect(context: Pick<AnalysisContext,
   return { ...record, cached: record.status === 'complete' }
 }
 
-async function queueMissingSections(context: AnalysisContext, sectionKeys: AnalysisSectionKey[], force = false): Promise<AnalysisSectionKey[]> {
+type SectionQueueMode = 'missing' | 'regenerate'
+
+async function queueSections(context: AnalysisContext, sectionKeys: AnalysisSectionKey[], mode: SectionQueueMode): Promise<AnalysisSectionKey[]> {
   const accepted: AnalysisSectionKey[] = []
   for (const sectionKey of sectionKeys) {
     const status = await analysisSectionStatusDirect(context, sectionKey)
-    if (status.status === 'complete' || status.status === 'running' || (status.status === 'error' && !force)) continue
+    if (status.status === 'running' || (status.status === 'complete' && mode === 'missing')) continue
     const record = { sectionKey, status: 'running', cached: false, sourceFingerprint: context.sourceFingerprint, updatedAt: new Date().toISOString() }
     if (await writeAnalysisRecord(context.pk, sectionRecordKey(context, sectionKey), record, status.status === 'missing')) accepted.push(sectionKey)
   }
@@ -398,7 +399,7 @@ analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
       await snapshotCompetitionProjection(pk, asOfDate)
     }
     const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
-    const queued = await queueMissingSections(context, sectionKeys, true)
+    const queued = await queueSections(context, sectionKeys, 'missing')
     await queueAnalysisSections(context, queued)
     res.status(202).json({
       data: {
@@ -453,7 +454,7 @@ analyticsRouter.post('/analysis/sections/invalidate', async (req, res) => {
       await snapshotCompetitionProjection(pk, asOfDate)
     }
     const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
-    const queued = await queueMissingSections(context, sectionKeys, true)
+    const queued = await queueSections(context, sectionKeys, 'regenerate')
     await queueAnalysisSections(context, queued)
     res.status(202).json({
       data: {
@@ -500,7 +501,7 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
       await snapshotCompetitionProjection(pk, asOfDate)
     }
     const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
-    const queued = await queueMissingSections(context, sectionKeys, true)
+    const queued = await queueSections(context, sectionKeys, 'regenerate')
     await queueAnalysisSections(context, queued)
     res.status(202).json({
       data: {

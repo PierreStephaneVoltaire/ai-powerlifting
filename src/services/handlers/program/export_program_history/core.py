@@ -265,12 +265,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
 
     try:
         if window:
-            cached = None
-            window_key = window.get("window_key")
-            if window_key:
-                from services.lib.analysis_cache import AnalysisCacheStore
-                cached = AnalysisCacheStore(pk=active_pk).get_window_analysis(str(window_key), None if session_block == ACTIVE else session_block)
-            bundle["weekly"] = cached.get("data") if cached else _build_sectioned_analysis(
+            bundle["weekly"] = _build_sectioned_analysis(
                 program,
                 sessions,
                 glossary,

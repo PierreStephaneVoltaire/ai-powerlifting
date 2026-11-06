@@ -47,14 +47,14 @@ resource "kubernetes_deployment_v1" "valkey" {
           name              = "valkey"
           image             = "valkey/valkey:7.2.5"
           image_pull_policy = "IfNotPresent"
-          args              = ["--save", "3600", "1", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+          args              = ["--save", "3600", "1", "--appendonly", "no", "--maxmemory", "1gb", "--maxmemory-policy", "allkeys-lru"]
 
           port {
             container_port = 6379
           }
 
           resources {
-            limits   = { cpu = "500m", memory = "384Mi" }
+            limits   = { cpu = "500m", memory = "1280Mi" }
             requests = { cpu = "100m", memory = "128Mi" }
           }
 

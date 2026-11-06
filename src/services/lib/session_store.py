@@ -415,16 +415,11 @@ class SessionStore:
             raise ValueError(f"Several Sessions are on {date_value}; choose one by id")
         raise ValueError(f"Session not found with date={date_value}")
 
-    def _invalidate_caches(self):
-        from services.lib.cache_invalidation import invalidate_analysis_caches
-        invalidate_analysis_caches(self._pk, region=self._region)
-
     def _write_sync(self, session_item: dict | None, existing_item: dict | None, delete: bool = False) -> None:
         if existing_item is not None and (delete or (session_item is not None and session_item.get("sk") != existing_item.get("sk"))):
             self.table.delete_item(Key={"pk": self._pk, "sk": existing_item["sk"]})
         if session_item is not None and not delete:
             self.table.put_item(Item=_to_dynamo(session_item))
-        self._invalidate_caches()
 
     async def create_session(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
         return await asyncio.get_running_loop().run_in_executor(
@@ -527,5 +522,4 @@ class SessionStore:
                     batch.delete_item(Key={"pk": self._pk, "sk": item["sk"]})
             for item in prepared:
                         batch.put_item(Item=_to_dynamo(item))
-        self._invalidate_caches()
         return None

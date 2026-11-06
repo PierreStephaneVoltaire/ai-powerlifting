@@ -371,9 +371,6 @@
   "program_update_phases": {
     "permission": "program:write"
   },
-  "regenerate_analysis": {
-    "permission": "analytics:write"
-  },
   "session_create": {
     "permission": "sessions:write"
   },

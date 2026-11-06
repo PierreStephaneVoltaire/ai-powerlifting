@@ -65,7 +65,6 @@ class MemoryTable:
 def test_weight_log_is_scoped_to_the_active_block(monkeypatch):
     import asyncio
     store_module = importlib.import_module("services.handlers.weight_log._weight_store")
-    monkeypatch.setattr(store_module, "invalidate_analysis_caches", lambda *_a, **_k: None)
     table = MemoryTable([
         {"pk": "a", "sk": "program#current", "ref_sk": "program#v002", "current_block_id": "block-new"},
         {"pk": "a", "sk": "weight_log#current", "version": "current", "updated_at": "t0", "entries": [

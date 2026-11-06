@@ -131,7 +131,6 @@ class ProgramStore:
         updated.pop("sessions", None)
         self.table.put_item(Item=self._floats_to_decimals(updated))
         self.invalidate_cache()
-        self._invalidate_analysis_cache()
         return {**copy.deepcopy(result), "sk": program_sk, "updated_at": now}
 
     async def _commit_source(self, *args, **kwargs) -> dict:
@@ -142,13 +141,6 @@ class ProgramStore:
         program = copy.deepcopy(snapshot[0])
         result = mutator(program) or {}
         return await self._commit_source(snapshot, program, operation, payload, result)
-
-    def _invalidate_analysis_cache(self) -> None:
-        try:
-            from services.lib.cache_invalidation import invalidate_analysis_caches
-            invalidate_analysis_caches(self._pk, self._table_name, self._region)
-        except Exception as exc:
-            logger.warning("[ProgramStore] Analysis cache invalidation failed: %s", exc)
 
     def _get_session_store(self):
         from services.lib.session_store import SessionStore
@@ -877,7 +869,6 @@ class ProgramStore:
         logger.info(f"[ProgramStore] Created new {'minor' if minor else 'major'} version: {new_label} (v{new_version_int})")
 
         self.invalidate_cache()
-        self._invalidate_analysis_cache()
         return program
 
     async def archive(self, sk: str) -> dict:

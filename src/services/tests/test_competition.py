@@ -143,7 +143,6 @@ def test_competition_update_is_a_plain_last_write_wins_save(monkeypatch):
     module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
     table = FakeCompetitionTable()
     monkeypatch.setattr(module, "_get_table", lambda: table)
-    monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
     first = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "first"}})
     second = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"notes": "second"}})
     assert (first["notes"], second["notes"]) == ("first", "second")
@@ -157,7 +156,6 @@ def test_competition_report_resave_keeps_attempt_ids(monkeypatch):
     module = importlib.import_module("services.handlers.competition.health_list_competitions.core")
     table = FakeCompetitionTable()
     monkeypatch.setattr(module, "_get_table", lambda: table)
-    monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
     report = {"attempts": [{"lift": "squat", "attempt_number": 1, "kg": 100, "result": "made"}]}
     result = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"post_meet_report": report}})
     attempt_id = result["post_meet_report"]["attempts"][0]["attempt_id"]
@@ -171,7 +169,6 @@ def test_entering_a_meet_indexes_it_by_date_and_block_and_withdrawing_unindexes_
     table.items[("athlete-1", "COMP#meet")]["start_date"] = "2026-11-01"
     monkeypatch.setattr(module, "_get_table", lambda: table)
     monkeypatch.setattr(module, "active_block_id_for", lambda pk: "block-new")
-    monkeypatch.setattr(module, "_invalidate_analysis_cache", lambda pk: None)
 
     entered = module.update_user_competition({"pk": "athlete-1", "master_id": "meet", "patch": {"user_status": "confirmed"}})
     stored = table.items[("athlete-1", "COMP#meet")]

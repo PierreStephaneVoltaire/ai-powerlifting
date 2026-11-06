@@ -100,13 +100,6 @@ class GlossaryStore:
         )
         return normalized
 
-    def _invalidate_analysis_cache(self) -> None:
-        try:
-            from services.lib.cache_invalidation import invalidate_analysis_caches
-            invalidate_analysis_caches(self._pk, self._table_name, self._region)
-        except Exception as exc:
-            logger.warning("[GlossaryStore] Analysis cache invalidation failed: %s", exc)
-
     def get_glossary_sync(self) -> list[dict]:
         resp = self.table.get_item(Key={"pk": self._pk, "sk": self.GLOSSARY_SK})
         item = resp.get("Item")
@@ -140,7 +133,6 @@ class GlossaryStore:
             "exercises": exercises,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }))
-        self._invalidate_analysis_cache()
 
     async def update_exercise(self, exercise_id: str, fields: dict) -> None:
         await asyncio.get_running_loop().run_in_executor(
@@ -224,7 +216,6 @@ class GlossaryStore:
         exercises = glossary.get("exercises", []) or []
         glossary["exercises"] = [self._to_canonical(ex) for ex in exercises]
         self.table.put_item(Item=self._floats_to_decimals(glossary))
-        self._invalidate_analysis_cache()
 
     def remove_exercise_sync(self, exercise_id: str) -> None:
         """Delete an exercise by id from the glossary."""

@@ -1,4 +1,5 @@
 import glob
+import hashlib
 import logging
 import os
 import threading
@@ -28,6 +29,7 @@ _lock = threading.Lock()
 _ready = threading.Event()
 _loading: Optional[threading.Thread] = None
 _frame: Optional[pd.DataFrame] = None
+_identity: Optional[str] = None
 _error: Optional[BaseException] = None
 
 
@@ -70,6 +72,11 @@ def _read(path: str) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True)
 
 
+def _files_identity(paths: list[str]) -> str:
+    stats = [f"{os.path.basename(path)}:{os.path.getsize(path)}:{int(os.path.getmtime(path))}" for path in paths]
+    return hashlib.sha256("|".join(stats).encode()).hexdigest()[:16]
+
+
 def parse() -> pd.DataFrame:
     ensure_downloaded()
     paths = sorted(glob.glob(_pattern()))
@@ -83,9 +90,10 @@ def parse() -> pd.DataFrame:
 
 
 def _load() -> None:
-    global _frame, _error
+    global _frame, _error, _identity
     try:
         frame = parse()
+        identity = _files_identity(sorted(glob.glob(_pattern())))
     except BaseException as exc:
         logger.exception("OpenPowerlifting dataset load failed")
         with _lock:
@@ -94,6 +102,7 @@ def _load() -> None:
         return
     with _lock:
         _frame = frame
+        _identity = identity
         _error = None
     logger.info("OpenPowerlifting dataset ready: %s rows", f"{len(frame):,}")
     _ready.set()
@@ -124,3 +133,8 @@ def load_data(block: bool = False) -> pd.DataFrame:
     if _error is not None:
         raise DatasetNotReadyError(f"The dataset failed to load: {_error}")
     raise DatasetNotReadyError("The dataset is still loading in the background. Try again in a moment.")
+
+
+def identity() -> str:
+    load_data(block=True)
+    return _identity or ""

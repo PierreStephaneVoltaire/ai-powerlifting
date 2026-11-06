@@ -40,10 +40,7 @@ interface WeeklyAnalysisBundle<T = unknown> {
 }
 
 export const CACHE_SCHEMA_VERSION = 5
-const SECTION_CACHE_SCHEMA_VERSION = 2
-// Current-block window caches expire after 7 days. Past-block caches have no TTL.
-// Shard size: keep individual DynamoDB string attributes under 400KB.
-// ~350_000 JSON chars is a safe ceiling before sharding kicks in.
+const SECTION_CACHE_SCHEMA_VERSION = 3
 
 const WINDOW_SPECS: Array<{ key: AnalysisWindowKey; label: string; mode: number | 'current' | 'block' }> = [
   { key: 'current', label: 'Current Week', mode: 'current' },
@@ -312,7 +309,10 @@ export async function buildAnalysisSourceFingerprint(
     .filter((entry) => entry.date <= window.end)
   const currentPhases = (program.phases ?? [])
     .filter((phase) => (phase.block ?? 'current') === 'current')
-  const goals = await fetchGoalsForFingerprint(pk)
+  const [goals, glossary] = await Promise.all([
+    fetchGoalsForFingerprint(pk),
+    callOperation('exercise_get_glossary', { pk }),
+  ])
   return hashValue({
     schema: SECTION_CACHE_SCHEMA_VERSION,
     asOfWindow: {
@@ -328,7 +328,7 @@ export async function buildAnalysisSourceFingerprint(
     competitions: program.competitions ?? [],
     goals,
     lift_profiles: program.lift_profiles ?? [],
-    diet_notes: (program as Program & { diet_notes?: unknown[] }).diet_notes ?? [],
     weight_log: scopedWeightLog,
+    glossary,
   })
 }
