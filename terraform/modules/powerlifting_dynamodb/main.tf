@@ -162,3 +162,250 @@ resource "aws_dynamodb_table" "if_powerlifting_goals" {
     Service = "powerlifting-goals"
   }
 }
+
+resource "aws_dynamodb_table" "if_sessions" {
+  name         = "if-sessions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "sessions"
+  }
+}
+
+resource "aws_dynamodb_table" "if_user" {
+  name         = "if-user"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "user"
+  }
+}
+
+resource "aws_dynamodb_table" "if_health" {
+  name         = "if-health"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "health"
+  }
+}
+
+resource "aws_dynamodb_table" "if_health_templates" {
+  name         = "if-health-templates"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "health-templates"
+  }
+}
+
+resource "aws_dynamodb_table" "if_powerlifting_requests" {
+  name         = "if-powerlifting-requests"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  dynamic "attribute" {
+    for_each = toset(["inbox_pk", "inbox_sk", "sent_pk", "sent_sk", "roster_pk", "roster_sk"])
+    content {
+      name = attribute.value
+      type = "S"
+    }
+  }
+
+  dynamic "global_secondary_index" {
+    for_each = { InboxIndex = "inbox", SentIndex = "sent", RosterIndex = "roster" }
+    content {
+      name            = global_secondary_index.key
+      hash_key        = "${global_secondary_index.value}_pk"
+      range_key       = "${global_secondary_index.value}_sk"
+      projection_type = "ALL"
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "powerlifting-requests"
+  }
+}
+
+resource "aws_dynamodb_table" "powerlifting_notifications" {
+  name         = "if-powerlifting-notifications"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_dynamodb_table" "powerlifting_tags" {
+  name         = "if-powerlifting-tags"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_dynamodb_table" "if_powerlifting_budget" {
+  name         = "if-powerlifting-budget"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "powerlifting-app"
+    Service = "budget"
+  }
+}
+
+resource "aws_dynamodb_table" "if_webhooks" {
+  name         = "if-webhooks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "webhooks"
+  }
+}

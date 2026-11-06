@@ -94,3 +94,54 @@ variable "discord_bot_token" {
   type      = string
   sensitive = true
 }
+
+variable "auth_namespace" {
+  type = string
+}
+
+variable "authentik_bootstrap_email" {
+  type = string
+}
+
+variable "authentik_bootstrap_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "authentik_bootstrap_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "storage_class" {
+  type = string
+}
+
+variable "node_name" {
+  type = string
+}
+
+variable "loki_storage_gb" {
+  type = number
+}
+
+variable "prometheus_storage_gb" {
+  type = number
+}
+
+variable "grafana_storage_gb" {
+  type = number
+}
+
+variable "log_retention_days" {
+  type = number
+}
+
+variable "metrics_retention_days" {
+  type = number
+}
+
+variable "grafana_admin_password" {
+  type      = string
+  sensitive = true
+}

@@ -4,7 +4,7 @@ Four independent states, applied in order.
 
 | Stack | Holds | Applied by |
 |---|---|---|
-| `core` | Namespaces, config, secrets, pod AWS credentials (read from SSM), registry pull secret, Actions runner controller and scale set | Locally |
+| `core` | Namespaces, config, secrets, pod AWS credentials (read from SSM), registry pull secret, Actions runner controller and scale set, Authentik with its CNPG Postgres cluster and NoLift identity objects, monitoring (Prometheus, Loki, Promtail, Grafana, exporters) | Locally |
 | `perms` | Service accounts, roles and bindings (registry refresher, deployer) | Locally |
 | `network` | Gateway controller, Gateway, routes, cloudflared | Runner |
 | `app` | `pl-*` services, analytics, Valkey, portal backend and frontend, registry token refresher | Runner |

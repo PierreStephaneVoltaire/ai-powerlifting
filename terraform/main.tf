@@ -2,7 +2,7 @@ module "ecr" {
   source = "./modules/ecr"
 
   repository_prefix = "if"
-  repository_names  = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-coach-agent", "powerlifting-coach-discord"]
+  repository_names  = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-coach-agent", "powerlifting-coach-discord", "powerlifting-fns"]
 }
 
 module "session_videos" {
