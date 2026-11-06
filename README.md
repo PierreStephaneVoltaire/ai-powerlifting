@@ -230,7 +230,7 @@ flowchart LR
     CF["Cloudflare<br/>DNS + tunnel"]
   end
 
-  subgraph Cluster["k3s cluster, powerlifting namespace"]
+  subgraph Cluster["k3s cluster"]
     Tunnel["cloudflared"]
     Gateway["NGINX Gateway Fabric"]
     FE["Frontend<br/>static PWA"]
@@ -242,6 +242,9 @@ flowchart LR
     Coach["pl-coach<br/>Codex worker"]
     Bot["pl-coach-discord<br/>gateway bot"]
     Runner["Actions runner<br/>applies network + app"]
+    Auth["Authentik + Discord OAuth"]
+    Postgres[("Postgres<br/>CNPG, Authentik data")]
+    Monitoring["Prometheus, Loki,<br/>Grafana"]
   end
 
   subgraph AWS["AWS"]
@@ -252,9 +255,9 @@ flowchart LR
     Thumbs["Lambda<br/>video thumbnails"]
   end
 
-  Auth["Authentik + Discord OAuth"]
-
   UI --> CF --> Tunnel --> Gateway
+  Tunnel -->|"auth host"| Auth
+  Auth --> Postgres
   Gateway -->|"/"| FE
   Gateway -->|"/api"| BE
   BE --> Valkey
@@ -284,10 +287,17 @@ take the rest down with it. AWS holds the data, plus two Lambdas that are still
 around: master-sync, which copies the competition directory to every athlete,
 and video thumbnails.
 
+Logins go through Authentik with Discord as the identity source, backed by a
+CNPG Postgres cluster in the same k3s node. Prometheus, Loki and Grafana watch
+the cluster; Grafana is reached by port-forward on `localhost:3000`.
+
 Infrastructure is Terraform, split into a few stacks: AWS and Cloudflare in
-`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`
-(network and app are applied by a runner inside the cluster), and the Coach in
-`terraform/coach`.
+`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`, and
+the Coach in `terraform/coach`. In `terraform/k8s/`, `core` (namespaces,
+secrets, the Actions runner, Authentik, Postgres and monitoring) and `perms`
+are applied locally because they hold secrets; `network` and `app` are applied
+by the runner inside the cluster. See
+[`terraform/k8s/README.md`](terraform/k8s/README.md).
 
 For more on the request flow, data model and caching, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
