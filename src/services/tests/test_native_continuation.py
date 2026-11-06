@@ -12,10 +12,15 @@ from services.lib import prompt_cache
 
 @pytest.fixture(autouse=True)
 def prompt_cache_store(monkeypatch):
-    store = {"exact": None, "similar": [], "remembered": []}
+    store = {"exact": None, "entries": {}, "remembered": []}
+
+    async def remember(*args):
+        store["remembered"].append(args)
+
     monkeypatch.setattr(prompt_cache, "exact", lambda *_args: store["exact"])
-    monkeypatch.setattr(prompt_cache, "similar", lambda *_args: store["similar"])
-    monkeypatch.setattr(prompt_cache, "remember", lambda *args: store["remembered"].append(args))
+    monkeypatch.setattr(prompt_cache, "has_entries", lambda *_args: bool(store["entries"]))
+    monkeypatch.setattr(prompt_cache, "entry", lambda athlete, operation, entry_id: store["entries"].get((athlete, operation, entry_id)))
+    monkeypatch.setattr(prompt_cache, "remember", remember)
     return store
 from services.contract import Operation
 from services.dispatch import dispatch
@@ -139,14 +144,15 @@ def test_identical_prompt_reuses_the_saved_answer_without_delegating(monkeypatch
     assert prompt_cache_store["remembered"] == []
 
 
-def test_similar_prompt_is_judged_by_luna_before_reuse(monkeypatch, prompt_cache_store):
+def test_luna_searches_the_prompt_cache_before_reuse(monkeypatch, prompt_cache_store):
     _value_operation(monkeypatch)
-    prompt_cache_store["similar"] = [prompt_cache.Candidate('saved-1', {'messages': []}, CACHED, 0.93)]
+    prompt_cache_store["entries"][('athlete-a', 'test_operation', 'saved-1')] = CACHED
 
     async def check():
         pending = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a')
         assert pending['status'] == 'needs_inference' and pending['instruction'] == ai.JUDGE_INSTRUCTION
-        assert 'saved-1' in pending['messages'][1]['content']
+        assert prompt_cache.SEARCH_TOOL in pending['messages'][0]['content']
+        assert prompt_cache.collection('athlete-a', 'test_operation') in pending['messages'][0]['content']
         result = await execution.resume(pending['execution_id'], 'job-a', 'athlete-a', pending['challenge_id'], {'match_id': 'saved-1', 'confidence': 0.95})
         return await _finish(result, pending['execution_id'])
 
@@ -156,7 +162,7 @@ def test_similar_prompt_is_judged_by_luna_before_reuse(monkeypatch, prompt_cache
 
 def test_unconfident_judge_falls_through_to_the_specialist_and_saves_its_answer(monkeypatch, prompt_cache_store):
     _value_operation(monkeypatch)
-    prompt_cache_store["similar"] = [prompt_cache.Candidate('saved-1', {'messages': []}, CACHED, 0.9)]
+    prompt_cache_store["entries"][('athlete-a', 'test_operation', 'saved-1')] = CACHED
 
     async def check():
         judge = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a')
@@ -173,3 +179,20 @@ def test_unconfident_judge_falls_through_to_the_specialist_and_saves_its_answer(
     assert (athlete, operation) == ('athlete-a', 'test_operation')
     assert request['messages'] == [{'role': 'user', 'content': 'Return a value'}]
     assert json.loads(response['choices'][0]['message']['content']) == {'value': 3}
+
+
+def test_judge_cannot_reuse_another_scope_entry(monkeypatch, prompt_cache_store):
+    _value_operation(monkeypatch)
+    prompt_cache_store["entries"][('athlete-b', 'test_operation', 'foreign')] = CACHED
+
+    async def check():
+        judge = await execution.start(SimpleNamespace(name="test_operation"), {'pk': 'athlete-a', '_person_pk': 'person-a'}, 'athlete-a', 'job-a')
+        pending = await execution.resume(judge['execution_id'], 'job-a', 'athlete-a', judge['challenge_id'], {'match_id': 'foreign', 'confidence': 0.99})
+        while pending['status'] == 'running':
+            await asyncio.sleep(0.01)
+            pending = await execution.resume(judge['execution_id'], 'job-a', 'athlete-a')
+        assert pending['instruction'] == ai.SPECIALIST_INSTRUCTION
+        result = await execution.resume(judge['execution_id'], 'job-a', 'athlete-a', pending['challenge_id'], {'value': 3})
+        return await _finish(result, judge['execution_id'])
+
+    assert asyncio.run(check()) == {'status': 'succeeded', 'result': {'value': 3}}

@@ -296,7 +296,7 @@ def _markdown_sources(monkeypatch, core, program, glossary=None, glossary_reads=
     return records
 
 
-def test_markdown_is_cached_until_the_program_changes(monkeypatch):
+def test_markdown_is_cached_until_an_analysis_input_write(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
     renders = []
     program = {"meta": {"program_name": "Athlete A"}, "sessions": [], "phases": [], "goals": [], "competitions": []}
@@ -310,6 +310,9 @@ def test_markdown_is_cached_until_the_program_changes(monkeypatch):
     assert len(renders) == 1 and len(records) == 1
 
     program["meta"]["program_name"] = "Athlete B"
+    assert core.get_analysis_markdown({"pk": "athlete-a"})["markdown"] == first["markdown"]
+    from services.analysis_version import record_write
+    record_write("program_update_meta_field", "athlete-a")
     changed = core.get_analysis_markdown({"pk": "athlete-a"})
     assert changed["markdown"].startswith("# Athlete B") and changed["cached"] is False
     assert len(renders) == 2

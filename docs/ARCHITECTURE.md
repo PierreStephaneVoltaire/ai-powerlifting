@@ -131,7 +131,7 @@ erDiagram
 | `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
 | `if-powerlifting-analysis-cache` | DynamoDB | AI generation records |
 | `pl-valkey` | Valkey | Deterministic analysis sections, block bundles, markdown exports and ranking percentiles, keyed by source fingerprint, no TTL (LRU eviction) |
-| `pl-prompt-cache` | pgvector + text-embeddings-inference (emptyDir) | Domain AI prompts and answers scoped by Athlete and operation for semantic reuse |
+| `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Domain AI prompt index, one collection per Athlete and operation; answers live in Valkey under the entry id |
 | `if-powerlifting-user-competitions` | DynamoDB | Independent Athlete-owned Competition Entries and Attempts |
 | `if-powerlifting-master-competitions` | DynamoDB | Master competition directory |
 | `if-powerlifting-master-federations` | DynamoDB | Federation library + qualification standards |
@@ -238,19 +238,22 @@ flowchart TB
   tooling; the Weekly tab reads sections instead.
 - AI correlation and program-evaluation reports cache separately and only
   regenerate on explicit refresh (never via the main regenerate endpoint).
-- Section, block and markdown keys contain a fingerprint of every input the
-  calculation reads (current-block sessions up to the window end, phases, meta,
-  Competition Entries, goals, lift profiles, weight log, glossary) plus the
-  as-of date for current-block windows. Unchanged data is always a hit; any
-  relevant write produces a new key, so nothing is explicitly invalidated and
-  orphaned keys age out under LRU. Past blocks are date-independent.
+- Section and block keys contain the per-Athlete analysis version (plus the
+  as-of date for current-block windows). Unchanged data is always a hit; an
+  analysis-input write bumps the version, so nothing is explicitly deleted and
+  orphaned keys age out under LRU.
 - Ranking percentiles key on the OpenPowerlifting file identity (name, size,
   mtime), the comparison year, the Athlete, their numbers and the filter.
-- Domain AI calls (`services/ai.py`) first look in `pl-prompt-cache`: an
-  identical request for the same Athlete and operation is reused directly; similar
-  requests (cosine ≥ 0.85, top 3) go to a Luna Specialist judge, and only a
-  confident match is reused. Otherwise the normal Specialist answers and the
-  result is stored. Persisted requirements
+- Domain AI calls (`services/ai.py`) reuse an identical request for the same
+  Athlete and operation directly from Valkey. Otherwise, when that scope's Qdrant
+  collection has entries, a Luna Specialist searches it with the
+  `prompt_cache` MCP tool (`qdrant-find`) and returns a matching entry id or
+  null. Only a confident match from the same scope is reused; otherwise the
+  normal Specialist answers and the request is stored through `qdrant-store`.
+- Writes to analysis inputs (an allowlist in `services/analysis_version.py`)
+  bump a per-Athlete version in Valkey from `dispatch`. Section, manifest,
+  block, markdown and report-generation lookups key on that version, so a
+  cache hit never reloads the program. Persisted requirements
   record the source domains and Competition Entry scope; every reference/job
   read checks them against current permissions. Legacy results without source
   requirements are readable only by the Athlete until regenerated.

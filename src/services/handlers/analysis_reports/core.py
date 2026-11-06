@@ -127,9 +127,8 @@ def _markdown_export_sex(program: dict, args: Dict[str, Any]) -> str:
     return str((program.get("meta") or {}).get("sex") or (program.get("settings") or {}).get("sex") or "male").lower()
 
 
-def _load_sources(args: Dict[str, Any]) -> tuple[str, dict, list]:
+def _load_sources(store, args: Dict[str, Any]) -> tuple[dict, list]:
     from services.lib.competition_entries import with_competition_entries
-    store = _get_store()
     store.invalidate_cache()
     program = _run_async(store.get_program())
     program = _visible_program(with_competition_entries(program, store.pk), args)
@@ -137,12 +136,12 @@ def _load_sources(args: Dict[str, Any]) -> tuple[str, dict, list]:
     glossary: list = []
     if _is_self(args) or "glossary:read" in access.get("permissions", []):
         glossary = _run_async(_get_glossary_store().get_glossary())
-    return store.pk, program, glossary
+    return program, glossary
 
 
-def _markdown_record_key(pk: str, args: Dict[str, Any], program: dict, glossary: list, today: str) -> str:
-    fingerprint = hashlib.sha256(json.dumps({"program": program, "glossary": glossary}, sort_keys=True, default=str).encode()).hexdigest()
-    return f"pl:markdown:{pk}:{_markdown_cache_key(args)}:{today}:{fingerprint}"
+def _markdown_record_key(pk: str, args: Dict[str, Any], today: str) -> str:
+    from services.analysis_version import current
+    return f"pl:markdown:{pk}:{_markdown_cache_key(args)}:{today}:{current(pk)}"
 
 
 def _render_markdown(pk: str, program: dict, glossary: list, today: str, args: Dict[str, Any]) -> str:
@@ -161,9 +160,10 @@ def _render_markdown(pk: str, program: dict, glossary: list, today: str, args: D
 def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     from services.source_access import authorize_source
 
-    pk, program, glossary = _load_sources(args)
+    store = _get_store()
+    pk = store.pk
     today = datetime.now(timezone.utc).date().isoformat()
-    key = _markdown_record_key(pk, args, program, glossary, today)
+    key = _markdown_record_key(pk, args, today)
     force_refresh = bool(args.get("refresh"))
 
     cached = None if force_refresh else valkey.get_json(key)
@@ -174,6 +174,7 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     if args.get("cache_only"):
         return {"cached": False, "cache_miss": True}
 
+    program, glossary = _load_sources(store, args)
     markdown = _render_markdown(pk, program, glossary, today, args)
     record = {"markdown": markdown, "generated_at": datetime.now(timezone.utc).isoformat()}
     if not _is_self(args):

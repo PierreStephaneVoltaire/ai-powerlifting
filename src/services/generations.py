@@ -82,6 +82,15 @@ class GenerationStore:
         return {**result, "cached": True} if isinstance(result, dict) else result
 
 
+def report_identity(arguments, athlete):
+    from .analysis_version import current
+    identity = {"access_requirements": read_requirements(arguments.get("_access") or {})}
+    if not isinstance(arguments.get("program"), dict):
+        identity["analysis_version"] = current(athlete)
+        identity["date"] = arguments.get("ref_date") or arguments.get("asOfDate") or date.today().isoformat()
+    return identity
+
+
 async def report_source(arguments, athlete, operation=""):
     source = {'access_requirements': read_requirements(arguments.get('_access') or {})}
     if "program_evaluation" in operation:

@@ -12,10 +12,12 @@ import type { Program, WeightEntry } from '@powerlifting/types'
 import { ALL_BLOCKS, scopeProgramToBlock } from '../utils/blockScope'
 import {
   ALL_WINDOW_KEYS,
+  CACHE_SCHEMA_VERSION,
   ALL_SECTION_KEYS,
   DETERMINISTIC_SECTION_KEYS,
   buildAnalysisWindows,
-  buildAnalysisSourceFingerprint,
+  analysisSourceKey,
+  analysisVersion,
   isIsoDate,
   makeWeeklyAnalysisBundle,
   normalizeAnalysisSectionKeys,
@@ -33,6 +35,8 @@ import {
   getOrCreateBlockCorrelationReport,
   getOrCreateBlockProgramEvaluation,
   loadGoals,
+  type BlockAnalysisBundle,
+  type ProgramBlockIndexEntry,
 } from '../services/blockAnalytics'
 import {
   blockAnalysisExportContentType,
@@ -126,27 +130,44 @@ async function snapshotCompetitionProjection(pk: string, date: string): Promise<
   }
 }
 
-type AnalysisContext = {
+type AnalysisKey = {
   pk: string
   asOfDate: string
   windowKey: AnalysisWindowKey
-  program: ProgramWithWeightLog
-  windows: ReturnType<typeof buildAnalysisWindows>
+  window: { start?: string; end?: string }
   sourceFingerprint: string
+}
+
+type AnalysisWindows = ReturnType<typeof buildAnalysisWindows>
+
+type AnalysisContext = AnalysisKey & {
+  program: ProgramWithWeightLog
+  windows: AnalysisWindows
 }
 
 const DETERMINISTIC_SECTION_SET = new Set<AnalysisSectionKey>(DETERMINISTIC_SECTION_KEYS)
 
-async function buildAnalysisContext(
+async function resolveAnalysisKey(
   pk: string,
   asOfDate: string,
   windowKey: AnalysisWindowKey,
-  window?: { start?: string; end?: string },
-): Promise<AnalysisContext> {
-  const program = await getProgramWithWeightLog(pk, 'current', 'current', window)
-  const windows = buildAnalysisWindows(program, asOfDate)
-  const sourceFingerprint = await buildAnalysisSourceFingerprint(program, windows[windowKey], pk)
-  return { pk, asOfDate, windowKey, program, windows, sourceFingerprint }
+  window: { start?: string; end?: string },
+): Promise<AnalysisKey> {
+  return { pk, asOfDate, windowKey, window, sourceFingerprint: analysisSourceKey(await analysisVersion(pk), window) }
+}
+
+async function buildAnalysisContext(key: AnalysisKey): Promise<AnalysisContext> {
+  const program = await getProgramWithWeightLog(key.pk, 'current', 'current', key.window)
+  return { ...key, program, windows: buildAnalysisWindows(program, key.asOfDate) }
+}
+
+async function analysisWindows(key: AnalysisKey): Promise<AnalysisWindows> {
+  const recordKey = `native_windows#${key.asOfDate}#${key.sourceFingerprint}`
+  const saved = await readAnalysisRecord<AnalysisWindows>(key.pk, recordKey)
+  if (saved) return saved
+  const { windows } = await buildAnalysisContext(key)
+  await writeAnalysisRecord(key.pk, recordKey, windows)
+  return windows
 }
 
 type AnalysisSectionStatusShape = {
@@ -230,11 +251,11 @@ async function computeSection(
   }
 }
 
-function sectionRecordKey(context: Pick<AnalysisContext, 'pk' | 'asOfDate' | 'windowKey' | 'sourceFingerprint'>, sectionKey: AnalysisSectionKey): string {
+function sectionRecordKey(context: Pick<AnalysisKey, 'pk' | 'asOfDate' | 'windowKey' | 'sourceFingerprint'>, sectionKey: AnalysisSectionKey): string {
   return `native_section#${context.asOfDate}#${context.windowKey}#${sectionKey}#${context.sourceFingerprint}`
 }
 
-export async function analysisSectionStatusDirect(context: Pick<AnalysisContext, 'pk' | 'asOfDate' | 'windowKey' | 'sourceFingerprint'>, sectionKey: AnalysisSectionKey): Promise<AnalysisSectionStatusShape> {
+export async function analysisSectionStatusDirect(context: Pick<AnalysisKey, 'pk' | 'asOfDate' | 'windowKey' | 'sourceFingerprint'>, sectionKey: AnalysisSectionKey): Promise<AnalysisSectionStatusShape> {
   const record = await readAnalysisRecord<AnalysisSectionStatusShape>(context.pk, sectionRecordKey(context, sectionKey))
   if (!record) return { sectionKey, status: 'missing', cached: false, sourceFingerprint: context.sourceFingerprint }
   if (record.generation_id) {
@@ -249,9 +270,13 @@ export async function analysisSectionStatusDirect(context: Pick<AnalysisContext,
   return { ...record, cached: record.status === 'complete' }
 }
 
+async function blockViewKey(pk: string, blockKey: string): Promise<string> {
+  return `native_block_view#${CACHE_SCHEMA_VERSION}#${blockKey}#${await analysisVersion(pk)}`
+}
+
 type SectionQueueMode = 'missing' | 'regenerate'
 
-async function queueSections(context: AnalysisContext, sectionKeys: AnalysisSectionKey[], mode: SectionQueueMode): Promise<AnalysisSectionKey[]> {
+async function queueSections(context: AnalysisKey, sectionKeys: AnalysisSectionKey[], mode: SectionQueueMode): Promise<AnalysisSectionKey[]> {
   const accepted: AnalysisSectionKey[] = []
   for (const sectionKey of sectionKeys) {
     const status = await analysisSectionStatusDirect(context, sectionKey)
@@ -262,15 +287,16 @@ async function queueSections(context: AnalysisContext, sectionKeys: AnalysisSect
   return accepted
 }
 
-async function runAnalysisSections(context: AnalysisContext, sectionKeys: AnalysisSectionKey[]): Promise<void> {
+async function runAnalysisSections(key: AnalysisKey, sectionKeys: AnalysisSectionKey[]): Promise<void> {
+  if (sectionKeys.length === 0) return
+  if (sectionKeys.some((sectionKey) => SNAPSHOT_SECTION_KEYS.has(sectionKey))) {
+    await snapshotCompetitionProjection(key.pk, key.asOfDate)
+  }
+  const context = await buildAnalysisContext(key)
   for (const sectionKey of sectionKeys) {
     const status = await computeSection(context, sectionKey)
     await writeAnalysisRecord(context.pk, sectionRecordKey(context, sectionKey), status)
   }
-}
-
-async function queueAnalysisSections(context: AnalysisContext, sectionKeys: AnalysisSectionKey[]): Promise<void> {
-  await runAnalysisSections(context, sectionKeys)
 }
 
 async function runTargetedRegeneration(
@@ -308,7 +334,8 @@ async function runTargetedRegeneration(
   }
 
   try {
-    await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeAnalysisTool, true, false)
+    const bundle = await getOrCreateBlockAnalysisBundle(pk, program, 'current', invokeAnalysisTool, true, false)
+    if (bundle) await writeAnalysisRecord(pk, await blockViewKey(pk, 'current'), bundle)
   } catch (err) {
     logger.warn({ err, pk }, 'block_analysis#v1#current regeneration failed')
   }
@@ -354,7 +381,7 @@ analyticsRouter.get('/analysis/manifest', async (req, res) => {
     const requestedAsOfDate = req.query.asOfDate as string | undefined
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.query.window)
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.query as Record<string, unknown>))
+    const context = await resolveAnalysisKey(pk, asOfDate, windowKey, requestedWindow(req.query as Record<string, unknown>))
     const statuses = await Promise.allSettled(ALL_SECTION_KEYS.map(async (sectionKey) => {
       const status = await analysisSectionStatusDirect(context, sectionKey)
       const { payload: _payload, ...withoutPayload } = status
@@ -365,7 +392,7 @@ analyticsRouter.get('/analysis/manifest', async (req, res) => {
         schemaVersion: 6,
         asOfDate,
         windowKey,
-        windows: context.windows,
+        windows: await analysisWindows(context),
         sourceFingerprint: context.sourceFingerprint,
         sections: Object.fromEntries(statuses.map((result, index) => [
           ALL_SECTION_KEYS[index],
@@ -395,12 +422,9 @@ analyticsRouter.post('/analysis/sections/queue', async (req, res) => {
         error: 'Read-only users can only queue deterministic analysis sections.',
       })
     }
-    if (sectionKeys.some((sectionKey: AnalysisSectionKey) => SNAPSHOT_SECTION_KEYS.has(sectionKey))) {
-      await snapshotCompetitionProjection(pk, asOfDate)
-    }
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
+    const context = await resolveAnalysisKey(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueSections(context, sectionKeys, 'missing')
-    await queueAnalysisSections(context, queued)
+    await runAnalysisSections(context, queued)
     res.status(202).json({
       data: {
         accepted: true,
@@ -427,7 +451,7 @@ analyticsRouter.get('/analysis/sections/:sectionKey', async (req, res) => {
     const requestedAsOfDate = req.query.asOfDate as string | undefined
     const asOfDate = isIsoDate(requestedAsOfDate) ? requestedAsOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.query.window)
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.query as Record<string, unknown>))
+    const context = await resolveAnalysisKey(pk, asOfDate, windowKey, requestedWindow(req.query as Record<string, unknown>))
     const status = await analysisSectionStatusDirect(context, sectionKey)
     res.json({
       data: {
@@ -450,12 +474,9 @@ analyticsRouter.post('/analysis/sections/invalidate', async (req, res) => {
     const asOfDate = isIsoDate(req.body?.asOfDate) ? req.body.asOfDate : todayIso()
     const windowKey = normalizeAnalysisWindowKey(req.body?.window)
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
-    if (sectionKeys.some((sectionKey: AnalysisSectionKey) => SNAPSHOT_SECTION_KEYS.has(sectionKey))) {
-      await snapshotCompetitionProjection(pk, asOfDate)
-    }
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
+    const context = await resolveAnalysisKey(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueSections(context, sectionKeys, 'regenerate')
-    await queueAnalysisSections(context, queued)
+    await runAnalysisSections(context, queued)
     res.status(202).json({
       data: {
         accepted: true,
@@ -497,12 +518,9 @@ analyticsRouter.post('/analysis/regenerate', async (req, res) => {
     const requestedWindows = Array.isArray(req.body?.windows) ? req.body.windows : []
     const windowKey = normalizeAnalysisWindowKey(req.body?.window ?? requestedWindows[0])
     const sectionKeys = normalizeAnalysisSectionKeys(req.body?.sections)
-    if (sectionKeys.some((sectionKey: AnalysisSectionKey) => SNAPSHOT_SECTION_KEYS.has(sectionKey))) {
-      await snapshotCompetitionProjection(pk, asOfDate)
-    }
-    const context = await buildAnalysisContext(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
+    const context = await resolveAnalysisKey(pk, asOfDate, windowKey, requestedWindow(req.body as Record<string, unknown>))
     const queued = await queueSections(context, sectionKeys, 'regenerate')
-    await queueAnalysisSections(context, queued)
+    await runAnalysisSections(context, queued)
     res.status(202).json({
       data: {
         success: true,
@@ -587,8 +605,13 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
 
 analyticsRouter.get('/blocks', async (req, res) => {
   try {
-    const program = await getProgramWithWeightLog(req.mapped_pk!, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(req.mapped_pk!, program)
+    const pk = req.mapped_pk!
+    const recordKey = `native_block_index#${CACHE_SCHEMA_VERSION}#${await analysisVersion(pk)}`
+    const saved = await readAnalysisRecord<ProgramBlockIndexEntry[]>(pk, recordKey)
+    if (saved) return res.json({ data: saved, error: null })
+    const program = await getProgramWithWeightLog(pk, 'current')
+    const blocks = await buildCurrentProgramBlockIndex(pk, program)
+    await writeAnalysisRecord(pk, recordKey, blocks)
     res.json({ data: blocks, error: null })
   } catch (err: any) {
     if (err?.statusCode === 404) {
@@ -602,26 +625,18 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
   try {
     const pk = req.mapped_pk!
     const { blockKey } = req.params
-    const program = await getProgramWithWeightLog(pk, 'current')
-    const blocks = await buildCurrentProgramBlockIndex(pk, program)
-    const blockEntry = blocks.find((b) => b.blockKey === blockKey)
-    const isCurrent = blockEntry?.isCurrent ?? (blockKey === 'current')
-
     const refresh = req.query.refresh === 'true'
     const cacheOnly = req.readOnly === true || req.query.cacheOnly === 'true' || req.query.cache_only === 'true'
+    const recordKey = await blockViewKey(pk, blockKey)
+    const saved = refresh && !cacheOnly ? null : await readAnalysisRecord<BlockAnalysisBundle>(pk, recordKey)
+    if (saved) return res.json({ data: { ...saved, cached: true }, error: null })
 
-    if (isCurrent) {
-      const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, cacheOnly)
-      if (!bundle) {
-        return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
-      }
-      return res.json({ data: bundle, error: null })
-    }
-
+    const program = await getProgramWithWeightLog(pk, 'current')
     const bundle = await getOrCreateBlockAnalysisBundle(pk, program, blockKey, invokeAnalysisTool, refresh, cacheOnly)
     if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found` })
     }
+    await writeAnalysisRecord(pk, recordKey, bundle)
     res.json({ data: bundle, error: null })
   } catch (err) {
     logger.error({ err, blockKey: req.params.blockKey }, 'Block analysis error')
@@ -661,6 +676,7 @@ analyticsRouter.post('/blocks/:blockKey/regenerate', async (req, res) => {
     if (!bundle) {
       return res.status(404).json({ data: null, error: `Block ${blockKey} not found or regeneration failed` })
     }
+    await writeAnalysisRecord(pk, await blockViewKey(pk, blockKey), bundle)
 
     res.json({
       data: {

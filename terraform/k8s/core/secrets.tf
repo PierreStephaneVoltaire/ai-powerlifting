@@ -13,11 +13,6 @@ resource "random_password" "session" {
   special = false
 }
 
-resource "random_password" "prompt_cache" {
-  length  = 48
-  special = false
-}
-
 resource "kubernetes_secret_v1" "app" {
   metadata {
     name      = "powerlifting-app-secrets"
@@ -33,7 +28,6 @@ resource "kubernetes_secret_v1" "app" {
     AUTHENTIK_CLIENT_SECRET   = var.authentik_client_secret
     MEDIA_SIGNING_PRIVATE_KEY = data.aws_ssm_parameter.media_signing_private_key.value
     DISCORD_BOT_TOKEN         = var.discord_bot_token
-    PROMPT_CACHE_PASSWORD     = random_password.prompt_cache.result
   }
 }
 

@@ -27,37 +27,12 @@ resource "kubernetes_deployment_v1" "prompt_cache" {
         enable_service_links            = false
 
         container {
-          name              = "postgres"
-          image             = "pgvector/pgvector:pg17"
+          name              = "qdrant"
+          image             = "qdrant/qdrant:v1.15.5"
           image_pull_policy = "IfNotPresent"
 
-          env {
-            name  = "POSTGRES_USER"
-            value = "prompt_cache"
-          }
-
-          env {
-            name  = "POSTGRES_DB"
-            value = "prompt_cache"
-          }
-
-          env {
-            name = "POSTGRES_PASSWORD"
-            value_from {
-              secret_key_ref {
-                name = "powerlifting-app-secrets"
-                key  = "PROMPT_CACHE_PASSWORD"
-              }
-            }
-          }
-
-          env {
-            name  = "PGDATA"
-            value = "/var/lib/postgresql/data/pgdata"
-          }
-
           port {
-            container_port = 5432
+            container_port = 6333
           }
 
           resources {
@@ -66,61 +41,22 @@ resource "kubernetes_deployment_v1" "prompt_cache" {
           }
 
           readiness_probe {
-            exec {
-              command = ["pg_isready", "-U", "prompt_cache", "-d", "prompt_cache"]
-            }
-            initial_delay_seconds = 5
-            period_seconds        = 10
-          }
-
-          volume_mount {
-            name       = "postgres"
-            mount_path = "/var/lib/postgresql/data"
-          }
-        }
-
-        container {
-          name              = "embeddings"
-          image             = "ghcr.io/huggingface/text-embeddings-inference:cpu-1.8"
-          image_pull_policy = "IfNotPresent"
-          args              = ["--model-id", "jinaai/jina-embeddings-v2-small-en", "--port", "8080", "--auto-truncate"]
-
-          env {
-            name  = "HUGGINGFACE_HUB_CACHE"
-            value = "/data"
-          }
-
-          port {
-            container_port = 8080
-          }
-
-          resources {
-            limits   = { cpu = "1", memory = "1Gi" }
-            requests = { cpu = "50m", memory = "256Mi" }
-          }
-
-          readiness_probe {
             http_get {
-              path = "/health"
-              port = 8080
+              path = "/readyz"
+              port = 6333
             }
-            initial_delay_seconds = 10
+            initial_delay_seconds = 3
             period_seconds        = 10
           }
 
           volume_mount {
-            name       = "models"
-            mount_path = "/data"
+            name       = "storage"
+            mount_path = "/qdrant/storage"
           }
         }
 
         volume {
-          name = "postgres"
-          empty_dir {}
-        }
-
-        volume {
-          name = "models"
+          name = "storage"
           empty_dir {}
         }
       }
@@ -138,15 +74,121 @@ resource "kubernetes_service_v1" "prompt_cache" {
     selector = { app = "pl-prompt-cache" }
 
     port {
-      name        = "postgres"
-      port        = 5432
-      target_port = 5432
+      port        = 6333
+      target_port = 6333
+    }
+  }
+}
+
+resource "kubernetes_deployment_v1" "prompt_cache_mcp" {
+  wait_for_rollout = false
+
+  metadata {
+    name      = "pl-prompt-cache-mcp"
+    namespace = var.namespace
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = { app = "pl-prompt-cache-mcp" }
     }
 
+    template {
+      metadata {
+        labels = { app = "pl-prompt-cache-mcp" }
+      }
+
+      spec {
+        automount_service_account_token = false
+        enable_service_links            = false
+
+        container {
+          name              = "mcp"
+          image             = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
+          image_pull_policy = "IfNotPresent"
+          command           = ["uvx", "mcp-server-qdrant==0.8.1", "--transport", "streamable-http"]
+
+          env {
+            name  = "QDRANT_URL"
+            value = "http://pl-prompt-cache.${var.namespace}.svc.cluster.local:6333"
+          }
+
+          env {
+            name  = "QDRANT_SEARCH_LIMIT"
+            value = "5"
+          }
+
+          env {
+            name  = "FASTMCP_SERVER_HOST"
+            value = "0.0.0.0"
+          }
+
+          env {
+            name  = "FASTMCP_SERVER_PORT"
+            value = "8000"
+          }
+
+          env {
+            name  = "FASTMCP_LOG_LEVEL"
+            value = "WARNING"
+          }
+
+          env {
+            name  = "UV_CACHE_DIR"
+            value = "/cache/uv"
+          }
+
+          env {
+            name  = "FASTEMBED_CACHE_PATH"
+            value = "/cache/fastembed"
+          }
+
+          port {
+            container_port = 8000
+          }
+
+          resources {
+            limits   = { cpu = "1", memory = "768Mi" }
+            requests = { cpu = "25m", memory = "384Mi" }
+          }
+
+          readiness_probe {
+            tcp_socket {
+              port = 8000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+          }
+
+          volume_mount {
+            name       = "cache"
+            mount_path = "/cache"
+          }
+        }
+
+        volume {
+          name = "cache"
+          empty_dir {}
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service_v1" "prompt_cache_mcp" {
+  metadata {
+    name      = "pl-prompt-cache-mcp"
+    namespace = var.namespace
+  }
+
+  spec {
+    selector = { app = "pl-prompt-cache-mcp" }
+
     port {
-      name        = "embeddings"
-      port        = 8080
-      target_port = 8080
+      port        = 8000
+      target_port = 8000
     }
   }
 }

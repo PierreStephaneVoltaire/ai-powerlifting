@@ -3,7 +3,7 @@ import os
 import uuid
 import time
 
-from .generations import GenerationStore, REPORTS, fingerprint, report_source
+from .generations import GenerationStore, REPORTS, fingerprint, report_identity, report_source
 
 import httpx
 
@@ -21,11 +21,10 @@ async def submit(operation, arguments, athlete, person):
     generation = None
     store = None
     if operation.name in REPORTS:
-        source = await report_source(arguments, athlete, operation.name)
+        requested = arguments
+        identity = report_identity(requested, athlete)
         arguments = {key: value for key, value in arguments.items() if key not in {'_access', '_person_pk', '_if_job_id'}}
-        generation_id = fingerprint(operation.name, arguments, source)
-        if source:
-            arguments = {**arguments, "_report_source": source}
+        generation_id = fingerprint(operation.name, arguments, identity)
         store = GenerationStore(athlete)
         if arguments.get("cache_only"):
             record = await asyncio.to_thread(store.get, generation_id)
@@ -34,12 +33,15 @@ async def submit(operation, arguments, athlete, person):
             return {"cached": False, "cache_miss": True, "generation_id": generation_id, "status": (record or {}).get("status", "missing")}
         if not person:
             raise OperationError(401, "invalid_principal", "Verified acting Person required")
-        generation, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, person, bool(arguments.get("refresh")), (source or {}).get('access_requirements'))
+        generation, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, person, bool(arguments.get("refresh")), identity["access_requirements"])
         if not created:
             if generation["status"] == "succeeded":
                 result = await asyncio.to_thread(store.result, generation)
                 return {**result, "cached": True} if isinstance(result, dict) else result
             return {"generation_id": generation_id, "job_id": generation.get("job_id"), "status": generation["status"]}
+        source = await report_source(requested, athlete, operation.name)
+        if source:
+            arguments = {**arguments, "_report_source": source}
     else:
         arguments = {key: value for key, value in arguments.items() if key not in {'_access', '_person_pk', '_if_job_id'}}
     if not person:
@@ -73,18 +75,19 @@ async def start(operation, arguments, athlete, job_id):
             job_executions.pop(previous.job_id, None)
     if operation.name in REPORTS and not arguments.get("_generation_id"):
         store = GenerationStore(athlete)
-        source = await report_source(arguments, athlete, operation.name)
-        generation_id = fingerprint(operation.name, arguments, source)
-        if source:
-            arguments = {**arguments, "_report_source": source}
+        identity = report_identity(arguments, athlete)
+        generation_id = fingerprint(operation.name, arguments, identity)
         if arguments.get("cache_only"):
             record = await asyncio.to_thread(store.get, generation_id)
             result = await asyncio.to_thread(store.result, record) if record and record["status"] == "succeeded" else {"cached": False, "cache_miss": True}
             return {"status": "succeeded", "result": result}
-        record, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, arguments.get("_person_pk") or athlete, bool(arguments.get("refresh")), (source or {}).get('access_requirements'))
+        record, created = await asyncio.to_thread(store.reserve, generation_id, operation.name, arguments.get("_person_pk") or athlete, bool(arguments.get("refresh")), identity["access_requirements"])
         if not created:
             result = await asyncio.to_thread(store.result, record) if record["status"] == "succeeded" else {"generation_id": generation_id, "status": record["status"]}
             return {"status": "succeeded", "result": result}
+        source = await report_source(arguments, athlete, operation.name)
+        if source:
+            arguments = {**arguments, "_report_source": source}
         arguments = {**arguments, "_generation_id": generation_id, "_generation_attempt": int(record["attempt"]), "refresh": True}
         await asyncio.to_thread(store.update, generation_id, expected_attempt=record["attempt"], job_id=job_id)
     person = arguments.get("_person_pk")

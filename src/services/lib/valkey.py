@@ -28,3 +28,19 @@ def set_json(key: str, value: Any) -> None:
         client().set(key, json.dumps(value, default=str))
     except redis.RedisError as exc:
         logger.warning("Valkey write failed for %s: %s", key, exc)
+
+
+def increment(key: str) -> None:
+    try:
+        client().incr(key)
+    except redis.RedisError as exc:
+        logger.error("Valkey increment failed for %s: %s", key, exc)
+
+
+def get_text(key: str) -> Optional[str]:
+    try:
+        raw = client().get(key)
+    except redis.RedisError as exc:
+        logger.warning("Valkey read failed for %s: %s", key, exc)
+        return None
+    return raw.decode() if raw else None

@@ -160,3 +160,28 @@ def test_cached_generation_reference_rechecks_source_domains_and_competition_tie
         asyncio.run(generations.status('saved', 'athlete', 'handler', {**access, 'permissions': ['competition:read']}))
     access['competition_scope']['read'].append('meet-b')
     assert asyncio.run(generations.status('saved', 'athlete', 'handler', access))['result'] == {'summary': 'Both meets'}
+
+
+def test_athlete_writes_to_analysis_inputs_advance_the_report_identity(memory_valkey):
+    from services.analysis_version import record_write
+    args = {'_access': {'is_self': True}, 'weeks': 4}
+    before = generations.fingerprint('correlation_analysis', args, generations.report_identity(args, 'athlete-a'))
+    record_write('budget_create_item', 'athlete-a')
+    record_write('session_patch', 'athlete-b')
+    assert generations.fingerprint('correlation_analysis', args, generations.report_identity(args, 'athlete-a')) == before
+    record_write('session_patch', 'athlete-a')
+    assert generations.fingerprint('correlation_analysis', args, generations.report_identity(args, 'athlete-a')) != before
+
+
+def test_cache_only_report_reads_never_load_the_program(monkeypatch):
+    class Store:
+        def __init__(self, athlete):
+            pass
+        def get(self, generation_id):
+            return None
+    async def refuse(*_args, **_kwargs):
+        raise AssertionError('cache-only read loaded the report source')
+    monkeypatch.setattr(execution, 'GenerationStore', Store)
+    monkeypatch.setattr(execution, 'report_source', refuse)
+    result = asyncio.run(execution.submit(SimpleNamespace(name='correlation_analysis', domain='analytics'), {'cache_only': True, '_access': {'is_self': True}}, 'athlete-a', 'person-a'))
+    assert result['cache_miss'] is True

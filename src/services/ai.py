@@ -32,7 +32,7 @@ class DomainExecution:
 
 
 SPECIALIST_INSTRUCTION = "Use a native Specialist child to answer these messages. Return its structured result using domain_resume. Do not submit another IF job."
-JUDGE_INSTRUCTION = "Use a fresh Luna Specialist child with low reasoning effort to answer these messages. Return its structured result using domain_resume. Do not submit another IF job."
+JUDGE_INSTRUCTION = "Use a fresh powerlifting_coach Specialist child on the Luna model with low reasoning effort to answer these messages; it must search the prompt cache tool as instructed. Return its structured result using domain_resume. Do not submit another IF job."
 JUDGE_CONFIDENCE = 0.8
 JUDGE_SCHEMA = {
     "type": "object",
@@ -61,13 +61,16 @@ async def _delegate(execution: DomainExecution, messages: list, tools: list, res
     return response
 
 
-def _judge_messages(request: dict[str, Any], candidates: list[prompt_cache.Candidate]) -> list[dict[str, str]]:
+def _judge_messages(request: dict[str, Any], collection: str) -> list[dict[str, str]]:
     return [
-        {"role": "system", "content": "Decide whether a previously generated answer can be reused for a new request. Reuse only when the new request asks for the same thing about the same data, so the cached answer would be just as correct and complete. Any difference in the underlying numbers, dates, sessions, or requested output means no match. Return match_id null when nothing qualifies."},
-        {"role": "user", "content": json.dumps({
-            "new_request": request,
-            "candidates": [{"id": candidate.id, "similarity": round(candidate.similarity, 3), "request": candidate.request} for candidate in candidates],
-        }, default=str)},
+        {"role": "system", "content": (
+            f"Decide whether a saved answer can be reused for the new request below. Search the prompt cache with the {prompt_cache.SEARCH_TOOL} tool "
+            f"using collection_name \"{collection}\" and a query describing the new request; search again with different wording if useful. "
+            "Each result holds a saved request and its entry_id in metadata. Reuse only when a saved request asks for the same thing about the same data, "
+            "so its answer would be just as correct and complete. Any difference in the underlying numbers, dates, sessions, or requested output means no match. "
+            "Return the matching entry_id as match_id, or null when nothing qualifies."
+        )},
+        {"role": "user", "content": json.dumps({"new_request": request}, default=str)},
     ]
 
 
@@ -75,20 +78,19 @@ async def _reusable(execution: DomainExecution, request: dict[str, Any]) -> dict
     hit = await asyncio.to_thread(prompt_cache.exact, execution.athlete, execution.operation, request)
     if hit is not None:
         return hit
-    candidates = await asyncio.to_thread(prompt_cache.similar, execution.athlete, execution.operation, request)
-    if not candidates:
+    if not await asyncio.to_thread(prompt_cache.has_entries, execution.athlete, execution.operation):
         return None
     judged = await _delegate(
         execution,
-        _judge_messages(request, candidates),
+        _judge_messages(request, prompt_cache.collection(execution.athlete, execution.operation)),
         [],
         {"type": "json_schema", "json_schema": {"name": "prompt_cache_match", "schema": JUDGE_SCHEMA}},
         JUDGE_INSTRUCTION,
     )
     verdict = json.loads(judged["choices"][0]["message"]["content"])
-    if verdict["confidence"] < JUDGE_CONFIDENCE:
+    if verdict["confidence"] < JUDGE_CONFIDENCE or not verdict["match_id"]:
         return None
-    return next((candidate.response for candidate in candidates if candidate.id == verdict["match_id"]), None)
+    return await asyncio.to_thread(prompt_cache.entry, execution.athlete, execution.operation, verdict["match_id"])
 
 
 async def completion(payload: dict[str, Any]) -> httpx.Response:
@@ -99,7 +101,7 @@ async def completion(payload: dict[str, Any]) -> httpx.Response:
     response = await _reusable(execution, request)
     if response is None:
         response = await _delegate(execution, payload.get("messages", []), payload.get("tools", []), payload.get("response_format"), SPECIALIST_INSTRUCTION)
-        await asyncio.to_thread(prompt_cache.remember, execution.athlete, execution.operation, request, response)
+        await prompt_cache.remember(execution.athlete, execution.operation, request, response)
     return httpx.Response(200, json=response, request=httpx.Request("POST", "http://native-delegation"))
 
 

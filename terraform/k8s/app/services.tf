@@ -2,7 +2,8 @@ locals {
   service_env = {
     IF_API_URL                  = "http://pl-coach.${var.namespace}.svc.cluster.local:8000"
     VALKEY_URL                  = "redis://pl-valkey.${var.namespace}.svc.cluster.local:6379"
-    PROMPT_CACHE_HOST           = "pl-prompt-cache.${var.namespace}.svc.cluster.local"
+    PROMPT_CACHE_QDRANT_URL     = "http://pl-prompt-cache.${var.namespace}.svc.cluster.local:6333"
+    PROMPT_CACHE_MCP_URL        = "http://pl-prompt-cache-mcp.${var.namespace}.svc.cluster.local:8000/mcp"
     AWS_SHARED_CREDENTIALS_FILE = "/secrets/aws/credentials"
     AWS_CONFIG_FILE             = "/secrets/aws/config"
   }

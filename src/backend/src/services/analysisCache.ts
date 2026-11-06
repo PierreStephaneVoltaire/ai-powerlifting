@@ -1,6 +1,5 @@
-import crypto from 'crypto'
-import { callOperation } from '../utils/operations'
-import type { AthleteGoal, Program, WeightEntry } from '@powerlifting/types'
+import { valkey } from '../utils/valkey'
+import type { Program } from '@powerlifting/types'
 
 export type AnalysisWindowKey =
   | 'current'
@@ -40,7 +39,7 @@ interface WeeklyAnalysisBundle<T = unknown> {
 }
 
 export const CACHE_SCHEMA_VERSION = 5
-const SECTION_CACHE_SCHEMA_VERSION = 3
+const SECTION_CACHE_SCHEMA_VERSION = 4
 
 const WINDOW_SPECS: Array<{ key: AnalysisWindowKey; label: string; mode: number | 'current' | 'block' }> = [
   { key: 'current', label: 'Current Week', mode: 'current' },
@@ -275,60 +274,10 @@ export function makeWeeklyAnalysisBundle<T>(
 }
 
 
-function stableJson(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  const obj = value as Record<string, unknown>
-  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableJson(obj[key])}`).join(',')}}`
+export async function analysisVersion(pk: string): Promise<string> {
+  return (await (await valkey()).get(`pl:analysis-version:${pk}`)) ?? '0'
 }
 
-function hashValue(value: unknown): string {
-  return crypto.createHash('sha256').update(stableJson(value)).digest('hex')
-}
-
-async function fetchGoalsForFingerprint(pk: string): Promise<AthleteGoal[]> {
-  const items = (await callOperation('goals_list', { pk })) as Record<string, unknown>[]
-  return items
-    .map((it) => {
-      const { sk: _sk, pk: _pk, created_at: _c, updated_at: _u, ...rest } = it
-      void _sk; void _pk; void _c; void _u
-      return rest as unknown as AthleteGoal
-    })
-    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
-}
-
-export async function buildAnalysisSourceFingerprint(
-  program: Program,
-  window: AnalysisWindow,
-  pk: string,
-): Promise<string> {
-  const currentSessions = (program.sessions ?? [])
-    .filter((session) => (session.block ?? 'current') === 'current')
-    .filter((session) => session.date <= window.end)
-  const scopedWeightLog = ((program as Program & { weight_log?: WeightEntry[] }).weight_log ?? [])
-    .filter((entry) => entry.date <= window.end)
-  const currentPhases = (program.phases ?? [])
-    .filter((phase) => (phase.block ?? 'current') === 'current')
-  const [goals, glossary] = await Promise.all([
-    fetchGoalsForFingerprint(pk),
-    callOperation('exercise_get_glossary', { pk }),
-  ])
-  return hashValue({
-    schema: SECTION_CACHE_SCHEMA_VERSION,
-    asOfWindow: {
-      key: window.key,
-      start: window.start,
-      end: window.end,
-      weekStart: window.weekStart,
-      weekEnd: window.weekEnd,
-    },
-    meta: program.meta ?? {},
-    phases: currentPhases,
-    sessions: currentSessions,
-    competitions: program.competitions ?? [],
-    goals,
-    lift_profiles: program.lift_profiles ?? [],
-    weight_log: scopedWeightLog,
-    glossary,
-  })
+export function analysisSourceKey(version: string, window: { start?: string; end?: string }): string {
+  return `s${SECTION_CACHE_SCHEMA_VERSION}-v${version}-${window.start ?? ''}-${window.end ?? ''}`
 }
