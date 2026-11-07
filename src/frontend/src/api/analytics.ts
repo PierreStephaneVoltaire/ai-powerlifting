@@ -909,7 +909,6 @@ export async function fetchProgramBlocks(viewAthlete?: string): Promise<ProgramB
 export async function fetchBlockAnalysis(blockKey: string, refresh = false, viewAthlete?: string): Promise<BlockAnalysisBundle> {
   const params = new URLSearchParams({
     refresh: String(refresh),
-    ...(viewAthlete ? { cacheOnly: 'true' } : {}),
   })
   const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/analysis?${params.toString()}`, viewAthlete ? { powerliftingViewAthlete: viewAthlete } : undefined)
   const body = res.data

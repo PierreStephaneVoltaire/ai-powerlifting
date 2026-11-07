@@ -891,7 +891,7 @@ export async function buildCurrentProgramBlockIndex(userPk: string, program: Pro
       : typeof blockRecord?.label === 'string' && blockRecord.label.trim() && blockRecord.label.trim().toLowerCase() !== 'current'
         ? blockRecord.label.trim()
         : ''
-    const isCurrent = currentBlockId !== null && block === currentBlockId
+    const isCurrent = currentBlockId !== null && (block === currentBlockId || block === DEFAULT_BLOCK)
     const label = customLabel || (isCurrent ? 'Current' : (startDate || `Block ${block}`))
 
     const entry: ProgramBlockIndexEntry = {

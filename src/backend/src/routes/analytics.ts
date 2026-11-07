@@ -117,6 +117,7 @@ function requestedWindow(value: Record<string, unknown> = {}): { start?: string;
 }
 
 const SNAPSHOT_SECTION_KEYS = new Set<AnalysisSectionKey>(['overview', 'alerts'])
+const BLOCK_INDEX_CACHE_SCHEMA_VERSION = 2
 
 async function snapshotCompetitionProjection(pk: string, date: string): Promise<void> {
   try {
@@ -606,7 +607,7 @@ analyticsRouter.get('/analysis/weekly', async (req, res) => {
 analyticsRouter.get('/blocks', async (req, res) => {
   try {
     const pk = req.mapped_pk!
-    const recordKey = `native_block_index#${CACHE_SCHEMA_VERSION}#${await analysisVersion(pk)}`
+    const recordKey = `native_block_index#${CACHE_SCHEMA_VERSION}#${BLOCK_INDEX_CACHE_SCHEMA_VERSION}#${await analysisVersion(pk)}`
     const saved = await readAnalysisRecord<ProgramBlockIndexEntry[]>(pk, recordKey)
     if (saved) return res.json({ data: saved, error: null })
     const program = await getProgramWithWeightLog(pk, 'current')
@@ -626,7 +627,7 @@ analyticsRouter.get('/blocks/:blockKey/analysis', async (req, res) => {
     const pk = req.mapped_pk!
     const { blockKey } = req.params
     const refresh = req.query.refresh === 'true'
-    const cacheOnly = req.readOnly === true || req.query.cacheOnly === 'true' || req.query.cache_only === 'true'
+    const cacheOnly = req.query.cacheOnly === 'true' || req.query.cache_only === 'true'
     const recordKey = await blockViewKey(pk, blockKey)
     const saved = refresh && !cacheOnly ? null : await readAnalysisRecord<BlockAnalysisBundle>(pk, recordKey)
     if (saved) return res.json({ data: { ...saved, cached: true }, error: null })
