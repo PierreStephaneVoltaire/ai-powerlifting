@@ -1,6 +1,4 @@
 region                 = ""
-kubeconfig_path        = ""
-kubeconfig_context     = null
 namespace              = ""
 node_name              = ""
 image_pull_secret      = ""

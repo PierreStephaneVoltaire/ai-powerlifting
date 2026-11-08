@@ -38,8 +38,7 @@ It holds only Kubernetes resources: the `pl-coach-state` PVC and both
 Deployments and Services. The in-cluster `kubernetes-apply` runner applies this
 state after `build-coach` publishes new images. It reads each image digest from
 the `latest` tag. Configure the repository `COACH_TFVARS` Actions secret with
-the existing Coach stack variable values from `terraform.tfvars`, retaining the
-current Kubernetes provider configuration.
+the Coach stack variable values from `terraform.tfvars`. 
 
 For a manual local rollout, the stack can still be planned and applied directly:
 

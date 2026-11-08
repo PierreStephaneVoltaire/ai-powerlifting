@@ -2,15 +2,6 @@ variable "region" {
   type = string
 }
 
-variable "kubeconfig_path" {
-  type = string
-}
-
-variable "kubeconfig_context" {
-  type     = string
-  nullable = true
-}
-
 variable "namespace" {
   description = "Namespace shared with the Powerlifting Services"
   type        = string
