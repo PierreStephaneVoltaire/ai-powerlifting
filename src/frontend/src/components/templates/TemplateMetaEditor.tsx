@@ -26,7 +26,7 @@ export function TemplateMetaEditor({ meta, onChange, disabled }: Props) {
       />
       <Textarea
         label="Program Context"
-        description="Saved with this template and used by its AI evaluation."
+        description="Additional context"
         value={meta.program_context ?? ''}
         onChange={(e) => onChange({ ...meta, program_context: e.currentTarget.value })}
         autosize

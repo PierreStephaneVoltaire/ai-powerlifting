@@ -81,7 +81,7 @@ export default function TemplateCreatePage() {
         />
         <Textarea
           label="Program Context"
-          description="Saved with this template and used by its AI evaluation."
+          description="Additional context"
           value={form.program_context}
           onChange={(e) => setForm(f => ({ ...f, program_context: e.currentTarget.value }))}
           autosize
