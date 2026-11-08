@@ -398,7 +398,7 @@ jobs:
         run: terraform apply -input=false -no-color -auto-approve -var="region=${{ env.AWS_REGION }}"
 
   kubernetes-apply:
-    needs: [changes, build-backend, build-services, build-frontend, terraform-apply]
+    needs: [changes, build-backend, build-services, build-coach, build-frontend, terraform-apply]
     runs-on: powerlifting-k8s
     if: >-
       ${{ always()
@@ -410,6 +410,7 @@ jobs:
       && (needs.changes.outputs.kubernetes == 'true'
         || needs.build-backend.result == 'success'
         || needs.build-services.result == 'success'
+        || needs.build-coach.result == 'success'
         || needs.build-frontend.result == 'success') }}
     concurrency:
       group: kubernetes-apply
@@ -435,8 +436,17 @@ jobs:
           K8S_TFVARS: ${{ secrets.K8S_TFVARS }}
         run: printf '%s' "$K8S_TFVARS" > "$RUNNER_TEMP/k8s.tfvars"
 
+      - if: ${{ needs.build-coach.result == 'success' }}
+        env:
+          COACH_TFVARS: ${{ secrets.COACH_TFVARS }}
+        run: |
+          test -n "$COACH_TFVARS" || { echo "COACH_TFVARS Actions secret is required to deploy the Coach images" >&2; exit 1; }
+          printf '%s' "$COACH_TFVARS" > "$RUNNER_TEMP/coach.tfvars"
+          chmod 600 "$RUNNER_TEMP/coach.tfvars"
+
       - env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          APPLY_COACH: ${{ needs.build-coach.result == 'success' }}
         working-directory: terraform/k8s
         run: |
           set -euo pipefail
@@ -449,3 +459,12 @@ jobs:
               -backend-config="use_lockfile=true"
             terraform -chdir="$stack" apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/k8s.tfvars"
           done
+          if [ "$APPLY_COACH" = "true" ]; then
+            terraform -chdir=../coach init -input=false \
+              -backend-config="bucket=$TF_STATE_BUCKET" \
+              -backend-config="key=powerlifting-app/coach/terraform.tfstate" \
+              -backend-config="region=$AWS_REGION" \
+              -backend-config="encrypt=true" \
+              -backend-config="use_lockfile=true"
+            terraform -chdir=../coach apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/coach.tfvars"
+          fi

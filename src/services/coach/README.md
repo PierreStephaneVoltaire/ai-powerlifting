@@ -35,9 +35,13 @@ For a manual Packer build, run `scripts/build_coach_images.sh agent discord`.
 
 `terraform/coach/` has its own state (`powerlifting-app/coach/terraform.tfstate`).
 It holds only Kubernetes resources: the `pl-coach-state` PVC and both
-Deployments and Services. CI cannot reach the cluster, so apply it locally. It
-reads each image digest from the `latest` tag, so a rollout is a new `:latest`
-followed by:
+Deployments and Services. The in-cluster `kubernetes-apply` runner applies this
+state after `build-coach` publishes new images. It reads each image digest from
+the `latest` tag. Configure the repository `COACH_TFVARS` Actions secret with
+the existing Coach stack variable values from `terraform.tfvars`, retaining the
+current Kubernetes provider configuration.
+
+For a manual local rollout, the stack can still be planned and applied directly:
 
 ```bash
 cd terraform/coach

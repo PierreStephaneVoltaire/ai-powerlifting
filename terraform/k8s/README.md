@@ -1,7 +1,7 @@
 # Kubernetes stacks
 
-Four independent states, applied in order by the `kubernetes-apply` job on the
-in-cluster Actions runner.
+The `kubernetes-apply` job on the in-cluster Actions runner applies these four
+states and the separate Coach state after their images are published.
 
 | Stack | Holds |
 |---|---|
@@ -9,12 +9,16 @@ in-cluster Actions runner.
 | `perms` | Service accounts, roles and bindings (registry refresher, runner deployer bound to `cluster-admin`) |
 | `network` | Gateway controller, Gateway, routes, cloudflared |
 | `app` | `pl-*` services, analytics, Valkey, portal backend and frontend, registry token refresher |
+| `../coach` | Coach and Discord bot Deployments and Services |
 
 The job runs only for pushes or manual runs triggered by the repository owner.
-It writes the `K8S_TFVARS` repository secret (the full `k8s.tfvars`, see
-`k8s.tfvars.example`) to a file and applies `core`, `perms`, `network` and
-`app` with it. `TF_STATE_BUCKET` names the state bucket and AWS reads go
-through the OIDC deploy role. The pods' AWS key belongs to the scoped
+It writes `K8S_TFVARS` (the full `k8s.tfvars`, see `k8s.tfvars.example`) and,
+when Coach images were built, `COACH_TFVARS` (the Coach stack's Terraform
+variables) to temporary files. It applies `core`, `perms`, `network` and `app`,
+then applies `../coach` when `build-coach` succeeds. `COACH_TFVARS` must match
+the existing Coach stack variables while preserving its Kubernetes provider
+configuration. `TF_STATE_BUCKET` names the state bucket and AWS reads go through
+the OIDC deploy role. The pods' AWS key belongs to the scoped
 `powerlifting-pods` IAM user, created outside terraform and stored in SSM at
 `/powerlifting/k8s/aws-credentials`; no AWS key lives in any tfvars file or
 terraform state.

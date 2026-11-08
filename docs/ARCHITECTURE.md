@@ -12,11 +12,10 @@ operations. The Express gateway calls them over the cluster network, and the
 Coach (`pl-coach`) answers their inference steps and exposes them as tools in
 chat. DynamoDB and S3 hold the data.
 
-The Kubernetes workloads are Terraform in this repository: `terraform/k8s/core`
-and `perms` (namespace, secrets, RBAC, Actions runner) are applied locally;
-`terraform/k8s/network` and `app` are applied by the in-cluster runner from CI,
-which resolves each image's `latest` digest. `terraform/coach` holds the Coach
-and the Discord bot.
+The Kubernetes workloads are Terraform in this repository. After the initial
+`core` and `perms` bootstrap, the in-cluster runner applies `terraform/k8s/core`,
+`perms`, `network`, `app`, and `terraform/coach` from CI. Coach's state is applied
+when `build-coach` publishes new images and resolves their `latest` digests.
 
 The AI workflow (use cases, models, request flow, concurrency, output
 validation and hallucination controls) is in the README's
