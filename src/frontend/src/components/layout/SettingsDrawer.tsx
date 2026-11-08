@@ -272,14 +272,14 @@ export default function SettingsDrawer() {
           <SectionLabel>Rankings Location</SectionLabel>
             <Text size="xs" c="dimmed" mb="sm">
               Used for national and regional percentile cards on the dashboard.
-              Options come from the OpenPowerlifting dataset.
+              Options come from the app's country and region reference data.
             </Text>
             <Stack gap="xs">
               <RankingLocationFields
                 country={rankingCountry}
                 region={rankingRegion}
                 onChange={({ country, region }) => { setRankingCountry(country); setRankingRegion(region) }}
-                enabled={isOpen}
+                disabled={!isOpen}
               />
               <Button
                 size="xs"

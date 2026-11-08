@@ -9,6 +9,7 @@ import { videoMimeTypes, videoUploadsRouter } from './videoUploads'
 import { serveStoredMedia } from '../utils/serveMedia'
 import { isPublicMediaKey, mediaCdnConfig, publicMediaUrl, signedMediaUrl } from '../utils/mediaCdn'
 import type { LiftProfileVideoAngle, VideoSort } from '@powerlifting/types'
+import { restoreOperationScope } from '../utils/operationScope'
 
 export const videosRouter = Router({ mergeParams: true })
 const upload = multer({
@@ -40,7 +41,7 @@ videosRouter.get('/', async (req, res, next) => {
   }
 })
 
-videosRouter.post('/:version/:sessionDate', receiveVideo, async (req, res, next) => {
+videosRouter.post('/:version/:sessionDate', receiveVideo, restoreOperationScope, async (req, res, next) => {
   if (req.file) {
     try {
       if (!videoMimeTypes.includes(req.file.mimetype)) return res.status(400).json({ data: null, error: 'Invalid video MIME type' })

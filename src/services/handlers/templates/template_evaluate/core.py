@@ -1,6 +1,5 @@
 import asyncio
 import os
-from datetime import date
 
 from .metrics import strip_calendar, template_metrics
 
@@ -10,25 +9,10 @@ def _lift_profiles(program):
     return [describe(profile) for profile in program.get("lift_profiles") or []]
 
 
-def _timeline(program, template_weeks):
-    from services.lib.competition_entries import next_competition
-    competition = next_competition(program.get("competitions") or [])
-    if not competition:
-        return {"template_weeks": template_weeks, "next_confirmed_competition": None}
-    competition_date = date.fromisoformat(str(competition.get("date") or competition.get("start_date"))[:10])
-    weeks_away = round((competition_date - date.today()).days / 7, 1)
-    return {
-        "template_weeks": template_weeks,
-        "next_confirmed_competition": {"name": competition.get("name"), "weeks_away": weeks_away},
-        "weeks_until_template_must_start": round(weeks_away - template_weeks, 1),
-    }
-
-
-def _athlete_context(program, template_weeks=0):
+def _athlete_context(program):
     return {
         "current_maxes": program.get("current_maxes") or {},
         "lift_profiles": _lift_profiles(program),
-        "timeline": _timeline(program, template_weeks),
     }
 
 
@@ -64,7 +48,6 @@ def _specificity_band():
 
 async def _dispatch(args):
     from .template_evaluate_ai import generate_template_evaluate_report
-    from services.lib.competition_entries import with_competition_entries
     sk = args["sk"]
     actor_pk = args.get("actor_pk") or args.get("pk")
     template = await _get_template_store().get_template(sk, actor_pk=actor_pk)
@@ -74,12 +57,11 @@ async def _dispatch(args):
     if context is None:
         context = (template.get("meta") or {}).get("program_context") or ""
     program = await _get_program_store(args).get_program()
-    program = await asyncio.to_thread(with_competition_entries, program, args["pk"])
     glossary = await asyncio.to_thread(_get_glossary, args)
     metrics = template_metrics(template, glossary, program.get("current_maxes") or {}, _specificity_band())
     stripped = strip_calendar(template)
     stripped["meta"]["program_context"] = context
-    report = await generate_template_evaluate_report(stripped, _athlete_context(program, metrics.get("weeks", 0)), metrics, context)
+    report = await generate_template_evaluate_report(stripped, _athlete_context(program), metrics, context)
     await _get_template_store().set_evaluation(sk, report, actor_pk=actor_pk, program_context=context)
     return report
 

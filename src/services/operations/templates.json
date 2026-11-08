@@ -279,6 +279,10 @@
         "description": {
           "type": "string"
         },
+        "program_context": {
+          "type": "string",
+          "maxLength": 4000
+        },
         "estimated_weeks": {
           "type": "integer",
           "minimum": 1
@@ -474,8 +478,7 @@
         "summary",
         "strengths",
         "weaknesses",
-        "suggestions",
-        "projected_readiness_at_comp"
+        "suggestions"
       ],
       "properties": {
         "stance": {

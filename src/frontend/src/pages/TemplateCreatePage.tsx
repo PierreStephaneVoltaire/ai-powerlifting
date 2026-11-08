@@ -8,7 +8,7 @@ import { templateEditRoute } from '../utils/templateRoutes'
 export default function TemplateCreatePage() {
   const { readOnly } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', description: '', estimated_weeks: 4, days_per_week: 3 })
+  const [form, setForm] = useState({ name: '', description: '', program_context: '', estimated_weeks: 4, days_per_week: 3 })
   const [nameError, setNameError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,6 +25,7 @@ export default function TemplateCreatePage() {
       const { sk } = await createBlankTemplate({
         name: form.name.trim(),
         description: form.description || undefined,
+        program_context: form.program_context || undefined,
         estimated_weeks: form.estimated_weeks,
         days_per_week: form.days_per_week,
       })
@@ -76,6 +77,16 @@ export default function TemplateCreatePage() {
           }}
           autosize
           minRows={2}
+          disabled={readOnly}
+        />
+        <Textarea
+          label="Program Context"
+          description="Saved with this template and used by its AI evaluation."
+          value={form.program_context}
+          onChange={(e) => setForm(f => ({ ...f, program_context: e.currentTarget.value }))}
+          autosize
+          minRows={2}
+          maxLength={4000}
           disabled={readOnly}
         />
         <TextInput

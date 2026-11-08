@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import * as templateController from '../controllers/templateController'
+import { restoreOperationScope } from '../utils/operationScope'
 
 export const templateRouter = Router()
 const upload = multer({
@@ -20,7 +21,7 @@ const upload = multer({
 templateRouter.get('/', templateController.listTemplates)
 
 // POST /api/templates/imports
-templateRouter.post('/imports', upload.single('file'), templateController.uploadTemplateImport)
+templateRouter.post('/imports', upload.single('file'), restoreOperationScope, templateController.uploadTemplateImport)
 
 // GET /api/templates/imports/:jobId
 templateRouter.get('/imports/:jobId', templateController.getTemplateImport)

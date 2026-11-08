@@ -8,6 +8,10 @@ function matchOption(value: string | null | undefined, options: string[]): strin
   return options.find((option) => option.toLocaleLowerCase() === wanted) ?? null
 }
 
+function regionsFor(country: string | null) {
+  return country ? rankingLocations.country_regions[country as keyof typeof rankingLocations.country_regions] ?? [] : []
+}
+
 interface Props {
   country: string | null
   region: string | null
@@ -18,12 +22,12 @@ interface Props {
 
 export function RankingLocationFields({ country, region, onChange, disabled = false, required = false }: Props) {
   const countryValue = matchOption(country, rankingLocations.countries)
-  const regionOptions = countryValue ? rankingLocations.country_regions[countryValue] ?? [] : []
+  const regionOptions = regionsFor(countryValue)
   const regionValue = matchOption(region, regionOptions)
 
   useEffect(() => {
     const fixedCountry = matchOption(country, rankingLocations.countries)
-    const fixedRegion = fixedCountry ? matchOption(region, rankingLocations.country_regions[fixedCountry] ?? []) : null
+    const fixedRegion = matchOption(region, regionsFor(fixedCountry))
     if ((fixedCountry && fixedCountry !== country) || (fixedRegion && fixedRegion !== region)) {
       onChange({ country: fixedCountry ?? country, region: fixedRegion ?? region })
     }

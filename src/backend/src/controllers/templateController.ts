@@ -66,10 +66,11 @@ export async function createTemplateFromBlock(req: Request, res: Response) {
 }
 
 export async function createBlankTemplate(req: Request, res: Response) {
-  const { name, description, estimated_weeks, days_per_week } = req.body
+  const { name, description, program_context, estimated_weeks, days_per_week } = req.body
   try {
     const result = await callOperation('template_create_blank', { name,
       description: description ?? '',
+      program_context: program_context ?? '',
       estimated_weeks: estimated_weeks ?? 4,
       days_per_week: days_per_week ?? 3,
       ...templateActor(req),
@@ -213,6 +214,7 @@ export async function uploadTemplateImport(req: Request, res: Response) {
   if (!req.user || req.readOnly || !req.mapped_pk || !req.actor_mapped_pk) {
     throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
   }
+  const importInstructions = typeof req.body?.instructions === 'string' ? req.body.instructions.slice(0, 4000) : ''
 
   const response = await fetch(`${coachUrl()}/v1/jobs`, {
     method: 'POST',
@@ -220,7 +222,21 @@ export async function uploadTemplateImport(req: Request, res: Response) {
     body: JSON.stringify({
       conversation_id: `template-import:${req.mapped_pk}`,
       kind: 'domain',
-      payload: { domain: 'imports', athlete: req.mapped_pk, operation: 'import_parse_file', arguments: { base64_content: req.file.buffer.toString('base64'), filename: req.file.originalname, pk: req.mapped_pk } },
+      payload: {
+        domain: 'imports',
+        athlete: req.mapped_pk,
+        operation: 'import_parse_file',
+        arguments: {
+          base64_content: req.file.buffer.toString('base64'),
+          filename: req.file.originalname,
+          template_import: true,
+          import_type: 'template',
+          import_instructions: importInstructions,
+          actor_pk: req.actor_mapped_pk,
+          author: req.user.username || req.actor_mapped_pk,
+          pk: req.mapped_pk,
+        },
+      },
     }),
   })
   if (!response.ok) {

@@ -685,13 +685,15 @@ export async function fetchE1rmMultiplierSuggestions(): Promise<Record<string, {
 
 // ─── Import ──────────────────────────────────────────────────────────────────
 
-export async function uploadImport(file: File): Promise<{ 
-  import_id: string; 
-  classification: ImportType | 'ambiguous'; 
+export async function uploadImport(file: File, importType: ImportType, instructions: string): Promise<{
+  import_id: string;
+  classification: ImportType;
   warnings: any[];
   parse_notes: string;
 }> {
   const formData = new FormData()
+  formData.append('import_type', importType)
+  formData.append('import_instructions', instructions)
   formData.append('file', file)
   const res = await api.post('/import/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -762,6 +764,7 @@ export async function confirmApplyTemplate(sk: string, body: {
 export async function createBlankTemplate(body: {
   name: string
   description?: string
+  program_context?: string
   estimated_weeks?: number
   days_per_week?: number
 }): Promise<{ sk: string }> {
@@ -784,8 +787,9 @@ export async function unpublishTemplate(sk: string): Promise<Record<string, unkn
   return res.data
 }
 
-export async function uploadTemplateImport(file: File): Promise<{ job_id: string; status: TemplateImportJob['status'] }> {
+export async function uploadTemplateImport(file: File, instructions: string): Promise<{ job_id: string; status: TemplateImportJob['status'] }> {
   const formData = new FormData()
+  formData.append('instructions', instructions)
   formData.append('file', file)
   const res = await api.post('/templates/imports', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -795,13 +799,9 @@ export async function uploadTemplateImport(file: File): Promise<{ job_id: string
 
 export async function fetchTemplateImport(jobId: string): Promise<TemplateImportJob> {
   const res = await api.get(`/templates/imports/${encodeURIComponent(jobId)}`)
-  return res.data
-}
-
-export async function applyTemplateImport(jobId: string): Promise<TemplateImportJob> {
-  const res = await api.post(`/templates/imports/${encodeURIComponent(jobId)}/apply`)
-  await invalidateDomain('templates')
-  return res.data
+  const job: TemplateImportJob = res.data
+  if (job.template_sk) await invalidateDomain('templates')
+  return job
 }
 
 // ─── Archive & e1RM ─────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { Alert, Button, Group, LoadingOverlay, Paper, Stack, Text, Title } from '@mantine/core'
+import { Alert, Button, Group, LoadingOverlay, Paper, Stack, Text, Textarea, Title } from '@mantine/core'
 import { Upload } from 'lucide-react'
-import { applyTemplateImport, fetchTemplateImport, uploadTemplateImport } from '../api/client'
+import { fetchTemplateImport, uploadTemplateImport } from '../api/client'
 import { cancelJob } from '../api/jobs'
 import type { TemplateImportJob } from '@powerlifting/types'
 import { templateEditRoute } from '../utils/templateRoutes'
@@ -12,24 +12,34 @@ import { useAuth } from '@/auth/AuthProvider'
 export default function TemplateImportPage() {
   const { readOnly } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const jobId = searchParams.get('job_id')
   const [job, setJob] = useState<TemplateImportJob | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [applying, setApplying] = useState(false)
+  const [instructions, setInstructions] = useState('')
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles.length || readOnly) return
     setUploading(true)
     setError(null)
     try {
-      const created = await uploadTemplateImport(acceptedFiles[0])
+      const created = await uploadTemplateImport(acceptedFiles[0], instructions)
       setJob(created)
+      setSearchParams({ job_id: created.job_id })
     } catch (err: any) {
       setError(err?.message ?? 'Template import failed')
     } finally {
       setUploading(false)
     }
-  }, [readOnly])
+  }, [instructions, readOnly, setSearchParams])
+
+  useEffect(() => {
+    if (!jobId) return
+    fetchTemplateImport(jobId)
+      .then(setJob)
+      .catch((err: any) => setError(err?.message ?? 'Failed to load template import'))
+  }, [jobId])
 
   useEffect(() => {
     if (!job?.job_id || ['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status)) return
@@ -46,12 +56,6 @@ export default function TemplateImportPage() {
   const cancel = async () => {
     if (!job) return
     try { setJob({ ...job, status: (await cancelJob(job.job_id)).status as TemplateImportJob['status'] }) } catch (err: any) { setError(err?.message ?? 'Cancellation failed') }
-  }
-
-  const apply = async () => {
-    if (!job) return
-    setApplying(true)
-    try { setJob(await applyTemplateImport(job.job_id)) } catch (err: any) { setError(err?.message ?? 'Template import apply failed') } finally { setApplying(false) }
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -81,6 +85,18 @@ export default function TemplateImportPage() {
 
       {error && <Alert color="red" title="Error">{error}</Alert>}
 
+      <Textarea
+        label="Import instructions"
+        description="Explain the program structure or how ambiguous columns should be interpreted."
+        placeholder="For example: each numbered week is relative to the start of the template; 'heavy single' describes the bench prescription."
+        value={instructions}
+        onChange={(event) => setInstructions(event.currentTarget.value)}
+        maxLength={4000}
+        autosize
+        minRows={2}
+        disabled={readOnly || uploading}
+      />
+
       <Paper
         {...getRootProps()}
         withBorder
@@ -93,7 +109,7 @@ export default function TemplateImportPage() {
           position: 'relative',
         }}
       >
-        <LoadingOverlay visible={uploading || applying || Boolean(job && !['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status))} />
+        <LoadingOverlay visible={uploading || Boolean(job && !['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status))} />
         <input {...getInputProps()} />
         <Group justify="center" gap="md" style={{ minHeight: 140 }}>
           <Upload size={24} />
@@ -108,10 +124,14 @@ export default function TemplateImportPage() {
         <Paper withBorder p="md" radius="md">
           <Stack gap="xs">
             <Text fw={500}>Status: {job.status}</Text>
+            {!['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status) && (
+              <Text size="sm" c="dimmed">This import runs in the background. You can leave; the editable draft will appear in your Template Library when it finishes.</Text>
+            )}
             {job.filename && <Text size="sm" c="dimmed">{job.filename}</Text>}
             {job.error && <Alert color="red">{job.error}</Alert>}
+            {job.parse_notes && <Text size="sm">{job.parse_notes}</Text>}
+            {job.warnings?.map((warning, index) => <Alert key={`${warning.type}-${index}`} color="yellow" title={warning.type}>{warning.message}</Alert>)}
             {job && !['succeeded', 'failed', 'cancelled', 'uncertain'].includes(job.status) && <Button variant="default" onClick={cancel}>Cancel</Button>}
-            {job.status === 'succeeded' && !job.template_sk && <Button onClick={apply} loading={applying}>Create template from import</Button>}
             {job.status === 'succeeded' && job.template_sk && (
               <Group>
                 <Button onClick={() => navigate(templateEditRoute(job.template_sk!))}>

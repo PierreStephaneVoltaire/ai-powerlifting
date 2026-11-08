@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getPublication, updatePublication } from '../controllers/publicationController'
 import multer from 'multer'
+import { restoreOperationScope } from '../utils/operationScope'
 import { getSettingsHandler, updateAvatarHandler, updateNicknameHandler, updateProfileHandler, updateRankingLocationHandler, updateAgeClassHandler, addTagHandler, removeTagHandler, proposeTagHandler } from '../controllers/settingsController'
 
 export const settingsRouter = Router()
@@ -25,7 +26,7 @@ settingsRouter.put('/nickname', updateNicknameHandler)
 settingsRouter.put('/profile', updateProfileHandler)
 settingsRouter.put('/ranking-location', updateRankingLocationHandler)
 settingsRouter.put('/age-class', updateAgeClassHandler)
-settingsRouter.post('/avatar', avatarUpload.single('avatar'), updateAvatarHandler)
+settingsRouter.post('/avatar', avatarUpload.single('avatar'), restoreOperationScope, updateAvatarHandler)
 
 settingsRouter.post('/tags', addTagHandler)
 settingsRouter.delete('/tags/:tag', removeTagHandler)

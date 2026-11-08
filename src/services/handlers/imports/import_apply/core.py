@@ -53,7 +53,7 @@ USER_SELECTED_RPE = 8
 
 
 def _prepare_template(template, glossary=None):
-    from services.lib.exercise_names import glossary_entry_for
+    from services.lib.exercise_names import canonicalize_competition_lift, glossary_entry_for
     prepared = copy.deepcopy(template)
     metadata = prepared.setdefault("meta", {})
     sessions = prepared.setdefault("sessions", [])
@@ -91,7 +91,14 @@ def _prepare_template(template, glossary=None):
         for exercise in exercises:
             if not isinstance(exercise, dict):
                 continue
-            exercise.setdefault("notes", "")
+            name = str(exercise.get("name") or "").strip()
+            canonical, prescription = canonicalize_competition_lift(name)
+            if canonical != name:
+                exercise["name"] = canonical
+            notes = str(exercise.get("notes") or "").strip()
+            if prescription and prescription.casefold() not in notes.casefold():
+                notes = f"{notes} {prescription}".strip()
+            exercise["notes"] = notes
             exercise.setdefault("sets", None)
             exercise.setdefault("reps", None)
             load_type = str(exercise.get("load_type") or "unresolvable").lower()
@@ -112,7 +119,11 @@ def _prepare_template(template, glossary=None):
                 note = f"Lifter selects the load at RPE {USER_SELECTED_RPE}."
                 exercise["notes"] = f"{exercise['notes']} {note}".strip() if note not in str(exercise["notes"]) else exercise["notes"]
             load_type = exercise["load_type"]
-            if not exercise.get("glossary_id") and glossary:
+            if glossary and canonical != name:
+                entry = glossary_entry_for(exercise.get("name", ""), glossary)
+                if entry and entry.get("id"):
+                    exercise["glossary_id"] = entry["id"]
+            elif not exercise.get("glossary_id") and glossary:
                 entry = glossary_entry_for(exercise.get("name", ""), glossary)
                 if entry and entry.get("id"):
                     exercise["glossary_id"] = entry["id"]
@@ -200,8 +211,9 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
             sessions = parsed.get("sessions") if isinstance(parsed.get("sessions"), list) else []
             template = _prepare_template({
                 "meta": {
-                    "name": f"Imported {str(pending.get('source_filename', 'template')).rsplit('.', 1)[0]}",
-                    "description": parsed.get("parse_notes", ""),
+                    "name": "Imported Template",
+                    "description": "",
+                    "program_context": "",
                     "source_filename": pending.get("source_filename"),
                     "source_file_hash": pending.get("source_file_hash"),
                 },

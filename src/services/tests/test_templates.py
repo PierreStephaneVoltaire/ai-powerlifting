@@ -3,7 +3,6 @@ import importlib
 import json
 import sys
 import unittest
-from datetime import date, timedelta
 from types import ModuleType
 from unittest.mock import patch
 
@@ -97,7 +96,6 @@ class TemplateContractTests(unittest.TestCase):
 
     def _evaluate(self, program, entries, **extra):
         core = importlib.import_module("services.handlers.templates.template_evaluate.core")
-        entries_module = importlib.import_module("services.lib.competition_entries")
         template_store = FakeTemplateStore()
         template_store.templates["template#1"] = {"sk": "template#1", "meta": {"name": "Strength"}, "sessions": [{"week_number": 1, "date": "2027-01-02", "exercises": []}, {"week_number": 4, "date": "2027-01-23", "exercises": [{"name": "Squat", "sets": 1, "reps": 1}]}]}
         program_store = FakeProgramStore()
@@ -112,35 +110,28 @@ class TemplateContractTests(unittest.TestCase):
 
         ai = ModuleType("template_evaluate_ai")
         ai.generate_template_evaluate_report = evaluate
-        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(core, "_get_glossary", return_value=[]), patch.object(core, "_specificity_band", return_value=lambda weeks_out: None), patch.object(entries_module, "load_entries", return_value=entries), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
+        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(core, "_get_glossary", return_value=[]), patch.object(core, "_specificity_band", return_value=lambda weeks_out: None), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
             report = core.template_evaluate({"pk": "athlete-1", "actor_pk": "person-1", "sk": "template#1", **extra})
         return captured, template_store, report
 
-    def test_evaluate_counts_weeks_to_the_next_confirmed_competition_and_saves_the_report(self):
-        future = (date.today() + timedelta(days=70)).isoformat()
+    def test_evaluate_ignores_the_athletes_competition_timeline_and_saves_the_report(self):
         program = {
-            "meta": {"sex": "male", "current_body_weight_kg": 100, "comp_date": (date.today() - timedelta(days=70)).isoformat()},
+            "meta": {"sex": "male", "current_body_weight_kg": 100, "comp_date": "2027-05-01"},
             "current_maxes": {"squat": 200, "bench": 150, "deadlift": 250},
         }
-        entries = [
-            {"sk": "COMP#past", "name": "Old Meet", "start_date": (date.today() - timedelta(days=7)).isoformat(), "user_status": "confirmed"},
-            {"sk": "COMP#skip", "name": "Maybe Meet", "start_date": (date.today() + timedelta(days=14)).isoformat(), "user_status": "available"},
-            {"sk": "COMP#optional", "name": "WRPF Nationals 2026", "start_date": (date.today() + timedelta(days=4)).isoformat(), "user_status": "optional"},
-            {"sk": "COMP#next", "name": "Royal City Rumble 5", "start_date": future, "user_status": "confirmed"},
-        ]
-        captured, store, report = self._evaluate(program, entries, context="Overreach with separate lift progressions")
+        captured, store, report = self._evaluate(program, [], context="Overreach with separate lift progressions")
         self.assertNotIn("dots_score", captured)
-        self.assertEqual(captured["timeline"], {"template_weeks": 4, "next_confirmed_competition": {"name": "Royal City Rumble 5", "weeks_away": 10.0}, "weeks_until_template_must_start": 6.0})
+        self.assertNotIn("timeline", captured)
         self.assertEqual(captured["context"], "Overreach with separate lift progressions")
         self.assertNotIn("date", captured["template"]["sessions"][0])
         self.assertEqual(store.templates["template#1"]["meta"]["ai_evaluation"], report)
         self.assertEqual(store.templates["template#1"]["meta"]["program_context"], "Overreach with separate lift progressions")
         self.assertEqual(store.evaluated_by, "person-1")
 
-    def test_evaluate_ignores_a_past_meta_comp_date_when_no_competition_is_upcoming(self):
-        program = {"meta": {"comp_date": (date.today() - timedelta(days=73)).isoformat()}, "current_maxes": {}}
+    def test_evaluate_ignores_program_comp_date(self):
+        program = {"meta": {"comp_date": "2027-05-01"}, "current_maxes": {}}
         captured, _, _ = self._evaluate(program, [])
-        self.assertEqual(captured["timeline"], {"template_weeks": 4, "next_confirmed_competition": None})
+        self.assertNotIn("timeline", captured)
 
 
 if __name__ == "__main__":

@@ -107,7 +107,7 @@ def test_parse_stages_csv_using_authenticated_scope_and_native_parser(monkeypatc
     monkeypatch.setattr(core, "_get_glossary_store", lambda pk: Glossary())
     monkeypatch.setattr(core, "_get_import_store", lambda pk: imports)
     monkeypatch.setattr(ai, "generate_import_parse_report", parse)
-    result = dispatch(load_operations("imports")["import_parse_file"], {"pk": "athlete-1", "base64_content": base64.b64encode(b"date,exercise\n2026-09-15,Squat\n").decode(), "filename": "sessions.csv"})
+    result = dispatch(load_operations("imports")["import_parse_file"], {"pk": "athlete-1", "base64_content": base64.b64encode(b"date,exercise\n2026-09-15,Squat\n").decode(), "filename": "sessions.csv", "import_type": "session_import"})
 
     assert result == {"import_id": "import-new", "classification": "session_import", "warnings": [], "parse_notes": "ok"}
     assert imports.staged[0]["source_filename"] == "sessions.csv"

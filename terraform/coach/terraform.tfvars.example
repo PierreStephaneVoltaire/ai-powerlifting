@@ -22,7 +22,7 @@ operation_ai = {
   multi_block_comparison_analysis = { provider = "", model = "", effort = "" }
   program_evaluation              = { provider = "", model = "", effort = "" }
   template_evaluate               = { provider = "", model = "", effort = "" }
-  import_parse_file               = { provider = "", model = "", effort = "" }
+  import_parse_file               = { provider = "chatgpt", model = "gpt-6-astra", effort = "high" }
   lift_profile_suggest            = { provider = "", model = "", effort = "" }
   lift_profile_estimate_stimulus  = { provider = "", model = "", effort = "" }
   glossary_estimate_muscles       = { provider = "", model = "", effort = "" }

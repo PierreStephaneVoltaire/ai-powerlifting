@@ -8,12 +8,17 @@ export async function uploadImport(req: Request, res: Response) {
   if (!req.file) {
     throw new AppError('No file uploaded', 400)
   }
+  const importType = req.body?.import_type
+  if (importType !== 'template' && importType !== 'session_import') {
+    throw new AppError('Choose whether to import this file as a reusable template or dated sessions', 400)
+  }
 
   const base64_content = req.file.buffer.toString('base64')
   const filename = req.file.originalname
+  const import_instructions = typeof req.body?.import_instructions === 'string' ? req.body.import_instructions.slice(0, 4000) : ''
 
   try {
-    const result = await invokeToolDirect('import_parse_file', { base64_content, filename, pk: req.mapped_pk })
+    const result = await invokeToolDirect('import_parse_file', { base64_content, filename, import_type: importType, import_instructions, pk: req.mapped_pk })
     res.status(201).json(result)
   } catch (err: any) {
     throw new AppError(`Import failed: ${err.message}`, 502)

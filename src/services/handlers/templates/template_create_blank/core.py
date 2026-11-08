@@ -131,8 +131,8 @@ def _prepare_template_payload(template):
     }
     return prepared
 
-async def template_create_blank(name, description="", estimated_weeks=4, days_per_week=3, actor_pk=None, author=None):
-    template = {"meta": {"name": name, "description": description, "estimated_weeks": estimated_weeks, "days_per_week": days_per_week, "archived": False}, "phases": [], "sessions": [], "glossary_resolution": {"resolved": [], "unresolved": [], "auto_added": [], "resolution_status": "resolved"}, "required_maxes": []}
+async def template_create_blank(name, description="", estimated_weeks=4, days_per_week=3, actor_pk=None, author=None, program_context=""):
+    template = {"meta": {"name": name, "description": description, "program_context": program_context, "estimated_weeks": estimated_weeks, "days_per_week": days_per_week, "archived": False}, "phases": [], "sessions": [], "glossary_resolution": {"resolved": [], "unresolved": [], "auto_added": [], "resolution_status": "resolved"}, "required_maxes": []}
     ts = _get_template_store()
     resolved_actor = _template_actor(actor_pk)
     sk = await ts.put_template(_prepare_template_payload(template), actor_pk=resolved_actor, author=_template_author(author, resolved_actor), published=False)

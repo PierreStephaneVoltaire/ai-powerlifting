@@ -358,7 +358,7 @@
   {
     "name": "import_parse_file",
     "domain": "imports",
-    "description": "Parse and stage a CSV or XLSX training import for review.",
+    "description": "Parse a CSV or XLSX training import; template uploads create an editable draft before the background job completes.",
     "handler": "services.handlers.imports.import_parse_file.handler",
     "input_schema": {
       "type": "object",
@@ -371,6 +371,28 @@
           "type": "string",
           "minLength": 1
         },
+        "template_import": {
+          "type": "boolean"
+        },
+        "import_type": {
+          "type": "string",
+          "enum": [
+            "template",
+            "session_import"
+          ]
+        },
+        "import_instructions": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "actor_pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1
+        },
         "pk": {
           "type": "string",
           "minLength": 1
@@ -378,7 +400,8 @@
       },
       "required": [
         "base64_content",
-        "filename"
+        "filename",
+        "import_type"
       ],
       "additionalProperties": false
     },
@@ -399,6 +422,9 @@
           "type": "array"
         },
         "parse_notes": {
+          "type": "string"
+        },
+        "template_sk": {
           "type": "string"
         }
       },

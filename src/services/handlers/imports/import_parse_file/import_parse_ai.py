@@ -40,12 +40,13 @@ def _sanitize(value: Any) -> Any:
     return value
 
 
-async def generate_import_parse_report(file_content, file_name, classification, athlete_context=None):
+async def generate_import_parse_report(file_content, file_name, classification, athlete_context=None, import_instructions=""):
     user_message = json.dumps({
         "file_content": file_content,
         "file_name": file_name,
         "classification": classification,
         "athlete_context": athlete_context or {},
+        "import_instructions": import_instructions or "Not provided.",
     }, indent=2, default=str)
     try:
         response = await completion({

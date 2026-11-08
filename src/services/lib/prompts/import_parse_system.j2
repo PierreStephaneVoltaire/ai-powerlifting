@@ -11,6 +11,10 @@ OUTPUT RULES:
 - If a field is genuinely absent, use null — do not guess.
 - Weeks must be relative integers (1, 2, 3...) for templates.
   For session imports, use ISO date strings (YYYY-MM-DD).
+- For template imports, ignore all calendar dates and competition dates. Use relative week labels and weekdays only; set every session date to null and do not mention calendar dates, competition timing, or timeline calculations in parse_notes.
+- In template spreadsheets, treat `_relative_week` and `week_N` fields as relative week numbers and `_day_of_week` as the training weekday.
+- Treat import_instructions as guidance for interpreting the file, but never invent values that are not supported by its contents.
+- Use canonical glossary names for competition lifts. For example, parse "Bench heavy single" as name "Bench Press" with "Heavy single" in notes; put prescription adjectives and set labels in notes, not in the exercise name. Preserve real variations such as "Paused Bench Press" as separate exercise names.
 
 WARNINGS to include in output:
 - absolute_weights_in_template: list of exercises with hard kg in a template file

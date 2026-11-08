@@ -24,6 +24,16 @@ export function TemplateMetaEditor({ meta, onChange, disabled }: Props) {
         minRows={2}
         disabled={disabled}
       />
+      <Textarea
+        label="Program Context"
+        description="Saved with this template and used by its AI evaluation."
+        value={meta.program_context ?? ''}
+        onChange={(e) => onChange({ ...meta, program_context: e.currentTarget.value })}
+        autosize
+        minRows={2}
+        maxLength={4000}
+        disabled={disabled}
+      />
       <TextInput
         type="number"
         label="Estimated Weeks"

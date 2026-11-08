@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import * as importController from '../controllers/importController'
+import { restoreOperationScope } from '../utils/operationScope'
 
 export const importRouter = Router()
 const upload = multer({
@@ -17,7 +18,7 @@ const upload = multer({
 })
 
 // POST /api/import/upload
-importRouter.post('/upload', upload.single('file'), importController.uploadImport)
+importRouter.post('/upload', upload.single('file'), restoreOperationScope, importController.uploadImport)
 
 // GET /api/import/pending
 importRouter.get('/pending', importController.listPendingImports)

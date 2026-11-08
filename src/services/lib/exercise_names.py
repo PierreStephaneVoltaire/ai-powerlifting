@@ -21,6 +21,15 @@ def competition_lift(name: str) -> str | None:
     return None
 
 
+def canonicalize_competition_lift(name: str) -> tuple[str, str]:
+    lift = competition_lift(name)
+    if not lift:
+        return name, ""
+    prefix = re.match(r"\s*(?:bench\s+press|bench|squat|deadlift)\b", name, re.IGNORECASE)
+    prescription = name[prefix.end():].strip(" \t\r\n-–—:()[]") if prefix else ""
+    return GLOSSARY_NAMES[lift], prescription
+
+
 def glossary_entry_for(name: str, glossary: list[dict]) -> dict | None:
     by_name = {normalize(entry.get("name")): entry for entry in glossary if entry.get("name")}
     entry = by_name.get(normalize(name))

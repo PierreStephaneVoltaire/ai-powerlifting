@@ -35,7 +35,7 @@ export const Step2_Classification: React.FC<Props> = ({
       <Paper withBorder p="lg" radius="md" style={{ width: '100%', maxWidth: 500 }}>
         <Stack align="center" gap="md">
           <Text size="lg" fw={500}>
-            {classificationOverride ? 'Classification (manual)' : 'Classification Detected'}
+            {classificationOverride ? 'Import Type (changed)' : 'Import Type Selected'}
           </Text>
 
           <Badge size="xl" color={classification === 'template' ? 'blue' : 'green'}>

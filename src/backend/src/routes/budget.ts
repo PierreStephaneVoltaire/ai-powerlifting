@@ -5,6 +5,7 @@ import * as competitionController from '../controllers/competitionController'
 import { cacheGet, invalidateAfter } from '../utils/cacheMiddleware'
 import type { BudgetCategory, BudgetPriorityTier } from '@powerlifting/types'
 import { serveStoredMedia } from '../utils/serveMedia'
+import { restoreOperationScope } from '../utils/operationScope'
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -100,7 +101,7 @@ budgetRouter.delete('/items/:id', invalidateAfter(['budget']), async (req, res, 
   }
 })
 
-budgetRouter.post('/items/:itemId/photo', upload.single('photo'), async (req, res, next) => {
+budgetRouter.post('/items/:itemId/photo', upload.single('photo'), restoreOperationScope, async (req, res, next) => {
   try {
     const file = req.file
     if (!file) {

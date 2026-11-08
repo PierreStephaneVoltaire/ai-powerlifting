@@ -1,5 +1,6 @@
 import React from 'react'
-import { Card, Text, Stack, Group, Badge, List, Button, Loader, Textarea } from '@mantine/core'
+import axios from 'axios'
+import { Alert, Card, Text, Stack, Group, Badge, List, Button, Loader } from '@mantine/core'
 import { AiTemplateEvaluation } from '@powerlifting/types'
 import { evaluateTemplate } from '../../api/client'
 
@@ -13,32 +14,20 @@ interface Props {
 
 export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, programContext = '', onRefresh, readOnly = false }) => {
   const [loading, setLoading] = React.useState(false)
-  const [context, setContext] = React.useState(programContext)
-
-  React.useEffect(() => setContext(programContext), [programContext])
-
-  const contextField = (
-    <Textarea
-      label="Program context"
-      description="What this program is meant to do, so the analysis judges it against your intent"
-      placeholder="e.g. Overreaching peak; squat, bench and deadlift each progress on their own schedule"
-      value={context}
-      onChange={(event) => setContext(event.currentTarget.value)}
-      autosize
-      minRows={2}
-      maxLength={4000}
-      disabled={readOnly || loading}
-    />
-  )
+  const [error, setError] = React.useState<string | null>(null)
 
   const handleEvaluate = async () => {
     if (readOnly) return
     setLoading(true)
+    setError(null)
     try {
-      await evaluateTemplate(sk, context)
+      await evaluateTemplate(sk, programContext)
       onRefresh()
     } catch (err) {
-      console.error(err)
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.error || err.message
+        : err instanceof Error ? err.message : 'Template evaluation failed'
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -48,7 +37,7 @@ export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, programContex
     return (
       <Card withBorder padding="lg" radius="md">
         <Stack gap="md">
-          {contextField}
+          {error && <Alert color="red" title="Evaluation failed">{error}</Alert>}
           <Text c="dimmed" ta="center">No evaluation available yet.</Text>
           <Button onClick={handleEvaluate} disabled={readOnly}>Generate AI Evaluation</Button>
         </Stack>
@@ -70,6 +59,7 @@ export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, programContex
   return (
     <Card withBorder padding="lg" radius="md">
       <Stack gap="md">
+        {error && <Alert color="red" title="Evaluation failed">{error}</Alert>}
         <Group justify="space-between">
           <Text fw={700} size="lg">AI Evaluation</Text>
           <Badge color={evaluation?.stance === 'Recommended' ? 'green' : 'yellow'} size="lg">
@@ -103,7 +93,6 @@ export const EvaluationPanel: React.FC<Props> = ({ sk, evaluation, programContex
           </List>
         </Stack>
 
-        {contextField}
         <Button variant="subtle" size="xs" onClick={handleEvaluate} loading={loading} disabled={readOnly}>
           Re-evaluate
         </Button>

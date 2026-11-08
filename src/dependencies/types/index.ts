@@ -688,7 +688,10 @@ export interface TemplateImportJob {
   status: TemplateImportJobStatus
   filename?: string
   template_sk?: string
-  warnings?: any[]
+  classification?: ImportType
+  import_id?: string
+  parse_notes?: string
+  warnings?: { type: string; message: string; exercises?: string[] }[]
   error?: string
   author?: string
   author_pk?: string
