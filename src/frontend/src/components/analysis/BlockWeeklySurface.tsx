@@ -34,7 +34,7 @@ import type { Unit } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
 import { bestSetE1rm, mainLiftFor } from '@/utils/sbdE1rm'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
-import { toDisplayUnit, formatDisplayWeight } from '@/utils/units'
+import { toDisplayUnit, formatBodyweight, formatDisplayWeight } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { fetchGlossary, fetchWeightLog } from '@/api/client'
 import { fetchViewedWeightLog } from '@/api/profiles'
@@ -731,8 +731,8 @@ export function BlockWeeklySurface({
         <Paper withBorder p="md">
           <Group gap="xs" mb="sm"><Scale size={18} /><Text fw={500}>Body Weight Trend</Text></Group>
           <Group align="baseline" gap="md">
-            <Text fz="2rem" fw={700}>{formatDisplayWeight(weightTrend.latest, unit)} {unit}</Text>
-            <Text fz="sm" fw={500} c={weightTrend.change >= 0 ? 'yellow' : 'green'}>{weightTrend.change >= 0 ? '+' : ''}{formatDisplayWeight(Math.abs(weightTrend.change), unit)} {unit} over {analysisWindow.weeks} wk{analysisWindow.weeks !== 1 ? 's' : ''}</Text>
+            <Text fz="2rem" fw={700}>{formatBodyweight(weightTrend.latest, unit)} {unit}</Text>
+            <Text fz="sm" fw={500} c={weightTrend.change >= 0 ? 'yellow' : 'green'}>{weightTrend.change >= 0 ? '+' : ''}{formatBodyweight(Math.abs(weightTrend.change), unit)} {unit} over {analysisWindow.weeks} wk{analysisWindow.weeks !== 1 ? 's' : ''}</Text>
           </Group>
         </Paper>
       )}

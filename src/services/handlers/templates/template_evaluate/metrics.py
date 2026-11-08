@@ -198,5 +198,5 @@ def template_metrics(template: dict, glossary_exercises: list[dict], current_max
 
 def strip_calendar(template: dict) -> dict:
     sessions = [{key: value for key, value in session.items() if key not in ("date", "id")} for session in template.get("sessions") or []]
-    meta = {key: value for key, value in (template.get("meta") or {}).items() if key in ("name", "description", "program_context", "estimated_weeks", "days_per_week")}
+    meta = {key: value for key, value in (template.get("meta") or {}).items() if key in ("name", "program_context", "estimated_weeks", "days_per_week")}
     return {"meta": meta, "phases": template.get("phases") or [], "sessions": sessions}

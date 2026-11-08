@@ -25,7 +25,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
 import { estimateSetE1rm } from '@/utils/rpe'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
-import { toDisplayUnit, formatDisplayWeight } from '@/utils/units'
+import { toDisplayUnit, formatBodyweight, formatDisplayWeight } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
 import { parseWeekNumber, programWeekEndDate, programWeekStartDate, resolveTrainingWeekForDate, trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { userCompToCompetition } from '@/utils/competitions'
@@ -1756,16 +1756,16 @@ export default function AnalysisPage() {
                 <Text fw={500}>Body Weight Trend</Text>
               </Group>
               <Group align="baseline" gap="md">
-                <Text fz="2rem" fw={700}>{formatDisplayWeight(weightTrend.latest, unit)} {unit}</Text>
+                <Text fz="2rem" fw={700}>{formatBodyweight(weightTrend.latest, unit)} {unit}</Text>
                 <Text fz="sm" fw={500} c={weightTrend.change >= 0 ? 'yellow' : 'green'}>
-                  {weightTrend.change >= 0 ? '+' : ''}{formatDisplayWeight(Math.abs(weightTrend.change), unit)} {unit} over {effectiveWeeks} wk{effectiveWeeks !== 1 ? 's' : ''}
+                  {weightTrend.change >= 0 ? '+' : ''}{formatBodyweight(Math.abs(weightTrend.change), unit)} {unit} over {effectiveWeeks} wk{effectiveWeeks !== 1 ? 's' : ''}
                 </Text>
               </Group>
               <SimpleGrid cols={{ base: 4, md: 8 }} mt="sm">
                 {weightTrend.entries.map(e => (
                   <Stack key={e.date} gap={2} ta="center">
                     <Text fz="xs" c="dimmed">{e.date.slice(5)}</Text>
-                    <Text fz="sm" fw={500}>{formatDisplayWeight(e.kg, unit)}</Text>
+                    <Text fz="sm" fw={500}>{formatBodyweight(e.kg, unit)}</Text>
                   </Stack>
                 ))}
               </SimpleGrid>

@@ -16,6 +16,10 @@ function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
+function decimalPlaces(value: number): number {
+  return String(value).split('.')[1]?.length ?? 0
+}
+
 export function mergeBodyweightEntries(
   weightLog: WeightEntry[],
   sessions: Session[] = [],
@@ -68,10 +72,11 @@ export function buildBodyweightTrend(
 
   const oldest = scoped[0].kg
   const latest = scoped[scoped.length - 1].kg
+  const precision = Math.max(decimalPlaces(oldest), decimalPlaces(latest))
   return {
     latest,
     oldest,
-    change: latest - oldest,
+    change: Number((latest - oldest).toFixed(precision)),
     entries: scoped.slice(-maxEntries),
     count: scoped.length,
   }

@@ -54,4 +54,4 @@ def test_weekly_metrics_cover_specificity_muscles_fatigue_and_main_lift_intensit
 def test_strip_calendar_removes_dates_and_keeps_only_design_meta():
     stripped = strip_calendar(template([(1, [])]))
     assert "date" not in stripped["sessions"][0] and "id" not in stripped["sessions"][0]
-    assert stripped["meta"] == {"name": "Peak", "description": "parser notes", "program_context": "overreach"}
+    assert stripped["meta"] == {"name": "Peak", "program_context": "overreach"}
