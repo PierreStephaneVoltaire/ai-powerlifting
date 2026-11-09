@@ -18,6 +18,8 @@ TOKEN = "internal-token"
 SERVICES = Path(__file__).resolve().parents[1]
 AI_OPERATIONS = [record["name"] for path in sorted((SERVICES / "operations").glob("*.json")) for record in json.loads(path.read_text()) if record.get("execution") == "ai"]
 OPERATION_AI = {name: {"provider": "openrouter" if name == "glossary_estimate_e1rm" else "chatgpt", "model": "estimate-model" if name == "glossary_estimate_e1rm" else "analysis-model", "effort": "high"} for name in AI_OPERATIONS}
+OPERATION_AI["chat_guard"] = {"provider": "chatgpt", "model": "guard-model", "effort": "low"}
+GENERAL_ROUTE = json.dumps({"surface": "general", "template_name": None, "intent": "other", "standalone": True, "reason": "training question"})
 
 
 class FakeServices:
@@ -37,6 +39,8 @@ class FakeServices:
             assert principal_claims["operation"] == "domain_resume"
             assert body == {"challenge_id": "ch-1", "content": {"e1rm_kg": 200}}
             return httpx.Response(200, json={"status": "succeeded", "result": {"status": "estimated", "estimate": {"e1rm_kg": 200, "basis": "model"}}})
+        if request.url.path == "/operations/template_list":
+            return httpx.Response(200, json=[])
         if request.url.path == "/operations/calculate_dots":
             assert "x-if-turn-id" not in request.headers
             return httpx.Response(200, json={"dots": 412.5})
@@ -53,6 +57,8 @@ class FakeModel:
         self.app = None
 
     async def complete(self, ai, instructions, prompt):
+        if ai.model == "guard-model":
+            return GENERAL_ROUTE
         self.completions.append((instructions, prompt, ai))
         return "```json\n{\"e1rm_kg\": \"heavy\"}\n```" if len(self.completions) == 1 else "{\"e1rm_kg\": 200}"
 

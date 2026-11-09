@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from .coach_client import CoachClient
 from .gateway import Gateway, Relay
 from .store import Registration, RegistrationStore
+from .users import UserDirectory
 
 logger = logging.getLogger("coach.discord")
 
@@ -27,6 +28,10 @@ def persons_from_env() -> dict[str, str]:
     if operator:
         persons.setdefault(operator, os.getenv("OPERATOR_PERSON", "operator"))
     return persons
+
+
+def directory_from_env() -> UserDirectory:
+    return UserDirectory(table_name=os.getenv("IF_USER_TABLE", "if-user"), region=os.getenv("AWS_REGION", "ca-central-1"))
 
 
 def store_from_env() -> RegistrationStore:
@@ -47,10 +52,10 @@ def view(registration: Registration, gateway: Gateway) -> dict:
     }
 
 
-def create_app(store: RegistrationStore | None = None, coach: CoachClient | None = None, persons: dict[str, str] | None = None, internal_token: str | None = None, gateway: Gateway | None = None) -> FastAPI:
+def create_app(store: RegistrationStore | None = None, coach: CoachClient | None = None, persons: dict[str, str] | None = None, internal_token: str | None = None, gateway: Gateway | None = None, directory: UserDirectory | None = None) -> FastAPI:
     internal_token = os.getenv("INTERNAL_API_TOKEN", "") if internal_token is None else internal_token
     coach = coach or CoachClient(os.getenv("COACH_URL", "http://pl-coach:8000"), internal_token)
-    relay = Relay(coach, persons_from_env() if persons is None else persons)
+    relay = Relay(coach, persons_from_env() if persons is None else persons, directory_from_env() if persons is None and directory is None else directory)
     state = {"store": store, "gateway": gateway}
 
     @asynccontextmanager

@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from jsonschema import Draft202012Validator
 
-from services.lib import prompt_cache
+from services.lib import llm_log, prompt_cache
 
 
 current_execution = contextvars.ContextVar("domain_execution", default=None)
@@ -32,19 +32,6 @@ class DomainExecution:
 
 
 SPECIALIST_INSTRUCTION = "Use a native Specialist child to answer these messages. Return its structured result using domain_resume. Do not submit another IF job."
-JUDGE_INSTRUCTION = "Use a fresh powerlifting_coach Specialist child on the Luna model with low reasoning effort to answer these messages; it must search the prompt cache tool as instructed. Return its structured result using domain_resume. Do not submit another IF job."
-JUDGE_CONFIDENCE = 0.8
-JUDGE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "match_id": {"type": ["string", "null"]},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-    },
-    "required": ["match_id", "confidence"],
-    "additionalProperties": False,
-}
-
-
 async def _delegate(execution: DomainExecution, messages: list, tools: list, response_format: Any, instruction: str) -> dict[str, Any]:
     execution.ready.clear()
     execution.response = None
@@ -61,47 +48,29 @@ async def _delegate(execution: DomainExecution, messages: list, tools: list, res
     return response
 
 
-def _judge_messages(request: dict[str, Any], collection: str) -> list[dict[str, str]]:
-    return [
-        {"role": "system", "content": (
-            f"Decide whether a saved answer can be reused for the new request below. Search the prompt cache with the {prompt_cache.SEARCH_TOOL} tool "
-            f"using collection_name \"{collection}\" and a query describing the new request; search again with different wording if useful. "
-            "Each result holds a saved request and its entry_id in metadata. Reuse only when a saved request asks for the same thing about the same data, "
-            "so its answer would be just as correct and complete. Any difference in the underlying numbers, dates, sessions, or requested output means no match. "
-            "Return the matching entry_id as match_id, or null when nothing qualifies."
-        )},
-        {"role": "user", "content": json.dumps({"new_request": request}, default=str)},
-    ]
-
-
-async def _reusable(execution: DomainExecution, request: dict[str, Any]) -> dict[str, Any] | None:
-    hit = await asyncio.to_thread(prompt_cache.exact, execution.athlete, execution.operation, request)
-    if hit is not None:
-        return hit
-    if not await asyncio.to_thread(prompt_cache.has_entries, execution.athlete, execution.operation):
-        return None
-    judged = await _delegate(
-        execution,
-        _judge_messages(request, prompt_cache.collection(execution.athlete, execution.operation)),
-        [],
-        {"type": "json_schema", "json_schema": {"name": "prompt_cache_match", "schema": JUDGE_SCHEMA}},
-        JUDGE_INSTRUCTION,
-    )
-    verdict = json.loads(judged["choices"][0]["message"]["content"])
-    if verdict["confidence"] < JUDGE_CONFIDENCE or not verdict["match_id"]:
-        return None
-    return await asyncio.to_thread(prompt_cache.entry, execution.athlete, execution.operation, verdict["match_id"])
-
-
 async def completion(payload: dict[str, Any]) -> httpx.Response:
     execution = current_execution.get()
     if execution is None:
         raise RuntimeError("Domain AI requires an active IF execution; direct model calls are disabled")
     request = prompt_cache.cache_request(payload)
-    response = await _reusable(execution, request)
+    started = time.monotonic()
+    response = await asyncio.to_thread(prompt_cache.exact, execution.athlete, execution.operation, request)
+    cache_layer = "exact" if response is not None else "none"
     if response is None:
         response = await _delegate(execution, payload.get("messages", []), payload.get("tools", []), payload.get("response_format"), SPECIALIST_INSTRUCTION)
-        await prompt_cache.remember(execution.athlete, execution.operation, request, response)
+        await asyncio.to_thread(prompt_cache.remember, execution.athlete, execution.operation, request, response)
+    llm_log.emit(
+        "ai_request",
+        operation=execution.operation,
+        athlete=execution.athlete,
+        person=execution.person,
+        job_id=execution.job_id,
+        cache_layer=cache_layer,
+        request_hash=prompt_cache.request_hash(request),
+        latency_ms=round((time.monotonic() - started) * 1000),
+        request=request,
+        response=response,
+    )
     return httpx.Response(200, json=response, request=httpx.Request("POST", "http://native-delegation"))
 
 

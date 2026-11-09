@@ -14,6 +14,7 @@ from .model import CodexModel, Model
 from .runner import Runner
 from .services import PowerliftingServices, Scope, ServiceError
 from .store import TERMINAL, Job, Store
+from .surfaces import SURFACES
 
 
 SCOPE_KEYS = {"athlete", "pk", "user_pk", "mapped_pk", "person_pk", "_user_pk"}
@@ -30,6 +31,8 @@ class JobRequest(BaseModel):
 class TurnRequest(BaseModel):
     messages: list[dict[str, Any]] = Field(min_length=1)
     athlete: str = ""
+    surface: str | None = None
+    template_sk: str | None = None
 
 
 def _conflicting_scope(value: Any, athlete: str) -> bool:
@@ -146,7 +149,9 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
         athlete = request.athlete or _athlete_from(conversation_id, owner)
         if athlete != owner and not (await access(owner, athlete, "access_context", {})).get("permissions"):
             raise HTTPException(403, "No Grant for this Athlete")
-        return runner.submit_turn(owner, athlete, conversation_id, request.messages).view()
+        if request.surface and (request.surface not in SURFACES or not request.template_sk):
+            raise HTTPException(422, "A known surface and its template_sk are required together")
+        return runner.submit_turn(owner, athlete, conversation_id, request.messages, request.surface, request.template_sk).view()
 
     @app.delete("/v1/conversations/{conversation_id}")
     async def reset(conversation_id: str, owner: str = Depends(person)):
@@ -169,7 +174,7 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
         elif method == "ping":
             outcome = {}
         elif method == "tools/list":
-            outcome = {"tools": [{"name": op.name, "description": op.description, "inputSchema": op.input_schema} for op in runner.catalog.values()]}
+            outcome = {"tools": [{"name": op.name, "description": op.description, "inputSchema": op.input_schema} for op in runner.surface_tools(job).values()]}
         elif method == "tools/call":
             params = body.get("params") or {}
             try:

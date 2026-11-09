@@ -51,8 +51,8 @@ class FakeGlossaryStore:
 class TemplateContractTests(unittest.TestCase):
     def test_inventory_and_required_mutation_fields(self):
         operations = load_operations("templates")
-        self.assertEqual(len(operations), 15)
-        for name in ("template_archive", "template_publish", "template_unpublish", "template_apply_confirm"):
+        self.assertEqual(len(operations), 17)
+        for name in ("template_archive", "template_publish", "template_unpublish", "template_apply_confirm", "template_patch"):
             with self.subTest(name=name):
                 with self.assertRaises(ValidationError):
                     operations[name].validate_input({})

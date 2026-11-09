@@ -41,19 +41,30 @@ def _get_glossary(args):
     return GlossaryStore(os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"), pk=args["pk"], region=os.environ.get("AWS_REGION", "ca-central-1")).get_glossary_sync()
 
 
-async def _dispatch(args):
-    from .template_evaluate_ai import generate_template_evaluate_report
+def template_actor(args):
+    return args.get("actor_pk") or args.get("_person_pk") or args.get("pk")
+
+
+async def load_report(args):
     sk = args["sk"]
-    actor_pk = args.get("actor_pk") or args.get("pk")
+    actor_pk = template_actor(args)
     template = await _get_template_store().get_template(sk, actor_pk=actor_pk)
     if not template:
         raise ValueError(f"Template not found: {sk}")
-    context = args.get("context")
-    if context is None:
-        context = (template.get("meta") or {}).get("program_context") or ""
     program = await _get_program_store(args).get_program()
     glossary = await asyncio.to_thread(_get_glossary, args)
     metrics = await asyncio.to_thread(template_metrics, template, glossary, program.get("current_maxes") or {}, program.get("lift_profiles") or [])
+    return template, program, metrics
+
+
+async def _dispatch(args):
+    from .template_evaluate_ai import generate_template_evaluate_report
+    sk = args["sk"]
+    actor_pk = template_actor(args)
+    template, program, metrics = await load_report(args)
+    context = args.get("context")
+    if context is None:
+        context = (template.get("meta") or {}).get("program_context") or ""
     stripped = strip_calendar(template)
     stripped["meta"]["program_context"] = context
     report = await generate_template_evaluate_report(stripped, _athlete_context(program), metrics, context)

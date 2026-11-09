@@ -1,0 +1,100 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "title": "AI Calls and Caching",
+  "uid": "ai-calls",
+  "schemaVersion": 39,
+  "tags": ["loki", "ai"],
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "title": "AI requests by cache layer",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (cache_layer, operation) (count_over_time({namespace=\"$namespace\"} |= \"ai_request\" | json | event=\"ai_request\" [$__interval]))",
+          "legendFormat": "{{operation}} {{cache_layer}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "title": "Provider cached input share",
+      "type": "timeseries",
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum(sum_over_time({namespace=\"$namespace\"} |= \"llm_call\" | json | event=\"llm_call\" | unwrap cached_tokens [$__interval])) / sum(sum_over_time({namespace=\"$namespace\"} |= \"llm_call\" | json | event=\"llm_call\" | unwrap input_tokens [$__interval]))",
+          "legendFormat": "cached / input",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "title": "Model tokens by stage",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (stage, operation) (sum_over_time({namespace=\"$namespace\"} |= \"llm_call\" | json | event=\"llm_call\" | unwrap input_tokens [$__interval]))",
+          "legendFormat": "{{stage}} {{operation}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "title": "Chat turns by guard outcome and cache layer",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (guard, cache_layer) (count_over_time({namespace=\"$namespace\"} |= \"chat_turn\" | json | event=\"chat_turn\" [$__interval]))",
+          "legendFormat": "{{guard}} {{cache_layer}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 14, "w": 24, "x": 0, "y": 16},
+      "id": 5,
+      "title": "Chat turns",
+      "type": "logs",
+      "options": {"showTime": true, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "sortOrder": "Descending", "dedupStrategy": "none"},
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{namespace=\"$namespace\"} |= \"chat_turn\" | json | event=\"chat_turn\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "type": "query",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "query": "label_values(namespace)",
+        "current": {"text": "powerlifting", "value": "powerlifting"},
+        "refresh": 1
+      }
+    ]
+  }
+}

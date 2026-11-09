@@ -50,7 +50,7 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = load_system_prompt("program_evaluation_system")
+_SYSTEM_PROMPT = load_system_prompt("program_evaluation_system") + ("\n\n" + FORMULA_REFERENCE if FORMULA_REFERENCE else "")
 
 _TOOL_SCHEMA = {
     "type": "function",
@@ -305,7 +305,6 @@ def _build_user_message(program: dict[str, Any], federation_library: dict[str, A
         "planned_sessions": planned_sessions,
         "weekly_analysis": weekly_report,
         "exercise_roi": exercise_roi,
-        "formula_reference": FORMULA_REFERENCE,
     }
 
     return json.dumps(_sanitize_floats(payload), indent=2, default=str)

@@ -580,5 +580,11 @@
   },
   "note_detach": {
     "permission": "grants:write"
+  },
+  "template_report": {
+    "permission": "templates:read"
+  },
+  "template_patch": {
+    "permission": "templates:write"
   }
 }

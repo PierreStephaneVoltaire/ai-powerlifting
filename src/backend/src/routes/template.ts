@@ -27,6 +27,15 @@ templateRouter.post('/imports', upload.single('file'), restoreOperationScope, te
 templateRouter.get('/imports/:jobId', templateController.getTemplateImport)
 templateRouter.post('/imports/:jobId/apply', templateController.applyTemplateImport)
 
+// POST /api/templates/chat
+templateRouter.post('/chat', templateController.chatTemplates)
+
+// POST /api/templates/:sk/chat
+templateRouter.post('/:sk/chat', templateController.chatTemplate)
+
+// DELETE /api/templates/:sk/chat
+templateRouter.delete('/:sk/chat', templateController.resetTemplateChat)
+
 // GET /api/templates/:sk
 templateRouter.get('/:sk', templateController.getTemplate)
 

@@ -12,7 +12,7 @@ from services.lib.prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = load_system_prompt("template_evaluate_system")
+_SYSTEM_PROMPT = load_system_prompt("template_evaluate_system") + "\n\n" + FORMULA_REFERENCE
 
 _TOOL_SCHEMA = {
     "type": "function",
@@ -76,7 +76,6 @@ async def generate_template_evaluate_report(
         "template": template,
         "metrics": metrics or {},
         "athlete_context": athlete_context,
-        "formula_reference": FORMULA_REFERENCE,
     }, indent=2, default=_json_default)
 
     logger.info("[TemplateEvaluateAI] payload_chars=%s", len(user_msg))

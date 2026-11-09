@@ -40,6 +40,14 @@ class Job:
         }
 
 
+@dataclass
+class Binding:
+    surface: str
+    subject: str
+    locked: bool = False
+    preview_hash: str | None = None
+
+
 class Store:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,6 +58,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY, owner TEXT, athlete TEXT, kind TEXT, conversation_id TEXT,
                 payload TEXT, status TEXT, result TEXT, error TEXT, created_at INTEGER, updated_at INTEGER);
             CREATE TABLE IF NOT EXISTS threads (owner TEXT, conversation_id TEXT, thread_id TEXT, PRIMARY KEY (owner, conversation_id));
+            CREATE TABLE IF NOT EXISTS bindings (owner TEXT, conversation_id TEXT, surface TEXT, subject TEXT, locked INTEGER, preview_hash TEXT,
+                PRIMARY KEY (owner, conversation_id));
             """
         )
         self.db.execute("UPDATE jobs SET status='uncertain', error=? WHERE status IN ('queued', 'running')", (json.dumps({"code": "interrupted", "message": "Coach restarted during this job; check side effects before retrying"}),))
@@ -74,7 +84,7 @@ class Store:
     def update(self, job: Job) -> None:
         job.updated_at = int(time.time())
         with self.lock:
-            self.db.execute("UPDATE jobs SET status=?, result=?, error=?, updated_at=? WHERE job_id=?", (job.status, None if job.result is None else json.dumps(job.result, default=str), None if job.error is None else json.dumps(job.error), job.updated_at, job.job_id))
+            self.db.execute("UPDATE jobs SET payload=?, status=?, result=?, error=?, updated_at=? WHERE job_id=?", (json.dumps(job.payload, default=str), job.status, None if job.result is None else json.dumps(job.result, default=str), None if job.error is None else json.dumps(job.error), job.updated_at, job.job_id))
             self.db.commit()
 
     def thread(self, owner: str, conversation_id: str) -> str | None:
@@ -90,4 +100,18 @@ class Store:
     def forget_thread(self, owner: str, conversation_id: str) -> None:
         with self.lock:
             self.db.execute("DELETE FROM threads WHERE owner=? AND conversation_id=?", (owner, conversation_id))
+            self.db.execute("DELETE FROM bindings WHERE owner=? AND conversation_id=?", (owner, conversation_id))
+            self.db.commit()
+
+    def binding(self, owner: str, conversation_id: str) -> Binding | None:
+        with self.lock:
+            row = self.db.execute("SELECT surface, subject, locked, preview_hash FROM bindings WHERE owner=? AND conversation_id=?", (owner, conversation_id)).fetchone()
+        return Binding(surface=row[0], subject=row[1], locked=bool(row[2]), preview_hash=row[3]) if row else None
+
+    def bind(self, owner: str, conversation_id: str, binding: Binding | None) -> None:
+        with self.lock:
+            if binding is None:
+                self.db.execute("DELETE FROM bindings WHERE owner=? AND conversation_id=?", (owner, conversation_id))
+            else:
+                self.db.execute("INSERT OR REPLACE INTO bindings VALUES (?,?,?,?,?,?)", (owner, conversation_id, binding.surface, binding.subject, int(binding.locked), binding.preview_hash))
             self.db.commit()

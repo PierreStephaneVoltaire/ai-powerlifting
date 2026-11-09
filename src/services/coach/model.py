@@ -1,9 +1,12 @@
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+from services.lib import llm_log
 
 from .config import AISettings, Provider
 
@@ -101,12 +104,28 @@ class CodexModel:
         from openai_codex import ApprovalMode, AsyncCodex, Sandbox
 
         provider = self.providers[ai.provider]
+        started = time.monotonic()
         async with AsyncCodex(self._config(cwd, overrides, ai.provider)) as codex:
             if provider.subscription:
                 await self._check_subscription(codex)
             options = dict(model=ai.model, model_provider=None if provider.subscription else ai.provider, cwd=str(cwd), sandbox=Sandbox.read_only, approval_mode=ApprovalMode.deny_all, developer_instructions=instructions)
             thread = await codex.thread_resume(thread_id, **options) if thread_id else await codex.thread_start(ephemeral=ephemeral, **options)
             result = await thread.run(prompt, model=ai.model, effort=ai.effort)
+        llm_log.emit(
+            "llm_call",
+            model=ai.model,
+            provider=ai.provider,
+            effort=ai.effort,
+            thread_id=thread.id,
+            resumed=bool(thread_id),
+            status=getattr(result.status, "value", result.status),
+            error=result.error.message if result.error else None,
+            latency_ms=round((time.monotonic() - started) * 1000),
+            instructions=instructions,
+            prompt=prompt,
+            response=result.final_response,
+            **llm_log.usage_fields(result.usage),
+        )
         if result.error:
             raise ModelError("model_failed", result.error.message)
         if getattr(result.status, "value", result.status) != "completed":

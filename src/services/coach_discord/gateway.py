@@ -7,6 +7,7 @@ from discord import app_commands
 
 from .coach_client import CoachClient
 from .store import Registration
+from .users import Identity, UserDirectory
 
 logger = logging.getLogger("coach.discord.gateway")
 MESSAGE_LIMIT = 2000
@@ -39,29 +40,35 @@ def message_text(message) -> str:
     return f"{message.clean_content}\n\nAttachments:\n{listed}".strip()
 
 
-def conversation_for(person: str, channel_id: str) -> str:
-    return f"powerlifting:{person}:discord:{channel_id}"
+def conversation_for(athlete: str, channel_id: str) -> str:
+    return f"powerlifting:{athlete}:discord:{channel_id}"
 
 
 class Relay:
-    def __init__(self, coach: CoachClient, persons: dict[str, str]):
+    def __init__(self, coach: CoachClient, persons: dict[str, str], directory: UserDirectory | None = None):
         self.coach = coach
         self.persons = persons
+        self.directory = directory
         self.locks: dict[tuple[str, str], asyncio.Lock] = {}
 
-    def person(self, author_id: int | str) -> str | None:
-        return self.persons.get(str(author_id))
+    async def identity(self, author_id: int | str) -> Identity | None:
+        if self.directory:
+            mapped = await asyncio.to_thread(self.directory.resolve, author_id)
+            if mapped:
+                return mapped
+        person = self.persons.get(str(author_id))
+        return Identity(person=person, athlete=person) if person else None
 
     async def answer(self, message, text: str) -> None:
-        person = self.person(message.author.id)
-        if not person:
+        identity = await self.identity(message.author.id)
+        if not identity:
             await message.reply(NOT_LINKED, mention_author=False)
             return
         channel_id = str(message.channel.id)
-        async with self.locks.setdefault((person, channel_id), asyncio.Lock()):
+        async with self.locks.setdefault((identity.person, channel_id), asyncio.Lock()):
             try:
                 async with message.channel.typing():
-                    reply = await self.coach.ask(person, person, conversation_for(person, channel_id), text)
+                    reply = await self.coach.ask(identity.person, identity.athlete, conversation_for(identity.athlete, channel_id), text)
             except Exception as exc:
                 logger.exception("coach request failed")
                 reply = f"The Coach is unavailable right now ({type(exc).__name__})."
@@ -72,10 +79,10 @@ class Relay:
                 await message.channel.send(part)
 
     async def reset(self, author_id: int, channel_id: int) -> str:
-        person = self.person(author_id)
-        if not person:
+        identity = await self.identity(author_id)
+        if not identity:
             return NOT_LINKED
-        await self.coach.reset(person, conversation_for(person, str(channel_id)))
+        await self.coach.reset(identity.person, conversation_for(identity.athlete, str(channel_id)))
         return "Started a fresh Coach conversation for this channel."
 
 

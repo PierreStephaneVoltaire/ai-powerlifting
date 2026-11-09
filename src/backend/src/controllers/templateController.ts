@@ -1,6 +1,7 @@
+import { randomUUID } from 'crypto'
 import { Request, Response } from 'express'
 import { callOperation } from '../utils/operations'
-import { invokeToolDirect } from '../utils/agent'
+import { coachChat, invokeToolDirect, resetCoachChat, templateConversation } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 import { principalToken } from '../auth/principal'
 import { coachUrl } from '../utils/coachUrl'
@@ -288,4 +289,47 @@ export async function applyTemplateImport(req: Request, res: Response) {
   const { merge_strategy, conflict_resolutions, start_date, glossary_overrides, confirmed_auto_adds } = req.body || {}
   const applied = await callOperation('import_apply', { import_id: importId, classification_override: 'template', author: req.user.username || req.mapped_pk, pk: req.mapped_pk, merge_strategy, conflict_resolutions, start_date, glossary_overrides, confirmed_auto_adds })
   res.json({ ...result, ...applied, job_id: job.job_id, status: 'succeeded', filename: job.request?.payload?.arguments?.filename, template_sk: applied?.target_sk || applied?.template_sk || applied?.sk })
+}
+
+const CHAT_ID = /^[A-Za-z0-9_-]{1,64}$/
+
+function chatMessage(req: Request): string {
+  const message = req.body?.message
+  if (typeof message !== 'string' || !message.trim()) throw new AppError('message is required', 422, 'VALIDATION')
+  return message
+}
+
+export async function chatTemplate(req: Request, res: Response) {
+  const sk = normalizeTemplateSk(req.params.sk)
+  const message = chatMessage(req)
+  const conversation = templateConversation(req.mapped_pk || '', sk)
+  try {
+    const reply = await coachChat(conversation, message, { surface: 'template', template_sk: sk })
+    res.json({ conversation_id: conversation, reply })
+  } catch (err: any) {
+    throw new AppError(`Template chat failed: ${err.message}`, 502)
+  }
+}
+
+export async function chatTemplates(req: Request, res: Response) {
+  const message = chatMessage(req)
+  const chatId = req.body?.chat_id === undefined ? randomUUID() : String(req.body.chat_id)
+  if (!CHAT_ID.test(chatId)) throw new AppError('chat_id must be 1-64 letters, digits, - or _', 422, 'VALIDATION')
+  const conversation = templateConversation(req.mapped_pk || '', undefined, chatId)
+  try {
+    const reply = await coachChat(conversation, message)
+    res.json({ chat_id: chatId, conversation_id: conversation, reply })
+  } catch (err: any) {
+    throw new AppError(`Template chat failed: ${err.message}`, 502)
+  }
+}
+
+export async function resetTemplateChat(req: Request, res: Response) {
+  const sk = normalizeTemplateSk(req.params.sk)
+  try {
+    await resetCoachChat(templateConversation(req.mapped_pk || '', sk))
+    res.json({ reset: true })
+  } catch (err: any) {
+    throw new AppError(`Template chat reset failed: ${err.message}`, 502)
+  }
 }

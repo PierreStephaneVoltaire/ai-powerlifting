@@ -39,13 +39,18 @@ build {
       "apt-get update",
       "apt-get install -y --no-install-recommends ca-certificates git tini",
       "rm -rf /var/lib/apt/lists/*",
-      "mkdir -p /opt/powerlifting/services /var/lib/coach/codex"
+      "mkdir -p /opt/powerlifting/services/lib /var/lib/coach/codex"
     ]
   }
 
   provisioner "file" {
     sources     = ["../src/services/__init__.py", "../src/services/permissions.json", "../src/services/operations", "../src/services/coach"]
     destination = "/opt/powerlifting/services/"
+  }
+
+  provisioner "file" {
+    sources     = ["../src/services/lib/__init__.py", "../src/services/lib/llm_log.py", "../src/services/lib/valkey.py", "../src/services/lib/exercise_names.py", "../src/services/lib/template_patch.py"]
+    destination = "/opt/powerlifting/services/lib/"
   }
 
   provisioner "shell" {

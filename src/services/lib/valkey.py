@@ -23,9 +23,9 @@ def get_json(key: str) -> Optional[Any]:
     return json.loads(raw) if raw else None
 
 
-def set_json(key: str, value: Any) -> None:
+def set_json(key: str, value: Any, ttl: int | None = None) -> None:
     try:
-        client().set(key, json.dumps(value, default=str))
+        client().set(key, json.dumps(value, default=str), ex=ttl)
     except redis.RedisError as exc:
         logger.warning("Valkey write failed for %s: %s", key, exc)
 

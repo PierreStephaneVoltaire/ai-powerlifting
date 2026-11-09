@@ -130,6 +130,7 @@ providers:
     "node-exporter-full.json"     = file("${path.module}/dashboards/node-exporter-full.json")
     "kube-state-metrics.json"     = file("${path.module}/dashboards/kube-state-metrics.json")
     "kubernetes-pod-metrics.json" = file("${path.module}/dashboards/kubernetes-pod-metrics.json")
+    "ai-calls.json"               = file("${path.module}/dashboards/ai-calls.json")
   }
 }
 

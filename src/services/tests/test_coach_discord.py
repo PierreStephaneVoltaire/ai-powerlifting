@@ -244,3 +244,36 @@ def test_attachments_are_forwarded_as_links():
     message = SimpleNamespace(clean_content="form check", attachments=[SimpleNamespace(filename="squat.mp4", url="https://cdn.discordapp.com/a/squat.mp4")])
     assert message_text(message) == "form check\n\nAttachments:\n- squat.mp4: https://cdn.discordapp.com/a/squat.mp4"
     assert message_text(SimpleNamespace(clean_content="hi", attachments=[])) == "hi"
+
+
+class FakeUserTable:
+    def __init__(self, items):
+        self.items = items
+        self.scans = 0
+
+    def scan(self, FilterExpression, **_):
+        self.scans += 1
+        wanted = FilterExpression._values[1]
+        return {"Items": [item for item in self.items if item.get("discord_id") == wanted]}
+
+
+def test_user_table_mapping_is_checked_before_env_persons():
+    from services.coach_discord.users import UserDirectory
+    table = FakeUserTable([{"pk": "sir_simpalot", "mapped_pk": "operator", "discord_id": "7"}, {"pk": "Identity#x", "discord_id": "7"}])
+    coach = FakeCoach()
+    relay = Relay(coach, {"7": "operator"}, UserDirectory("if-user", "ca-central-1", table=table))
+    channel = FakeChannel(42)
+    asyncio.run(relay.answer(FakeMessage(7, channel), "hi"))
+    asyncio.run(relay.answer(FakeMessage(7, channel), "again"))
+    assert [ask[:3] for ask in coach.asked] == [("sir_simpalot", "operator", conversation_for("operator", "42"))] * 2
+    assert table.scans == 1
+    asyncio.run(relay.reset(7, 42))
+    assert coach.resets == [("sir_simpalot", conversation_for("operator", "42"))]
+
+
+def test_unmapped_or_ambiguous_discord_ids_fall_back_to_env_persons():
+    from services.coach_discord.users import UserDirectory
+    table = FakeUserTable([{"pk": "a", "discord_id": "7"}, {"pk": "b", "discord_id": "7"}])
+    coach = FakeCoach()
+    asyncio.run(Relay(coach, {"7": "person_a"}, UserDirectory("if-user", "ca-central-1", table=table)).answer(FakeMessage(7, FakeChannel(1)), "hi"))
+    assert coach.asked[0][:2] == ("person_a", "person_a")
