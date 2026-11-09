@@ -35,7 +35,7 @@ import type { AppRole, UserSettings } from '@/api/settings'
 import { getSettings } from '@/api/settings'
 import { onboardingStepFor } from './onboardingStep'
 import type { MasterFederation } from '@powerlifting/types'
-import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
+import { fromDisplayUnit, fromDisplayBodyweight, toDisplayBodyweight, toDisplayUnit } from '@/utils/units'
 import { readDraft, removeDraft, saveDraft } from '@/api/drafts'
 
 const ROLE_OPTIONS: { value: AppRole; label: string; description: string }[] = [
@@ -665,6 +665,8 @@ function AthleteBasicsStep(props: {
   const [unit, setUnit] = useState<'kg' | 'lb'>('kg')
   const display = (value: number | string) => typeof value === 'number' ? toDisplayUnit(value, unit) : value
   const kilograms = (value: number | string) => value === '' ? '' : fromDisplayUnit(Number(value), unit)
+  const bodyweightKilograms = (value: number | string) => value === '' ? '' : fromDisplayBodyweight(Number(value), unit)
+  const bodyweightDisplay = (value: number | string) => typeof value === 'number' ? toDisplayBodyweight(value, unit) : value
   const {
     sex,
     setSex,
@@ -711,8 +713,8 @@ function AthleteBasicsStep(props: {
       <NumberInput
         label={`Bodyweight (${unit})`}
         description="Current bodyweight, used for weight-class lookup."
-        value={display(bodyweight)}
-        onChange={(v) => setBodyweight(kilograms(v))}
+        value={bodyweightDisplay(bodyweight)}
+        onChange={(v) => setBodyweight(bodyweightKilograms(v))}
         min={toDisplayUnit(30, unit)}
         max={toDisplayUnit(300, unit)}
         decimalScale={1}

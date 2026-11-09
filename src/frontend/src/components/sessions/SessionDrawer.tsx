@@ -6,7 +6,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
 import { getDayOfWeek, parseLocalDate } from '@/utils/dates'
 import { format } from 'date-fns'
-import { toDisplayUnit, fromDisplayUnit } from '@/utils/units'
+import { toDisplayUnit, fromDisplayUnit, fromDisplayBodyweight, toDisplayBodyweight } from '@/utils/units'
 import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
 import { readDraft, removeDraftIfMatch, saveDraft, sessionDraftKey, type Draft } from '@/api/drafts'
@@ -1689,8 +1689,8 @@ export default function SessionDrawer({
                 value={localSession.body_weight_kg ?? null}
                 onValueChange={updateBodyWeight}
                 isValid={(value) => value > 0}
-                toDisplay={(kg) => toDisplayUnit(kg, unit as 'kg' | 'lb')}
-                fromDisplay={(value) => fromDisplayUnit(value, unit as 'kg' | 'lb')}
+                toDisplay={(kg) => toDisplayBodyweight(kg, unit as 'kg' | 'lb')}
+                fromDisplay={(value) => fromDisplayBodyweight(value, unit as 'kg' | 'lb')}
                 placeholder={unit}
                 size="sm"
                 classNames={{ input: 'if-control-input' }}

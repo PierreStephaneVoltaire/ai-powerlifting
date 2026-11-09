@@ -4100,6 +4100,7 @@ def weekly_analysis(
     weeks: int = 1,
     block: Optional[str] = None,
     glossary: list[dict] | None = None,
+    current_maxes: dict | None = None,
 ) -> dict:
     """Full weekly analysis — single entry point for tools and API."""
     meta = program.get("meta", {})
@@ -4293,7 +4294,7 @@ def weekly_analysis(
 
     comp_maxes_raw = _estimate_maxes_from_comps(program.get("competitions", []), reference_date=ref)
     session_maxes_raw = _estimate_maxes_from_sessions(completed_history_to_ref, reference_date=ref)
-    current_maxes_raw = comp_maxes_raw or session_maxes_raw
+    current_maxes_raw = current_maxes or comp_maxes_raw or session_maxes_raw
 
     target_rpe_mid = None
     if current_phase:
@@ -4353,7 +4354,7 @@ def weekly_analysis(
         "effective_training_weeks": sum(1 for d in deload_info_raw if d["effective_index"] >= 0),
     }
 
-    maxes_method = "comp_results" if comp_maxes_raw else ("session_estimated" if session_maxes_raw else "none")
+    maxes_method = "provided" if current_maxes else "comp_results" if comp_maxes_raw else ("session_estimated" if session_maxes_raw else "none")
     current_maxes_out: dict[str, Any] = {}
     if current_maxes_raw:
         for lk in ("squat", "bench", "deadlift"):

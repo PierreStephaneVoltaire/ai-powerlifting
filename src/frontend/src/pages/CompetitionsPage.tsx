@@ -24,7 +24,7 @@ import { useUiStore } from '@/store/uiStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { calculateDots } from '@/utils/dots'
-import { fromDisplayUnit, toDisplayUnit } from '@/utils/units'
+import { fromDisplayUnit, fromDisplayBodyweight, toDisplayBodyweight, toDisplayUnit } from '@/utils/units'
 import type {
   UserCompetition,
   UserCompetitionUpdate,
@@ -386,7 +386,7 @@ export default function CompetitionsPage() {
                       <Select label="Entry units" value={unit} data={[{ value: 'kg', label: 'Kilograms' }, { value: 'lb', label: 'Pounds' }]} onChange={(v) => { if (v && !isDisabled) setDraft(comp.master_id, { units: v as 'kg' | 'lb' }) }} disabled={readOnly || isCancelled} allowDeselect={false} />
                       <Select label="Your Status" value={view.user_status} data={STATUS_OPTIONS} onChange={(v) => { if (v && !isDisabled) setDraft(comp.master_id, { user_status: v as UserCompetition['user_status'] }) }} disabled={readOnly || isCancelled} />
                       <DraftNumberInput label={`Weight Class (${unit})`} value={view.weight_class_kg} toDisplay={(kg) => toDisplayUnit(kg, unit)} fromDisplay={(value) => fromDisplayUnit(value, unit)} isValid={isPositive} onValueChange={(next) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { weight_class_kg: next }) }} disabled={readOnly || isCancelled} />
-                      {view.user_status === 'completed' && <DraftNumberInput label={`Body Weight (${unit})`} value={view.body_weight_kg} toDisplay={(kg) => toDisplayUnit(kg, unit)} fromDisplay={(value) => fromDisplayUnit(value, unit)} isValid={isPositive} onValueChange={(next) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { body_weight_kg: next }) }} disabled={readOnly || isCancelled} />}
+                      {view.user_status === 'completed' && <DraftNumberInput label={`Body Weight (${unit})`} value={view.body_weight_kg} toDisplay={(kg) => toDisplayBodyweight(kg, unit)} fromDisplay={(value) => fromDisplayBodyweight(value, unit)} isValid={isPositive} onValueChange={(next) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { body_weight_kg: next }) }} disabled={readOnly || isCancelled} />}
                       <Checkbox mt={30} label="Hotel required" checked={view.hotel_required} onChange={(event) => { if (!readOnly && !isCancelled) setDraft(comp.master_id, { hotel_required: event.currentTarget.checked }) }} disabled={readOnly || isCancelled} />
                     </SimpleGrid>
                     <Stack gap="xs">
@@ -450,7 +450,7 @@ export default function CompetitionsPage() {
         <Stack gap="md">
           <Text size="sm" c="dimmed">Log the attempt card and meet-day context.</Text>
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-            <DraftNumberInput label={`Body Weight at Weigh-in (${completeForm.unit})`} value={completeForm.body_weight_kg || null} toDisplay={(kg) => toDisplayUnit(kg, completeForm.unit)} fromDisplay={(value) => fromDisplayUnit(value, completeForm.unit)} isValid={isPositive} onValueChange={(next) => setCompleteForm((p) => ({ ...p, body_weight_kg: next ?? 0 }))} disabled={readOnly} />
+            <DraftNumberInput label={`Body Weight at Weigh-in (${completeForm.unit})`} value={completeForm.body_weight_kg || null} toDisplay={(kg) => toDisplayBodyweight(kg, completeForm.unit)} fromDisplay={(value) => fromDisplayBodyweight(value, completeForm.unit)} isValid={isPositive} onValueChange={(next) => setCompleteForm((p) => ({ ...p, body_weight_kg: next ?? 0 }))} disabled={readOnly} />
             <DraftNumberInput label="Sleep before meet (hours)" value={completeForm.report.sleep_hours} isValid={(value) => value >= 0 && value <= 24} onValueChange={(next) => updateCompleteReport({ sleep_hours: next })} disabled={readOnly} />
             <DraftNumberInput label="Attempt selection grade" placeholder="1-5" value={completeForm.report.attempt_selection_grade} isValid={(value) => Number.isInteger(value) && value >= 1 && value <= 5} commitOnlyValid onValueChange={(next) => updateCompleteReport({ attempt_selection_grade: next as 1 | 2 | 3 | 4 | 5 | null })} disabled={readOnly} />
           </SimpleGrid>

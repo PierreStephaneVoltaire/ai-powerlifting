@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useUiStore } from '@/store/uiStore'
-import { displayWeight, fromDisplayUnit, kgToLb } from '@/utils/units'
+import { displayBodyweight, displayWeight, fromDisplayBodyweight, kgToLb } from '@/utils/units'
 import { daysUntil, formatDateShort } from '@/utils/dates'
 import { format, parse, subDays } from 'date-fns'
 import {
@@ -110,7 +110,7 @@ export default function WeightTracker() {
   const handleAddEntry = async () => {
     if (!newWeight || !newDate) return
 
-    const kg = fromDisplayUnit(Number(newWeight), unit)
+    const kg = fromDisplayBodyweight(Number(newWeight), unit)
     try {
       await api.addWeightEntry(version, { date: newDate, kg })
       setEntries((prev) => {
@@ -169,7 +169,7 @@ export default function WeightTracker() {
           <Group justify="space-between" align="flex-start">
             <div>
               <Text size="sm" c="dimmed">Current Weight</Text>
-              <Text fz="h1" fw={700}>{displayWeight(currentBW, unit)}</Text>
+              <Text fz="h1" fw={700}>{displayBodyweight(currentBW, unit)}</Text>
             </div>
             <div style={{ textAlign: 'right' }}>
               <Text size="sm" c="dimmed">Target Class</Text>
@@ -206,7 +206,7 @@ export default function WeightTracker() {
                   <TrendingDown size={20} />
                 )}
                 <Text fw={500}>
-                  {weightDelta.over ? '+' : ''}{displayWeight(Math.abs(weightDelta.kg), unit)} {weightDelta.over ? 'over' : 'under'}
+                  {weightDelta.over ? '+' : ''}{displayBodyweight(Math.abs(weightDelta.kg), unit)} {weightDelta.over ? 'over' : 'under'}
                 </Text>
               </Group>
             </Paper>
@@ -229,7 +229,7 @@ export default function WeightTracker() {
             </div>
             <div>
               <Text size="xs" c="dimmed">Peak Week Est.</Text>
-              <Text fw={700}>{peakWeekWeight ? displayWeight(peakWeekWeight, unit) : '\u2014'}</Text>
+              <Text fw={700}>{peakWeekWeight ? displayBodyweight(peakWeekWeight, unit) : '\u2014'}</Text>
             </div>
             <div>
               <Text size="xs" c="dimmed">Days to Confirm</Text>
@@ -296,7 +296,7 @@ export default function WeightTracker() {
                     <Text size="sm" c="dimmed">{entry.date}</Text>
                   </div>
                   <Group gap="sm">
-                    <Text fw={700}>{displayWeight(entry.kg, unit)}</Text>
+                    <Text fw={700}>{displayBodyweight(entry.kg, unit)}</Text>
                     <ActionIcon
                       variant="subtle"
                       color="gray"

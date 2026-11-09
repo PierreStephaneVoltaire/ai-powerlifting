@@ -7,6 +7,7 @@ from decimal import Decimal
 import logging
 from typing import Any
 
+from services.handlers.program.export_program_markdown.prompt_context import FORMULA_REFERENCE
 from services.lib.prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ async def generate_template_evaluate_report(
         "template": template,
         "metrics": metrics or {},
         "athlete_context": athlete_context,
+        "formula_reference": FORMULA_REFERENCE,
     }, indent=2, default=_json_default)
 
     logger.info("[TemplateEvaluateAI] payload_chars=%s", len(user_msg))

@@ -110,7 +110,7 @@ class TemplateContractTests(unittest.TestCase):
 
         ai = ModuleType("template_evaluate_ai")
         ai.generate_template_evaluate_report = evaluate
-        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(core, "_get_glossary", return_value=[]), patch.object(core, "_specificity_band", return_value=lambda weeks_out: None), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
+        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(core, "_get_glossary", return_value=[]), patch.dict(sys.modules, {"services.handlers.templates.template_evaluate.template_evaluate_ai": ai}):
             report = core.template_evaluate({"pk": "athlete-1", "actor_pk": "person-1", "sk": "template#1", **extra})
         return captured, template_store, report
 

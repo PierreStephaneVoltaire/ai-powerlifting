@@ -41,11 +41,6 @@ def _get_glossary(args):
     return GlossaryStore(os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"), pk=args["pk"], region=os.environ.get("AWS_REGION", "ca-central-1")).get_glossary_sync()
 
 
-def _specificity_band():
-    from services.handlers.analysis_reports.analytics import _specificity_expected_band
-    return _specificity_expected_band
-
-
 async def _dispatch(args):
     from .template_evaluate_ai import generate_template_evaluate_report
     sk = args["sk"]
@@ -58,7 +53,7 @@ async def _dispatch(args):
         context = (template.get("meta") or {}).get("program_context") or ""
     program = await _get_program_store(args).get_program()
     glossary = await asyncio.to_thread(_get_glossary, args)
-    metrics = template_metrics(template, glossary, program.get("current_maxes") or {}, _specificity_band())
+    metrics = await asyncio.to_thread(template_metrics, template, glossary, program.get("current_maxes") or {}, program.get("lift_profiles") or [])
     stripped = strip_calendar(template)
     stripped["meta"]["program_context"] = context
     report = await generate_template_evaluate_report(stripped, _athlete_context(program), metrics, context)
