@@ -39,9 +39,14 @@ resource "kubectl_manifest" "app_route" {
       hostnames  = [var.app_domain]
       rules = [
         {
+          matches     = [{ path = { type = "PathPrefix", value = "/oauth2" } }]
+          filters     = local.edge_filter
+          backendRefs = [{ name = "oauth2-proxy", port = 4180 }]
+        },
+        {
           matches     = [{ path = { type = "PathPrefix", value = "/api" } }]
           filters     = local.edge_filter
-          backendRefs = [{ name = "powerlifting-app-backend", port = 3005 }]
+          backendRefs = [{ name = "oauth2-proxy", port = 4180 }]
         },
         {
           matches     = [{ path = { type = "PathPrefix", value = "/" } }]

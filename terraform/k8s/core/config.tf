@@ -32,6 +32,7 @@ resource "kubernetes_config_map_v1" "app" {
     DISCORD_REDIRECT_URI                   = "https://${var.app_domain}/api/auth/discord/callback"
     AUTHENTIK_CLIENT_ID                    = var.authentik_client_id
     AUTHENTIK_ISSUER_URL                   = "https://${var.auth_domain}/application/o/${var.authentik_client_id}/"
+    AUTHENTIK_JWKS_URL                     = "http://authentik-server.${var.auth_namespace}.svc.cluster.local/application/o/${var.authentik_client_id}/jwks/"
     AUTHENTIK_REDIRECT_URI                 = "https://${var.app_domain}/api/auth/authentik/callback"
     COOKIE_DOMAIN                          = var.cookie_domain
     COOKIE_SECURE                          = "true"

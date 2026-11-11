@@ -15,10 +15,11 @@ resource "kubernetes_deployment_v1" "backend" {
 
     template {
       metadata {
-        labels = { app = "powerlifting-app-backend" }
+        labels = { app = "powerlifting-app-backend", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name            = "powerlifting-app-backend"
         automount_service_account_token = false
         enable_service_links            = false
 
@@ -33,6 +34,8 @@ resource "kubernetes_deployment_v1" "backend" {
 
           port {
             container_port = 3005
+            name           = "http"
+            protocol       = "TCP"
           }
 
           env_from {
@@ -93,6 +96,7 @@ resource "kubernetes_service_v1" "backend" {
   metadata {
     name      = "powerlifting-app-backend"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -101,6 +105,8 @@ resource "kubernetes_service_v1" "backend" {
     port {
       port        = 3005
       target_port = 3005
+      name        = "http"
+      protocol    = "TCP"
     }
   }
 }
@@ -122,10 +128,11 @@ resource "kubernetes_deployment_v1" "frontend" {
 
     template {
       metadata {
-        labels = { app = "powerlifting-app-frontend" }
+        labels = { app = "powerlifting-app-frontend", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name            = "powerlifting-app-frontend"
         automount_service_account_token = false
         enable_service_links            = false
 
@@ -140,6 +147,8 @@ resource "kubernetes_deployment_v1" "frontend" {
 
           port {
             container_port = 3001
+            name           = "http"
+            protocol       = "TCP"
           }
 
           resources {
@@ -174,6 +183,7 @@ resource "kubernetes_service_v1" "frontend" {
   metadata {
     name      = "powerlifting-app-frontend"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -182,6 +192,8 @@ resource "kubernetes_service_v1" "frontend" {
     port {
       port        = 3001
       target_port = 3001
+      name        = "http"
+      protocol    = "TCP"
     }
   }
 }

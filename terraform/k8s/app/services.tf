@@ -50,10 +50,11 @@ resource "kubernetes_deployment_v1" "service" {
 
     template {
       metadata {
-        labels = { app = each.key }
+        labels = { app = each.key, "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name             = each.key
         automount_service_account_token  = false
         enable_service_links             = false
         termination_grace_period_seconds = 30
@@ -93,6 +94,8 @@ resource "kubernetes_deployment_v1" "service" {
 
           port {
             container_port = 8000
+            name           = "http"
+            protocol       = "TCP"
           }
 
           resources {
@@ -134,6 +137,7 @@ resource "kubernetes_service_v1" "service" {
   metadata {
     name      = each.key
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -142,6 +146,8 @@ resource "kubernetes_service_v1" "service" {
     port {
       port        = 8000
       target_port = 8000
+      name        = "http"
+      protocol    = "TCP"
     }
   }
 }

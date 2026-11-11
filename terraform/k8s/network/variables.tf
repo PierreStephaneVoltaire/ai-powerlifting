@@ -5,3 +5,4 @@ variable "namespace" {
 variable "app_domain" {
   type = string
 }
+
