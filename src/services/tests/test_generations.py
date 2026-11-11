@@ -38,8 +38,6 @@ def test_native_submission_excludes_transient_access_and_keeps_acting_person(mon
     import httpx
     import jwt
     monkeypatch.setenv('IF_API_URL', 'http://native')
-    monkeypatch.setenv('INTERNAL_API_TOKEN', 'test-only')
-    monkeypatch.setenv('PL_PRINCIPAL_SECRET', 'principal-test-secret-never-used-outside-tests')
     sent = []
     class Client:
         def __init__(self, **kwargs):
@@ -51,19 +49,20 @@ def test_native_submission_excludes_transient_access_and_keeps_acting_person(mon
         async def post(self, url, **kwargs):
             sent.append(kwargs)
             return httpx.Response(202, json={'job_id': 'native', 'status': 'running'})
+    async def delegate(parent, athlete, operation, destination):
+        assert parent == 'caller-proof' and athlete == 'athlete-a' and destination == 'pl-coach'
+        return 'delegated'
+    monkeypatch.setattr(execution, 'delegated_principal', delegate)
     monkeypatch.setattr(execution.httpx, 'AsyncClient', Client)
-    asyncio.run(execution.submit(SimpleNamespace(name='template_parse', domain='templates'), {'pk': 'athlete-a', '_access': {'person_pk': 'coach'}, '_person_pk': 'coach'}, 'athlete-a', 'coach'))
+    asyncio.run(execution.submit(SimpleNamespace(name='template_parse', domain='templates'), {'pk': 'athlete-a', '_access': {'person_pk': 'coach'}, '_person_pk': 'coach', '_principal': 'caller-proof'}, 'athlete-a', 'coach'))
     assert sent[0]['json']['payload']['arguments'] == {'pk': 'athlete-a'}
     assert sent[0]['headers']['X-Person-Pk'] == 'coach'
-    claims = jwt.decode(sent[0]['headers']['X-PL-Principal'], options={'verify_signature': False})
-    assert claims['sub'] == 'coach' and claims['athlete'] == 'athlete-a'
+    assert sent[0]['headers']['X-PL-Principal'] == 'delegated'
 
 
 def test_report_submission_uses_access_for_source_before_persisting_payload(monkeypatch):
     import httpx
     monkeypatch.setenv('IF_API_URL', 'http://native')
-    monkeypatch.setenv('INTERNAL_API_TOKEN', 'test-only')
-    monkeypatch.setenv('PL_PRINCIPAL_SECRET', 'principal-test-secret-never-used-outside-tests')
     access = {'permissions': ['competition:read'], 'competition_scope': {'read': ['meet-a']}}
     seen = []
     async def source(arguments, athlete, operation):
@@ -87,8 +86,12 @@ def test_report_submission_uses_access_for_source_before_persisting_payload(monk
             return httpx.Response(202, json={'job_id': 'native', 'status': 'running'})
     monkeypatch.setattr(execution, 'report_source', source)
     monkeypatch.setattr(execution, 'GenerationStore', Store)
+    async def delegate(parent, athlete, operation, destination):
+        assert parent == 'caller-proof' and athlete == 'athlete-a' and destination == 'pl-coach'
+        return 'delegated'
+    monkeypatch.setattr(execution, 'delegated_principal', delegate)
     monkeypatch.setattr(execution.httpx, 'AsyncClient', Client)
-    asyncio.run(execution.submit(SimpleNamespace(name='program_evaluation', domain='analytics'), {'_access': access, '_person_pk': 'coach', 'program': {}}, 'athlete-a', 'coach'))
+    asyncio.run(execution.submit(SimpleNamespace(name='program_evaluation', domain='analytics'), {'_access': access, '_person_pk': 'coach', '_principal': 'caller-proof', 'program': {}}, 'athlete-a', 'coach'))
     assert seen == [{'_access': access, '_person_pk': 'coach', 'program': {}}]
 
 
@@ -118,8 +121,6 @@ def test_generation_poll_uses_current_person_instead_of_original_owner(monkeypat
     import httpx
     import jwt
     monkeypatch.setenv('IF_API_URL', 'http://native')
-    monkeypatch.setenv('INTERNAL_API_TOKEN', 'test-only')
-    monkeypatch.setenv('PL_PRINCIPAL_SECRET', 'principal-test-secret-never-used-outside-tests')
     class Store:
         def __init__(self, athlete):
             pass
@@ -134,12 +135,15 @@ def test_generation_poll_uses_current_person_instead_of_original_owner(monkeypat
             pass
         async def get(self, url, headers):
             assert headers['X-Person-Pk'] == 'current-person'
-            claims = jwt.decode(headers['X-PL-Principal'], options={'verify_signature': False})
-            assert claims['sub'] == 'current-person' and claims['athlete'] == 'athlete-a'
+            assert headers['X-PL-Principal'] == 'delegated'
             return httpx.Response(200, json={'status': 'running'}, request=httpx.Request('GET', url))
+    async def delegate(parent, athlete, operation, destination):
+        assert parent == 'caller-proof' and athlete == 'athlete-a' and operation == 'domain_job_read' and destination == 'pl-coach'
+        return 'delegated'
+    monkeypatch.setattr(generations, 'delegated_principal', delegate)
     monkeypatch.setattr(generations, 'GenerationStore', Store)
     monkeypatch.setattr(generations.httpx, 'AsyncClient', Client)
-    assert asyncio.run(generations.status('reference', 'athlete-a', 'current-person', {'is_self': True}))['status'] == 'running'
+    assert asyncio.run(generations.status('reference', 'athlete-a', 'current-person', {'is_self': True}, 'caller-proof'))['status'] == 'running'
 
 
 def test_cached_generation_reference_rechecks_source_domains_and_competition_ties(monkeypatch):

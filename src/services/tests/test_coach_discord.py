@@ -8,7 +8,17 @@ from services.coach_discord.app import create_app
 from services.coach_discord.gateway import NOT_LINKED, Relay, chunks, conversation_for
 from services.coach_discord.store import Registration, RegistrationStore
 
-TOKEN = "internal"
+ACCESS = {'X-PL-Access-Context': json.dumps({'workload': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'})}
+
+
+class Directory:
+    def __init__(self, people):
+        self.people = people
+
+    def resolve(self, discord_id):
+        from services.coach_discord.users import Identity
+        person = self.people.get(str(discord_id))
+        return Identity(person, person) if person else None
 
 
 class FakeTable:
@@ -61,11 +71,11 @@ class FakeCoach:
         self.asked = []
         self.resets = []
 
-    async def ask(self, person, athlete, conversation_id, text):
+    async def ask(self, person, athlete, conversation_id, text, discord_subject):
         self.asked.append((person, athlete, conversation_id, text))
         return self.reply
 
-    async def reset(self, person, conversation_id):
+    async def reset(self, person, athlete, conversation_id, discord_subject):
         self.resets.append((person, conversation_id))
 
 
@@ -123,7 +133,7 @@ def test_store_ignores_other_partitions_activity_rows_and_inactive_on_startup_li
 
 
 def client_with(store, gateway):
-    return TestClient(create_app(store=store, coach=FakeCoach(), persons={}, internal_token=TOKEN, gateway=gateway))
+    return TestClient(create_app(store=store, coach=FakeCoach(), directory=Directory({}), gateway=gateway))
 
 
 def test_startup_opens_sockets_for_active_registrations_only():
@@ -136,25 +146,25 @@ def test_startup_opens_sockets_for_active_registrations_only():
         assert inactive.webhook_id not in gateway.attached
 
 
-def test_register_requires_internal_token_and_starts_listening_without_returning_the_token():
+def test_register_requires_verified_gateway_and_starts_listening_without_returning_the_token():
     store, gateway = store_with(), FakeGateway()
     with client_with(store, gateway) as client:
-        assert client.post("/v1/servers", json={"label": "workout", "bot_token": "secret", "channel_id": "42"}).status_code == 401
-        response = client.post("/v1/servers", json={"label": "workout", "bot_token": "secret", "channel_id": "42"}, headers={"X-Internal-Token": TOKEN})
+        assert client.post("/v1/servers", json={"label": "workout", "bot_token": "secret", "channel_id": "42"}).status_code == 403
+        response = client.post("/v1/servers", json={"label": "workout", "bot_token": "secret", "channel_id": "42"}, headers=ACCESS)
         assert response.status_code == 200
         body = response.json()
         assert body["listening"] is True and "secret" not in json.dumps(body)
         assert gateway.attached == [body["webhook_id"]]
-        listed = client.get("/v1/servers", headers={"X-Internal-Token": TOKEN}).json()
+        listed = client.get("/v1/servers", headers=ACCESS).json()
         assert "secret" not in json.dumps(listed)
-        assert client.delete(f"/v1/servers/{body['webhook_id']}", headers={"X-Internal-Token": TOKEN}).json()["status"] == "inactive"
+        assert client.delete(f"/v1/servers/{body['webhook_id']}", headers=ACCESS).json()["status"] == "inactive"
         assert gateway.detached == [body["webhook_id"]]
         assert store.get(body["webhook_id"]).status == "inactive"
 
 
 def test_linked_author_gets_the_coach_reply_in_chunks():
     coach = FakeCoach(reply="x" * 2500)
-    relay = Relay(coach, {"7": "person_a"})
+    relay = Relay(coach, Directory({"7": "person_a"}))
     channel = FakeChannel(42)
     message = FakeMessage(7, channel)
     asyncio.run(relay.answer(message, "how was my squat?"))
@@ -166,13 +176,13 @@ def test_linked_author_gets_the_coach_reply_in_chunks():
 def test_unlinked_author_is_told_and_coach_is_not_called():
     coach = FakeCoach()
     message = FakeMessage(9, FakeChannel())
-    asyncio.run(Relay(coach, {"7": "person_a"}).answer(message, "hi"))
+    asyncio.run(Relay(coach, Directory({"7": "person_a"})).answer(message, "hi"))
     assert message.replies == [NOT_LINKED] and coach.asked == []
 
 
 def test_reset_clears_the_channel_conversation():
     coach = FakeCoach()
-    text = asyncio.run(Relay(coach, {"7": "person_a"}).reset(7, 42))
+    text = asyncio.run(Relay(coach, Directory({"7": "person_a"})).reset(7, 42))
     assert coach.resets == [("person_a", conversation_for("person_a", "42"))] and "fresh" in text
 
 
@@ -193,7 +203,7 @@ def test_gateway_shares_one_socket_per_bot_token_and_closes_it_with_the_last_cha
     monkeypatch.setattr(Gateway, "_run", fake_run)
 
     async def scenario():
-        gateway = Gateway(Relay(FakeCoach(), {}))
+        gateway = Gateway(Relay(FakeCoach(), Directory({})))
         first = Registration(label="a", bot_token="bot-1", channel_id="1")
         second = Registration(label="b", bot_token="bot-1", channel_id="2")
         other = Registration(label="c", bot_token="bot-2", channel_id="3")
@@ -217,7 +227,7 @@ def test_real_discord_client_only_relays_human_messages_in_registered_channels()
 
     async def scenario():
         coach = FakeCoach()
-        gateway = Gateway(Relay(coach, {"7": "person_a"}))
+        gateway = Gateway(Relay(coach, Directory({"7": "person_a"})))
         key = token_key("bot-1")
         gateway.channels[key] = {"42"}
         client = gateway._client(key)
@@ -257,11 +267,11 @@ class FakeUserTable:
         return {"Items": [item for item in self.items if item.get("discord_id") == wanted]}
 
 
-def test_user_table_mapping_is_checked_before_env_persons():
+def test_user_table_mapping_preserves_person_and_athlete():
     from services.coach_discord.users import UserDirectory
     table = FakeUserTable([{"pk": "sir_simpalot", "mapped_pk": "operator", "discord_id": "7"}, {"pk": "Identity#x", "discord_id": "7"}])
     coach = FakeCoach()
-    relay = Relay(coach, {"7": "operator"}, UserDirectory("if-user", "ca-central-1", table=table))
+    relay = Relay(coach, UserDirectory("if-user", "ca-central-1", table=table))
     channel = FakeChannel(42)
     asyncio.run(relay.answer(FakeMessage(7, channel), "hi"))
     asyncio.run(relay.answer(FakeMessage(7, channel), "again"))
@@ -271,9 +281,9 @@ def test_user_table_mapping_is_checked_before_env_persons():
     assert coach.resets == [("sir_simpalot", conversation_for("operator", "42"))]
 
 
-def test_unmapped_or_ambiguous_discord_ids_fall_back_to_env_persons():
+def test_ambiguous_discord_ids_do_not_select_a_person():
     from services.coach_discord.users import UserDirectory
     table = FakeUserTable([{"pk": "a", "discord_id": "7"}, {"pk": "b", "discord_id": "7"}])
     coach = FakeCoach()
-    asyncio.run(Relay(coach, {"7": "person_a"}, UserDirectory("if-user", "ca-central-1", table=table)).answer(FakeMessage(7, FakeChannel(1)), "hi"))
-    assert coach.asked[0][:2] == ("person_a", "person_a")
+    asyncio.run(Relay(coach, UserDirectory("if-user", "ca-central-1", table=table)).answer(FakeMessage(7, FakeChannel(1)), "hi"))
+    assert coach.asked == []

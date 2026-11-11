@@ -17,11 +17,6 @@ variable "image_pull_secret" {
   type = string
 }
 
-variable "shared_secret_name" {
-  description = "Secret holding INTERNAL_API_TOKEN and PL_PRINCIPAL_SECRET for the Powerlifting Services"
-  type        = string
-}
-
 variable "aws_credentials_secret_name" {
   description = "Secret holding the AWS credentials and config files the Discord bot uses to read its registrations"
   type        = string

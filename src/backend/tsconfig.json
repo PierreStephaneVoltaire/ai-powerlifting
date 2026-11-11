@@ -4,10 +4,9 @@
     "outDir": "dist",
     "rootDir": "src",
     "module": "CommonJS",
-    "moduleResolution": "Node",
-    "paths": {
-      "openid-client/passport": ["../node_modules/openid-client/build/passport.d.ts"]
-    }
+    "moduleResolution": "Node"
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }
