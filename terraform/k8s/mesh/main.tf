@@ -39,7 +39,7 @@ resource "helm_release" "istiod" {
         port     = port
         timeout  = "2s"
         failOpen = false
-        includeRequestBodyInCheck = {
+        includeRequestBodyInCheck = destination == "pl-backend" ? null : {
           maxRequestBytes     = 10485760
           allowPartialMessage = false
           packAsBytes         = true

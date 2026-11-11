@@ -64,35 +64,3 @@ resource "kubectl_manifest" "app_route" {
 
   depends_on = [kubectl_manifest.gateway, kubectl_manifest.edge_headers]
 }
-
-resource "kubectl_manifest" "authentik_route" {
-  yaml_body = yamlencode({
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "HTTPRoute"
-    metadata   = { name = "authentik", namespace = var.namespace }
-    spec = {
-      parentRefs = [{ name = local.gateway_name }]
-      hostnames  = [var.auth_domain]
-      rules = [{
-        filters     = local.edge_filter
-        backendRefs = [{ name = "authentik-server", namespace = "if-portals", port = 9000 }]
-      }]
-    }
-  })
-
-  depends_on = [kubectl_manifest.gateway, kubectl_manifest.edge_headers, kubectl_manifest.authentik_reference]
-}
-
-resource "kubectl_manifest" "authentik_reference" {
-  yaml_body = yamlencode({
-    apiVersion = "gateway.networking.k8s.io/v1beta1"
-    kind       = "ReferenceGrant"
-    metadata   = { name = "powerlifting-authentik-route", namespace = "if-portals" }
-    spec = {
-      from = [{ group = "gateway.networking.k8s.io", kind = "HTTPRoute", namespace = var.namespace }]
-      to   = [{ group = "", kind = "Service", name = "authentik-server" }]
-    }
-  })
-
-  depends_on = [kubectl_manifest.gateway_api_crds]
-}

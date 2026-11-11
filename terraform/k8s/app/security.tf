@@ -365,6 +365,7 @@ resource "kubernetes_service_v1" "oauth2_proxy" {
 locals {
   security_operations = flatten([for filename in fileset("${path.module}/../../../src/services/operations", "*.json") : jsondecode(file("${path.module}/../../../src/services/operations/${filename}"))])
   ai_operations       = [for operation in local.security_operations : operation.name if try(operation.execution, "") == "ai"]
+  ai_domains          = toset([for operation in local.security_operations : operation.domain if try(operation.execution, "") == "ai"])
 
   security_destinations = merge(
     { "pl-security" = 9000, "pl-coach" = 9001 },
@@ -379,13 +380,15 @@ locals {
     { "cluster.local/ns/${var.namespace}/sa/pl-coach-discord" = "pl-coach-discord" },
     { "cluster.local/ns/${var.namespace}/sa/pl-security" = "pl-security" },
     { "cluster.local/ns/${var.namespace}/sa/pl-analytics" = "pl-analytics" },
+    { "cluster.local/ns/${var.namespace}/sa/oauth2-proxy" = "pl-oauth2-proxy" },
   )
 
   security_allowed_callers = merge(
     { "cluster.local/ns/${var.namespace}/sa/powerlifting-app-backend" = concat(["pl-security", "pl-coach", "pl-coach-discord"], [for name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}"]) },
-    { for name in ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "cluster.local/ns/${var.namespace}/sa/pl-${name}" => ["pl-security"] },
-    { "cluster.local/ns/${var.namespace}/sa/pl-analytics" = ["pl-security", "pl-budget", "pl-calculations", "pl-competition", "pl-federation", "pl-performance", "pl-profile", "pl-program", "pl-sessions", "pl-weight-log"] },
-    { "cluster.local/ns/${var.namespace}/sa/pl-coach" = ["pl-security", "pl-budget", "pl-calculations", "pl-competition", "pl-export", "pl-federation", "pl-glossary", "pl-goals", "pl-imports", "pl-lift-profiles", "pl-performance", "pl-profile", "pl-program", "pl-rankings", "pl-sessions", "pl-templates", "pl-videos", "pl-weight-log"] },
+    { "cluster.local/ns/${var.namespace}/sa/oauth2-proxy" = ["pl-backend"] },
+    { for name in ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "cluster.local/ns/${var.namespace}/sa/pl-${name}" => concat(["pl-security"], contains(local.ai_domains, name) ? ["pl-coach"] : []) },
+    { "cluster.local/ns/${var.namespace}/sa/pl-analytics" = ["pl-security", "pl-budget", "pl-calculations", "pl-competition", "pl-federation", "pl-performance", "pl-profile", "pl-program", "pl-sessions", "pl-weight-log", "pl-coach"] },
+    { "cluster.local/ns/${var.namespace}/sa/pl-coach" = ["pl-security", "pl-analytics", "pl-budget", "pl-calculations", "pl-competition", "pl-export", "pl-federation", "pl-glossary", "pl-goals", "pl-imports", "pl-lift-profiles", "pl-performance", "pl-profile", "pl-program", "pl-rankings", "pl-sessions", "pl-templates", "pl-videos", "pl-weight-log"] },
     { "cluster.local/ns/${var.namespace}/sa/pl-coach-discord" = ["pl-security", "pl-coach"] },
     { "cluster.local/ns/${var.namespace}/sa/pl-security" = [] },
   )

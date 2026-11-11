@@ -1,9 +1,8 @@
 # Kubernetes stacks
 
 The `kubernetes-apply` job on the in-cluster Actions runner applies core, perms,
-network and app after their images are published. It applies the separate mesh
-state only when `enable_ambient_mesh=true` is selected on a manual run. Coach
-resources remain a local operator apply.
+network, mesh and app after their images are published. Coach resources remain a
+local operator apply.
 
 | Stack | Holds |
 |---|---|
@@ -19,7 +18,7 @@ temporary file. It applies `core`, `perms`, `network`, optionally `mesh`, then
 `app`. It does not apply Coach resources. The in-cluster runner uses its
 service account for Kubernetes access. `TF_STATE_BUCKET` names the state bucket
 and AWS reads go through the OIDC deploy role. App workloads use dedicated
-service accounts. Ambient enrollment is off by default. The pods' AWS key belongs to the scoped
+service accounts and use Ambient enrollment. The pods' AWS key belongs to the scoped
 `powerlifting-pods` IAM user, created outside terraform and stored in SSM at
 `/powerlifting/k8s/aws-credentials`; no AWS key lives in any tfvars file or
 terraform state.

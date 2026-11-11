@@ -8,8 +8,6 @@ locals {
       oauth2-proxy              = { service = "oauth2-proxy", app = "oauth2-proxy", port = 4180, destination = "pl-oauth2-proxy" }
       pl-security               = { service = "pl-security", app = "pl-security", port = 8000, destination = "pl-security" }
       pl-analytics              = { service = "pl-analytics", app = "pl-analytics", port = 8000, destination = "pl-analytics" }
-      pl-coach                  = { service = "pl-coach", app = "pl-coach", port = 8000, destination = "pl-coach" }
-      pl-coach-discord          = { service = "pl-coach-discord", app = "pl-coach-discord", port = 8000, destination = "pl-coach-discord" }
     },
     { for name, service in kubernetes_service_v1.service : service.metadata[0].name => { service = service.metadata[0].name, app = service.spec[0].selector.app, port = 8000, destination = service.metadata[0].name } },
   )
