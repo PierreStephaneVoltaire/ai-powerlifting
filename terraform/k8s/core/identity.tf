@@ -133,6 +133,7 @@ resource "authentik_application" "powerlifting" {
   policy_engine_mode = "any"
 }
 
+
 resource "authentik_property_mapping_provider_scope" "verified_discord_subjects" {
   name       = "powerlifting-verified-discord-subjects"
   scope_name = "powerlifting_identity"
