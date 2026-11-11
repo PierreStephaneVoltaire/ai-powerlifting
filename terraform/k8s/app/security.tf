@@ -163,7 +163,7 @@ resource "kubernetes_deployment_v1" "security" {
           dynamic "port" {
             for_each = { for key, value in local.security_destinations : key => value if key != "pl-security" }
             content {
-              name           = "grpc-${replace(port.key, "pl-", "")}"
+              name           = "grpc-${substr(replace(port.key, "pl-", ""), 0, 11)}"
               container_port = port.value
               protocol       = "TCP"
             }
@@ -224,7 +224,7 @@ resource "kubernetes_service_v1" "security" {
     dynamic "port" {
       for_each = { for key, value in local.security_destinations : key => value if key != "pl-security" }
       content {
-        name        = "grpc-${replace(port.key, "pl-", "")}"
+        name        = "grpc-${substr(replace(port.key, "pl-", ""), 0, 11)}"
         port        = port.value
         target_port = port.value
         protocol    = "TCP"

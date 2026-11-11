@@ -8,7 +8,7 @@ locals {
   authz_destinations = merge(
     { "pl-security" = 9000, "pl-coach" = 9001 },
     { for index, name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}" => 9002 + index },
-    { "pl-coach-discord" = 9020 },
+    { "pl-coach-discord" = 9020, "pl-backend" = 9021 },
   )
 }
 
