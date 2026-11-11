@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+// Contract owned by pl-analytics. Consumers (pl-analytics-ai, pl-analytics-export) compile this file by relative path.
+package powerlifting.analytics.v1;
+
+import "google/protobuf/struct.proto";
+
+// AnalyticsData serves normalized athlete data and deterministic analytics reports to sibling services.
+// Callers must send the gRPC metadata x-internal-token, x-athlete-pk and x-person-pk, and the
+// athlete_pk in every request must equal x-athlete-pk.
+// Report bodies are google.protobuf.Struct and have exactly the JSON shape of the matching HTTP operation.
+service AnalyticsData {
+  // GetSnapshot returns the athlete's program, sessions, weight log, goals and competitions, already normalized.
+  rpc GetSnapshot(AthleteRef) returns (Snapshot);
+  // GetBlockBundle returns the analysis bundle of one block (analytics.blocks_get), computing it when it is not cached.
+  rpc GetBlockBundle(BlockRef) returns (Report);
+  // ListBlocks returns the block index with data quality flags (analytics.blocks_list).
+  rpc ListBlocks(AthleteRef) returns (BlockList);
+  // Compare returns the deterministic comparison of the selected blocks (analytics.compare).
+  rpc Compare(BlockKeys) returns (Report);
+  // Lifetime returns the holistic all-blocks report (analytics.lifetime).
+  rpc Lifetime(AthleteRef) returns (Report);
+  // CorrelationInputs returns the weekly e1RM and accessory volume series consumed by the AI correlation prompts.
+  rpc CorrelationInputs(BlockRef) returns (CorrelationInputsReply);
+}
+
+// AthleteRef selects one athlete.
+message AthleteRef {
+  // Athlete partition key.
+  string athlete_pk = 1;
+  // When true, cached records are ignored and recomputed.
+  bool refresh = 2;
+}
+
+// BlockRef selects one training block of one athlete.
+message BlockRef {
+  // Athlete partition key.
+  string athlete_pk = 1;
+  // Block key as returned by ListBlocks (for example "current" or "block_22869d7d72295e").
+  string block_key = 2;
+  // When true, cached records are ignored and recomputed.
+  bool refresh = 3;
+}
+
+// BlockKeys selects a set of blocks of one athlete.
+message BlockKeys {
+  // Athlete partition key.
+  string athlete_pk = 1;
+  // Blocks to compare. Empty means every past block plus the current block.
+  repeated string block_keys = 2;
+}
+
+// Snapshot is the normalized data of one athlete.
+message Snapshot {
+  // Program document without sessions: meta, phases, competitions, lift profiles, diet notes.
+  google.protobuf.Struct program = 1;
+  // Public (normalized) sessions in chronological order.
+  repeated google.protobuf.Struct sessions = 2;
+  // Bodyweight log entries.
+  repeated google.protobuf.Struct weight_log = 3;
+  // Athlete goals as stored.
+  repeated google.protobuf.Struct goals = 4;
+  // Competition entries merged with the program, normalized.
+  repeated google.protobuf.Struct competitions = 5;
+}
+
+// Report wraps one JSON report body.
+message Report {
+  // Report body; identical to the HTTP operation result.
+  google.protobuf.Struct body = 1;
+}
+
+// BlockList is the block index.
+message BlockList {
+  // One entry per block, in first-session order.
+  repeated google.protobuf.Struct blocks = 1;
+}
+
+// CorrelationInputsReply carries the series the AI correlation analysis reasons over.
+message CorrelationInputsReply {
+  // Block key the series belong to.
+  string block_key = 1;
+  // First date of the analysis window (YYYY-MM-DD).
+  string window_start = 2;
+  // Number of weeks in the block.
+  int32 weeks = 3;
+  // Weekly best estimated 1RM per competition lift, ordered by week number.
+  repeated WeeklyE1rm weekly_e1rm = 4;
+  // Weekly volume per accessory exercise, ordered by week number.
+  repeated WeeklyAccessoryVolume weekly_accessory = 5;
+  // Lift profiles of the athlete.
+  repeated google.protobuf.Struct lift_profiles = 6;
+  // Athlete measurements: height, wingspan, leg length, weight class, bodyweight.
+  google.protobuf.Struct athlete_measurements = 7;
+}
+
+// WeeklyE1rm is the best estimated 1RM per lift in one training week.
+message WeeklyE1rm {
+  // Block-local week number (1-based).
+  int32 week_number = 1;
+  // Best squat estimate in kg, absent when the lift was not trained.
+  optional double squat_kg = 2;
+  // Best bench estimate in kg, absent when the lift was not trained.
+  optional double bench_kg = 3;
+  // Best deadlift estimate in kg, absent when the lift was not trained.
+  optional double deadlift_kg = 4;
+}
+
+// WeeklyAccessoryVolume is the volume of accessory exercises in one training week.
+message WeeklyAccessoryVolume {
+  // Block-local week number (1-based).
+  int32 week_number = 1;
+  // One entry per accessory exercise trained that week.
+  repeated ExerciseVolume exercises = 2;
+}
+
+// ExerciseVolume is executed sets x reps x kg of one exercise.
+message ExerciseVolume {
+  // Exercise name as logged.
+  string name = 1;
+  // Volume in kg.
+  double volume_kg = 2;
+}

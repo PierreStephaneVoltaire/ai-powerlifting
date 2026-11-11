@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+// Contract owned by pl-analytics-ai. Consumers (pl-analytics) compile this file by relative path in build.rs.
+package powerlifting.analytics_ai.v1;
+
+// Reports exposes AI report generation owned by pl-analytics-ai.
+// Callers must send the gRPC metadata x-internal-token, x-athlete-pk and x-person-pk.
+service Reports {
+  // Regenerate forces a fresh AI correlation report and a fresh AI program evaluation for one training block.
+  // Individual report failures do not fail the call; they are reported through the result flags.
+  rpc Regenerate(BlockRef) returns (RegenerateResult);
+}
+
+// BlockRef identifies one training block of one athlete.
+message BlockRef {
+  // Athlete partition key whose data is analysed.
+  string athlete_pk = 1;
+  // Stable block key as returned by analytics.blocks_list (for example "current" or "block_22869d7d72295e").
+  string block_key = 2;
+}
+
+// RegenerateResult reports which AI sub-reports were regenerated.
+message RegenerateResult {
+  // True when the block correlation report was regenerated and saved.
+  bool correlation_regenerated = 1;
+  // True when the block program evaluation was regenerated and saved.
+  bool evaluation_regenerated = 2;
+  // UTC timestamp (RFC 3339) at which regeneration finished.
+  string generated_at = 3;
+}

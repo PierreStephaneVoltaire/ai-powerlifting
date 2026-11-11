@@ -8,7 +8,7 @@ import { coachUrl } from './coachUrl'
 type Operation = { name: string; domain: string }
 const SERVICE_BASE_URL = process.env.POWERLIFTING_SERVICE_BASE_URL
 const operations = new Map<string, Operation>()
-for (const domain of ['program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'profile', 'lift-profiles', 'analytics', 'videos', 'export', 'rankings']) {
+for (const domain of ['program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'profile', 'lift-profiles', 'analytics', 'analytics-ai', 'analytics-export', 'videos', 'export', 'rankings']) {
   const records = JSON.parse(readFileSync(resolve(__dirname, '../../../services/operations', `${domain}.json`), 'utf8')) as Operation[]
   for (const operation of records) {
     operations.set(operation.name, operation)
@@ -64,7 +64,7 @@ export async function callOperation(name: string, payload: Record<string, unknow
 export async function readGeneration(generationId: string, athlete: string): Promise<any> {
   const scope = operationScope.getStore()
   if (!scope || scope.athlete !== athlete) throw new AppError('Authenticated scope required', 401)
-  const response = await fetch(`${serviceUrl('analytics')}/generations/${encodeURIComponent(generationId)}`, { headers: serviceHeaders(scope) })
+  const response = await fetch(`${serviceUrl('analytics-ai')}/generations/${encodeURIComponent(generationId)}`, { headers: serviceHeaders(scope) })
   if (!response.ok) throw new Error(`Generation status failed ${response.status}: ${await response.text()}`)
   return response.json()
 }
