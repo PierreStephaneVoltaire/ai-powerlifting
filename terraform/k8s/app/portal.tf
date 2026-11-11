@@ -45,8 +45,33 @@ resource "kubernetes_deployment_v1" "backend" {
           }
 
           env_from {
-            secret_ref {
-              name = "powerlifting-app-secrets"
+            config_map_ref {
+              name = "powerlifting-app-config"
+            }
+          }
+
+          env {
+            name  = "PL_SECURITY_URL"
+            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
+          }
+
+          env {
+            name = "PL_PRINCIPAL_PUBLIC_KEY"
+            value_from {
+              secret_key_ref {
+                name = "pl-security-signing-key"
+                key  = "public_key"
+              }
+            }
+          }
+
+          env {
+            name = "MEDIA_SIGNING_PRIVATE_KEY"
+            value_from {
+              secret_key_ref {
+                name = "powerlifting-app-secrets"
+                key  = "MEDIA_SIGNING_PRIVATE_KEY"
+              }
             }
           }
 

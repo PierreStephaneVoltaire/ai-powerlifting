@@ -35,9 +35,9 @@ resource "helm_release" "istiod" {
     meshConfig = { extensionProviders = [for destination, port in local.authz_destinations : {
       name = "nolift-${destination}"
       envoyExtAuthzGrpc = {
-        service = "pl-security.${var.namespace}.svc.cluster.local"
-        port    = port
-        timeout = "2s"
+        service  = "pl-security.${var.namespace}.svc.cluster.local"
+        port     = port
+        timeout  = "2s"
         failOpen = false
         includeRequestBodyInCheck = {
           maxRequestBytes     = 10485760

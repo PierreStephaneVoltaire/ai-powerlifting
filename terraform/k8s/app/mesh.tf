@@ -3,11 +3,11 @@ locals {
 
   mesh_services = merge(
     {
-      powerlifting-app-backend = { service = "powerlifting-app-backend", app = "powerlifting-app-backend", port = 3005, destination = "pl-backend" }
+      powerlifting-app-backend  = { service = "powerlifting-app-backend", app = "powerlifting-app-backend", port = 3005, destination = "pl-backend" }
       powerlifting-app-frontend = { service = "powerlifting-app-frontend", app = "powerlifting-app-frontend", port = 3001, destination = "pl-frontend" }
-      oauth2-proxy = { service = "oauth2-proxy", app = "oauth2-proxy", port = 4180, destination = "pl-oauth2-proxy" }
-      pl-security = { service = "pl-security", app = "pl-security", port = 8000, destination = "pl-security" }
-      pl-analytics = { service = "pl-analytics", app = "pl-analytics", port = 8000, destination = "pl-analytics" }
+      oauth2-proxy              = { service = "oauth2-proxy", app = "oauth2-proxy", port = 4180, destination = "pl-oauth2-proxy" }
+      pl-security               = { service = "pl-security", app = "pl-security", port = 8000, destination = "pl-security" }
+      pl-analytics              = { service = "pl-analytics", app = "pl-analytics", port = 8000, destination = "pl-analytics" }
     },
     { for name, service in kubernetes_service_v1.service : service.metadata[0].name => { service = service.metadata[0].name, app = service.spec[0].selector.app, port = 8000, destination = service.metadata[0].name } },
   )
@@ -20,7 +20,7 @@ resource "kubectl_manifest" "portal_waypoint" {
     metadata   = { name = "nolift-waypoint", namespace = var.namespace, labels = { "istio.io/waypoint-for" = "all" } }
     spec = {
       gatewayClassName = "istio-waypoint"
-      listeners = [{ name = "mesh", port = 15008, protocol = "HBONE" }]
+      listeners        = [{ name = "mesh", port = 15008, protocol = "HBONE" }]
     }
   })
 }
@@ -35,7 +35,7 @@ resource "kubectl_manifest" "l4_waypoint_only" {
     spec = {
       selector = { matchLabels = { app = each.value.app } }
       action   = "ALLOW"
-      rules = [{ from = [{ source = { principals = ["cluster.local/ns/${var.namespace}/sa/nolift-waypoint"] } }] }]
+      rules    = [{ from = [{ source = { principals = ["cluster.local/ns/${var.namespace}/sa/nolift-waypoint"] } }] }]
     }
   })
 
@@ -53,7 +53,7 @@ resource "kubectl_manifest" "central_authz" {
       targetRefs = [{ group = "", kind = "Service", name = each.value.service }]
       action     = "CUSTOM"
       provider   = { name = "nolift-${each.value.destination}" }
-      rules = [{ to = [{ operation = { ports = [tostring(each.value.port)] } }] }]
+      rules      = [{ to = [{ operation = { ports = [tostring(each.value.port)] } }] }]
     }
   })
 

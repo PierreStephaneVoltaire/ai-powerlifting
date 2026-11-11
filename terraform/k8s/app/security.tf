@@ -202,6 +202,7 @@ resource "kubernetes_service_v1" "security" {
   metadata {
     name      = "pl-security"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -316,7 +317,7 @@ resource "kubernetes_deployment_v1" "oauth2_proxy" {
 
           env {
             name  = "OAUTH2_PROXY_COOKIE_SECRET"
-            value = random_password.oauth2_proxy_cookie[0].result
+            value = random_password.oauth2_proxy_cookie.result
           }
 
           port {
@@ -346,6 +347,7 @@ resource "kubernetes_service_v1" "oauth2_proxy" {
   metadata {
     name      = "oauth2-proxy"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -364,7 +366,7 @@ locals {
   security_destinations = merge(
     { "pl-security" = 9000, "pl-coach" = 9001 },
     { for index, name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}" => 9002 + index },
-    { "pl-coach-discord" = 9020 },
+    { "pl-coach-discord" = 9020, "pl-backend" = 9021 },
   )
 
   security_workloads = merge(
