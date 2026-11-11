@@ -37,6 +37,12 @@
   "analytics.export": {
     "permission": "analytics:read"
   },
+  "analytics.lifetime": {
+    "permission": "analytics:read"
+  },
+  "analytics.lifetime_export": {
+    "permission": "analytics:read"
+  },
   "analytics.manifest": {
     "permission": "analytics:read"
   },

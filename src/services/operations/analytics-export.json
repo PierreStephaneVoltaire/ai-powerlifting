@@ -1,0 +1,105 @@
+[
+  {
+    "name": "analytics.export",
+    "domain": "analytics-export",
+    "description": "Return a block analysis export as base64 with its content metadata.",
+    "handler": "services.handlers.analysis_reports.analytics_export",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "xlsx",
+            "markdown"
+          ]
+        }
+      },
+      "required": [
+        "pk",
+        "blockKey",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "content_base64": {
+          "type": "string"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "content_disposition": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content_base64",
+        "content_type",
+        "content_disposition"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "analytics.lifetime_export",
+    "domain": "analytics-export",
+    "description": "Return the saved lifetime report as base64 markdown or xlsx with its content metadata.",
+    "handler": "services.handlers.analysis_reports.lifetime_export",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "markdown",
+            "xlsx"
+          ]
+        }
+      },
+      "required": [
+        "pk",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "content_base64": {
+          "type": "string"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "content_disposition": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content_base64",
+        "content_type",
+        "content_disposition"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

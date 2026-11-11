@@ -66,5 +66,140 @@
     },
     "execution": "deterministic",
     "ownership": "athlete"
+  },
+  {
+    "name": "get_analysis_markdown",
+    "domain": "export",
+    "description": "Return the markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Served from cache while the program and glossary are unchanged; refresh forces regeneration.",
+    "handler": "services.handlers.analysis_reports.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "refresh": {
+          "type": "boolean",
+          "description": "Force regeneration before returning markdown",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "markdown",
+            "generated_at",
+            "cached"
+          ],
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "cached",
+            "cache_miss"
+          ],
+          "properties": {
+            "cached": {
+              "const": false
+            },
+            "cache_miss": {
+              "const": true
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "analytics.markdown",
+    "domain": "export",
+    "description": "Return the cached markdown export of the full training program.",
+    "handler": "services.handlers.analysis_reports.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "pk"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "markdown",
+            "generated_at",
+            "cached"
+          ],
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "cached",
+            "cache_miss"
+          ],
+          "properties": {
+            "cached": {
+              "const": false
+            },
+            "cache_miss": {
+              "const": true
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
   }
 ]

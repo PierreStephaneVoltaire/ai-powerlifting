@@ -51,3 +51,6 @@ app/src/agent/prompts/specialists/
 
 # Generated from specialists/* at startup
 .opencode/agent/
+
+# Operator analytics snapshots
+fixtures/

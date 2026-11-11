@@ -8,9 +8,13 @@ from services.contract import load_operations
 from services.dispatch import dispatch
 
 
+def _analytics_operations():
+    return {name: operation for domain in ("analytics", "analytics-ai", "analytics-export", "export") for name, operation in load_operations(domain).items()}
+
+
 def test_analytics_contracts_have_structured_results():
-    operations = load_operations("analytics")
-    assert len(operations) == 27
+    operations = _analytics_operations()
+    assert len(operations) == 30
     assert all(operation.result_schema for operation in operations.values())
 
 
@@ -153,7 +157,7 @@ def test_composite_correlation_cache_miss_preserves_not_found_status(monkeypatch
 
 
 def test_composite_operation_contracts_have_importable_handlers():
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     names = {name for name in operations if name.startswith("analytics.")}
     assert names == {
         "analytics.manifest",
@@ -172,6 +176,8 @@ def test_composite_operation_contracts_have_importable_handlers():
         "analytics.export",
         "analytics.compare",
         "analytics.compare_ai",
+        "analytics.lifetime",
+        "analytics.lifetime_export",
     }
     for operation in names:
         module = importlib.import_module(operations[operation].handler)
@@ -219,7 +225,7 @@ def test_legacy_weekly_contract_matches_flat_handler_result(monkeypatch):
 
 
 def test_composite_inputs_match_their_routes():
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     expected = {
         "analytics.manifest": {"pk", "asOfDate", "window"},
         "analytics.sections_queue": {"pk", "asOfDate", "window", "sections", "read_only"},
@@ -251,7 +257,7 @@ def test_composite_inputs_match_their_routes():
 
 
 def test_composite_ai_report_results_have_concrete_shapes():
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     operations["analytics.block_evaluation"].validate_result({"stance": "continue", "summary": "Stable"})
     operations["analytics.correlation"].validate_result({"findings": [], "summary": "Stable"})
 
@@ -353,7 +359,7 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", build_analysis)
 
     access = {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     result = dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "refresh": True, "_access": access})
     assert "# Training Program" in result["markdown"]
     assert "visible session" in result["markdown"]
@@ -393,7 +399,7 @@ def test_markdown_athlete_reads_never_share_delegate_records(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
     _markdown_sources(monkeypatch, core, {"meta": {"program_name": "Mine"}, "sessions": [], "phases": [], "goals": [], "competitions": []})
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: {})
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "_access": {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}})
     assert dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "cache_only": True, "_access": {"is_self": True}}) == {"cached": False, "cache_miss": True}
     dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "_access": {"is_self": True}})
