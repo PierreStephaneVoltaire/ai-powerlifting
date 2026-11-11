@@ -23,6 +23,14 @@ resource "kubernetes_persistent_volume_claim_v1" "coach_state" {
   }
 }
 
+resource "kubernetes_service_account_v1" "coach" {
+  metadata {
+    name      = "pl-coach"
+    namespace = var.namespace
+  }
+  automount_service_account_token = false
+}
+
 resource "kubernetes_deployment_v1" "coach" {
   wait_for_rollout = false
 
@@ -36,6 +44,7 @@ resource "kubernetes_deployment_v1" "coach" {
   metadata {
     name      = "pl-coach"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -51,10 +60,11 @@ resource "kubernetes_deployment_v1" "coach" {
 
     template {
       metadata {
-        labels = { app = "pl-coach" }
+        labels = { app = "pl-coach", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name             = kubernetes_service_account_v1.coach.metadata[0].name
         automount_service_account_token  = false
         enable_service_links             = false
         termination_grace_period_seconds = 60
@@ -75,7 +85,7 @@ resource "kubernetes_deployment_v1" "coach" {
 
           env {
             name  = "COACH_URL"
-            value = "http://pl-coach.${var.namespace}.svc.cluster.local:8000"
+            value = "http://127.0.0.1:8000"
           }
 
           env {
@@ -113,15 +123,17 @@ resource "kubernetes_deployment_v1" "coach" {
             }
           }
 
-          dynamic "env" {
-            for_each = toset(["INTERNAL_API_TOKEN", "PL_PRINCIPAL_SECRET"])
-            content {
-              name = env.value
-              value_from {
-                secret_key_ref {
-                  name = var.shared_secret_name
-                  key  = env.value
-                }
+          env {
+            name  = "PL_SECURITY_URL"
+            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
+          }
+
+          env {
+            name = "PL_PRINCIPAL_PUBLIC_KEY"
+            value_from {
+              secret_key_ref {
+                name = "pl-security-signing-key"
+                key  = "public_key"
               }
             }
           }
@@ -168,6 +180,7 @@ resource "kubernetes_service_v1" "coach" {
   metadata {
     name      = "pl-coach"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -176,6 +189,8 @@ resource "kubernetes_service_v1" "coach" {
     port {
       port        = 8000
       target_port = 8000
+      name        = "http"
+      protocol    = "TCP"
     }
 
     type = "ClusterIP"

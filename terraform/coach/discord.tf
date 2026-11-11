@@ -1,9 +1,18 @@
+resource "kubernetes_service_account_v1" "coach_discord" {
+  metadata {
+    name      = "pl-coach-discord"
+    namespace = var.namespace
+  }
+  automount_service_account_token = false
+}
+
 resource "kubernetes_deployment_v1" "coach_discord" {
   wait_for_rollout = false
 
   metadata {
     name      = "pl-coach-discord"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -15,10 +24,11 @@ resource "kubernetes_deployment_v1" "coach_discord" {
 
     template {
       metadata {
-        labels = { app = "pl-coach-discord" }
+        labels = { app = "pl-coach-discord", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name             = kubernetes_service_account_v1.coach_discord.metadata[0].name
         automount_service_account_token  = false
         enable_service_links             = false
         termination_grace_period_seconds = 30
@@ -53,13 +63,8 @@ resource "kubernetes_deployment_v1" "coach_discord" {
           }
 
           env {
-            name = "INTERNAL_API_TOKEN"
-            value_from {
-              secret_key_ref {
-                name = var.shared_secret_name
-                key  = "INTERNAL_API_TOKEN"
-              }
-            }
+            name  = "PL_SECURITY_URL"
+            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
           }
 
           env {
@@ -115,6 +120,7 @@ resource "kubernetes_service_v1" "coach_discord" {
   metadata {
     name      = "pl-coach-discord"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -123,6 +129,8 @@ resource "kubernetes_service_v1" "coach_discord" {
     port {
       port        = 8000
       target_port = 8000
+      name        = "http"
+      protocol    = "TCP"
     }
 
     type = "ClusterIP"

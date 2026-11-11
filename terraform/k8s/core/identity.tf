@@ -114,6 +114,11 @@ resource "authentik_provider_oauth2" "powerlifting" {
     },
     {
       matching_mode     = "strict"
+      url               = "https://${var.app_domain}/oauth2/callback"
+      redirect_uri_type = "authorization"
+    },
+    {
+      matching_mode     = "strict"
       url               = "http://localhost:3005/api/auth/authentik/callback"
       redirect_uri_type = "authorization"
     },

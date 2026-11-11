@@ -163,7 +163,7 @@ resource "kubernetes_deployment_v1" "security" {
           dynamic "port" {
             for_each = { for key, value in local.security_destinations : key => value if key != "pl-security" }
             content {
-              name           = "grpc-${substr(replace(port.key, "pl-", ""), 0, 11)}"
+              name           = "grpc-${substr(replace(port.key, "pl-", ""), 0, 10)}"
               container_port = port.value
               protocol       = "TCP"
             }
@@ -224,7 +224,7 @@ resource "kubernetes_service_v1" "security" {
     dynamic "port" {
       for_each = { for key, value in local.security_destinations : key => value if key != "pl-security" }
       content {
-        name        = "grpc-${substr(replace(port.key, "pl-", ""), 0, 11)}"
+        name        = "grpc-${substr(replace(port.key, "pl-", ""), 0, 10)}"
         port        = port.value
         target_port = port.value
         protocol    = "TCP"
@@ -363,6 +363,9 @@ resource "kubernetes_service_v1" "oauth2_proxy" {
 }
 
 locals {
+  security_operations = flatten([for filename in fileset("${path.module}/../../../src/services/operations", "*.json") : jsondecode(file("${path.module}/../../../src/services/operations/${filename}"))])
+  ai_operations       = [for operation in local.security_operations : operation.name if try(operation.execution, "") == "ai"]
+
   security_destinations = merge(
     { "pl-security" = 9000, "pl-coach" = 9001 },
     { for index, name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}" => 9002 + index },
@@ -379,18 +382,18 @@ locals {
   )
 
   security_allowed_callers = merge(
-    { "cluster.local/ns/${var.namespace}/sa/powerlifting-app-backend" = ["pl-security", "pl-budget", "pl-calculations", "pl-competition", "pl-export", "pl-federation", "pl-glossary", "pl-goals", "pl-imports", "pl-lift-profiles", "pl-performance", "pl-profile", "pl-program", "pl-rankings", "pl-sessions", "pl-templates", "pl-videos", "pl-weight-log"] },
-    { for name in ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "cluster.local/ns/${var.namespace}/sa/pl-${name}" => ["pl-security", "pl-coach"] },
+    { "cluster.local/ns/${var.namespace}/sa/powerlifting-app-backend" = concat(["pl-security", "pl-coach", "pl-coach-discord"], [for name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}"]) },
+    { for name in ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "cluster.local/ns/${var.namespace}/sa/pl-${name}" => ["pl-security"] },
     { "cluster.local/ns/${var.namespace}/sa/pl-analytics" = ["pl-security", "pl-budget", "pl-calculations", "pl-competition", "pl-federation", "pl-performance", "pl-profile", "pl-program", "pl-sessions", "pl-weight-log"] },
     { "cluster.local/ns/${var.namespace}/sa/pl-coach" = ["pl-security", "pl-budget", "pl-calculations", "pl-competition", "pl-export", "pl-federation", "pl-glossary", "pl-goals", "pl-imports", "pl-lift-profiles", "pl-performance", "pl-profile", "pl-program", "pl-rankings", "pl-sessions", "pl-templates", "pl-videos", "pl-weight-log"] },
     { "cluster.local/ns/${var.namespace}/sa/pl-coach-discord" = ["pl-security", "pl-coach"] },
     { "cluster.local/ns/${var.namespace}/sa/pl-security" = [] },
   )
 
-  security_delegation = {
-    conversation_turn = ["conversation_turn", "access_context", "operation_execute"]
-    domain_job_read   = ["domain_job_read", "generation_status"]
-    domain_resume     = ["domain_resume", "generation_status"]
-    generation_status = ["generation_status"]
-  }
+  security_delegation = merge(
+    { "conversation_turn" = concat(["access_context"], [for operation in local.security_operations : operation.name]) },
+    { "domain_job_read" = local.ai_operations, "domain_job_cancel" = local.ai_operations },
+    { for operation in local.ai_operations : operation => ["domain_resume", "access_context", operation] },
+    { "generation_status" = ["domain_job_read"] },
+  )
 }

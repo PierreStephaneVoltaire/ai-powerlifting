@@ -8,6 +8,11 @@ resource "kubectl_manifest" "edge_headers" {
         context = "http.server.location"
         value   = <<-NGINX
           proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header Authorization "";
+          proxy_set_header X-PL-Principal "";
+          proxy_set_header X-PL-Mesh-Caller "";
+          proxy_set_header X-PL-Access-Context "";
+          proxy_set_header X-Internal-Api-Token "";
           proxy_read_timeout 300s;
           client_max_body_size 500M;
           add_header X-Frame-Options "SAMEORIGIN" always;
