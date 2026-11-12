@@ -249,11 +249,6 @@ scrape_configs:
         labels:
           job: container-logs
           __path__: /var/log/containers/*_${var.runner_namespace}_*.log
-      - targets:
-          - localhost
-        labels:
-          job: container-logs
-          __path__: /var/log/containers/*_${var.auth_namespace}_*.log
     pipeline_stages:
       - cri: {}
       - regex:

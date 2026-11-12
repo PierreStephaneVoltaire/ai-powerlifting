@@ -42,14 +42,14 @@ runner can take over.
 ## Authentik
 
 `core` installs the CNPG operator, a two-instance Postgres cluster and the
-Authentik Helm release in `auth_namespace`, and runs the bootstrap job that
+Authentik Helm release in `namespace`, and runs the bootstrap job that
 creates the `akadmin` API token from `authentik_bootstrap_token`. The same
 stack configures Authentik through its API: the `nolift-powerlifting` OIDC
 provider and application, the `athletes`/`coaches`/`handlers` roles and groups,
 the scope mappings and the Discord identity source. Discord source matching uses
 its verified provider identifier. The OIDC client ID and secret are written to
-the `authentik-powerlifting-oidc` secret in the Authentik namespace; the app
-stack copies only the client secret to the OAuth proxy's namespace-local secret.
+the `authentik-powerlifting-oidc` secret in `namespace`; the app stack copies
+only the client secret to the OAuth proxy's secret.
 
 CI runs the identity-pointer migration's preflight and conditional writes before
 the app-stack apply; existing Person and Athlete keys are preserved. The backend media-signing private key is
@@ -60,18 +60,16 @@ so on a new cluster Authentik is installed with a targeted apply first (see
 below).
 
 Both public hostnames use the configured Cloudflare tunnel origin, which points
-to the NGINX Gateway Service. NGINX watches only `namespace` and `auth_namespace`
-to resolve the cross-namespace Authentik backend; its Gateway accepts routes only
-from `namespace`. The `auth` HTTPRoute reaches only the
-`authentik-server` Service in `auth_namespace`; its `ReferenceGrant` permits
-that one Service reference from routes in `namespace`. Apply the app stack
+to the NGINX Gateway Service. NGINX watches only `namespace`, and its Gateway
+accepts routes only from `namespace`. The `auth` HTTPRoute reaches the
+`authentik-server` Service in the same namespace. Apply the app stack
 before the Coach stack so its waypoint and authorization provider exist.
 
 ## Monitoring
 
 `core` runs the `monitoring` namespace: Prometheus, Loki, Promtail, Grafana,
 node-exporter, cadvisor, kube-state-metrics and the event exporter. Promtail
-ships container logs from `namespace`, `runner_namespace` and `auth_namespace`.
+ships container logs from `namespace` and `runner_namespace`.
 Grafana is not exposed through the gateway; reach it with a port-forward at the
 `grafana_url` output and log in as `admin` with `grafana_admin_password`:
 

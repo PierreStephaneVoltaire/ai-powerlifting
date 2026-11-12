@@ -75,11 +75,6 @@ variable "discord_bot_token" {
   type      = string
   sensitive = true
 }
-
-variable "auth_namespace" {
-  type = string
-}
-
 variable "authentik_bootstrap_email" {
   type = string
 }

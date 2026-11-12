@@ -13,7 +13,7 @@ provider "kubectl" {}
 data "kubernetes_service_v1" "authentik_server" {
   metadata {
     name      = "authentik-server"
-    namespace = var.auth_namespace
+    namespace = var.namespace
   }
 }
 
