@@ -173,7 +173,7 @@ while retaining permission semantics and ADR 0004 CDN behavior.
 | 6 | Terra / high | Body-aware ext_authz, trusted contexts, HTTP/MCP parity |
 | 7 | Terra / high | Domain execution, Coach, bot, analytics and gateway caller migration |
 | 8 | Terra / high | Dry-run/idempotent identity migration and tests |
-| 9 | Luna / high | Acceptance evidence and runbook; Terra security review |
+| 9 | Luna / high | Acceptance checks; Terra security review |
 | 10 | Terra / high | Operator cutover after live acceptance; rollback uses main branch |
 
 Default one worker; at most two on disjoint work after interfaces are fixed.
@@ -235,7 +235,7 @@ are primary risks. A failed security gate keeps the portal in maintenance.
 - Plan saved on 2026-11-11. Live readiness rechecked; no warning events in
   powerlifting. Unrelated analytics migration leftovers predated implementation
   and were later explicitly authorized for deletion by the operator.
-- Deployment remains operator-controlled. This branch requires the completed mesh;
+- Deployment requires a protected branch. This branch requires the completed mesh;
   no legacy/fallback mode is retained.
 - Removed unused Rust analytics/rankings target directories and unrelated local
   dataset fixtures after checking that current code does not reference them.
@@ -260,9 +260,9 @@ are primary risks. A failed security gate keeps the portal in maintenance.
 - Gateway API CRDs retain their existing network-state ownership. The controller
   watches only powerlifting and the Authentik namespace for backend resolution;
   same-namespace route attachment remains enforced.
-- No Terraform plans/applies, identity migration writes or live rollout/bypass
-  acceptance were performed. See docs/istio-migration-runbook.md for operator
-  prerequisites, commands, maintenance order and the remaining live checks.
+- Deployment provisions signing parameters through the separate security stack
+  and runs the identity-pointer preflight and conditional migration automatically.
+  Live bypass acceptance and rollback verification remain outstanding.
 - Corrected the deployment contract after operator review: Packer publishes
   only the selected tag; app and Coach resolve the same branch-derived tag.
   Restored the existing Coach CI apply and dormant core credential resources

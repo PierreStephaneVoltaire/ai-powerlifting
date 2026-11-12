@@ -205,7 +205,7 @@ guard rails are about keeping the model away from making things up:
 - **No silent retries.** If a job is interrupted, it's flagged so you can
   check what happened instead of being re-run.
 
-What's not checked is whether a valid answer is a *good* one. The reports are
+What's not checked is whether a valid answer is a _good_ one. The reports are
 advice, they cite the numbers they were given, and you can regenerate them.
 
 ### Running things in parallel
@@ -357,9 +357,3 @@ powerlifting-app/
 See [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md) for the annotated tree and
 [`AGENTS.md`](AGENTS.md) for the guidelines agents and contributors must follow
 when working in this repo.
-
-## Image rollout
-
-Every push builds the images in `docker/` with Packer and pushes them to ECR.
-When I'm the one pushing, a runner in the cluster then applies the Kubernetes
-stacks, which picks up the new images and rolls the workloads.

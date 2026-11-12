@@ -68,6 +68,7 @@ build {
       tags       = [var.image_tag]
     }
     post-processor "docker-push" {
+      name         = "publish"
       ecr_login    = true
       login_server = split("/", var.image_repository)[0]
     }

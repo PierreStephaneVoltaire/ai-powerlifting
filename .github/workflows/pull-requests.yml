@@ -1,0 +1,105 @@
+name: Pull request checks
+
+on:
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - 'src/frontend/**'
+      - 'src/services/**'
+      - 'src/dependencies/**'
+      - 'src/lambda/**'
+      - 'docker/**'
+      - 'terraform/**'
+      - 'src/package.json'
+      - 'src/package-lock.json'
+      - 'src/tsconfig.json'
+      - 'scripts/image_tag.py'
+      - 'scripts/test_image_tag.py'
+      - 'scripts/test_deployment_contract.py'
+      - 'scripts/migrate_identity_pointers.py'
+      - 'scripts/validate_terraform_plan.py'
+      - 'scripts/test_terraform_plan.py'
+      - '.github/workflows/**'
+      - '.github/image-filters.yml'
+      - '!**/*.md'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.images.outputs.matrix }}
+      image_tag: ${{ steps.images.outputs.tag }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+      kubernetes: ${{ steps.filter.outputs.kubernetes }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s scripts -p test_image_tag.py
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/image-filters.yml
+      - id: images
+        env:
+          BACKEND: ${{ steps.filter.outputs.backend }}
+          FRONTEND: ${{ steps.filter.outputs.frontend }}
+          SERVICES: ${{ steps.filter.outputs.services }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          images=()
+          if [ "$BACKEND" = true ]; then images+=(powerlifting-backend); fi
+          if [ "$FRONTEND" = true ]; then images+=(powerlifting-frontend); fi
+          if [ "$SERVICES" = true ]; then images+=(powerlifting-services powerlifting-analytics powerlifting-coach-agent powerlifting-coach-discord); fi
+          matrix="$(printf '%s\n' "${images[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "tag=$(python3 scripts/image_tag.py "$BRANCH")" >> "$GITHUB_OUTPUT"
+
+  images:
+    needs: changes
+    if: ${{ needs.changes.outputs.images != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.changes.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-packer@v3
+        with:
+          version: 1.13.x
+      - working-directory: docker
+        run: packer init "${{ matrix.image }}.pkr.hcl"
+      - working-directory: docker
+        env:
+          IMAGE: ${{ matrix.image }}
+          IMAGE_TAG: ${{ needs.changes.outputs.image_tag }}
+        run: packer build -color=false -except=publish -var="image_repository=nolift-ci/$IMAGE" -var="image_tag=$IMAGE_TAG" "$IMAGE.pkr.hcl"
+
+  terraform:
+    needs: changes
+    if: ${{ needs.changes.outputs.terraform == 'true' || needs.changes.outputs.kubernetes == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [terraform, terraform/security, terraform/k8s/core, terraform/k8s/perms, terraform/k8s/network, terraform/k8s/mesh, terraform/k8s/app, terraform/coach]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.x
+      - working-directory: ${{ matrix.directory }}
+        run: terraform init -backend=false -input=false
+      - working-directory: ${{ matrix.directory }}
+        run: terraform validate
+
+  lambda:
+    needs: changes
+    if: ${{ needs.changes.outputs.terraform == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m compileall -q src/lambda

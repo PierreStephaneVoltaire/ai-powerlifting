@@ -4,8 +4,7 @@ Date: 2026-11-11.
 
 ## Status
 
-Accepted for this branch. Production cutover requires the live checks in the
-[migration runbook](../istio-migration-runbook.md).
+Accepted.
 
 Supersedes the browser-login and service-authentication portions of ADRs 0002
 and 0003. Their Person/Athlete separation, grants, publication rules and verified
@@ -53,13 +52,6 @@ change.
 
 ## Consequences
 
-This branch requires the new mesh and identity infrastructure. There are no
-runtime legacy modes or authentication fallback paths. Feature images publish
-only their branch tag; `master`/`main` use `latest`. Rollback runs master's full
-pipeline, restoring its images and shared Terraform states including Coach.
-Core retains the existing unused credential resources for that reapply. The
-separate Istio foundation and additive identity links remain installed.
-
-Central authorization is a required dependency. The existing single-node cluster
-does not gain availability from the mesh. Infrastructure deployment, identity
-migration and negative live tests remain operator-controlled.
+OAuth2 Proxy, the waypoint and central authorization are required dependencies.
+There are no runtime legacy modes or authentication fallback paths. The existing
+single-node cluster does not gain availability from the mesh.

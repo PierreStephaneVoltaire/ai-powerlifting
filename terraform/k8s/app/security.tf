@@ -265,6 +265,7 @@ resource "kubernetes_deployment_v1" "oauth2_proxy" {
             "--http-address=0.0.0.0:4180",
             "--reverse-proxy=true",
             "--provider=oidc",
+            "--email-domain=*",
             "--redirect-url=https://${var.app_domain}/oauth2/callback",
             "--upstream=http://powerlifting-app-backend.${var.namespace}.svc.cluster.local:3005/",
             "--scope=openid profile email groups roles powerlifting_identity offline_access",

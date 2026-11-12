@@ -5,13 +5,11 @@ from image_tag import image_tag
 
 
 class ImageTagTests(unittest.TestCase):
-    def test_master_and_main_use_latest(self):
-        for branch in ("master", "main"):
-            with self.subTest(branch=branch):
-                self.assertEqual(image_tag(branch), "latest")
+    def test_master_uses_latest(self):
+        self.assertEqual(image_tag("master"), "latest")
 
     def test_feature_branches_are_stable_valid_tags(self):
-        for branch in ("istio", "feature/istio", "latest", "Master", "a" * 300, "fix/登录"):
+        for branch in ("main", "istio", "feature/istio", "latest", "Master", "a" * 300, "fix/登录"):
             with self.subTest(branch=branch):
                 tag = image_tag(branch)
                 self.assertNotEqual(tag, "latest")

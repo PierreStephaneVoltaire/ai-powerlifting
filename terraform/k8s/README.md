@@ -12,7 +12,8 @@ the same runner then applies Coach's separate state.
 | `mesh` | Pinned Istio Ambient base, control plane, CNI and ztunnel |
 | `app` | `pl-*` services, analytics, Valkey, portal backend and frontend, registry token refresher |
 
-The job runs only for pushes or manual runs triggered by the repository owner.
+The job runs only on protected branches, for pushes or manual applies triggered
+by the repository owner. Manual apply defaults to disabled.
 It writes `K8S_TFVARS` (the full `k8s.tfvars`, see `k8s.tfvars.example`) to a
 temporary file. It applies `core`, `perms`, `network`, `mesh`, then `app`. It
 applies Coach with `COACH_TFVARS` after a successful Coach image build. The
@@ -25,10 +26,10 @@ service accounts and use Ambient enrollment. The pods' AWS key belongs to the sc
 terraform state.
 
 The app stack selects the ECR image tag from `image_tag` (default `latest`). CI
-publishes `latest` only for `main` and `master`; other branches publish their
+publishes `latest` only for `master`; other protected branches publish their
 branch-specific tag. The workflow passes the same derived tag explicitly to
 Packer, the app stack and the Coach stack, overriding any value in tfvars. Run
-the workflow manually against a feature branch to deploy it. A full manual run
+the workflow manually against a protected feature branch to deploy it. A full manual run
 against `master`, with `apply_terraform=true` and both partial-build inputs
 false, rebuilds its `latest` images and reapplies its infrastructure and Coach
 states. Keep the existing rollback credential inputs in `K8S_TFVARS` and
@@ -50,9 +51,12 @@ its verified provider identifier. The OIDC client ID and secret are written to
 the `authentik-powerlifting-oidc` secret in the Authentik namespace; the app
 stack copies only the client secret to the OAuth proxy's namespace-local secret.
 
-Before the first app-stack apply, create the signing key pair in AWS Systems
-Manager Parameter Store at `/powerlifting/security/principal-signing-private-key`
-(SecureString) and `/powerlifting/security/principal-signing-public-key` (String).
+Before the app-stack apply, CI applies `terraform/security` in the separate
+`powerlifting-app/security.tfstate` state. It generates or adopts the matching
+signing pair in Parameter Store at `/powerlifting/security/principal-signing-private-key`
+(SecureString) and `/powerlifting/security/principal-signing-public-key` (String),
+without rotating existing values. CI also runs the identity-pointer migration's
+preflight and conditional writes; existing Person and Athlete keys are preserved.
 The private key is mounted only into `pl-security`; workloads that verify signed
 principals receive only the public key. The backend media-signing private key is
 read separately from `/powerlifting/media/cloudfront-signing-private-key`.

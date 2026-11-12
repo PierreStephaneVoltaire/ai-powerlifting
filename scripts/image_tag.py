@@ -4,7 +4,7 @@ import sys
 
 
 def image_tag(branch: str) -> str:
-    if branch in {"master", "main"}:
+    if branch == "master":
         return "latest"
     if not branch or any(character.isspace() for character in branch):
         raise ValueError("A branch name without whitespace is required")

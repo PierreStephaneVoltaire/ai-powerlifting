@@ -12,11 +12,6 @@ operations. The Express gateway calls them over the cluster network, and the
 Coach (`pl-coach`) answers their inference steps and exposes them as tools in
 chat. DynamoDB and S3 hold the data.
 
-The Kubernetes workloads are Terraform in this repository. After the initial
-`core` and `perms` bootstrap, the in-cluster runner applies `terraform/k8s/core`,
-`perms`, `network`, `app`, and `terraform/coach` from CI. Coach's state is applied
-when `build-coach` publishes new images and resolves their `latest` digests.
-
 The AI workflow (use cases, models, request flow, concurrency, output
 validation and hallucination controls) is in the README's
 [AI components](../README.md#ai-components) section.
@@ -43,9 +38,7 @@ provider; Discord is an Authentik source. The gateway holds no login session and
 obtains verified identity and operation principals from `pl-security`. Dedicated
 ServiceAccounts identify workloads through Istio Ambient mTLS. A shared waypoint
 calls the central authorizer, which reuses Profile/PyCasbin and current grants at
-HTTP/MCP boundaries. Private signing keys stay in the authorizer. See ADR-0006
-and [the cutover runbook](./istio-migration-runbook.md). This branch requires the
-new infrastructure and contains no legacy authentication mode.
+HTTP/MCP boundaries. Private signing keys stay in the authorizer. See ADR-0006.
 
 Video upload keeps the existing multipart gateway endpoint. A single request
 spools the file with a 500 MiB bound; the backend sends bytes to S3 and confirms
