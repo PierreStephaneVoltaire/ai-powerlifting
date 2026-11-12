@@ -30,15 +30,17 @@
   pl-security Deployment/Service/secret are removed in the app stack.
 - Packer init now authenticates with the workflow token (GitHub API rate limit flake).
 
-### Deploy 2 — after deploy 1 is verified
+### Deploy 1 — deployed and browser-verified 2026-11-12 (login, dashboard, sessions, analysis, profile)
 
-1. `terraform/k8s/mesh/main.tf`: remove the `nolift-security` `extensionProviders` entry.
-2. `terraform/k8s/perms/portal_accounts.tf`: remove the `pl-security` ServiceAccount.
-3. Delete the SSM parameters `/powerlifting/security/principal-signing-{private,public}-key`
-   (operator only; never delete AWS resources from an agent).
-4. Delete leftover hot-fix ConfigMaps `pl-security-code`, `pl-videos-media-code`,
-   `pl-coach-discord-code`, and the old `Media#` rows in `if-health` (backup in the session
-   scratchpad, `media-backup-if-health.json`).
+### Deploy 2 — code done 2026-11-12, waiting on commit + pipeline
+
+- `terraform/k8s/mesh/main.tf`: `nolift-security` extensionProvider removed.
+- `terraform/k8s/perms/portal_accounts.tf`: `pl-security` ServiceAccount removed.
+- CI `security-apply` job removed; `terraform/security` stays only so the operator can destroy it.
+- Done live: hot-fix ConfigMaps deleted; 152 old `Media#` rows deleted from `if-health` after
+  confirming each exists in `workout-Videos`.
+- Operator, after deploy 2: `terraform -chdir=terraform/security destroy` (removes the two
+  `/powerlifting/security/principal-signing-*` SSM parameters), then delete `terraform/security`.
 
 Keep them separate: the mesh stack applies before the app stack, so removing the provider in
 deploy 1 would deny all traffic until the CUSTOM policies are gone.

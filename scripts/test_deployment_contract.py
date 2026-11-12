@@ -130,7 +130,7 @@ class DeploymentContractTests(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / ".github/workflows/build-images.yml").read_text())
         triggers = workflow.get("on") or workflow[True]
         self.assertEqual(triggers["workflow_dispatch"]["inputs"]["apply_terraform"]["default"], "false")
-        for job in ("terraform-apply", "security-apply", "kubernetes-apply"):
+        for job in ("terraform-apply", "kubernetes-apply"):
             for event, branch, protected, ref_type, apply, expected in (
                 ("push", "master", True, "branch", "false", True),
                 ("push", "master", False, "branch", "false", True),
@@ -179,12 +179,10 @@ class DeploymentContractTests(unittest.TestCase):
                     expression = expression.replace("github.ref_name", repr(branch)).replace("&&", " and ").replace("||", " or ")
                     self.assertEqual(eval(expression.strip(), {"__builtins__": {}}, {}), expected)
 
-    def test_deployment_provisions_keys_and_migrates_pointers(self):
+    def test_deployment_migrates_pointers(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/build-images.yml").read_text())
         kubernetes = workflow["jobs"]["kubernetes-apply"]
-        self.assertIn("security-apply", kubernetes["needs"])
-        security = workflow["jobs"]["security-apply"]
-        self.assertTrue(any("key=powerlifting-app/security.tfstate" in step.get("run", "") for step in security["steps"]))
+        self.assertNotIn("security-apply", workflow["jobs"])
         migration = next(step for step in kubernetes["steps"] if step.get("name") == "Preserve existing identity pointers")
         self.assertEqual(migration["run"].splitlines(), [
             "python scripts/migrate_identity_pointers.py",

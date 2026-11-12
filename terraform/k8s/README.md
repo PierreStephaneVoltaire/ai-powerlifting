@@ -51,14 +51,8 @@ its verified provider identifier. The OIDC client ID and secret are written to
 the `authentik-powerlifting-oidc` secret in the Authentik namespace; the app
 stack copies only the client secret to the OAuth proxy's namespace-local secret.
 
-Before the app-stack apply, CI applies `terraform/security` in the separate
-`powerlifting-app/security.tfstate` state. It generates or adopts the matching
-signing pair in Parameter Store at `/powerlifting/security/principal-signing-private-key`
-(SecureString) and `/powerlifting/security/principal-signing-public-key` (String),
-without rotating existing values. CI also runs the identity-pointer migration's
-preflight and conditional writes; existing Person and Athlete keys are preserved.
-The private key is mounted only into `pl-security`; workloads that verify signed
-principals receive only the public key. The backend media-signing private key is
+CI runs the identity-pointer migration's preflight and conditional writes before
+the app-stack apply; existing Person and Athlete keys are preserved. The backend media-signing private key is
 read separately from `/powerlifting/media/cloudfront-signing-private-key`.
 
 The Authentik provider connects to the in-cluster `authentik-server` service,

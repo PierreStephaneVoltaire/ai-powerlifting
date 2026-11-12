@@ -352,39 +352,8 @@ jobs:
           terraform show -json "$RUNNER_TEMP/aws.tfplan" | python3 ../scripts/validate_terraform_plan.py
           terraform apply -input=false -no-color "$RUNNER_TEMP/aws.tfplan"
 
-  security-apply:
-    needs: changes
-    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
-    runs-on: ubuntu-latest
-    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
-    env:
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - working-directory: terraform/security
-        run: |
-          terraform init -input=false \
-            -backend-config="bucket=$TF_STATE_BUCKET" \
-            -backend-config="key=powerlifting-app/security.tfstate" \
-            -backend-config="region=$AWS_REGION" \
-            -backend-config="encrypt=true" \
-            -backend-config="use_lockfile=true"
-
-      - working-directory: terraform/security
-        run: terraform apply -input=false -no-color -auto-approve -var="region=$AWS_REGION"
-
   kubernetes-apply:
-    needs: [changes, build-backend, build-services, build-coach, build-frontend, terraform-apply, security-apply]
+    needs: [changes, build-backend, build-services, build-coach, build-frontend, terraform-apply]
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: powerlifting-k8s
     if: >-

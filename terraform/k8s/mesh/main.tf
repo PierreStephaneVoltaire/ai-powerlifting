@@ -22,23 +22,7 @@ resource "helm_release" "istiod" {
   namespace  = kubernetes_namespace_v1.istio_system.metadata[0].name
   wait       = true
 
-  values = [yamlencode({
-    profile = "ambient"
-    meshConfig = { extensionProviders = [{
-      name = "nolift-security"
-      envoyExtAuthzGrpc = {
-        service  = "pl-security.${var.namespace}.svc.cluster.local"
-        port     = 9000
-        timeout  = "2s"
-        failOpen = false
-        includeRequestBodyInCheck = {
-          maxRequestBytes     = 10485760
-          allowPartialMessage = false
-          packAsBytes         = true
-        }
-      }
-    }] }
-  })]
+  values     = [yamlencode({ profile = "ambient" })]
   depends_on = [helm_release.base]
 }
 

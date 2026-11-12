@@ -34,11 +34,13 @@ flowchart LR
 ```
 
 Browser authentication uses OAuth2 Proxy with the existing Authentik OIDC
-provider; Discord is an Authentik source. The gateway holds no login session and
-obtains verified identity and operation principals from `pl-security`. Dedicated
-ServiceAccounts identify workloads through Istio Ambient mTLS. A shared waypoint
-calls the central authorizer, which reuses Profile/PyCasbin and current grants at
-HTTP/MCP boundaries. Private signing keys stay in the authorizer. See ADR-0006.
+provider; Discord is an Authentik source. The gateway holds no login session; it
+reads the user from the ID token OAuth2 Proxy forwards and resolves the Person
+through Profile. Dedicated ServiceAccounts identify workloads through Istio
+Ambient mTLS, and per-service AuthorizationPolicies on the shared waypoint decide
+which workloads may call which services. Callers state the acting Person in a
+header; each domain service authorizes it in-process with Profile/PyCasbin and
+current grants at HTTP/MCP boundaries. See ADR-0006.
 
 Video upload keeps the existing multipart gateway endpoint. A single request
 spools the file with a 500 MiB bound; the backend sends bytes to S3 and confirms
