@@ -75,6 +75,12 @@ resource "kubectl_manifest" "auth_route" {
       parentRefs = [{ name = local.gateway_name }]
       hostnames  = [var.auth_domain]
       rules = [{
+        filters = [{
+          type = "RequestHeaderModifier"
+          requestHeaderModifier = {
+            set = [{ name = "X-Forwarded-Proto", value = "https" }]
+          }
+        }]
         backendRefs = [{ name = "authentik-server", namespace = var.auth_namespace, port = 80 }]
       }]
     }
