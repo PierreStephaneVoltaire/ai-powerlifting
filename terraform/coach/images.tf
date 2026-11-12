@@ -10,5 +10,5 @@ data "aws_ecr_repository" "coach" {
 data "aws_ecr_image" "coach" {
   for_each        = local.repositories
   repository_name = data.aws_ecr_repository.coach[each.value].name
-  image_tag       = "latest"
+  image_tag       = var.image_tag
 }

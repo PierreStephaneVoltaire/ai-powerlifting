@@ -37,6 +37,3 @@ variable "auth_domain" {
   type = string
 }
 
-variable "auth_origin_url" {
-  type = string
-}

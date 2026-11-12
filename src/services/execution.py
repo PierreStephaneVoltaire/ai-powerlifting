@@ -9,7 +9,6 @@ import httpx
 
 from .ai import DomainExecution, answer, current_execution
 from .dispatch import OperationError, dispatch
-from .principal import principal_token
 
 
 executions: dict[str, DomainExecution] = {}
@@ -53,7 +52,7 @@ async def submit(operation, arguments, athlete, person):
         async with httpx.AsyncClient(timeout=40) as client:
             response = await client.post(
                 os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs",
-                headers={"X-Internal-Token": os.environ["INTERNAL_API_TOKEN"], "X-Person-Pk": person, "X-PL-Principal": principal_token(person, athlete, operation.name)},
+                headers={'X-Person-Pk': person, 'X-Athlete-Pk': athlete},
                 json={"conversation_id": f"powerlifting:{athlete}:{key}", "kind": "domain", "payload": {"domain": operation.domain, "operation": operation.name, "arguments": arguments, "athlete": athlete, **({"generation_id": generation["generation_id"], "generation_attempt": int(generation["attempt"])} if generation else {})}},
             )
             if response.is_error:

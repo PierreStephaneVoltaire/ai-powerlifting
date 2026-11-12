@@ -2,6 +2,16 @@ variable "region" {
   type = string
 }
 
+variable "image_tag" {
+  type    = string
+  default = "latest"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.image_tag))
+    error_message = "image_tag must be a valid Docker or ECR tag."
+  }
+}
+
 variable "namespace" {
   description = "Namespace shared with the Powerlifting Services"
   type        = string
@@ -15,11 +25,6 @@ variable "node_name" {
 
 variable "image_pull_secret" {
   type = string
-}
-
-variable "shared_secret_name" {
-  description = "Secret holding INTERNAL_API_TOKEN and PL_PRINCIPAL_SECRET for the Powerlifting Services"
-  type        = string
 }
 
 variable "aws_credentials_secret_name" {

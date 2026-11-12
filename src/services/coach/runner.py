@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+import secrets
 import uuid
 from datetime import date
 from pathlib import Path
@@ -70,13 +71,14 @@ class Runner:
         self.store = store
         self.tasks: dict[str, asyncio.Task] = {}
         self.limiter = guard.RateLimiter()
+        self.tool_secret = secrets.token_bytes(32)
 
     @property
     def catalog(self) -> dict[str, Operation]:
         return operations(self.settings.operations_dir, self.settings.permissions_path)
 
     def tool_token(self, job_id: str) -> str:
-        return hmac.new(self.settings.internal_token.encode(), f"coach-tools:{job_id}".encode(), hashlib.sha256).hexdigest()
+        return hmac.new(self.tool_secret, f"coach-tools:{job_id}".encode(), hashlib.sha256).hexdigest()
 
     def _spawn(self, job: Job, work) -> None:
         async def execute():
@@ -96,10 +98,10 @@ class Runner:
 
         self.tasks[job.job_id] = asyncio.create_task(execute())
 
-    def submit_domain(self, owner: str, athlete: str, payload: dict[str, Any]) -> Job:
+    def submit_domain(self, owner: str, athlete: str, payload: dict[str, Any], job_id: str = '') -> Job:
         operation = self.catalog[payload["operation"]]
-        job = self.store.create(owner, athlete, "domain", f"powerlifting:{athlete}:{uuid.uuid4().hex}", payload)
-        scope = Scope(person=owner, athlete=athlete)
+        job = self.store.create(owner, athlete, "domain", f"powerlifting:{athlete}:{uuid.uuid4().hex}", payload, job_id)
+        scope = Scope(person=owner, athlete=athlete, job_id=job.job_id)
         generation = {"generation_id": payload["generation_id"], "generation_attempt": payload.get("generation_attempt", 0)} if payload.get("generation_id") else None
         async def work():
             with llm_log.scope(kind="operation", operation=operation.name, job_id=job.job_id, person=owner, athlete=athlete):
@@ -111,12 +113,12 @@ class Runner:
     def surface_tools(self, job: Job) -> dict[str, Operation]:
         return tools(self.catalog, SURFACES.get(job.payload.get("surface") or ""))
 
-    def submit_turn(self, owner: str, athlete: str, conversation_id: str, messages: list[dict[str, Any]], surface: str | None = None, subject: str | None = None) -> Job:
+    def submit_turn(self, owner: str, athlete: str, conversation_id: str, messages: list[dict[str, Any]], surface: str | None = None, subject: str | None = None, job_id: str = '') -> Job:
         if surface:
             current = self.store.binding(owner, conversation_id)
             if not current or current.surface != surface or current.subject != subject:
                 self.store.bind(owner, conversation_id, Binding(surface=surface, subject=subject or "", locked=True))
-        job = self.store.create(owner, athlete, "conversation", conversation_id, {"messages": messages[-HISTORY_LIMIT:]})
+        job = self.store.create(owner, athlete, "conversation", conversation_id, {"messages": messages[-HISTORY_LIMIT:]}, job_id)
         async def work():
             with llm_log.scope(kind="conversation", conversation_id=conversation_id, job_id=job.job_id, person=owner, athlete=athlete):
                 return await self._converse(job)
@@ -135,7 +137,7 @@ class Runner:
             return await self._route(job, messages, latest, message, person)
 
     async def _identity(self, job: Job) -> tuple[str, str]:
-        access = await self.services.access(Scope(person=job.owner, athlete=job.athlete), "access_context", {})
+        access = await self.services.access(Scope(person=job.owner, athlete=job.athlete, job_id=job.job_id), "access_context", {})
         return str(access.get("settings_pk") or job.owner), str(access.get("own_athlete_pk") or job.athlete)
 
     async def _route(self, job: Job, messages: list[dict[str, Any]], latest: dict[str, Any], message: str, person: str) -> str:
@@ -174,7 +176,7 @@ class Runner:
 
     async def _template_turn(self, job: Job, message: str, binding: Binding, verdict: guard.Verdict, messages: list[dict[str, Any]], latest: dict[str, Any]) -> str:
         surface = SURFACES["template"]
-        scope = Scope(person=job.owner, athlete=job.athlete)
+        scope = Scope(person=job.owner, athlete=job.athlete, job_id=job.job_id)
         template = await self.services.call(scope, "templates", "template_get", {"sk": binding.subject})
         version = chat_cache.fingerprint(template)
         cacheable = verdict.standalone and verdict.intent in CACHEABLE_INTENTS
@@ -191,7 +193,7 @@ class Runner:
         return self._finish(job, message, reply, outcome="accepted", verdict=verdict, surface=surface.name, subject=binding.subject, cache_layer="none")
 
     async def _templates(self, job: Job) -> list[dict[str, Any]]:
-        listed = await self.services.call(Scope(person=job.owner, athlete=job.athlete), "templates", "template_list", {})
+        listed = await self.services.call(Scope(person=job.owner, athlete=job.athlete, job_id=job.job_id), "templates", "template_list", {})
         return listed if isinstance(listed, list) else []
 
     async def _agent(self, job: Job, surface: Surface | None, instructions: str, extra: dict[str, Any], messages: list[dict[str, Any]], latest: dict[str, Any]) -> str:
@@ -234,7 +236,7 @@ class Runner:
             arguments[surface.subject_argument] = job.payload["subject"]
         if name == "template_patch":
             self._check_patch(job, arguments)
-        scope = Scope(person=job.owner, athlete=job.athlete)
+        scope = Scope(person=job.owner, athlete=job.athlete, job_id=job.job_id)
         with llm_log.scope(kind="tool", operation=name, conversation_id=job.conversation_id, job_id=job.job_id, person=job.owner, athlete=job.athlete):
             result = await run_operation(self.services, self.model.model, self.settings.operation_ai, scope, operation, arguments, f"{job.job_id}-{uuid.uuid4().hex[:12]}")
             llm_log.emit("chat_tool", arguments=arguments, result=result)

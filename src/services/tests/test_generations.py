@@ -38,8 +38,6 @@ def test_native_submission_excludes_transient_access_and_keeps_acting_person(mon
     import httpx
     import jwt
     monkeypatch.setenv('IF_API_URL', 'http://native')
-    monkeypatch.setenv('INTERNAL_API_TOKEN', 'test-only')
-    monkeypatch.setenv('PL_PRINCIPAL_SECRET', 'principal-test-secret-never-used-outside-tests')
     sent = []
     class Client:
         def __init__(self, **kwargs):
@@ -55,15 +53,12 @@ def test_native_submission_excludes_transient_access_and_keeps_acting_person(mon
     asyncio.run(execution.submit(SimpleNamespace(name='template_parse', domain='templates'), {'pk': 'athlete-a', '_access': {'person_pk': 'coach'}, '_person_pk': 'coach'}, 'athlete-a', 'coach'))
     assert sent[0]['json']['payload']['arguments'] == {'pk': 'athlete-a'}
     assert sent[0]['headers']['X-Person-Pk'] == 'coach'
-    claims = jwt.decode(sent[0]['headers']['X-PL-Principal'], options={'verify_signature': False})
-    assert claims['sub'] == 'coach' and claims['athlete'] == 'athlete-a'
+    assert sent[0]['headers']['X-Athlete-Pk'] == 'athlete-a'
 
 
 def test_report_submission_uses_access_for_source_before_persisting_payload(monkeypatch):
     import httpx
     monkeypatch.setenv('IF_API_URL', 'http://native')
-    monkeypatch.setenv('INTERNAL_API_TOKEN', 'test-only')
-    monkeypatch.setenv('PL_PRINCIPAL_SECRET', 'principal-test-secret-never-used-outside-tests')
     access = {'permissions': ['competition:read'], 'competition_scope': {'read': ['meet-a']}}
     seen = []
     async def source(arguments, athlete, operation):
@@ -118,8 +113,6 @@ def test_generation_poll_uses_current_person_instead_of_original_owner(monkeypat
     import httpx
     import jwt
     monkeypatch.setenv('IF_API_URL', 'http://native')
-    monkeypatch.setenv('INTERNAL_API_TOKEN', 'test-only')
-    monkeypatch.setenv('PL_PRINCIPAL_SECRET', 'principal-test-secret-never-used-outside-tests')
     class Store:
         def __init__(self, athlete):
             pass
@@ -134,8 +127,7 @@ def test_generation_poll_uses_current_person_instead_of_original_owner(monkeypat
             pass
         async def get(self, url, headers):
             assert headers['X-Person-Pk'] == 'current-person'
-            claims = jwt.decode(headers['X-PL-Principal'], options={'verify_signature': False})
-            assert claims['sub'] == 'current-person' and claims['athlete'] == 'athlete-a'
+            assert headers['X-Athlete-Pk'] == 'athlete-a'
             return httpx.Response(200, json={'status': 'running'}, request=httpx.Request('GET', url))
     monkeypatch.setattr(generations, 'GenerationStore', Store)
     monkeypatch.setattr(generations.httpx, 'AsyncClient', Client)

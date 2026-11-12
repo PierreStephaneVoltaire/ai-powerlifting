@@ -48,6 +48,9 @@ data "authentik_property_mapping_provider_scope" "email" {
 data "authentik_property_mapping_provider_scope" "profile" {
   name = "authentik default OAuth Mapping: OpenID 'profile'"
 }
+data "authentik_property_mapping_provider_scope" "offline_access" {
+  name = "authentik default OAuth Mapping: OpenID 'offline_access'"
+}
 
 resource "authentik_property_mapping_provider_scope" "powerlifting_groups" {
   name       = "powerlifting-groups"
@@ -83,9 +86,10 @@ resource "authentik_source_oauth" "discord" {
   consumer_key        = var.discord_client_id
   consumer_secret     = var.discord_client_secret
   enabled             = true
-  user_path_template  = "authentik:%%(username)s"
+  promoted            = true
+  user_path_template  = "goauthentik.io/sources/%(slug)s"
   group_matching_mode = "name_link"
-  user_matching_mode  = "email_link"
+  user_matching_mode  = "identifier"
   additional_scopes   = "email identify"
   policy_engine_mode  = "any"
 }
@@ -97,11 +101,12 @@ resource "authentik_provider_oauth2" "powerlifting" {
   authorization_flow = data.authentik_flow.default_authorization.id
   invalidation_flow  = data.authentik_flow.default_invalidation.id
   signing_key        = data.authentik_certificate_key_pair.default.id
-  grant_types        = ["authorization_code"]
+  grant_types        = ["authorization_code", "refresh_token"]
   property_mappings = [
     data.authentik_property_mapping_provider_scope.openid.id,
     data.authentik_property_mapping_provider_scope.email.id,
     data.authentik_property_mapping_provider_scope.profile.id,
+    data.authentik_property_mapping_provider_scope.offline_access.id,
     authentik_property_mapping_provider_scope.powerlifting_groups.id,
     authentik_property_mapping_provider_scope.powerlifting_roles.id,
     authentik_property_mapping_provider_scope.verified_discord_subjects.id,
@@ -109,12 +114,7 @@ resource "authentik_provider_oauth2" "powerlifting" {
   allowed_redirect_uris = [
     {
       matching_mode     = "strict"
-      url               = "https://${var.app_domain}/api/auth/authentik/callback"
-      redirect_uri_type = "authorization"
-    },
-    {
-      matching_mode     = "strict"
-      url               = "http://localhost:3005/api/auth/authentik/callback"
+      url               = "https://${var.app_domain}/oauth2/callback"
       redirect_uri_type = "authorization"
     },
   ]
@@ -135,7 +135,7 @@ resource "authentik_property_mapping_provider_scope" "verified_discord_subjects"
 from authentik.sources.oauth.models import UserOAuthSourceConnection
 return {
   "discord_subjects": list(UserOAuthSourceConnection.objects.filter(
-    user=user, source__provider_type="discord"
+    user=user, source__oauthsource__provider_type="discord"
   ).values_list("identifier", flat=True)),
 }
 EOT
@@ -144,7 +144,7 @@ EOT
 resource "kubernetes_secret_v1" "authentik_powerlifting_oidc" {
   metadata {
     name      = "authentik-powerlifting-oidc"
-    namespace = kubernetes_namespace_v1.auth.metadata[0].name
+    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
     labels = {
       app = "authentik"
     }

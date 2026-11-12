@@ -41,14 +41,11 @@ interface AuthContextType extends AuthState {
   selectRole: (role: ActiveRole) => void
   refreshAccess: () => Promise<void>
   signIn: () => void
-  signInDiscord: () => void
-  signInAuthentik: () => void
   signOut: () => Promise<void>
 }
 const empty: AuthState = { user: null, mapped_pk: 'operator', person_pk: '', own_athlete_pk: '', athlete_display_name: 'Demo', permissions: [], readOnly: true, is_onboarded: false, ranking_country: null, ranking_region: null, age_class: 'open', offline: false }
-const signInDiscord = () => { window.location.href = '/api/auth/discord/login' }
-const signInAuthentik = () => { window.location.href = '/api/auth/authentik/login' }
-const AuthContext = createContext<AuthContextType>({ ...empty, loading: true, selectAthlete: async () => {}, selectRole: () => {}, refreshAccess: async () => {}, signIn: signInAuthentik, signInDiscord, signInAuthentik, signOut: async () => {} })
+const signIn = () => { window.location.href = '/oauth2/start?rd=%2F' }
+const AuthContext = createContext<AuthContextType>({ ...empty, loading: true, selectAthlete: async () => {}, selectRole: () => {}, refreshAccess: async () => {}, signIn, signOut: async () => {} })
 export function useAuth(domain?: string) {
   const value = useContext(AuthContext)
   const location = useLocation()
@@ -180,9 +177,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     if (!response.ok) throw new Error('Sign out was not confirmed')
+    const result = await response.json()
     ++sequence.current
     await clearCache()
     setRequestPerson(''); setRequestAthlete('operator'); stateRef.current = empty; setState(empty)
+    if (result.redirect === '/oauth2/sign_out?rd=%2F') window.location.assign(result.redirect)
   }
-  return <AuthContext.Provider value={{ ...state, loading, selectAthlete, selectRole, refreshAccess, signIn: signInAuthentik, signInDiscord, signInAuthentik, signOut }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ ...state, loading, selectAthlete, selectRole, refreshAccess, signIn, signOut }}>{children}</AuthContext.Provider>
 }

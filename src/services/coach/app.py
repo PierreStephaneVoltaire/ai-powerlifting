@@ -1,6 +1,7 @@
 import hmac
 import json
 import logging
+import uuid
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -8,7 +9,7 @@ from fastapi.responses import JSONResponse
 from jsonschema import ValidationError, validate
 from pydantic import BaseModel, Field
 
-from . import principal
+from services.mesh import caller
 from .config import Settings, load
 from .model import CodexModel, Model
 from .runner import Runner
@@ -55,20 +56,10 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
     app = FastAPI(title="Powerlifting Coach")
     app.state.runner = runner
 
-    def internal(x_internal_token: str = Header(default="")):
-        if not settings.internal_token or not hmac.compare_digest(settings.internal_token, x_internal_token):
-            raise HTTPException(401, "Invalid internal token")
-
-    def person(_: None = Depends(internal), x_person_pk: str = Header(default="")) -> str:
+    def person(x_person_pk: str = Header(default="")) -> str:
         if not x_person_pk:
             raise HTTPException(403, "Authenticated Person scope required")
         return x_person_pk
-
-    def verify(token: str, operation: str, owner: str, athlete: str) -> dict:
-        try:
-            return principal.verify(settings.principal_secret, token, operation, owner, athlete)
-        except Exception as exc:
-            raise HTTPException(401, "Verified acting Person required") from exc
 
     async def access(owner: str, athlete: str, operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -82,13 +73,12 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
             raise HTTPException(404, "Job not found")
         return job
 
-    async def readable(job_id: str, owner: str, token: str, action: str = READ_ACTION) -> Job:
+    async def readable(job_id: str, owner: str, action: str = READ_ACTION) -> Job:
         job = job_or_404(job_id)
         if job.kind != "domain":
             if job.owner != owner:
                 raise HTTPException(404, "Job not found")
             return job
-        verify(token, action, owner, job.athlete)
         if action == CANCEL_ACTION and job.owner != owner:
             raise HTTPException(403, "Only the submitting Person may cancel this job")
         arguments = {**(job.payload.get("arguments") or {}), "cache_only": True, "refresh": False, "_required_access": job.payload.get("access_requirements")}
@@ -100,7 +90,7 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
         return {"status": "ok", "operations": len(runner.catalog)}
 
     @app.post("/v1/jobs", status_code=202)
-    async def submit(request: JobRequest, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
+    async def submit(request: JobRequest, owner: str = Depends(person), x_pl_source_principal: str = Header(default="")):
         if request.kind != "domain":
             raise HTTPException(422, "Only domain jobs may be submitted; use conversation turns")
         payload = dict(request.payload)
@@ -117,9 +107,8 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
             raise HTTPException(422, "Authenticated Athlete scope required")
         if _conflicting_scope(arguments, athlete):
             raise HTTPException(403, "Job payload scope conflicts with authenticated Athlete")
-        claims = verify(x_pl_principal, operation.name, owner, athlete)
         internal_fields = {key for key in arguments if key.startswith("_")}
-        if internal_fields - ({"_report_source"} if claims["iss"] == principal.SIGNING_ISSUER else set()):
+        if internal_fields - ({"_report_source"} if caller(x_pl_source_principal).endswith('/sa/pl-' + operation.domain) else set()):
             raise HTTPException(403, "Internal operation fields cannot be supplied")
         context = await access(owner, athlete, operation.name, arguments)
         payload["access_requirements"] = {
@@ -127,20 +116,20 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
             "competition_ids": context.get("competition_scope", {}).get("read", []),
         }
         payload.update(domain=operation.domain, athlete=athlete)
-        return runner.submit_domain(owner, athlete, payload).view()
+        return runner.submit_domain(owner, athlete, payload, uuid.uuid4().hex).view()
 
     @app.get("/v1/jobs/{job_id}")
-    async def status(job_id: str, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
-        return (await readable(job_id, owner, x_pl_principal)).view()
+    async def status(job_id: str, owner: str = Depends(person)):
+        return (await readable(job_id, owner)).view()
 
     @app.get("/v1/jobs/{job_id}/result")
-    async def result(job_id: str, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
-        job = await readable(job_id, owner, x_pl_principal)
+    async def result(job_id: str, owner: str = Depends(person)):
+        job = await readable(job_id, owner)
         return JSONResponse(job.view(), status_code=200 if job.status in TERMINAL else 202)
 
     @app.post("/v1/jobs/{job_id}/cancel")
-    async def cancel(job_id: str, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
-        job = await readable(job_id, owner, x_pl_principal, CANCEL_ACTION)
+    async def cancel(job_id: str, owner: str = Depends(person)):
+        job = await readable(job_id, owner, CANCEL_ACTION)
         runner.cancel(job.job_id)
         return job_or_404(job_id).view()
 
@@ -151,7 +140,7 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
             raise HTTPException(403, "No Grant for this Athlete")
         if request.surface and (request.surface not in SURFACES or not request.template_sk):
             raise HTTPException(422, "A known surface and its template_sk are required together")
-        return runner.submit_turn(owner, athlete, conversation_id, request.messages, request.surface, request.template_sk).view()
+        return runner.submit_turn(owner, athlete, conversation_id, request.messages, request.surface, request.template_sk, uuid.uuid4().hex).view()
 
     @app.delete("/v1/conversations/{conversation_id}")
     async def reset(conversation_id: str, owner: str = Depends(person)):

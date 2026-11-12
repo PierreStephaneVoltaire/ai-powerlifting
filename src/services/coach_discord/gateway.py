@@ -45,19 +45,13 @@ def conversation_for(athlete: str, channel_id: str) -> str:
 
 
 class Relay:
-    def __init__(self, coach: CoachClient, persons: dict[str, str], directory: UserDirectory | None = None):
+    def __init__(self, coach: CoachClient, directory: UserDirectory):
         self.coach = coach
-        self.persons = persons
         self.directory = directory
         self.locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def identity(self, author_id: int | str) -> Identity | None:
-        if self.directory:
-            mapped = await asyncio.to_thread(self.directory.resolve, author_id)
-            if mapped:
-                return mapped
-        person = self.persons.get(str(author_id))
-        return Identity(person=person, athlete=person) if person else None
+        return await asyncio.to_thread(self.directory.resolve, author_id)
 
     async def answer(self, message, text: str) -> None:
         identity = await self.identity(message.author.id)
@@ -82,7 +76,7 @@ class Relay:
         identity = await self.identity(author_id)
         if not identity:
             return NOT_LINKED
-        await self.coach.reset(identity.person, conversation_for(identity.athlete, str(channel_id)))
+        await self.coach.reset(identity.person, identity.athlete, conversation_for(identity.athlete, str(channel_id)))
         return "Started a fresh Coach conversation for this channel."
 
 

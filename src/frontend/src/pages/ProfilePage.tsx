@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Alert,
   Avatar,
@@ -131,6 +131,7 @@ export default function ProfilePage() {
   const { nickname: targetNickname } = useParams<{ nickname?: string }>()
   const { user, loading: authLoading, readOnly } = useAuth('settings')
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const { program, version } = useProgramStore()
   const { unit, sex } = useSettingsStore()
   const { pushToast } = useUiStore()
@@ -154,7 +155,7 @@ export default function ProfilePage() {
   const [weightClasses, setWeightClasses] = useState<string[]>([])
   const [federations, setFederations] = useState<MasterFederation[]>([])
   const [otherExercise, setOtherExercise] = useState<string | null>(null)
-  const viewingOther = Boolean(targetNickname)
+  const viewingOther = Boolean(targetNickname) && publicProfile?.is_self !== true
 
   // The page renders one of two video grids (own-videos when signed in,
   // public-videos when reading someone else's profile). Both grids feed
@@ -197,13 +198,13 @@ export default function ProfilePage() {
   }, [authLoading, user, viewingOther])
 
   useEffect(() => {
-    if (authLoading || (user && !viewingOther)) return
+    if (authLoading || (user && !targetNickname)) return
 
     let cancelled = false
     setPublicProfileLoading(true)
     setPublicProfile(null)
     setError(null)
-    const profileRequest = viewingOther && targetNickname ? fetchProfile(targetNickname) : fetchCurrentProfile()
+    const profileRequest = targetNickname ? fetchProfile(targetNickname) : fetchCurrentProfile()
     profileRequest
       .then((profile) => {
         if (!cancelled) setPublicProfile(profile)
@@ -218,7 +219,14 @@ export default function ProfilePage() {
     return () => {
       cancelled = true
     }
-  }, [authLoading, user, targetNickname, viewingOther])
+  }, [authLoading, user, targetNickname])
+
+  useEffect(() => {
+    const ownNickname = settings?.nickname
+    if (!user || viewingOther || !ownNickname || targetNickname === ownNickname) return
+    const query = searchParams.toString()
+    navigate(`/profiles/${encodeURIComponent(ownNickname)}${query ? `?${query}` : ''}`, { replace: true })
+  }, [user, viewingOther, settings?.nickname, targetNickname, searchParams, navigate])
 
   useEffect(() => {
     if (!program || viewingOther) return

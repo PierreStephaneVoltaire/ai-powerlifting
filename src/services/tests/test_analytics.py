@@ -87,6 +87,7 @@ def test_e1rm_multiplier_suggestions_binding_uses_existing_calculation():
 
 
 def test_composite_operation_bindings_proxy_to_node_sidecar(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     calls = []
 
@@ -102,6 +103,7 @@ def test_composite_operation_bindings_proxy_to_node_sidecar(monkeypatch):
 
 
 def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as_input(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     calls = []
 
@@ -114,10 +116,13 @@ def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as
     headers = calls[0][1]["headers"]
     assert headers["X-Person-Pk"] == "coach-1"
     assert headers["X-IF-Turn-Id"] == "job-1"
+    assert "X-PL-Principal" not in headers
+    assert headers["X-Internal-Token"] == "loopback-secret"
     assert calls[0][1]["json"] == {"pk": "athlete-1"}
 
 
 def test_composite_block_cache_miss_preserves_not_found_status(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     from services.dispatch import OperationError
 
@@ -135,6 +140,7 @@ def test_composite_block_cache_miss_preserves_not_found_status(monkeypatch):
 
 
 def test_composite_correlation_cache_miss_preserves_not_found_status(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     from services.dispatch import OperationError
 

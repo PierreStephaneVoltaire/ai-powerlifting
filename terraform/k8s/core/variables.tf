@@ -14,10 +14,6 @@ variable "auth_domain" {
   type = string
 }
 
-variable "cookie_domain" {
-  type = string
-}
-
 variable "tables" {
   type = object({
     powerlifting        = string
@@ -50,21 +46,6 @@ variable "authentik_client_id" {
   type = string
 }
 
-variable "authentik_client_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "jwt_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "internal_api_token" {
-  type      = string
-  sensitive = true
-}
-
 variable "runner_namespace" {
   type = string
 }
@@ -94,11 +75,6 @@ variable "discord_bot_token" {
   type      = string
   sensitive = true
 }
-
-variable "auth_namespace" {
-  type = string
-}
-
 variable "authentik_bootstrap_email" {
   type = string
 }
@@ -144,4 +120,24 @@ variable "metrics_retention_days" {
 variable "grafana_admin_password" {
   type      = string
   sensitive = true
+}
+
+variable "authentik_client_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "jwt_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "internal_api_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "workout_videos_table" {
+  type    = string
+  default = "workout-Videos"
 }

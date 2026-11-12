@@ -8,6 +8,9 @@ resource "kubectl_manifest" "edge_headers" {
         context = "http.server.location"
         value   = <<-NGINX
           proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header Authorization "";
+          proxy_set_header X-PL-Source-Principal "";
+          proxy_set_header X-Internal-Api-Token "";
           proxy_read_timeout 300s;
           client_max_body_size 500M;
           add_header X-Frame-Options "SAMEORIGIN" always;
@@ -39,9 +42,14 @@ resource "kubectl_manifest" "app_route" {
       hostnames  = [var.app_domain]
       rules = [
         {
+          matches     = [{ path = { type = "PathPrefix", value = "/oauth2" } }]
+          filters     = local.edge_filter
+          backendRefs = [{ name = "oauth2-proxy", port = 4180 }]
+        },
+        {
           matches     = [{ path = { type = "PathPrefix", value = "/api" } }]
           filters     = local.edge_filter
-          backendRefs = [{ name = "powerlifting-app-backend", port = 3005 }]
+          backendRefs = [{ name = "oauth2-proxy", port = 4180 }]
         },
         {
           matches     = [{ path = { type = "PathPrefix", value = "/" } }]
@@ -53,4 +61,27 @@ resource "kubectl_manifest" "app_route" {
   })
 
   depends_on = [kubectl_manifest.gateway, kubectl_manifest.edge_headers]
+}
+
+resource "kubectl_manifest" "auth_route" {
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "HTTPRoute"
+    metadata   = { name = "authentik", namespace = var.namespace }
+    spec = {
+      parentRefs = [{ name = local.gateway_name }]
+      hostnames  = [var.auth_domain]
+      rules = [{
+        filters = [{
+          type = "RequestHeaderModifier"
+          requestHeaderModifier = {
+            set = [{ name = "X-Forwarded-Proto", value = "https" }]
+          }
+        }]
+        backendRefs = [{ name = "authentik-server", port = 80 }]
+      }]
+    }
+  })
+
+  depends_on = [kubectl_manifest.gateway]
 }

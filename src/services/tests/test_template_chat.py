@@ -6,7 +6,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from services.coach import chat_cache, guard, principal
+from services.coach import chat_cache, guard
+from services.tests.test_coach import headers
 from services.coach.app import create_app
 from services.coach.config import load
 from services.coach.model import Reply
@@ -91,7 +92,7 @@ class Services:
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content or b"{}")
         path = request.url.path
-        if path == "/internal/access":
+        if path == "/operations/access_context":
             return httpx.Response(200, json={"permissions": ["templates:write"], "competition_scope": {"read": []}, "settings_pk": "sir_simpalot", "own_athlete_pk": "operator"})
         if path == "/operations/template_list":
             return httpx.Response(200, json=[{"sk": "template#1", "name": "Imported Template", "archived": False, "published": False}, {"sk": "template#2", "name": "offseason", "archived": False, "published": False}])
@@ -131,8 +132,6 @@ class Model:
 
 @pytest.fixture
 def chat(tmp_path, monkeypatch):
-    monkeypatch.setenv("INTERNAL_API_TOKEN", TOKEN)
-    monkeypatch.setenv("PL_PRINCIPAL_SECRET", SECRET)
     monkeypatch.setenv("PL_SERVICES_DIR", str(SERVICES))
     monkeypatch.setenv("COACH_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("COACH_URL", "http://coach")
@@ -158,11 +157,11 @@ def chat(tmp_path, monkeypatch):
 
 
 def say(client, conversation, text, **extra):
-    headers = {"X-Internal-Token": TOKEN, "X-Person-Pk": "operator"}
-    submitted = client.post(f"/v1/conversations/{conversation}/turns", json={"messages": [{"role": "user", "content": text}], **extra}, headers=headers)
+    turn_headers = headers()
+    submitted = client.post(f"/v1/conversations/{conversation}/turns", json={"messages": [{"role": "user", "content": text}], **extra}, headers=turn_headers)
     assert submitted.status_code == 202, submitted.text
     for _ in range(200):
-        response = client.get(f"/v1/jobs/{submitted.json()['job_id']}/result", headers=headers)
+        response = client.get(f"/v1/jobs/{submitted.json()['job_id']}/result", headers=headers())
         if response.status_code == 200:
             return response.json()
         time.sleep(0.02)

@@ -17,6 +17,7 @@ resource "kubernetes_persistent_volume_claim_v1" "valkey" {
 }
 
 resource "kubernetes_deployment_v1" "valkey" {
+  depends_on       = [kubectl_manifest.cache_l4, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -37,10 +38,11 @@ resource "kubernetes_deployment_v1" "valkey" {
 
     template {
       metadata {
-        labels = { app = "pl-valkey" }
+        labels = { app = "pl-valkey", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name            = "pl-valkey"
         automount_service_account_token = false
 
         container {

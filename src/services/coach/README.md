@@ -28,17 +28,22 @@ the external agent API.
 Both images are Packer templates (`docker/powerlifting-coach-agent.pkr.hcl`,
 `docker/powerlifting-coach-discord.pkr.hcl`). CI (`.github/workflows/build-images.yml`,
 job `build-coach`) builds them on
-`src/services/**` changes and pushes `:latest` and `:<sha>` to
-`if-powerlifting-coach-agent` and `if-powerlifting-coach-discord`. Those ECR
+`src/services/**` changes and pushes the selected tag to
+`if-powerlifting-coach-agent` and `if-powerlifting-coach-discord`. It publishes
+`latest` only for `main` and `master`; other branches publish their
+branch-specific tag. Those ECR
 repositories are in the main `terraform/` state's `ecr` module, applied by CI.
 For a manual Packer build, run `scripts/build_coach_images.sh agent discord`.
 
 `terraform/coach/` has its own state (`powerlifting-app/coach/terraform.tfstate`).
 It holds only Kubernetes resources: the `pl-coach-state` PVC and both
-Deployments and Services. The in-cluster `kubernetes-apply` runner applies this
-state after `build-coach` publishes new images. It reads each image digest from
-the `latest` tag. Configure the repository `COACH_TFVARS` Actions secret with
-the Coach stack variable values from `terraform.tfvars`. 
+Deployments and Services. Set `image_tag` in the Coach stack variables to the
+published tag before applying; it defaults to `latest`. The stack resolves each
+image to its digest. Configure the repository `COACH_TFVARS` Actions secret with
+the Coach stack variable values from `terraform.tfvars`. After building Coach,
+the in-cluster Kubernetes job applies this separate state with the same derived
+image tag used by the app. Preserve the existing `shared_secret_name` input in
+the Actions secret for master rollback; this branch does not consume it.
 
 For a manual local rollout, the stack can still be planned and applied directly:
 
@@ -48,7 +53,7 @@ terraform init -backend-config=backend.tfvars
 terraform plan -out=coach.plan && terraform apply coach.plan
 ```
 
-Every variable is required and has no default. Environment values live in the
+`image_tag` defaults to `latest`; other variables are required. Environment values live in the
 gitignored `terraform.tfvars` (template: `terraform.tfvars.example`), and the
 state location lives in the gitignored `backend.tfvars`. Secrets are referenced by
 name and never copied.

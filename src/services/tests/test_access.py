@@ -49,7 +49,7 @@ def test_aggregate_program_changes_require_each_affected_domain():
     import pytest
     from services.authorization import check_context
     from services.dispatch import OperationError
-    claims = {'iss': 'powerlifting-gateway'}
+    claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'}
     limited = {'permissions': ['program:write', 'program:read']}
     for path in ('sessions[0].exercises', 'current_maxes.squat', 'meta.manual_maxes', 'competitions'):
         with pytest.raises(OperationError, match='permission required'):
@@ -83,7 +83,7 @@ def test_cross_domain_metadata_and_note_permissions_are_checked():
     from services.authorization import check_context
     from services.dispatch import OperationError
     context = {'permissions': ['program:write', 'competition:read', 'settings:write', 'videos:write']}
-    claims = {'iss': 'powerlifting-gateway'}
+    claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'}
     with pytest.raises(OperationError, match='competition:write'):
         check_context('program_update_meta_field', {'field': 'attempt_pct', 'value': {}}, claims, context)
     with pytest.raises(OperationError, match='weight-log:write'):
@@ -125,7 +125,7 @@ def test_competition_ties_limit_writes_and_peer_reads_remain_independent():
     grant = {'grantee_person_pk': 'handler', 'grant_type': 'handler', 'tied_competition_ids': ['COMP#meet-a']}
     dates = {'COMP#meet-a': '2099-01-01'}
     context = evaluate_facts('handler', 'athlete', owner, actor, [grant], dates)
-    claims = {'iss': 'powerlifting-gateway', 'athlete': 'athlete'}
+    claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend', 'athlete': 'athlete'}
     assert check_context('health_update_user_competition', {'master_id': 'meet-a'}, claims, context) is context
     for operation, arguments in [('health_update_user_competition', {'master_id': 'meet-b'}), ('health_list_competitions', {'op': 'update', 'master_id': 'meet-b'})]:
         with pytest.raises(OperationError, match='outside the current grant'):

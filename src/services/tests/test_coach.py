@@ -7,14 +7,11 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from services.coach import principal
 from services.coach.app import create_app
 from services.coach.config import load
 from services.coach.model import Reply
 
 
-SECRET = "s" * 40
-TOKEN = "internal-token"
 SERVICES = Path(__file__).resolve().parents[1]
 AI_OPERATIONS = [record["name"] for path in sorted((SERVICES / "operations").glob("*.json")) for record in json.loads(path.read_text()) if record.get("execution") == "ai"]
 OPERATION_AI = {name: {"provider": "openrouter" if name == "glossary_estimate_e1rm" else "chatgpt", "model": "estimate-model" if name == "glossary_estimate_e1rm" else "analysis-model", "effort": "high"} for name in AI_OPERATIONS}
@@ -29,14 +26,15 @@ class FakeServices:
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content or b"{}")
         self.calls.append((request.url.host, request.url.path, dict(request.headers), body))
-        principal_claims = principal.verify(SECRET, request.headers["x-pl-principal"], principal_operation(request), request.headers.get("x-person-pk", ""), request.headers.get("x-athlete-pk", "")) if request.url.path != "/internal/access" else None
-        if request.url.path == "/internal/access":
+        assert request.headers["x-person-pk"] and request.headers["x-athlete-pk"]
+        if request.url.path == "/operations/access_context":
+            if request.headers["x-person-pk"] == "outsider":
+                return httpx.Response(403, json={"detail": {"code": "forbidden", "message": "Not permitted"}})
             return httpx.Response(200, json={"permissions": ["program:read", "glossary:write"], "competition_scope": {"read": []}})
         if request.url.path == "/operations/glossary_estimate_e1rm":
             assert request.headers["x-if-turn-id"]
             return httpx.Response(200, json={"status": "needs_inference", "execution_id": "exec-1", "challenge_id": "ch-1", "messages": [{"role": "system", "content": "Estimate."}, {"role": "user", "content": "Squat"}], "tools": [{"type": "function", "function": {"name": "report", "parameters": {"type": "object", "properties": {"e1rm_kg": {"type": "number"}}, "required": ["e1rm_kg"]}}}]})
         if request.url.path == "/executions/exec-1":
-            assert principal_claims["operation"] == "domain_resume"
             assert body == {"challenge_id": "ch-1", "content": {"e1rm_kg": 200}}
             return httpx.Response(200, json={"status": "succeeded", "result": {"status": "estimated", "estimate": {"e1rm_kg": 200, "basis": "model"}}})
         if request.url.path == "/operations/template_list":
@@ -45,10 +43,6 @@ class FakeServices:
             assert "x-if-turn-id" not in request.headers
             return httpx.Response(200, json={"dots": 412.5})
         return httpx.Response(404, json={"detail": "missing"})
-
-
-def principal_operation(request: httpx.Request) -> str:
-    return "domain_resume" if request.url.path.startswith("/executions/") else request.url.path.rsplit("/", 1)[-1]
 
 
 class FakeModel:
@@ -80,8 +74,6 @@ class FakeModel:
 
 @pytest.fixture
 def harness(tmp_path, monkeypatch):
-    monkeypatch.setenv("INTERNAL_API_TOKEN", TOKEN)
-    monkeypatch.setenv("PL_PRINCIPAL_SECRET", SECRET)
     monkeypatch.setenv("PL_SERVICES_DIR", str(SERVICES))
     monkeypatch.setenv("COACH_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("COACH_URL", "http://coach")
@@ -100,11 +92,8 @@ def harness(tmp_path, monkeypatch):
         yield client, fake, model
 
 
-def headers(person="operator", operation=None, athlete="operator"):
-    result = {"X-Internal-Token": TOKEN, "X-Person-Pk": person}
-    if operation:
-        result["X-PL-Principal"] = principal.sign(SECRET, person, athlete, operation)
-    return result
+def headers(person="operator"):
+    return {"X-Person-Pk": person, "X-Athlete-Pk": "operator"}
 
 
 def wait(client, job_id, request_headers):
@@ -118,22 +107,22 @@ def wait(client, job_id, request_headers):
 
 def test_domain_job_answers_inference_challenges_and_returns_compatible_result(harness):
     client, fake, model = harness
-    submitted = client.post("/v1/jobs", json={"kind": "domain", "payload": {"operation": "glossary_estimate_e1rm", "arguments": {"id": "squat"}, "athlete": "operator"}}, headers=headers(operation="glossary_estimate_e1rm"))
+    submitted = client.post("/v1/jobs", json={"kind": "domain", "payload": {"operation": "glossary_estimate_e1rm", "arguments": {"id": "squat"}, "athlete": "operator"}}, headers=headers())
     assert submitted.status_code == 202, submitted.text
-    job = wait(client, submitted.json()["job_id"], headers(operation="domain_job_read"))
+    job = wait(client, submitted.json()["job_id"], headers())
     assert job["status"] == "succeeded", job
     assert json.loads(job["result"]["content"])["estimate"]["e1rm_kg"] == 200
     assert len(model.completions) == 2 and "rejected" in model.completions[1][1]
     assert {(ai.provider, ai.model, ai.effort) for _, _, ai in model.completions} == {("openrouter", "estimate-model", "high")}
 
 
-def test_domain_job_rejects_bad_principal_and_scope(harness):
+def test_domain_job_rejects_unauthorized_person_and_scope(harness):
     client, _, _ = harness
     payload = {"kind": "domain", "payload": {"operation": "glossary_estimate_e1rm", "arguments": {"id": "squat"}, "athlete": "operator"}}
-    assert client.post("/v1/jobs", json=payload, headers=headers(operation="program_get")).status_code == 401
+    assert client.post("/v1/jobs", json=payload, headers=headers(person="outsider")).status_code == 403
     scoped = {"kind": "domain", "payload": {**payload["payload"], "arguments": {"id": "squat", "pk": "someone-else"}}}
-    assert client.post("/v1/jobs", json=scoped, headers=headers(operation="glossary_estimate_e1rm")).status_code == 403
-    assert client.post("/v1/jobs", json=payload, headers={"X-Person-Pk": "operator"}).status_code == 401
+    assert client.post("/v1/jobs", json=scoped, headers=headers()).status_code == 403
+    assert client.post("/v1/jobs", json=payload, headers={"X-Athlete-Pk": "operator"}).status_code == 403
 
 
 def test_conversation_turn_uses_scoped_tools_and_keeps_thread(harness):

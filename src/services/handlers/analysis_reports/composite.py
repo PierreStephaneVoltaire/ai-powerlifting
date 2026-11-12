@@ -12,7 +12,7 @@ from services.dispatch import OperationError
 def call_node(operation: str, args: dict[str, Any]) -> Any:
     url = os.environ.get("ANALYTICS_NODE_URL", "http://127.0.0.1:8091").rstrip("/")
     headers = {
-        "X-Internal-Token": os.environ.get("ANALYTICS_NODE_TOKEN", os.environ.get("INTERNAL_API_TOKEN", "")),
+        "X-Internal-Token": os.environ["ANALYTICS_NODE_TOKEN"],
         "X-Athlete-Pk": str(args.get("pk", "")),
         "X-Person-Pk": str(args.get("_person_pk", args.get("pk", ""))),
         "X-Read-Only": str(bool(args.get("read_only", False))).lower(),

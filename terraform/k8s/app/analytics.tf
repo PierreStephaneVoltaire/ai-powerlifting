@@ -1,9 +1,25 @@
+resource "random_password" "analytics_node_token" {
+  length  = 64
+  special = false
+}
+
+resource "kubernetes_secret_v1" "analytics" {
+  metadata {
+    name      = "pl-analytics-secrets"
+    namespace = var.namespace
+  }
+
+  data = { ANALYTICS_NODE_TOKEN = random_password.analytics_node_token.result }
+}
+
 resource "kubernetes_deployment_v1" "analytics" {
+  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
     name      = "pl-analytics"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -15,10 +31,11 @@ resource "kubernetes_deployment_v1" "analytics" {
 
     template {
       metadata {
-        labels = { app = "pl-analytics" }
+        labels = { app = "pl-analytics", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name             = "pl-analytics"
         automount_service_account_token  = false
         enable_service_links             = false
         termination_grace_period_seconds = 30
@@ -51,8 +68,19 @@ resource "kubernetes_deployment_v1" "analytics" {
           }
 
           env_from {
-            secret_ref {
-              name = "powerlifting-app-secrets"
+            config_map_ref {
+              name = "powerlifting-app-config"
+            }
+          }
+
+
+          env {
+            name = "ANALYTICS_NODE_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.analytics.metadata[0].name
+                key  = "ANALYTICS_NODE_TOKEN"
+              }
             }
           }
 
@@ -99,9 +127,13 @@ resource "kubernetes_deployment_v1" "analytics" {
             }
           }
 
-          env_from {
-            secret_ref {
-              name = "powerlifting-app-secrets"
+          env {
+            name = "ANALYTICS_NODE_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.analytics.metadata[0].name
+                key  = "ANALYTICS_NODE_TOKEN"
+              }
             }
           }
 
@@ -133,6 +165,7 @@ resource "kubernetes_service_v1" "analytics" {
   metadata {
     name      = "pl-analytics"
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -141,6 +174,8 @@ resource "kubernetes_service_v1" "analytics" {
     port {
       port        = 8000
       target_port = 8000
+      name        = "http"
+      protocol    = "TCP"
     }
   }
 }

@@ -10,13 +10,28 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from services.lib import media_notifications
 
-MEDIA_SK_PREFIX = "Media#"
 
 
 def get_health_table():
     return dynamodb_resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
         os.environ.get("IF_HEALTH_TABLE_NAME", "if-health")
     )
+
+
+def get_videos_table():
+    return dynamodb_resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
+        os.environ.get("WORKOUT_VIDEOS_TABLE_NAME", "workout-Videos")
+    )
+
+
+def media_record(item: dict) -> dict:
+    record = {key: value for key, value in item.items() if key not in {"pk", "sk"}}
+    record["athlete_id"] = str(item["pk"])
+    return record
+
+
+def media_item(record: dict) -> dict:
+    return {**{key: value for key, value in record.items() if key != "athlete_id"}, "pk": str(record["athlete_id"])}
 
 
 def get_session_store(args: dict):
@@ -180,15 +195,15 @@ def cas_update_videos(store: Any, program_sk: str, session_date: str, phases: li
     raise ValueError("Concurrent video update conflict")
 
 
-def media_key(video_id: str) -> str:
-    return f"{MEDIA_SK_PREFIX}{video_id}"
-
-
-def get_media(table: Any, pk: str, video_id: str) -> dict | None:
-    item = table.get_item(Key={"pk": pk, "sk": media_key(video_id)}, ConsistentRead=True).get("Item") or None
-    if not item or str(item.get("media_id") or item.get("video_id") or "") != video_id:
+def get_media(pk: str, video_id: str) -> dict | None:
+    record = get_videos_table().get_item(Key={"athlete_id": pk, "video_id": video_id}, ConsistentRead=True).get("Item") or None
+    if not record or str(record.get("media_id") or record.get("video_id") or "") != video_id:
         return None
-    return item
+    return media_item(record)
+
+
+def put_media(item: dict, **conditions) -> None:
+    get_videos_table().put_item(Item=media_record(item), **conditions)
 
 
 def media_metadata(item: dict) -> dict[str, str]:
@@ -273,8 +288,8 @@ def lift_profile_slot(table: Any, pk: str, program_sk: str, lift: str, angle: st
     return dict(slot) if isinstance(slot, dict) else None
 
 
-def allocate_media(table: Any, item: dict) -> dict:
-    current = get_media(table, item["pk"], item["video_id"])
+def allocate_media(item: dict) -> dict:
+    current = get_media(item["pk"], item["video_id"])
     if current:
         if any(str(current.get(key) or "") != str(item.get(key) or "") for key in ("pk", "session_id", "session_date", "program_sk", "lift", "angle")):
             raise ValueError("Video ID is already owned by another session")
@@ -289,13 +304,13 @@ def allocate_media(table: Any, item: dict) -> dict:
             for key in ("processed_s3_key", "thumbnail_s3_key", "source_size", "completed_at", "failure"):
                 item.pop(key, None)
             try:
-                table.put_item(Item=item, ConditionExpression="allocation_revision = :revision AND #status = :status", ExpressionAttributeNames={"#status": "status"}, ExpressionAttributeValues={":revision": current.get("allocation_revision", 0), ":status": current.get("status")})
+                put_media(item, ConditionExpression="allocation_revision = :revision AND #status = :status", ExpressionAttributeNames={"#status": "status"}, ExpressionAttributeValues={":revision": current.get("allocation_revision", 0), ":status": current.get("status")})
             except ClientError as error:
                 if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
                     raise
-                return get_media(table, item["pk"], item["video_id"]) or item
+                return get_media(item["pk"], item["video_id"]) or item
             return item
         return current
     item.setdefault("allocated_at", datetime.now(timezone.utc).isoformat())
-    table.put_item(Item=item, ConditionExpression="attribute_not_exists(pk)")
+    put_media(item, ConditionExpression="attribute_not_exists(video_id)")
     return item

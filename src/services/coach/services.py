@@ -3,7 +3,6 @@ from typing import Any
 
 import httpx
 
-from . import principal
 from .config import Settings
 
 
@@ -18,6 +17,7 @@ class ServiceError(RuntimeError):
 class Scope:
     person: str
     athlete: str
+    job_id: str = ''
 
 
 class PowerliftingServices:
@@ -28,15 +28,10 @@ class PowerliftingServices:
     def _client(self, timeout: float) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=timeout, transport=self.transport)
 
-    def _headers(self, scope: Scope, operation: str, turn_id: str = "") -> dict[str, str]:
-        headers = {
-            "X-Internal-Token": self.settings.internal_token,
-            "X-Athlete-Pk": scope.athlete,
-            "X-Person-Pk": scope.person,
-            "X-PL-Principal": principal.sign(self.settings.principal_secret, scope.person, scope.athlete, operation),
-        }
+    def _headers(self, scope: Scope, turn_id: str = "") -> dict[str, str]:
+        headers = {'X-Athlete-Pk': scope.athlete, 'X-Person-Pk': scope.person}
         if turn_id:
-            headers["X-IF-Turn-Id"] = turn_id
+            headers['X-IF-Turn-Id'] = turn_id
         return headers
 
     async def _post(self, url: str, body: dict[str, Any], headers: dict[str, str], timeout: float = 60) -> Any:
@@ -51,11 +46,11 @@ class PowerliftingServices:
         return response.json()
 
     async def access(self, scope: Scope, operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        headers = self._headers(scope, operation)
-        return await self._post(self.settings.profile_url.rstrip("/") + "/internal/access", {"operation": operation, "arguments": arguments}, {"X-Internal-Token": headers["X-Internal-Token"], "X-PL-Principal": headers["X-PL-Principal"]}, timeout=10)
+        body = {} if operation == 'access_context' else {'operation': operation, 'arguments': arguments}
+        return await self._post(f"{self.settings.service_url('profile')}/operations/access_context", body, self._headers(scope), timeout=10)
 
     async def call(self, scope: Scope, domain: str, operation: str, arguments: dict[str, Any], turn_id: str = "", generation: dict[str, Any] | None = None) -> Any:
-        headers = self._headers(scope, operation, turn_id)
+        headers = self._headers(scope, turn_id)
         if generation:
             headers["X-IF-Generation-Id"] = str(generation["generation_id"])
             headers["X-IF-Generation-Attempt"] = str(generation["generation_attempt"])
@@ -63,4 +58,4 @@ class PowerliftingServices:
 
     async def resume(self, scope: Scope, domain: str, execution_id: str, turn_id: str, challenge_id: str | None = None, content: Any = None) -> Any:
         body = {"challenge_id": challenge_id, "content": content} if challenge_id else {}
-        return await self._post(f"{self.settings.service_url(domain)}/executions/{execution_id}", body, self._headers(scope, "domain_resume", turn_id))
+        return await self._post(f"{self.settings.service_url(domain)}/executions/{execution_id}", body, self._headers(scope, turn_id))

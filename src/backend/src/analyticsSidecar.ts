@@ -6,7 +6,9 @@ import { relayResponse } from './analyticsRelay'
 
 const app = express()
 const port = Number(process.env.ANALYTICS_NODE_PORT || 8091)
-const token = process.env.ANALYTICS_NODE_TOKEN || process.env.INTERNAL_API_TOKEN || ''
+const token = process.env.ANALYTICS_NODE_TOKEN || ''
+
+if (!token) throw new Error('ANALYTICS_NODE_TOKEN is required')
 
 app.use(express.json({ limit: '10mb' }))
 app.use((req: Request, res: Response, next) => {

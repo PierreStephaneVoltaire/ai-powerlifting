@@ -3,10 +3,8 @@ import { Request, Response } from 'express'
 import { callOperation } from '../utils/operations'
 import { coachChat, invokeToolDirect, resetCoachChat, templateConversation } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
-import { principalToken } from '../auth/principal'
+import { serviceHeaders } from '../utils/serviceHeaders'
 import { coachUrl } from '../utils/coachUrl'
-
-const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 function normalizeTemplateSk(sk: string): string {
   try {
@@ -24,14 +22,9 @@ function templateActor(req: Request): Record<string, string> {
   }
 }
 
-function jobHeaders(req: Request, operation: string): Record<string, string> {
+function jobHeaders(req: Request): Record<string, string> {
   if (!req.actor_mapped_pk || !req.mapped_pk) throw new AppError('Authenticated Person and Athlete scope required', 401, 'AUTH_REQUIRED')
-  return {
-    'Content-Type': 'application/json',
-    'X-Internal-Token': INTERNAL_API_TOKEN,
-    'X-Person-Pk': req.actor_mapped_pk,
-    'X-PL-Principal': principalToken(operation, { athlete: req.mapped_pk, person: req.actor_mapped_pk }),
-  }
+  return serviceHeaders({ athlete: req.mapped_pk, person: req.actor_mapped_pk })
 }
 
 export async function listTemplates(req: Request, res: Response) {
@@ -219,7 +212,7 @@ export async function uploadTemplateImport(req: Request, res: Response) {
 
   const response = await fetch(`${coachUrl()}/v1/jobs`, {
     method: 'POST',
-    headers: jobHeaders(req, 'import_parse_file'),
+    headers: jobHeaders(req),
     body: JSON.stringify({
       conversation_id: `template-import:${req.mapped_pk}`,
       kind: 'domain',
@@ -253,7 +246,7 @@ export async function getTemplateImport(req: Request, res: Response) {
     throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
   }
   const response = await fetch(`${coachUrl()}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, {
-    headers: jobHeaders(req, 'domain_job_read'),
+    headers: jobHeaders(req),
   })
   if (response.status === 404) throw new AppError('Template import job not found', 404)
   if (!response.ok) {
@@ -277,7 +270,7 @@ export async function getTemplateImport(req: Request, res: Response) {
 
 export async function applyTemplateImport(req: Request, res: Response) {
   if (!req.user || req.readOnly || !req.mapped_pk || !req.actor_mapped_pk) throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
-  const response = await fetch(`${coachUrl()}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, { headers: jobHeaders(req, 'domain_job_read') })
+  const response = await fetch(`${coachUrl()}/v1/jobs/${encodeURIComponent(req.params.jobId)}`, { headers: jobHeaders(req) })
   if (!response.ok) throw new AppError('Template import job not found', response.status === 404 ? 404 : 502)
   const job: any = await response.json()
   if (job.status !== 'succeeded') throw new AppError(`Template import is ${job.status}`, 409, 'IMPORT_NOT_READY')

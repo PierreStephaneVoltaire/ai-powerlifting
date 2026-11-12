@@ -44,7 +44,7 @@ build {
   }
 
   provisioner "file" {
-    sources     = ["../src/services/__init__.py", "../src/services/permissions.json", "../src/services/operations", "../src/services/coach"]
+    sources     = ["../src/services/__init__.py", "../src/services/mesh.py", "../src/services/permissions.json", "../src/services/operations", "../src/services/coach"]
     destination = "/opt/powerlifting/services/"
   }
 
@@ -65,9 +65,10 @@ build {
   post-processors {
     post-processor "docker-tag" {
       repository = var.image_repository
-      tags       = [var.image_tag, "latest"]
+      tags       = [var.image_tag]
     }
     post-processor "docker-push" {
+      name         = "publish"
       ecr_login    = true
       login_server = split("/", var.image_repository)[0]
     }
