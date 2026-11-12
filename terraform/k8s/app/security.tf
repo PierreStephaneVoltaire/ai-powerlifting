@@ -283,6 +283,7 @@ resource "kubernetes_deployment_v1" "oauth2_proxy" {
             "--skip-auth-route=POST=^/api/auth/logout$",
             "--upstream-timeout=300s",
             "--skip-provider-button=true",
+            "--insecure-oidc-allow-unverified-email=true",
             "--silence-ping-logging=true",
           ]
 

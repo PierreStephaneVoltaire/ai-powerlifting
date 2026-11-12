@@ -86,6 +86,7 @@ resource "authentik_source_oauth" "discord" {
   consumer_key        = var.discord_client_id
   consumer_secret     = var.discord_client_secret
   enabled             = true
+  promoted            = true
   user_path_template  = "goauthentik.io/sources/%(slug)s"
   group_matching_mode = "name_link"
   user_matching_mode  = "identifier"
