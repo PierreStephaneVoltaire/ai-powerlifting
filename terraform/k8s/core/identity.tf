@@ -86,7 +86,7 @@ resource "authentik_source_oauth" "discord" {
   consumer_key        = var.discord_client_id
   consumer_secret     = var.discord_client_secret
   enabled             = true
-  user_path_template  = "authentik:%%(username)s"
+  user_path_template  = "goauthentik.io/sources/%(slug)s"
   group_matching_mode = "name_link"
   user_matching_mode  = "identifier"
   additional_scopes   = "email identify"
@@ -134,7 +134,7 @@ resource "authentik_property_mapping_provider_scope" "verified_discord_subjects"
 from authentik.sources.oauth.models import UserOAuthSourceConnection
 return {
   "discord_subjects": list(UserOAuthSourceConnection.objects.filter(
-    user=user, source__provider_type="discord"
+    user=user, source__oauthsource__provider_type="discord"
   ).values_list("identifier", flat=True)),
 }
 EOT
