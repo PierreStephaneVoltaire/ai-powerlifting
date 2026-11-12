@@ -67,8 +67,10 @@ powerlifting-app/
 │   ├── tsconfig.json
 │   └── index.ts             Program, Session, Exercise, Competition, Glossary, Budget, …
 ├── src/services/
-│   ├── handlers/             Domain operation packages grouped by service
-│   ├── lib/                  Shared stores, scoping, calculations, and AI prompts
+│   ├── <domain>/             One package per Python domain: operation handlers, domain helpers, tests/
+│   ├── runtime/              Shared Python runtime, stores, scoping, prompts, permissions.json, tests/
+│   ├── analytics/ rankings/ analytics-ai/ analytics-export/   Native services
+│   ├── coach/ coach_discord/ Coach services
 │   ├── operations/           Typed HTTP/MCP operation manifests
 ├── src/lambda/
 │   ├── master-sync/          Master data sync AWS Lambda
@@ -108,6 +110,6 @@ When behavior and prose disagree, the code wins. The highest-signal files:
 - **Types:** `src/dependencies/types/index.ts`
 - **AI plumbing:** `src/backend/src/utils/agent.ts` (invokeToolDirect → Coach jobs)
 - **Service plumbing:** `src/backend/src/utils/operations.ts` (callOperation HTTP call to the owning domain service) + `src/backend/src/utils/operationCache.ts` (in-process LRU cache + write invalidation)
-- **Service runtime:** `src/services/` handlers and shared `src/services/lib/`, packaged by `docker/powerlifting-services.pkr.hcl`.
+- **Service runtime:** `src/services/<domain>/` handlers and shared `src/services/runtime/`, packaged by `docker/powerlifting-services.pkr.hcl`.
 - **AWS Lambda substrate:** `powerlifting-app/terraform/` retains only the master-sync and video-thumbnail Lambdas.
 - **Infra:** `terraform/` (root, local k3s) and `powerlifting-app/terraform/` (AWS-only)

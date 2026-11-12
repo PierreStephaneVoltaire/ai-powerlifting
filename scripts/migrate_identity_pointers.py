@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 from botocore.exceptions import ClientError
-from services.handlers.user.identity_resolve.core import _get_table, _identity_key, _scan
+from services.profile.identity_resolve.core import _get_table, _identity_key, _scan
 
 
 def migrate(table, apply=False):

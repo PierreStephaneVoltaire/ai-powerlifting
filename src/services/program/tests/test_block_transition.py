@@ -1,0 +1,348 @@
+import asyncio
+import copy
+import hashlib
+
+import pytest
+
+
+from services.runtime.program_store import ProgramNotFoundError, ProgramStore
+from services.runtime.session_store import SessionIdentityConflictError
+
+
+class FakeTable:
+    def __init__(self, items):
+        self.items = {tuple(item[key] for key in ("pk", "sk")): copy.deepcopy(item) for item in items}
+        self.puts = []
+        self.deletes = []
+
+    def get_item(self, Key, **_kwargs):
+        item = self.items.get((Key["pk"], Key["sk"]))
+        return {"Item": copy.deepcopy(item)} if item else {}
+
+    def put_item(self, Item, **_kwargs):
+        item = copy.deepcopy(Item)
+        self.items[(item["pk"], item["sk"])] = item
+        self.puts.append(item)
+
+    def delete_item(self, Key, **_kwargs):
+        self.items.pop((Key["pk"], Key["sk"]), None)
+        self.deletes.append(dict(Key))
+
+    def query(self, **_kwargs):
+        return {"Items": [
+            copy.deepcopy(item)
+            for (pk, sk), item in self.items.items()
+            if pk == "athlete-1" and sk.startswith("program#v")
+        ]}
+
+
+class FakeSessionStore:
+    def __init__(self, sessions):
+        self.sessions = {"program#v007": copy.deepcopy(sessions)}
+        self.replacements = []
+        self.on_replace = None
+
+    def list_sessions_sync(self, program_sk, _phases):
+        return copy.deepcopy(self.sessions.get(program_sk, []))
+
+    def replace_program_sessions_sync(self, program_sk, sessions, phases, **_kwargs):
+        self.sessions[program_sk] = copy.deepcopy(sessions)
+        self.replacements.append((program_sk, copy.deepcopy(sessions), copy.deepcopy(phases)))
+        if self.on_replace:
+            self.on_replace(program_sk)
+
+
+def make_store():
+    sessions = [
+        {"id": "logged", "date": "2026-09-10", "block": "current", "block_id": "current", "status": "logged", "completed": True, "week_number": 4, "session_notes": "kept"},
+        {"id": "planned", "date": "2026-09-20", "block": "current", "block_id": "current", "status": "planned", "completed": False, "week_number": 5},
+        {"id": "skipped", "date": "2026-09-21", "block": "current", "block_id": "current", "status": "skipped", "completed": False, "week_number": 5},
+    ]
+    program = {
+        "pk": "athlete-1",
+        "sk": "program#v007",
+        "meta": {
+            "version_label": "7.0",
+            "block_notes": [{"date": "2026-09-01", "notes": "keep this history", "updated_at": "2026-09-01T00:00:00+00:00", "block": "current"}],
+            "blocks": [{"id": "current", "name": "Accumulation", "status": "active", "start_week": 1, "end_week": 4, "week_start_day": "Tuesday", "start_maxes_kg": {"squat": 180, "bench": 110, "deadlift": 210}}],
+        },
+        "phases": [{"name": "Volume", "intent": "base", "start_week": 2, "end_week": 4, "notes": "phase history", "block": "current"}],
+        "current_maxes": {"squat": 185, "bench": 115, "deadlift": 220},
+    }
+    pointer = {"pk": "athlete-1", "sk": "program#current", "version": 7, "ref_sk": "program#v007", "revision": 4}
+    table = FakeTable([pointer, program])
+    sessions_store = FakeSessionStore(sessions)
+    store = ProgramStore("if-health", "athlete-1")
+    store._table = table
+    store._get_session_store = lambda: sessions_store
+    return store, table, sessions_store
+
+
+def transition(store, **kwargs):
+    return asyncio.run(store.block_transition(**kwargs))
+
+
+def test_complete_and_start_preserves_history_resets_numbering_and_sessions():
+    store, table, sessions_store = make_store()
+    result = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        name="Strength",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
+
+    program = result["program"]
+    meta = program["meta"]
+    next_id = result["next_block_id"]
+    assert next_id.startswith("block-")
+    archive_id = next(block["id"] for block in meta["blocks"] if block["status"] == "completed")
+    assert meta["current_block_id"] == next_id
+    assert [block["label"] for block in meta["blocks"]].count("current") == 1
+    assert [block["id"] for block in meta["blocks"]].count(next_id) == 1
+    assert archive_id != "current"
+    assert next(block["status"] for block in meta["blocks"] if block["id"] == archive_id) == "completed"
+    assert next(block["start_week"] for block in meta["blocks"] if block["id"] == next_id) == 1
+    assert next(block["end_week"] for block in meta["blocks"] if block["id"] == next_id) == 0
+    blocks_by_id = {block["id"]: block for block in meta["blocks"]}
+    assert blocks_by_id[archive_id]["start_maxes_kg"] == {"squat": 180, "bench": 110, "deadlift": 210}
+    assert blocks_by_id[next_id]["start_maxes_kg"] == {"squat": 190, "bench": 120, "deadlift": 225}
+    assert (blocks_by_id[archive_id]["week_start_day"], blocks_by_id[next_id]["week_start_day"]) == ("Tuesday", "Wednesday")
+    assert not {"block_start_maxes", "block_week_start_days", "program_week_start_day"} & set(meta)
+    assert meta["block_notes"][0]["notes"] == "keep this history"
+    assert meta["block_notes"][0]["block"] == archive_id
+    phases = [phase for phase in program["phases"] if phase["block"] == next_id]
+    assert phases == []
+    assert [(session["id"], session["status"], session["completed"]) for session in program["sessions"]] == [
+        ("logged", "logged", True),
+        ("planned", "planned", False),
+        ("skipped", "skipped", False),
+    ]
+    assert {session["block"] for session in program["sessions"]} == {archive_id}
+    assert len(sessions_store.replacements) == 1
+    assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v") and item.get("published", True) is not False]) == 2
+
+
+def test_empty_new_block_template_preserves_external_session_rows():
+    store, _, sessions_store = make_store()
+    result = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        name="Empty next block",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
+        next_program={"phases": [], "sessions": []})
+    preserved = next(session for session in result["program"]["sessions"] if session["id"] == "logged")
+    assert preserved["session_notes"] == "kept"
+    assert preserved["completed"] is True
+    assert sessions_store.sessions["program#v007"][0]["id"] == "logged"
+
+
+def test_complete_publishes_a_new_version_with_no_active_block():
+    store, table, _ = make_store()
+    result = transition(store, action="complete", block_id="current")
+    assert result["program"]["meta"]["current_block_id"] is None
+    pointer = table.items[("athlete-1", "program#current")]
+    assert pointer["ref_sk"].startswith("program#v008")
+    assert table.items[("athlete-1", pointer["ref_sk"])]["published"] is True
+
+
+def test_completing_a_block_without_start_maxes_records_the_current_maxes():
+    store, _, _ = make_store()
+    program = store._table.items[("athlete-1", "program#v007")]
+    del program["meta"]["blocks"][0]["start_maxes_kg"]
+    result = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
+    archive_id = next(block["id"] for block in result["program"]["meta"]["blocks"] if block["status"] == "completed")
+    archived = next(block for block in result["program"]["meta"]["blocks"] if block["id"] == archive_id)
+    assert archived["start_maxes_kg"] == {"squat": 185, "bench": 115, "deadlift": 220}
+
+
+def test_start_next_requires_completed_block_and_uses_designer_plan():
+    store, _, sessions_store = make_store()
+    with pytest.raises(ValueError, match="only allowed"):
+        transition(
+            store,
+            action="start_next",
+            block_id="current",
+            start_date="2026-09-22",
+            week_start_day="Wednesday",
+            start_maxes_kg={"squat": 190})
+    completed = transition(store, action="complete", block_id="current")
+    archive_id = completed["program"]["meta"]["blocks"][0]["id"]
+    result = transition(
+        store,
+        action="start_next",
+        block_id=archive_id,
+        name="Strength",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
+        next_program={
+            "phases": [{"name": "Strength", "start_week": 1, "end_week": 3}],
+            "sessions": [{"id": "next-session", "date": "2026-09-22", "week_number": 1, "status": "planned"}],
+        })
+    next_id = result["next_block_id"]
+    assert result["program"]["meta"]["current_block_id"] == next_id
+    assert [phase["start_week"] for phase in result["program"]["phases"] if phase["block"] == "current"] == [1]
+    next_session = next(session for session in result["program"]["sessions"] if session["id"] == "next-session")
+    assert next_session["block"] == "current"
+    assert next_session["block_id"] == next_id
+    assert next_session["status"] == "planned"
+    assert next_session["completed"] is False
+    assert len(sessions_store.replacements) == 2
+
+
+def test_unknown_block_and_invalid_next_plan_are_rejected():
+    store, _, _ = make_store()
+    with pytest.raises(ValueError, match="active current"):
+        transition(store, action="complete", block_id="missing")
+    with pytest.raises(ValueError, match="completed sessions"):
+        transition(
+            store,
+            action="complete_and_start",
+            block_id="current",
+            start_date="2026-09-22",
+            week_start_day="Wednesday",
+            start_maxes_kg={"squat": 190},
+            next_program={"sessions": [{"date": "2026-09-22", "status": "logged"}]})
+
+
+def test_transition_rejects_next_session_id_colliding_with_archived_history():
+    store, table, sessions_store = make_store()
+    with pytest.raises(SessionIdentityConflictError, match="occurs more than once"):
+        transition(
+            store,
+            action="complete_and_start",
+            block_id="current",
+            start_date="2026-09-22",
+            week_start_day="Wednesday",
+            start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225},
+            next_program={"sessions": [{"id": "logged", "date": "2026-09-22", "week_number": 1}]})
+    assert not sessions_store.replacements
+    assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v")]) == 1
+
+
+def test_new_version_rejects_full_program_duplicate_before_staging():
+    store, table, _ = make_store()
+    duplicate = copy.deepcopy(store._table.items[("athlete-1", "program#v007")])
+    duplicate["sessions"] = [{"id": "same", "date": "2026-09-10"}, {"id": "same", "date": "2026-09-11"}]
+
+    with pytest.raises(SessionIdentityConflictError, match="occurs more than once"):
+        store._write_new_version_sync(duplicate, minor=False)
+    assert len([item for item in table.items.values() if item.get("sk", "").startswith("program#v")]) == 1
+
+
+def test_unpublished_stages_are_hidden_from_lists_and_reads():
+    store, table, _ = make_store()
+    staged = {**copy.deepcopy(table.items[("athlete-1", "program#v007")]), "sk": "program#v008", "published": False}
+    table.items[("athlete-1", "program#v008")] = staged
+    assert [item["sk"] for item in store._list_programs_sync(include_archived=True)] == ["program#v007"]
+    store._selected_program_sk = "program#v008"
+    with pytest.raises(ProgramNotFoundError):
+        store._load_program_sync()
+
+
+def test_ordinary_new_version_writes_next_version_without_revision_check():
+    store, table, _ = make_store()
+    result = asyncio.run(store.new_version([], "ordinary change"))
+    pointer = table.items[("athlete-1", "program#current")]
+    assert pointer["ref_sk"].startswith("program#v008")
+    assert result["meta"]["version_label"] != "7.0"
+
+
+def test_complete_archives_current_block_under_name_slug():
+    store, _table, _sessions = make_store()
+
+    result = transition(store, action="complete", block_id="current", current_name="Sunny Daze + APEX Prep")
+
+    meta = result["program"]["meta"]
+    archived = meta["blocks"][0]
+    assert archived["id"] == "sunny-daze-apex-prep"
+    assert archived["name"] == archived["label"] == "Sunny Daze + APEX Prep"
+    assert archived["status"] == "completed"
+    assert meta["current_block_id"] is None
+    assert {session["block"] for session in result["program"]["sessions"]} == {"sunny-daze-apex-prep"}
+
+
+@pytest.mark.parametrize("name", ["current", "Current Block", " CURRENT "])
+def test_archived_block_cannot_be_named_current(name):
+    store, _table, _sessions = make_store()
+
+    with pytest.raises(ValueError, match="cannot be named current"):
+        transition(store, action="complete", block_id="current", current_name=name)
+
+    archived = transition(store, action="complete", block_id="current")
+    archive_id = archived["program"]["meta"]["blocks"][0]["id"]
+    with pytest.raises(ValueError, match="cannot be named current"):
+        transition(store, action="rename", block_id=archive_id, name=name)
+
+
+def _apply_mutations_in_memory(store):
+    async def mutate_source(_name, _payload, mutate):
+        program = copy.deepcopy(await store.get_program())
+        result = mutate(program)
+        store.get_program = _returning(program)
+        return result
+
+    store.mutate_source = mutate_source
+
+
+def _returning(program):
+    async def get_program():
+        return copy.deepcopy(program)
+
+    return get_program
+
+
+def _store_with_block_records():
+    store, table, sessions_store = make_store()
+    program = table.items[("athlete-1", "program#v007")]
+    program["diet_notes"] = [{"date": "2026-09-05", "notes": "old cut"}]
+    program["supplements"] = [{"name": "creatine", "dose": "5g"}]
+    program["supplement_phases"] = [{"phase": 1, "phase_name": "Base", "notes": "", "items": [], "block": "current"}]
+    return store, table
+
+
+def test_complete_and_start_archives_notes_and_supplements_with_the_block():
+    store, _table = _store_with_block_records()
+    result = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        name="Strength",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
+    program = result["program"]
+    archive_id = next(block["id"] for block in program["meta"]["blocks"] if block["status"] == "completed")
+    assert program["diet_notes"][0]["block_id"] == archive_id
+    assert program["supplements"][0]["block_id"] == archive_id
+    assert program["supplement_phases"][0]["block"] == archive_id
+
+
+
+def test_replacing_current_block_supplements_keeps_archived_ones():
+    store, _table = _store_with_block_records()
+    transitioned = transition(
+        store,
+        action="complete_and_start",
+        block_id="current",
+        name="Strength",
+        start_date="2026-09-22",
+        week_start_day="Wednesday",
+        start_maxes_kg={"squat": 190, "bench": 120, "deadlift": 225})
+    store.get_program = _returning(transitioned["program"])
+    _apply_mutations_in_memory(store)
+    result = asyncio.run(store.update_supplements({"supplements": [{"name": "caffeine", "dose": "200mg"}]}))
+    assert [item["name"] for item in result["supplements"]] == ["caffeine"]
+    stored = asyncio.run(store.get_program())
+    assert sorted(item["name"] for item in stored["supplements"]) == ["caffeine", "creatine"]

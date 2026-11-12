@@ -39,23 +39,24 @@ build {
       "apt-get update",
       "apt-get install -y --no-install-recommends ca-certificates git tini",
       "rm -rf /var/lib/apt/lists/*",
-      "mkdir -p /opt/powerlifting/services/lib /var/lib/coach/codex"
+      "mkdir -p /opt/powerlifting/services/runtime /var/lib/coach/codex"
     ]
   }
 
   provisioner "file" {
-    sources     = ["../src/services/__init__.py", "../src/services/mesh.py", "../src/services/permissions.json", "../src/services/operations", "../src/services/coach"]
+    sources     = ["../src/services/__init__.py", "../src/services/operations", "../src/services/coach"]
     destination = "/opt/powerlifting/services/"
   }
 
   provisioner "file" {
-    sources     = ["../src/services/lib/__init__.py", "../src/services/lib/llm_log.py", "../src/services/lib/valkey.py", "../src/services/lib/exercise_names.py", "../src/services/lib/template_patch.py"]
-    destination = "/opt/powerlifting/services/lib/"
+    sources     = ["../src/services/runtime/__init__.py", "../src/services/runtime/mesh.py", "../src/services/runtime/permissions.json", "../src/services/runtime/llm_log.py", "../src/services/runtime/valkey.py", "../src/services/runtime/exercise_names.py", "../src/services/runtime/template_patch.py"]
+    destination = "/opt/powerlifting/services/runtime/"
   }
 
   provisioner "shell" {
     inline = [
       "pip install --no-cache-dir -r /opt/powerlifting/services/coach/requirements.txt",
+      "rm -rf /opt/powerlifting/services/coach/tests",
       "find /opt/powerlifting -name __pycache__ -type d -prune -exec rm -rf {} +",
       "useradd -m -u 10001 coach",
       "chown -R coach:coach /var/lib/coach"

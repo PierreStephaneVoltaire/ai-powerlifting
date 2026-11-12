@@ -1,6 +1,7 @@
 locals {
   service_env = {
     IF_API_URL                  = "http://pl-coach.${var.namespace}.svc.cluster.local:8000"
+    PL_SERVICE_URL_TEMPLATE     = "http://pl-{domain}.${var.namespace}.svc.cluster.local:8000"
     VALKEY_URL                  = "redis://pl-valkey.${var.namespace}.svc.cluster.local:6379"
     PROMPT_CACHE_QDRANT_URL     = "http://pl-prompt-cache.${var.namespace}.svc.cluster.local:6333"
     PROMPT_CACHE_MCP_URL        = "http://pl-prompt-cache-mcp.${var.namespace}.svc.cluster.local:8000/mcp"

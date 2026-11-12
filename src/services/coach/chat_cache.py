@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
-from services.lib import valkey
+from services.runtime import valkey
 
 logger = logging.getLogger("coach")
 TTL_SECONDS = 30 * 24 * 3600

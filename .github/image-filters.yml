@@ -36,6 +36,6 @@ kubernetes:
 terraform:
   - 'terraform/**'
   - 'src/lambda/**'
-  - 'src/services/lib/media_notifications.py'
+  - 'src/services/videos/media_notifications.py'
   - '.github/workflows/**'
   - '.github/image-filters.yml'

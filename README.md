@@ -346,7 +346,7 @@ powerlifting-app/
 ├── src/
 │   ├── backend/              Express API (thin transport → typed services)
 │   ├── frontend/             React 19 + Vite PWA
-│   ├── services/             Typed HTTP/MCP domain services, handlers, shared libraries, and operation manifests
+│   ├── services/             One folder per typed HTTP/MCP domain service, shared `runtime/`, and operation manifests
 │   ├── lambda/               Retained AWS Lambdas: master-sync and video-thumbnail
 │   └── dependencies/types/   Shared TypeScript types
 ├── docker/         Container build context

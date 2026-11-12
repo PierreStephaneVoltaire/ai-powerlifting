@@ -3,7 +3,7 @@
     "name": "master_copy_seed_user",
     "domain": "profile",
     "description": "Seed per-user copies of master competitions and federations.",
-    "handler": "services.handlers.user.master_copy_seed_user.handler",
+    "handler": "services.profile.master_copy_seed_user.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -25,7 +25,7 @@
     "name": "profile_get",
     "domain": "profile",
     "description": "Build a public profile by nickname, including visible training summary and videos.",
-    "handler": "services.handlers.user.profile_get.handler",
+    "handler": "services.profile.profile_get.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -139,7 +139,7 @@
     "name": "profile_get_current",
     "domain": "profile",
     "description": "Build the current user profile by mapped partition key.",
-    "handler": "services.handlers.user.profile_get_current.handler",
+    "handler": "services.profile.profile_get_current.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -254,7 +254,7 @@
     "name": "profile_search",
     "domain": "profile",
     "description": "Search public Athlete/Coach profiles and currently granted private profiles with approved tag and federation filters.",
-    "handler": "services.handlers.user.profile_search.handler",
+    "handler": "services.profile.profile_search.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -340,7 +340,7 @@
     "name": "settings_create",
     "domain": "profile",
     "description": "Conditionally create the initial settings row for a Discord identity.",
-    "handler": "services.handlers.user.settings_create.handler",
+    "handler": "services.profile.settings_create.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -428,7 +428,7 @@
     "name": "settings_get",
     "domain": "profile",
     "description": "Get settings by Discord username or mapped partition key, defaulting to operator settings when anonymous.",
-    "handler": "services.handlers.user.settings_get.handler",
+    "handler": "services.profile.settings_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -493,7 +493,7 @@
     "name": "settings_update_age_class",
     "domain": "profile",
     "description": "Update a user's age class.",
-    "handler": "services.handlers.user.settings_update_age_class.handler",
+    "handler": "services.profile.settings_update_age_class.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -559,7 +559,7 @@
     "name": "settings_update_avatar",
     "domain": "profile",
     "description": "Upload a profile avatar to configured media storage and update the settings row.",
-    "handler": "services.handlers.user.settings_update_avatar.handler",
+    "handler": "services.profile.settings_update_avatar.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -634,7 +634,7 @@
     "name": "settings_update_nickname",
     "domain": "profile",
     "description": "Update a user's public nickname.",
-    "handler": "services.handlers.user.settings_update_nickname.handler",
+    "handler": "services.profile.settings_update_nickname.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -693,7 +693,7 @@
     "name": "settings_update_profile",
     "domain": "profile",
     "description": "Update profile visibility, display name, bio, and public training summary setting.",
-    "handler": "services.handlers.user.settings_update_profile.handler",
+    "handler": "services.profile.settings_update_profile.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -763,7 +763,7 @@
     "name": "settings_update_ranking_location",
     "domain": "profile",
     "description": "Update a user's ranking country and region.",
-    "handler": "services.handlers.user.settings_update_ranking_location.handler",
+    "handler": "services.profile.settings_update_ranking_location.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -829,7 +829,7 @@
     "name": "settings_update_athlete_basics",
     "domain": "profile",
     "description": "Update athlete sex, country, region, bodyweight, and all three training maxes.",
-    "handler": "services.handlers.user.settings_update_athlete_basics.handler",
+    "handler": "services.profile.settings_update_athlete_basics.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -964,7 +964,7 @@
     "name": "settings_update_onboarding_profile",
     "domain": "profile",
     "description": "Complete onboarding profile fields and mark the profile complete.",
-    "handler": "services.handlers.user.settings_update_onboarding_profile.handler",
+    "handler": "services.profile.settings_update_onboarding_profile.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1050,7 +1050,7 @@
     "name": "settings_update_role",
     "domain": "profile",
     "description": "Set the user's assigned roles and active role.",
-    "handler": "services.handlers.user.settings_update_role.handler",
+    "handler": "services.profile.settings_update_role.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1123,7 +1123,7 @@
     "name": "settings_tag_add",
     "domain": "profile",
     "description": "Select an approved tag or request new vocabulary for operator review.",
-    "handler": "services.handlers.user.settings_tag_add.handler",
+    "handler": "services.profile.settings_tag_add.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1180,7 +1180,7 @@
     "name": "settings_tag_remove",
     "domain": "profile",
     "description": "Remove a tag from the authenticated user's profile.",
-    "handler": "services.handlers.user.settings_tag_remove.handler",
+    "handler": "services.profile.settings_tag_remove.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1234,7 +1234,7 @@
     "name": "settings_tag_approve",
     "domain": "profile",
     "description": "Operator decision on a global tag catalog entry.",
-    "handler": "services.handlers.user.settings_tag_approve.handler",
+    "handler": "services.profile.settings_tag_approve.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1289,7 +1289,7 @@
     "name": "settings_tag_propose",
     "domain": "profile",
     "description": "Request a global tag for the authenticated profile, pending operator approval.",
-    "handler": "services.handlers.user.settings_tag_propose.handler",
+    "handler": "services.profile.settings_tag_propose.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -1348,7 +1348,7 @@
     "name": "onboarding_status",
     "domain": "profile",
     "description": "Return the current onboarding state for the authenticated user.",
-    "handler": "services.handlers.user.onboarding_status.handler",
+    "handler": "services.profile.onboarding_status.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1437,7 +1437,7 @@
     "name": "grant_check",
     "domain": "profile",
     "description": "grant check",
-    "handler": "services.handlers.user.grant_check.handler",
+    "handler": "services.profile.grant_check.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1584,7 +1584,7 @@
     "name": "grant_create",
     "domain": "profile",
     "description": "grant create",
-    "handler": "services.handlers.user.grant_create.handler",
+    "handler": "services.profile.grant_create.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1842,7 +1842,7 @@
     "name": "grant_list",
     "domain": "profile",
     "description": "grant list",
-    "handler": "services.handlers.user.grant_list.handler",
+    "handler": "services.profile.grant_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2060,7 +2060,7 @@
     "name": "grant_revoke",
     "domain": "profile",
     "description": "grant revoke",
-    "handler": "services.handlers.user.grant_revoke.handler",
+    "handler": "services.profile.grant_revoke.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2282,7 +2282,7 @@
     "name": "identity_resolve",
     "domain": "profile",
     "description": "Resolve a verified gateway identity to a stable Person and settings record.",
-    "handler": "services.handlers.user.identity_resolve.handler",
+    "handler": "services.profile.identity_resolve.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -2359,7 +2359,7 @@
     "name": "access_context",
     "domain": "profile",
     "description": "Read current permissions for the authenticated Person and selected Athlete, optionally authorizing a named operation.",
-    "handler": "services.access_store",
+    "handler": "services.runtime.access_store",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2454,7 +2454,7 @@
     "name": "profile_media_resolve",
     "domain": "profile",
     "description": "Resolve the selected permitted Profile avatar to a storage key.",
-    "handler": "services.profile_media",
+    "handler": "services.profile.profile_media",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2488,7 +2488,7 @@
     "name": "tag_catalog_get",
     "domain": "profile",
     "description": "List approved global tags; the operator can also review pending and rejected entries.",
-    "handler": "services.tag_catalog",
+    "handler": "services.runtime.tag_catalog",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2524,7 +2524,7 @@
     "name": "relationship_request",
     "domain": "profile",
     "description": "relationship request",
-    "handler": "services.handlers.user.relationship_request.handler",
+    "handler": "services.profile.relationship_request.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2678,7 +2678,7 @@
     "name": "relationship_respond",
     "domain": "profile",
     "description": "relationship respond",
-    "handler": "services.handlers.user.relationship_respond.handler",
+    "handler": "services.profile.relationship_respond.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2822,7 +2822,7 @@
     "name": "relationship_revoke",
     "domain": "profile",
     "description": "relationship revoke",
-    "handler": "services.handlers.user.relationship_revoke.handler",
+    "handler": "services.profile.relationship_revoke.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -2929,7 +2929,7 @@
     "name": "relationship_list",
     "domain": "profile",
     "description": "relationship list",
-    "handler": "services.handlers.user.relationship_list.handler",
+    "handler": "services.profile.relationship_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3199,7 +3199,7 @@
     "name": "relationship_history",
     "domain": "profile",
     "description": "relationship history",
-    "handler": "services.handlers.user.relationship_history.handler",
+    "handler": "services.profile.relationship_history.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3303,7 +3303,7 @@
     "name": "favorite",
     "domain": "profile",
     "description": "favorite",
-    "handler": "services.handlers.user.favorite.handler",
+    "handler": "services.profile.favorite.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3345,7 +3345,7 @@
     "name": "favorites",
     "domain": "profile",
     "description": "favorites",
-    "handler": "services.handlers.user.favorites.handler",
+    "handler": "services.profile.favorites.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3382,7 +3382,7 @@
     "name": "notifications",
     "domain": "profile",
     "description": "notifications",
-    "handler": "services.handlers.user.notifications.handler",
+    "handler": "services.profile.notifications.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3447,7 +3447,7 @@
     "name": "notifications_read",
     "domain": "profile",
     "description": "notifications read",
-    "handler": "services.handlers.user.notifications_read.handler",
+    "handler": "services.profile.notifications_read.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3486,7 +3486,7 @@
     "name": "settings_publication_get",
     "domain": "profile",
     "description": "Read own publication settings",
-    "handler": "services.publication",
+    "handler": "services.runtime.publication",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3513,7 +3513,7 @@
     "name": "settings_publication_update",
     "domain": "profile",
     "description": "Publish selected Athlete domains while public; private data remains inaccessible",
-    "handler": "services.publication",
+    "handler": "services.runtime.publication",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3569,7 +3569,7 @@
     "name": "handler_context",
     "domain": "profile",
     "description": "Permitted Athlete context, current Block/Phase, canonical estimated maxes and tied Competition Entries/Attempts",
-    "handler": "services.handler_context",
+    "handler": "services.runtime.handler_context",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3626,7 +3626,7 @@
     "name": "note_list_private",
     "domain": "profile",
     "description": "List private originals owned by the acting Person.",
-    "handler": "services.handlers.authored_notes.note_list_private.handler",
+    "handler": "services.profile.note_list_private.handler",
     "input_schema": {
       "type": "object",
       "properties": {},
@@ -3655,7 +3655,7 @@
     "name": "note_save_private",
     "domain": "profile",
     "description": "Save a revision of an author-owned private original.",
-    "handler": "services.handlers.authored_notes.note_save_private.handler",
+    "handler": "services.profile.note_save_private.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3702,7 +3702,7 @@
     "name": "note_list_attachments",
     "domain": "profile",
     "description": "Read permitted attributed note attachments.",
-    "handler": "services.handlers.authored_notes.note_list_attachments.handler",
+    "handler": "services.profile.note_list_attachments.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3752,7 +3752,7 @@
     "name": "note_share",
     "domain": "profile",
     "description": "Explicitly attach a private note revision while the author has permission.",
-    "handler": "services.handlers.authored_notes.note_share.handler",
+    "handler": "services.profile.note_share.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -3812,7 +3812,7 @@
     "name": "note_detach",
     "domain": "profile",
     "description": "Allow the owning Athlete to remove a note attachment.",
-    "handler": "services.handlers.authored_notes.note_detach.handler",
+    "handler": "services.profile.note_detach.handler",
     "input_schema": {
       "type": "object",
       "properties": {

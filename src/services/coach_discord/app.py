@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from services.mesh import BACKEND_ACCOUNT, caller, is_account
+from services.runtime.mesh import BACKEND_ACCOUNT, caller, is_account
 
 from .coach_client import CoachClient
 from .gateway import Gateway, Relay

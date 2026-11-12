@@ -3,7 +3,7 @@
     "name": "budget_advisor",
     "domain": "budget",
     "description": "Analyze budget spending and competition readiness.",
-    "handler": "services.handlers.budget.budget_advisor.handler",
+    "handler": "services.budget.budget_advisor.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -276,7 +276,7 @@
     "name": "budget_create_item",
     "domain": "budget",
     "description": "Create a budget item.",
-    "handler": "services.handlers.budget.budget_create_item.handler",
+    "handler": "services.budget.budget_create_item.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -491,7 +491,7 @@
     "name": "budget_delete_item",
     "domain": "budget",
     "description": "Delete a budget item.",
-    "handler": "services.handlers.budget.budget_delete_item.handler",
+    "handler": "services.budget.budget_delete_item.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -526,7 +526,7 @@
     "name": "budget_get_config",
     "domain": "budget",
     "description": "Get budget configuration.",
-    "handler": "services.handlers.budget.budget_get_config.handler",
+    "handler": "services.budget.budget_get_config.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -582,7 +582,7 @@
     "name": "budget_get_summary",
     "domain": "budget",
     "description": "Get budget summary for a month.",
-    "handler": "services.handlers.budget.budget_get_summary.handler",
+    "handler": "services.budget.budget_get_summary.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -646,7 +646,7 @@
     "name": "budget_list_items",
     "domain": "budget",
     "description": "List budget items with optional filters.",
-    "handler": "services.handlers.budget.budget_list_items.handler",
+    "handler": "services.budget.budget_list_items.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -798,7 +798,7 @@
     "name": "budget_priority_timeline",
     "domain": "budget",
     "description": "Generate a purchase priority timeline.",
-    "handler": "services.handlers.budget.budget_priority_timeline.handler",
+    "handler": "services.budget.budget_priority_timeline.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1066,7 +1066,7 @@
     "name": "budget_put_config",
     "domain": "budget",
     "description": "Replace budget configuration.",
-    "handler": "services.handlers.budget.budget_put_config.handler",
+    "handler": "services.budget.budget_put_config.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1145,7 +1145,7 @@
     "name": "budget_update_item",
     "domain": "budget",
     "description": "Update a budget item.",
-    "handler": "services.handlers.budget.budget_update_item.handler",
+    "handler": "services.budget.budget_update_item.handler",
     "input_schema": {
       "type": "object",
       "properties": {

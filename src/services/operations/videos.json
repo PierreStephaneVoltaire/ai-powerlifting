@@ -3,7 +3,7 @@
     "name": "video_library_get",
     "domain": "videos",
     "description": "Get the video library across sessions with optional exercise filter.",
-    "handler": "services.handlers.videos.video_library_get.handler",
+    "handler": "services.videos.video_library_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -156,7 +156,7 @@
     "name": "video_upload_presign",
     "domain": "videos",
     "description": "Create an internal storage ticket for a session or lift-profile form video.",
-    "handler": "services.handlers.videos.video_upload_presign.handler",
+    "handler": "services.videos.video_upload_presign.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -252,7 +252,7 @@
     "name": "video_upload_confirm",
     "domain": "videos",
     "description": "Verify an internally staged session or lift-profile form video.",
-    "handler": "services.handlers.videos.video_upload_confirm.handler",
+    "handler": "services.videos.video_upload_confirm.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -375,7 +375,7 @@
     "name": "video_remove",
     "domain": "videos",
     "description": "Remove a session video (S3 object + thumbnail) and detach from session.",
-    "handler": "services.handlers.videos.video_remove.handler",
+    "handler": "services.videos.video_remove.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -428,7 +428,7 @@
     "name": "video_update_metadata",
     "domain": "videos",
     "description": "Update metadata (exercise_name/set_number/notes) on a session video.",
-    "handler": "services.handlers.videos.video_update_metadata.handler",
+    "handler": "services.videos.video_update_metadata.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -523,7 +523,7 @@
     "name": "video_media_resolve",
     "domain": "videos",
     "description": "Resolve an attached media key for authenticated media delivery.",
-    "handler": "services.handlers.videos.video_media_resolve.handler",
+    "handler": "services.videos.video_media_resolve.handler",
     "input_schema": {
       "type": "object",
       "properties": {

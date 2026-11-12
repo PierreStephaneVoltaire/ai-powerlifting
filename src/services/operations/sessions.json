@@ -3,7 +3,7 @@
     "name": "session_create",
     "domain": "sessions",
     "description": "Create a new session for the current program. The session is appended to the program sessions list with the provided session object.",
-    "handler": "services.handlers.sessions.session_create.handler",
+    "handler": "services.sessions.session_create.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -35,7 +35,7 @@
     "name": "session_delete",
     "domain": "sessions",
     "description": "Delete a session at a specific date and index (for same-day ordinals).",
-    "handler": "services.handlers.sessions.session_delete.handler",
+    "handler": "services.sessions.session_delete.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -85,7 +85,7 @@
     "name": "session_get",
     "domain": "sessions",
     "description": "Load a single session by date and index (for same-day ordinals). Returns the session with resolved phase object.",
-    "handler": "services.handlers.sessions.session_get.handler",
+    "handler": "services.sessions.session_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -127,7 +127,7 @@
     "name": "session_list",
     "domain": "sessions",
     "description": "List the most recent sessions for a user. Returns session summaries sorted by date descending, then by sort key descending. Use limit to cap the number returned.",
-    "handler": "services.handlers.sessions.session_list.handler",
+    "handler": "services.sessions.session_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -192,7 +192,7 @@
     "name": "session_list_full",
     "domain": "sessions",
     "description": "List full session objects (with resolved phases) for a specific program. Returns complete session objects, not summaries.",
-    "handler": "services.handlers.sessions.session_list_full.handler",
+    "handler": "services.sessions.session_list_full.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -220,7 +220,7 @@
     "name": "session_patch",
     "domain": "sessions",
     "description": "Apply a partial patch to a session at a specific date and index. Only the fields in the patch dict are updated; other fields remain unchanged.",
-    "handler": "services.handlers.sessions.session_patch.handler",
+    "handler": "services.sessions.session_patch.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -267,7 +267,7 @@
     "name": "session_patch_by_date",
     "domain": "sessions",
     "description": "Patch a session by date without specifying an index. Finds the matching date and applies the patch. Use when you only have the date, not the ordinal.",
-    "handler": "services.handlers.sessions.session_patch_by_date.handler",
+    "handler": "services.sessions.session_patch_by_date.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -309,7 +309,7 @@
     "name": "session_replace",
     "domain": "sessions",
     "description": "Full replace of a session at a specific date and index. Overwrites all session fields with the provided session object.",
-    "handler": "services.handlers.sessions.session_replace.handler",
+    "handler": "services.sessions.session_replace.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -356,7 +356,7 @@
     "name": "session_replace_all",
     "domain": "sessions",
     "description": "Replace ALL sessions for a program. Deletes all existing sessions and writes the incoming array. Use with caution — this is a destructive full replace.",
-    "handler": "services.handlers.sessions.session_replace_all.handler",
+    "handler": "services.sessions.session_replace_all.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -396,7 +396,7 @@
     "name": "health_get_sessions_range",
     "domain": "sessions",
     "description": "Load all sessions within a date range (inclusive). Returns sessions in date order, each with resolved phase object.",
-    "handler": "services.handlers.sessions.health_get_sessions_range.handler",
+    "handler": "services.sessions.health_get_sessions_range.handler",
     "input_schema": {
       "type": "object",
       "properties": {

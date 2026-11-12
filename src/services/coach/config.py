@@ -56,7 +56,7 @@ def load() -> Settings:
     root = Path(os.getenv("PL_SERVICES_DIR", Path(__file__).resolve().parents[1]))
     return Settings(
         operations_dir=Path(os.getenv("PL_OPERATIONS_DIR", root / "operations")),
-        permissions_path=Path(os.getenv("PL_PERMISSIONS_PATH", root / "permissions.json")),
+        permissions_path=Path(os.getenv("PL_PERMISSIONS_PATH", root / "runtime" / "permissions.json")),
         service_url_template=os.getenv("PL_SERVICE_URL_TEMPLATE", "http://pl-{domain}:8000"),
         public_url=os.getenv("COACH_URL", "http://127.0.0.1:8000").rstrip("/"),
         state_dir=Path(os.getenv("COACH_STATE_DIR", "./data")),

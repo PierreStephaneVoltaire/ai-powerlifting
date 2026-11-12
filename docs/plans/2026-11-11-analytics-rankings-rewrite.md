@@ -102,7 +102,7 @@ Other Go conventions: JSON-RPC at `POST /mcp`, distroless non-root images, `GOME
     - `mesh_callers` per the gRPC table
     - `cache_callers` for Valkey
   - `fmt` and `validate` only.
-- [ ] **7. Final offline compare** with `scripts/golden_harness`, plus the `bug.md` entries.
+- [ ] **7. Final offline compare** with the golden harness (kept outside the repo in the session scratchpad), plus the `bug.md` entries.
 - [x] **D. Delete legacy code.**
   - **Carve-out first.** Export/markdown, program history, the `template_evaluate` metrics and the competition projection each take the few functions they use out of `analysis_reports/analytics.py` into a module in their own package. No new operations, and no calls to the analysis services.
   - **Python deletions:**

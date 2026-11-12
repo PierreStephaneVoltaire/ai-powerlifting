@@ -3,7 +3,7 @@
     "name": "block_transition",
     "domain": "program",
     "description": "Complete the current block, start a next block, or do both with an idempotent revisioned transition.",
-    "handler": "services.handlers.program.block_transition.handler",
+    "handler": "services.program.block_transition.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -80,7 +80,7 @@
     "name": "health_get_diet_notes",
     "domain": "program",
     "description": "Get diet notes for a date range.",
-    "handler": "services.handlers.health.get_diet_notes.handler",
+    "handler": "services.program.get_diet_notes.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -115,7 +115,7 @@
     "name": "health_get_supplements",
     "domain": "program",
     "description": "Get the supplement protocol from the program.",
-    "handler": "services.handlers.health.get_supplements.handler",
+    "handler": "services.program.get_supplements.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -140,7 +140,7 @@
     "name": "program_get",
     "domain": "program",
     "description": "Get a specific program version by its sort key. Returns the full program object with phases, sessions, meta, lift profiles, and competitions. Use this to load a program for display or before modifying it.",
-    "handler": "services.handlers.program.program_get.handler",
+    "handler": "services.program.program_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -177,7 +177,7 @@
     "name": "program_list_full",
     "domain": "program",
     "description": "List all program versions with full program objects (not just summaries) for a user. Includes resolved phases and sessions. Use include_archived=true to include archived versions.",
-    "handler": "services.handlers.program.program_list_full.handler",
+    "handler": "services.program.program_list_full.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -205,7 +205,7 @@
     "name": "program_archive",
     "domain": "program",
     "description": "Archive a program version by setting its archived flag. The version remains accessible via program_list with include_archived=true but is hidden from default views.",
-    "handler": "services.handlers.program.program_archive.handler",
+    "handler": "services.program.program_archive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -230,7 +230,7 @@
     "name": "program_unarchive",
     "domain": "program",
     "description": "Unarchive a previously archived program version, restoring it to the default view.",
-    "handler": "services.handlers.program.program_unarchive.handler",
+    "handler": "services.program.program_unarchive.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -255,7 +255,7 @@
     "name": "program_update_meta_field",
     "domain": "program",
     "description": "Update a single top-level meta field on the current program (e.g. name, start_date, current_body_weight_kg, current_body_weight_lb). Reads the program, applies the field update, and writes it back.",
-    "handler": "services.handlers.program.program_update_meta_field.handler",
+    "handler": "services.program.program_update_meta_field.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -305,7 +305,7 @@
     "name": "program_update_phases",
     "domain": "program",
     "description": "Update the phases array on a program version, or replace a single block within the phases. Reads the program, applies the phase/block update, and writes it back.",
-    "handler": "services.handlers.program.program_update_phases.handler",
+    "handler": "services.program.program_update_phases.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -341,7 +341,7 @@
     "name": "block_notes_get",
     "domain": "program",
     "description": "Get block notes for a program version. Block notes are free-form per-block commentary stored alongside the program.",
-    "handler": "services.handlers.program.block_notes_get.handler",
+    "handler": "services.program.block_notes_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -366,7 +366,7 @@
     "name": "block_notes_update",
     "domain": "program",
     "description": "Replace the block notes array for a program version. This is a full replace — send the complete array of block note dicts.",
-    "handler": "services.handlers.program.block_notes_update.handler",
+    "handler": "services.program.block_notes_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -398,7 +398,7 @@
     "name": "diet_notes_update",
     "domain": "program",
     "description": "Replace the diet notes array for a program version. Full replace — send the complete array of note dicts.",
-    "handler": "services.handlers.program.diet_notes_update.handler",
+    "handler": "services.program.diet_notes_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -432,7 +432,7 @@
     "name": "supplement_phases_update",
     "domain": "program",
     "description": "Replace the supplement phases array for a program version. Full replace — send the complete array of phase dicts.",
-    "handler": "services.handlers.program.supplement_phases_update.handler",
+    "handler": "services.program.supplement_phases_update.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -464,7 +464,7 @@
     "name": "export_program_markdown",
     "domain": "program",
     "description": "Generate a markdown export of the current program and return its content as a string. Includes phases, sessions, meta, and analysis sections (deterministic only — AI sections excluded).",
-    "handler": "services.handlers.program.export_program_markdown.handler",
+    "handler": "services.program.export_program_markdown.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -485,7 +485,7 @@
     "name": "health_new_version",
     "domain": "program",
     "description": "Create a new major version of the program. Copies the current program, applies patches to specific fields, and stores as a new version. Use this when making significant program changes that should be tracked as a separate version.",
-    "handler": "services.handlers.program.health_new_version.handler",
+    "handler": "services.program.health_new_version.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -518,7 +518,7 @@
     "name": "health_setup_initialize",
     "domain": "program",
     "description": "Initialize a no-data user first training block for the active partition. Creates a blank program or applies a template depending on mode. Use when a new user needs their first program.",
-    "handler": "services.handlers.program.health_setup_initialize.handler",
+    "handler": "services.program.health_setup_initialize.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -568,7 +568,7 @@
     "name": "health_setup_status",
     "domain": "program",
     "description": "Return first-class setup state for the active health data partition. Indicates whether the user has a program, whether setup initialization is needed, and what step they are on.",
-    "handler": "services.handlers.program.health_setup_status.handler",
+    "handler": "services.program.health_setup_status.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -589,7 +589,7 @@
     "name": "health_invalidate_program_cache",
     "domain": "program",
     "description": "Invalidate the program cache for the current user. Forces the next read to go to DynamoDB instead of the in-process LRU cache. Use after writes that must be immediately visible.",
-    "handler": "services.handlers.program.health_invalidate_program_cache.handler",
+    "handler": "services.program.health_invalidate_program_cache.handler",
     "input_schema": {
       "type": "object",
       "properties": {

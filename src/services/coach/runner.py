@@ -9,8 +9,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from services.lib import llm_log
-from services.lib.template_patch import patch_hash
+from services.runtime import llm_log
+from services.runtime.template_patch import patch_hash
 
 from . import chat_cache, guard
 from .catalog import Operation, operations

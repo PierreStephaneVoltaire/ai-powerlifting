@@ -14,7 +14,7 @@ use crate::ops::{Engine, Handler};
 
 const CONTRACT: &str = include_str!("../../operations/rankings.json");
 const RESERVED: [&str; 3] = ["_person_pk", "_access", "_if_job_id"];
-const PERMISSIONS: &str = include_str!("../../permissions.json");
+const PERMISSIONS: &str = include_str!("../../runtime/permissions.json");
 
 #[derive(Debug, Error)]
 pub enum ContractError {

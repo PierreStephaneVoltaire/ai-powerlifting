@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from services.lib import llm_log
+from services.runtime import llm_log
 
 from .config import AISettings, Provider
 

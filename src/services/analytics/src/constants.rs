@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
-const CONSTANTS: &str = include_str!("../../calculation_constants.json");
+const CONSTANTS: &str = include_str!("../../runtime/calculation_constants.json");
 
 #[derive(Deserialize)]
 pub struct DotsCoefficients {
