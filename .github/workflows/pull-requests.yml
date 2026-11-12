@@ -47,7 +47,7 @@ jobs:
           images=()
           if [ "$BACKEND" = true ]; then images+=(powerlifting-backend); fi
           if [ "$FRONTEND" = true ]; then images+=(powerlifting-frontend); fi
-          if [ "$SERVICES" = true ]; then images+=(powerlifting-services powerlifting-analytics powerlifting-coach-agent powerlifting-coach-discord); fi
+          if [ "$SERVICES" = true ]; then images+=(powerlifting-services powerlifting-analytics powerlifting-rankings powerlifting-analytics-ai powerlifting-analytics-export powerlifting-coach-agent powerlifting-coach-discord); fi
           matrix="$(printf '%s\n' "${images[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "tag=$(python3 scripts/image_tag.py "$BRANCH")" >> "$GITHUB_OUTPUT"

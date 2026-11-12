@@ -5,7 +5,7 @@ use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-const RECORD_TTL_SECONDS: u64 = 2_592_000;
+pub const RECORD_TTL_SECONDS: u64 = 2_592_000;
 const IO_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Clone)]
@@ -84,5 +84,23 @@ impl Cache {
             .await
             .inspect_err(|error| tracing::warn!(%error, key, "analysis record write failed"))
             .is_ok_and(|reply| reply.as_deref() == Some("OK"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn records_live_thirty_days() {
+        assert_eq!(RECORD_TTL_SECONDS, 30 * 24 * 60 * 60);
+    }
+
+    #[test]
+    fn record_keys_are_namespaced_per_athlete() {
+        assert_eq!(
+            record_key("operator", "native_lifetime#3"),
+            "pl:analysis:operator:native_lifetime#3"
+        );
     }
 }

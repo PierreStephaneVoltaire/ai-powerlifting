@@ -71,7 +71,10 @@ pub fn build(
             &repeated.confidence,
         ));
     }
-    let completed: Vec<&Row> = rows.iter().filter(|row| row.e1rm_delta_kg.is_some()).collect();
+    let completed: Vec<&Row> = rows
+        .iter()
+        .filter(|row| row.e1rm_delta_kg.is_some())
+        .collect();
     if completed.len() >= 2 {
         let delta = |row: &Row| row.e1rm_delta_kg.unwrap_or(f64::NEG_INFINITY);
         let worst_delta = |row: &Row| row.e1rm_delta_kg.unwrap_or(f64::INFINITY);
@@ -82,7 +85,10 @@ pub fn build(
         {
             patterns.push(pattern(
                 "training_response",
-                format!("{} had the strongest total response among source blocks.", best.label),
+                format!(
+                    "{} had the strongest total response among source blocks.",
+                    best.label
+                ),
                 format!(
                     "{}: {} kg total delta, {} compliance, {} kg volume. {}: {} kg total delta.",
                     best.label,
@@ -173,13 +179,9 @@ pub fn build(
             .filter(|point| point.block_key == row.block_key)
             .collect();
         points.sort_by_key(|point| point.week_number);
-        let Some(first_zero) = points
-            .iter()
-            .enumerate()
-            .position(|(index, point)| {
-                index > 0 && point.training_days == 0 && points[index - 1].training_days > 0
-            })
-        else {
+        let Some(first_zero) = points.iter().enumerate().position(|(index, point)| {
+            index > 0 && point.training_days == 0 && points[index - 1].training_days > 0
+        }) else {
             continue;
         };
         let run = points[first_zero..]

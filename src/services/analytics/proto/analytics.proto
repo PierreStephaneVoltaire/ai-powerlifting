@@ -6,7 +6,7 @@ package powerlifting.analytics.v1;
 import "google/protobuf/struct.proto";
 
 // AnalyticsData serves normalized athlete data and deterministic analytics reports to sibling services.
-// Callers must send the gRPC metadata x-internal-token, x-athlete-pk and x-person-pk, and the
+// Callers must send the gRPC metadata x-athlete-pk and x-person-pk, and the
 // athlete_pk in every request must equal x-athlete-pk.
 // Report bodies are google.protobuf.Struct and have exactly the JSON shape of the matching HTTP operation.
 service AnalyticsData {

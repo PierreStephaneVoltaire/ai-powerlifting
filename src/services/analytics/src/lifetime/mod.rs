@@ -76,10 +76,7 @@ fn rows_of(records: &[BlockRecord]) -> Vec<Row> {
                     .insert(format!("{lift}.weekly_tonnage_kg"), item.weekly_tonnage_kg);
                 row.exposures
                     .insert(format!("{lift}.weekly_frequency"), item.weekly_frequency);
-                for (name, value) in [
-                    ("avg_inol", item.avg_inol),
-                    ("avg_rpe", item.avg_rpe),
-                ] {
+                for (name, value) in [("avg_inol", item.avg_inol), ("avg_rpe", item.avg_rpe)] {
                     if let Some(value) = value {
                         row.exposures.insert(format!("{lift}.{name}"), value);
                     }
@@ -97,7 +94,10 @@ fn rows_of(records: &[BlockRecord]) -> Vec<Row> {
                 ("weekly_hard_sets", Some(exposure.weekly_hard_sets)),
                 ("weekly_tonnage_kg", Some(exposure.weekly_tonnage_kg)),
                 ("fatigue_axial_mean", exposure.fatigue.dimension_mean.axial),
-                ("fatigue_neural_mean", exposure.fatigue.dimension_mean.neural),
+                (
+                    "fatigue_neural_mean",
+                    exposure.fatigue.dimension_mean.neural,
+                ),
                 (
                     "fatigue_peripheral_mean",
                     exposure.fatigue.dimension_mean.peripheral,
@@ -180,7 +180,10 @@ fn facts_of(records: &[BlockRecord]) -> BTreeMap<String, BlockFacts> {
                 .iter()
                 .map(|(lift, verdict)| (lift.clone(), verdict.label.clone()))
                 .collect();
-            classification.insert("total".to_owned(), record.classification.overall.label.clone());
+            classification.insert(
+                "total".to_owned(),
+                record.classification.overall.label.clone(),
+            );
             (
                 record.block_key.clone(),
                 BlockFacts {

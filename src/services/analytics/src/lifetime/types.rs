@@ -119,6 +119,7 @@ pub struct Outcome {
     pub dots: Change,
     pub ipf_gl: Change,
     pub competition: Option<CompetitionResult>,
+    #[schema(value_type = Object)]
     pub rpe_drift: BTreeMap<String, Option<Drift>>,
 }
 

@@ -3,7 +3,6 @@
     "name": "analysis_section",
     "domain": "analytics",
     "description": "Compute a single deterministic weekly analysis section. Loads program+sessions via the ProgramStore layer, fetches glossary via direct DynamoDB, then computes one analysis section (e.g. \"volume\", \"intensity\", \"progression\"). AI section keys (ai_correlation, program_evaluation) are rejected before reaching this core.",
-    "handler": "services.handlers.analysis.analysis_section.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -26,6 +25,52 @@
         "refresh": {
           "type": "boolean",
           "description": "Force recompute instead of using cached value. Default false."
+        },
+        "program": {
+          "type": "object",
+          "description": "Program to analyze instead of the stored one."
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Sessions to analyze instead of the program's own."
+        },
+        "weeks": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "block": {
+          "type": "string",
+          "default": "current",
+          "description": "Block scope; an empty string analyzes every session."
+        },
+        "window_start": {
+          "type": "string"
+        },
+        "window_end": {
+          "type": "string"
+        },
+        "ref_date": {
+          "type": "string"
+        },
+        "week_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "week_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "current_maxes": {
+          "type": "object",
+          "description": "Squat, bench and deadlift maxes that replace the estimated ones (method becomes provided)."
+        },
+        "projection_date": {
+          "type": "string",
+          "description": "Adds overview.requested_projection for a meet on this date."
         }
       }
     },
@@ -60,7 +105,6 @@
     "name": "weekly_analysis",
     "domain": "analytics",
     "description": "Build a full sectioned deterministic weekly analysis for the current program. Loads program+sessions, fetches glossary, then computes all deterministic analysis sections via the analytics module. AI sections (program_evaluation, correlation) are intentionally omitted.",
-    "handler": "services.handlers.analysis.weekly_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -79,6 +123,52 @@
         "refresh": {
           "type": "boolean",
           "description": "Force recompute. Default false."
+        },
+        "program": {
+          "type": "object",
+          "description": "Program to analyze instead of the stored one."
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Sessions to analyze instead of the program's own."
+        },
+        "weeks": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "block": {
+          "type": "string",
+          "default": "current",
+          "description": "Block scope; an empty string analyzes every session."
+        },
+        "window_start": {
+          "type": "string"
+        },
+        "window_end": {
+          "type": "string"
+        },
+        "ref_date": {
+          "type": "string"
+        },
+        "week_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "week_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "current_maxes": {
+          "type": "object",
+          "description": "Squat, bench and deadlift maxes that replace the estimated ones (method becomes provided)."
+        },
+        "projection_date": {
+          "type": "string",
+          "description": "Adds overview.requested_projection for a meet on this date."
         }
       }
     },
@@ -113,7 +203,6 @@
     "name": "analyze_progression",
     "domain": "analytics",
     "description": "Analyze progression rate for the current program. Loads program+sessions, then calls analytics.progression_rate to compute week-over-week progression trends.",
-    "handler": "services.handlers.analysis.analyze_progression.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -177,7 +266,6 @@
     "name": "analyze_rpe_drift",
     "domain": "analytics",
     "description": "Analyze RPE (rate of perceived exertion) drift for a specific exercise over a window of weeks. Loads program+sessions, then calls analytics.rpe_drift. Uses window_weeks (default 4) to set the lookback period.",
-    "handler": "services.handlers.analysis.analyze_rpe_drift.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -235,7 +323,6 @@
     "name": "health_suggest_e1rm_multipliers",
     "domain": "analytics",
     "description": "Suggest per lift e1RM multipliers from completed competition results and max history compared with recent session estimates.",
-    "handler": "services.handlers.analysis_reports.suggest_e1rm_multipliers",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -402,7 +489,6 @@
     "name": "analytics.manifest",
     "domain": "analytics",
     "description": "Return section statuses, windows, and the current analysis source fingerprint.",
-    "handler": "services.handlers.analysis_reports.manifest",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -558,7 +644,6 @@
     "name": "analytics.sections_queue",
     "domain": "analytics",
     "description": "Queue requested analysis sections for the selected window.",
-    "handler": "services.handlers.analysis_reports.sections_queue",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -643,7 +728,6 @@
     "name": "analytics.sections_get",
     "domain": "analytics",
     "description": "Return one analysis section status and payload for the selected window.",
-    "handler": "services.handlers.analysis_reports.sections_get",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -723,7 +807,6 @@
     "name": "analytics.sections_invalidate",
     "domain": "analytics",
     "description": "Invalidate and requeue requested analysis sections for the selected window.",
-    "handler": "services.handlers.analysis_reports.sections_invalidate",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -805,7 +888,6 @@
     "name": "analytics.weekly",
     "domain": "analytics",
     "description": "Return the weekly analysis report for the requested window.",
-    "handler": "services.handlers.analysis_reports.weekly",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1053,7 +1135,6 @@
     "name": "analytics.bundle",
     "domain": "analytics",
     "description": "Return the complete current block weekly analysis bundle.",
-    "handler": "services.handlers.analysis_reports.bundle",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1161,7 +1242,6 @@
     "name": "analytics.regenerate",
     "domain": "analytics",
     "description": "Regenerate selected analysis sections and windows.",
-    "handler": "services.handlers.analysis_reports.regenerate",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1252,7 +1332,6 @@
     "name": "analytics.blocks_list",
     "domain": "analytics",
     "description": "List analyzed training blocks and their cache/data quality status.",
-    "handler": "services.handlers.analysis_reports.blocks_list",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1319,7 +1398,6 @@
     "name": "analytics.blocks_get",
     "domain": "analytics",
     "description": "Return the cached or regenerated analysis bundle for one block.",
-    "handler": "services.handlers.analysis_reports.blocks_get",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1389,7 +1467,6 @@
     "name": "analytics.blocks_regenerate",
     "domain": "analytics",
     "description": "Regenerate one block analysis and its associated reports.",
-    "handler": "services.handlers.analysis_reports.blocks_regenerate",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1443,7 +1520,6 @@
     "name": "analytics.compare",
     "domain": "analytics",
     "description": "Compare selected training blocks using deterministic analytics.",
-    "handler": "services.handlers.analysis_reports.compare",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1507,7 +1583,7 @@
           "type": "array"
         },
         "trendSeries": {
-          "type": "object"
+          "type": "array"
         },
         "volumeTolerance": {
           "type": "object"
@@ -1528,6 +1604,7 @@
         "patternSignals",
         "liftDoseResponse",
         "trainingDayResponse",
+        "trendSeries",
         "volumeTolerance",
         "missingDataSummary"
       ],
@@ -1540,7 +1617,6 @@
     "name": "analytics.lifetime",
     "domain": "analytics",
     "description": "Holistic deterministic report across every training block: per-block exposure and outcomes, exposure-outcome correlations, volume tolerance bands, and what worked or did not work.",
-    "handler": "services.handlers.analysis_reports.lifetime",
     "input_schema": {
       "type": "object",
       "properties": {

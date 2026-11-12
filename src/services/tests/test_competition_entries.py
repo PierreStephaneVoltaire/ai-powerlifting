@@ -14,7 +14,7 @@ def test_program_competitions_come_only_from_participation_entries():
     assert [c['master_id'] for c in program['competitions']] == ['meet']
     latest = program['competitions'][-1]
     assert latest['revision'] == 3 and 'pk' not in latest and latest['date'] == '2026-08-01'
-    analytics = importlib.import_module('services.handlers.analysis_reports.analytics')
+    analytics = importlib.import_module('services.lib.training_analysis')
     assert analytics._estimate_maxes_from_comps(program['competitions'], date(2026, 9, 14)) == {'squat': 180, 'bench': 100, 'deadlift': 220}
     assert entries == original
 

@@ -13,7 +13,6 @@ aws-sdk-dynamodb = "1"
 axum = { version = "0.8.9", features = ["json"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 jsonschema = "0.61.1"
-jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs"] }
 kendalls = "1.0.0"
 linregress = "0.5"
 mimalloc = "0.1.52"
@@ -23,7 +22,6 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_dynamo = { version = "4", features = ["aws-sdk-dynamodb+1"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 statrs = "0.19"
-subtle = "2.6.1"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal"] }
 tower-http = { version = "0.7.1", features = ["trace", "compression-gzip", "timeout"] }
@@ -39,6 +37,9 @@ tonic = "0.14"
 tonic-health = "0.14"
 tonic-prost = "0.14"
 tonic-reflection = "0.14"
+
+[dev-dependencies]
+insta = { version = "1", features = ["json"] }
 
 [build-dependencies]
 protoc-bin-vendored = "3"

@@ -8,6 +8,7 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+from services import analytics_client
 from services.lib import valkey
 from services.lib.block_scope import scope_program
 
@@ -15,15 +16,6 @@ from services.lib.block_scope import scope_program
 def _get_store():
     from services.lib.program_store import ProgramStore
     return ProgramStore(
-        table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
-        pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
-        region=os.environ.get("AWS_REGION", "ca-central-1"),
-    )
-
-
-def _get_glossary_store():
-    from services.lib.glossary_store import GlossaryStore
-    return GlossaryStore(
         table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"),
         pk=os.environ.get("HEALTH_PROGRAM_PK", "operator"),
         region=os.environ.get("AWS_REGION", "ca-central-1"),
@@ -42,34 +34,23 @@ def _run_async(coro):
     return asyncio.run(coro)
 
 
-_DETERMINISTIC_ANALYSIS_SECTIONS = ["overview", "fatigue_readiness", "peaking", "workload", "alerts"]
-
-
 def _build_sectioned_week_analysis(
     program: dict,
     sessions: list[dict],
-    glossary: list[dict] | None,
     *,
     week_start: int,
     week_end: int,
     ref_date: str,
 ) -> dict:
-    from .analytics import weekly_analysis_section
-
-    result: dict[str, Any] = {}
-    for section in _DETERMINISTIC_ANALYSIS_SECTIONS:
-        result.update(weekly_analysis_section(
-            program=program,
-            sessions=sessions,
-            section=section,
-            weeks=max(1, week_end - week_start + 1),
-            block="current",
-            week_start=week_start,
-            week_end=week_end,
-            ref_date=ref_date,
-            glossary=glossary,
-        ))
-    return result
+    return analytics_client.weekly_analysis(
+        program,
+        sessions,
+        weeks=max(1, week_end - week_start + 1),
+        block="current",
+        week_start=week_start,
+        week_end=week_end,
+        ref_date=ref_date,
+    )
 
 
 def _is_self(args: Dict[str, Any]) -> bool:
@@ -127,16 +108,11 @@ def _markdown_export_sex(program: dict, args: Dict[str, Any]) -> str:
     return str((program.get("meta") or {}).get("sex") or (program.get("settings") or {}).get("sex") or "male").lower()
 
 
-def _load_sources(store, args: Dict[str, Any]) -> tuple[dict, list]:
+def _load_program(store, args: Dict[str, Any]) -> dict:
     from services.lib.competition_entries import with_competition_entries
     store.invalidate_cache()
     program = _run_async(store.get_program())
-    program = _visible_program(with_competition_entries(program, store.pk), args)
-    access = args.get("_access") or {}
-    glossary: list = []
-    if _is_self(args) or "glossary:read" in access.get("permissions", []):
-        glossary = _run_async(_get_glossary_store().get_glossary())
-    return program, glossary
+    return _visible_program(with_competition_entries(program, store.pk), args)
 
 
 def _markdown_record_key(pk: str, args: Dict[str, Any], today: str) -> str:
@@ -144,11 +120,11 @@ def _markdown_record_key(pk: str, args: Dict[str, Any], today: str) -> str:
     return f"pl:markdown:{pk}:{_markdown_cache_key(args)}:{today}:{current(pk)}"
 
 
-def _render_markdown(pk: str, program: dict, glossary: list, today: str, args: Dict[str, Any]) -> str:
+def _render_markdown(pk: str, program: dict, today: str, args: Dict[str, Any]) -> str:
     from .export import build_program_markdown
     sessions = scope_program(program).get("sessions", [])
     current_week = max((int(s.get("week_number", 0)) for s in sessions if s.get("week_number")), default=1)
-    analysis = _build_sectioned_week_analysis(program, sessions, glossary, week_start=1, week_end=current_week, ref_date=today)
+    analysis = _build_sectioned_week_analysis(program, sessions, week_start=1, week_end=current_week, ref_date=today)
     bundle = {"weekly": analysis, "pk": pk, "sex": _markdown_export_sex(program, args)}
     with tempfile.TemporaryDirectory() as directory:
         out_path = os.path.join(directory, "program.md")
@@ -174,8 +150,8 @@ def get_analysis_markdown(args: Dict[str, Any]) -> Dict[str, Any]:
     if args.get("cache_only"):
         return {"cached": False, "cache_miss": True}
 
-    program, glossary = _load_sources(store, args)
-    markdown = _render_markdown(pk, program, glossary, today, args)
+    program = _load_program(store, args)
+    markdown = _render_markdown(pk, program, today, args)
     record = {"markdown": markdown, "generated_at": datetime.now(timezone.utc).isoformat()}
     if not _is_self(args):
         record["access_requirements"] = _markdown_source_requirements(args)

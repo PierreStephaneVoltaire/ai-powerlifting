@@ -18,14 +18,13 @@ pub enum SourceKind {
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub internal_token: String,
-    pub principal_secret: String,
     pub profile_url: String,
     pub valkey_url: String,
     pub region: String,
     pub port: u16,
     pub grpc_port: u16,
     pub ai_grpc_url: String,
+    pub grpc_allowed_callers: Vec<String>,
     pub tables: Tables,
     pub source: SourceKind,
     pub fixture_dir: PathBuf,
@@ -46,14 +45,20 @@ fn table(name: &str, default: &str) -> String {
 impl Config {
     pub fn from_env() -> Self {
         Self {
-            internal_token: var("INTERNAL_API_TOKEN", ""),
-            principal_secret: var("PL_PRINCIPAL_SECRET", ""),
             profile_url: var("PL_PROFILE_URL", "http://pl-profile:8000"),
             valkey_url: var("VALKEY_URL", "redis://pl-valkey:6379"),
             region: var("AWS_REGION", "ca-central-1"),
             port: var("PORT", "8000").parse().unwrap_or(8000),
             grpc_port: var("GRPC_PORT", "50051").parse().unwrap_or(50051),
             ai_grpc_url: var("ANALYTICS_AI_GRPC_URL", "http://pl-analytics-ai:50051"),
+            grpc_allowed_callers: var(
+                "GRPC_ALLOWED_CALLERS",
+                "pl-analytics-ai,pl-analytics-export",
+            )
+            .split(',')
+            .map(|account| account.trim().to_owned())
+            .filter(|account| !account.is_empty())
+            .collect(),
             tables: Tables {
                 health: table("IF_HEALTH_TABLE_NAME", "if-health"),
                 sessions: table("IF_SESSIONS_TABLE_NAME", "if-sessions"),

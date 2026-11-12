@@ -4,9 +4,10 @@ syntax = "proto3";
 package powerlifting.analytics_ai.v1;
 
 // Reports exposes AI report generation owned by pl-analytics-ai.
-// Callers must send the gRPC metadata x-internal-token, x-athlete-pk and x-person-pk.
+// Callers must send the gRPC metadata x-athlete-pk and x-person-pk.
 service Reports {
-  // Regenerate forces a fresh AI correlation report and a fresh AI program evaluation for one training block.
+  // Regenerate queues a fresh AI correlation report and a fresh AI program evaluation for one training block
+  // with the coach. The reports are saved asynchronously once the coach delivers them.
   // Individual report failures do not fail the call; they are reported through the result flags.
   rpc Regenerate(BlockRef) returns (RegenerateResult);
 }
@@ -21,9 +22,9 @@ message BlockRef {
 
 // RegenerateResult reports which AI sub-reports were regenerated.
 message RegenerateResult {
-  // True when the block correlation report was regenerated and saved.
+  // True when regeneration of the block correlation report was accepted (queued, or answered without inference).
   bool correlation_regenerated = 1;
-  // True when the block program evaluation was regenerated and saved.
+  // True when regeneration of the block program evaluation was accepted (queued, or answered without inference).
   bool evaluation_regenerated = 2;
   // UTC timestamp (RFC 3339) at which regeneration finished.
   string generated_at = 3;

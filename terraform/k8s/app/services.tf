@@ -23,7 +23,6 @@ locals {
     "pl-performance"   = merge(local.small, { domain = "performance" })
     "pl-profile"       = merge(local.small, { domain = "profile" })
     "pl-program"       = merge(local.small, { domain = "program" })
-    "pl-rankings"      = { domain = "rankings", limits = { cpu = "1", memory = "3Gi" }, requests = { cpu = "25m", memory = "768Mi" } }
     "pl-sessions"      = merge(local.small, { domain = "sessions" })
     "pl-templates"     = merge(local.small, { domain = "templates" })
     "pl-videos"        = merge(local.small, { domain = "videos" })
@@ -72,11 +71,6 @@ resource "kubernetes_deployment_v1" "service" {
           env {
             name  = "PL_DOMAIN"
             value = each.value.domain
-          }
-
-          env {
-            name  = "POWERLIFTING_S3_BUCKET"
-            value = var.dataset_bucket
           }
 
           dynamic "env" {

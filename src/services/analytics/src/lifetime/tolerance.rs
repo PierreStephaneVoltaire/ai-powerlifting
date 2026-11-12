@@ -93,3 +93,56 @@ pub fn build(points: &BTreeMap<String, BTreeMap<String, Vec<Point>>>) -> Toleran
             .collect(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn points(items: &[(f64, f64, &str)]) -> Vec<Point> {
+        items
+            .iter()
+            .enumerate()
+            .map(|(index, (x, delta, label))| Point {
+                block_key: format!("b{index}"),
+                x: *x,
+                delta_per_week: *delta,
+                label: (*label).to_owned(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn bands_split_exposure_in_thirds_and_find_stall_onset() {
+        let data = points(&[
+            (8.0, 0.4, "improved"),
+            (10.0, 0.5, "improved"),
+            (12.0, 0.6, "improved"),
+            (14.0, 0.5, "improved"),
+            (18.0, 0.0, "stalled"),
+            (22.0, -0.2, "regressed"),
+        ]);
+        let result = variable(&data);
+        assert_eq!(result.bands.len(), 3);
+        assert_eq!(
+            result
+                .bands
+                .iter()
+                .map(|band| band.label.as_str())
+                .collect::<Vec<_>>(),
+            ["low", "mid", "high"]
+        );
+        let range = result.positive_range.unwrap();
+        assert_eq!((range.min, range.max), (8.0, 14.0));
+        assert_eq!(result.stall_onset, Some(18.0));
+        assert!(!result.low_n);
+        assert_eq!(result.bands[0].positive_share, Some(1.0));
+        assert_eq!(result.bands[2].positive_share, Some(0.0));
+    }
+
+    #[test]
+    fn few_points_collapse_to_one_band_and_flag_low_n() {
+        let result = variable(&points(&[(10.0, 0.5, "improved"), (12.0, 0.1, "stalled")]));
+        assert_eq!(result.bands.len(), 1);
+        assert!(result.low_n);
+    }
+}

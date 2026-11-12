@@ -98,13 +98,17 @@ def owner_aliases(arguments: dict[str, Any]) -> frozenset[str]:
 
 def dispatch(operation: Operation, arguments: dict[str, Any]) -> Any:
     operation.validate_input({key: value for key, value in arguments.items() if not key.startswith("_")})
-    from services.lib.storage_scope import current_athlete, current_owner_aliases
+    if operation.handler is None:
+        raise OperationError(501, "not_served", f"{operation.name} is served by a native service")
+    from services.lib.storage_scope import current_athlete, current_owner_aliases, current_person
     token = current_athlete.set(arguments.get("pk") if operation.ownership != "public" else None)
+    person_token = current_person.set(arguments.get("_person_pk"))
     aliases_token = current_owner_aliases.set(owner_aliases(arguments))
     try:
         module = importlib.import_module(operation.handler)
         result = unwrap(module.handler(arguments, None))
     finally:
+        current_person.reset(person_token)
         current_owner_aliases.reset(aliases_token)
         current_athlete.reset(token)
     if isinstance(result, str):

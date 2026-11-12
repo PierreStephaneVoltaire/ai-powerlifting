@@ -20,9 +20,6 @@ from services.lib.session_store import SessionIdentityConflictError
 
 DOMAIN = os.environ["PL_DOMAIN"]
 OPERATIONS = load_operations(DOMAIN)
-if DOMAIN == "rankings":
-    from .lib.opl_dataset import warm_cache
-    warm_cache()
 app = FastAPI(title=f"Powerlifting {DOMAIN}")
 
 
@@ -40,9 +37,7 @@ async def authorization_context(name: str, arguments: dict[str, Any], person: st
     return claims, access
 
 
-async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, job_id: str = "", nested_operation: bool = False, generation_id: str = "", generation_attempt: int = 0, source: str = ""):
-    if generation_id and not job_id:
-        raise HTTPException(403, "Generation requires an active native turn")
+async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, job_id: str = "", nested_operation: bool = False, source: str = ""):
     if name not in OPERATIONS:
         raise HTTPException(404, "Unknown operation")
     operation = OPERATIONS[name]
@@ -57,9 +52,6 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
         arguments['_access'] = access
         if job_id:
             arguments["_if_job_id"] = job_id
-            if generation_id:
-                arguments["_generation_id"] = generation_id
-                arguments["_generation_attempt"] = generation_attempt
         if nested_operation:
             if not job_id:
                 raise OperationError(409, "uncertain", "Nested operation requires an active domain execution")
@@ -88,9 +80,9 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
 
 
 @app.post("/operations/{name}")
-async def operation(name: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_pl_nested_operation: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_if_generation_id: str = Header(default=""), x_if_generation_attempt: int = Header(default=0), x_pl_source_principal: str = Header(default="")):
-    result = await call(name, arguments, x_athlete_pk, x_person_pk, x_if_turn_id or x_if_job_id, x_pl_nested_operation == "true", x_if_generation_id, x_if_generation_attempt, x_pl_source_principal)
-    return JSONResponse(result, status_code=202) if isinstance(result, dict) and ("job_id" in result or "generation_id" in result) and not result.get("cached") else result
+async def operation(name: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_pl_nested_operation: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
+    result = await call(name, arguments, x_athlete_pk, x_person_pk, x_if_turn_id or x_if_job_id, x_pl_nested_operation == "true", x_pl_source_principal)
+    return JSONResponse(result, status_code=202) if isinstance(result, dict) and "job_id" in result and not result.get("cached") else result
 
 
 @app.post("/mcp")
@@ -141,17 +133,3 @@ async def resume(execution_id: str, arguments: dict[str, Any], x_athlete_pk: str
         raise HTTPException(exc.status, {"code": exc.code, "message": exc.message})
     except ValueError as exc:
         raise HTTPException(409, str(exc))
-
-
-@app.get("/generations/{generation_id}")
-async def generation_status(generation_id: str, x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
-    from .generations import status
-    if not x_athlete_pk:
-        raise HTTPException(403, "Authenticated Athlete required")
-    try:
-        claims, access = await authorization_context('generation_status', {}, x_person_pk, x_athlete_pk, x_pl_source_principal)
-        return await status(generation_id, claims['athlete'], claims['sub'], access)
-    except OperationError as exc:
-        raise HTTPException(exc.status, {"code": exc.code, "message": exc.message})
-
-

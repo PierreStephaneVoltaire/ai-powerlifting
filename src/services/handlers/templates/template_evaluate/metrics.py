@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import Any
 
-from services.handlers.analysis_reports import analytics
+from services import analytics_client
 from services.lib.exercise_names import GLOSSARY_NAMES, competition_lift, normalize as _normalize
 from services.lib.lift_calculations import RPE_PERCENT
 
@@ -183,7 +183,7 @@ def template_metrics(template: dict, glossary_exercises: list[dict], current_max
         return {"weeks": 0}
     weeks = max(session["week_number"] for session in sessions)
     end = max(session["date"] for session in sessions)
-    report = analytics.weekly_analysis(program, sessions, week_start=1, week_end=weeks, ref_date=end, glossary=glossary_exercises, current_maxes=program["current_maxes"])
+    report = analytics_client.weekly_analysis(program, sessions, week_start=1, week_end=weeks, ref_date=end, block="", current_maxes=program["current_maxes"])
     return {
         "weeks": weeks,
         "analysis": {key: value for key, value in report.items() if key not in LOGGED_ONLY_SECTIONS},

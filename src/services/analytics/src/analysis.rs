@@ -6,10 +6,21 @@ use crate::calc::progression::{progression_rate, rpe_drift};
 use crate::calc::projection::multiplier_suggestions;
 use crate::engine::{Engine, to_value};
 use crate::error::Error;
-use crate::model::{ProgramData, Session};
+use crate::model::{Lift, Maxes, ProgramData, Session};
 use crate::sections::{self, Params};
 use crate::source::Window;
-use crate::util::parse_date;
+use crate::util::{num_of, parse_date};
+
+fn provided_maxes(raw: Option<&Value>) -> Maxes {
+    let mut maxes = Maxes::default();
+    for lift in Lift::ALL {
+        let value = num_of(raw.and_then(|map| map.get(lift.key())));
+        if value > 0.0 {
+            maxes.set(lift, value);
+        }
+    }
+    maxes
+}
 
 impl Engine {
     pub async fn supplied_or_loaded(
@@ -51,6 +62,8 @@ impl Engine {
             ref_date: args.ref_date.clone(),
             week_start: args.week_start,
             week_end: args.week_end,
+            provided_maxes: provided_maxes(args.current_maxes.as_ref()),
+            projection_date: args.projection_date.clone(),
         }
     }
 

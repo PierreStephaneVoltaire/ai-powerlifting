@@ -5,8 +5,6 @@ pub const DOMAIN: &str = "rankings";
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub internal_token: String,
-    pub principal_secret: String,
     pub profile_url: String,
     pub valkey_url: String,
     pub data_dir: PathBuf,
@@ -31,8 +29,6 @@ fn parsed<T: std::str::FromStr>(name: &str, default: T) -> T {
 impl Config {
     pub fn from_env() -> Self {
         Self {
-            internal_token: var("INTERNAL_API_TOKEN", ""),
-            principal_secret: var("PL_PRINCIPAL_SECRET", ""),
             profile_url: var("PL_PROFILE_URL", "http://pl-profile:8000"),
             valkey_url: var("VALKEY_URL", "redis://pl-valkey:6379"),
             data_dir: PathBuf::from(var("DATA_DIR", "/data")),

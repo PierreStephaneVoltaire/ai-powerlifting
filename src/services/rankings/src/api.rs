@@ -1,6 +1,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
+
+#[derive(IntoParams)]
+#[into_params(parameter_in = Header)]
+pub struct CallerHeaders {
+    #[param(rename = "X-Person-Pk")]
+    pub person: Option<String>,
+    #[param(rename = "X-Athlete-Pk")]
+    pub athlete: Option<String>,
+}
 
 #[derive(Serialize, ToSchema)]
 pub struct Health {

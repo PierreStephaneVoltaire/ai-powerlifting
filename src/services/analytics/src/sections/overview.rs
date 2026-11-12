@@ -4,7 +4,7 @@ use serde_json::Value;
 use super::Context;
 use crate::calc::alerts::{ProjectionEntry, rounded_maxes};
 use crate::calc::compliance::{self, Compliance};
-use crate::calc::projection::{self, AttemptSelection, Calibration, meet_projection};
+use crate::calc::projection::{self, AttemptSelection, Calibration, Projection, meet_projection};
 use crate::calc::{deload, scoring};
 use crate::model::{Lift, Maxes, Session};
 use crate::util::truthy_of;
@@ -45,6 +45,8 @@ pub struct Overview<'a> {
     pub projection_reason: Option<String>,
     pub projection_calibration: Calibration,
     pub attempt_selection: Option<AttemptSelection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requested_projection: Option<Projection>,
     pub sessions_analyzed: usize,
     pub deload_info: DeloadInfo,
 }
@@ -158,6 +160,20 @@ pub fn projections(context: &Context<'_>) -> Projections {
     }
 }
 
+fn requested_projection(context: &Context<'_>) -> Option<Projection> {
+    let date = context.projection_date.as_deref()?;
+    match meet_projection(
+        context.env,
+        context.program,
+        &context.sessions,
+        date,
+        context.end,
+    ) {
+        crate::calc::Computed::Ready(projection) => Some(projection),
+        crate::calc::Computed::Insufficient(_) => None,
+    }
+}
+
 pub fn deload_info(context: &Context<'_>) -> DeloadInfo {
     let loads = deload::detect(&context.sessions, &context.program_start);
     DeloadInfo {
@@ -212,6 +228,7 @@ pub fn build<'a>(context: &'a Context<'a>) -> Overview<'a> {
         projection_reason: computed.reason,
         projection_calibration: computed.calibration,
         attempt_selection: computed.attempt_selection,
+        requested_projection: requested_projection(context),
         sessions_analyzed: context.completed_in_window.len(),
         deload_info: deload_info(context),
     }

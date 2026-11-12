@@ -44,8 +44,9 @@ pub fn from_value(value: &ProstValue) -> Value {
     match value.kind.as_ref() {
         None | Some(Kind::NullValue(_)) => Value::Null,
         Some(Kind::BoolValue(flag)) => Value::Bool(*flag),
-        Some(Kind::NumberValue(number)) => serde_json::Number::from_f64(*number)
-            .map_or(Value::Null, Value::Number),
+        Some(Kind::NumberValue(number)) => {
+            serde_json::Number::from_f64(*number).map_or(Value::Null, Value::Number)
+        }
         Some(Kind::StringValue(text)) => Value::String(text.clone()),
         Some(Kind::ListValue(list)) => Value::Array(list.values.iter().map(from_value).collect()),
         Some(Kind::StructValue(inner)) => from_struct(inner),

@@ -9,36 +9,22 @@ use serde_json::Value;
 use tower_http::compression::CompressionLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
-use utoipa::{Modify, OpenApi};
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::api::{
-    CategoriesRequest, CategoriesResponse, ErrorBody, Health, PercentileRequest,
+    CallerHeaders, CategoriesRequest, CategoriesResponse, ErrorBody, Health, PercentileRequest,
     PercentileResponse, StatsRequest, StatsResponse,
 };
 
-use crate::auth;
+use crate::caller::Caller;
 use crate::config::DOMAIN;
 use crate::dataset::Phase;
 use crate::error::Error;
 use crate::mcp;
-use crate::operations::{Caller, Service};
+use crate::operations::Service;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
-
-struct InternalToken;
-
-impl Modify for InternalToken {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        if let Some(components) = openapi.components.as_mut() {
-            components.add_security_scheme(
-                "internal",
-                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("X-Internal-Token"))),
-            );
-        }
-    }
-}
 
 #[derive(OpenApi)]
 #[openapi(
@@ -60,8 +46,7 @@ impl Modify for InternalToken {
         CategoriesResponse,
         PercentileRequest,
         PercentileResponse
-    )),
-    modifiers(&InternalToken)
+    ))
 )]
 pub struct ApiDoc;
 
@@ -90,44 +75,6 @@ pub fn router(service: Arc<Service>) -> Router {
         ))
         .layer(TraceLayer::new_for_http())
         .with_state(service)
-}
-
-pub fn authenticate(service: &Service, headers: &HeaderMap) -> Result<(), Error> {
-    auth::check_internal_token(
-        &service.config.internal_token,
-        header(headers, "x-internal-token"),
-    )
-}
-
-fn header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
-    headers
-        .get(name)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-}
-
-pub fn principal_caller(headers: &HeaderMap) -> Caller {
-    Caller {
-        athlete: header(headers, "x-athlete-pk").to_owned(),
-        person: header(headers, "x-person-pk").to_owned(),
-        principal: header(headers, "x-pl-principal").to_owned(),
-        ..Caller::default()
-    }
-}
-
-fn caller(headers: &HeaderMap) -> Caller {
-    let turn = header(headers, "x-if-turn-id");
-    let job = if turn.is_empty() {
-        header(headers, "x-if-job-id")
-    } else {
-        turn
-    };
-    Caller {
-        job_id: job.to_owned(),
-        generation_id: header(headers, "x-if-generation-id").to_owned(),
-        nested: header(headers, "x-pl-nested-operation") == "true",
-        ..principal_caller(headers)
-    }
 }
 
 #[utoipa::path(
@@ -159,13 +106,12 @@ async fn operation(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Json<Value>, Error> {
-    authenticate(&service, &headers)?;
     let arguments = match serde_json::from_slice::<Value>(&body) {
         Ok(Value::Object(arguments)) => arguments,
         _ => return Err(Error::Body),
     };
     service
-        .call(&name, arguments, &caller(&headers))
+        .call(&name, arguments, &Caller::from_headers(&headers))
         .await
         .map(Json)
 }
@@ -176,10 +122,10 @@ async fn operation(
     request_body = StatsRequest,
     responses(
         (status = 200, description = "Rank analysis, or a status string while the dataset loads", body = StatsResponse),
-        (status = 401, description = "Invalid internal token", body = ErrorBody),
+        (status = 403, description = "Access denied", body = ErrorBody),
         (status = 422, description = "Invalid request body", body = ErrorBody)
     ),
-    security(("internal" = []))
+    params(CallerHeaders)
 )]
 async fn analyze_powerlifting_stats(
     state: State<Arc<Service>>,
@@ -201,10 +147,10 @@ async fn analyze_powerlifting_stats(
     request_body = CategoriesRequest,
     responses(
         (status = 200, description = "Distinct filter values, or a status string while the dataset loads", body = CategoriesResponse),
-        (status = 401, description = "Invalid internal token", body = ErrorBody),
+        (status = 403, description = "Access denied", body = ErrorBody),
         (status = 422, description = "Invalid request body", body = ErrorBody)
     ),
-    security(("internal" = []))
+    params(CallerHeaders)
 )]
 async fn powerlifting_filter_categories(
     state: State<Arc<Service>>,
@@ -226,10 +172,10 @@ async fn powerlifting_filter_categories(
     request_body = PercentileRequest,
     responses(
         (status = 200, description = "Percentiles by scope, or a status string while the dataset loads", body = PercentileResponse),
-        (status = 401, description = "Invalid internal token", body = ErrorBody),
+        (status = 403, description = "Access denied", body = ErrorBody),
         (status = 422, description = "Invalid request body", body = ErrorBody)
     ),
-    security(("internal" = []))
+    params(CallerHeaders)
 )]
 async fn powerlifting_ranking_percentile(
     state: State<Arc<Service>>,
@@ -268,5 +214,15 @@ mod tests {
         assert!(count > 0);
         assert!(document.pointer("/paths/~1health/get").is_some());
         assert!(document.pointer("/paths/~1mcp/post").is_some());
+        assert!(document.pointer("/components/securitySchemes").is_none());
+        let parameters = document
+            .pointer("/paths/~1operations~1powerlifting_filter_categories/post/parameters")
+            .and_then(Value::as_array)
+            .expect("header parameters");
+        let names: Vec<&str> = parameters
+            .iter()
+            .filter_map(|parameter| parameter["name"].as_str())
+            .collect();
+        assert!(names.contains(&"X-Person-Pk") && names.contains(&"X-Athlete-Pk"));
     }
 }

@@ -58,7 +58,10 @@ pub fn build(sessions: &[Session], cutoff: &str) -> Inputs {
                 continue;
             }
             let week_entry = inputs.weekly_accessory.entry(week).or_default();
-            match week_entry.iter_mut().find(|(name, _)| *name == exercise.name) {
+            match week_entry
+                .iter_mut()
+                .find(|(name, _)| *name == exercise.name)
+            {
                 Some(slot) => slot.1 += volume,
                 None => week_entry.push((exercise.name.clone(), volume)),
             }

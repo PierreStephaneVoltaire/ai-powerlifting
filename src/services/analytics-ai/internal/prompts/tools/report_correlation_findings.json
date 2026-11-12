@@ -1,0 +1,77 @@
+{
+  "type": "function",
+  "function": {
+    "name": "report_correlation_findings",
+    "description": "Report accessory exercise to big lift correlation findings",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "exercise": {
+                "type": "string"
+              },
+              "lift": {
+                "type": "string",
+                "enum": [
+                  "squat",
+                  "bench",
+                  "deadlift"
+                ]
+              },
+              "correlation_direction": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "unclear"
+                ]
+              },
+              "strength": {
+                "type": "string",
+                "enum": [
+                  "strong",
+                  "moderate",
+                  "weak"
+                ]
+              },
+              "reasoning": {
+                "type": "string"
+              },
+              "caveat": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "exercise",
+              "lift",
+              "correlation_direction",
+              "strength",
+              "reasoning",
+              "caveat"
+            ]
+          }
+        },
+        "summary": {
+          "type": "string",
+          "description": "1-2 sentence overall summary of the correlation analysis"
+        },
+        "insufficient_data": {
+          "type": "boolean",
+          "description": "True if data is insufficient for meaningful analysis"
+        },
+        "insufficient_data_reason": {
+          "type": "string",
+          "description": "If insufficient_data is true, explain why"
+        }
+      },
+      "required": [
+        "findings",
+        "summary"
+      ]
+    }
+  }
+}

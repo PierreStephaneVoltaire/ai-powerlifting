@@ -35,13 +35,7 @@ pub fn link_for_block(start: &str, end: &str, competitions: &[&Value]) -> Option
     let in_range: Vec<(&Value, i64, &str)> = completed
         .iter()
         .filter(|(_, date)| *date >= start && *date <= end)
-        .map(|(competition, date)| {
-            (
-                *competition,
-                (end - *date).num_days().abs(),
-                "in_range",
-            )
-        })
+        .map(|(competition, date)| (*competition, (end - *date).num_days().abs(), "in_range"))
         .collect();
     let after_end = end + Duration::days(30);
     let after: Vec<(&Value, i64, &str)> = completed

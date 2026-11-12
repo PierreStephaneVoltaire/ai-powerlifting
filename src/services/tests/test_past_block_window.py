@@ -1,4 +1,4 @@
-from services.handlers.analysis_reports.analytics import _weekly_analysis_window_context
+from services.lib.training_analysis import _weekly_analysis_window_context
 
 
 def test_past_block_window_filters_sessions_without_name_error():

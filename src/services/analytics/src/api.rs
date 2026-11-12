@@ -5,8 +5,7 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use serde::Serialize;
 use serde_json::Value;
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
-use utoipa::{Modify, OpenApi, ToSchema};
+use utoipa::{IntoParams, OpenApi, ToSchema};
 
 use crate::args::{
     BlockArgs, CompareArgs, ExerciseArgs, LifetimeArgs, PkArgs, SectionArgs, SuggestArgs,
@@ -22,6 +21,15 @@ use crate::records::SectionStatus;
 
 type Shared = State<Arc<Service>>;
 type Outcome = Result<Json<Value>, Error>;
+
+#[derive(IntoParams)]
+#[into_params(parameter_in = Header)]
+pub struct CallerHeaders {
+    #[param(rename = "X-Person-Pk")]
+    pub person: Option<String>,
+    #[param(rename = "X-Athlete-Pk")]
+    pub athlete: Option<String>,
+}
 
 #[derive(Serialize, ToSchema)]
 pub struct ErrorResponse {
@@ -46,6 +54,7 @@ pub struct ManifestResponse {
 #[serde(rename_all = "camelCase")]
 pub struct SectionResponse {
     #[serde(flatten)]
+    #[schema(value_type = Object)]
     status: SectionStatus,
     as_of_date: String,
     window_key: String,
@@ -108,13 +117,12 @@ macro_rules! operation_handlers {
                 request_body = $request,
                 responses(
                     (status = 200, description = "Operation result", body = $response),
-                    (status = 401, description = "Invalid internal token or principal", body = ErrorResponse),
                     (status = 403, description = "Access denied", body = ErrorResponse),
                     (status = 404, description = "Not found or not cached", body = ErrorResponse),
                     (status = 422, description = "Invalid arguments", body = ErrorResponse),
                     (status = 500, description = "Internal error", body = ErrorResponse)
                 ),
-                security(("internal" = []))
+                params(CallerHeaders)
             )]
             pub async fn $function(
                 State(service): Shared,
@@ -147,18 +155,6 @@ operation_handlers!(
     (analytics_lifetime, "analytics.lifetime", "/operations/analytics.lifetime", LifetimeArgs, Lifetime, "Holistic all-blocks lifetime report"),
 );
 
-struct InternalToken;
-
-impl Modify for InternalToken {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        let components = openapi.components.get_or_insert_with(Default::default);
-        components.add_security_scheme(
-            "internal",
-            SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("X-Internal-Token"))),
-        );
-    }
-}
-
 #[derive(OpenApi)]
 #[openapi(
     info(title = "Powerlifting analytics", version = "1.0.0"),
@@ -183,7 +179,6 @@ impl Modify for InternalToken {
         analytics_compare,
         analytics_lifetime,
     ),
-    components(schemas(Health, crate::mcp::RpcRequest, ErrorResponse)),
-    modifiers(&InternalToken)
+    components(schemas(Health, crate::mcp::RpcRequest, ErrorResponse))
 )]
 pub struct ApiDoc;

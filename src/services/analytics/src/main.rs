@@ -1,14 +1,16 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use mimalloc::MiMalloc;
+use pl_analytics::ai::Ai;
 use pl_analytics::cache::Cache;
 use pl_analytics::config::{Config, SourceKind};
 use pl_analytics::engine::{Clock, Engine};
-use pl_analytics::http;
 use pl_analytics::operations::{Registry, Service};
 use pl_analytics::source::Source;
 use pl_analytics::source::dynamo::DynamoSource;
 use pl_analytics::source::fixture::FixtureSource;
+use pl_analytics::{grpc, http};
 use tokio::net::TcpListener;
 use tokio::signal::unix::{SignalKind, signal};
 use tracing_subscriber::EnvFilter;
@@ -31,11 +33,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         SourceKind::Fixture => Arc::new(FixtureSource::new(config.fixture_dir.clone())),
     };
-    let engine = Engine::new(source, Cache::connect(&config.valkey_url), Clock::System);
+    let engine = Engine::new(source, Cache::connect(&config.valkey_url), Clock::System)
+        .with_ai(Ai::connect_lazy(&config.ai_grpc_url));
     let port = config.port;
+    let grpc_address = SocketAddr::from(([0, 0, 0, 0], config.grpc_port));
+    let allowed_callers = config.grpc_allowed_callers.clone();
+    let grpc_engine = engine.clone();
     let service = Arc::new(Service::new(config, Registry::load()?, engine));
     let listener = TcpListener::bind(("0.0.0.0", port)).await?;
-    tracing::info!(port, "pl-analytics listening");
+    tracing::info!(
+        port,
+        grpc_port = grpc_address.port(),
+        "pl-analytics listening"
+    );
+    tokio::spawn(async move {
+        if let Err(error) =
+            grpc::serve(grpc_engine, &allowed_callers, grpc_address, shutdown()).await
+        {
+            tracing::error!(%error, "gRPC server stopped");
+        }
+    });
     axum::serve(listener, http::router(service))
         .with_graceful_shutdown(shutdown())
         .await?;

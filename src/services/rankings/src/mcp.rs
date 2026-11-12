@@ -8,9 +8,11 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use utoipa::ToSchema;
 
+use crate::api::CallerHeaders;
+use crate::caller::Caller;
 use crate::error::Error;
 use crate::operations::Service;
-use crate::{config::DOMAIN, http, pyjson};
+use crate::{config::DOMAIN, pyjson};
 
 const PROTOCOL_VERSION: &str = "2025-03-26";
 
@@ -28,14 +30,13 @@ pub struct RpcRequest {
     path = "/mcp",
     request_body = RpcRequest,
     responses((status = 200, description = "JSON-RPC response", body = Object)),
-    security(("internal" = []))
+    params(CallerHeaders)
 )]
 pub async fn handle(
     State(service): State<Arc<Service>>,
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Response, Error> {
-    http::authenticate(&service, &headers)?;
     let request: RpcRequest = serde_json::from_slice(&body).map_err(|_| Error::Body)?;
     let Some(id) = request.id else {
         return Ok((StatusCode::ACCEPTED, Json(json!({}))).into_response());
@@ -93,7 +94,7 @@ async fn call_tool(service: &Service, headers: &HeaderMap, params: Option<Value>
     };
     let result = match outcome {
         Ok(arguments) => {
-            let caller = http::principal_caller(headers);
+            let caller = Caller::identity(headers);
             service.call(name, arguments, &caller).await
         }
         Err(error) => Err(error),

@@ -1,0 +1,459 @@
+{
+  "type": "function",
+  "function": {
+    "name": "submit_multi_block_comparison",
+    "description": "Return a conservative multi-block powerlifting analysis.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "overall_summary": {
+          "type": "string"
+        },
+        "similarities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "differences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "what_works": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "what_does_not_work": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "lift_specific_insights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lift": {
+                "type": "string",
+                "enum": [
+                  "squat",
+                  "bench",
+                  "deadlift",
+                  "total"
+                ]
+              },
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "lift",
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "multi_block_exercise_roi": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "cross_block_correlations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "pattern_detections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "volume_dose_response": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "bodyweight_relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "training_day_frequency": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "best_value_blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "block": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "tradeoff": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "block",
+              "reason",
+              "tradeoff",
+              "confidence"
+            ]
+          }
+        },
+        "projection_accuracy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "progress_dropoff_points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "fatigue_patterns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "finding",
+              "evidence",
+              "confidence"
+            ]
+          }
+        },
+        "data_limits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "overall_summary",
+        "similarities",
+        "differences",
+        "what_works",
+        "what_does_not_work",
+        "lift_specific_insights",
+        "multi_block_exercise_roi",
+        "cross_block_correlations",
+        "pattern_detections",
+        "volume_dose_response",
+        "bodyweight_relationships",
+        "training_day_frequency",
+        "best_value_blocks",
+        "projection_accuracy",
+        "progress_dropoff_points",
+        "fatigue_patterns",
+        "data_limits"
+      ]
+    }
+  }
+}

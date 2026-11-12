@@ -12,7 +12,6 @@ const REGENERATE_TIMEOUT: Duration = Duration::from_secs(900);
 #[derive(Clone, Default)]
 pub struct Ai {
     client: Option<ReportsClient<Channel>>,
-    token: String,
 }
 
 impl Ai {
@@ -20,15 +19,12 @@ impl Ai {
         Self::default()
     }
 
-    pub fn connect_lazy(url: &str, token: &str) -> Self {
+    pub fn connect_lazy(url: &str) -> Self {
         let client = Endpoint::from_shared(url.to_owned())
             .ok()
             .map(|endpoint| endpoint.timeout(REGENERATE_TIMEOUT).connect_lazy())
             .map(ReportsClient::new);
-        Self {
-            client,
-            token: token.to_owned(),
-        }
+        Self { client }
     }
 
     pub async fn regenerate(
@@ -42,11 +38,7 @@ impl Ai {
             athlete_pk: athlete.to_owned(),
             block_key: block_key.to_owned(),
         });
-        for (name, value) in [
-            ("x-internal-token", self.token.as_str()),
-            ("x-athlete-pk", athlete),
-            ("x-person-pk", person),
-        ] {
+        for (name, value) in [("x-athlete-pk", athlete), ("x-person-pk", person)] {
             if let Ok(value) = MetadataValue::try_from(value) {
                 request.metadata_mut().insert(name, value);
             }

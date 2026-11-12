@@ -30,7 +30,7 @@ pub fn ipf_gl(total_kg: f64, bodyweight_kg: f64, sex: &str) -> Option<f64> {
     (denominator.abs() >= 1e-12).then(|| round(total_kg * 100.0 / denominator, 2))
 }
 
-fn record<'a>(value: Option<&'a Value>) -> Option<&'a Map<String, Value>> {
+fn record(value: Option<&Value>) -> Option<&Map<String, Value>> {
     value.and_then(Value::as_object)
 }
 
@@ -66,9 +66,10 @@ pub fn projection_results(weekly: &Value, linked: Option<&Link>) -> Option<Value
     if squat <= 0.0 && bench <= 0.0 && deadlift <= 0.0 && total.is_none_or(|total| total <= 0.0) {
         return None;
     }
-    let total = total
-        .filter(|total| *total > 0.0)
-        .map_or_else(|| round_digits(squat + bench + deadlift, 1), |total| round_digits(total, 1));
+    let total = total.filter(|total| *total > 0.0).map_or_else(
+        || round_digits(squat + bench + deadlift, 1),
+        |total| round_digits(total, 1),
+    );
     Some(json!({
         "squat_kg": squat,
         "bench_kg": bench,
@@ -77,11 +78,7 @@ pub fn projection_results(weekly: &Value, linked: Option<&Link>) -> Option<Value
     }))
 }
 
-pub fn summarize(
-    sex: &str,
-    linked: Option<&Link>,
-    fallback: Option<Value>,
-) -> Option<Outcome> {
+pub fn summarize(sex: &str, linked: Option<&Link>, fallback: Option<Value>) -> Option<Outcome> {
     let link = linked?;
     let competition = &link.competition;
     let results = results_of(competition).filter(|results| has_results(Some(results)));

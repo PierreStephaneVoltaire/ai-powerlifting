@@ -3,7 +3,6 @@
     "name": "analyze_powerlifting_stats",
     "domain": "rankings",
     "description": "Analyze powerlifting statistics for the current program version. Computes totals, Wilks, DOTS, and comparative metrics. Copied from tools/health/powerlifting_stats.py.",
-    "handler": "services.handlers.analysis.analyze_powerlifting_stats.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -52,7 +51,6 @@
     "name": "powerlifting_filter_categories",
     "domain": "rankings",
     "description": "List available filter categories for powerlifting ranking data. Returns the distinct values for federation, equipment, gender, and weight class filters used by the ranking percentile tool.",
-    "handler": "services.handlers.analysis.powerlifting_filter_categories.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -115,7 +113,6 @@
     "name": "powerlifting_ranking_percentile",
     "domain": "rankings",
     "description": "Compute the ranking percentile for a given total, body weight, gender, equipment, and federation. Returns the percentile rank compared to known competition results.",
-    "handler": "services.handlers.analysis.powerlifting_ranking_percentile.handler",
     "input_schema": {
       "type": "object",
       "properties": {

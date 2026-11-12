@@ -17,6 +17,7 @@ layers/**/*.zip
 layers/**/.stage/
 
 # Docker
+docker/.build/
 .docker/
 *.tar.gz
 

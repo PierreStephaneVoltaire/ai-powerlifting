@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from importlib import import_module
+from services import analytics_client
 from services.lib.competition_entries import with_competition_entries
 from services.lib.block_scope import scope_program
 from services.lib.aws import dynamodb_resource
@@ -84,55 +85,17 @@ def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
     return _sanitize_decimals(item)
 
 
-_DETERMINISTIC_ANALYSIS_SECTIONS = ["overview", "fatigue_readiness", "peaking", "workload", "alerts"]
-
-
-def _build_sectioned_analysis(
-    program: dict,
-    sessions: list[dict],
-    glossary: list[dict] | None,
-    *,
-    weeks: int = 1,
-    block: str = "current",
-    window_start: str | None = None,
-    window_end: str | None = None,
-    ref_date: str | None = None,
-    week_start: int | None = None,
-    week_end: int | None = None,
-) -> dict:
-    from .analytics import weekly_analysis_section
-
-    result: dict[str, Any] = {}
-    for section in _DETERMINISTIC_ANALYSIS_SECTIONS:
-        result.update(weekly_analysis_section(
-            program=program,
-            sessions=sessions,
-            section=section,
-            weeks=weeks,
-            block=block,
-            window_start=window_start,
-            window_end=window_end,
-            week_start=week_start,
-            week_end=week_end,
-            ref_date=ref_date,
-            glossary=glossary,
-        ))
-    return result
-
-
 def _build_sectioned_week_analysis(
     program: dict,
     sessions: list[dict],
-    glossary: list[dict] | None,
     *,
     week_start: int,
     week_end: int,
     ref_date: str,
 ) -> dict:
-    return _build_sectioned_analysis(
+    return analytics_client.weekly_analysis(
         program,
         sessions,
-        glossary,
         weeks=max(1, week_end - week_start + 1),
         block="current",
         week_start=week_start,
@@ -239,7 +202,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
         bundle["weekly"] = _build_sectioned_week_analysis(
             program,
             current_sessions,
-            glossary,
             week_start=max(1, current_week - effective_weeks + 1),
             week_end=current_week,
             ref_date=datetime.utcnow().date().isoformat(),

@@ -8,7 +8,10 @@ use crate::js::round_or_null;
 const REQUIRED_SAMPLE: i64 = 3;
 
 pub fn build(rows: &[Row], bundles: &[Bundle]) -> Tolerance {
-    let linked = rows.iter().filter(|row| row.actual_total_kg.is_some()).count() as i64;
+    let linked = rows
+        .iter()
+        .filter(|row| row.actual_total_kg.is_some())
+        .count() as i64;
     let by_lift: BTreeMap<String, ToleranceLift> = LIFTS
         .iter()
         .map(|lift| {
@@ -56,8 +59,9 @@ pub fn build(rows: &[Row], bundles: &[Bundle]) -> Tolerance {
         confidence: if linked >= 5 { "medium" } else { "low" }.to_owned(),
         sample_size: linked,
         required_sample_size: REQUIRED_SAMPLE,
-        message: "Volume tolerance is estimated from observed block-level INOL and strength outcomes."
-            .to_owned(),
+        message:
+            "Volume tolerance is estimated from observed block-level INOL and strength outcomes."
+                .to_owned(),
         by_lift,
     }
 }

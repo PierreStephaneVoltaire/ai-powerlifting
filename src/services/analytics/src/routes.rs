@@ -229,6 +229,7 @@ impl Engine {
             ref_date: args.ref_date.filter(|text| !text.is_empty()),
             week_start: args.week_start.filter(|week| *week > 0),
             week_end: args.week_end.filter(|week| *week > 0),
+            ..Params::default()
         };
         sections::compute_all(self.env(&loaded), &loaded.program, &params).map(Value::Object)
     }
@@ -294,6 +295,7 @@ fn window_params(window: &windows::Window, as_of: &str) -> Params {
         ref_date: Some(as_of.to_owned()),
         week_start: Some(window.week_start),
         week_end: Some(window.week_end),
+        ..Params::default()
     }
 }
 
