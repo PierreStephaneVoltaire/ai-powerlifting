@@ -1,11 +1,12 @@
 import asyncio
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
+
+from services.mesh import BACKEND_ACCOUNT, caller, is_account
 
 from .coach_client import CoachClient
 from .gateway import Gateway, Relay
@@ -60,13 +61,9 @@ def create_app(store: RegistrationStore | None = None, coach: CoachClient | None
 
     app = FastAPI(title="Powerlifting Coach Discord bot", lifespan=lifespan)
 
-    def authorized(x_pl_access_context: str = Header(default="")) -> None:
-        try:
-            context = json.loads(x_pl_access_context)
-            if not isinstance(context, dict) or not str(context.get('workload', '')).endswith('/sa/powerlifting-app-backend'):
-                raise ValueError('Unauthorized workload')
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(403, 'Verified workload required') from exc
+    def authorized(x_pl_source_principal: str = Header(default="")) -> None:
+        if not is_account(caller(x_pl_source_principal), BACKEND_ACCOUNT):
+            raise HTTPException(403, 'Verified workload required')
 
     async def found(webhook_id: str) -> Registration:
         registration = await asyncio.to_thread(state["store"].get, webhook_id)

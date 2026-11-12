@@ -32,7 +32,6 @@ async def video_upload_presign(args: dict) -> dict:
         s3_key = f"videos/{session_date}/{video_id}.{video_extension(filename)}"
         item = {
             "pk": pk,
-            "sk": f"Media#{video_id}",
             "entity_type": "media",
             "media_id": video_id,
             "video_id": video_id,
@@ -59,7 +58,7 @@ async def video_upload_presign(args: dict) -> dict:
                 datetime.now(timezone.utc).isoformat(),
                 filename,
                 item.get("expected_size"))
-        item = allocate_media(health_table, item)
+        item = allocate_media(item)
         metadata = media_metadata(item)
         return {"video_id": video_id, "s3_key": s3_key, "metadata": metadata}
 

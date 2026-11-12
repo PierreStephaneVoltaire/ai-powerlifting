@@ -9,15 +9,16 @@ from services import media_access
 
 def test_form_media_checks_current_allocation_and_permissions(monkeypatch):
     allocations = {
-        ('athlete', 'Media#form'): {'media_id': 'form', 'lift': 'squat'},
-        ('athlete', 'Media#session'): {'media_id': 'session'},
+        ('athlete', 'form'): {'media_id': 'form', 'lift': 'squat'},
+        ('athlete', 'session'): {'media_id': 'session'},
     }
     def get_item(**kwargs):
         assert kwargs['ConsistentRead'] is True
         key = kwargs['Key']
-        return {'Item': allocations.get((key['pk'], key['sk']))}
-    monkeypatch.setattr(media_access, 'database', lambda: SimpleNamespace(Table=lambda _: SimpleNamespace(get_item=get_item)))
-    claims = {'iss': 'pl-security', 'origin': 'pl-backend', 'athlete': 'athlete'}
+        return {'Item': allocations.get((key['athlete_id'], key['video_id']))}
+    tables = []
+    monkeypatch.setattr(media_access, 'database', lambda: SimpleNamespace(Table=lambda name: tables.append(name) or SimpleNamespace(get_item=get_item)))
+    claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend', 'athlete': 'athlete'}
     videos_only = {'permissions': ['videos:read', 'videos:write']}
     authorized = {'permissions': [*videos_only['permissions'], 'lift-profiles:read', 'lift-profiles:write']}
     assert check_context('video_upload_presign', {'lift': 'squat'}, claims, authorized) is authorized
@@ -36,3 +37,4 @@ def test_form_media_checks_current_allocation_and_permissions(monkeypatch):
     assert check_context('video_upload_confirm', {'video_id': 'session', 'lift': 'squat'}, claims, videos_only) is videos_only
     with pytest.raises(OperationError):
         check_context('video_media_resolve', {'s3_key': 'athlete/form.jpg'}, claims, {'permissions': ['lift-profiles:read']})
+    assert set(tables) == {'workout-Videos'}

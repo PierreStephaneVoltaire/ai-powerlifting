@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, X, Trash2, Edit2, Save, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Trash2, Edit2, Save, ChevronDown, ChevronUp, CopyPlus } from 'lucide-react'
 import {
   Stack, Group, Text, Button,
   TextInput, Textarea, Select, ActionIcon,
@@ -127,30 +127,29 @@ export default function SupplementsPage() {
     setHasChanges(true)
   }
 
-  function updateProtocolKey(phaseIndex: number, key: string, value: string) {
-    setPhases((prev) => {
-      const newPhases = [...prev]
-      const protocol = { ...(newPhases[phaseIndex].peak_week_protocol || {}), [key]: value }
-      newPhases[phaseIndex] = { ...newPhases[phaseIndex], peak_week_protocol: protocol }
-      return newPhases
-    })
+  function addSupplement() {
+    const target = [...filteredPhases].sort((a, b) => b.phase - a.phase)[0]
+    if (target) {
+      addItem(phases.indexOf(target))
+      setExpandedPhase(target.phase)
+      return
+    }
+    const nextPhase = phases.reduce((max, p) => Math.max(max, p.phase), 0) + 1
+    setPhases((prev) => [...prev, { phase: nextPhase, phase_name: 'Supplements', notes: '', items: [{ name: '', dose: '' }], block_id: block }])
+    setExpandedPhase(nextPhase)
     setHasChanges(true)
   }
 
-  function addProtocolKey(phaseIndex: number) {
-    const key = prompt('Enter protocol key name:')
-    if (!key) return
-    updateProtocolKey(phaseIndex, key, '')
-  }
+  const previousPhase = useMemo(() => {
+    const earlier = phases.filter((p) => recordBlock(p, 'supplement_phases', program) !== block && p.items.length > 0)
+    return earlier.sort((a, b) => b.phase - a.phase)[0]
+  }, [phases, block, program])
 
-  function removeProtocolKey(phaseIndex: number, key: string) {
-    setPhases((prev) => {
-      const newPhases = [...prev]
-      const protocol = { ...(newPhases[phaseIndex].peak_week_protocol || {}) }
-      delete protocol[key]
-      newPhases[phaseIndex] = { ...newPhases[phaseIndex], peak_week_protocol: protocol }
-      return newPhases
-    })
+  function carryOver() {
+    if (!previousPhase) return
+    const nextPhase = phases.reduce((max, p) => Math.max(max, p.phase), 0) + 1
+    setPhases((prev) => [...prev, { phase: nextPhase, phase_name: previousPhase.phase_name, notes: previousPhase.notes, items: previousPhase.items.map((item) => ({ ...item })), block_id: block }])
+    setExpandedPhase(nextPhase)
     setHasChanges(true)
   }
 
@@ -182,7 +181,7 @@ export default function SupplementsPage() {
       <Group justify="space-between" className="if-mock-header">
         <Stack gap={0}>
           <h1 className="if-mock-title">Supplements</h1>
-          <div className="if-mock-subtitle">Manage supplement phases and peak week protocols.</div>
+          <div className="if-mock-subtitle">What you are taking this block, with dose and notes.</div>
         </Stack>
         <Group gap="sm">
           <Select
@@ -205,12 +204,19 @@ export default function SupplementsPage() {
             </Button>
           )}
           <Button
-            variant="default"
+            leftSection={<Plus size={16} />}
+            onClick={addSupplement}
+            disabled={readOnly}
+          >
+            Add supplement
+          </Button>
+          <Button
+            variant="subtle"
             leftSection={<Plus size={16} />}
             onClick={addPhase}
             disabled={readOnly}
           >
-            Add Phase
+            New phase
           </Button>
         </Group>
       </Group>
@@ -302,7 +308,7 @@ export default function SupplementsPage() {
                         onChange={(e) => updatePhase(originalIndex, { notes: e.currentTarget.value })}
                         minRows={2}
                         autosize
-                        placeholder="Protocol intent, notes for AI context..."
+                        placeholder="Why you are running this stack, how it is going..."
                         disabled={readOnly}
                       />
                     </div>
@@ -371,50 +377,6 @@ export default function SupplementsPage() {
                       </Text>
                     )}
 
-                    <div className="if-supp-section" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
-                      <Group justify="space-between" mb={8}>
-                        <div className="if-small-label" style={{ marginBottom: 0 }}>Peak week protocol</div>
-                        <Button
-                          variant="default"
-                          size="compact-xs"
-                          leftSection={<Plus size={11} />}
-                          onClick={() => addProtocolKey(originalIndex)}
-                          disabled={readOnly}
-                        >
-                          Add field
-                        </Button>
-                      </Group>
-                      {phase.peak_week_protocol && Object.keys(phase.peak_week_protocol).length > 0 ? (
-                        <Stack gap="xs">
-                          {Object.entries(phase.peak_week_protocol).map(([key, value]) => (
-                            <Group key={key} gap="sm">
-                              <Text size="sm" c="dimmed" w={130}>{key}:</Text>
-                              <TextInput
-                                value={value}
-                                onChange={(e) => updateProtocolKey(originalIndex, key, e.currentTarget.value)}
-                                style={{ flex: 1 }}
-                                size="sm"
-                                disabled={readOnly}
-                              />
-                              <ActionIcon
-                                variant="subtle"
-                                color="red"
-                                size="sm"
-                                onClick={() => removeProtocolKey(originalIndex, key)}
-                                disabled={readOnly}
-                              >
-                                <X size={14} />
-                              </ActionIcon>
-                            </Group>
-                          ))}
-                        </Stack>
-                      ) : (
-                        <Text size="sm" c="dimmed">
-                          No peak week protocol defined
-                        </Text>
-                      )}
-                    </div>
-
                     <div className="if-supp-footer">
                       <Button
                         variant="light"
@@ -434,9 +396,17 @@ export default function SupplementsPage() {
           })}
         </div>
       ) : (
-        <Group justify="center" py={48}>
-          <Text c="dimmed">No supplement phases defined. Click "Add Phase" to get started.</Text>
-        </Group>
+        <Stack align="center" py={48} gap="sm">
+          <Text c="dimmed">No supplements logged for this block yet.</Text>
+          <Group gap="sm">
+            <Button leftSection={<Plus size={16} />} onClick={addSupplement} disabled={readOnly}>Add supplement</Button>
+            {previousPhase && (
+              <Button variant="default" leftSection={<CopyPlus size={16} />} onClick={carryOver} disabled={readOnly}>
+                Carry over {previousPhase.items.length} from {previousPhase.phase_name}
+              </Button>
+            )}
+          </Group>
+        </Stack>
       )}
     </Stack>
   )

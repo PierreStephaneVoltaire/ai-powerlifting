@@ -8,13 +8,9 @@ from services.contract import load_operations
 from services.dispatch import dispatch
 
 
-def _analytics_operations():
-    return {name: operation for domain in ("analytics", "analytics-ai", "analytics-export", "export") for name, operation in load_operations(domain).items()}
-
-
 def test_analytics_contracts_have_structured_results():
-    operations = _analytics_operations()
-    assert len(operations) == 30
+    operations = load_operations("analytics")
+    assert len(operations) == 27
     assert all(operation.result_schema for operation in operations.values())
 
 
@@ -116,11 +112,11 @@ def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as
         return httpx.Response(200, json={"data": {"schemaVersion": 6}, "error": None}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(composite.httpx, "post", fake_post)
-    composite.call_node("analytics.manifest", {"pk": "athlete-1", "_person_pk": "coach-1", "_if_job_id": "job-1", "_principal": "scope-token"})
+    composite.call_node("analytics.manifest", {"pk": "athlete-1", "_person_pk": "coach-1", "_if_job_id": "job-1"})
     headers = calls[0][1]["headers"]
     assert headers["X-Person-Pk"] == "coach-1"
     assert headers["X-IF-Turn-Id"] == "job-1"
-    assert headers["X-PL-Principal"] == "scope-token"
+    assert "X-PL-Principal" not in headers
     assert headers["X-Internal-Token"] == "loopback-secret"
     assert calls[0][1]["json"] == {"pk": "athlete-1"}
 
@@ -163,7 +159,7 @@ def test_composite_correlation_cache_miss_preserves_not_found_status(monkeypatch
 
 
 def test_composite_operation_contracts_have_importable_handlers():
-    operations = _analytics_operations()
+    operations = load_operations("analytics")
     names = {name for name in operations if name.startswith("analytics.")}
     assert names == {
         "analytics.manifest",
@@ -182,8 +178,6 @@ def test_composite_operation_contracts_have_importable_handlers():
         "analytics.export",
         "analytics.compare",
         "analytics.compare_ai",
-        "analytics.lifetime",
-        "analytics.lifetime_export",
     }
     for operation in names:
         module = importlib.import_module(operations[operation].handler)
@@ -231,7 +225,7 @@ def test_legacy_weekly_contract_matches_flat_handler_result(monkeypatch):
 
 
 def test_composite_inputs_match_their_routes():
-    operations = _analytics_operations()
+    operations = load_operations("analytics")
     expected = {
         "analytics.manifest": {"pk", "asOfDate", "window"},
         "analytics.sections_queue": {"pk", "asOfDate", "window", "sections", "read_only"},
@@ -263,7 +257,7 @@ def test_composite_inputs_match_their_routes():
 
 
 def test_composite_ai_report_results_have_concrete_shapes():
-    operations = _analytics_operations()
+    operations = load_operations("analytics")
     operations["analytics.block_evaluation"].validate_result({"stance": "continue", "summary": "Stable"})
     operations["analytics.correlation"].validate_result({"findings": [], "summary": "Stable"})
 
@@ -365,7 +359,7 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", build_analysis)
 
     access = {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}
-    operations = _analytics_operations()
+    operations = load_operations("analytics")
     result = dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "refresh": True, "_access": access})
     assert "# Training Program" in result["markdown"]
     assert "visible session" in result["markdown"]
@@ -405,7 +399,7 @@ def test_markdown_athlete_reads_never_share_delegate_records(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
     _markdown_sources(monkeypatch, core, {"meta": {"program_name": "Mine"}, "sessions": [], "phases": [], "goals": [], "competitions": []})
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: {})
-    operations = _analytics_operations()
+    operations = load_operations("analytics")
     dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "_access": {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}})
     assert dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "cache_only": True, "_access": {"is_self": True}}) == {"cached": False, "cache_miss": True}
     dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "_access": {"is_self": True}})

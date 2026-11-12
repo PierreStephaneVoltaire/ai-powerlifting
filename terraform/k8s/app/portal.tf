@@ -1,4 +1,19 @@
+data "aws_ssm_parameter" "media_signing_private_key" {
+  name            = "/powerlifting/media/cloudfront-signing-private-key"
+  with_decryption = true
+}
+
+resource "kubernetes_secret_v1" "backend" {
+  metadata {
+    name      = "powerlifting-app-backend-secrets"
+    namespace = var.namespace
+  }
+
+  data = { MEDIA_SIGNING_PRIVATE_KEY = data.aws_ssm_parameter.media_signing_private_key.value }
+}
+
 resource "kubernetes_deployment_v1" "backend" {
+  depends_on       = [kubectl_manifest.backend_from_oauth2_proxy, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -15,10 +30,11 @@ resource "kubernetes_deployment_v1" "backend" {
 
     template {
       metadata {
-        labels = { app = "powerlifting-app-backend" }
+        labels = { app = "powerlifting-app-backend", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name            = "powerlifting-app-backend"
         automount_service_account_token = false
         enable_service_links            = false
 
@@ -33,6 +49,8 @@ resource "kubernetes_deployment_v1" "backend" {
 
           port {
             container_port = 3005
+            name           = "http"
+            protocol       = "TCP"
           }
 
           env_from {
@@ -41,9 +59,14 @@ resource "kubernetes_deployment_v1" "backend" {
             }
           }
 
-          env_from {
-            secret_ref {
-              name = "powerlifting-app-secrets"
+
+          env {
+            name = "MEDIA_SIGNING_PRIVATE_KEY"
+            value_from {
+              secret_key_ref {
+                name = "powerlifting-app-backend-secrets"
+                key  = "MEDIA_SIGNING_PRIVATE_KEY"
+              }
             }
           }
 
@@ -101,11 +124,14 @@ resource "kubernetes_service_v1" "backend" {
     port {
       port        = 3005
       target_port = 3005
+      name        = "http"
+      protocol    = "TCP"
     }
   }
 }
 
 resource "kubernetes_deployment_v1" "frontend" {
+  depends_on       = [kubectl_manifest.edge_only, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -114,7 +140,7 @@ resource "kubernetes_deployment_v1" "frontend" {
   }
 
   spec {
-    replicas = 1
+    replicas = 2
 
     selector {
       match_labels = { app = "powerlifting-app-frontend" }
@@ -122,10 +148,11 @@ resource "kubernetes_deployment_v1" "frontend" {
 
     template {
       metadata {
-        labels = { app = "powerlifting-app-frontend" }
+        labels = { app = "powerlifting-app-frontend", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name            = "powerlifting-app-frontend"
         automount_service_account_token = false
         enable_service_links            = false
 
@@ -140,6 +167,8 @@ resource "kubernetes_deployment_v1" "frontend" {
 
           port {
             container_port = 3001
+            name           = "http"
+            protocol       = "TCP"
           }
 
           resources {
@@ -182,6 +211,8 @@ resource "kubernetes_service_v1" "frontend" {
     port {
       port        = 3001
       target_port = 3001
+      name        = "http"
+      protocol    = "TCP"
     }
   }
 }

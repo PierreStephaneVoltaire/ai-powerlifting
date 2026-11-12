@@ -13,6 +13,8 @@ from .dispatch import OperationError, authorize, dispatch
 from . import execution
 from .authorization import check_context
 from .access import permission_map
+from .access_store import current_context
+from .mesh import caller
 from services.lib.session_store import SessionIdentityConflictError
 
 
@@ -29,19 +31,16 @@ def health():
     return {"status": "ok", "domain": DOMAIN}
 
 
-def mesh_context(value: str, operation: str, person: str, athlete: str):
-    try:
-        data = json.loads(value)
-        if not isinstance(data, dict) or data.get('operation') != operation or not isinstance(data.get('person'), str) or not isinstance(data.get('athlete'), str) or not isinstance(data.get('context'), dict):
-            raise ValueError('Invalid authorization context')
-        if person and person != data['person'] or athlete and athlete != data['athlete']:
-            raise ValueError('Authorization context scope mismatch')
-        return {'sub': data['person'], 'athlete': data['athlete']}, data['context']
-    except (ValueError, TypeError) as exc:
-        raise OperationError(403, 'forbidden', 'Verified authorization context required') from exc
+async def authorization_context(name: str, arguments: dict[str, Any], person: str, athlete: str, source: str) -> tuple[dict, dict]:
+    claims = {'sub': person, 'athlete': athlete, 'caller': caller(source)}
+    access = await asyncio.to_thread(current_context, person, athlete)
+    check_context(name, arguments, claims, access)
+    if name == 'access_context' and arguments.get('operation'):
+        check_context(arguments['operation'], arguments.get('arguments') or {}, claims, access)
+    return claims, access
 
 
-async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, job_id: str = "", nested_operation: bool = False, generation_id: str = "", generation_attempt: int = 0, principal: str = "", access_context: str = ""):
+async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, job_id: str = "", nested_operation: bool = False, generation_id: str = "", generation_attempt: int = 0, source: str = ""):
     if generation_id and not job_id:
         raise HTTPException(403, "Generation requires an active native turn")
     if name not in OPERATIONS:
@@ -49,15 +48,13 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
     operation = OPERATIONS[name]
     access = {}
     try:
-        if any(key in arguments for key in ('_person_pk', '_access', '_principal', '_if_job_id')):
+        if any(key in arguments for key in ('_person_pk', '_access', '_if_job_id')):
             raise OperationError(403, 'forbidden', 'Reserved authorization fields cannot be supplied')
-        claims, access = mesh_context(access_context, name, person, athlete)
-        person, athlete = claims['sub'], claims['athlete']
+        _, access = await authorization_context(name, arguments, person, athlete, source)
         arguments = authorize(operation, arguments, athlete, person, access)
         operation.validate_input(arguments)
         arguments['_person_pk'] = person
         arguments['_access'] = access
-        arguments['_principal'] = principal
         if job_id:
             arguments["_if_job_id"] = job_id
             if generation_id:
@@ -91,13 +88,13 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
 
 
 @app.post("/operations/{name}")
-async def operation(name: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_pl_nested_operation: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_if_generation_id: str = Header(default=""), x_if_generation_attempt: int = Header(default=0), x_pl_principal: str = Header(default=""), x_pl_access_context: str = Header(default="")):
-    result = await call(name, arguments, x_athlete_pk, x_person_pk, x_if_turn_id or x_if_job_id, x_pl_nested_operation == "true", x_if_generation_id, x_if_generation_attempt, x_pl_principal, x_pl_access_context)
+async def operation(name: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_pl_nested_operation: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_if_generation_id: str = Header(default=""), x_if_generation_attempt: int = Header(default=0), x_pl_source_principal: str = Header(default="")):
+    result = await call(name, arguments, x_athlete_pk, x_person_pk, x_if_turn_id or x_if_job_id, x_pl_nested_operation == "true", x_if_generation_id, x_if_generation_attempt, x_pl_source_principal)
     return JSONResponse(result, status_code=202) if isinstance(result, dict) and ("job_id" in result or "generation_id" in result) and not result.get("cached") else result
 
 
 @app.post("/mcp")
-async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_principal: str = Header(default=""), x_pl_access_context: str = Header(default="")):
+async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
     body = await request.json()
     method, request_id = body.get("method"), body.get("id")
     if request_id is None:
@@ -112,7 +109,7 @@ async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person
     elif method == "tools/call":
         params = body.get("params") or {}
         try:
-            value = jsonable_encoder(await call(params.get("name", ""), params.get("arguments", {}), x_athlete_pk, x_person_pk, principal=x_pl_principal, access_context=x_pl_access_context))
+            value = jsonable_encoder(await call(params.get("name", ""), params.get("arguments", {}), x_athlete_pk, x_person_pk, source=x_pl_source_principal))
             result = {"content": [{"type": "text", "text": json.dumps(value)}], "isError": False}
             if isinstance(value, dict):
                 result["structuredContent"] = value
@@ -131,13 +128,12 @@ app.openapi = openapi
 
 
 @app.post("/executions/{execution_id}")
-async def resume(execution_id: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_principal: str = Header(default=""), x_pl_access_context: str = Header(default="")):
+async def resume(execution_id: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
     try:
         active = execution.executions.get(execution_id)
         if active is None:
             raise OperationError(409, 'uncertain', 'Execution unavailable')
-        claims, access = mesh_context(x_pl_access_context, 'domain_resume', x_person_pk, x_athlete_pk)
-        check_context('domain_resume', {'operation': active.operation}, {'iss': 'pl-security', **claims}, access)
+        claims, _ = await authorization_context('domain_resume', {'operation': active.operation}, x_person_pk, x_athlete_pk, x_pl_source_principal)
         if active.person != claims['sub'] or active.athlete != claims['athlete']:
             raise OperationError(403, 'forbidden', 'Execution belongs to another Person')
         return await execution.resume(execution_id, x_if_turn_id or x_if_job_id, x_athlete_pk, arguments.get("challenge_id"), arguments.get("content"))
@@ -148,13 +144,13 @@ async def resume(execution_id: str, arguments: dict[str, Any], x_athlete_pk: str
 
 
 @app.get("/generations/{generation_id}")
-async def generation_status(generation_id: str, x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_principal: str = Header(default=""), x_pl_access_context: str = Header(default="")):
+async def generation_status(generation_id: str, x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
     from .generations import status
     if not x_athlete_pk:
         raise HTTPException(403, "Authenticated Athlete required")
     try:
-        claims, access = mesh_context(x_pl_access_context, 'generation_status', x_person_pk, x_athlete_pk)
-        return await status(generation_id, claims['athlete'], claims['sub'], access, x_pl_principal)
+        claims, access = await authorization_context('generation_status', {}, x_person_pk, x_athlete_pk, x_pl_source_principal)
+        return await status(generation_id, claims['athlete'], claims['sub'], access)
     except OperationError as exc:
         raise HTTPException(exc.status, {"code": exc.code, "message": exc.message})
 

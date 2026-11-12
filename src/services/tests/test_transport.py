@@ -1,5 +1,4 @@
 import importlib
-import json
 
 from fastapi.testclient import TestClient
 from services.contract import load_operations
@@ -9,10 +8,9 @@ def test_http_mcp_calculation_parity_and_context(monkeypatch):
     monkeypatch.setenv('PL_DOMAIN', 'profile')
     module = importlib.reload(importlib.import_module('services.app'))
     monkeypatch.setattr(module, 'OPERATIONS', load_operations('calculations'))
-    context = json.dumps({'person': '', 'athlete': '', 'operation': 'kg_to_lb', 'context': {'permissions': []}})
+    monkeypatch.setattr(module, 'current_context', lambda person, athlete: {'permissions': []})
     with TestClient(module.app) as client:
-        assert client.post('/operations/kg_to_lb', json={'kg': 100}).status_code == 403
-        headers = {'X-PL-Access-Context': context}
+        headers = {'X-Person-Pk': '', 'X-Athlete-Pk': ''}
         http = client.post('/operations/kg_to_lb', headers=headers, json={'kg': 100})
         assert http.status_code == 200, http.text
         response = client.post('/mcp', headers=headers, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'kg_to_lb', 'arguments': {'kg': 100}}})

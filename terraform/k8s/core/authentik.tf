@@ -35,18 +35,17 @@ resource "random_password" "authentik_secret_key" {
   length  = 60
   special = false
 }
-
-resource "kubernetes_secret_v1" "authentik_env" {
+resource "kubernetes_secret_v1" "authentik_powerlifting_env" {
   metadata {
     name      = "authentik-env"
-    namespace = kubernetes_namespace_v1.auth.metadata[0].name
+    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
     labels = {
       app = "authentik"
     }
   }
   data = {
     AUTHENTIK_SECRET_KEY           = random_password.authentik_secret_key.result
-    AUTHENTIK_POSTGRESQL__HOST     = local.postgres_host
+    AUTHENTIK_POSTGRESQL__HOST     = local.authentik_db_host
     AUTHENTIK_POSTGRESQL__PORT     = "5432"
     AUTHENTIK_POSTGRESQL__NAME     = local.postgres_database
     AUTHENTIK_POSTGRESQL__USER     = local.postgres_username
@@ -58,10 +57,10 @@ resource "kubernetes_secret_v1" "authentik_env" {
   type = "Opaque"
 }
 
-resource "kubernetes_secret_v1" "authentik_token" {
+resource "kubernetes_secret_v1" "authentik_powerlifting_token" {
   metadata {
     name      = "authentik-terraform-token"
-    namespace = kubernetes_namespace_v1.auth.metadata[0].name
+    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
     labels = {
       app = "authentik"
     }
@@ -72,16 +71,17 @@ resource "kubernetes_secret_v1" "authentik_token" {
   type = "Opaque"
 }
 
-resource "helm_release" "authentik" {
+resource "helm_release" "authentik_powerlifting" {
   name       = "authentik"
   repository = "https://charts.goauthentik.io"
   chart      = "authentik"
   version    = local.authentik_version
-  namespace  = kubernetes_namespace_v1.auth.metadata[0].name
+  namespace  = kubernetes_namespace_v1.powerlifting.metadata[0].name
+  timeout    = 900
 
   set {
     name  = "authentik.existingSecret.secretName"
-    value = kubernetes_secret_v1.authentik_env.metadata[0].name
+    value = kubernetes_secret_v1.authentik_powerlifting_env.metadata[0].name
   }
   set {
     name  = "postgresql.enabled"
@@ -99,12 +99,14 @@ resource "helm_release" "authentik" {
     name  = "worker.replicas"
     value = "1"
   }
+
+  depends_on = [kubectl_manifest.authentik_postgres]
 }
 
-resource "kubernetes_job_v1" "authentik_bootstrap_token" {
+resource "kubernetes_job_v1" "authentik_powerlifting_bootstrap_token" {
   metadata {
     name      = "authentik-bootstrap-token"
-    namespace = kubernetes_namespace_v1.auth.metadata[0].name
+    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
     labels = {
       app = "authentik"
     }
@@ -126,7 +128,7 @@ resource "kubernetes_job_v1" "authentik_bootstrap_token" {
           command = ["python", "/manage.py", "shell", "-c", local.authentik_bootstrap_script]
           env_from {
             secret_ref {
-              name = kubernetes_secret_v1.authentik_env.metadata[0].name
+              name = kubernetes_secret_v1.authentik_powerlifting_env.metadata[0].name
             }
           }
         }
@@ -135,7 +137,7 @@ resource "kubernetes_job_v1" "authentik_bootstrap_token" {
   }
 
   depends_on = [
-    kubernetes_secret_v1.authentik_token,
-    helm_release.authentik,
+    kubernetes_secret_v1.authentik_powerlifting_token,
+    helm_release.authentik_powerlifting,
   ]
 }

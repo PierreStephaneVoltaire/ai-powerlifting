@@ -4,7 +4,7 @@ import asyncio
 
 from botocore.exceptions import ClientError
 
-from .._video_store import cas_update_videos, context, get_health_table, get_media, get_session_store, resolve_pk, session_for_date
+from .._video_store import cas_update_videos, context, get_health_table, get_media, get_session_store, put_media, resolve_pk, session_for_date
 
 
 def _remove_lift_profile_video(table, pk: str, program_sk: str, lift: str, angle: str, video_id: str) -> None:
@@ -66,7 +66,7 @@ async def video_remove(args: dict) -> dict:
 
     def remove():
         program_sk, phases = context(health_table, pk, version)
-        media = get_media(health_table, pk, video_id)
+        media = get_media(pk, video_id)
         if not media:
             raise ValueError("Video allocation not found")
         if media.get("readonly"):
@@ -78,8 +78,8 @@ async def video_remove(args: dict) -> dict:
                 if media.get("status") == "removed":
                     break
                 try:
-                    health_table.put_item(
-                        Item={**media, "status": "removed"},
+                    put_media(
+                        {**media, "status": "removed"},
                         ConditionExpression="allocation_revision = :revision AND #status = :status",
                         ExpressionAttributeNames={"#status": "status"},
                         ExpressionAttributeValues={":revision": media.get("allocation_revision", 0), ":status": media.get("status")},
@@ -88,7 +88,7 @@ async def video_remove(args: dict) -> dict:
                 except ClientError as error:
                     if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
                         raise
-                    media = get_media(health_table, pk, video_id)
+                    media = get_media(pk, video_id)
                     if not media:
                         raise ValueError("Video allocation not found")
             else:
@@ -107,8 +107,8 @@ async def video_remove(args: dict) -> dict:
             if media.get("status") == "removed":
                 break
             try:
-                health_table.put_item(
-                    Item={**media, "status": "removed"},
+                put_media(
+                    {**media, "status": "removed"},
                     ConditionExpression="allocation_revision = :revision AND #status = :status",
                     ExpressionAttributeNames={"#status": "status"},
                     ExpressionAttributeValues={":revision": media.get("allocation_revision", 0), ":status": media.get("status")},
@@ -117,7 +117,7 @@ async def video_remove(args: dict) -> dict:
             except Exception as error:
                 if getattr(error, "response", {}).get("Error", {}).get("Code") != "ConditionalCheckFailedException":
                     raise
-                media = get_media(health_table, pk, video_id)
+                media = get_media(pk, video_id)
                 if not media:
                     raise ValueError("Video allocation not found")
         else:

@@ -12,11 +12,6 @@ operations. The Express gateway calls them over the cluster network, and the
 Coach (`pl-coach`) answers their inference steps and exposes them as tools in
 chat. DynamoDB and S3 hold the data.
 
-The Kubernetes workloads are Terraform in this repository. After the initial
-`core` and `perms` bootstrap, the in-cluster runner applies `terraform/k8s/core`,
-`perms`, `network`, `app`, and `terraform/coach` from CI. Coach's state is applied
-when `build-coach` publishes new images and resolves their `latest` digests.
-
 The AI workflow (use cases, models, request flow, concurrency, output
 validation and hallucination controls) is in the README's
 [AI components](../README.md#ai-components) section.
@@ -38,13 +33,14 @@ flowchart LR
   Service --> Profile
 ```
 
-The gateway authentication contract keeps direct Discord login alongside
-Authentik OIDC through Passport/openid-client; existing Valkey stores server-side
-sessions. The backlog records deployment verification for each provider. Short-lived signed
-principals bind acting Person, selected Athlete and operation. The Profile
-service evaluates current application permissions with PyCasbin. See ADR-0002
-and ADR-0003. These are implementation contracts; the backlog records what has
-actually been tested and deployed.
+Browser authentication uses OAuth2 Proxy with the existing Authentik OIDC
+provider; Discord is an Authentik source. The gateway holds no login session; it
+reads the user from the ID token OAuth2 Proxy forwards and resolves the Person
+through Profile. Dedicated ServiceAccounts identify workloads through Istio
+Ambient mTLS, and per-service AuthorizationPolicies on the shared waypoint decide
+which workloads may call which services. Callers state the acting Person in a
+header; each domain service authorizes it in-process with Profile/PyCasbin and
+current grants at HTTP/MCP boundaries. See ADR-0006.
 
 Video upload keeps the existing multipart gateway endpoint. A single request
 spools the file with a 500 MiB bound; the backend sends bytes to S3 and confirms

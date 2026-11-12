@@ -22,6 +22,7 @@ module "video_thumbnail_lambda" {
   videos_bucket_arn   = module.session_videos.bucket_arn
   health_table_name   = "if-health"
   sessions_table_name = "if-sessions"
+  videos_table_name   = module.powerlifting_dynamodb.workout_videos_table_name
 }
 
 module "cloudfront" {
@@ -67,6 +68,6 @@ module "tunnel" {
   origin_url           = var.tunnel_origin_url
   zone_plan            = var.cloudflare_zone_plan
   auth_hostname        = var.auth_domain
-  auth_origin_url      = var.auth_origin_url
+  auth_origin_url      = var.tunnel_origin_url
   token_parameter_name = "/powerlifting/k8s/tunnel-token"
 }

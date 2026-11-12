@@ -13,7 +13,7 @@ const LOG_ITEMS = [
     to: '/supplements',
     icon: Pill,
     title: 'Supplements',
-    desc: 'Supplement phases, protocol notes, and peak-week details.',
+    desc: 'What you take each block, with dose and notes.',
   },
   {
     to: '/biometrics',

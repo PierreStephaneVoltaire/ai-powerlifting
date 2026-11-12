@@ -1,7 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppError } from '../middleware/errorHandler'
-import { serviceHeaders } from '../auth/principal'
-import { operationScope } from '../utils/operationScope'
+import { serviceHeaders } from '../utils/serviceHeaders'
 import { coachUrl } from '../utils/coachUrl'
 
 const router = Router()
@@ -24,23 +23,20 @@ function forward(path: (req: Request) => string, method: string) {
       const person = req.actor_mapped_pk || ''
       if (!athlete || !person) throw new AppError('Authenticated Person and Athlete scope required', 401, 'AUTH_REQUIRED')
       let body = req.body || {}
-      let principalOperation = 'domain_job_read'
       if (method === 'POST' && path(req) === '/v1/jobs') {
         if (body.kind !== 'domain' || !body.payload || typeof body.payload.operation !== 'string' || typeof body.payload.domain !== 'string') {
           throw new AppError('A domain operation is required', 422)
         }
         checkScope(body.payload.arguments, athlete)
-        principalOperation = body.payload.operation
         body = {
           kind: 'domain', conversation_id: `powerlifting:${athlete}`,
           priority: 0,
           payload: { domain: body.payload.domain, operation: body.payload.operation, arguments: body.payload.arguments || {}, athlete },
         }
       }
-      if (method === 'POST' && path(req).endsWith('/cancel')) principalOperation = 'domain_job_cancel'
       const response = await fetch(`${coachUrl()}${path(req)}`, {
         method,
-        headers: await serviceHeaders(principalOperation, { ...operationScope.getStore(), athlete, person }, 'pl-coach'),
+        headers: serviceHeaders({ athlete, person }),
         ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
       })
       const text = await response.text()

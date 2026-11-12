@@ -8,7 +8,7 @@ from services.coach_discord.app import create_app
 from services.coach_discord.gateway import NOT_LINKED, Relay, chunks, conversation_for
 from services.coach_discord.store import Registration, RegistrationStore
 
-ACCESS = {'X-PL-Access-Context': json.dumps({'workload': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'})}
+ACCESS = {'X-PL-Source-Principal': 'spiffe://cluster.local/ns/powerlifting/sa/powerlifting-app-backend'}
 
 
 class Directory:
@@ -71,11 +71,11 @@ class FakeCoach:
         self.asked = []
         self.resets = []
 
-    async def ask(self, person, athlete, conversation_id, text, discord_subject):
+    async def ask(self, person, athlete, conversation_id, text):
         self.asked.append((person, athlete, conversation_id, text))
         return self.reply
 
-    async def reset(self, person, athlete, conversation_id, discord_subject):
+    async def reset(self, person, athlete, conversation_id):
         self.resets.append((person, conversation_id))
 
 
@@ -258,32 +258,34 @@ def test_attachments_are_forwarded_as_links():
 
 class FakeUserTable:
     def __init__(self, items):
-        self.items = items
-        self.scans = 0
+        self.items = {item['pk']: item for item in items}
+        self.reads = 0
 
-    def scan(self, FilterExpression, **_):
-        self.scans += 1
-        wanted = FilterExpression._values[1]
-        return {"Items": [item for item in self.items if item.get("discord_id") == wanted]}
+    def get_item(self, Key, ConsistentRead):
+        assert ConsistentRead
+        self.reads += 1
+        return {'Item': self.items.get(Key['pk'])}
 
 
 def test_user_table_mapping_preserves_person_and_athlete():
-    from services.coach_discord.users import UserDirectory
-    table = FakeUserTable([{"pk": "sir_simpalot", "mapped_pk": "operator", "discord_id": "7"}, {"pk": "Identity#x", "discord_id": "7"}])
+    from services.coach_discord.users import UserDirectory, _identity_key
+    pointer = {'pk': _identity_key('https://discord.com', '7'), 'identity_issuer': 'https://discord.com', 'identity_sub': '7', 'mapped_pk': 'sir_simpalot'}
+    table = FakeUserTable([{'pk': 'sir_simpalot', 'mapped_pk': 'operator'}, pointer])
     coach = FakeCoach()
-    relay = Relay(coach, UserDirectory("if-user", "ca-central-1", table=table))
+    relay = Relay(coach, UserDirectory('if-user', 'ca-central-1', table=table))
     channel = FakeChannel(42)
-    asyncio.run(relay.answer(FakeMessage(7, channel), "hi"))
-    asyncio.run(relay.answer(FakeMessage(7, channel), "again"))
-    assert [ask[:3] for ask in coach.asked] == [("sir_simpalot", "operator", conversation_for("operator", "42"))] * 2
-    assert table.scans == 1
+    asyncio.run(relay.answer(FakeMessage(7, channel), 'hi'))
+    asyncio.run(relay.answer(FakeMessage(7, channel), 'again'))
+    assert [ask[:3] for ask in coach.asked] == [('sir_simpalot', 'operator', conversation_for('operator', '42'))] * 2
+    assert table.reads == 2
     asyncio.run(relay.reset(7, 42))
-    assert coach.resets == [("sir_simpalot", conversation_for("operator", "42"))]
+    assert coach.resets == [('sir_simpalot', conversation_for('operator', '42'))]
 
 
-def test_ambiguous_discord_ids_do_not_select_a_person():
-    from services.coach_discord.users import UserDirectory
-    table = FakeUserTable([{"pk": "a", "discord_id": "7"}, {"pk": "b", "discord_id": "7"}])
+def test_unverified_or_dangling_pointer_does_not_select_a_person():
+    from services.coach_discord.users import UserDirectory, _identity_key
+    key = _identity_key('https://discord.com', '7')
+    table = FakeUserTable([{'pk': 'a', 'discord_id': '7'}, {'pk': key, 'identity_issuer': 'https://discord.com', 'identity_sub': '7', 'mapped_pk': 'missing'}])
     coach = FakeCoach()
-    asyncio.run(Relay(coach, UserDirectory("if-user", "ca-central-1", table=table)).answer(FakeMessage(7, FakeChannel(1)), "hi"))
+    asyncio.run(Relay(coach, UserDirectory('if-user', 'ca-central-1', table=table)).answer(FakeMessage(7, FakeChannel(1)), 'hi'))
     assert coach.asked == []

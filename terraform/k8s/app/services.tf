@@ -32,7 +32,8 @@ locals {
 }
 
 resource "kubernetes_deployment_v1" "service" {
-  for_each = local.services
+  depends_on = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls]
+  for_each   = local.services
 
   wait_for_rollout = false
 
@@ -42,7 +43,7 @@ resource "kubernetes_deployment_v1" "service" {
   }
 
   spec {
-    replicas = 1
+    replicas = each.key == "pl-sessions" ? 2 : 1
 
     selector {
       match_labels = { app = each.key }
@@ -50,10 +51,11 @@ resource "kubernetes_deployment_v1" "service" {
 
     template {
       metadata {
-        labels = { app = each.key }
+        labels = { app = each.key, "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name             = each.key
         automount_service_account_token  = false
         enable_service_links             = false
         termination_grace_period_seconds = 30
@@ -86,13 +88,29 @@ resource "kubernetes_deployment_v1" "service" {
           }
 
           env_from {
-            secret_ref {
-              name = "powerlifting-app-secrets"
+            config_map_ref {
+              name = "powerlifting-app-config"
+            }
+          }
+
+
+          dynamic "env" {
+            for_each = each.key == "pl-profile" ? [1] : []
+            content {
+              name = "DISCORD_BOT_TOKEN"
+              value_from {
+                secret_key_ref {
+                  name = "powerlifting-profile-secrets"
+                  key  = "DISCORD_BOT_TOKEN"
+                }
+              }
             }
           }
 
           port {
             container_port = 8000
+            name           = "http"
+            protocol       = "TCP"
           }
 
           resources {
@@ -134,6 +152,7 @@ resource "kubernetes_service_v1" "service" {
   metadata {
     name      = each.key
     namespace = var.namespace
+    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -142,6 +161,8 @@ resource "kubernetes_service_v1" "service" {
     port {
       port        = 8000
       target_port = 8000
+      name        = "http"
+      protocol    = "TCP"
     }
   }
 }

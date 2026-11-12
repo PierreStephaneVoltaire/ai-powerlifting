@@ -9,7 +9,6 @@ import httpx
 
 from .ai import DomainExecution, answer, current_execution
 from .dispatch import OperationError, dispatch
-from .principal import delegated_principal
 
 
 executions: dict[str, DomainExecution] = {}
@@ -18,7 +17,6 @@ job_executions: dict[str, DomainExecution] = {}
 
 async def submit(operation, arguments, athlete, person):
     arguments = dict(arguments)
-    parent = arguments.pop('_principal', '')
     generation = None
     store = None
     if operation.name in REPORTS:
@@ -52,10 +50,9 @@ async def submit(operation, arguments, athlete, person):
     key = f"{generation['generation_id']}:{generation['attempt']}" if generation else uuid.uuid4().hex
     try:
         async with httpx.AsyncClient(timeout=40) as client:
-            token = await delegated_principal(parent, athlete, operation.name, 'pl-coach')
             response = await client.post(
                 os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs",
-                headers={'X-Person-Pk': person, 'X-PL-Principal': token},
+                headers={'X-Person-Pk': person, 'X-Athlete-Pk': athlete},
                 json={"conversation_id": f"powerlifting:{athlete}:{key}", "kind": "domain", "payload": {"domain": operation.domain, "operation": operation.name, "arguments": arguments, "athlete": athlete, **({"generation_id": generation["generation_id"], "generation_attempt": int(generation["attempt"])} if generation else {})}},
             )
             if response.is_error:

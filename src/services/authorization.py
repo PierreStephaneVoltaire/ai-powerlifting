@@ -1,4 +1,5 @@
 from .access import operation_permission, permission_map, permits
+from .mesh import BACKEND_ACCOUNT, is_account
 from .dispatch import OperationError
 from .media_access import additional_permission
 from .competition_access import authorize_entry
@@ -10,16 +11,9 @@ def check_context(operation: str, arguments: dict, claims: dict, context: dict) 
     rule = permission_map().get(operation)
     if not rule:
         raise OperationError(403, 'forbidden', 'Operation has no permission mapping')
-    if rule.get('internal_only') and not (claims['iss'] == 'pl-security' and claims.get('origin') == 'pl-backend'):
+    if rule.get('internal_only') and not is_account(claims.get('caller', ''), BACKEND_ACCOUNT):
         raise OperationError(403, 'forbidden', 'Operation is internal to the gateway')
-    if operation == 'identity_resolve':
-        identity = claims.get('identity') or {}
-        if not identity or any(arguments.get(key) != identity.get(key) for key in ('issuer', 'provider', 'sub')):
-            raise OperationError(403, 'forbidden', 'Verified identity does not match the request')
-        if arguments.get('discord_subjects', []) != identity.get('discord_subjects', []):
-            raise OperationError(403, 'forbidden', 'Linked subjects are not verified')
-        return context
-    if operation == 'access_context' or rule.get('public'):
+    if operation in ('identity_resolve', 'access_context') or rule.get('public'):
         return context
     if not permits(context, operation_permission(operation, arguments)):
         raise OperationError(403, 'forbidden', 'Not permitted')

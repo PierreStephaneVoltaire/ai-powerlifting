@@ -62,7 +62,7 @@ class Relay:
         async with self.locks.setdefault((identity.person, channel_id), asyncio.Lock()):
             try:
                 async with message.channel.typing():
-                    reply = await self.coach.ask(identity.person, identity.athlete, conversation_for(identity.athlete, channel_id), text, str(message.author.id))
+                    reply = await self.coach.ask(identity.person, identity.athlete, conversation_for(identity.athlete, channel_id), text)
             except Exception as exc:
                 logger.exception("coach request failed")
                 reply = f"The Coach is unavailable right now ({type(exc).__name__})."
@@ -76,7 +76,7 @@ class Relay:
         identity = await self.identity(author_id)
         if not identity:
             return NOT_LINKED
-        await self.coach.reset(identity.person, identity.athlete, conversation_for(identity.athlete, str(channel_id)), str(author_id))
+        await self.coach.reset(identity.person, identity.athlete, conversation_for(identity.athlete, str(channel_id)))
         return "Started a fresh Coach conversation for this channel."
 
 

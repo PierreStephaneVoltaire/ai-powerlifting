@@ -6,7 +6,7 @@ test('budget photo resolution rejects a forged attachment from another Athlete',
   const { resolveItemPhoto } = await import('./budgetController')
   const valid = 'budget/athlete-a/item-1/photo.jpg'
   const forged = 'budget/athlete-b/item-2/private.jpg'
-  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => new Response(JSON.stringify(String(input).endsWith('/v1/principals') ? { principal: 'operation-token' } : { items: [
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => new Response(JSON.stringify({ items: [
     { id: 'item-1', photo_s3_key: valid }, { id: 'item-2', photo_s3_key: forged },
   ] })))
   await operationScope.run({ person: 'person-a', athlete: 'athlete-a' }, async () => {

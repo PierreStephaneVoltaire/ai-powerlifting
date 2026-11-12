@@ -2358,11 +2358,19 @@
   {
     "name": "access_context",
     "domain": "profile",
-    "description": "Read current permissions for the authenticated Person and selected Athlete.",
+    "description": "Read current permissions for the authenticated Person and selected Athlete, optionally authorizing a named operation.",
     "handler": "services.access_store",
     "input_schema": {
       "type": "object",
-      "properties": {},
+      "properties": {
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arguments": {
+          "type": "object"
+        }
+      },
       "additionalProperties": false
     },
     "result_schema": {

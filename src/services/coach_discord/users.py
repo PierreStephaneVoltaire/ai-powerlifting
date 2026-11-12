@@ -1,10 +1,15 @@
+import hashlib
+import re
 import time
 from dataclasses import dataclass
 
 import boto3
-from boto3.dynamodb.conditions import Attr
 
 CACHE_SECONDS = 600
+
+
+def _identity_key(issuer: str, sub: str) -> str:
+    return "Identity#" + hashlib.sha256(f"{issuer}\0{sub}".encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -18,22 +23,18 @@ class UserDirectory:
         self.table = table or boto3.resource("dynamodb", region_name=region).Table(table_name)
         self.cache: dict[str, tuple[float, Identity | None]] = {}
 
-    def _scan(self, discord_id: str) -> list[dict]:
-        arguments = {"FilterExpression": Attr("discord_id").eq(discord_id), "ProjectionExpression": "pk, mapped_pk, discord_id"}
-        items = []
-        while True:
-            response = self.table.scan(**arguments)
-            items.extend(response.get("Items", []))
-            if not response.get("LastEvaluatedKey"):
-                return items
-            arguments["ExclusiveStartKey"] = response["LastEvaluatedKey"]
-
     def resolve(self, discord_id: str | int) -> Identity | None:
         key = str(discord_id)
         cached = self.cache.get(key)
         if cached and time.monotonic() - cached[0] < CACHE_SECONDS:
             return cached[1]
-        users = [item for item in self._scan(key) if not str(item.get("pk", "")).startswith("Identity#")]
-        identity = Identity(person=str(users[0]["pk"]), athlete=str(users[0].get("mapped_pk") or users[0]["pk"])) if len(users) == 1 else None
+        identity = None
+        issuer = "https://discord.com"
+        if re.fullmatch(r"\d{1,32}", key):
+            pointer = self.table.get_item(Key={"pk": _identity_key(issuer, key)}, ConsistentRead=True).get("Item")
+            if pointer and pointer.get("identity_issuer") == issuer and pointer.get("identity_sub") == key and pointer.get("mapped_pk"):
+                person = self.table.get_item(Key={"pk": pointer["mapped_pk"]}, ConsistentRead=True).get("Item")
+                if person and person.get("pk") == pointer["mapped_pk"]:
+                    identity = Identity(person=str(person["pk"]), athlete=str(person.get("mapped_pk") or person["pk"]))
         self.cache[key] = (time.monotonic(), identity)
         return identity

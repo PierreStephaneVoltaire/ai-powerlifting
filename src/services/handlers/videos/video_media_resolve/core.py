@@ -13,10 +13,10 @@ async def video_media_resolve(args: dict) -> str:
         store = get_session_store(args)
         filename = key.rsplit("/", 1)[-1]
         video_id = filename.rsplit(".", 1)[0]
-        media = get_media(health_table, pk, video_id)
+        media = get_media(pk, video_id)
         if not media and "/" in key:
             video_id = key.rsplit("/", 2)[-2]
-            media = get_media(health_table, pk, video_id)
+            media = get_media(pk, video_id)
         if not media or media.get("status") not in {"ready", "confirmed"}:
             raise ValueError("Media key is not attached to this athlete")
         program_sk = str(media.get("program_sk") or "")

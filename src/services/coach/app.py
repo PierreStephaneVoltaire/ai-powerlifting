@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from jsonschema import ValidationError, validate
 from pydantic import BaseModel, Field
 
-from . import principal
+from services.mesh import caller
 from .config import Settings, load
 from .model import CodexModel, Model
 from .runner import Runner
@@ -56,24 +56,14 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
     app = FastAPI(title="Powerlifting Coach")
     app.state.runner = runner
 
-    def person(x_person_pk: str = Header(default=""), x_pl_access_context: str = Header(default="")) -> str:
-        try:
-            context = json.loads(x_pl_access_context)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(403, 'Verified authorization context required') from exc
-        if not x_person_pk or not isinstance(context, dict) or context.get('person') != x_person_pk:
+    def person(x_person_pk: str = Header(default="")) -> str:
+        if not x_person_pk:
             raise HTTPException(403, "Authenticated Person scope required")
         return x_person_pk
 
-    def verify(token: str, operation: str, owner: str, athlete: str) -> dict:
+    async def access(owner: str, athlete: str, operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
-            return principal.verify(token, operation, owner, athlete)
-        except Exception as exc:
-            raise HTTPException(401, "Verified acting Person required") from exc
-
-    async def access(owner: str, athlete: str, operation: str, arguments: dict[str, Any], token: str) -> dict[str, Any]:
-        try:
-            return await services.access(Scope(person=owner, athlete=athlete, principal=token), operation, arguments)
+            return await services.access(Scope(person=owner, athlete=athlete), operation, arguments)
         except ServiceError as exc:
             raise HTTPException(exc.status if exc.status in {401, 403} else 503, "Powerlifting operation access denied") from exc
 
@@ -83,9 +73,8 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
             raise HTTPException(404, "Job not found")
         return job
 
-    async def readable(job_id: str, owner: str, token: str, action: str = READ_ACTION) -> Job:
+    async def readable(job_id: str, owner: str, action: str = READ_ACTION) -> Job:
         job = job_or_404(job_id)
-        verify(token, action, owner, job.athlete)
         if job.kind != "domain":
             if job.owner != owner:
                 raise HTTPException(404, "Job not found")
@@ -93,7 +82,7 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
         if action == CANCEL_ACTION and job.owner != owner:
             raise HTTPException(403, "Only the submitting Person may cancel this job")
         arguments = {**(job.payload.get("arguments") or {}), "cache_only": True, "refresh": False, "_required_access": job.payload.get("access_requirements")}
-        await access(owner, job.athlete, job.payload["operation"], arguments, token)
+        await access(owner, job.athlete, job.payload["operation"], arguments)
         return job
 
     @app.get("/health")
@@ -101,7 +90,7 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
         return {"status": "ok", "operations": len(runner.catalog)}
 
     @app.post("/v1/jobs", status_code=202)
-    async def submit(request: JobRequest, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
+    async def submit(request: JobRequest, owner: str = Depends(person), x_pl_source_principal: str = Header(default="")):
         if request.kind != "domain":
             raise HTTPException(422, "Only domain jobs may be submitted; use conversation turns")
         payload = dict(request.payload)
@@ -118,46 +107,40 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
             raise HTTPException(422, "Authenticated Athlete scope required")
         if _conflicting_scope(arguments, athlete):
             raise HTTPException(403, "Job payload scope conflicts with authenticated Athlete")
-        claims = verify(x_pl_principal, operation.name, owner, athlete)
         internal_fields = {key for key in arguments if key.startswith("_")}
-        if internal_fields - ({"_report_source"} if claims.get('caller', '').endswith('/sa/pl-' + operation.domain) else set()):
+        if internal_fields - ({"_report_source"} if caller(x_pl_source_principal).endswith('/sa/pl-' + operation.domain) else set()):
             raise HTTPException(403, "Internal operation fields cannot be supplied")
-        context = await access(owner, athlete, operation.name, arguments, x_pl_principal)
+        context = await access(owner, athlete, operation.name, arguments)
         payload["access_requirements"] = {
             "permissions": sorted(p for p in context.get("permissions", []) if p.endswith(":read") and p.split(":")[0] not in {"settings", "grants", "operator"}),
             "competition_ids": context.get("competition_scope", {}).get("read", []),
         }
         payload.update(domain=operation.domain, athlete=athlete)
-        job_id = uuid.uuid4().hex
-        capability = await services.job_capability(x_pl_principal, job_id)
-        return runner.submit_domain(owner, athlete, payload, job_id, capability).view()
+        return runner.submit_domain(owner, athlete, payload, uuid.uuid4().hex).view()
 
     @app.get("/v1/jobs/{job_id}")
-    async def status(job_id: str, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
-        return (await readable(job_id, owner, x_pl_principal)).view()
+    async def status(job_id: str, owner: str = Depends(person)):
+        return (await readable(job_id, owner)).view()
 
     @app.get("/v1/jobs/{job_id}/result")
-    async def result(job_id: str, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
-        job = await readable(job_id, owner, x_pl_principal)
+    async def result(job_id: str, owner: str = Depends(person)):
+        job = await readable(job_id, owner)
         return JSONResponse(job.view(), status_code=200 if job.status in TERMINAL else 202)
 
     @app.post("/v1/jobs/{job_id}/cancel")
-    async def cancel(job_id: str, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
-        job = await readable(job_id, owner, x_pl_principal, CANCEL_ACTION)
+    async def cancel(job_id: str, owner: str = Depends(person)):
+        job = await readable(job_id, owner, CANCEL_ACTION)
         runner.cancel(job.job_id)
         return job_or_404(job_id).view()
 
     @app.post("/v1/conversations/{conversation_id}/turns", status_code=202)
-    async def turn(conversation_id: str, request: TurnRequest, owner: str = Depends(person), x_pl_principal: str = Header(default="")):
+    async def turn(conversation_id: str, request: TurnRequest, owner: str = Depends(person)):
         athlete = request.athlete or _athlete_from(conversation_id, owner)
-        verify(x_pl_principal, 'conversation_turn', owner, athlete)
-        if athlete != owner and not (await access(owner, athlete, "access_context", {}, x_pl_principal)).get("permissions"):
+        if athlete != owner and not (await access(owner, athlete, "access_context", {})).get("permissions"):
             raise HTTPException(403, "No Grant for this Athlete")
         if request.surface and (request.surface not in SURFACES or not request.template_sk):
             raise HTTPException(422, "A known surface and its template_sk are required together")
-        job_id = uuid.uuid4().hex
-        capability = await services.job_capability(x_pl_principal, job_id)
-        return runner.submit_turn(owner, athlete, conversation_id, request.messages, request.surface, request.template_sk, job_id, capability).view()
+        return runner.submit_turn(owner, athlete, conversation_id, request.messages, request.surface, request.template_sk, uuid.uuid4().hex).view()
 
     @app.delete("/v1/conversations/{conversation_id}")
     async def reset(conversation_id: str, owner: str = Depends(person)):

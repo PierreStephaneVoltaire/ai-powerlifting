@@ -28,6 +28,11 @@ variable "health_table_name" {
   description = "Name of the health DynamoDB table."
 }
 
+variable "videos_table_name" {
+  type        = string
+  description = "Name of the workout videos DynamoDB table."
+}
+
 variable "sessions_table_name" {
   type        = string
   description = "Name of the sessions DynamoDB table."

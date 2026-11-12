@@ -17,6 +17,7 @@ resource "kubernetes_persistent_volume_claim_v1" "prompt_cache" {
 }
 
 resource "kubernetes_deployment_v1" "prompt_cache" {
+  depends_on       = [kubectl_manifest.cache_l4, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -37,10 +38,11 @@ resource "kubernetes_deployment_v1" "prompt_cache" {
 
     template {
       metadata {
-        labels = { app = "pl-prompt-cache" }
+        labels = { app = "pl-prompt-cache", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name            = "pl-prompt-cache"
         automount_service_account_token = false
         enable_service_links            = false
 
@@ -102,6 +104,7 @@ resource "kubernetes_service_v1" "prompt_cache" {
 }
 
 resource "kubernetes_deployment_v1" "prompt_cache_mcp" {
+  depends_on       = [kubectl_manifest.cache_l4, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -118,10 +121,11 @@ resource "kubernetes_deployment_v1" "prompt_cache_mcp" {
 
     template {
       metadata {
-        labels = { app = "pl-prompt-cache-mcp" }
+        labels = { app = "pl-prompt-cache-mcp", "istio.io/dataplane-mode" = "ambient" }
       }
 
       spec {
+        service_account_name            = "pl-prompt-cache-mcp"
         automount_service_account_token = false
         enable_service_links            = false
 

@@ -17,6 +17,7 @@ resource "kubernetes_config_map_v1" "app" {
     DYNAMODB_TABLE                         = var.tables.powerlifting
     IF_USER_TABLE                          = var.tables.users
     IF_SESSIONS_TABLE_NAME                 = var.tables.sessions
+    WORKOUT_VIDEOS_TABLE_NAME              = var.workout_videos_table
     ANALYSIS_CACHE_TABLE_NAME              = var.tables.analysis_cache
     POWERLIFTING_MASTER_COMPETITIONS_TABLE = var.tables.master_competitions
     POWERLIFTING_USER_COMPETITIONS_TABLE   = var.tables.user_competitions
@@ -28,18 +29,13 @@ resource "kubernetes_config_map_v1" "app" {
     NODE_ENV                               = "production"
     PORT                                   = "3005"
     FRONTEND_URL                           = "https://${var.app_domain}"
-    DISCORD_CLIENT_ID                      = var.discord_client_id
-    DISCORD_REDIRECT_URI                   = "https://${var.app_domain}/api/auth/discord/callback"
     AUTHENTIK_CLIENT_ID                    = var.authentik_client_id
     AUTHENTIK_ISSUER_URL                   = "https://${var.auth_domain}/application/o/${var.authentik_client_id}/"
-    AUTHENTIK_REDIRECT_URI                 = "https://${var.app_domain}/api/auth/authentik/callback"
-    COOKIE_DOMAIN                          = var.cookie_domain
-    COOKIE_SECURE                          = "true"
+    AUTHENTIK_JWKS_URL                     = "http://authentik-server.${var.namespace}.svc.cluster.local/application/o/${var.authentik_client_id}/jwks/"
     MEDIA_CDN_BASE_URL                     = nonsensitive(data.aws_ssm_parameter.media_base_url.value)
     MEDIA_SIGNING_KEY_PAIR_ID              = nonsensitive(data.aws_ssm_parameter.media_signing_key_pair_id.value)
     MEDIA_VIDEO_URL_TTL_HOURS              = "72"
     VALKEY_URL                             = "redis://pl-valkey.${var.namespace}.svc.cluster.local:6379"
-    IF_API_URL                             = "http://pl-coach.${var.namespace}.svc.cluster.local:8000"
     AWS_SHARED_CREDENTIALS_FILE            = "/secrets/aws/credentials"
     AWS_CONFIG_FILE                        = "/secrets/aws/config"
   }

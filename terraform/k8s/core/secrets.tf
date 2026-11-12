@@ -31,6 +31,17 @@ resource "kubernetes_secret_v1" "app" {
   }
 }
 
+resource "kubernetes_secret_v1" "profile" {
+  metadata {
+    name      = "powerlifting-profile-secrets"
+    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
+  }
+
+  data = {
+    DISCORD_BOT_TOKEN = var.discord_bot_token
+  }
+}
+
 data "aws_ssm_parameter" "pod_credentials" {
   name            = "/powerlifting/k8s/aws-credentials"
   with_decryption = true

@@ -1,9 +1,9 @@
 locals {
-  postgres_cluster_name = "postgres"
-  postgres_database     = "authentik"
-  postgres_username     = "authentik"
-  postgres_secret_name  = "postgres-app"
-  postgres_host         = "postgres-rw.${var.auth_namespace}.svc.cluster.local"
+  postgres_database    = "authentik"
+  postgres_username    = "authentik"
+  authentik_db_cluster = "authentik-postgres"
+  authentik_db_secret  = "authentik-postgres-app"
+  authentik_db_host    = "${local.authentik_db_cluster}-rw.${var.namespace}.svc.cluster.local"
 }
 
 resource "kubernetes_storage_class_v1" "postgres" {
@@ -21,27 +21,6 @@ resource "random_password" "postgres" {
   length  = 32
   special = false
 }
-
-resource "kubernetes_secret_v1" "postgres" {
-  metadata {
-    name      = local.postgres_secret_name
-    namespace = kubernetes_namespace_v1.auth.metadata[0].name
-  }
-  data = {
-    username = local.postgres_username
-    password = random_password.postgres.result
-  }
-  type = "kubernetes.io/basic-auth"
-
-  lifecycle {
-    ignore_changes = [
-      metadata[0].annotations,
-      metadata[0].labels,
-      data,
-    ]
-  }
-}
-
 resource "helm_release" "cnpg" {
   name             = "cnpg"
   repository       = "https://cloudnative-pg.github.io/charts"
@@ -55,14 +34,25 @@ resource "helm_release" "cnpg" {
     value = "true"
   }
 }
+resource "kubernetes_secret_v1" "authentik_postgres" {
+  metadata {
+    name      = local.authentik_db_secret
+    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
+  }
+  data = {
+    username = local.postgres_username
+    password = random_password.postgres.result
+  }
+  type = "kubernetes.io/basic-auth"
+}
 
-resource "kubectl_manifest" "postgres" {
+resource "kubectl_manifest" "authentik_postgres" {
   yaml_body = yamlencode({
     apiVersion = "postgresql.cnpg.io/v1"
     kind       = "Cluster"
     metadata = {
-      name      = local.postgres_cluster_name
-      namespace = kubernetes_namespace_v1.auth.metadata[0].name
+      name      = local.authentik_db_cluster
+      namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
     }
     spec = {
       instances             = 2
@@ -76,11 +66,12 @@ resource "kubectl_manifest" "postgres" {
           database = local.postgres_database
           owner    = local.postgres_username
           secret = {
-            name = local.postgres_secret_name
+            name = local.authentik_db_secret
           }
         }
       }
     }
   })
-  depends_on = [helm_release.cnpg, kubernetes_secret_v1.postgres]
+
+  depends_on = [helm_release.cnpg, kubernetes_secret_v1.authentik_postgres]
 }

@@ -13,9 +13,9 @@ def additional_permission(operation: str, arguments: dict, athlete: str) -> str 
     if operation == 'video_media_resolve':
         parts = str(arguments.get('s3_key') or '').split('/')
         identifiers = [parts[-1].rsplit('.', 1)[0], parts[-2] if len(parts) > 1 else '']
-    table = database().Table(os.getenv('IF_HEALTH_TABLE_NAME', 'if-health'))
+    table = database().Table(os.getenv('WORKOUT_VIDEOS_TABLE_NAME', 'workout-Videos'))
     for identifier in filter(None, identifiers):
-        media = table.get_item(Key={'pk': athlete, 'sk': f'Media#{identifier}'}, ConsistentRead=True).get('Item')
+        media = table.get_item(Key={'athlete_id': athlete, 'video_id': identifier}, ConsistentRead=True).get('Item')
         if media and str(media.get('media_id') or media.get('video_id') or '') == identifier:
             if media.get('lift'):
                 return 'lift-profiles:read' if operation == 'video_media_resolve' else 'lift-profiles:write'

@@ -6,7 +6,7 @@ data "aws_ecr_repository" "app" {
 data "aws_ecr_image" "app" {
   for_each        = var.repositories
   repository_name = each.value
-  image_tag       = "latest"
+  image_tag       = var.image_tag
 }
 
 locals {

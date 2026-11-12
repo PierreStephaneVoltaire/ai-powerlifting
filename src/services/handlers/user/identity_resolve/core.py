@@ -14,6 +14,7 @@ from services.lib.aws import dynamodb_resource
 from botocore.exceptions import ClientError
 
 from ..settings_get.core import _normalize_settings
+from .discord_links import link_discord_subjects
 
 _table = None
 logger = logging.getLogger(__name__)
@@ -215,4 +216,10 @@ def _resolve_sync(args):
 async def identity_resolve(args: dict) -> dict:
     if args.get("provider") not in ("discord", "authentik") or not args.get("issuer") or not args.get("sub"):
         raise ValueError("Verified issuer, provider, and subject are required")
-    return await asyncio.get_running_loop().run_in_executor(None, lambda: _resolve_sync(args))
+    return await asyncio.get_running_loop().run_in_executor(None, lambda: _resolve_and_link(args))
+
+
+def _resolve_and_link(args: dict) -> dict:
+    result = _resolve_sync(args)
+    link_discord_subjects(_get_table(), _identity_key, result["settings"]["pk"], args.get("discord_subjects", []))
+    return result

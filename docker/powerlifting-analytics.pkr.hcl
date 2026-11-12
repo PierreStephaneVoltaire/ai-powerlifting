@@ -74,9 +74,10 @@ build {
   post-processors {
     post-processor "docker-tag" {
       repository = var.image_repository
-      tags       = [var.image_tag, "latest"]
+      tags       = [var.image_tag]
     }
     post-processor "docker-push" {
+      name         = "publish"
       ecr_login    = true
       login_server = split("/", var.image_repository)[0]
     }

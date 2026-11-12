@@ -22,11 +22,12 @@ resource "kubernetes_deployment_v1" "tunnel" {
 
     template {
       metadata {
-        labels      = { app = "cloudflared" }
+        labels      = { app = "cloudflared", "istio.io/dataplane-mode" = "ambient" }
         annotations = { "checksum/token" = sha256(data.kubernetes_secret_v1.tunnel.data["token"]) }
       }
 
       spec {
+        service_account_name            = "cloudflared"
         automount_service_account_token = false
 
         container {
