@@ -48,6 +48,7 @@ build {
   }
 
   provisioner "file" {
+    generated   = true
     source      = ".build/rankings/pl-rankings"
     destination = "/usr/local/bin/pl-rankings"
   }

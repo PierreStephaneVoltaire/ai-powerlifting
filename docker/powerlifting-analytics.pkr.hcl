@@ -48,6 +48,7 @@ build {
   }
 
   provisioner "file" {
+    generated   = true
     source      = ".build/analytics/pl-analytics"
     destination = "/usr/local/bin/pl-analytics"
   }

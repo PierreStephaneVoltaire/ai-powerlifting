@@ -17,9 +17,10 @@ variable "image_tag" {
 }
 
 source "docker" "powerlifting_analytics_export" {
-  image    = "gcr.io/distroless/static-debian12:debug-nonroot"
-  commit   = true
-  platform = "linux/amd64"
+  image       = "gcr.io/distroless/static-debian12:debug-nonroot"
+  commit      = true
+  run_command = ["-d", "-i", "-t", "--entrypoint=/busybox/sh", "--", "{{.Image}}"]
+  platform    = "linux/amd64"
   changes = [
     "USER nonroot",
     "EXPOSE 8000 50051",
@@ -39,6 +40,7 @@ build {
   }
 
   provisioner "file" {
+    generated   = true
     source      = ".build/analytics-export/pl-analytics-export"
     destination = "/pl-analytics-export"
   }

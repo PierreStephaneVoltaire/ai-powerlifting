@@ -1,5 +1,5 @@
 import type { LiftProfile } from '@powerlifting/types'
-import definitions from '../../../services/lift_profile_options.json'
+import definitions from '../../../services/runtime/lift_profile_options.json'
 
 type Lift = LiftProfile['lift']
 
