@@ -23,3 +23,11 @@ def test_avatar_resolution_uses_canonical_owner_and_current_visibility(monkeypat
         profile_media.handler({**args, 's3_key': 'profiles/other/avatars/private.jpg'}, None)
     with pytest.raises(OperationError, match='not found'):
         profile_media.handler({**args, 'pk': 'other'}, None)
+
+
+def test_avatar_resolution_accepts_legacy_served_media_url(monkeypatch):
+    key = 'profiles/athlete-a/avatars/legacy.jpg'
+    owner = {'pk': 'username', 'mapped_pk': 'athlete-a', 'avatar_url': '/api/videos/media/' + key, 'profile_visibility': 'public'}
+    monkeypatch.setattr(profile_media, 'person_record', lambda pk: owner if pk == 'athlete-a' else None)
+    monkeypatch.setattr(profile_media, 'current_context', lambda person, athlete: evaluate_facts(person, athlete, owner, None, [], {}))
+    assert profile_media.handler({'pk': 'athlete-a', 's3_key': key, '_person_pk': ''}, None) == {'s3_key': key}
