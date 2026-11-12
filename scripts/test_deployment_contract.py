@@ -16,11 +16,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentContractTests(unittest.TestCase):
+    def test_dispatch_does_not_require_branch_protection(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/build-images.yml").read_text())
+        self.assertNotIn("github.ref_protected", (ROOT / ".github/workflows/build-images.yml").read_text())
+        changes = workflow["jobs"]["changes"]
+        for event, protected, ref_type, expected in (
+            ("workflow_dispatch", False, "branch", True),
+            ("workflow_dispatch", True, "branch", True),
+            ("workflow_dispatch", False, "tag", False),
+            ("workflow_dispatch", True, "tag", False),
+            ("push", False, "branch", True),
+            ("push", True, "branch", True),
+            ("pull_request", True, "branch", False),
+        ):
+            with self.subTest(event=event, protected=protected, ref_type=ref_type):
+                expression = changes["if"].strip().removeprefix("${{").removesuffix("}}")
+                expression = expression.replace("github.event_name", repr(event)).replace("github.ref_type", repr(ref_type)).replace("github.ref_protected", str(protected))
+                expression = expression.replace("&&", " and ").replace("||", " or ")
+                self.assertEqual(eval(expression.strip(), {"__builtins__": {}}, {}), expected)
+
     def test_push_paths_exclude_documentation(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/build-images.yml").read_text())
         triggers = workflow.get("on") or workflow[True]
         self.assertEqual(triggers["push"]["branches"], ["**"])
-        self.assertIn("github.ref_protected", workflow["jobs"]["changes"]["if"])
         self.assertIn("github.ref_type == 'branch'", workflow["jobs"]["changes"]["if"])
         self.assertNotIn("pull_request", triggers)
         pull_requests = yaml.safe_load((ROOT / ".github/workflows/pull-requests.yml").read_text())
@@ -115,14 +133,14 @@ class DeploymentContractTests(unittest.TestCase):
         for job in ("terraform-apply", "security-apply", "kubernetes-apply"):
             for event, branch, protected, ref_type, apply, expected in (
                 ("push", "master", True, "branch", "false", True),
-                ("push", "master", False, "branch", "false", False),
+                ("push", "master", False, "branch", "false", True),
                 ("push", "release/next", True, "branch", "false", True),
-                ("push", "release/next", False, "branch", "false", False),
+                ("push", "release/next", False, "branch", "false", True),
                 ("push", "v1", True, "tag", "false", False),
                 ("pull_request", "istio", True, "branch", "true", False),
                 ("workflow_dispatch", "istio", True, "branch", "false", False),
                 ("workflow_dispatch", "istio", True, "branch", "true", True),
-                ("workflow_dispatch", "istio", False, "branch", "true", False),
+                ("workflow_dispatch", "istio", False, "branch", "true", True),
                 ("workflow_dispatch", "master", True, "branch", "false", False),
             ):
                 with self.subTest(job=job, event=event, branch=branch, protected=protected, ref_type=ref_type, apply=apply):

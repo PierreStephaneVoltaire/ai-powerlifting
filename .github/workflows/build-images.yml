@@ -54,7 +54,7 @@ env:
 
 jobs:
   changes:
-    if: ${{ github.ref_type == 'branch' && github.ref_protected }}
+    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.result.outputs.backend }}
@@ -320,7 +320,7 @@ jobs:
     needs: terraform-plan
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ github.ref_type == 'branch' && github.ref_protected && needs.terraform-plan.result == 'success' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
+    if: ${{ github.ref_type == 'branch' && needs.terraform-plan.result == 'success' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -355,7 +355,7 @@ jobs:
     needs: changes
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ github.ref_type == 'branch' && github.ref_protected && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
+    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
     env:
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
@@ -389,7 +389,6 @@ jobs:
     if: >-
       ${{ always()
       && github.ref_type == 'branch'
-      && github.ref_protected
       && (github.event_name == 'push'
         || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true'))
       && github.triggering_actor == github.repository_owner
