@@ -4,17 +4,9 @@ resource "kubernetes_namespace_v1" "istio_system" {
   }
 }
 
-locals {
-  authz_destinations = merge(
-    { "pl-security" = 9000, "pl-coach" = 9001 },
-    { for index, name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}" => 9002 + index },
-    { "pl-coach-discord" = 9020, "pl-backend" = 9021 },
-  )
-}
-
 resource "helm_release" "base" {
   name             = "istio-base"
-  repository       = "https://istio-release.storage.googleapis.com/charts"
+  repository       = "https://blob.istio.io/istio-release/charts"
   chart            = "base"
   version          = "1.32.0"
   namespace        = kubernetes_namespace_v1.istio_system.metadata[0].name
@@ -24,7 +16,7 @@ resource "helm_release" "base" {
 
 resource "helm_release" "istiod" {
   name       = "istiod"
-  repository = "https://istio-release.storage.googleapis.com/charts"
+  repository = "https://blob.istio.io/istio-release/charts"
   chart      = "istiod"
   version    = "1.32.0"
   namespace  = kubernetes_namespace_v1.istio_system.metadata[0].name
@@ -32,20 +24,18 @@ resource "helm_release" "istiod" {
 
   values = [yamlencode({
     profile = "ambient"
-    meshConfig = { extensionProviders = [for destination, port in local.authz_destinations : {
-      name = "nolift-${destination}"
+    meshConfig = { extensionProviders = [{
+      name = "nolift-security"
       envoyExtAuthzGrpc = {
         service  = "pl-security.${var.namespace}.svc.cluster.local"
-        port     = port
+        port     = 9000
         timeout  = "2s"
         failOpen = false
-        includeRequestBodyInCheck = destination == "pl-backend" ? null : {
+        includeRequestBodyInCheck = {
           maxRequestBytes     = 10485760
           allowPartialMessage = false
           packAsBytes         = true
         }
-        includeRequestHeadersInCheck = ["authorization", "content-type", "x-pl-principal"]
-        headersToUpstreamOnAllow     = ["x-pl-principal", "x-pl-mesh-caller"]
       }
     }] }
   })]
@@ -54,7 +44,7 @@ resource "helm_release" "istiod" {
 
 resource "helm_release" "cni" {
   name       = "istio-cni"
-  repository = "https://istio-release.storage.googleapis.com/charts"
+  repository = "https://blob.istio.io/istio-release/charts"
   chart      = "cni"
   version    = "1.32.0"
   namespace  = kubernetes_namespace_v1.istio_system.metadata[0].name
@@ -66,7 +56,7 @@ resource "helm_release" "cni" {
 
 resource "helm_release" "ztunnel" {
   name       = "ztunnel"
-  repository = "https://istio-release.storage.googleapis.com/charts"
+  repository = "https://blob.istio.io/istio-release/charts"
   chart      = "ztunnel"
   version    = "1.32.0"
   namespace  = kubernetes_namespace_v1.istio_system.metadata[0].name

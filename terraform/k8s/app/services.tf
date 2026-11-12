@@ -32,7 +32,8 @@ locals {
 }
 
 resource "kubernetes_deployment_v1" "service" {
-  for_each = local.services
+  depends_on = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination, kubectl_manifest.strict_mtls]
+  for_each   = local.services
 
   wait_for_rollout = false
 
@@ -97,12 +98,15 @@ resource "kubernetes_deployment_v1" "service" {
             value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
           }
 
-          env {
-            name = "PL_PRINCIPAL_PUBLIC_KEY"
-            value_from {
-              secret_key_ref {
-                name = "pl-security-signing-key"
-                key  = "public_key"
+          dynamic "env" {
+            for_each = each.key == "pl-profile" ? [1] : []
+            content {
+              name = "DISCORD_BOT_TOKEN"
+              value_from {
+                secret_key_ref {
+                  name = "powerlifting-profile-secrets"
+                  key  = "DISCORD_BOT_TOKEN"
+                }
               }
             }
           }

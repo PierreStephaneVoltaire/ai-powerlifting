@@ -1,5 +1,4 @@
 import asyncio
-import hmac
 import json
 import logging
 import os
@@ -20,14 +19,6 @@ class RegisterServer(BaseModel):
     label: str
     bot_token: str
     channel_id: str
-
-
-def persons_from_env() -> dict[str, str]:
-    persons = json.loads(os.getenv("DISCORD_PERSONS", "{}"))
-    operator = os.getenv("DISCORD_OPERATOR_ID", "")
-    if operator:
-        persons.setdefault(operator, os.getenv("OPERATOR_PERSON", "operator"))
-    return persons
 
 
 def directory_from_env() -> UserDirectory:
@@ -52,10 +43,9 @@ def view(registration: Registration, gateway: Gateway) -> dict:
     }
 
 
-def create_app(store: RegistrationStore | None = None, coach: CoachClient | None = None, persons: dict[str, str] | None = None, internal_token: str | None = None, gateway: Gateway | None = None, directory: UserDirectory | None = None) -> FastAPI:
-    internal_token = os.getenv("INTERNAL_API_TOKEN", "") if internal_token is None else internal_token
-    coach = coach or CoachClient(os.getenv("COACH_URL", "http://pl-coach:8000"), internal_token)
-    relay = Relay(coach, persons_from_env() if persons is None else persons, directory_from_env() if persons is None and directory is None else directory)
+def create_app(store: RegistrationStore | None = None, coach: CoachClient | None = None, gateway: Gateway | None = None, directory: UserDirectory | None = None) -> FastAPI:
+    coach = coach or CoachClient(os.getenv("COACH_URL", "http://pl-coach:8000"))
+    relay = Relay(coach, directory or directory_from_env())
     state = {"store": store, "gateway": gateway}
 
     @asynccontextmanager
@@ -70,9 +60,13 @@ def create_app(store: RegistrationStore | None = None, coach: CoachClient | None
 
     app = FastAPI(title="Powerlifting Coach Discord bot", lifespan=lifespan)
 
-    def authorized(x_internal_token: str = Header(default="")) -> None:
-        if not internal_token or not hmac.compare_digest(x_internal_token, internal_token):
-            raise HTTPException(401, "Invalid internal token")
+    def authorized(x_pl_access_context: str = Header(default="")) -> None:
+        try:
+            context = json.loads(x_pl_access_context)
+            if not isinstance(context, dict) or not str(context.get('workload', '')).endswith('/sa/powerlifting-app-backend'):
+                raise ValueError('Unauthorized workload')
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(403, 'Verified workload required') from exc
 
     async def found(webhook_id: str) -> Registration:
         registration = await asyncio.to_thread(state["store"].get, webhook_id)

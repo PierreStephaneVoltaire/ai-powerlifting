@@ -13,6 +13,22 @@ resource "random_password" "oauth2_proxy_cookie" {
   special = false
 }
 
+data "kubernetes_secret_v1" "authentik_oidc" {
+  metadata {
+    name      = "authentik-powerlifting-oidc"
+    namespace = var.auth_namespace
+  }
+}
+
+resource "kubernetes_secret_v1" "oauth2_proxy" {
+  metadata {
+    name      = "oauth2-proxy-secrets"
+    namespace = var.namespace
+  }
+
+  data = { OAUTH2_PROXY_CLIENT_SECRET = data.kubernetes_secret_v1.authentik_oidc.data["AUTHENTIK_CLIENT_SECRET"] }
+}
+
 resource "kubernetes_secret_v1" "security" {
   metadata {
     name      = "pl-security-signing-key"
@@ -26,6 +42,7 @@ resource "kubernetes_secret_v1" "security" {
 }
 
 resource "kubernetes_deployment_v1" "security" {
+  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -115,8 +132,8 @@ resource "kubernetes_deployment_v1" "security" {
             value = jsonencode(local.security_allowed_callers)
           }
           env {
-            name  = "PL_SECURITY_DESTINATIONS"
-            value = jsonencode(local.security_destinations)
+            name  = "PL_SECURITY_AUTHORITIES"
+            value = jsonencode(local.security_authorities)
           }
           env {
             name  = "PL_SECURITY_DELEGATION"
@@ -160,15 +177,6 @@ resource "kubernetes_deployment_v1" "security" {
             container_port = 9000
             protocol       = "TCP"
           }
-          dynamic "port" {
-            for_each = { for key, value in local.security_destinations : key => value if key != "pl-security" }
-            content {
-              name           = "grpc-${substr(replace(port.key, "pl-", ""), 0, 10)}"
-              container_port = port.value
-              protocol       = "TCP"
-            }
-          }
-
           readiness_probe {
             http_get {
               path = "/health"
@@ -221,19 +229,11 @@ resource "kubernetes_service_v1" "security" {
       target_port = 9000
       protocol    = "TCP"
     }
-    dynamic "port" {
-      for_each = { for key, value in local.security_destinations : key => value if key != "pl-security" }
-      content {
-        name        = "grpc-${substr(replace(port.key, "pl-", ""), 0, 10)}"
-        port        = port.value
-        target_port = port.value
-        protocol    = "TCP"
-      }
-    }
   }
 }
 
 resource "kubernetes_deployment_v1" "oauth2_proxy" {
+  depends_on       = [kubectl_manifest.edge_only, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -267,20 +267,20 @@ resource "kubernetes_deployment_v1" "oauth2_proxy" {
             "--provider=oidc",
             "--redirect-url=https://${var.app_domain}/oauth2/callback",
             "--upstream=http://powerlifting-app-backend.${var.namespace}.svc.cluster.local:3005/",
-            "--scope=openid profile email groups roles powerlifting_identity",
+            "--scope=openid profile email groups roles powerlifting_identity offline_access",
             "--code-challenge-method=S256",
             "--insecure-oidc-skip-nonce=false",
+            "--cookie-refresh=1m",
             "--cookie-name=__Host-pl_oauth2_proxy",
             "--cookie-secure=true",
             "--cookie-httponly=true",
             "--cookie-samesite=lax",
             "--session-store-type=redis",
             "--redis-connection-url=redis://pl-valkey.${var.namespace}.svc.cluster.local:6379",
-            "--redis-session-prefix={oauth2-proxy}:session:",
             "--pass-authorization-header=true",
-            "--set-authorization-header=true",
-            "--skip-auth-route=GET=^/api/.*$",
             "--api-route=^/api/.*$",
+            "--skip-auth-route=POST=^/api/auth/logout$",
+            "--upstream-timeout=300s",
             "--skip-provider-button=true",
             "--silence-ping-logging=true",
           ]
@@ -309,8 +309,8 @@ resource "kubernetes_deployment_v1" "oauth2_proxy" {
             name = "OAUTH2_PROXY_CLIENT_SECRET"
             value_from {
               secret_key_ref {
-                name = "powerlifting-app-secrets"
-                key  = "AUTHENTIK_CLIENT_SECRET"
+                name = kubernetes_secret_v1.oauth2_proxy.metadata[0].name
+                key  = "OAUTH2_PROXY_CLIENT_SECRET"
               }
             }
           }
@@ -347,7 +347,6 @@ resource "kubernetes_service_v1" "oauth2_proxy" {
   metadata {
     name      = "oauth2-proxy"
     namespace = var.namespace
-    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -367,12 +366,6 @@ locals {
   ai_operations       = [for operation in local.security_operations : operation.name if try(operation.execution, "") == "ai"]
   ai_domains          = toset([for operation in local.security_operations : operation.domain if try(operation.execution, "") == "ai"])
 
-  security_destinations = merge(
-    { "pl-security" = 9000, "pl-coach" = 9001 },
-    { for index, name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}" => 9002 + index },
-    { "pl-coach-discord" = 9020, "pl-backend" = 9021 },
-  )
-
   security_workloads = merge(
     { "cluster.local/ns/${var.namespace}/sa/powerlifting-app-backend" = "pl-backend" },
     { for name in ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "cluster.local/ns/${var.namespace}/sa/pl-${name}" => "pl-${name}" },
@@ -385,7 +378,6 @@ locals {
 
   security_allowed_callers = merge(
     { "cluster.local/ns/${var.namespace}/sa/powerlifting-app-backend" = concat(["pl-security", "pl-coach", "pl-coach-discord"], [for name in ["analytics", "budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "pl-${name}"]) },
-    { "cluster.local/ns/${var.namespace}/sa/oauth2-proxy" = ["pl-backend"] },
     { for name in ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"] : "cluster.local/ns/${var.namespace}/sa/pl-${name}" => concat(["pl-security"], contains(local.ai_domains, name) ? ["pl-coach"] : []) },
     { "cluster.local/ns/${var.namespace}/sa/pl-analytics" = ["pl-security", "pl-budget", "pl-calculations", "pl-competition", "pl-federation", "pl-performance", "pl-profile", "pl-program", "pl-sessions", "pl-weight-log", "pl-coach"] },
     { "cluster.local/ns/${var.namespace}/sa/pl-coach" = ["pl-security", "pl-analytics", "pl-budget", "pl-calculations", "pl-competition", "pl-export", "pl-federation", "pl-glossary", "pl-goals", "pl-imports", "pl-lift-profiles", "pl-performance", "pl-profile", "pl-program", "pl-rankings", "pl-sessions", "pl-templates", "pl-videos", "pl-weight-log"] },

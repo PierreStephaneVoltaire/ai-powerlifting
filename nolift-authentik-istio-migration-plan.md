@@ -12,6 +12,8 @@ Decisions agreed with the operator:
 - Retain Discord as an upstream Authentik identity source.
 - Use a planned maintenance window for final cutover.
 - Assign implementation to GPT-6 Luna and GPT-6.1 Terra using bounded tasks.
+- This branch is mesh-only: remove legacy authentication and runtime fallback switches.
+- Rollback means deploying the main branch; agents perform no Git operations.
 
 Success means browser, Discord bot, HTTP, MCP, analytics, upload, and background
 workflows continue through authenticated workload connections. Current Athlete
@@ -71,7 +73,7 @@ Keep Kubernetes Service DNS, HTTP operation endpoints, MCP and existing payloads
 Give each portal workload a dedicated ServiceAccount. Use Ambient mTLS and one
 shared portal waypoint initially. Enroll explicitly selected portal workloads;
 keep Authentik, Postgres, monitoring, runner and unrelated workloads outside.
-Attach HTTP policies with waypoint targetRefs and L4 policies to destination
+Use one gRPC external-authorization provider for the shared waypoint. Each allowed response overwrites an authorized-destination header; a Service-scoped ALLOW policy requires it to match the actual Service. Do not infer actual destination from a caller Host header or the waypoint identity. Attach HTTP policies with waypoint targetRefs and L4 policies to destination
 workloads. Protected destination ports accept only the waypoint's identity;
 enrollment labels alone do not prevent direct Pod-IP bypasses. Name HTTP Service
 ports or set appProtocol. Preserve timeouts; add no automatic write retries.
@@ -127,9 +129,9 @@ without manufacturing human identities.
 
 | State | Responsibility |
 | --- | --- |
-| core | Authentik, narrow ReferenceGrant, separated secrets |
+| core | Authentik and separated secrets |
 | perms | Dedicated portal ServiceAccounts and required RBAC |
-| network | Shared Gateway API CRDs, NGINX, routes, sanitation |
+| network | Existing shared Gateway API CRDs, NGINX, routes, narrow ReferenceGrant, sanitation |
 | new mesh | Istio base, istiod, CNI, ztunnel, extension providers |
 | app | Proxy, pl-security, waypoint, app enrollment and policies |
 | coach | Coach/bot identities, enrollment and destination policies |
@@ -139,10 +141,15 @@ Initial pins: Istio 1.32.0 and OAuth2 Proxy 7.15.6. Validate NGINX/Gateway API
 compatibility together before changing shared CRDs; record tested pins below.
 Inspect actual host CNI paths before installation; global.platform=k3s is valid
 only for the bundled CNI and matching paths. Keep the Authentik HTTPRoute in
-powerlifting with a narrow ReferenceGrant in if-portals. Preserve listener scope.
+powerlifting with a narrow ReferenceGrant in if-portals. Both routing resources
+belong to the network state so its existing CRDs are installed first; retain
+the CRDs in their existing state without moving ownership. Preserve listener scope.
 
-CI order: core -> perms -> network -> mesh -> app, with readiness gates.
-Apply Coach locally per AGENTS.md; remove automatic Coach apply, retain builds.
+CI order: core -> perms -> network -> mesh -> app -> Coach, with readiness gates.
+Retain the existing in-cluster Coach apply and its separate state so a full
+master pipeline run restores the complete deployment, as required by the operator.
+Use one branch-derived tag for all six image builds and both image-consuming
+Terraform stacks. Only master/main publish latest; no feature build updates it.
 Agents perform no git writes, Terraform applies, AWS deletion or broad destructive
 Kubernetes commands. Supply operator commands and reviewed artifacts instead.
 
@@ -160,14 +167,14 @@ while retaining permission semantics and ADR 0004 CDN behavior.
 | --- | --- | --- |
 | 1 | Luna / low | Route/edge/port/secret inventory, fixtures, readiness and rollback digests; Terra validates boundaries |
 | 2 | Terra / high | Principal, delegation, normalization contracts and negative tests |
-| 3 | Terra / high | Mesh foundation and pilot enforcement; old checks remain active |
+| 3 | Terra / high | Mesh foundation and pilot enforcement before deploying the new branch |
 | 4 | Luna / high | Identities, ports, enrollment, scoped secrets and CI wiring |
 | 5 | Terra / high | Proxy, Express identity integration, frontend auth and tests |
 | 6 | Terra / high | Body-aware ext_authz, trusted contexts, HTTP/MCP parity |
 | 7 | Terra / high | Domain execution, Coach, bot, analytics and gateway caller migration |
 | 8 | Terra / high | Dry-run/idempotent identity migration and tests |
 | 9 | Luna / high | Acceptance evidence and runbook; Terra security review |
-| 10 | Terra / high | Operator cutover and legacy cleanup after live acceptance |
+| 10 | Terra / high | Operator cutover after live acceptance; rollback uses main branch |
 
 Default one worker; at most two on disjoint work after interfaces are fixed.
 Pass only packet context and relevant paths. Reuse workers for adjacent tasks.
@@ -197,15 +204,18 @@ Required checks:
 
 Maintenance sequence: finish code/tests/images/plans/rollback preparation; capture
 image digests and migration evidence; stop new portal writes/submissions and let
-active work finish; install mesh and pilot with old checks active; deploy proxy,
+active work finish; install mesh and validate the pilot; deploy proxy,
 security service, identities and policies; apply additive links; switch routing;
-run browser/bot/bypass acceptance; only then remove legacy token authentication,
-distributed keys, Passport sessions and duplicate permission calls; rerun tests
-before reopening the portal.
+run browser/bot/bypass acceptance before reopening the portal. The new branch
+contains no shared-token authentication, distributed signing keys, Passport
+sessions or runtime fallback switches.
 
 Observe adapter failures/latency, waypoint/proxy health and node resources using
-existing monitoring. Never log tokens or request bodies. Rollback restores old
-images/routes with old checks active before mesh restrictions are relaxed. Keep
+existing monitoring. Never log tokens or request bodies. Rollback runs the full
+master pipeline with apply_terraform=true and both partial-build flags false.
+It rebuilds master images and restores its matching Terraform states, including
+Coach. Preserve the original unused credential resources and CI secret inputs
+for that reapply. Keep
 additive links and installed infrastructure; do not uninstall CNI or shared CRDs
 as incident recovery. Shared-node CNI changes and central authorization availability
 are primary risks. A failed security gate keeps the portal in maintenance.
@@ -223,7 +233,38 @@ are primary risks. A failed security gate keeps the portal in maintenance.
 ## Implementation evidence and handoffs
 
 - Plan saved on 2026-11-11. Live readiness rechecked; no warning events in
-  powerlifting. Existing untracked fixtures and analytics/rankings directories
-  predate implementation and must be preserved.
-- Deployment remains operator-controlled. Legacy behavior stays the default until
-  the maintenance-window mesh gate is enabled and live acceptance succeeds.
+  powerlifting. Unrelated analytics migration leftovers predated implementation
+  and were later explicitly authorized for deletion by the operator.
+- Deployment remains operator-controlled. This branch requires the completed mesh;
+  no legacy/fallback mode is retained.
+- Removed unused Rust analytics/rankings target directories and unrelated local
+  dataset fixtures after checking that current code does not reference them.
+- Server recovery preserved tracked edits but lost new helper/security files; the
+  implementation workers were restarted and restored the required files.
+
+- Integration review confirmed Istio permits one extension provider per waypoint.
+  The implementation uses one provider with Service-scoped destination binding,
+  rather than multiple providers. Direct Pod-IP access is denied by L4 policy;
+  only protected Services enroll in the waypoint.
+
+- Completed the mesh-only gateway, domain, Coach and bot caller migration; removed
+  Passport, direct Discord application callbacks, shared HMAC signing and runtime
+  compatibility switches. OAuth2 Proxy handles browser login, refresh and logout.
+- Terra: full Python suite passes (377 tests, 15 subtests). Luna: root, core,
+  perms, network, mesh, app and Coach Terraform scopes validate; changed HCL format
+  checks and workflow YAML parsing pass. The pinned Istio chart templates and
+  representative policies pass istioctl validation; NGINX 2.6.3 also renders.
+- Gateway/frontend verification: 39 backend and 22 frontend Node tests pass;
+  npm run build and npm run typecheck pass from src. Credential log redaction,
+  malformed broker responses, origin checks and forged identity headers are tested.
+- Gateway API CRDs retain their existing network-state ownership. The controller
+  watches only powerlifting and the Authentik namespace for backend resolution;
+  same-namespace route attachment remains enforced.
+- No Terraform plans/applies, identity migration writes or live rollout/bypass
+  acceptance were performed. See docs/istio-migration-runbook.md for operator
+  prerequisites, commands, maintenance order and the remaining live checks.
+- Corrected the deployment contract after operator review: Packer publishes
+  only the selected tag; app and Coach resolve the same branch-derived tag.
+  Restored the existing Coach CI apply and dormant core credential resources
+  needed by master's full pipeline reapply. The separate Istio foundation and
+  additive identity links remain after application rollback.

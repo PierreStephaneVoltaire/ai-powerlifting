@@ -1,27 +1,9 @@
 import { Request, Response } from 'express'
-import passport from 'passport'
 import { deriveOnboardingStatus } from '../services/userSettings'
 import { evaluateRbac } from '../auth/rbac'
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
-
-export const discordLogin = passport.authenticate('discord')
-export const authentikLogin = passport.authenticate('authentik')
-const discordCallback = passport.authenticate('discord', { failureRedirect: `${FRONTEND_URL}/login?error=auth_failed` })
-const authentikCallback = passport.authenticate('authentik', { failureRedirect: `${FRONTEND_URL}/login?error=auth_failed` })
-export const discordCallbackRoute = [discordCallback, (_req: Request, res: Response) => res.redirect(FRONTEND_URL)]
-export const authentikCallbackRoute = [authentikCallback, (_req: Request, res: Response) => res.redirect(FRONTEND_URL)]
-
 export function listProviders(_req: Request, res: Response): void {
-  res.json({ discord: { enabled: isDiscordConfigured() }, authentik: { enabled: isAuthentikConfigured() } })
-}
-
-function isAuthentikConfigured(): boolean {
-  return Boolean(process.env.AUTHENTIK_ISSUER_URL && process.env.AUTHENTIK_CLIENT_ID && process.env.AUTHENTIK_CLIENT_SECRET && process.env.AUTHENTIK_REDIRECT_URI)
-}
-
-function isDiscordConfigured(): boolean {
-  return Boolean(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET && process.env.DISCORD_REDIRECT_URI)
+  res.json({ authentik: { enabled: true } })
 }
 
 export async function getMe(req: Request, res: Response): Promise<void> {
@@ -37,9 +19,6 @@ export async function getMe(req: Request, res: Response): Promise<void> {
   })
 }
 
-export function logout(req: Request, res: Response): void {
-  req.logout((error) => {
-    if (error) { res.status(500).json({ ok: false }); return }
-    req.session.destroy(() => res.clearCookie('connect.sid').json({ ok: true }))
-  })
+export function logout(_req: Request, res: Response): void {
+  res.json({ ok: true, redirect: '/oauth2/sign_out?rd=%2F' })
 }

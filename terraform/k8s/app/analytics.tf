@@ -1,4 +1,19 @@
+resource "random_password" "analytics_node_token" {
+  length  = 64
+  special = false
+}
+
+resource "kubernetes_secret_v1" "analytics" {
+  metadata {
+    name      = "pl-analytics-secrets"
+    namespace = var.namespace
+  }
+
+  data = { ANALYTICS_NODE_TOKEN = random_password.analytics_node_token.result }
+}
+
 resource "kubernetes_deployment_v1" "analytics" {
+  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -64,20 +79,10 @@ resource "kubernetes_deployment_v1" "analytics" {
           }
 
           env {
-            name = "PL_PRINCIPAL_PUBLIC_KEY"
-            value_from {
-              secret_key_ref {
-                name = "pl-security-signing-key"
-                key  = "public_key"
-              }
-            }
-          }
-
-          env {
             name = "ANALYTICS_NODE_TOKEN"
             value_from {
               secret_key_ref {
-                name = "powerlifting-app-secrets"
+                name = kubernetes_secret_v1.analytics.metadata[0].name
                 key  = "ANALYTICS_NODE_TOKEN"
               }
             }
@@ -130,7 +135,7 @@ resource "kubernetes_deployment_v1" "analytics" {
             name = "ANALYTICS_NODE_TOKEN"
             value_from {
               secret_key_ref {
-                name = "powerlifting-app-secrets"
+                name = kubernetes_secret_v1.analytics.metadata[0].name
                 key  = "ANALYTICS_NODE_TOKEN"
               }
             }

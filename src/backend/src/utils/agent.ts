@@ -2,38 +2,38 @@ import { operationScope } from './operationScope'
 import { randomUUID } from 'crypto'
 import { callOperation, pollJob } from './operations'
 import { coachUrl } from './coachUrl'
+import { serviceHeaders } from '../auth/principal'
+import type { OperationContext } from './operationScope'
 
-const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 async function invokeInference(payload: Record<string, unknown>, conversationId: string): Promise<any> {
-  if (!INTERNAL_API_TOKEN) throw new Error('INTERNAL_API_TOKEN is not set')
   const scope = operationScope.getStore()
   if (!scope?.athlete || !scope.person) throw new Error('Authenticated scope is required for inference')
   if (scope.ifJobId) throw new Error('Active domain work must use native continuation, not submit another conversation')
   const conversation = `powerlifting:${scope.athlete}:${conversationId || randomUUID()}`
   const response = await fetch(`${coachUrl()}/v1/conversations/${encodeURIComponent(conversation)}/turns`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': scope.person },
-    body: JSON.stringify({ messages: payload.messages, specialist: payload.specialist, model: 'gpt-5.6-sol' }),
+    headers: await serviceHeaders('conversation_turn', scope, 'pl-coach'),
+    body: JSON.stringify({ athlete: scope.athlete, messages: payload.messages, specialist: payload.specialist, model: 'gpt-5.6-sol' }),
   })
   if (!response.ok) throw new Error(`IF job submission failed ${response.status}: ${await response.text()}`)
   const job: any = await response.json()
   return pollJob(job.job_id, 'inference', scope.person)
 }
 
-function coachScope(): { athlete: string; person: string } {
-  if (!INTERNAL_API_TOKEN) throw new Error('INTERNAL_API_TOKEN is not set')
+function coachScope(): OperationContext {
   const scope = operationScope.getStore()
   if (!scope?.athlete || !scope.person) throw new Error('Authenticated scope is required for chat')
-  return { athlete: scope.athlete, person: scope.person }
+  return scope
 }
 
 export async function coachChat(conversationId: string, message: string, binding?: { surface: string; template_sk: string }): Promise<unknown> {
-  const { person } = coachScope()
+  const scope = coachScope()
+  const { person } = scope
   const response = await fetch(`${coachUrl()}/v1/conversations/${encodeURIComponent(conversationId)}/turns`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person },
-    body: JSON.stringify({ messages: [{ role: 'user', content: message }], ...(binding || {}) }),
+    headers: await serviceHeaders('conversation_turn', scope, 'pl-coach'),
+    body: JSON.stringify({ athlete: scope.athlete, messages: [{ role: 'user', content: message }], ...(binding || {}) }),
   })
   if (!response.ok) throw new Error(`Chat submission failed ${response.status}: ${await response.text()}`)
   const job: any = await response.json()
@@ -41,10 +41,11 @@ export async function coachChat(conversationId: string, message: string, binding
 }
 
 export async function resetCoachChat(conversationId: string): Promise<void> {
-  const { person } = coachScope()
+  const scope = coachScope()
+  const { person } = scope
   const response = await fetch(`${coachUrl()}/v1/conversations/${encodeURIComponent(conversationId)}`, {
     method: 'DELETE',
-    headers: { 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person },
+    headers: await serviceHeaders('conversation_reset', scope, 'pl-coach'),
   })
   if (!response.ok) throw new Error(`Chat reset failed ${response.status}: ${await response.text()}`)
 }

@@ -1,27 +1,38 @@
 # Kubernetes stacks
 
 The `kubernetes-apply` job on the in-cluster Actions runner applies core, perms,
-network, mesh and app after their images are published. Coach resources remain a
-local operator apply.
+network, mesh and app after their images are published. When Coach images build,
+the same runner then applies Coach's separate state.
 
 | Stack | Holds |
 |---|---|
 | `core` | Namespaces, config, secrets, pod AWS credentials (read from SSM), registry pull secret, Actions runner controller and scale set, Authentik and its CNPG Postgres cluster, NoLift identity objects in Authentik, monitoring |
 | `perms` | Service accounts, roles and bindings (registry refresher, runner deployer bound to `cluster-admin`) |
-| `network` | Gateway controller, Gateway, routes, cloudflared |
+| `network` | Gateway API CRDs, NGINX Gateway and data plane, app and Authentik routes, cloudflared, narrow Authentik `ReferenceGrant` |
 | `mesh` | Pinned Istio Ambient base, control plane, CNI and ztunnel |
 | `app` | `pl-*` services, analytics, Valkey, portal backend and frontend, registry token refresher |
 
 The job runs only for pushes or manual runs triggered by the repository owner.
 It writes `K8S_TFVARS` (the full `k8s.tfvars`, see `k8s.tfvars.example`) to a
-temporary file. It applies `core`, `perms`, `network`, optionally `mesh`, then
-`app`. It does not apply Coach resources. The in-cluster runner uses its
+temporary file. It applies `core`, `perms`, `network`, `mesh`, then `app`. It
+applies Coach with `COACH_TFVARS` after a successful Coach image build. The
+Coach state key remains `powerlifting-app/coach/terraform.tfstate`. The in-cluster runner uses its
 service account for Kubernetes access. `TF_STATE_BUCKET` names the state bucket
 and AWS reads go through the OIDC deploy role. App workloads use dedicated
 service accounts and use Ambient enrollment. The pods' AWS key belongs to the scoped
 `powerlifting-pods` IAM user, created outside terraform and stored in SSM at
 `/powerlifting/k8s/aws-credentials`; no AWS key lives in any tfvars file or
 terraform state.
+
+The app stack selects the ECR image tag from `image_tag` (default `latest`). CI
+publishes `latest` only for `main` and `master`; other branches publish their
+branch-specific tag. The workflow passes the same derived tag explicitly to
+Packer, the app stack and the Coach stack, overriding any value in tfvars. Run
+the workflow manually against a feature branch to deploy it. A full manual run
+against `master`, with `apply_terraform=true` and both partial-build inputs
+false, rebuilds its `latest` images and reapplies its infrastructure and Coach
+states. Keep the existing rollback credential inputs in `K8S_TFVARS` and
+`COACH_TFVARS`; the new runtime does not use the old shared-token secret.
 
 `core` installs the runner and `perms` grants it its permissions, so on a
 brand-new cluster those two are applied once from a workstation before the
@@ -34,12 +45,29 @@ Authentik Helm release in `auth_namespace`, and runs the bootstrap job that
 creates the `akadmin` API token from `authentik_bootstrap_token`. The same
 stack configures Authentik through its API: the `nolift-powerlifting` OIDC
 provider and application, the `athletes`/`coaches`/`handlers` roles and groups,
-the scope mappings and the Discord login source. The client ID and secret are
-written to the `authentik-powerlifting-oidc` secret.
+the scope mappings and the Discord identity source. Discord source matching uses
+its verified provider identifier. The OIDC client ID and secret are written to
+the `authentik-powerlifting-oidc` secret in the Authentik namespace; the app
+stack copies only the client secret to the OAuth proxy's namespace-local secret.
+
+Before the first app-stack apply, create the signing key pair in AWS Systems
+Manager Parameter Store at `/powerlifting/security/principal-signing-private-key`
+(SecureString) and `/powerlifting/security/principal-signing-public-key` (String).
+The private key is mounted only into `pl-security`; workloads that verify signed
+principals receive only the public key. The backend media-signing private key is
+read separately from `/powerlifting/media/cloudfront-signing-private-key`.
 
 The Authentik provider connects to the in-cluster `authentik-server` service,
 so on a new cluster Authentik is installed with a targeted apply first (see
 below).
+
+Both public hostnames use the configured Cloudflare tunnel origin, which points
+to the NGINX Gateway Service. NGINX watches only `namespace` and `auth_namespace`
+to resolve the cross-namespace Authentik backend; its Gateway accepts routes only
+from `namespace`. The `auth` HTTPRoute reaches only the
+`authentik-server` Service in `auth_namespace`; its `ReferenceGrant` permits
+that one Service reference from routes in `namespace`. Apply the app stack
+before the Coach stack so its waypoint and authorization provider exist.
 
 ## Monitoring
 

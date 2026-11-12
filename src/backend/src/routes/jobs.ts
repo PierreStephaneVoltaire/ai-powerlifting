@@ -1,10 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppError } from '../middleware/errorHandler'
-import { principalToken } from '../auth/principal'
+import { serviceHeaders } from '../auth/principal'
+import { operationScope } from '../utils/operationScope'
 import { coachUrl } from '../utils/coachUrl'
 
 const router = Router()
-const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
 
 function checkScope(value: unknown, athlete: string): void {
   if (!value || typeof value !== 'object') return
@@ -19,8 +19,7 @@ function checkScope(value: unknown, athlete: string): void {
 function forward(path: (req: Request) => string, method: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!INTERNAL_API_TOKEN) throw new AppError('Internal gateway is not configured', 503)
-      if (!req.isAuthenticated()) throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
+      if (!req.user) throw new AppError('Sign in required', 401, 'AUTH_REQUIRED')
       const athlete = req.mapped_pk || ''
       const person = req.actor_mapped_pk || ''
       if (!athlete || !person) throw new AppError('Authenticated Person and Athlete scope required', 401, 'AUTH_REQUIRED')
@@ -41,7 +40,7 @@ function forward(path: (req: Request) => string, method: string) {
       if (method === 'POST' && path(req).endsWith('/cancel')) principalOperation = 'domain_job_cancel'
       const response = await fetch(`${coachUrl()}${path(req)}`, {
         method,
-        headers: { 'Content-Type': 'application/json', 'X-Internal-Token': INTERNAL_API_TOKEN, 'X-Person-Pk': person, 'X-PL-Principal': principalToken(principalOperation, { athlete, person }) },
+        headers: await serviceHeaders(principalOperation, { ...operationScope.getStore(), athlete, person }, 'pl-coach'),
         ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
       })
       const text = await response.text()

@@ -2,19 +2,7 @@ name: Build & Push Powerlifting Images
 
 on:
   push:
-    branches: [master, main]
-    paths:
-      - "src/backend/**"
-      - "src/frontend/**"
-      - "src/dependencies/**"
-      - "src/services/**"
-      - "src/lambda/**"
-      - "docker/**"
-      - "terraform/**"
-      - "src/package.json"
-      - "src/package-lock.json"
-      - "src/tsconfig.json"
-      - ".github/workflows/build-images.yml"
+    branches: [master, main, istio]
 
   pull_request:
     branches: [master, main]
@@ -26,13 +14,12 @@ on:
       - "src/lambda/**"
       - "docker/**"
       - "terraform/**"
+      - "scripts/image_tag.py"
+      - "scripts/test_image_tag.py"
       - ".github/workflows/build-images.yml"
 
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Override image tag (default: branch name)"
-        required: false
       backend_only:
         description: Build only backend
         required: false
@@ -44,7 +31,11 @@ on:
       apply_terraform:
         description: Run terraform apply (workflow_dispatch only)
         required: false
-        default: "false"
+        default: "true"
+
+concurrency:
+  group: powerlifting-release
+  cancel-in-progress: false
 
 permissions:
   id-token: write
@@ -64,8 +55,19 @@ jobs:
       services: ${{ steps.result.outputs.services }}
       terraform: ${{ steps.result.outputs.terraform }}
       kubernetes: ${{ steps.result.outputs.kubernetes }}
+      image_tag: ${{ steps.release.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check branch image selection
+        run: python3 -m unittest discover -s scripts -p test_image_tag.py
+
+      - id: release
+        env:
+          RELEASE_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          image_tag="$(python3 scripts/image_tag.py "$RELEASE_BRANCH")"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
 
       - id: filter
         if: ${{ github.event_name != 'workflow_dispatch' }}
@@ -80,6 +82,7 @@ jobs:
               - 'src/package.json'
               - 'src/package-lock.json'
               - 'src/tsconfig.json'
+              - 'scripts/image_tag.py'
               - '.github/workflows/build-images.yml'
             frontend:
               - 'src/frontend/**'
@@ -88,8 +91,10 @@ jobs:
               - 'src/package.json'
               - 'src/package-lock.json'
               - 'src/tsconfig.json'
+              - 'scripts/image_tag.py'
               - '.github/workflows/build-images.yml'
             services:
+              - 'terraform/coach/**'
               - 'src/services/**'
               - 'src/backend/src/**'
               - 'src/backend/package.json'
@@ -99,9 +104,11 @@ jobs:
               - 'src/package-lock.json'
               - 'src/tsconfig.json'
               - 'src/frontend/package.json'
+              - 'scripts/image_tag.py'
               - '.github/workflows/build-images.yml'
             kubernetes:
               - 'terraform/k8s/**'
+              - 'terraform/coach/**'
             terraform:
               - 'terraform/**'
               - 'src/lambda/**'
@@ -111,7 +118,7 @@ jobs:
       - id: result
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "backend=true" >> "$GITHUB_OUTPUT"
             echo "frontend=true" >> "$GITHUB_OUTPUT"
             echo "services=true" >> "$GITHUB_OUTPUT"
@@ -128,7 +135,7 @@ jobs:
   build-backend:
     needs: changes
     runs-on: ubuntu-latest
-    if: ${{ needs.changes.outputs.backend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
+    if: ${{ github.event_name != 'pull_request' && needs.changes.outputs.backend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -147,16 +154,6 @@ jobs:
         with:
           version: 1.13.x
 
-      - id: tag
-        shell: bash
-        run: |
-          if [ -n "${{ inputs.image_tag }}" ]; then
-            TAG="${{ inputs.image_tag }}"
-          else
-            TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
-          fi
-          echo "value=$TAG" >> "$GITHUB_OUTPUT"
-
       - working-directory: docker
         run: packer init powerlifting-backend.pkr.hcl
 
@@ -164,7 +161,7 @@ jobs:
         run: |
           packer build -color=false \
             -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-app-backend" \
-            -var "image_tag=${{ steps.tag.outputs.value }}" \
+            -var "image_tag=${{ needs.changes.outputs.image_tag }}" \
             powerlifting-backend.pkr.hcl
 
   build-services:
@@ -196,12 +193,6 @@ jobs:
         with:
           version: 1.13.x
 
-      - id: tag
-        shell: bash
-        run: |
-          TAG="${{ inputs.image_tag }}"
-          echo "value=${TAG:-${GITHUB_SHA::12}}" >> "$GITHUB_OUTPUT"
-
       - working-directory: docker
         run: packer init ${{ matrix.image }}.pkr.hcl
 
@@ -209,7 +200,7 @@ jobs:
         run: |
           packer build -color=false \
             -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-${{ matrix.repository }}" \
-            -var "image_tag=${{ steps.tag.outputs.value }}" \
+            -var "image_tag=${{ needs.changes.outputs.image_tag }}" \
             ${{ matrix.image }}.pkr.hcl
 
   build-coach:
@@ -237,12 +228,6 @@ jobs:
         with:
           version: 1.13.x
 
-      - id: tag
-        shell: bash
-        run: |
-          TAG="${{ inputs.image_tag }}"
-          echo "value=${TAG:-${GITHUB_SHA::12}}" >> "$GITHUB_OUTPUT"
-
       - working-directory: docker
         run: packer init ${{ matrix.image }}.pkr.hcl
 
@@ -250,13 +235,13 @@ jobs:
         run: |
           packer build -color=false \
             -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-${{ matrix.image }}" \
-            -var "image_tag=${{ steps.tag.outputs.value }}" \
+            -var "image_tag=${{ needs.changes.outputs.image_tag }}" \
             ${{ matrix.image }}.pkr.hcl
 
   build-frontend:
     needs: changes
     runs-on: ubuntu-latest
-    if: ${{ needs.changes.outputs.frontend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
+    if: ${{ github.event_name != 'pull_request' && needs.changes.outputs.frontend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -291,16 +276,6 @@ jobs:
         with:
           version: 1.13.x
 
-      - id: tag
-        shell: bash
-        run: |
-          if [ -n "${{ inputs.image_tag }}" ]; then
-            TAG="${{ inputs.image_tag }}"
-          else
-            TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
-          fi
-          echo "value=$TAG" >> "$GITHUB_OUTPUT"
-
       - working-directory: docker
         run: packer init powerlifting-frontend.pkr.hcl
 
@@ -308,7 +283,7 @@ jobs:
         run: |
           packer build -color=false \
             -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-powerlifting-app-frontend" \
-            -var "image_tag=${{ steps.tag.outputs.value }}" \
+            -var "image_tag=${{ needs.changes.outputs.image_tag }}" \
             -var "api_url=/api" \
             -var "cloudfront_media_base_url=${{ steps.tfout.outputs.cloudfront_media_base_url }}" \
             powerlifting-frontend.pkr.hcl
@@ -347,7 +322,6 @@ jobs:
       TF_VAR_app_zone: ${{ vars.APP_ZONE }}
       TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN }}
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
-      TF_VAR_auth_origin_url: ${{ vars.AUTH_ORIGIN_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -369,7 +343,7 @@ jobs:
   terraform-apply:
     needs: terraform-plan
     runs-on: ubuntu-latest
-    if: ${{ needs.terraform-plan.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
+    if: ${{ needs.terraform-plan.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/istio')) || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -378,7 +352,6 @@ jobs:
       TF_VAR_app_zone: ${{ vars.APP_ZONE }}
       TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN }}
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
-      TF_VAR_auth_origin_url: ${{ vars.AUTH_ORIGIN_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -417,6 +390,7 @@ jobs:
       cancel-in-progress: false
     env:
       KUBE_LOAD_CONFIG_FILE: "false"
+      IMAGE_TAG: ${{ needs.changes.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -432,17 +406,47 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.34.5
+
       - env:
           K8S_TFVARS: ${{ secrets.K8S_TFVARS }}
-        run: printf '%s' "$K8S_TFVARS" > "$RUNNER_TEMP/k8s.tfvars"
+        run: |
+          umask 077
+          printf '%s' "$K8S_TFVARS" > "$RUNNER_TEMP/k8s.tfvars"
 
       - if: ${{ needs.build-coach.result == 'success' }}
         env:
           COACH_TFVARS: ${{ secrets.COACH_TFVARS }}
         run: |
+          umask 077
           test -n "$COACH_TFVARS" || { echo "COACH_TFVARS Actions secret is required to deploy the Coach images" >&2; exit 1; }
           printf '%s' "$COACH_TFVARS" > "$RUNNER_TEMP/coach.tfvars"
-          chmod 600 "$RUNNER_TEMP/coach.tfvars"
+
+      - name: Configure kubectl for the in-cluster runner
+        run: |
+          cat > "$RUNNER_TEMP/kubeconfig" <<'EOF'
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: in-cluster
+            cluster:
+              certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              server: https://kubernetes.default.svc
+          contexts:
+          - name: runner
+            context:
+              cluster: in-cluster
+              user: runner
+          current-context: runner
+          users:
+          - name: runner
+            user:
+              tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+          EOF
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
       - env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
@@ -450,14 +454,25 @@ jobs:
         working-directory: terraform/k8s
         run: |
           set -euo pipefail
-          for stack in core perms network app; do
+          for stack in core perms network mesh app; do
             terraform -chdir="$stack" init -input=false \
               -backend-config="bucket=$TF_STATE_BUCKET" \
               -backend-config="key=powerlifting-app/k8s/$stack.tfstate" \
               -backend-config="region=$AWS_REGION" \
               -backend-config="encrypt=true" \
               -backend-config="use_lockfile=true"
-            terraform -chdir="$stack" apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/k8s.tfvars"
+            image_args=()
+            if [ "$stack" = "app" ]; then
+              image_args=(-var="image_tag=$IMAGE_TAG")
+            fi
+            terraform -chdir="$stack" apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/k8s.tfvars" "${image_args[@]}"
+          done
+          kubectl -n istio-system rollout status daemonset/istio-cni-node --timeout=180s
+          kubectl -n istio-system rollout status daemonset/ztunnel --timeout=180s
+          kubectl -n istio-system rollout status deployment/istiod --timeout=180s
+          namespace="$(terraform -chdir=core output -raw namespace)"
+          for deployment in cloudflared nolift-waypoint pl-security oauth2-proxy powerlifting-app-backend powerlifting-app-frontend pl-analytics pl-valkey pl-prompt-cache pl-prompt-cache-mcp pl-budget pl-calculations pl-competition pl-export pl-federation pl-glossary pl-goals pl-imports pl-lift-profiles pl-performance pl-profile pl-program pl-rankings pl-sessions pl-templates pl-videos pl-weight-log; do
+            kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=180s
           done
           if [ "$APPLY_COACH" = "true" ]; then
             terraform -chdir=../coach init -input=false \
@@ -466,5 +481,7 @@ jobs:
               -backend-config="region=$AWS_REGION" \
               -backend-config="encrypt=true" \
               -backend-config="use_lockfile=true"
-            terraform -chdir=../coach apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/coach.tfvars"
+            terraform -chdir=../coach apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/coach.tfvars" -var="image_tag=$IMAGE_TAG"
+            kubectl -n "$namespace" rollout status deployment/pl-coach --timeout=180s
+            kubectl -n "$namespace" rollout status deployment/pl-coach-discord --timeout=180s
           fi

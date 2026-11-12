@@ -32,6 +32,7 @@ resource "kubernetes_service_account_v1" "coach" {
 }
 
 resource "kubernetes_deployment_v1" "coach" {
+  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination]
   wait_for_rollout = false
 
   lifecycle {

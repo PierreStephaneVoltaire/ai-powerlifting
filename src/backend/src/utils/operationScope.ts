@@ -5,11 +5,12 @@ export interface OperationContext {
   athlete: string
   person: string
   ifJobId?: string
-  identity?: { issuer: string; provider: 'authentik' | 'discord'; sub: string; discord_subjects?: string[] }
+  identityToken?: string
+  principal?: string
 }
 
 export const operationScope = new AsyncLocalStorage<OperationContext>()
 
 export const restoreOperationScope: RequestHandler = (req, _res, next) => {
-  operationScope.run({ athlete: req.mapped_pk || '', person: req.actor_mapped_pk || '' }, next)
+  operationScope.run({ athlete: req.mapped_pk || '', person: req.actor_mapped_pk || '', identityToken: req.identityToken, principal: req.operationPrincipal }, next)
 }

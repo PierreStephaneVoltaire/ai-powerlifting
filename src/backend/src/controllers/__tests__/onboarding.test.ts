@@ -7,7 +7,6 @@
  */
 import express from 'express'
 import http from 'http'
-import cookieParser from 'cookie-parser'
 import { AddressInfo } from 'net'
 
 let failures = 0
@@ -176,7 +175,7 @@ function startFakeServices(): Promise<http.Server> {
           res.end(JSON.stringify(status >= 400 ? { detail: { message: payload?.error, code: 'validation' } } : payload))
         }
         try {
-          if (route === '/profile/internal/access') return respond(200, { permissions: ['settings:read', 'settings:write'] })
+          if (route === '/v1/principals') return respond(200, { principal: 'operation-token' })
           const operation = route.startsWith('/profile/operations/') ? route.slice('/profile/operations/'.length) : ''
           if (!store[athlete]) store[athlete] = defaultSettings(athlete)
           if (operation === 'onboarding_status') return respond(200, deriveStatus(store[athlete]))
@@ -205,7 +204,6 @@ function startFakeServices(): Promise<http.Server> {
 function startBackendApp(onboardingRouter: any, operationScope: any): Promise<http.Server> {
   const app = express()
   app.use(express.json())
-  app.use(cookieParser())
   app.use((req: any, _res, next) => {
     req.user = {
       identity: {
@@ -276,8 +274,7 @@ async function main() {
   const servicesServer = await startFakeServices()
   const servicesPort = (servicesServer.address() as AddressInfo).port
   process.env.POWERLIFTING_SERVICE_BASE_URL = `http://127.0.0.1:${servicesPort}`
-  process.env.INTERNAL_API_TOKEN = 'test'
-  process.env.PL_PRINCIPAL_SECRET = 'x'.repeat(40)
+  process.env.PL_SECURITY_URL = `http://127.0.0.1:${servicesPort}`
 
   const { onboardingRouter } = await import('../../routes/onboarding')
   const { operationScope } = await import('../../utils/operationScope')

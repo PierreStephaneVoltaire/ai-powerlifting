@@ -12,7 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from botocore.exceptions import ClientError
 
 from .dispatch import OperationError
-from .principal import principal_token
+from .principal import delegated_principal
 from .source_access import authorize_source, read_requirements
 
 REPORTS = {"correlation_analysis", "program_evaluation", "block_correlation_analysis", "block_program_evaluation", "multi_block_comparison_analysis"}
@@ -116,7 +116,7 @@ async def report_source(arguments, athlete, operation=""):
         current_athlete.reset(token)
 
 
-async def status(generation_id, athlete, person, access):
+async def status(generation_id, athlete, person, access, parent=''):
     store = GenerationStore(athlete)
     record = await asyncio.to_thread(store.get, generation_id)
     if not record:
@@ -124,7 +124,8 @@ async def status(generation_id, athlete, person, access):
     authorize_source(record.get('access_requirements'), access)
     if person and record["status"] not in TERMINAL and record.get("job_id"):
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs/" + record["job_id"], headers={"X-Internal-Token": os.environ["INTERNAL_API_TOKEN"], "X-Person-Pk": person, "X-PL-Principal": principal_token(person, athlete, "domain_job_read")})
+            token = await delegated_principal(parent, athlete, 'domain_job_read', 'pl-coach')
+            response = await client.get(os.environ["IF_API_URL"].rstrip("/") + "/v1/jobs/" + record["job_id"], headers={'X-Person-Pk': person, 'X-PL-Principal': token})
             response.raise_for_status()
             job = response.json()
         if job["status"] in TERMINAL:

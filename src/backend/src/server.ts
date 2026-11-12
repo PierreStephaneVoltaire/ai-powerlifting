@@ -1,6 +1,5 @@
 import express from 'express'
 import cors from 'cors'
-import cookieParser from 'cookie-parser'
 import pinoHttp from 'pino-http'
 import { logger } from './utils/logger'
 import { programsRouter } from './routes/programs'
@@ -46,7 +45,6 @@ app.use(cors({
   origin: FRONTEND_URL,
   credentials: true,
 }))
-app.use(cookieParser())
 app.use(express.json())
 
 app.get('/health', (_req, res) => {

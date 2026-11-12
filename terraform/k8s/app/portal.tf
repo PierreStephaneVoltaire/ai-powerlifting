@@ -1,4 +1,19 @@
+data "aws_ssm_parameter" "media_signing_private_key" {
+  name            = "/powerlifting/media/cloudfront-signing-private-key"
+  with_decryption = true
+}
+
+resource "kubernetes_secret_v1" "backend" {
+  metadata {
+    name      = "powerlifting-app-backend-secrets"
+    namespace = var.namespace
+  }
+
+  data = { MEDIA_SIGNING_PRIVATE_KEY = data.aws_ssm_parameter.media_signing_private_key.value }
+}
+
 resource "kubernetes_deployment_v1" "backend" {
+  depends_on       = [kubectl_manifest.backend_from_oauth2_proxy, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -44,32 +59,16 @@ resource "kubernetes_deployment_v1" "backend" {
             }
           }
 
-          env_from {
-            config_map_ref {
-              name = "powerlifting-app-config"
-            }
-          }
-
           env {
             name  = "PL_SECURITY_URL"
             value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
           }
 
           env {
-            name = "PL_PRINCIPAL_PUBLIC_KEY"
-            value_from {
-              secret_key_ref {
-                name = "pl-security-signing-key"
-                key  = "public_key"
-              }
-            }
-          }
-
-          env {
             name = "MEDIA_SIGNING_PRIVATE_KEY"
             value_from {
               secret_key_ref {
-                name = "powerlifting-app-secrets"
+                name = "powerlifting-app-backend-secrets"
                 key  = "MEDIA_SIGNING_PRIVATE_KEY"
               }
             }
@@ -121,7 +120,6 @@ resource "kubernetes_service_v1" "backend" {
   metadata {
     name      = "powerlifting-app-backend"
     namespace = var.namespace
-    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {
@@ -137,6 +135,7 @@ resource "kubernetes_service_v1" "backend" {
 }
 
 resource "kubernetes_deployment_v1" "frontend" {
+  depends_on       = [kubectl_manifest.edge_only, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -208,7 +207,6 @@ resource "kubernetes_service_v1" "frontend" {
   metadata {
     name      = "powerlifting-app-frontend"
     namespace = var.namespace
-    labels    = { "istio.io/use-waypoint" = "nolift-waypoint" }
   }
 
   spec {

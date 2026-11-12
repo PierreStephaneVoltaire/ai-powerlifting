@@ -38,13 +38,14 @@ flowchart LR
   Service --> Profile
 ```
 
-The gateway authentication contract keeps direct Discord login alongside
-Authentik OIDC through Passport/openid-client; existing Valkey stores server-side
-sessions. The backlog records deployment verification for each provider. Short-lived signed
-principals bind acting Person, selected Athlete and operation. The Profile
-service evaluates current application permissions with PyCasbin. See ADR-0002
-and ADR-0003. These are implementation contracts; the backlog records what has
-actually been tested and deployed.
+Browser authentication uses OAuth2 Proxy with the existing Authentik OIDC
+provider; Discord is an Authentik source. The gateway holds no login session and
+obtains verified identity and operation principals from `pl-security`. Dedicated
+ServiceAccounts identify workloads through Istio Ambient mTLS. A shared waypoint
+calls the central authorizer, which reuses Profile/PyCasbin and current grants at
+HTTP/MCP boundaries. Private signing keys stay in the authorizer. See ADR-0006
+and [the cutover runbook](./istio-migration-runbook.md). This branch requires the
+new infrastructure and contains no legacy authentication mode.
 
 Video upload keeps the existing multipart gateway endpoint. A single request
 spools the file with a 500 MiB bound; the backend sends bytes to S3 and confirms

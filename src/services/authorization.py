@@ -1,12 +1,5 @@
-import asyncio
-import os
-
-import httpx
-
 from .access import operation_permission, permission_map, permits
-from .access_store import current_context
 from .dispatch import OperationError
-from .principal import verify_principal
 from .media_access import additional_permission
 from .competition_access import authorize_entry
 from .program_access import authorize_program_change
@@ -17,7 +10,7 @@ def check_context(operation: str, arguments: dict, claims: dict, context: dict) 
     rule = permission_map().get(operation)
     if not rule:
         raise OperationError(403, 'forbidden', 'Operation has no permission mapping')
-    if rule.get('internal_only') and claims['iss'] != 'powerlifting-gateway':
+    if rule.get('internal_only') and not (claims['iss'] == 'pl-security' and claims.get('origin') == 'pl-backend'):
         raise OperationError(403, 'forbidden', 'Operation is internal to the gateway')
     if operation == 'identity_resolve':
         identity = claims.get('identity') or {}
@@ -39,22 +32,3 @@ def check_context(operation: str, arguments: dict, claims: dict, context: dict) 
         raise OperationError(403, 'forbidden', f'{media_permission} permission required')
     return context
 
-
-async def authorize_request(operation: str, arguments: dict, token: str, person: str, athlete: str) -> tuple[dict, dict]:
-    try:
-        claims = verify_principal(token, operation, person, athlete)
-    except Exception as exc:
-        raise OperationError(401, 'invalid_principal', 'Verified acting Person required') from exc
-    if os.getenv('PL_DOMAIN') == 'profile':
-        context = await asyncio.to_thread(current_context, claims['sub'], claims['athlete'])
-        return claims, check_context(operation, arguments, claims, context)
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(os.getenv('PL_PROFILE_URL', 'http://pl-profile:8000') + '/internal/access',
-                headers={'X-Internal-Token': os.environ['INTERNAL_API_TOKEN'], 'X-PL-Principal': token},
-                json={'operation': operation, 'arguments': arguments})
-        if response.status_code != 200:
-            raise OperationError(response.status_code, 'forbidden', 'Access evaluation denied')
-        return claims, response.json()
-    except httpx.HTTPError as exc:
-        raise OperationError(503, 'access_unavailable', 'Permission service unavailable') from exc

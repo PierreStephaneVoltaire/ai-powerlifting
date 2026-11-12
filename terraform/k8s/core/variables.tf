@@ -14,10 +14,6 @@ variable "auth_domain" {
   type = string
 }
 
-variable "cookie_domain" {
-  type = string
-}
-
 variable "tables" {
   type = object({
     powerlifting        = string
@@ -48,21 +44,6 @@ variable "discord_client_secret" {
 
 variable "authentik_client_id" {
   type = string
-}
-
-variable "authentik_client_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "jwt_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "internal_api_token" {
-  type      = string
-  sensitive = true
 }
 
 variable "runner_namespace" {
@@ -142,6 +123,21 @@ variable "metrics_retention_days" {
 }
 
 variable "grafana_admin_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "authentik_client_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "jwt_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "internal_api_token" {
   type      = string
   sensitive = true
 }

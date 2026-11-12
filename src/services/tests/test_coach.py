@@ -4,6 +4,9 @@ from dataclasses import replace
 from pathlib import Path
 
 import httpx
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 import pytest
 from fastapi.testclient import TestClient
 
@@ -13,8 +16,14 @@ from services.coach.config import load
 from services.coach.model import Reply
 
 
-SECRET = "s" * 40
-TOKEN = "internal-token"
+KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+PRIVATE = KEY.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+PUBLIC = KEY.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+
+
+def sign(person, athlete, operation, destination='pl-coach'):
+    now = int(time.time())
+    return jwt.encode({'iss': 'pl-security', 'aud': 'powerlifting-services', 'sub': person, 'athlete': athlete, 'operation': operation, 'destination': destination, 'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend', 'iat': now, 'exp': now + 300}, PRIVATE, algorithm='RS256')
 SERVICES = Path(__file__).resolve().parents[1]
 AI_OPERATIONS = [record["name"] for path in sorted((SERVICES / "operations").glob("*.json")) for record in json.loads(path.read_text()) if record.get("execution") == "ai"]
 OPERATION_AI = {name: {"provider": "openrouter" if name == "glossary_estimate_e1rm" else "chatgpt", "model": "estimate-model" if name == "glossary_estimate_e1rm" else "analysis-model", "effort": "high"} for name in AI_OPERATIONS}
@@ -29,9 +38,13 @@ class FakeServices:
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content or b"{}")
         self.calls.append((request.url.host, request.url.path, dict(request.headers), body))
-        principal_claims = principal.verify(SECRET, request.headers["x-pl-principal"], principal_operation(request), request.headers.get("x-person-pk", ""), request.headers.get("x-athlete-pk", "")) if request.url.path != "/internal/access" else None
-        if request.url.path == "/internal/access":
-            return httpx.Response(200, json={"permissions": ["program:read", "glossary:write"], "competition_scope": {"read": []}})
+        if request.url.path == '/v1/principals':
+            return httpx.Response(200, json={'principal': sign('operator', body['athlete'], body['operation'], body['destination'])})
+        if request.url.path == '/v1/job-capabilities':
+            return httpx.Response(200, json={'capability': 'job-capability'})
+        if request.url.path == '/v1/access':
+            return httpx.Response(200, json={'context': {'permissions': ['program:read', 'glossary:write'], 'competition_scope': {'read': []}}})
+        principal_claims = jwt.decode(request.headers['x-pl-principal'], PUBLIC, algorithms=['RS256'], audience='powerlifting-services', issuer='pl-security')
         if request.url.path == "/operations/glossary_estimate_e1rm":
             assert request.headers["x-if-turn-id"]
             return httpx.Response(200, json={"status": "needs_inference", "execution_id": "exec-1", "challenge_id": "ch-1", "messages": [{"role": "system", "content": "Estimate."}, {"role": "user", "content": "Squat"}], "tools": [{"type": "function", "function": {"name": "report", "parameters": {"type": "object", "properties": {"e1rm_kg": {"type": "number"}}, "required": ["e1rm_kg"]}}}]})
@@ -80,8 +93,7 @@ class FakeModel:
 
 @pytest.fixture
 def harness(tmp_path, monkeypatch):
-    monkeypatch.setenv("INTERNAL_API_TOKEN", TOKEN)
-    monkeypatch.setenv("PL_PRINCIPAL_SECRET", SECRET)
+    monkeypatch.setenv("PL_PRINCIPAL_PUBLIC_KEY", PUBLIC)
     monkeypatch.setenv("PL_SERVICES_DIR", str(SERVICES))
     monkeypatch.setenv("COACH_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("COACH_URL", "http://coach")
@@ -100,11 +112,9 @@ def harness(tmp_path, monkeypatch):
         yield client, fake, model
 
 
-def headers(person="operator", operation=None, athlete="operator"):
-    result = {"X-Internal-Token": TOKEN, "X-Person-Pk": person}
-    if operation:
-        result["X-PL-Principal"] = principal.sign(SECRET, person, athlete, operation)
-    return result
+def headers(person="operator", operation="conversation_turn", athlete="operator"):
+    return {"X-Person-Pk": person, "X-PL-Principal": sign(person, athlete, operation),
+            "X-PL-Access-Context": json.dumps({"person": person, "athlete": athlete, "operation": operation, "context": {}})}
 
 
 def wait(client, job_id, request_headers):
@@ -133,22 +143,22 @@ def test_domain_job_rejects_bad_principal_and_scope(harness):
     assert client.post("/v1/jobs", json=payload, headers=headers(operation="program_get")).status_code == 401
     scoped = {"kind": "domain", "payload": {**payload["payload"], "arguments": {"id": "squat", "pk": "someone-else"}}}
     assert client.post("/v1/jobs", json=scoped, headers=headers(operation="glossary_estimate_e1rm")).status_code == 403
-    assert client.post("/v1/jobs", json=payload, headers={"X-Person-Pk": "operator"}).status_code == 401
+    assert client.post("/v1/jobs", json=payload, headers={"X-Person-Pk": "operator"}).status_code == 403
 
 
 def test_conversation_turn_uses_scoped_tools_and_keeps_thread(harness):
     client, fake, _ = harness
     first = client.post("/v1/conversations/powerlifting:operator:discord:1/turns", json={"messages": [{"role": "user", "content": "What is my DOTS?"}]}, headers=headers())
     assert first.status_code == 202, first.text
-    done = wait(client, first.json()["job_id"], headers())
+    done = wait(client, first.json()["job_id"], headers(operation="domain_job_read"))
     assert done["status"] == "succeeded", done
     assert done["result"]["content"] == "new:What is my DOTS?:412.5"
     forwarded = next(call for call in fake.calls if call[1] == "/operations/calculate_dots")
     assert "_access" not in forwarded[3]
     second = client.post("/v1/conversations/powerlifting:operator:discord:1/turns", json={"messages": [{"role": "user", "content": "And now?"}]}, headers=headers())
-    assert wait(client, second.json()["job_id"], headers())["result"]["content"] == "resumed:And now?:412.5"
-    assert client.get(f"/v1/jobs/{second.json()['job_id']}", headers=headers(person="someone")).status_code == 404
-    assert client.delete("/v1/conversations/powerlifting:operator:discord:1", headers=headers()).json() == {"reset": True}
+    assert wait(client, second.json()["job_id"], headers(operation="domain_job_read"))["result"]["content"] == "resumed:And now?:412.5"
+    assert client.get(f"/v1/jobs/{second.json()['job_id']}", headers=headers(person="someone", operation="domain_job_read")).status_code == 404
+    assert client.delete("/v1/conversations/powerlifting:operator:discord:1", headers=headers(operation="conversation_reset")).json() == {"reset": True}
 
 
 def test_tools_refuse_finished_turns(harness):

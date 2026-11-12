@@ -69,9 +69,9 @@ class Store:
         return Job(job_id=row[0], owner=row[1], athlete=row[2], kind=row[3], conversation_id=row[4], payload=json.loads(row[5]), status=row[6],
                    result=json.loads(row[7]) if row[7] else None, error=json.loads(row[8]) if row[8] else None, created_at=row[9], updated_at=row[10])
 
-    def create(self, owner: str, athlete: str, kind: str, conversation_id: str, payload: dict[str, Any]) -> Job:
+    def create(self, owner: str, athlete: str, kind: str, conversation_id: str, payload: dict[str, Any], job_id: str = '') -> Job:
         with self.lock:
-            job = Job(job_id=uuid.uuid4().hex, owner=owner, athlete=athlete, kind=kind, conversation_id=conversation_id, payload=payload)
+            job = Job(job_id=job_id or uuid.uuid4().hex, owner=owner, athlete=athlete, kind=kind, conversation_id=conversation_id, payload=payload)
             self.db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)", (job.job_id, owner, athlete, kind, conversation_id, json.dumps(payload, default=str), job.status, None, None, job.created_at, job.updated_at))
             self.db.commit()
             return job

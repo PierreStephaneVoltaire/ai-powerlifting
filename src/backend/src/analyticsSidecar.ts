@@ -6,7 +6,9 @@ import { relayResponse } from './analyticsRelay'
 
 const app = express()
 const port = Number(process.env.ANALYTICS_NODE_PORT || 8091)
-const token = process.env.ANALYTICS_NODE_TOKEN || process.env.INTERNAL_API_TOKEN || ''
+const token = process.env.ANALYTICS_NODE_TOKEN || ''
+
+if (!token) throw new Error('ANALYTICS_NODE_TOKEN is required')
 
 app.use(express.json({ limit: '10mb' }))
 app.use((req: Request, res: Response, next) => {
@@ -17,7 +19,7 @@ app.use((req: Request, res: Response, next) => {
   req.mapped_pk = req.get('X-Athlete-Pk') || undefined
   req.actor_mapped_pk = req.get('X-Person-Pk') || req.mapped_pk
   req.readOnly = req.get('X-Read-Only') === 'true'
-  operationScope.run({ athlete: req.mapped_pk || '', person: req.actor_mapped_pk || '', ifJobId: req.get('X-IF-Turn-Id') || req.get('X-IF-Job-Id') || undefined }, next)
+  operationScope.run({ athlete: req.mapped_pk || '', person: req.actor_mapped_pk || '', principal: req.get('X-PL-Principal'), ifJobId: req.get('X-IF-Turn-Id') || req.get('X-IF-Job-Id') || undefined }, next)
 })
 
 const operationPaths: Record<string, (args: Record<string, unknown>) => { method: string; path: string; body?: unknown }> = {
@@ -54,6 +56,7 @@ app.post('/internal/analytics/operations/:operation', async (req, res) => {
         'X-Athlete-Pk': req.get('X-Athlete-Pk') || '',
         'X-Person-Pk': req.get('X-Person-Pk') || '',
         'X-Read-Only': req.get('X-Read-Only') || 'false',
+        ...(req.get('X-PL-Principal') ? { 'X-PL-Principal': req.get('X-PL-Principal') as string } : {}),
         ...(req.get('X-IF-Turn-Id') || req.get('X-IF-Job-Id') ? { 'X-IF-Job-Id': req.get('X-IF-Turn-Id') || req.get('X-IF-Job-Id') as string } : {}),
         ...(target.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },

@@ -1,4 +1,3 @@
-import { operationScope } from '../utils/operationScope'
 import { callOperation } from '../utils/operations'
 import type { AgeCategory, Role } from '@powerlifting/types'
 import { APP_ROLE_VALUES } from '../auth/identity'
@@ -195,7 +194,7 @@ function deriveActiveRole(roles: Role[], explicit: unknown): Role {
   return roles[0] ?? 'athlete'
 }
 
-function normalizeSettings(raw: Record<string, unknown>): UserSettings {
+export function normalizeSettings(raw: Record<string, unknown>): UserSettings {
   const discordUsername = String(raw.discord_username || raw.username || '')
   const username = usernameKey(String(raw.username || discordUsername || raw.nickname || 'user'))
   const nickname = String(raw.nickname || username)
@@ -345,23 +344,6 @@ export async function proposeTag(
     tag,
   })
   return normalizeSettings(result as Record<string, unknown>)
-}
-
-export async function getOrCreateSettingsForIdentity(
-  provider: 'discord' | 'authentik',
-  sub: string,
-  username: string,
-  avatarUrl: string | null,
-  discordSubjects: string[] = [],
-): Promise<UserSettings> {
-  const issuer = process.env.AUTHENTIK_ISSUER_URL || ''
-  if (!issuer) throw new Error('Verified OIDC identity required')
-  const identityIssuer = provider === 'authentik' ? issuer : 'https://discord.com'
-  const identity = { issuer: identityIssuer, provider, sub, discord_subjects: discordSubjects }
-  const result = await operationScope.run({ athlete: '', person: '', identity }, () => callOperation('identity_resolve', {
-    ...identity, display_name: username, avatar_url: avatarUrl,
-  })) as { settings: Record<string, unknown>; created: boolean }
-  return normalizeSettings(result.settings)
 }
 
 // =============================================================================

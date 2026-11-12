@@ -87,6 +87,7 @@ def test_e1rm_multiplier_suggestions_binding_uses_existing_calculation():
 
 
 def test_composite_operation_bindings_proxy_to_node_sidecar(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     calls = []
 
@@ -102,6 +103,7 @@ def test_composite_operation_bindings_proxy_to_node_sidecar(monkeypatch):
 
 
 def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as_input(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     calls = []
 
@@ -110,14 +112,17 @@ def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as
         return httpx.Response(200, json={"data": {"schemaVersion": 6}, "error": None}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(composite.httpx, "post", fake_post)
-    composite.call_node("analytics.manifest", {"pk": "athlete-1", "_person_pk": "coach-1", "_if_job_id": "job-1"})
+    composite.call_node("analytics.manifest", {"pk": "athlete-1", "_person_pk": "coach-1", "_if_job_id": "job-1", "_principal": "scope-token"})
     headers = calls[0][1]["headers"]
     assert headers["X-Person-Pk"] == "coach-1"
     assert headers["X-IF-Turn-Id"] == "job-1"
+    assert headers["X-PL-Principal"] == "scope-token"
+    assert headers["X-Internal-Token"] == "loopback-secret"
     assert calls[0][1]["json"] == {"pk": "athlete-1"}
 
 
 def test_composite_block_cache_miss_preserves_not_found_status(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     from services.dispatch import OperationError
 
@@ -135,6 +140,7 @@ def test_composite_block_cache_miss_preserves_not_found_status(monkeypatch):
 
 
 def test_composite_correlation_cache_miss_preserves_not_found_status(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
     composite = importlib.import_module("services.handlers.analysis_reports.composite")
     from services.dispatch import OperationError
 

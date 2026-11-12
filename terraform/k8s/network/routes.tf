@@ -12,6 +12,7 @@ resource "kubectl_manifest" "edge_headers" {
           proxy_set_header X-PL-Principal "";
           proxy_set_header X-PL-Mesh-Caller "";
           proxy_set_header X-PL-Access-Context "";
+          proxy_set_header X-PL-Authorized-Destination "";
           proxy_set_header X-Internal-Api-Token "";
           proxy_read_timeout 300s;
           client_max_body_size 500M;
@@ -63,4 +64,21 @@ resource "kubectl_manifest" "app_route" {
   })
 
   depends_on = [kubectl_manifest.gateway, kubectl_manifest.edge_headers]
+}
+
+resource "kubectl_manifest" "auth_route" {
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "HTTPRoute"
+    metadata   = { name = "authentik", namespace = var.namespace }
+    spec = {
+      parentRefs = [{ name = local.gateway_name }]
+      hostnames  = [var.auth_domain]
+      rules = [{
+        backendRefs = [{ name = "authentik-server", namespace = var.auth_namespace, port = 80 }]
+      }]
+    }
+  })
+
+  depends_on = [kubectl_manifest.gateway, kubectl_manifest.authentik_route_reference]
 }
