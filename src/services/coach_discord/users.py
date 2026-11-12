@@ -1,11 +1,15 @@
+import hashlib
 import re
 import time
 from dataclasses import dataclass
 
 import boto3
-from services.handlers.user.identity_resolve.core import _identity_key
 
 CACHE_SECONDS = 600
+
+
+def _identity_key(issuer: str, sub: str) -> str:
+    return "Identity#" + hashlib.sha256(f"{issuer}\0{sub}".encode()).hexdigest()
 
 
 @dataclass(frozen=True)

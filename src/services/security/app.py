@@ -76,6 +76,7 @@ async def identity(request: IdentityRequest, x_pl_mesh_caller: str = Header(defa
             raise ValueError('Workload is not the gateway')
         return await asyncio.to_thread(credentials.resolve_identity, request.id_token)
     except Exception as exc:
+        logger.warning('identity denied reason=%r', exc)
         raise HTTPException(401, 'Identity verification failed') from exc
 
 
