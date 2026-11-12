@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from fastapi import FastAPI, Header, HTTPException
@@ -12,6 +13,7 @@ from services.dispatch import OperationError
 from . import credentials
 
 
+logger = logging.getLogger('pl-security')
 app = FastAPI(title='Powerlifting security')
 OPERATIONS = load_operations()
 PSEUDO = {'domain_resume', 'generation_status', 'domain_job_read', 'domain_job_cancel', 'conversation_turn', 'conversation_reset'}
@@ -123,6 +125,7 @@ async def principals(request: PrincipalRequest, x_pl_mesh_caller: str = Header(d
             person, origin = '', source_service
         return {'principal': credentials.sign(person, request.athlete, request.operation, source, request.destination, origin)}
     except Exception as exc:
+        logger.warning('principal denied operation=%s destination=%s caller=%s reason=%s', request.operation, request.destination, x_pl_mesh_caller, exc)
         raise HTTPException(403, 'Principal issuance denied') from exc
 
 
@@ -155,4 +158,5 @@ async def access(request: AccessRequest, x_pl_mesh_caller: str = Header(default=
     except OperationError as exc:
         raise HTTPException(exc.status, 'Access denied') from exc
     except Exception as exc:
+        logger.warning('access denied reason=%s', exc)
         raise HTTPException(403, 'Access denied') from exc

@@ -141,3 +141,8 @@ variable "internal_api_token" {
   type      = string
   sensitive = true
 }
+
+variable "workout_videos_table" {
+  type    = string
+  default = "workout-Videos"
+}

@@ -70,9 +70,28 @@ class FakeTable:
         self.updates.append(dict(current))
 
 
+class FakeVideosTable:
+    def __init__(self, health):
+        self.health = health
+
+    def get_item(self, **kwargs):
+        key = kwargs["Key"]
+        assert set(key) == {"athlete_id", "video_id"}
+        item = self.health.items.get((key["athlete_id"], f"Media#{key['video_id']}"))
+        if item is None:
+            return {}
+        return {"Item": {**{name: value for name, value in item.items() if name not in {"pk", "sk"}}, "athlete_id": item["pk"]}}
+
+    def put_item(self, **kwargs):
+        record = kwargs["Item"]
+        assert "athlete_id" in record and "pk" not in record and "sk" not in record
+        item = {**{name: value for name, value in record.items() if name != "athlete_id"}, "pk": record["athlete_id"], "sk": f"Media#{record['video_id']}"}
+        self.health.put_item(**{**kwargs, "Item": item})
+
+
 class FakeDynamo:
     def __init__(self, health, sessions):
-        self.tables = {"if-health": health, "if-sessions": sessions}
+        self.tables = {"if-health": health, "if-sessions": sessions, "workout-Videos": FakeVideosTable(health)}
 
     def Table(self, name):
         return self.tables[name]

@@ -16,6 +16,7 @@ dynamodb = boto3.resource('dynamodb')
 
 TABLE_NAME = os.environ.get('TABLE_NAME', 'if-health')
 SESSIONS_TABLE_NAME = os.environ.get('SESSIONS_TABLE_NAME', 'if-sessions')
+VIDEOS_TABLE_NAME = os.environ.get('VIDEOS_TABLE_NAME', 'workout-Videos')
 VIDEOS_BUCKET = os.environ.get('VIDEOS_BUCKET', 'powerlifting-session-videos')
 MAX_VIDEO_BYTES = 500 * 1024 * 1024
 MAX_FORM_VIDEO_SECONDS = 180
@@ -23,6 +24,10 @@ MAX_FORM_VIDEO_SECONDS = 180
 
 def _table():
     return dynamodb.Table(TABLE_NAME)
+
+
+def _videos_table():
+    return dynamodb.Table(VIDEOS_TABLE_NAME)
 
 
 def _notifications_module():
@@ -49,11 +54,11 @@ def _notify_media_ready(media):
     return True
 
 
-def _media(table, pk, video_id):
-    item = table.get_item(Key={'pk': pk, 'sk': f'Media#{video_id}'}, ConsistentRead=True).get('Item')
-    if not item or str(item.get('media_id') or item.get('video_id') or '') != video_id:
+def _media(pk, video_id):
+    record = _videos_table().get_item(Key={'athlete_id': pk, 'video_id': video_id}, ConsistentRead=True).get('Item')
+    if not record or str(record.get('media_id') or record.get('video_id') or '') != video_id:
         raise ValueError('Media allocation not found')
-    return item
+    return {**{key: value for key, value in record.items() if key != 'athlete_id'}, 'pk': str(record['athlete_id'])}
 
 
 def _decimals(value):
@@ -129,12 +134,14 @@ def _update_lift_profile_video(media, status, processed_key='', thumbnail_key=''
     return False
 
 
-def _put_media(table, item, expected_statuses, expected_status=None):
+def _put_media(item, expected_statuses, expected_status=None):
     status = expected_status if expected_status is not None else item.get('status')
     if status not in expected_statuses:
         return item
-    table.put_item(
-        Item=item,
+    record = {key: value for key, value in item.items() if key not in {'pk', 'sk'}}
+    record['athlete_id'] = str(item['pk'])
+    _videos_table().put_item(
+        Item=record,
         ConditionExpression='allocation_revision = :revision AND #status = :status',
         ExpressionAttributeNames={'#status': 'status'},
         ExpressionAttributeValues={':revision': item['allocation_revision'], ':status': status},
@@ -159,8 +166,7 @@ def _form_duration_seconds(ffmpeg_path, input_path):
 
 
 def _complete_media(pk, video_id, revision, source_size, processed_key, thumbnail_key):
-    table = _table()
-    current = _media(table, pk, video_id)
+    current = _media(pk, video_id)
     if int(current.get('allocation_revision', 0)) != revision:
         return current
     if current.get('status') not in {'allocated', 'processing', 'confirmed', 'ready'}:
@@ -177,17 +183,16 @@ def _complete_media(pk, video_id, revision, source_size, processed_key, thumbnai
         'updated_at': datetime.now(timezone.utc).isoformat(),
     }
     try:
-        return _put_media(table, updated, (current.get('status'),), current.get('status'))
+        return _put_media(updated, (current.get('status'),), current.get('status'))
     except ClientError as error:
         if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
-            return _media(table, pk, video_id)
+            return _media(pk, video_id)
         raise
 
 
 def _mark_failed(pk, video_id, revision, message):
-    table = _table()
     try:
-        current = _media(table, pk, video_id)
+        current = _media(pk, video_id)
     except ValueError:
         return False
     if int(current.get('allocation_revision', 0)) != revision or current.get('status') == 'ready' or (
@@ -196,7 +201,7 @@ def _mark_failed(pk, video_id, revision, message):
         return False
     updated = {**current, 'status': 'failed', 'failure': str(message), 'updated_at': datetime.now(timezone.utc).isoformat()}
     try:
-        _put_media(table, updated, (current.get('status'),), current.get('status'))
+        _put_media(updated, (current.get('status'),), current.get('status'))
     except ClientError as error:
         if error.response.get('Error', {}).get('Code') != 'ConditionalCheckFailedException':
             raise
@@ -207,13 +212,12 @@ def _mark_failed(pk, video_id, revision, message):
 def _mark_processing(media):
     if media.get('status') != 'allocated':
         return media
-    table = _table()
     updated = {**media, 'status': 'processing', 'updated_at': datetime.now(timezone.utc).isoformat()}
     try:
-        return _put_media(table, updated, ('allocated',), 'allocated')
+        return _put_media(updated, ('allocated',), 'allocated')
     except ClientError as error:
         if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
-            return _media(table, media['pk'], media['video_id'])
+            return _media(media['pk'], media['video_id'])
         raise
 
 
@@ -229,7 +233,7 @@ def _process_record(bucket, key):
     source_size = int(source.get('ContentLength') or 0)
     if source_size <= 0 or source_size > MAX_VIDEO_BYTES:
         raise ValueError('Uploaded video size is invalid')
-    media = _media(_table(), metadata['pk'], video_id)
+    media = _media(metadata['pk'], video_id)
     revision = int(metadata['allocation_revision'])
     for field, value in (('video_id', video_id), ('session_id', metadata['session_id']), ('session_date', metadata['session_date']), ('pk', metadata['pk']), ('program_sk', metadata['sk'])):
         if str(media.get(field) or '') != value:
@@ -320,7 +324,7 @@ def handler(event, context):
                 head = s3.head_object(Bucket=bucket, Key=key)
                 metadata = {str(k).lower(): str(v) for k, v in (head.get('Metadata') or {}).items()}
                 if metadata.get('pk') and metadata.get('video_id') and metadata.get('allocation_revision') and _mark_failed(metadata['pk'], metadata['video_id'], int(metadata['allocation_revision']), error):
-                    _update_lift_profile_video(_media(_table(), metadata['pk'], metadata['video_id']), 'failed', failure=error)
+                    _update_lift_profile_video(_media(metadata['pk'], metadata['video_id']), 'failed', failure=error)
                     update_video_metadata(
                         metadata['pk'], metadata.get('sk', ''), metadata.get('session_date', ''), metadata['video_id'],
                         '', '', 'failed', session_id=metadata.get('session_id', ''),
@@ -331,7 +335,7 @@ def handler(event, context):
 
 
 def update_video_metadata(pk, program_sk, session_date, video_id, video_s3_key, thumbnail_s3_key, status, _attempt=0, session_id=None, allocation_revision=None):
-    media = _media(_table(), pk, video_id)
+    media = _media(pk, video_id)
     if allocation_revision is not None and (
         int(media.get('allocation_revision', 0)) != int(allocation_revision)
         or media.get('status') not in {'ready', 'confirmed', 'failed'}

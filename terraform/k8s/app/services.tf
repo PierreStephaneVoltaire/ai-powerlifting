@@ -43,7 +43,7 @@ resource "kubernetes_deployment_v1" "service" {
   }
 
   spec {
-    replicas = 1
+    replicas = each.key == "pl-sessions" ? 2 : 1
 
     selector {
       match_labels = { app = each.key }

@@ -16,7 +16,7 @@ async def video_update_metadata(args: dict) -> dict:
 
     def update():
         program_sk, phases = context(health_table, pk, version)
-        media = get_media(health_table, pk, video_id)
+        media = get_media(pk, video_id)
         if not media:
             raise ValueError("Video allocation not found")
         if media.get("readonly"):

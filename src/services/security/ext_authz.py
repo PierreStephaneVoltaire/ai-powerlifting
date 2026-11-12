@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from urllib.parse import urlsplit
 
@@ -14,6 +15,8 @@ from .app import OPERATIONS
 
 MAX_BODY = 10 * 1024 * 1024
 
+
+logger = logging.getLogger('pl-security')
 
 def deny(status=403):
     return external_auth_pb2.CheckResponse(status=status_pb2.Status(code=code_pb2.PERMISSION_DENIED), denied_response=external_auth_pb2.DeniedHttpResponse(status={'code': status}, body='Authorization denied'))
@@ -144,5 +147,6 @@ class Authorization(external_auth_pb2_grpc.AuthorizationServicer):
             return allow(destination, {'x-pl-access-context': value})
         except OverflowError:
             return deny(413)
-        except Exception:
+        except Exception as exc:
+            logger.warning('authorization denied method=%s path=%s reason=%s', request.attributes.request.http.method, urlsplit(request.attributes.request.http.path).path, exc)
             return deny()

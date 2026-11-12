@@ -74,6 +74,7 @@ resource "aws_iam_role_policy" "this" {
         Resource = [
           "arn:aws:dynamodb:${var.region}:*:table/${var.health_table_name}",
           "arn:aws:dynamodb:${var.region}:*:table/${var.sessions_table_name}",
+          "arn:aws:dynamodb:${var.region}:*:table/${var.videos_table_name}",
         ]
       },
       {
@@ -113,6 +114,7 @@ resource "aws_lambda_function" "this" {
     variables = {
       TABLE_NAME                          = var.health_table_name
       SESSIONS_TABLE_NAME                 = var.sessions_table_name
+      VIDEOS_TABLE_NAME                   = var.videos_table_name
       VIDEOS_BUCKET                       = var.videos_bucket_id
       IF_POWERLIFTING_NOTIFICATIONS_TABLE = "if-powerlifting-notifications"
     }

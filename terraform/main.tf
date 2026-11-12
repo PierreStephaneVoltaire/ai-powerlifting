@@ -22,6 +22,7 @@ module "video_thumbnail_lambda" {
   videos_bucket_arn   = module.session_videos.bucket_arn
   health_table_name   = "if-health"
   sessions_table_name = "if-sessions"
+  videos_table_name   = module.powerlifting_dynamodb.workout_videos_table_name
 }
 
 module "cloudfront" {

@@ -17,6 +17,7 @@ resource "kubernetes_config_map_v1" "app" {
     DYNAMODB_TABLE                         = var.tables.powerlifting
     IF_USER_TABLE                          = var.tables.users
     IF_SESSIONS_TABLE_NAME                 = var.tables.sessions
+    WORKOUT_VIDEOS_TABLE_NAME              = var.workout_videos_table
     ANALYSIS_CACHE_TABLE_NAME              = var.tables.analysis_cache
     POWERLIFTING_MASTER_COMPETITIONS_TABLE = var.tables.master_competitions
     POWERLIFTING_USER_COMPETITIONS_TABLE   = var.tables.user_competitions

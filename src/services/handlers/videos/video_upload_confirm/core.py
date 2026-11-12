@@ -4,7 +4,7 @@ import asyncio
 import os
 from datetime import datetime, timezone
 
-from .._video_store import cas_update_videos, context, get_health_table, get_media, get_s3, get_session_store, lift_profile_slot, notify_media_ready, resolve_pk, session_for_date
+from .._video_store import cas_update_videos, context, get_health_table, get_media, get_s3, put_media, get_session_store, lift_profile_slot, notify_media_ready, resolve_pk, session_for_date
 
 MAX_VIDEO_BYTES = 500 * 1024 * 1024
 
@@ -26,7 +26,7 @@ async def video_upload_confirm(args: dict) -> dict:
 
     def confirm():
         program_sk, phases = context(health_table, pk, version)
-        table_media = get_media(health_table, pk, video_id)
+        table_media = get_media(pk, video_id)
         if not table_media:
             raise ValueError("Video upload allocation not found")
         if table_media.get("readonly"):
@@ -142,11 +142,11 @@ async def video_upload_confirm(args: dict) -> dict:
             return videos + [video]
         if not target_lift:
             cas_update_videos(store, program_sk, session_date, phases, update, session_id)
-        current = get_media(health_table, pk, video_id)
+        current = get_media(pk, video_id)
         if current and current.get("status") != "confirmed":
             try:
-                health_table.put_item(
-                    Item={**current, "status": "confirmed", "confirmed_at": datetime.now(timezone.utc).isoformat()},
+                put_media(
+                    {**current, "status": "confirmed", "confirmed_at": datetime.now(timezone.utc).isoformat()},
                     ConditionExpression="allocation_revision = :revision AND #status = :status",
                     ExpressionAttributeNames={"#status": "status"},
                     ExpressionAttributeValues={":revision": current.get("allocation_revision", 0), ":status": current.get("status")},
@@ -154,7 +154,7 @@ async def video_upload_confirm(args: dict) -> dict:
             except Exception as error:
                 if getattr(error, "response", {}).get("Error", {}).get("Code") != "ConditionalCheckFailedException":
                     raise
-        current = get_media(health_table, pk, video_id) or current
+        current = get_media(pk, video_id) or current
         if current:
             notify_media_ready(current)
         return result

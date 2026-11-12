@@ -8,6 +8,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from services.contract import load_operations
+from services.handlers.videos import _video_store as video_store
 
 
 class FakeHealthTable:
@@ -65,6 +66,27 @@ class FakeHealthTable:
         item["lift_profiles"] = copy.deepcopy(values[":next"])
         self.items[key] = item
         self.program = item
+
+
+class FakeVideosTable:
+    def __init__(self, health):
+        self.health = health
+
+    def get_item(self, **kwargs):
+        key = kwargs["Key"]
+        assert set(key) == {"athlete_id", "video_id"}
+        item = self.health.items.get((key["athlete_id"], f"Media#{key['video_id']}"))
+        if item is None:
+            return {}
+        record = {name: value for name, value in item.items() if name not in {"pk", "sk"}}
+        return {"Item": copy.deepcopy({**record, "athlete_id": item["pk"]})}
+
+    def put_item(self, **kwargs):
+        record = kwargs["Item"]
+        assert "athlete_id" in record and "pk" not in record and "sk" not in record
+        item = {**{name: value for name, value in record.items() if name != "athlete_id"}, "pk": record["athlete_id"], "sk": f"Media#{record['video_id']}"}
+        condition = kwargs.get("ConditionExpression", "").replace("attribute_not_exists(video_id)", "attribute_not_exists(pk)")
+        self.health.put_item(**{**kwargs, "Item": item, "ConditionExpression": condition} if condition else {**kwargs, "Item": item})
 
 
 class FakeStore:
@@ -150,6 +172,7 @@ def _core(name):
 
 def _patch_core(core, store, s3=None):
     core.get_health_table = lambda: store.health_table
+    video_store.get_videos_table = lambda: FakeVideosTable(store.health_table)
     core.get_session_store = lambda args: store
     if s3 is not None:
         core.get_s3 = lambda: s3

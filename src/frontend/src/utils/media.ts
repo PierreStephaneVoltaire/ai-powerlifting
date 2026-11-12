@@ -14,8 +14,12 @@ export function getMediaUrl(s3Key: string | null | undefined, athletePk?: string
   return `/api/${domain}/media/${encodeKey(s3Key)}?athlete=${encodeURIComponent(owner)}`
 }
 
+const SERVED_MEDIA_PATH = /^\/api\/(?:budget|profiles|videos)\/media\/([^?]+)/
+
 export function resolveAvatarUrl(value: string | null | undefined): string {
   if (!value) return ''
+  const served = SERVED_MEDIA_PATH.exec(value)
+  if (served) return getMediaUrl(served[1].split('/').map(decodeURIComponent).join('/'))
   if (/^https?:\/\//i.test(value)) {
     const url = new URL(value)
     return url.hostname.endsWith('.cloudfront.net') ? getMediaUrl(decodeURIComponent(url.pathname.slice(1))) : value
