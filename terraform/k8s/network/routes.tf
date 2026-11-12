@@ -78,10 +78,10 @@ resource "kubectl_manifest" "auth_route" {
             set = [{ name = "X-Forwarded-Proto", value = "https" }]
           }
         }]
-        backendRefs = [{ name = "authentik-server", namespace = var.auth_namespace, port = 80 }]
+        backendRefs = [{ name = "authentik-server", port = 80 }]
       }]
     }
   })
 
-  depends_on = [kubectl_manifest.gateway, kubectl_manifest.authentik_route_reference]
+  depends_on = [kubectl_manifest.gateway]
 }

@@ -144,7 +144,7 @@ EOT
 resource "kubernetes_secret_v1" "authentik_powerlifting_oidc" {
   metadata {
     name      = "authentik-powerlifting-oidc"
-    namespace = kubernetes_namespace_v1.auth.metadata[0].name
+    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
     labels = {
       app = "authentik"
     }

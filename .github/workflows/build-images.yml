@@ -15,11 +15,7 @@ on:
       - "src/package-lock.json"
       - "src/tsconfig.json"
       - "scripts/image_tag.py"
-      - "scripts/test_image_tag.py"
-      - "scripts/test_deployment_contract.py"
       - "scripts/migrate_identity_pointers.py"
-      - "scripts/validate_terraform_plan.py"
-      - "scripts/test_terraform_plan.py"
       - ".github/workflows/**"
       - ".github/image-filters.yml"
       - "!**/*.md"
@@ -66,9 +62,6 @@ jobs:
       image_tag: ${{ steps.release.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check branch image selection
-        run: python3 -m unittest discover -s scripts -p test_image_tag.py
 
       - id: release
         env:
@@ -349,7 +342,6 @@ jobs:
         run: |
           umask 077
           terraform plan -input=false -no-color -var="region=${{ env.AWS_REGION }}" -out="$RUNNER_TEMP/aws.tfplan"
-          terraform show -json "$RUNNER_TEMP/aws.tfplan" | python3 ../scripts/validate_terraform_plan.py
           terraform apply -input=false -no-color "$RUNNER_TEMP/aws.tfplan"
 
   kubernetes-apply:

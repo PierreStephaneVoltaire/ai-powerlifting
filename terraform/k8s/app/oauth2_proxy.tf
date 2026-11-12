@@ -6,7 +6,7 @@ resource "random_password" "oauth2_proxy_cookie" {
 data "kubernetes_secret_v1" "authentik_oidc" {
   metadata {
     name      = "authentik-powerlifting-oidc"
-    namespace = var.auth_namespace
+    namespace = var.namespace
   }
 }
 

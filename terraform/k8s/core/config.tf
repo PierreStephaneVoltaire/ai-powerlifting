@@ -31,7 +31,7 @@ resource "kubernetes_config_map_v1" "app" {
     FRONTEND_URL                           = "https://${var.app_domain}"
     AUTHENTIK_CLIENT_ID                    = var.authentik_client_id
     AUTHENTIK_ISSUER_URL                   = "https://${var.auth_domain}/application/o/${var.authentik_client_id}/"
-    AUTHENTIK_JWKS_URL                     = "http://authentik-server.${var.auth_namespace}.svc.cluster.local/application/o/${var.authentik_client_id}/jwks/"
+    AUTHENTIK_JWKS_URL                     = "http://authentik-server.${var.namespace}.svc.cluster.local/application/o/${var.authentik_client_id}/jwks/"
     MEDIA_CDN_BASE_URL                     = nonsensitive(data.aws_ssm_parameter.media_base_url.value)
     MEDIA_SIGNING_KEY_PAIR_ID              = nonsensitive(data.aws_ssm_parameter.media_signing_key_pair_id.value)
     MEDIA_VIDEO_URL_TTL_HOURS              = "72"

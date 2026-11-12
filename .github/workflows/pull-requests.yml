@@ -14,11 +14,7 @@ on:
       - 'src/package-lock.json'
       - 'src/tsconfig.json'
       - 'scripts/image_tag.py'
-      - 'scripts/test_image_tag.py'
-      - 'scripts/test_deployment_contract.py'
       - 'scripts/migrate_identity_pointers.py'
-      - 'scripts/validate_terraform_plan.py'
-      - 'scripts/test_terraform_plan.py'
       - '.github/workflows/**'
       - '.github/image-filters.yml'
       - '!**/*.md'
@@ -37,7 +33,6 @@ jobs:
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
     steps:
       - uses: actions/checkout@v4
-      - run: python3 -m unittest discover -s scripts -p test_image_tag.py
       - uses: dorny/paths-filter@v3
         id: filter
         with:

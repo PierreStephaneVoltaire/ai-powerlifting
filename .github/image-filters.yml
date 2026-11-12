@@ -37,7 +37,5 @@ terraform:
   - 'terraform/**'
   - 'src/lambda/**'
   - 'src/services/lib/media_notifications.py'
-  - 'scripts/validate_terraform_plan.py'
-  - 'scripts/test_terraform_plan.py'
   - '.github/workflows/**'
   - '.github/image-filters.yml'

@@ -82,17 +82,3 @@ resource "kubectl_manifest" "nginx_mesh_proxy" {
 
   depends_on = [helm_release.gateway_controller]
 }
-
-resource "kubectl_manifest" "authentik_route_reference" {
-  yaml_body = yamlencode({
-    apiVersion = "gateway.networking.k8s.io/v1beta1"
-    kind       = "ReferenceGrant"
-    metadata   = { name = "authentik-gateway-route", namespace = var.auth_namespace }
-    spec = {
-      from = [{ group = "gateway.networking.k8s.io", kind = "HTTPRoute", namespace = var.namespace }]
-      to   = [{ group = "", kind = "Service", name = "authentik-server" }]
-    }
-  })
-
-  depends_on = [kubectl_manifest.gateway_api_crds]
-}
