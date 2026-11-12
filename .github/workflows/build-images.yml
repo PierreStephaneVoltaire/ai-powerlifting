@@ -49,6 +49,7 @@ permissions:
 
 env:
   AWS_REGION: ca-central-1
+  PACKER_GITHUB_API_TOKEN: ${{ github.token }}
   ECR_REPO_PREFIX: if
   TF_VERSION: "1.15.x"
 
@@ -497,7 +498,7 @@ jobs:
           kubectl -n istio-system rollout status daemonset/ztunnel --timeout=180s
           kubectl -n istio-system rollout status deployment/istiod --timeout=180s
           namespace="$(terraform -chdir=core output -raw namespace)"
-          for deployment in cloudflared nolift-waypoint pl-security oauth2-proxy powerlifting-app-backend powerlifting-app-frontend pl-analytics pl-valkey pl-prompt-cache pl-prompt-cache-mcp pl-budget pl-calculations pl-competition pl-export pl-federation pl-glossary pl-goals pl-imports pl-lift-profiles pl-performance pl-profile pl-program pl-rankings pl-sessions pl-templates pl-videos pl-weight-log; do
+          for deployment in cloudflared nolift-waypoint oauth2-proxy powerlifting-app-backend powerlifting-app-frontend pl-analytics pl-valkey pl-prompt-cache pl-prompt-cache-mcp pl-budget pl-calculations pl-competition pl-export pl-federation pl-glossary pl-goals pl-imports pl-lift-profiles pl-performance pl-profile pl-program pl-rankings pl-sessions pl-templates pl-videos pl-weight-log; do
             kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=180s
           done
           if [ "$APPLY_COACH" = "true" ]; then

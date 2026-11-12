@@ -32,7 +32,7 @@ locals {
 }
 
 resource "kubernetes_deployment_v1" "service" {
-  depends_on = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination, kubectl_manifest.strict_mtls]
+  depends_on = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls]
   for_each   = local.services
 
   wait_for_rollout = false
@@ -93,10 +93,6 @@ resource "kubernetes_deployment_v1" "service" {
             }
           }
 
-          env {
-            name  = "PL_SECURITY_URL"
-            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
-          }
 
           dynamic "env" {
             for_each = each.key == "pl-profile" ? [1] : []

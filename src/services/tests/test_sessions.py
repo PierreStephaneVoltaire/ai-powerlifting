@@ -209,7 +209,10 @@ def test_patching_a_deleted_session_reports_it_is_gone(monkeypatch):
 def test_identity_conflict_code_survives_service_transports(monkeypatch):
     monkeypatch.setenv("PL_DOMAIN", "sessions")
     services_app = importlib.reload(importlib.import_module("services.app"))
-    monkeypatch.setattr(services_app, "mesh_context", lambda *args: ({"sub": "person", "athlete": "athlete"}, {}))
+    async def trusted(*_args):
+        return {"sub": "person", "athlete": "athlete"}, {}
+
+    monkeypatch.setattr(services_app, "authorization_context", trusted)
     monkeypatch.setattr(services_app, "authorize", lambda operation, arguments, athlete, person, access: arguments)
 
     monkeypatch.setattr(services_app, "dispatch", lambda *_args: (_ for _ in ()).throw(SessionIdentityConflictError("deleted-session", 8)))
@@ -220,7 +223,7 @@ def test_identity_conflict_code_survives_service_transports(monkeypatch):
     assert http_error.value.detail["code"] == "session_identity_conflict"
     from fastapi.testclient import TestClient
     with TestClient(services_app.app) as client:
-        response = client.post("/mcp", headers={"X-PL-Access-Context": "trusted"}, json={
+        response = client.post("/mcp", json={
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",

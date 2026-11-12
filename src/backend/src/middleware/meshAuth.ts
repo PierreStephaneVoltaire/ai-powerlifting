@@ -1,6 +1,6 @@
 import type { Express, NextFunction, Request, Response } from 'express'
-import type { AuthIdentity } from '../auth/identity'
-import { securityRequest } from '../auth/security'
+import { identityFromToken } from '../auth/oidcIdentity'
+import { callOperationAs } from '../utils/operations'
 import { normalizeSettings } from '../services/userSettings'
 import { AppError } from './errorHandler'
 
@@ -21,13 +21,11 @@ export function configureMeshAuthentication(app: Express): void {
       if (!authorization) return next()
       const match = /^Bearer ([^\s]+)$/.exec(authorization)
       if (!match) throw new AppError('Invalid login token', 401, 'AUTH_REQUIRED')
-      const result = await securityRequest<{ identity: AuthIdentity; settings: Record<string, unknown> }>('/v1/identity', { id_token: match[1] })
-      if (!result.identity || result.identity.provider !== 'authentik' || result.identity.issuer !== process.env.AUTHENTIK_ISSUER_URL || typeof result.identity.sub !== 'string' || !result.identity.sub || typeof result.settings?.pk !== 'string' || !result.settings.pk || typeof result.identity.username !== 'string' || typeof result.identity.display_name !== 'string' || !Array.isArray(result.identity.groups) || !Array.isArray(result.identity.roles)) {
-        throw new AppError('Invalid verified identity', 401, 'AUTH_REQUIRED')
-      }
-      req.identityToken = match[1]
+      const identity = identityFromToken(match[1])
+      const result = await callOperationAs('identity_resolve', { issuer: identity.issuer, provider: identity.provider, sub: identity.sub, display_name: identity.display_name, avatar_url: identity.avatar, discord_subjects: identity.discord_subjects }, { athlete: '', person: '' }) as { settings?: Record<string, unknown> }
+      if (typeof result?.settings?.pk !== 'string' || !result.settings.pk) throw new AppError('Identity resolution failed', 503, 'AUTH_CONTEXT_FAILED')
       req.settings = normalizeSettings(result.settings)
-      req.user = { identity: result.identity, discord_id: '', username: req.settings.username, avatar: result.identity.avatar, actor_mapped_pk: req.settings.pk }
+      req.user = { identity, discord_id: '', username: req.settings.username, avatar: identity.avatar, actor_mapped_pk: req.settings.pk }
       next()
     } catch (error) { next(error) }
   })

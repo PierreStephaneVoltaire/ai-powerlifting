@@ -2,7 +2,7 @@ import { operationScope } from './operationScope'
 import { randomUUID } from 'crypto'
 import { callOperation, pollJob } from './operations'
 import { coachUrl } from './coachUrl'
-import { serviceHeaders } from '../auth/principal'
+import { serviceHeaders } from './serviceHeaders'
 import type { OperationContext } from './operationScope'
 
 
@@ -13,7 +13,7 @@ async function invokeInference(payload: Record<string, unknown>, conversationId:
   const conversation = `powerlifting:${scope.athlete}:${conversationId || randomUUID()}`
   const response = await fetch(`${coachUrl()}/v1/conversations/${encodeURIComponent(conversation)}/turns`, {
     method: 'POST',
-    headers: await serviceHeaders('conversation_turn', scope, 'pl-coach'),
+    headers: serviceHeaders(scope),
     body: JSON.stringify({ athlete: scope.athlete, messages: payload.messages, specialist: payload.specialist, model: 'gpt-5.6-sol' }),
   })
   if (!response.ok) throw new Error(`IF job submission failed ${response.status}: ${await response.text()}`)
@@ -32,7 +32,7 @@ export async function coachChat(conversationId: string, message: string, binding
   const { person } = scope
   const response = await fetch(`${coachUrl()}/v1/conversations/${encodeURIComponent(conversationId)}/turns`, {
     method: 'POST',
-    headers: await serviceHeaders('conversation_turn', scope, 'pl-coach'),
+    headers: serviceHeaders(scope),
     body: JSON.stringify({ athlete: scope.athlete, messages: [{ role: 'user', content: message }], ...(binding || {}) }),
   })
   if (!response.ok) throw new Error(`Chat submission failed ${response.status}: ${await response.text()}`)
@@ -45,7 +45,7 @@ export async function resetCoachChat(conversationId: string): Promise<void> {
   const { person } = scope
   const response = await fetch(`${coachUrl()}/v1/conversations/${encodeURIComponent(conversationId)}`, {
     method: 'DELETE',
-    headers: await serviceHeaders('conversation_reset', scope, 'pl-coach'),
+    headers: serviceHeaders(scope),
   })
   if (!response.ok) throw new Error(`Chat reset failed ${response.status}: ${await response.text()}`)
 }

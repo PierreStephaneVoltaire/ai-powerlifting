@@ -8,7 +8,6 @@ test('apply preserves domain validation status through the gateway', async () =>
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input) => {
     const url = String(input)
-    if (url.endsWith('/v1/principals')) return Response.json({ principal: 'operation-token' })
     if (url.endsWith('/operations/import_apply')) {
       return new Response(JSON.stringify({ detail: { code: 'operation_failed', message: 'Import already applied' } }), { status: 422 })
     }

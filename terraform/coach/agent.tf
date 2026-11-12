@@ -32,7 +32,7 @@ resource "kubernetes_service_account_v1" "coach" {
 }
 
 resource "kubernetes_deployment_v1" "coach" {
-  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination]
+  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers]
   wait_for_rollout = false
 
   lifecycle {
@@ -124,20 +124,7 @@ resource "kubernetes_deployment_v1" "coach" {
             }
           }
 
-          env {
-            name  = "PL_SECURITY_URL"
-            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
-          }
 
-          env {
-            name = "PL_PRINCIPAL_PUBLIC_KEY"
-            value_from {
-              secret_key_ref {
-                name = "pl-security-signing-key"
-                key  = "public_key"
-              }
-            }
-          }
 
           port {
             container_port = 8000

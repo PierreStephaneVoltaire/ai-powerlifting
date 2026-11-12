@@ -71,6 +71,8 @@ jobs:
         with:
           version: 1.13.x
       - working-directory: docker
+        env:
+          PACKER_GITHUB_API_TOKEN: ${{ github.token }}
         run: packer init "${{ matrix.image }}.pkr.hcl"
       - working-directory: docker
         env:

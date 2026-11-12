@@ -175,7 +175,6 @@ function startFakeServices(): Promise<http.Server> {
           res.end(JSON.stringify(status >= 400 ? { detail: { message: payload?.error, code: 'validation' } } : payload))
         }
         try {
-          if (route === '/v1/principals') return respond(200, { principal: 'operation-token' })
           const operation = route.startsWith('/profile/operations/') ? route.slice('/profile/operations/'.length) : ''
           if (!store[athlete]) store[athlete] = defaultSettings(athlete)
           if (operation === 'onboarding_status') return respond(200, deriveStatus(store[athlete]))
@@ -274,7 +273,6 @@ async function main() {
   const servicesServer = await startFakeServices()
   const servicesPort = (servicesServer.address() as AddressInfo).port
   process.env.POWERLIFTING_SERVICE_BASE_URL = `http://127.0.0.1:${servicesPort}`
-  process.env.PL_SECURITY_URL = `http://127.0.0.1:${servicesPort}`
 
   const { onboardingRouter } = await import('../../routes/onboarding')
   const { operationScope } = await import('../../utils/operationScope')

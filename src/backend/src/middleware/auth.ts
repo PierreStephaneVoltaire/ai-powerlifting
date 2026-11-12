@@ -8,7 +8,7 @@ import { configureMeshAuthentication } from './meshAuth'
 declare global { namespace Express { interface User {
   discord_id: string; username: string; avatar: string | null; actor_mapped_pk: string; identity: AuthIdentity
 } interface Request {
-  user?: User; mapped_pk?: string; actor_mapped_pk?: string; readOnly?: boolean; settings?: UserSettings; identityToken?: string; operationPrincipal?: string
+  user?: User; mapped_pk?: string; actor_mapped_pk?: string; readOnly?: boolean; settings?: UserSettings
 } } }
 
 export async function configureAuthentication(app: Express): Promise<void> {
@@ -44,7 +44,7 @@ export async function resolvePk(req: Request, _res: Response, next: NextFunction
       req.user.username = settings.username
       req.user.identity = { ...identity, username: settings.username, ...groupsFromSettings(identity.groups, identity.roles, settings.roles, settings.active_role) }
     }
-    operationScope.run({ athlete: req.mapped_pk || '', person: req.actor_mapped_pk || '', identityToken: req.identityToken, principal: req.operationPrincipal }, next)
+    operationScope.run({ athlete: req.mapped_pk || '', person: req.actor_mapped_pk || '' }, next)
   } catch (error) { next(error instanceof AppError ? error : new AppError('Failed to resolve authenticated identity', 503, 'AUTH_CONTEXT_FAILED')) }
 }
 

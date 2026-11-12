@@ -8,7 +8,7 @@ from services.coach_discord.app import create_app
 from services.coach_discord.gateway import NOT_LINKED, Relay, chunks, conversation_for
 from services.coach_discord.store import Registration, RegistrationStore
 
-ACCESS = {'X-PL-Access-Context': json.dumps({'workload': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'})}
+ACCESS = {'X-PL-Source-Principal': 'spiffe://cluster.local/ns/powerlifting/sa/powerlifting-app-backend'}
 
 
 class Directory:
@@ -71,11 +71,11 @@ class FakeCoach:
         self.asked = []
         self.resets = []
 
-    async def ask(self, person, athlete, conversation_id, text, discord_subject):
+    async def ask(self, person, athlete, conversation_id, text):
         self.asked.append((person, athlete, conversation_id, text))
         return self.reply
 
-    async def reset(self, person, athlete, conversation_id, discord_subject):
+    async def reset(self, person, athlete, conversation_id):
         self.resets.append((person, conversation_id))
 
 

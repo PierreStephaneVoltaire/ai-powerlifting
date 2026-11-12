@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 import httpx
 
@@ -17,20 +16,16 @@ class CoachClient:
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url=self.base_url, timeout=30, transport=self.transport)
 
-    async def _headers(self, person: str, athlete: str, discord_subject: str, operation: str) -> dict[str, str]:
-        async with self._client() as client:
-            response = await client.post(os.getenv('PL_SECURITY_URL', 'http://pl-security:8000').rstrip('/') + '/v1/principals', json={
-                'discord_subject': discord_subject, 'athlete': athlete, 'operation': operation, 'destination': 'pl-coach'})
-            response.raise_for_status()
-            return {'X-Person-Pk': person, 'X-Athlete-Pk': athlete, 'X-PL-Principal': response.json()['principal']}
+    def _headers(self, person: str, athlete: str) -> dict[str, str]:
+        return {'X-Person-Pk': person, 'X-Athlete-Pk': athlete}
 
-    async def ask(self, person: str, athlete: str, conversation_id: str, text: str, discord_subject: str) -> str:
+    async def ask(self, person: str, athlete: str, conversation_id: str, text: str) -> str:
         async with self._client() as client:
-            response = await client.post(f"/v1/conversations/{conversation_id}/turns", json={"messages": [{"role": "user", "content": text}], "athlete": athlete}, headers=await self._headers(person, athlete, discord_subject, 'conversation_turn'))
+            response = await client.post(f"/v1/conversations/{conversation_id}/turns", json={"messages": [{"role": "user", "content": text}], "athlete": athlete}, headers=self._headers(person, athlete))
             response.raise_for_status()
             job_id = response.json()["job_id"]
             for _ in range(int(self.timeout_seconds / self.poll_seconds)):
-                response = await client.get(f"/v1/jobs/{job_id}/result", headers=await self._headers(person, athlete, discord_subject, 'domain_job_read'))
+                response = await client.get(f"/v1/jobs/{job_id}/result", headers=self._headers(person, athlete))
                 response.raise_for_status()
                 job = response.json()
                 if job["status"] in TERMINAL:
@@ -40,7 +35,7 @@ class CoachClient:
                 await asyncio.sleep(self.poll_seconds)
         return "The Coach is still working; ask again in a moment."
 
-    async def reset(self, person: str, athlete: str, conversation_id: str, discord_subject: str) -> None:
+    async def reset(self, person: str, athlete: str, conversation_id: str) -> None:
         async with self._client() as client:
-            response = await client.delete(f"/v1/conversations/{conversation_id}", headers=await self._headers(person, athlete, discord_subject, 'conversation_reset'))
+            response = await client.delete(f"/v1/conversations/{conversation_id}", headers=self._headers(person, athlete))
             response.raise_for_status()

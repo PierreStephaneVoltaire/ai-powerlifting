@@ -59,10 +59,6 @@ resource "kubernetes_deployment_v1" "backend" {
             }
           }
 
-          env {
-            name  = "PL_SECURITY_URL"
-            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
-          }
 
           env {
             name = "MEDIA_SIGNING_PRIVATE_KEY"

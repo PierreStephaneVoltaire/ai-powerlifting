@@ -112,11 +112,11 @@ def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as
         return httpx.Response(200, json={"data": {"schemaVersion": 6}, "error": None}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(composite.httpx, "post", fake_post)
-    composite.call_node("analytics.manifest", {"pk": "athlete-1", "_person_pk": "coach-1", "_if_job_id": "job-1", "_principal": "scope-token"})
+    composite.call_node("analytics.manifest", {"pk": "athlete-1", "_person_pk": "coach-1", "_if_job_id": "job-1"})
     headers = calls[0][1]["headers"]
     assert headers["X-Person-Pk"] == "coach-1"
     assert headers["X-IF-Turn-Id"] == "job-1"
-    assert headers["X-PL-Principal"] == "scope-token"
+    assert "X-PL-Principal" not in headers
     assert headers["X-Internal-Token"] == "loopback-secret"
     assert calls[0][1]["json"] == {"pk": "athlete-1"}
 

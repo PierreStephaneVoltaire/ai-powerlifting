@@ -13,7 +13,7 @@ resource "kubernetes_secret_v1" "analytics" {
 }
 
 resource "kubernetes_deployment_v1" "analytics" {
-  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination, kubectl_manifest.strict_mtls]
+  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
 
   metadata {
@@ -73,10 +73,6 @@ resource "kubernetes_deployment_v1" "analytics" {
             }
           }
 
-          env {
-            name  = "PL_SECURITY_URL"
-            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
-          }
 
           env {
             name = "ANALYTICS_NODE_TOKEN"

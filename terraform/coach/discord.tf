@@ -7,7 +7,7 @@ resource "kubernetes_service_account_v1" "coach_discord" {
 }
 
 resource "kubernetes_deployment_v1" "coach_discord" {
-  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.central_authz, kubectl_manifest.authorized_destination]
+  depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers]
   wait_for_rollout = false
 
   metadata {
@@ -63,10 +63,6 @@ resource "kubernetes_deployment_v1" "coach_discord" {
             value = jsonencode(var.discord_persons)
           }
 
-          env {
-            name  = "PL_SECURITY_URL"
-            value = "http://pl-security.${var.namespace}.svc.cluster.local:8000"
-          }
 
           env {
             name  = "AWS_SHARED_CREDENTIALS_FILE"

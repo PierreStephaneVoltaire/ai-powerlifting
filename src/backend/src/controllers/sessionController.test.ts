@@ -14,7 +14,6 @@ test('exercise field updates read and patch the stable Session after same-day re
     const request = new Request(input, init)
     const body = await request.json()
     calls.push({ url: request.url, body })
-    if (request.url.endsWith('/v1/principals')) return Response.json({ principal: 'operation-token' })
     if (request.url.endsWith('/operations/session_get')) {
       assert.equal(body.session_id, 'session-intended')
       return new Response(JSON.stringify(sessions.find(session => session.id === body.session_id)), { status: 200 })

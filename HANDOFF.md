@@ -10,39 +10,35 @@
   detail for 2026-11-12. No API calls returned 4xx/5xx.
 - All 17 `pl-*` services, oauth2-proxy, pl-security (2 replicas), backend and frontend are Running.
 
-## Pending task: remove pl-security (ADR-0006 was rewritten today)
+## Pending task: remove pl-security (ADR-0006)
 
-`docs/adr/0006-ambient-mesh-and-authentik-only-login.md` now describes the target design. No code
-has changed yet.
+### Deploy 1 — code done 2026-11-12, waiting on commit + pipeline
 
-Target design:
+- Backend reads the Authentik ID token that OAuth2 Proxy passes in `Authorization`
+  (`src/backend/src/auth/oidcIdentity.ts`), checks issuer/audience, then calls the
+  `identity_resolve` operation on pl-profile. Discord alias linking moved into that handler
+  (`handlers/user/identity_resolve/discord_links.py`).
+- Backend, Coach, the Discord bot and domain services send `X-Person-Pk` / `X-Athlete-Pk`
+  (`src/backend/src/utils/serviceHeaders.ts`). No principals, delegation or job capabilities.
+- Domain services run `current_context` + `check_context` in-process
+  (`services/app.py::authorization_context`). Internal-only operations require the caller to be
+  the backend, read from the waypoint-stamped `x-pl-source-principal` header
+  (`terraform/k8s/app/waypoint_identity.tf`, `services/mesh.py`).
+- Coach authorizes jobs by calling pl-profile `access_context` with `operation` + `arguments`.
+- Mesh: per-service ALLOW caller policies (`service_callers` in `terraform/k8s/app/mesh.tf` and
+  `terraform/coach/mesh.tf`) replace the CUSTOM ext_authz and authorized-destination policies.
+  pl-security Deployment/Service/secret are removed in the app stack.
+- Packer init now authenticates with the workflow token (GitHub API rate limit flake).
 
-1. OAuth2 Proxy validates login. Express reads the user from proxy headers: add
-   `--set-xauthrequest` / `--pass-user-headers` to oauth2-proxy in
-   `terraform/k8s/app/security.tf`. The backend accepts traffic only from the oauth2-proxy
-   service account (`mesh.tf` `backend_from_oauth2_proxy`, which already exists).
-2. The backend and the Discord bot send the acting Person in a header to domain services. The
-   bot resolves the Discord subject to a Person through the identity pointers in DynamoDB.
-3. Workload-to-workload Istio AuthorizationPolicies control who can call which service. The
-   caller map already exists as `security_allowed_callers` in `terraform/k8s/app/security.tf`;
-   turn it into per-service ALLOW policies.
-4. Each domain service calls `check_context` (`src/services/authorization.py`) in-process for
-   per-user operations. Starting a job is authorized as a per-user operation. The job then runs
-   as the service, with the initiating Person stored on the job record.
-5. Delete: `src/services/security/`, `src/services/principal.py`, `src/services/coach/principal.py`,
-   `src/backend/src/auth/{security,principal}.ts`, the `/v1/identity` call in
-   `src/backend/src/middleware/meshAuth.ts`, the pl-security Deployment/Service/ext_authz
-   provider/destination-binding policies, and `terraform/k8s/mesh/main.tf` extensionProviders.
+### Deploy 2 — after deploy 1 is verified
 
-Files that reference principals or pl-security and need edits:
+1. `terraform/k8s/mesh/main.tf`: remove the `nolift-security` `extensionProviders` entry.
+2. `terraform/k8s/perms/portal_accounts.tf`: remove the `pl-security` ServiceAccount.
+3. Delete the SSM parameters `/powerlifting/security/principal-signing-{private,public}-key`
+   (operator only; never delete AWS resources from an agent).
+4. Delete leftover hot-fix ConfigMaps `pl-security-code`, `pl-videos-media-code`,
+   `pl-coach-discord-code`, and the old `Media#` rows in `if-health` (backup in the session
+   scratchpad, `media-backup-if-health.json`).
 
-- Python: `src/services/{app,execution,generations,authorization}.py`,
-  `src/services/coach/{model,services}.py`, `src/services/coach_discord/coach_client.py`,
-  `src/services/handlers/analysis_reports/composite.py`
-- Backend: `src/backend/src/{analyticsSidecar.ts,utils/logger.ts,middleware/meshAuth.ts}`
-- Terraform: `terraform/k8s/app/{portal,mesh,services,analytics,security}.tf`,
-  `terraform/k8s/{mesh/main.tf,network/routes.tf,perms/portal_accounts.tf}`,
-  `terraform/coach/{agent,discord}.tf`
-
-Order: cut over consumers first (backend, services, coach, bot) while pl-security is still up,
-deploy, then delete pl-security and the ext_authz provider in a second deploy.
+Keep them separate: the mesh stack applies before the app stack, so removing the provider in
+deploy 1 would deny all traffic until the CUSTOM policies are gone.

@@ -19,9 +19,7 @@ def call_node(operation: str, args: dict[str, Any]) -> Any:
     }
     if args.get("_if_job_id"):
         headers["X-IF-Turn-Id"] = str(args["_if_job_id"])
-    if args.get('_principal'):
-        headers['X-PL-Principal'] = str(args['_principal'])
-    payload = {key: value for key, value in args.items() if key not in {"_if_job_id", "_person_pk", "_principal"}}
+    payload = {key: value for key, value in args.items() if key not in {"_if_job_id", "_person_pk"}}
     response = httpx.post(f"{url}/internal/analytics/operations/{operation}", headers=headers, json=payload, timeout=900)
     if response.status_code >= 400:
         if response.status_code == 404 and operation in {'analytics.blocks_get', 'analytics.correlation'}:
