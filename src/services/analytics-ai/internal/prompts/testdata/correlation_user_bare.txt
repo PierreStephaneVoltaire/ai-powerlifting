@@ -1,0 +1,14 @@
+## Analysis window: Last 6 weeks (from 2026-09-07)
+
+## Weekly e1RM Estimates (kg)
+
+| Week | Squat | Bench | Deadlift |
+|------|-------|-------|----------|
+| W1 | 100.0 | - | - |
+
+## Task
+Analyze the data above. Identify which accessory exercises have volume trends
+that plausibly correlate with changes in Squat, Bench, or Deadlift e1RM.
+Only report anatomically relevant correlations as per the system instructions.
+Where the exercise ROI table gives a strong |r|, use it to upgrade confidence on
+anatomically-plausible findings — never invent correlations from ROI alone.

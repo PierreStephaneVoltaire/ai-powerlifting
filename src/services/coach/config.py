@@ -33,6 +33,7 @@ class Settings:
     providers: dict[str, Provider]
     conversation_ai: AISettings
     operation_ai: dict[str, AISettings]
+    lifetime_bucket: str = ""
 
     @property
     def database(self) -> Path:
@@ -62,4 +63,5 @@ def load() -> Settings:
         providers=_providers(),
         conversation_ai=AISettings(**json.loads(os.environ["COACH_CONVERSATION_AI"])),
         operation_ai={name: AISettings(**value) for name, value in json.loads(os.environ["COACH_OPERATION_AI"]).items()},
+        lifetime_bucket=os.getenv("POWERLIFTING_S3_BUCKET", ""),
     )

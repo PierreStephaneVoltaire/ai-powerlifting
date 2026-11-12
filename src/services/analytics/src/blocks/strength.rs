@@ -87,10 +87,14 @@ pub fn estimate(
     manual: Option<&StartMaxes>,
 ) -> StrengthSummary {
     let all = records(sessions);
-    let start_cutoff = iso_date(start_date)
-        .map_or_else(|| start_date.to_owned(), |date| (date + Duration::days(21)).to_string());
-    let end_cutoff = iso_date(end_date)
-        .map_or_else(|| end_date.to_owned(), |date| (date - Duration::days(21)).to_string());
+    let start_cutoff = iso_date(start_date).map_or_else(
+        || start_date.to_owned(),
+        |date| (date + Duration::days(21)).to_string(),
+    );
+    let end_cutoff = iso_date(end_date).map_or_else(
+        || end_date.to_owned(),
+        |date| (date - Duration::days(21)).to_string(),
+    );
     let pick = |lift: &str, from_start: bool| -> Option<f64> {
         let mut lifted: Vec<&Record> = all.iter().filter(|record| record.lift == lift).collect();
         if lifted.is_empty() {
@@ -108,7 +112,11 @@ pub fn estimate(
             })
             .collect();
         let best = if windowed.is_empty() {
-            let edge = if from_start { lifted.first() } else { lifted.last() };
+            let edge = if from_start {
+                lifted.first()
+            } else {
+                lifted.last()
+            };
             edge.map_or(f64::NEG_INFINITY, |record| record.e1rm)
         } else {
             windowed

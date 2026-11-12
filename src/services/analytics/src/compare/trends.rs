@@ -4,9 +4,7 @@ use chrono::Duration;
 use serde_json::Value;
 
 use super::context::Context;
-use super::types::{
-    CompetitionSummary, GoalSummary, Point, Row, TrainingDays, TrendPoint, Trends,
-};
+use super::types::{CompetitionSummary, GoalSummary, Point, Row, TrainingDays, TrendPoint, Trends};
 use crate::blocks::outcome::dots;
 use crate::blocks::scope::{exercise_volume, latest_bodyweight};
 use crate::blocks::strength::{canonical_lift, set_e1rm};
@@ -67,7 +65,13 @@ pub fn row(bundle: &Bundle, context: Option<&Context>) -> Row {
             .and_then(|total| number(total.get("deltaKg"))),
         data_quality_flags: bundle.historical.missing_data.clone(),
         competitions: context
-            .map(|context| context.competitions.iter().map(competition_summary).collect())
+            .map(|context| {
+                context
+                    .competitions
+                    .iter()
+                    .map(competition_summary)
+                    .collect()
+            })
             .unwrap_or_default(),
         goals: context
             .map(|context| {

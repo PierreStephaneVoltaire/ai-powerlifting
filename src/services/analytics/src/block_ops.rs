@@ -69,7 +69,7 @@ impl Engine {
         let entry = scoped_entry(workspace, raw);
         let cache_key = bundle_key(&raw.block_key, &entry.source_fingerprint);
         let latest_key = bundle_key(&raw.block_key, "latest");
-        if !(refresh && !cache_only) {
+        if !refresh || cache_only {
             let mut saved = self.cache.read::<Bundle>(athlete, &cache_key).await;
             if saved.is_none() && cache_only {
                 saved = self.cache.read::<Bundle>(athlete, &latest_key).await;
@@ -85,8 +85,12 @@ impl Engine {
             return Ok(None);
         }
         let computed = tokio::task::block_in_place(|| bundle::compute(workspace, env, raw))?;
-        self.cache.write(athlete, &cache_key, &computed, false).await;
-        self.cache.write(athlete, &latest_key, &computed, false).await;
+        self.cache
+            .write(athlete, &cache_key, &computed, false)
+            .await;
+        self.cache
+            .write(athlete, &latest_key, &computed, false)
+            .await;
         Ok(Some(computed))
     }
 
@@ -114,7 +118,7 @@ impl Engine {
         let cache_only = args.cache_only.unwrap_or(false);
         let version = self.cache.version(&args.pk).await;
         let view = view_key(&args.block_key, &version);
-        if !(refresh && !cache_only)
+        if (!refresh || cache_only)
             && let Some(saved) = self.cache.read::<Value>(&args.pk, &view).await
         {
             return Ok(mark_cached(saved));
@@ -190,7 +194,10 @@ impl Engine {
         let env = self.env(&loaded);
         let mut bundles = Vec::new();
         let mut contexts = BTreeMap::new();
-        for raw in entries.iter().filter(|entry| selected.contains(&entry.block_key)) {
+        for raw in entries
+            .iter()
+            .filter(|entry| selected.contains(&entry.block_key))
+        {
             let scoped = scoped_entry(&workspace, raw);
             contexts.insert(
                 scoped.block_key.clone(),
@@ -224,7 +231,10 @@ impl Engine {
         Ok(value)
     }
 
-    pub async fn compute_lifetime(&self, athlete: &str) -> Result<lifetime::types::Lifetime, Error> {
+    pub async fn compute_lifetime(
+        &self,
+        athlete: &str,
+    ) -> Result<lifetime::types::Lifetime, Error> {
         let loaded = self.everything(athlete).await?;
         let workspace = workspace(&loaded, self.clock.today());
         let entries = index::build(&workspace);
@@ -252,6 +262,30 @@ impl Engine {
 
     pub async fn list_blocks_typed(&self, athlete: &str) -> Result<Vec<BlockEntry>, Error> {
         let loaded = self.everything(athlete).await?;
-        Ok(blocks::index::build(&workspace(&loaded, self.clock.today())))
+        Ok(blocks::index::build(&workspace(
+            &loaded,
+            self.clock.today(),
+        )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lifetime_cache_key_is_versioned() {
+        assert_eq!(lifetime_key("0"), "native_lifetime#0");
+        assert_eq!(lifetime_key("42"), "native_lifetime#42");
+    }
+
+    #[test]
+    fn block_cache_keys_keep_the_python_layout() {
+        assert_eq!(index_key("7"), "native_block_index#5#2#7");
+        assert_eq!(view_key("current", "7"), "native_block_view#5#current#7");
+        assert_eq!(
+            bundle_key("current", "latest"),
+            "native_block#5#current#latest"
+        );
     }
 }

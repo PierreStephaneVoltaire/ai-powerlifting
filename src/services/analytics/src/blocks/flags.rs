@@ -1,9 +1,9 @@
 use serde_json::Value;
 
+use super::Workspace;
 use super::competitions::{flag_truthy, has_results, results_of};
 use super::strength::{self, manual_start_maxes};
 use super::types::{Flag, Link};
-use super::Workspace;
 use crate::js::truthy;
 use crate::model::Session;
 
@@ -76,7 +76,8 @@ pub fn data_quality(
                     "Missing post-meet report",
                 ));
             }
-            let nested = results_of(competition).and_then(|results| results.get("projected_at_t_minus_1w"));
+            let nested =
+                results_of(competition).and_then(|results| results.get("projected_at_t_minus_1w"));
             if !flag_truthy(competition, "projected_at_t_minus_1w") && !truthy(nested) {
                 flags.push(Flag::warning(
                     "missing_t_minus_1_projection",

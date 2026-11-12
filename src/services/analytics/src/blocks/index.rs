@@ -54,7 +54,10 @@ pub fn fingerprint(
         .filter_map(|session| session["date"].as_str())
         .rfind(|date| !date.is_empty());
     let (block_notes, diet_notes) = match first.zip(last) {
-        Some((start, end)) => (workspace.block_notes(start, end), workspace.diet_notes(start, end)),
+        Some((start, end)) => (
+            workspace.block_notes(start, end),
+            workspace.diet_notes(start, end),
+        ),
         None => (Vec::new(), Vec::new()),
     };
     let meta = workspace.meta();
@@ -159,10 +162,22 @@ pub fn build(workspace: &Workspace<'_>) -> Vec<BlockEntry> {
             let linked = link_for_block(&start, &end, &competitions);
             let scoped = window(workspace, &start, &end, linked.as_ref());
             let scoped_goals = goals::for_competitions(&workspace.goals, &scoped);
-            let source_fingerprint =
-                fingerprint(workspace, &block, &sessions, &phases, &scoped, &scoped_goals);
-            let flags =
-                data_quality(workspace, &sessions, &start, &end, linked.as_ref(), &block_key);
+            let source_fingerprint = fingerprint(
+                workspace,
+                &block,
+                &sessions,
+                &phases,
+                &scoped,
+                &scoped_goals,
+            );
+            let flags = data_quality(
+                workspace,
+                &sessions,
+                &start,
+                &end,
+                linked.as_ref(),
+                &block_key,
+            );
             let comparison_eligible = linked
                 .as_ref()
                 .is_some_and(|link| has_results(results_of(&link.competition)));

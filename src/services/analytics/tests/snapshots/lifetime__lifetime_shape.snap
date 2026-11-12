@@ -1,0 +1,574 @@
+---
+source: tests/lifetime.rs
+expression: shape(&report)
+---
+{
+  "schema_version": "number",
+  "generated_at": "string",
+  "block_count": "number",
+  "min_block_weeks": "number",
+  "blocks": [
+    {
+      "week_count": "number",
+      "is_current": "bool",
+      "training_only": "bool",
+      "exposure": {
+        "acwr_peak": "number",
+        "acwr_composite": "number",
+        "monotony": {
+          "mean": "number",
+          "peak": "number"
+        },
+        "strain": {
+          "mean": "number",
+          "peak": "number"
+        },
+        "compliance_pct": "number",
+        "deload": {
+          "positions": [
+            "number"
+          ],
+          "weeks": [
+            "number"
+          ],
+          "break_weeks": [
+            "number"
+          ],
+          "count": "number",
+          "per_10_weeks": "number",
+          "placement": "string"
+        },
+        "training_weeks": "number",
+        "training_days_per_week": "number",
+        "weekly_hard_sets": "number",
+        "weekly_tonnage_kg": "number",
+        "lifts": {
+          "bench": {
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "avg_rpe": "number",
+            "avg_inol": "number",
+            "peak_inol": "number",
+            "total_sets": "number",
+            "weekly_hard_sets": "number",
+            "intensity_bands": {
+              "heavy_pct": "number",
+              "moderate_pct": "number",
+              "light_pct": "number"
+            }
+          },
+          "deadlift": {
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "avg_rpe": "number",
+            "avg_inol": "number",
+            "peak_inol": "number",
+            "total_sets": "number",
+            "weekly_hard_sets": "number",
+            "intensity_bands": {
+              "heavy_pct": "number",
+              "moderate_pct": "number",
+              "light_pct": "number"
+            }
+          },
+          "squat": {
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "avg_rpe": "number",
+            "avg_inol": "number",
+            "peak_inol": "number",
+            "total_sets": "number",
+            "weekly_hard_sets": "number",
+            "intensity_bands": {
+              "heavy_pct": "number",
+              "moderate_pct": "number",
+              "light_pct": "number"
+            }
+          }
+        },
+        "accessories": {
+          "chest": {
+            "avg_rpe": "null",
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "total_sets": "number"
+          },
+          "arm": {
+            "avg_rpe": "number",
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "total_sets": "number"
+          },
+          "deadlift": {
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "avg_rpe": "number",
+            "total_sets": "number"
+          },
+          "core": {
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "avg_rpe": "number",
+            "total_sets": "number"
+          },
+          "lower_back": {
+            "avg_rpe": "number",
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "total_sets": "number"
+          },
+          "legs": {
+            "avg_rpe": "number",
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "total_sets": "number"
+          },
+          "back": {
+            "avg_rpe": "number",
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "total_sets": "number"
+          },
+          "bench": {
+            "avg_rpe": "number",
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "weekly_frequency": "number",
+            "total_sets": "number"
+          },
+          "uncategorized": {
+            "weekly_frequency": "number",
+            "avg_rpe": "number",
+            "weekly_hard_sets": "number",
+            "weekly_tonnage_kg": "number",
+            "total_sets": "number"
+          }
+        },
+        "fatigue": {
+          "index": "number",
+          "dimension_mean": {
+            "axial": "number",
+            "neural": "number",
+            "peripheral": "number",
+            "systemic": "number"
+          },
+          "dimension_peak": {
+            "axial": "number",
+            "neural": "number",
+            "peripheral": "number",
+            "systemic": "number"
+          }
+        },
+        "specificity": {
+          "broad": "number",
+          "narrow": "number"
+        }
+      },
+      "outcome": {
+        "ipf_gl": {
+          "start": "number",
+          "end": "number",
+          "delta": "number",
+          "delta_per_week": "number"
+        },
+        "competition": "null",
+        "e1rm": {
+          "bench": {
+            "start": "number",
+            "end": "number",
+            "delta": "number",
+            "delta_per_week": "number"
+          },
+          "deadlift": {
+            "start": "number",
+            "end": "number",
+            "delta": "number",
+            "delta_per_week": "number"
+          },
+          "squat": {
+            "start": "number",
+            "end": "number",
+            "delta": "number",
+            "delta_per_week": "number"
+          },
+          "total": {
+            "start": "number",
+            "end": "number",
+            "delta": "number",
+            "delta_per_week": "number"
+          }
+        },
+        "dots": {
+          "start": "number",
+          "end": "number",
+          "delta": "number",
+          "delta_per_week": "number"
+        },
+        "rpe_drift": {
+          "bench": {
+            "slope": "number",
+            "direction": "string"
+          },
+          "deadlift": {
+            "slope": "number",
+            "direction": "string"
+          },
+          "squat": {
+            "slope": "number",
+            "direction": "string"
+          }
+        }
+      },
+      "classification": {
+        "overall": {
+          "noise_kg": "number",
+          "threshold_kg": "number",
+          "label": "string",
+          "delta_kg": "number",
+          "basis": "string"
+        },
+        "per_lift": {
+          "bench": {
+            "noise_kg": "number",
+            "threshold_kg": "number",
+            "label": "string",
+            "delta_kg": "number",
+            "basis": "string"
+          },
+          "deadlift": {
+            "noise_kg": "number",
+            "threshold_kg": "number",
+            "label": "string",
+            "delta_kg": "number",
+            "basis": "string"
+          },
+          "squat": {
+            "noise_kg": "number",
+            "threshold_kg": "number",
+            "label": "string",
+            "delta_kg": "number",
+            "basis": "string"
+          }
+        }
+      },
+      "block_key": "string",
+      "label": "string",
+      "start_date": "string",
+      "end_date": "string",
+      "data_quality_flags": [
+        {
+          "code": "string",
+          "label": "string",
+          "severity": "string"
+        }
+      ]
+    }
+  ],
+  "classification": {
+    "thresholds": {
+      "method": "string",
+      "noise_multiplier": "number",
+      "min_threshold_pct": "number",
+      "fallback_noise_pct": "number",
+      "min_series_points": "number"
+    },
+    "overall": {
+      "improved": "number",
+      "stalled": "number",
+      "regressed": "number",
+      "insufficient_data": "number"
+    },
+    "per_lift": {
+      "bench": {
+        "improved": "number",
+        "stalled": "number",
+        "regressed": "number",
+        "insufficient_data": "number"
+      },
+      "deadlift": {
+        "improved": "number",
+        "stalled": "number",
+        "regressed": "number",
+        "insufficient_data": "number"
+      },
+      "squat": {
+        "improved": "number",
+        "stalled": "number",
+        "regressed": "number",
+        "insufficient_data": "number"
+      }
+    }
+  },
+  "correlations": [
+    {
+      "kendall": {
+        "z": "number",
+        "tau": "number",
+        "p": "number"
+      },
+      "spearman": {
+        "rho": "number",
+        "p": "number"
+      },
+      "direction": "string",
+      "strength": "string",
+      "exposure": "string",
+      "outcome": "string",
+      "lift": "string",
+      "n": "number",
+      "low_n": "bool",
+      "observations": [
+        {
+          "x": "number",
+          "block_key": "string",
+          "y": "number"
+        }
+      ]
+    }
+  ],
+  "tolerance": {
+    "min_sample_size": "number",
+    "by_lift": {
+      "bench": {
+        "avg_inol": {
+          "sample_size": "number",
+          "low_n": "bool",
+          "bands": [
+            {
+              "blocks": "number",
+              "mean_delta_per_week": "number",
+              "label": "string",
+              "min": "number",
+              "max": "number",
+              "positive_share": "number"
+            }
+          ],
+          "positive_range": {
+            "min": "number",
+            "max": "number"
+          },
+          "stall_onset": "null"
+        },
+        "weekly_hard_sets": {
+          "sample_size": "number",
+          "low_n": "bool",
+          "bands": [
+            {
+              "blocks": "number",
+              "mean_delta_per_week": "number",
+              "label": "string",
+              "min": "number",
+              "max": "number",
+              "positive_share": "number"
+            }
+          ],
+          "positive_range": {
+            "min": "number",
+            "max": "number"
+          },
+          "stall_onset": "null"
+        }
+      },
+      "deadlift": {
+        "avg_inol": {
+          "sample_size": "number",
+          "low_n": "bool",
+          "bands": [
+            {
+              "mean_delta_per_week": "number",
+              "label": "string",
+              "min": "number",
+              "max": "number",
+              "blocks": "number",
+              "positive_share": "number"
+            }
+          ],
+          "positive_range": {
+            "min": "number",
+            "max": "number"
+          },
+          "stall_onset": "null"
+        },
+        "weekly_hard_sets": {
+          "sample_size": "number",
+          "low_n": "bool",
+          "bands": [
+            {
+              "blocks": "number",
+              "mean_delta_per_week": "number",
+              "label": "string",
+              "min": "number",
+              "max": "number",
+              "positive_share": "number"
+            }
+          ],
+          "positive_range": {
+            "min": "number",
+            "max": "number"
+          },
+          "stall_onset": "null"
+        }
+      },
+      "squat": {
+        "avg_inol": {
+          "sample_size": "number",
+          "low_n": "bool",
+          "bands": [
+            {
+              "blocks": "number",
+              "mean_delta_per_week": "number",
+              "label": "string",
+              "min": "number",
+              "max": "number",
+              "positive_share": "number"
+            }
+          ],
+          "positive_range": {
+            "min": "number",
+            "max": "number"
+          },
+          "stall_onset": "null"
+        },
+        "weekly_hard_sets": {
+          "sample_size": "number",
+          "low_n": "bool",
+          "bands": [
+            {
+              "blocks": "number",
+              "mean_delta_per_week": "number",
+              "label": "string",
+              "min": "number",
+              "max": "number",
+              "positive_share": "number"
+            }
+          ],
+          "positive_range": {
+            "min": "number",
+            "max": "number"
+          },
+          "stall_onset": "null"
+        }
+      }
+    }
+  },
+  "exercise_roi": [
+    {
+      "blockCount": "number",
+      "totalSets": "number",
+      "totalVolumeKg": "number",
+      "correlatedLifts": [
+        "empty"
+      ],
+      "positiveSignals": "number",
+      "negativeSignals": "number",
+      "unclearSignals": "number",
+      "confidence": "string",
+      "summary": "string",
+      "exercise": "string",
+      "blocks": [
+        {
+          "sets": "number",
+          "volumeKg": "number",
+          "correlations": [
+            "empty"
+          ],
+          "blockKey": "string",
+          "label": "string",
+          "liftDeltasKg": {
+            "deadlift": "number",
+            "squat": "number",
+            "bench": "number",
+            "total": "number"
+          }
+        }
+      ]
+    }
+  ],
+  "lift_dose_response": [
+    {
+      "strengthDeltaKg": "number",
+      "responsePerSetKg": "number",
+      "blockKey": "string",
+      "label": "string",
+      "lift": "string",
+      "avgInol": "number",
+      "rawAvgInol": "number",
+      "sets": "number",
+      "volumeKg": "number",
+      "responsePer1000Kg": "number"
+    }
+  ],
+  "training_day_response": [
+    {
+      "blockKey": "string",
+      "label": "string",
+      "completedWeeks": "number",
+      "totalTrainingDays": "number",
+      "avgTrainingDaysPerWeek": "number",
+      "strengthDeltaKg": "number",
+      "compliancePct": "number"
+    }
+  ],
+  "pattern_signals": [
+    {
+      "kind": "string",
+      "finding": "string",
+      "evidence": "string",
+      "confidence": "string"
+    }
+  ],
+  "worked": [
+    {
+      "statement": "string",
+      "strength": "string",
+      "n": "number",
+      "low_n": "bool",
+      "tau": "number",
+      "p": "number",
+      "variable": "string",
+      "outcome": "string",
+      "lift": "string",
+      "evidence": [
+        {
+          "outcome": "number",
+          "block_key": "string",
+          "label": "string",
+          "exposure": "number",
+          "classification": "string"
+        }
+      ]
+    }
+  ],
+  "did_not_work": [
+    {
+      "strength": "string",
+      "n": "number",
+      "low_n": "bool",
+      "tau": "number",
+      "p": "number",
+      "variable": "string",
+      "outcome": "string",
+      "lift": "string",
+      "statement": "string",
+      "evidence": [
+        {
+          "exposure": "number",
+          "outcome": "number",
+          "block_key": "string",
+          "label": "string",
+          "classification": "string"
+        }
+      ]
+    }
+  ],
+  "data_limits": [
+    "string"
+  ]
+}

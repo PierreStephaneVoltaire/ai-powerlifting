@@ -75,12 +75,7 @@ def test_e1rm_covers_ten_reps_and_treats_a_missing_rpe_as_rpe_ten():
 def test_every_analytics_copy_estimates_eight_rep_sets_without_rpe():
     import importlib
 
-    for name in (
-        "services.handlers.analysis_reports.analytics",
-        "services.handlers.program.export_program_markdown.analytics",
-        "services.handlers.program.export_program_history.analytics",
-        "services.handlers.competition.health_snapshot_competition_projection.analytics",
-    ):
+    for name in ("services.lib.training_analysis",):
         module = importlib.import_module(name)
         sessions = [
             {"date": day, "status": "completed", "session_rpe": rpe, "exercises": [

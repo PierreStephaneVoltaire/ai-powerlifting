@@ -32,6 +32,9 @@ grafana_admin_password       = ""
 repositories = {
   services  = ""
   analytics = ""
+  rankings  = ""
+  analytics_ai = ""
+  analytics_export = ""
   backend   = ""
   frontend  = ""
 }

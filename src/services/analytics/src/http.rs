@@ -6,18 +6,19 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::Value;
 use tower_http::compression::CompressionLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 use utoipa::{OpenApi, ToSchema};
-use utoipa_scalar::{Scalar, Servable};
+use utoipa_swagger_ui::SwaggerUi;
 
-use crate::auth;
+use crate::api::ApiDoc;
+use crate::caller::Caller;
 use crate::config::DOMAIN;
 use crate::error::Error;
 use crate::mcp;
-use crate::operations::{Caller, Registry, Service};
+use crate::operations::Service;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -27,26 +28,12 @@ pub struct Health {
     domain: &'static str,
 }
 
-#[derive(OpenApi)]
-#[openapi(
-    info(title = "Powerlifting analytics", version = "1.0.0"),
-    paths(health, mcp::handle),
-    components(schemas(Health, mcp::RpcRequest))
-)]
-struct ApiDoc;
-
 pub fn router(service: Arc<Service>) -> Router {
-    let document = Arc::new(openapi(&service.registry));
-    let served = Arc::clone(&document);
     Router::new()
         .route("/health", get(health))
         .route("/operations/{name}", post(operation))
         .route("/mcp", post(mcp::handle))
-        .route(
-            "/openapi.json",
-            get(move || async move { Json(served.as_ref().clone()) }),
-        )
-        .merge(Scalar::with_url("/docs", document.as_ref().clone()))
+        .merge(SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))
         .layer(CompressionLayer::new())
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
@@ -56,44 +43,6 @@ pub fn router(service: Arc<Service>) -> Router {
         .with_state(service)
 }
 
-pub fn authenticate(service: &Service, headers: &HeaderMap) -> Result<(), Error> {
-    auth::check_internal_token(
-        &service.config.internal_token,
-        header(headers, "x-internal-token"),
-    )
-}
-
-fn header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
-    headers
-        .get(name)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-}
-
-pub fn principal_caller(headers: &HeaderMap) -> Caller {
-    Caller {
-        athlete: header(headers, "x-athlete-pk").to_owned(),
-        person: header(headers, "x-person-pk").to_owned(),
-        principal: header(headers, "x-pl-principal").to_owned(),
-        ..Caller::default()
-    }
-}
-
-fn caller(headers: &HeaderMap) -> Caller {
-    let turn = header(headers, "x-if-turn-id");
-    let job = if turn.is_empty() {
-        header(headers, "x-if-job-id")
-    } else {
-        turn
-    };
-    Caller {
-        job_id: job.to_owned(),
-        generation_id: header(headers, "x-if-generation-id").to_owned(),
-        nested: header(headers, "x-pl-nested-operation") == "true",
-        ..principal_caller(headers)
-    }
-}
-
 #[utoipa::path(
     get,
     path = "/health",
@@ -101,11 +50,27 @@ fn caller(headers: &HeaderMap) -> Caller {
         (status = 200, description = "Service ready", body = Health)
     )
 )]
-async fn health() -> Json<Health> {
+pub async fn health() -> Json<Health> {
     Json(Health {
         status: "ok",
         domain: DOMAIN,
     })
+}
+
+pub async fn execute(
+    service: Arc<Service>,
+    name: &str,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, Error> {
+    let arguments = match serde_json::from_slice::<Value>(&body) {
+        Ok(Value::Object(arguments)) => arguments,
+        _ => return Err(Error::Body),
+    };
+    service
+        .call(name, arguments, &Caller::from_headers(&headers))
+        .await
+        .map(Json)
 }
 
 async fn operation(
@@ -114,52 +79,41 @@ async fn operation(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Json<Value>, Error> {
-    authenticate(&service, &headers)?;
-    let arguments = match serde_json::from_slice::<Value>(&body) {
-        Ok(Value::Object(arguments)) => arguments,
-        _ => return Err(Error::Body),
-    };
-    service
-        .call(&name, arguments, &caller(&headers))
-        .await
-        .map(Json)
+    execute(service, &name, headers, body).await
 }
 
-fn openapi(registry: &Registry) -> Value {
-    let mut document = serde_json::to_value(ApiDoc::openapi()).unwrap_or_else(|_| json!({}));
-    let mut paths = document
-        .get("paths")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    for operation in registry.iter() {
-        paths.insert(
-            format!("/operations/{}", operation.name),
-            operation_path(operation),
-        );
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operations::Registry;
+
+    #[test]
+    fn openapi_documents_every_registered_operation() {
+        let document = serde_json::to_value(ApiDoc::openapi()).expect("serializable");
+        let registry = Registry::load().expect("contract loads");
+        let mut count = 0;
+        for operation in registry.iter() {
+            count += 1;
+            let path = format!("/operations/{}", operation.name);
+            assert!(
+                document
+                    .pointer(&format!("/paths/{}/post", path.replace('/', "~1")))
+                    .is_some(),
+                "missing {path}"
+            );
+        }
+        assert!(count > 0);
+        assert!(document.pointer("/paths/~1health/get").is_some());
+        assert!(document.pointer("/paths/~1mcp/post").is_some());
+        assert!(document.pointer("/components/securitySchemes").is_none());
+        let parameters = document
+            .pointer("/paths/~1operations~1analytics.manifest/post/parameters")
+            .and_then(Value::as_array)
+            .expect("header parameters");
+        let names: Vec<&str> = parameters
+            .iter()
+            .filter_map(|parameter| parameter["name"].as_str())
+            .collect();
+        assert!(names.contains(&"X-Person-Pk") && names.contains(&"X-Athlete-Pk"));
     }
-    document["paths"] = Value::Object(paths);
-    document["info"]["title"] = json!(format!("Powerlifting {DOMAIN}"));
-    document["components"]["securitySchemes"] =
-        json!({"internal": {"type": "apiKey", "in": "header", "name": "X-Internal-Token"}});
-    document
-}
-
-fn operation_path(operation: &crate::operations::Operation) -> Value {
-    let mut post = Map::new();
-    post.insert("operationId".to_owned(), json!(operation.name));
-    post.insert("summary".to_owned(), json!(operation.description));
-    post.insert(
-        "requestBody".to_owned(),
-        json!({"required": true, "content": {"application/json": {"schema": operation.input_schema}}}),
-    );
-    post.insert(
-        "responses".to_owned(),
-        json!({"200": {
-            "description": "Domain result",
-            "content": {"application/json": {"schema": operation.result_schema}},
-        }}),
-    );
-    post.insert("security".to_owned(), json!([{"internal": []}]));
-    json!({"post": post})
 }

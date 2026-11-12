@@ -12,10 +12,13 @@ variable "storage_class" {
 
 variable "repositories" {
   type = object({
-    services  = string
-    analytics = string
-    backend   = string
-    frontend  = string
+    services         = string
+    analytics        = string
+    rankings         = string
+    analytics_ai     = string
+    analytics_export = string
+    backend          = string
+    frontend         = string
   })
 }
 

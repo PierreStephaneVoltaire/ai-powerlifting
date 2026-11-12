@@ -111,9 +111,7 @@ fn change(start: Option<f64>, end: Option<f64>, delta: Option<f64>, weeks: i64) 
         start,
         end,
         delta,
-        delta_per_week: delta.and_then(|delta| {
-            round_or_null(Some(delta / weeks.max(1) as f64), 3)
-        }),
+        delta_per_week: delta.and_then(|delta| round_or_null(Some(delta / weeks.max(1) as f64), 3)),
     }
 }
 
@@ -155,7 +153,9 @@ pub fn build(
         ),
     );
     let total_delta = historical.strength_delta.total;
-    let all_missing = per_lift.values().all(|item| item.label == "insufficient_data");
+    let all_missing = per_lift
+        .values()
+        .all(|item| item.label == "insufficient_data");
     let overall = if all_missing {
         verdict(None, None, None)
     } else {
@@ -165,15 +165,21 @@ pub fn build(
     };
     let completed: Vec<&Session> = context.sessions.iter().filter(|s| s.completed).collect();
     let bodyweight_at = |date: &str| {
-        latest_bodyweight(&completed, context.fallback_bodyweight, date, &context.weight_log)
+        latest_bodyweight(
+            &completed,
+            context.fallback_bodyweight,
+            date,
+            &context.weight_log,
+        )
     };
     let start_weight = bodyweight_at(&bundle.block.start_date);
     let end_weight = bodyweight_at(&bundle.block.end_date);
-    let score = |total: Option<f64>, weight: Option<f64>, scorer: fn(f64, f64, &str) -> Option<f64>| {
-        total
-            .zip(weight)
-            .and_then(|(total, weight)| scorer(total, weight, context.sex))
-    };
+    let score =
+        |total: Option<f64>, weight: Option<f64>, scorer: fn(f64, f64, &str) -> Option<f64>| {
+            total
+                .zip(weight)
+                .and_then(|(total, weight)| scorer(total, weight, context.sex))
+        };
     let start_dots = score(total_start, start_weight, dots);
     let end_dots = score(historical.end_strength.total, end_weight, dots);
     let start_gl = score(total_start, start_weight, ipf_gl);
@@ -197,27 +203,35 @@ pub fn build(
             ((*lift).to_owned(), value)
         })
         .collect();
-    let competition = historical.competition_outcome.as_ref().map(|outcome| CompetitionResult {
-        name: outcome.competition_name.clone(),
-        date: outcome.competition_date.clone(),
-        total_kg: outcome
-            .results
-            .as_ref()
-            .and_then(|results| results.get("total_kg"))
-            .and_then(serde_json::Value::as_f64),
-        dots: outcome.dots,
-        ipf_gl: outcome.ipf_gl,
-        projection_total_delta_kg: outcome
-            .projection_accuracy
-            .as_ref()
-            .and_then(|accuracy| accuracy.get("total_kg"))
-            .and_then(|total| total.get("deltaKg"))
-            .and_then(serde_json::Value::as_f64),
-    });
+    let competition = historical
+        .competition_outcome
+        .as_ref()
+        .map(|outcome| CompetitionResult {
+            name: outcome.competition_name.clone(),
+            date: outcome.competition_date.clone(),
+            total_kg: outcome
+                .results
+                .as_ref()
+                .and_then(|results| results.get("total_kg"))
+                .and_then(serde_json::Value::as_f64),
+            dots: outcome.dots,
+            ipf_gl: outcome.ipf_gl,
+            projection_total_delta_kg: outcome
+                .projection_accuracy
+                .as_ref()
+                .and_then(|accuracy| accuracy.get("total_kg"))
+                .and_then(|total| total.get("deltaKg"))
+                .and_then(serde_json::Value::as_f64),
+        });
     (
         Outcome {
             e1rm,
-            dots: change(start_dots, end_dots, difference(start_dots, end_dots), weeks),
+            dots: change(
+                start_dots,
+                end_dots,
+                difference(start_dots, end_dots),
+                weeks,
+            ),
             ipf_gl: change(start_gl, end_gl, difference(start_gl, end_gl), weeks),
             competition,
             rpe_drift: drift,
@@ -250,5 +264,75 @@ pub fn summarize(blocks: &[BlockClassification]) -> Classification {
         thresholds: thresholds(),
         overall,
         per_lift,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_delta_is_judged_against_the_noise() {
+        assert_eq!(verdict(Some(6.0), Some(200.0), Some(1.0)).label, "improved");
+        assert_eq!(verdict(Some(6.0), Some(200.0), Some(8.0)).label, "stalled");
+        assert_eq!(
+            verdict(Some(-6.0), Some(200.0), Some(1.0)).label,
+            "regressed"
+        );
+        assert_eq!(verdict(Some(-6.0), Some(200.0), Some(8.0)).label, "stalled");
+    }
+
+    #[test]
+    fn threshold_never_drops_below_the_floor_percentage() {
+        let result = verdict(Some(1.5), Some(200.0), Some(0.0));
+        assert_eq!(result.threshold_kg, Some(2.0));
+        assert_eq!(result.label, "stalled");
+        assert_eq!(result.basis, "weekly_mad");
+    }
+
+    #[test]
+    fn short_series_falls_back_to_percentage_noise() {
+        let result = verdict(Some(10.0), Some(200.0), None);
+        assert_eq!(result.basis, "percent_fallback");
+        assert_eq!(result.noise_kg, Some(4.0));
+        assert_eq!(result.label, "improved");
+    }
+
+    #[test]
+    fn missing_delta_is_insufficient_data() {
+        let result = verdict(None, Some(200.0), Some(1.0));
+        assert_eq!(result.label, "insufficient_data");
+        assert!(result.threshold_kg.is_none());
+    }
+
+    #[test]
+    fn noise_needs_enough_points_and_ignores_a_clean_trend() {
+        assert!(noise(&[100.0, 101.0, 102.0]).is_none());
+        let clean = noise(&[100.0, 102.0, 104.0, 106.0, 108.0]).unwrap();
+        assert!(clean.abs() < 1e-6);
+        let jittery = noise(&[100.0, 108.0, 101.0, 109.0, 100.0, 110.0]).unwrap();
+        assert!(jittery > 1.0);
+    }
+
+    #[test]
+    fn summary_counts_every_label_and_stores_thresholds() {
+        let block = |label: &str| BlockClassification {
+            overall: verdict(None, None, None),
+            per_lift: BTreeMap::from([(
+                "squat".to_owned(),
+                Verdict {
+                    label: label.to_owned(),
+                    ..verdict(None, None, None)
+                },
+            )]),
+        };
+        let summary = summarize(&[block("improved"), block("stalled"), block("regressed")]);
+        let squat = &summary.per_lift["squat"];
+        assert_eq!((squat.improved, squat.stalled, squat.regressed), (1, 1, 1));
+        assert_eq!(summary.overall.insufficient_data, 3);
+        assert_eq!(
+            summary.thresholds.min_series_points,
+            MIN_SERIES_POINTS as i64
+        );
     }
 }

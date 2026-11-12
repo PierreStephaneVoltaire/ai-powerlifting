@@ -3,10 +3,12 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Server as Transport;
+use tonic::transport::server::TcpIncoming;
 use tonic::{Request, Response, Status};
 
-use crate::auth;
+use crate::assemble::Scope;
 use crate::block_ops::workspace;
 use crate::blocks::index;
 use crate::blocks::scope::{program_for_block, scoped_entry};
@@ -15,11 +17,10 @@ use crate::engine::{Engine, to_value};
 use crate::error::Error;
 use crate::proto::analytics::analytics_data_server::{AnalyticsData, AnalyticsDataServer};
 use crate::proto::analytics::{
-    AthleteRef, BlockKeys, BlockList, BlockRef, CorrelationInputsReply, ExerciseVolume, Report,
-    Snapshot, WeeklyAccessoryVolume, WeeklyE1rm, DESCRIPTOR,
+    AthleteRef, BlockKeys, BlockList, BlockRef, CorrelationInputsReply, DESCRIPTOR, ExerciseVolume,
+    Report, Snapshot, WeeklyAccessoryVolume, WeeklyE1rm,
 };
 use crate::source::Window;
-use crate::assemble::Scope;
 use crate::structs::{to_struct, to_structs};
 
 const MAX_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
@@ -32,13 +33,13 @@ pub struct Principal {
 
 #[derive(Clone)]
 pub struct Guard {
-    token: Arc<str>,
+    allowed: Arc<[String]>,
 }
 
 impl Guard {
-    pub fn new(token: &str) -> Self {
+    pub fn new(allowed: &[String]) -> Self {
         Self {
-            token: Arc::from(token),
+            allowed: allowed.into(),
         }
     }
 }
@@ -51,10 +52,15 @@ fn metadata<'a>(request: &'a Request<()>, name: &str) -> &'a str {
         .unwrap_or_default()
 }
 
+fn service_account(source: &str) -> Option<&str> {
+    source
+        .rsplit_once("/sa/")
+        .map(|(_, account)| account)
+        .filter(|account| !account.is_empty())
+}
+
 impl Interceptor for Guard {
     fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, Status> {
-        auth::check_internal_token(&self.token, metadata(&request, "x-internal-token"))
-            .map_err(|_| Status::unauthenticated("Invalid internal token"))?;
         let athlete = metadata(&request, "x-athlete-pk").to_owned();
         let person = metadata(&request, "x-person-pk").to_owned();
         if athlete.is_empty() || person.is_empty() {
@@ -62,7 +68,18 @@ impl Interceptor for Guard {
                 "x-athlete-pk and x-person-pk metadata are required",
             ));
         }
-        request.extensions_mut().insert(Principal { athlete, person });
+        let source = metadata(&request, "x-pl-source-principal");
+        let Some(account) = service_account(source) else {
+            return Err(Status::unauthenticated(
+                "x-pl-source-principal metadata is required",
+            ));
+        };
+        if !self.allowed.iter().any(|allowed| allowed == account) {
+            return Err(Status::permission_denied("Calling service is not allowed"));
+        }
+        request
+            .extensions_mut()
+            .insert(Principal { athlete, person });
         Ok(request)
     }
 }
@@ -186,7 +203,8 @@ impl AnalyticsData for Service {
         }) else {
             return Err(Status::internal("invalid arguments"));
         };
-        self.report(self.engine.compare_blocks(arguments).await).await
+        self.report(self.engine.compare_blocks(arguments).await)
+            .await
     }
 
     async fn lifetime(&self, request: Request<AthleteRef>) -> Result<Response<Report>, Status> {
@@ -222,13 +240,7 @@ impl AnalyticsData for Service {
         let entry = scoped_entry(&workspace, raw);
         let (program, _) = program_for_block(&workspace, &entry);
         let inputs = correlation::build(&program.sessions, &entry.start_date);
-        let measurement = |key: &str| {
-            program
-                .meta
-                .get(key)
-                .cloned()
-                .unwrap_or(Value::Null)
-        };
+        let measurement = |key: &str| program.meta.get(key).cloned().unwrap_or(Value::Null);
         let measurements: serde_json::Map<String, Value> = [
             "height_cm",
             "arm_wingspan_cm",
@@ -282,25 +294,148 @@ impl AnalyticsData for Service {
 
 pub async fn serve(
     engine: Engine,
-    token: &str,
+    allowed: &[String],
     address: SocketAddr,
     shutdown: impl std::future::Future<Output = ()>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut reporter, health) = tonic_health::server::health_reporter();
-    reporter
-        .set_serving::<AnalyticsDataServer<Service>>()
-        .await;
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    serve_on(engine, allowed, TcpIncoming::bind(address)?, shutdown).await
+}
+
+pub async fn serve_on(
+    engine: Engine,
+    allowed: &[String],
+    incoming: TcpIncoming,
+    shutdown: impl std::future::Future<Output = ()>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let (reporter, health) = tonic_health::server::health_reporter();
+    reporter.set_serving::<AnalyticsDataServer<Service>>().await;
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(DESCRIPTOR)
         .build_v1()?;
-    let service = AnalyticsDataServer::with_interceptor(Service::new(engine), Guard::new(token))
+    let data = AnalyticsDataServer::new(Service::new(engine))
         .max_decoding_message_size(MAX_MESSAGE_BYTES)
         .max_encoding_message_size(MAX_MESSAGE_BYTES);
+    let service = InterceptedService::new(data, Guard::new(allowed));
     Transport::builder()
         .add_service(health)
         .add_service(reflection)
         .add_service(service)
-        .serve_with_shutdown(address, shutdown)
+        .serve_with_incoming_shutdown(incoming, shutdown)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tonic::Code;
+    use tonic::metadata::MetadataValue;
+
+    fn guard() -> Guard {
+        Guard::new(&[
+            "pl-analytics-ai".to_owned(),
+            "pl-analytics-export".to_owned(),
+        ])
+    }
+
+    fn request(pairs: &[(&'static str, &str)]) -> Request<()> {
+        let mut request = Request::new(());
+        for (name, value) in pairs {
+            request
+                .metadata_mut()
+                .insert(*name, MetadataValue::try_from(*value).unwrap());
+        }
+        request
+    }
+
+    const AI: &str = "spiffe://cluster.local/ns/pl/sa/pl-analytics-ai";
+
+    #[test]
+    fn allowed_service_account_passes_with_principal() {
+        let allowed = guard()
+            .call(request(&[
+                ("x-person-pk", "p"),
+                ("x-athlete-pk", "a"),
+                ("x-pl-source-principal", AI),
+            ]))
+            .unwrap();
+        let principal = allowed.extensions().get::<Principal>().unwrap();
+        assert_eq!(
+            (principal.person.as_str(), principal.athlete.as_str()),
+            ("p", "a")
+        );
+    }
+
+    #[test]
+    fn export_account_is_allowed() {
+        let source = "cluster.local/ns/pl/sa/pl-analytics-export";
+        assert!(
+            guard()
+                .call(request(&[
+                    ("x-person-pk", "p"),
+                    ("x-athlete-pk", "a"),
+                    ("x-pl-source-principal", source),
+                ]))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn unlisted_service_account_is_denied() {
+        let denied = guard()
+            .call(request(&[
+                ("x-person-pk", "p"),
+                ("x-athlete-pk", "a"),
+                (
+                    "x-pl-source-principal",
+                    "cluster.local/ns/pl/sa/pl-rankings",
+                ),
+            ]))
+            .unwrap_err();
+        assert_eq!(denied.code(), Code::PermissionDenied);
+    }
+
+    #[test]
+    fn missing_source_is_unauthenticated() {
+        for source in [None, Some("pl-analytics-ai"), Some("x/sa/")] {
+            let mut pairs = vec![("x-person-pk", "p"), ("x-athlete-pk", "a")];
+            if let Some(source) = source {
+                pairs.push(("x-pl-source-principal", source));
+            }
+            let denied = guard().call(request(&pairs)).unwrap_err();
+            assert_eq!(denied.code(), Code::Unauthenticated, "{source:?}");
+        }
+    }
+
+    #[test]
+    fn missing_person_or_athlete_is_unauthenticated() {
+        for pairs in [
+            vec![("x-athlete-pk", "a"), ("x-pl-source-principal", AI)],
+            vec![("x-person-pk", "p"), ("x-pl-source-principal", AI)],
+        ] {
+            let denied = guard().call(request(&pairs)).unwrap_err();
+            assert_eq!(denied.code(), Code::Unauthenticated);
+        }
+    }
+
+    #[test]
+    fn athlete_must_match_the_request() {
+        let mut allowed = guard()
+            .call(request(&[
+                ("x-person-pk", "p"),
+                ("x-athlete-pk", "a"),
+                ("x-pl-source-principal", AI),
+            ]))
+            .unwrap();
+        assert!(authorize(&allowed, "a").is_ok());
+        assert_eq!(
+            authorize(&allowed, "b").unwrap_err().code(),
+            Code::PermissionDenied
+        );
+        allowed.extensions_mut().remove::<Principal>();
+        assert_eq!(
+            authorize(&allowed, "a").unwrap_err().code(),
+            Code::Unauthenticated
+        );
+    }
 }

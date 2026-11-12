@@ -28,9 +28,7 @@ pub fn build(workspace: &Workspace<'_>, raw: &BlockEntry) -> Context {
     let goals = goals::for_competitions(&workspace.goals, &window);
     let fallback = window
         .iter()
-        .find_map(|competition| {
-            number(competition.get("body_weight_kg")).filter(|kg| *kg > 0.0)
-        })
+        .find_map(|competition| number(competition.get("body_weight_kg")).filter(|kg| *kg > 0.0))
         .or_else(|| number(workspace.meta().get("current_body_weight_kg")))
         .filter(|kg| *kg > 0.0);
     Context {

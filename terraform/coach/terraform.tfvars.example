@@ -32,4 +32,5 @@ operation_ai = {
   budget_advisor                  = { provider = "", model = "", effort = "" }
   budget_priority_timeline        = { provider = "", model = "", effort = "" }
 }
+dataset_bucket = "<powerlifting-dataset-bucket-name>"
 coach_replicas = 1

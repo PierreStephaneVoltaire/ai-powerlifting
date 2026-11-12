@@ -2,13 +2,13 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
+use super::Workspace;
 use super::outcome::{projection_results, summarize};
 use super::scope::{
     analysis_end, analysis_sessions, program_for_block, projection_reference, scoped_entry,
 };
 use super::strength::{estimate, manual_start_maxes};
 use super::types::{BlockEntry, Bundle, CacheStatus, Historical, Summary};
-use super::Workspace;
 use crate::calc::Env;
 use crate::error::Error;
 use crate::js::{number, round_digits};
@@ -58,7 +58,12 @@ pub fn historical(workspace: &Workspace<'_>, entry: &BlockEntry, weekly: &Value)
     let sessions = analysis_sessions(workspace, entry, true);
     let refs: Vec<&crate::model::Session> = sessions.iter().collect();
     let manual = manual_start_maxes(workspace, &entry.block_key);
-    let strength = estimate(&refs, &entry.start_date, analysis_end(entry), manual.as_ref());
+    let strength = estimate(
+        &refs,
+        &entry.start_date,
+        analysis_end(entry),
+        manual.as_ref(),
+    );
     let fallback = projection_results(weekly, entry.linked_competition.as_ref());
     Historical {
         start_strength: strength.start,
@@ -71,17 +76,17 @@ pub fn historical(workspace: &Workspace<'_>, entry: &BlockEntry, weekly: &Value)
         }
         .to_owned(),
         manual_start_maxes: manual,
-        competition_outcome: summarize(workspace.sex(), entry.linked_competition.as_ref(), fallback),
+        competition_outcome: summarize(
+            workspace.sex(),
+            entry.linked_competition.as_ref(),
+            fallback,
+        ),
         analytics_summary: summary_from_weekly(weekly),
         missing_data: entry.data_quality_flags.clone(),
     }
 }
 
-pub fn compute(
-    workspace: &Workspace<'_>,
-    env: Env<'_>,
-    raw: &BlockEntry,
-) -> Result<Bundle, Error> {
+pub fn compute(workspace: &Workspace<'_>, env: Env<'_>, raw: &BlockEntry) -> Result<Bundle, Error> {
     let entry = scoped_entry(workspace, raw);
     let (program, _) = program_for_block(workspace, &entry);
     let reference = projection_reference(&entry);
@@ -93,6 +98,7 @@ pub fn compute(
         ref_date: Some(reference),
         week_start: Some(entry.week_start),
         week_end: Some(entry.week_end),
+        ..Params::default()
     };
     let weekly = Value::Object(sections::compute_all(env, &program, &params)?);
     let now = timestamp();

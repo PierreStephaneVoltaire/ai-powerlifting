@@ -34,7 +34,11 @@ fn lift_of(exposure: &str) -> Option<&str> {
 
 fn ranks(values: &[f64]) -> Vec<f64> {
     let mut order: Vec<usize> = (0..values.len()).collect();
-    order.sort_by(|a, b| values[*a].partial_cmp(&values[*b]).unwrap_or(Ordering::Equal));
+    order.sort_by(|a, b| {
+        values[*a]
+            .partial_cmp(&values[*b])
+            .unwrap_or(Ordering::Equal)
+    });
     let mut ranked = vec![0.0; values.len()];
     let mut start = 0;
     while start < order.len() {
@@ -53,7 +57,10 @@ fn ranks(values: &[f64]) -> Vec<f64> {
 
 fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
     let count = xs.len() as f64;
-    let (mean_x, mean_y) = (xs.iter().sum::<f64>() / count, ys.iter().sum::<f64>() / count);
+    let (mean_x, mean_y) = (
+        xs.iter().sum::<f64>() / count,
+        ys.iter().sum::<f64>() / count,
+    );
     let (mut covariance, mut var_x, mut var_y) = (0.0, 0.0, 0.0);
     for (x, y) in xs.iter().zip(ys) {
         covariance += (x - mean_x) * (y - mean_y);
@@ -78,8 +85,9 @@ pub fn kendall(xs: &[f64], ys: &[f64]) -> Kendall {
     if xs.len() < MIN_PAIRS {
         return empty;
     }
-    match kendalls::tau_b_with_comparator(xs, ys, |a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-    {
+    match kendalls::tau_b_with_comparator(xs, ys, |a, b| {
+        a.partial_cmp(b).unwrap_or(Ordering::Equal)
+    }) {
         Ok((tau, z)) if tau.is_finite() && z.is_finite() => Kendall {
             tau: Some(round(tau, 4)),
             z: Some(round(z, 4)),
@@ -128,11 +136,7 @@ fn direction_of(tau: Option<f64>) -> &'static str {
     }
 }
 
-pub fn correlate(
-    exposure: &str,
-    outcome: &str,
-    pairs: &[(String, f64, f64)],
-) -> Correlation {
+pub fn correlate(exposure: &str, outcome: &str, pairs: &[(String, f64, f64)]) -> Correlation {
     let xs: Vec<f64> = pairs.iter().map(|pair| pair.1).collect();
     let ys: Vec<f64> = pairs.iter().map(|pair| pair.2).collect();
     let kendall = kendall(&xs, &ys);
@@ -196,4 +200,110 @@ pub fn analyse(rows: &[Row]) -> Vec<Correlation> {
             .unwrap_or(Ordering::Equal)
     });
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows(
+        count: usize,
+        exposure: impl Fn(usize) -> f64,
+        outcome: impl Fn(usize) -> f64,
+    ) -> Vec<Row> {
+        (0..count)
+            .map(|index| Row {
+                block_key: format!("block_{index}"),
+                exposures: BTreeMap::from([("weekly_hard_sets".to_owned(), exposure(index))]),
+                outcomes: BTreeMap::from([("total".to_owned(), outcome(index))]),
+            })
+            .collect()
+    }
+
+    fn total(rows: &[Row]) -> Correlation {
+        analyse(rows)
+            .into_iter()
+            .find(|item| item.outcome == "total_e1rm_delta_per_week")
+            .expect("total correlation present")
+    }
+
+    fn pseudo(index: usize, salt: u64) -> f64 {
+        let mut state = (index as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            ^ salt.wrapping_mul(0xD1B5_4A32_D192_ED03);
+        state = (state ^ (state >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        state = (state ^ (state >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        state ^= state >> 31;
+        (state % 1000) as f64 / 10.0
+    }
+
+    #[test]
+    fn monotonic_dose_gives_tau_one() {
+        let result = total(&rows(8, |i| 10.0 + i as f64, |i| 1.0 + 0.5 * i as f64));
+        assert!((result.kendall.tau.unwrap() - 1.0).abs() < 1e-9);
+        assert!((result.spearman.rho.unwrap() - 1.0).abs() < 1e-9);
+        assert_eq!(result.direction, "positive");
+        assert_eq!(result.strength, "strong");
+        assert_eq!(result.n, 8);
+        assert!(!result.low_n);
+        assert!(result.kendall.p.unwrap() < 0.01);
+        assert!(result.spearman.p.unwrap() < 0.01);
+    }
+
+    #[test]
+    fn inverse_dose_gives_tau_minus_one() {
+        let result = total(&rows(7, |i| i as f64, |i| 10.0 - i as f64));
+        assert!((result.kendall.tau.unwrap() + 1.0).abs() < 1e-9);
+        assert_eq!(result.direction, "negative");
+    }
+
+    #[test]
+    fn noise_gives_small_tau_and_large_p() {
+        let result = total(&rows(40, |i| pseudo(i, 1), |i| pseudo(i, 99)));
+        assert!(
+            result.kendall.tau.unwrap().abs() < 0.3,
+            "{:?}",
+            result.kendall
+        );
+        assert!(result.kendall.p.unwrap() > 0.05);
+        assert!(result.spearman.rho.unwrap().abs() < 0.4);
+        assert_eq!(result.strength, "weak");
+    }
+
+    #[test]
+    fn low_n_flag_turns_off_at_five_blocks() {
+        for (count, expected) in [(3, true), (4, true), (5, false), (9, false)] {
+            let result = total(&rows(count, |i| i as f64, |i| i as f64));
+            assert_eq!(result.low_n, expected, "n={count}");
+            assert_eq!(result.n, count as i64);
+        }
+    }
+
+    #[test]
+    fn fewer_than_three_pairs_have_no_statistics() {
+        let result = total(&rows(2, |i| i as f64, |i| i as f64));
+        assert!(result.kendall.tau.is_none() && result.spearman.rho.is_none());
+        assert!(result.low_n);
+    }
+
+    #[test]
+    fn constant_exposure_has_no_correlation() {
+        let result = total(&rows(6, |_| 12.0, |i| i as f64));
+        assert!(result.spearman.rho.is_none());
+        assert_eq!(result.direction, "none");
+    }
+
+    #[test]
+    fn results_are_ordered_by_tau_magnitude() {
+        let mut data = rows(6, |i| i as f64, |i| i as f64);
+        for (index, row) in data.iter_mut().enumerate() {
+            row.exposures
+                .insert("noise_axis".to_owned(), pseudo(index, 7));
+        }
+        let found = analyse(&data);
+        let magnitudes: Vec<f64> = found
+            .iter()
+            .map(|item| item.kendall.tau.map_or(-1.0, f64::abs))
+            .collect();
+        assert!(magnitudes.windows(2).all(|pair| pair[0] >= pair[1]));
+    }
 }

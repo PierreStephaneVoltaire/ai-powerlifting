@@ -1,0 +1,26 @@
+{
+ "weeks": 6,
+ "window_start": "2026-09-07",
+ "weeks_to_primary_comp": null,
+ "lift_profiles": [],
+ "athlete_measurements": {
+  "height_cm": null
+ },
+ "caloric_status": null,
+ "bodyweight_trend": null,
+ "weekly_e1rm": [
+  {
+   "week": 1,
+   "squat": 100.0,
+   "bench": null,
+   "deadlift": null
+  }
+ ],
+ "weekly_accessory": [
+  {
+   "week": 1,
+   "exercises": []
+  }
+ ],
+ "exercise_roi": null
+}

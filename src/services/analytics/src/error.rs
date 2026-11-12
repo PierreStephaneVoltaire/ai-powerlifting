@@ -6,14 +6,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Invalid internal token")]
-    InvalidToken,
     #[error("Unknown operation")]
     UnknownOperation,
     #[error("Generation requires an active native turn")]
     GenerationWithoutTurn,
-    #[error("Verified acting Person required")]
-    InvalidPrincipal,
     #[error("{0}")]
     Forbidden(&'static str),
     #[error("Access evaluation denied")]
@@ -41,8 +37,9 @@ pub enum Error {
 impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::InvalidToken | Self::InvalidPrincipal => StatusCode::UNAUTHORIZED,
-            Self::UnknownOperation | Self::NotFound(_) | Self::CacheMiss(_) => StatusCode::NOT_FOUND,
+            Self::UnknownOperation | Self::NotFound(_) | Self::CacheMiss(_) => {
+                StatusCode::NOT_FOUND
+            }
             Self::GenerationWithoutTurn | Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::AccessDenied(status) => *status,
             Self::AccessUnavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -56,9 +53,7 @@ impl Error {
     pub fn detail(&self) -> Value {
         let message = self.to_string();
         match self {
-            Self::InvalidToken | Self::UnknownOperation | Self::GenerationWithoutTurn => {
-                Value::String(message)
-            }
+            Self::UnknownOperation | Self::GenerationWithoutTurn => Value::String(message),
             Self::Body => json!([{"type": "dict_type", "loc": ["body"], "msg": message}]),
             _ => json!({"code": self.code(), "message": message}),
         }
@@ -66,7 +61,6 @@ impl Error {
 
     fn code(&self) -> &'static str {
         match self {
-            Self::InvalidPrincipal => "invalid_principal",
             Self::Forbidden(_) | Self::AccessDenied(_) => "forbidden",
             Self::AccessUnavailable => "access_unavailable",
             Self::NestedWithoutExecution => "uncertain",

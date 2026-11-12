@@ -6,11 +6,19 @@ from datetime import date
 from boto3.dynamodb.conditions import Key
 
 from .access_store import database, pages, person_record
+from . import analytics_client
 from .dispatch import OperationError
 from .profile_views import visible_profile
 from .publication import program_view
 from .tag_catalog import catalog
 from .competition_access import visible_entries
+
+
+def _estimated_maxes(args):
+    try:
+        return analytics_client.estimated_maxes()
+    except OperationError:
+        return {}
 
 
 def handler(args, _context):
@@ -43,9 +51,6 @@ def handler(args, _context):
     today = date.today().isoformat()
     nearest = next((session for session in sessions if str(session.get('date', '')) >= today), sessions[-1] if sessions else {})
     phase = nearest.get('phase')
-    analytics = importlib.import_module('services.handlers.analysis_reports.analytics')
-    comp_maxes = analytics._estimate_maxes_from_comps(program.get('competitions', []), reference_date=date.today())
-    session_maxes = analytics._estimate_maxes_from_sessions(program.get('sessions', []), reference_date=date.today())
-    maxes = analytics._analysis_current_maxes_out(comp_maxes or session_maxes, comp_maxes, session_maxes)
+    maxes = _estimated_maxes(args) if 'performance:read' in permissions else {}
     plain = importlib.import_module('services.handlers.user.settings_get.core')._sanitize_decimals
-    return plain({'profile': profile, 'block': block if 'program:read' in permissions else None, 'phase': phase if 'program:read' in permissions else None, 'estimated_maxes': maxes if 'performance:read' in permissions else {}, 'competitions': [{key: value for key, value in entry.items() if key not in ('pk', 'test_seed_source_pk')} for entry in entries] if 'competition:read' in permissions else [], 'notes': filtered.get('meta', {}).get('block_notes', []) if 'program:read' in permissions else []})
+    return plain({'profile': profile, 'block': block if 'program:read' in permissions else None, 'phase': phase if 'program:read' in permissions else None, 'estimated_maxes': maxes, 'competitions': [{key: value for key, value in entry.items() if key not in ('pk', 'test_seed_source_pk')} for entry in entries] if 'competition:read' in permissions else [], 'notes': filtered.get('meta', {}).get('block_notes', []) if 'program:read' in permissions else []})

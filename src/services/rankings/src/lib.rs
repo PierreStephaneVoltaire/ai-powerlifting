@@ -1,6 +1,8 @@
+pub mod access;
 pub mod api;
 pub mod auth;
 pub mod cache;
+pub mod caller;
 pub mod categories;
 pub mod classes;
 pub mod config;
@@ -14,3 +16,5 @@ pub mod pyjson;
 pub mod query;
 pub mod scoring;
 pub mod store;
+#[cfg(test)]
+mod testing;

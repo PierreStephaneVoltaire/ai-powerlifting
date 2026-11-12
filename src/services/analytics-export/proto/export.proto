@@ -1,0 +1,17 @@
+syntax = "proto3";
+package export.v1;
+import "google/protobuf/struct.proto";
+service Exports {
+  rpc SaveLifetimeReport(LifetimeReport) returns (SaveResult);
+}
+message LifetimeReport {
+  string athlete = 1;
+  string generated_at = 2;
+  repeated string block_keys = 3;
+  google.protobuf.Struct report = 4;
+  google.protobuf.Struct narrative = 5;
+}
+message SaveResult {
+  string markdown_key = 1;
+  string xlsx_key = 2;
+}

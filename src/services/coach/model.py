@@ -44,7 +44,7 @@ class Reply:
 
 
 class Model(Protocol):
-    async def complete(self, ai: AISettings, instructions: str, prompt: str) -> str: ...
+    async def complete(self, ai: AISettings, instructions: str, prompt: str, workspace: Path | None = None) -> str: ...
 
     async def converse(self, ai: AISettings, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply: ...
 
@@ -132,9 +132,10 @@ class CodexModel:
             raise ModelError("interrupted", "Coach turn did not complete; check side effects before retrying")
         return Reply(text=result.final_response or "", thread_id=thread.id)
 
-    async def complete(self, ai: AISettings, instructions: str, prompt: str) -> str:
-        self.scratch.mkdir(parents=True, exist_ok=True)
-        return (await self._run(ai, self.scratch, (), None, instructions, prompt, ephemeral=True)).text
+    async def complete(self, ai: AISettings, instructions: str, prompt: str, workspace: Path | None = None) -> str:
+        cwd = workspace or self.scratch
+        cwd.mkdir(parents=True, exist_ok=True)
+        return (await self._run(ai, cwd, (), None, instructions, prompt, ephemeral=True)).text
 
     async def converse(self, ai: AISettings, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply:
         return await self._run(ai, workspace, _tool_overrides(tools), thread_id, instructions, prompt)

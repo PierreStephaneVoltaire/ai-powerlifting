@@ -80,12 +80,20 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::operations::Registry;
 
     #[test]
     fn every_operation_in_the_contract_has_a_handler() {
         let registry = Registry::load().expect("contract loads");
-        assert!(registry.iter().count() >= 17);
+        let mut count = 0;
+        for operation in registry.iter() {
+            count += 1;
+            assert!(
+                super::Handler::for_operation(&operation.name).is_some(),
+                "{} has no handler",
+                operation.name
+            );
+        }
+        assert!(count >= 17);
     }
 }

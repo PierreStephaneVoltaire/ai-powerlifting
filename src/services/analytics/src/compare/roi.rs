@@ -274,7 +274,14 @@ pub fn roi_signals(bundles: &[Bundle]) -> Vec<RoiSignal> {
         .map(|lift| {
             let inol: Vec<f64> = bundles
                 .iter()
-                .filter_map(|bundle| bundle.historical.analytics_summary.avg_inol.get(*lift).copied())
+                .filter_map(|bundle| {
+                    bundle
+                        .historical
+                        .analytics_summary
+                        .avg_inol
+                        .get(*lift)
+                        .copied()
+                })
                 .collect();
             let deltas: Vec<f64> = bundles
                 .iter()

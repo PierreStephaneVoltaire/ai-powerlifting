@@ -50,16 +50,19 @@ impl Series {
     }
 
     fn avg_rpe(&self) -> Option<f64> {
-        let (sum, sets) = self
-            .weeks
-            .values()
-            .fold((0.0, 0.0), |(sum, sets), week| (sum + week.rpe_sum, sets + week.rpe_sets));
+        let (sum, sets) = self.weeks.values().fold((0.0, 0.0), |(sum, sets), week| {
+            (sum + week.rpe_sum, sets + week.rpe_sets)
+        });
         round_or_null((sets > 0.0).then(|| sum / sets), 2)
     }
 
     fn totals(&self) -> (f64, f64, f64) {
         self.weeks.values().fold((0.0, 0.0, 0.0), |acc, week| {
-            (acc.0 + week.sets, acc.1 + week.tonnage, acc.2 + week.days.len() as f64)
+            (
+                acc.0 + week.sets,
+                acc.1 + week.tonnage,
+                acc.2 + week.days.len() as f64,
+            )
         })
     }
 }
@@ -69,7 +72,9 @@ fn round2(value: f64) -> f64 {
 }
 
 fn number(value: Option<&Value>) -> Option<f64> {
-    value.and_then(Value::as_f64).filter(|value| value.is_finite())
+    value
+        .and_then(Value::as_f64)
+        .filter(|value| value.is_finite())
 }
 
 fn spread(rows: &[&Value], key: &str) -> Spread {
@@ -214,10 +219,17 @@ pub fn build(
             let rpe = exercise.rpe.or(session.session_rpe);
             all.add(week, session, sets, tonnage, rpe);
             match canonical_lift(&exercise.name) {
-                Some(lift) => lifts.entry(lift).or_default().add(week, session, sets, tonnage, rpe),
+                Some(lift) => lifts
+                    .entry(lift)
+                    .or_default()
+                    .add(week, session, sets, tonnage, rpe),
                 None => {
                     let category = env.glossary.category(&exercise.key);
-                    let category = if category.is_empty() { UNCATEGORIZED } else { category };
+                    let category = if category.is_empty() {
+                        UNCATEGORIZED
+                    } else {
+                        category
+                    };
                     categories
                         .entry(category.to_owned())
                         .or_default()
@@ -240,8 +252,9 @@ pub fn build(
     let lift_map = LIFTS
         .iter()
         .map(|lift| {
-            let (hard, tonnage, frequency, rpe, sets) =
-                lifts.get(lift).map_or((0.0, 0.0, 0.0, None, 0.0), summarize);
+            let (hard, tonnage, frequency, rpe, sets) = lifts
+                .get(lift)
+                .map_or((0.0, 0.0, 0.0, None, 0.0), summarize);
             let peak_inol = weekly
                 .pointer(&format!("/inol/per_lift_per_week/{lift}"))
                 .and_then(Value::as_object)

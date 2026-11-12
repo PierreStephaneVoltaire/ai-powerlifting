@@ -1,17 +1,3 @@
-resource "random_password" "analytics_node_token" {
-  length  = 64
-  special = false
-}
-
-resource "kubernetes_secret_v1" "analytics" {
-  metadata {
-    name      = "pl-analytics-secrets"
-    namespace = var.namespace
-  }
-
-  data = { ANALYTICS_NODE_TOKEN = random_password.analytics_node_token.result }
-}
-
 resource "kubernetes_deployment_v1" "analytics" {
   depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls]
   wait_for_rollout = false
@@ -46,25 +32,32 @@ resource "kubernetes_deployment_v1" "analytics" {
 
         container {
           name              = "analytics"
-          image             = local.images.services
+          image             = local.images.analytics
           image_pull_policy = "IfNotPresent"
 
           env {
-            name  = "PL_DOMAIN"
-            value = "analytics"
+            name  = "VALKEY_URL"
+            value = local.service_env.VALKEY_URL
           }
 
           env {
-            name  = "ANALYTICS_NODE_URL"
-            value = "http://127.0.0.1:8091"
+            name  = "ANALYTICS_AI_GRPC_URL"
+            value = "http://pl-analytics-ai.${var.namespace}.svc.cluster.local:50051"
           }
 
-          dynamic "env" {
-            for_each = local.service_env
-            content {
-              name  = env.key
-              value = env.value
-            }
+          env {
+            name  = "GRPC_ALLOWED_CALLERS"
+            value = "pl-analytics-ai,pl-analytics-export"
+          }
+
+          env {
+            name  = "AWS_SHARED_CREDENTIALS_FILE"
+            value = "/secrets/aws/credentials"
+          }
+
+          env {
+            name  = "AWS_CONFIG_FILE"
+            value = "/secrets/aws/config"
           }
 
           env_from {
@@ -73,24 +66,21 @@ resource "kubernetes_deployment_v1" "analytics" {
             }
           }
 
-
-          env {
-            name = "ANALYTICS_NODE_TOKEN"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret_v1.analytics.metadata[0].name
-                key  = "ANALYTICS_NODE_TOKEN"
-              }
-            }
+          port {
+            container_port = 8000
+            name           = "http"
+            protocol       = "TCP"
           }
 
           port {
-            container_port = 8000
+            container_port = 50051
+            name           = "grpc"
+            protocol       = "TCP"
           }
 
           resources {
-            limits   = { cpu = "500m", memory = "512Mi" }
-            requests = { cpu = "25m", memory = "64Mi" }
+            limits   = { cpu = "1", memory = "256Mi" }
+            requests = { cpu = "50m", memory = "64Mi" }
           }
 
           readiness_probe {
@@ -100,46 +90,6 @@ resource "kubernetes_deployment_v1" "analytics" {
             }
             initial_delay_seconds = 3
             period_seconds        = 10
-          }
-
-          volume_mount {
-            name       = "aws"
-            mount_path = "/secrets/aws"
-            read_only  = true
-          }
-        }
-
-        container {
-          name              = "reports"
-          image             = local.images.analytics
-          image_pull_policy = "IfNotPresent"
-
-          env {
-            name  = "ANALYTICS_NODE_PORT"
-            value = "8091"
-          }
-
-          dynamic "env" {
-            for_each = local.service_env
-            content {
-              name  = env.key
-              value = env.value
-            }
-          }
-
-          env {
-            name = "ANALYTICS_NODE_TOKEN"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret_v1.analytics.metadata[0].name
-                key  = "ANALYTICS_NODE_TOKEN"
-              }
-            }
-          }
-
-          resources {
-            limits   = { cpu = "1", memory = "512Mi" }
-            requests = { cpu = "50m", memory = "128Mi" }
           }
 
           volume_mount {
@@ -176,6 +126,14 @@ resource "kubernetes_service_v1" "analytics" {
       target_port = 8000
       name        = "http"
       protocol    = "TCP"
+    }
+
+    port {
+      port         = 50051
+      target_port  = 50051
+      name         = "grpc"
+      protocol     = "TCP"
+      app_protocol = "grpc"
     }
   }
 }

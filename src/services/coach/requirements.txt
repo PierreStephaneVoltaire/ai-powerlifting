@@ -9,3 +9,4 @@ redis>=5.0.0
 mcp>=1.30,<2
 
 cryptography>=42
+boto3

@@ -11,6 +11,7 @@ import base64
 import logging
 from importlib import import_module
 
+from services import analytics_client
 from services.lib.performed_sets import expand_session_sets
 from services.lib.block_scope import ACTIVE, current_block_id, resolve_block_id, scope_entries, scope_program
 import os
@@ -83,13 +84,9 @@ def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
     return _sanitize_decimals(item)
 
 
-_DETERMINISTIC_ANALYSIS_SECTIONS = ["overview", "fatigue_readiness", "peaking", "workload", "alerts"]
-
-
 def _build_sectioned_analysis(
     program: dict,
     sessions: list[dict],
-    glossary: list[dict] | None,
     *,
     weeks: int = 1,
     block: str = "current",
@@ -99,24 +96,17 @@ def _build_sectioned_analysis(
     week_start: int | None = None,
     week_end: int | None = None,
 ) -> dict:
-    from .analytics import weekly_analysis_section
-
-    result: dict[str, Any] = {}
-    for section in _DETERMINISTIC_ANALYSIS_SECTIONS:
-        result.update(weekly_analysis_section(
-            program=program,
-            sessions=sessions,
-            section=section,
-            weeks=weeks,
-            block=block,
-            window_start=window_start,
-            window_end=window_end,
-            week_start=week_start,
-            week_end=week_end,
-            ref_date=ref_date,
-            glossary=glossary,
-        ))
-    return result
+    return analytics_client.weekly_analysis(
+        program,
+        sessions,
+        weeks=weeks,
+        block=block,
+        window_start=window_start,
+        window_end=window_end,
+        week_start=week_start,
+        week_end=week_end,
+        ref_date=ref_date,
+    )
 
 
 def _session_in_window(session: dict, window: dict) -> bool:
@@ -245,7 +235,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
             bundle["weekly"] = _build_sectioned_analysis(
                 program,
                 sessions,
-                glossary,
                 weeks=effective_weeks,
                 block=session_block,
                 window_start=window.get("window_start"),
@@ -259,7 +248,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
             bundle["weekly"] = _build_sectioned_analysis(
                 program,
                 sessions,
-                glossary,
                 weeks=effective_weeks,
                 block=session_block,
                 week_start=min(weeks, default=1),

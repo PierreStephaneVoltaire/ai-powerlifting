@@ -1,0 +1,42 @@
+## Analysis window: Last {{.Weeks}} weeks (from {{.WindowStart}})
+
+{{if .PrimaryWeeks}}**Weeks to primary competition:** {{.PrimaryWeeks}}
+
+{{end}}{{if .Profiles}}## Athlete Lift Profiles
+
+{{range .Profiles}}### {{.Lift}}
+{{if .StyleNotes}}  Style: {{.StyleNotes}}
+{{end}}{{if .StickingPoints}}  Sticking points: {{.StickingPoints}}
+{{end}}{{if .PrimaryMuscle}}  Primary muscle: {{.PrimaryMuscle}}
+{{end}}{{if .VolumeTolerance}}  Volume tolerance: {{.VolumeTolerance}}
+{{end}}
+{{end}}{{end}}{{if .ShowMeasurements}}## Athlete Measurements
+
+{{range .Measurements}}  {{.Name}}: {{.Value}}
+{{end}}
+{{end}}{{if .CaloricStatus}}**Caloric status:** {{.CaloricStatus}}
+
+{{end}}{{if .BodyweightLine}}{{.BodyweightLine}}
+{{end}}## Weekly e1RM Estimates (kg)
+
+| Week | Squat | Bench | Deadlift |
+|------|-------|-------|----------|
+{{range .E1rmRows}}| W{{.Week}} | {{.Squat}} | {{.Bench}} | {{.Deadlift}} |
+{{end}}
+{{if .Accessory}}## Weekly Accessory Volume (sets × reps × kg) — Top 20
+
+| Week | {{range .Accessory}}{{.}} | {{end}}
+|------|{{range .Accessory}}---|{{end}}
+{{range .AccessoryRows}}| W{{.Week}} | {{range .Cells}}{{.}} | {{end}}
+{{end}}{{end}}{{if .ROI}}## Accessory Exercise ROI (pearson r between weekly volume and avg intensity)
+
+| Exercise | Pearson r | Weeks |
+|----------|-----------|-------|
+{{range .ROI}}| {{.Exercise}} | {{.PearsonR}} | {{.Weeks}} |
+{{end}}
+{{end}}## Task
+Analyze the data above. Identify which accessory exercises have volume trends
+that plausibly correlate with changes in Squat, Bench, or Deadlift e1RM.
+Only report anatomically relevant correlations as per the system instructions.
+Where the exercise ROI table gives a strong |r|, use it to upgrade confidence on
+anatomically-plausible findings — never invent correlations from ROI alone.

@@ -174,3 +174,77 @@ def test_api_key_provider_runs_codex_as_the_harness_with_its_own_key(harness, tm
     assert 'model_provider="openrouter"' in routed.config_overrides
     assert not any(item.startswith("forced_login_method") for item in routed.config_overrides)
     assert 'forced_login_method="chatgpt"' in model._config(tmp_path, (), "chatgpt").config_overrides
+
+
+class StubBody:
+    def __init__(self, data):
+        self.data = data
+
+    def read(self):
+        return self.data
+
+
+class StubS3:
+    def __init__(self, outcome):
+        self.outcome = outcome
+        self.keys = []
+
+    def get_object(self, Bucket, Key):
+        self.keys.append((Bucket, Key))
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return {"Body": StubBody(self.outcome)}
+
+
+def _client_error(code):
+    from botocore.exceptions import ClientError
+
+    return ClientError({"Error": {"Code": code, "Message": code}}, "GetObject")
+
+
+class RecordingModel:
+    def __init__(self):
+        self.calls = []
+
+    async def complete(self, ai, instructions, prompt, workspace=None):
+        self.calls.append((instructions, workspace))
+        return "ok"
+
+
+def _lifetime_job(tmp_path, monkeypatch, bucket="bucket"):
+    from services.coach.store import Job
+
+    monkeypatch.setenv("PL_SERVICES_DIR", str(SERVICES))
+    monkeypatch.setenv("COACH_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("POWERLIFTING_S3_BUCKET", bucket)
+    monkeypatch.setenv("COACH_PROVIDERS", json.dumps({"chatgpt": {"auth": "chatgpt", "max_concurrent": 1}}))
+    monkeypatch.setenv("COACH_CONVERSATION_AI", json.dumps({"provider": "chatgpt", "model": "m", "effort": "medium"}))
+    monkeypatch.setenv("COACH_OPERATION_AI", json.dumps(OPERATION_AI))
+    job = Job.__new__(Job)
+    job.owner, job.athlete, job.job_id = "operator", "ath-1", "job-1"
+    return load(), job
+
+
+def test_lifetime_report_is_written_and_announced(tmp_path, monkeypatch):
+    import asyncio
+    from services.coach.lifetime import NOTE, REPORT_FILE, with_lifetime_report
+
+    settings, job = _lifetime_job(tmp_path, monkeypatch)
+    s3, base = StubS3(b"# Lifetime"), RecordingModel()
+    wrapped = asyncio.run(with_lifetime_report(settings, base, job, s3))
+    assert asyncio.run(wrapped.complete(None, "base", "p")) == "ok"
+    instructions, workspace = base.calls[0]
+    assert s3.keys == [("bucket", "lifetime/ath-1/latest.md")]
+    assert instructions == "base\n\n" + NOTE
+    assert (workspace / REPORT_FILE).read_bytes() == b"# Lifetime"
+
+
+@pytest.mark.parametrize("outcome,bucket", [(_client_error("NoSuchKey"), "bucket"), (_client_error("404"), "bucket"), (_client_error("AccessDenied"), "bucket"), (RuntimeError("boom"), "bucket"), (b"x", "")])
+def test_lifetime_report_missing_or_failing_leaves_model_untouched(tmp_path, monkeypatch, outcome, bucket):
+    import asyncio
+    from services.coach.lifetime import with_lifetime_report
+
+    settings, job = _lifetime_job(tmp_path, monkeypatch, bucket)
+    base = RecordingModel()
+    assert asyncio.run(with_lifetime_report(settings, base, job, StubS3(outcome))) is base
+    assert not list(settings.workspaces.glob("*/lifetime_report.md"))

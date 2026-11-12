@@ -1,0 +1,59 @@
+## Analysis window: Last 6 weeks (from 2026-09-07)
+
+**Weeks to primary competition:** 8.2
+
+## Athlete Lift Profiles
+
+### Squat
+  Style: High bar
+  Sticking points: out of the hole
+  Primary muscle: quads
+  Volume tolerance: moderate
+
+### Bench Press
+
+### Deadlift
+  Sticking points: lockout
+  Volume tolerance: low
+
+### ?
+  Style: orphan
+
+**Caloric status:** surplus
+
+**Body weight trend:** 79.5 kg, down (-2.5 kg over window)
+## Weekly e1RM Estimates (kg)
+
+| Week | Squat | Bench | Deadlift |
+|------|-------|-------|----------|
+| W1 | 180.0 | 120.0 | - |
+| W2 | - | 121.2 | 220.0 |
+| W3 | 183.3 | - | - |
+| W4 | - | - | - |
+| W5 | 185.0 | 123.0 | 225.6 |
+| W6 | - | 124.5 | 226.0 |
+
+## Weekly Accessory Volume (sets × reps × kg) — Top 20
+
+| Week | Tríceps Pushdown | Leg Press | Acc 23 | Acc 22 | Acc 21 | Acc 20 | Acc 19 | Acc 18 | Acc 17 | Acc 16 | Acc 15 | Acc 14 | Acc 13 | Acc 12 | Acc 11 | Acc 10 | Acc 9 | Acc 8 | Acc 7 | Acc 6 | 
+|------|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| W1 | 1200 | - | 330 | 320 | 310 | 300 | 290 | 280 | 270 | 260 | 250 | 240 | 230 | 220 | 210 | 200 | 190 | 180 | 170 | 160 | 
+| W2 | 1500 | 2500 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W3 | - | 0 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W4 | - | 2 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W5 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W6 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+## Accessory Exercise ROI (pearson r between weekly volume and avg intensity)
+
+| Exercise | Pearson r | Weeks |
+|----------|-----------|-------|
+| Leg Press | +0.723 | 5 |
+| Curl | -0.310 | 4 |
+| Nothing | +0.000 | 0 |
+
+## Task
+Analyze the data above. Identify which accessory exercises have volume trends
+that plausibly correlate with changes in Squat, Bench, or Deadlift e1RM.
+Only report anatomically relevant correlations as per the system instructions.
+Where the exercise ROI table gives a strong |r|, use it to upgrade confidence on
+anatomically-plausible findings — never invent correlations from ROI alone.

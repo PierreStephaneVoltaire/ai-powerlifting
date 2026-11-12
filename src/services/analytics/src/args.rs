@@ -1,6 +1,6 @@
 use serde::Deserialize;
-use utoipa::ToSchema;
 use serde_json::{Map, Value};
+use utoipa::ToSchema;
 
 use crate::error::Error;
 
@@ -39,6 +39,9 @@ pub struct SectionArgs {
     pub program: Option<Value>,
     #[schema(value_type = Option<Vec<Object>>)]
     pub sessions: Option<Value>,
+    #[schema(value_type = Option<Object>)]
+    pub current_maxes: Option<Value>,
+    pub projection_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

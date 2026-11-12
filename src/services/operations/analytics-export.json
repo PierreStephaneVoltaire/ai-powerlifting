@@ -3,7 +3,6 @@
     "name": "analytics.export",
     "domain": "analytics-export",
     "description": "Return a block analysis export as base64 with its content metadata.",
-    "handler": "services.handlers.analysis_reports.analytics_export",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -57,7 +56,6 @@
     "name": "analytics.lifetime_export",
     "domain": "analytics-export",
     "description": "Return the saved lifetime report as base64 markdown or xlsx with its content metadata.",
-    "handler": "services.handlers.analysis_reports.lifetime_export",
     "input_schema": {
       "type": "object",
       "properties": {

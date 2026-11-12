@@ -17,13 +17,13 @@ variable "image_tag" {
 }
 
 source "docker" "powerlifting_analytics" {
-  image    = "public.ecr.aws/docker/library/node:24-bookworm-slim"
+  image    = "public.ecr.aws/docker/library/debian:bookworm-slim"
   commit   = true
   platform = "linux/amd64"
   changes = [
-    "WORKDIR /opt/powerlifting/src/backend",
-    "USER node",
-    "CMD [\"node\", \"dist/analyticsSidecar.js\"]"
+    "USER 10001",
+    "EXPOSE 8000 50051",
+    "ENTRYPOINT [\"/usr/local/bin/pl-analytics\"]"
   ]
 }
 
@@ -31,44 +31,29 @@ build {
   name    = "powerlifting-analytics"
   sources = ["source.docker.powerlifting_analytics"]
 
-  provisioner "shell" {
-    inline = ["mkdir -p /opt/powerlifting/src/backend /opt/powerlifting/src/frontend /opt/powerlifting/src/dependencies /opt/powerlifting/src/services"]
-  }
-
-  provisioner "file" {
-    sources     = ["../src/package.json", "../src/package-lock.json", "../src/tsconfig.json"]
-    destination = "/opt/powerlifting/src/"
-  }
-
-  provisioner "file" {
-    sources     = ["../src/backend/package.json", "../src/backend/tsconfig.json", "../src/backend/src"]
-    destination = "/opt/powerlifting/src/backend/"
-  }
-
-  provisioner "file" {
-    source      = "../src/frontend/package.json"
-    destination = "/opt/powerlifting/src/frontend/package.json"
-  }
-
-  provisioner "file" {
-    source      = "../src/dependencies/types"
-    destination = "/opt/powerlifting/src/dependencies/"
-  }
-
-  provisioner "file" {
-    sources     = ["../src/services/operations", "../src/services/calculation_constants.json"]
-    destination = "/opt/powerlifting/src/services/"
+  provisioner "shell-local" {
+    inline = [
+      "rm -rf .build/analytics && mkdir -p .build/analytics",
+      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e CARGO_HOME=/tmp/cargo -e CARGO_TARGET_DIR=/tmp/target -e CARGO_BUILD_JOBS=4 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/analytics:/out\" -w /workspace/services/analytics public.ecr.aws/docker/library/rust:1-slim-bookworm sh -c 'cargo build --release --locked && cp /tmp/target/release/pl-analytics /out/pl-analytics'"
+    ]
   }
 
   provisioner "shell" {
     inline = [
-      "cd /opt/powerlifting/src",
-      "npm ci --workspace=backend --workspace=dependencies/types",
-      "npm run build --workspace=backend",
-      "npm prune --omit=dev --workspace=backend --workspace=dependencies/types",
-      "rm -rf /opt/powerlifting/src/backend/src /opt/powerlifting/src/frontend /root/.npm",
-      "chown -R node:node /opt/powerlifting"
+      "apt-get update",
+      "apt-get install -y --no-install-recommends ca-certificates",
+      "rm -rf /var/lib/apt/lists/*",
+      "useradd --no-create-home --uid 10001 service"
     ]
+  }
+
+  provisioner "file" {
+    source      = ".build/analytics/pl-analytics"
+    destination = "/usr/local/bin/pl-analytics"
+  }
+
+  provisioner "shell" {
+    inline = ["chmod 755 /usr/local/bin/pl-analytics"]
   }
 
   post-processors {

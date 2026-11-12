@@ -1,0 +1,818 @@
+[
+  {
+    "name": "correlation_analysis",
+    "domain": "analytics-ai",
+    "description": "Generate a correlation analysis report across training variables. Analyzes how volume, intensity, RPE, and other factors correlate with progression. Results are reused while the source data is unchanged; refresh forces a new report.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "weeks": {
+          "type": "integer",
+          "description": "Number of weeks to analyze. Default 4."
+        },
+        "block": {
+          "type": "string",
+          "description": "Block key to scope the analysis."
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "findings",
+        "summary"
+      ],
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "insufficient_data": {
+          "type": "boolean"
+        },
+        "insufficient_data_reason": {
+          "type": "string"
+        },
+        "cached": {
+          "type": "boolean"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "window_start": {
+          "type": "string"
+        },
+        "weeks": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "block_correlation_analysis",
+    "domain": "analytics-ai",
+    "description": "Generate an AI correlation report for a specific block. Analyzes relationships between training variables (volume, intensity, RPE) and outcomes (progression, fatigue). Uses AI to generate natural-language findings and summary.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "block_key": {
+          "type": "string",
+          "description": "Block key to analyze."
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "findings",
+        "summary"
+      ],
+      "properties": {
+        "findings": {
+          "type": "array"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "insufficient_data": {
+          "type": "boolean"
+        },
+        "insufficient_data_reason": {
+          "type": "string"
+        },
+        "cached": {
+          "type": "boolean"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "window_start": {
+          "type": "string"
+        },
+        "weeks": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "program_evaluation",
+    "domain": "analytics-ai",
+    "description": "Generate an AI program evaluation report for the current program. Assesses overall design, volume, intensity, exercise selection, and progression. Results are reused while the source data is unchanged; refresh forces a new report.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "stance",
+        "summary"
+      ],
+      "properties": {
+        "stance": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "what_is_working": {
+          "type": "array"
+        },
+        "what_is_not_working": {
+          "type": "array"
+        },
+        "competition_alignment": {
+          "type": "array"
+        },
+        "goal_status": {
+          "type": "array"
+        },
+        "competition_strategy": {
+          "type": "array"
+        },
+        "weight_class_strategy": {
+          "type": "object"
+        },
+        "small_changes": {
+          "type": "array"
+        },
+        "external_factors": {
+          "type": "array"
+        },
+        "monitoring_focus": {
+          "type": "array"
+        },
+        "conclusion": {
+          "type": "string"
+        },
+        "insufficient_data": {
+          "type": "boolean"
+        },
+        "insufficient_data_reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "block_program_evaluation",
+    "domain": "analytics-ai",
+    "description": "Generate an AI program evaluation report for a specific block. Assesses the overall program design, exercise selection, volume distribution, and progression. Uses AI to produce a structured evaluation with recommendations.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "block_key": {
+          "type": "string",
+          "description": "Block key to evaluate."
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        },
+        "weeks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "window_start": {
+          "type": "string"
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "stance",
+        "summary"
+      ],
+      "properties": {
+        "stance": {
+          "type": "string",
+          "enum": [
+            "continue",
+            "monitor",
+            "adjust",
+            "critical"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "what_is_working": {
+          "type": "array"
+        },
+        "what_is_not_working": {
+          "type": "array"
+        },
+        "competition_alignment": {
+          "type": "array"
+        },
+        "goal_status": {
+          "type": "array"
+        },
+        "competition_strategy": {
+          "type": "array"
+        },
+        "weight_class_strategy": {
+          "type": "object"
+        },
+        "small_changes": {
+          "type": "array"
+        },
+        "external_factors": {
+          "type": "array"
+        },
+        "monitoring_focus": {
+          "type": "array"
+        },
+        "conclusion": {
+          "type": "string"
+        },
+        "insufficient_data": {
+          "type": "boolean"
+        },
+        "insufficient_data_reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "multi_block_comparison_analysis",
+    "domain": "analytics-ai",
+    "description": "Generate a comparison report across multiple training blocks. Analyzes differences in volume, intensity, progression, and outcomes between blocks. Uses AI to produce a structured comparison.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "block_keys": {
+          "type": "array",
+          "description": "List of block keys to compare."
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "overall_summary"
+      ],
+      "properties": {
+        "overall_summary": {
+          "type": "string"
+        },
+        "similarities": {
+          "type": "array"
+        },
+        "differences": {
+          "type": "array"
+        },
+        "what_works": {
+          "type": "array"
+        },
+        "what_does_not_work": {
+          "type": "array"
+        },
+        "lift_specific_insights": {
+          "type": "array"
+        },
+        "multi_block_exercise_roi": {
+          "type": "array"
+        },
+        "cross_block_correlations": {
+          "type": "array"
+        },
+        "pattern_detections": {
+          "type": "array"
+        },
+        "volume_dose_response": {
+          "type": "array"
+        },
+        "bodyweight_relationships": {
+          "type": "array"
+        },
+        "training_day_frequency": {
+          "type": "array"
+        },
+        "best_value_blocks": {
+          "type": "array"
+        },
+        "projection_accuracy": {
+          "type": "array"
+        },
+        "progress_dropoff_points": {
+          "type": "array"
+        },
+        "fatigue_patterns": {
+          "type": "array"
+        },
+        "data_limits": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "analytics.block_evaluation",
+    "domain": "analytics-ai",
+    "description": "Return the cached AI evaluation for one block.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cacheOnly": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "pk",
+        "blockKey"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "stance": {
+              "type": "string",
+              "enum": [
+                "continue",
+                "monitor",
+                "adjust",
+                "critical"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "what_is_working": {
+              "type": "array"
+            },
+            "what_is_not_working": {
+              "type": "array"
+            },
+            "competition_alignment": {
+              "type": "array"
+            },
+            "goal_status": {
+              "type": "array"
+            },
+            "competition_strategy": {
+              "type": "array"
+            },
+            "weight_class_strategy": {
+              "type": "object"
+            },
+            "small_changes": {
+              "type": "array"
+            },
+            "external_factors": {
+              "type": "array"
+            },
+            "monitoring_focus": {
+              "type": "array"
+            },
+            "conclusion": {
+              "type": "string"
+            },
+            "insufficient_data": {
+              "type": "boolean"
+            },
+            "insufficient_data_reason": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "window_start": {
+              "type": "string"
+            },
+            "weeks": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "stance",
+            "summary"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "generation_id": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "starting",
+                "running",
+                "succeeded",
+                "failed",
+                "cancelled",
+                "cancel_requested",
+                "uncertain",
+                "missing"
+              ]
+            },
+            "job_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "generation_id",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cache_miss": {
+              "const": true
+            },
+            "cached": {
+              "const": false
+            }
+          },
+          "required": [
+            "cache_miss",
+            "cached"
+          ]
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "analytics.correlation",
+    "domain": "analytics-ai",
+    "description": "Return the cached AI correlation report for one block.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cacheOnly": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "pk",
+        "blockKey"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "findings": {
+              "type": "array"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "insufficient_data": {
+              "type": "boolean"
+            },
+            "insufficient_data_reason": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "window_start": {
+              "type": "string"
+            },
+            "weeks": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "findings",
+            "summary"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "generation_id": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "starting",
+                "running",
+                "succeeded",
+                "failed",
+                "cancelled",
+                "cancel_requested",
+                "uncertain",
+                "missing"
+              ]
+            },
+            "job_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "generation_id",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cache_miss": {
+              "const": true
+            },
+            "cached": {
+              "const": false
+            }
+          },
+          "required": [
+            "cache_miss",
+            "cached"
+          ]
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "analytics.compare_ai",
+    "domain": "analytics-ai",
+    "description": "Compare selected training blocks with the cached AI synthesis.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockKeys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cacheOnly": {
+          "type": "boolean",
+          "default": false
+        },
+        "read_only": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "pk"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "integer"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "cached": {
+          "type": "boolean"
+        },
+        "selectedBlockKeys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "sourceFingerprint": {
+          "type": "string"
+        },
+        "report": {
+          "type": "object"
+        },
+        "deterministic": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "integer"
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "selectedBlockKeys": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "rows": {
+              "type": "array"
+            },
+            "trends": {
+              "type": "object"
+            },
+            "roiSignals": {
+              "type": "array"
+            },
+            "exerciseRoi": {
+              "type": "array"
+            },
+            "correlationFindings": {
+              "type": "array"
+            },
+            "patternSignals": {
+              "type": "array"
+            },
+            "liftDoseResponse": {
+              "type": "array"
+            },
+            "trainingDayResponse": {
+              "type": "array"
+            },
+            "trendSeries": {
+              "type": "object"
+            },
+            "volumeTolerance": {
+              "type": "object"
+            },
+            "missingDataSummary": {
+              "type": "array"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "generatedAt",
+            "selectedBlockKeys",
+            "rows",
+            "trends",
+            "roiSignals",
+            "exerciseRoi",
+            "correlationFindings",
+            "patternSignals",
+            "liftDoseResponse",
+            "trainingDayResponse",
+            "volumeTolerance",
+            "missingDataSummary"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "generatedAt",
+        "selectedBlockKeys",
+        "sourceFingerprint",
+        "report",
+        "deterministic"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

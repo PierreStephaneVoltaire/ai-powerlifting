@@ -36,6 +36,7 @@ async fn section_payload(fixtures: &Fixtures, window_key: &str, section: &str) -
         ref_date: Some(fixtures.as_of.to_string()),
         week_start: Some(window.week_start),
         week_end: Some(window.week_end),
+        ..Params::default()
     };
     let env = Env {
         today: fixtures.as_of,
@@ -73,6 +74,11 @@ async fn check_section(section: &str) {
         assert_eq!(golden["body"]["sectionKey"], body["sectionKey"], "{file}");
         checked += 1;
     }
+    assert_eq!(
+        checked,
+        fixtures.calls("analytics.manifest").len(),
+        "{section} must be covered for every window"
+    );
     eprintln!("{section}: {checked} golden(s) matched");
 }
 
@@ -190,4 +196,79 @@ async fn progression() {
 #[tokio::test(flavor = "multi_thread")]
 async fn rpe_drift() {
     check_exercise("analyze_rpe_drift", "drift").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocks_list() {
+    let Some(fixtures) = fixtures() else { return };
+    let engine = fixtures.engine();
+    let registry = Registry::load().expect("contract loads");
+    let calls = fixtures.calls("analytics.blocks_list");
+    assert_eq!(calls.len(), 1);
+    for (file, _) in calls {
+        let golden = fixtures.golden(&file);
+        let actual = engine
+            .blocks_list(object(json!({"pk": fixtures.athlete})))
+            .await
+            .expect("blocks list builds");
+        assert_matches(&file, &golden["body"], &actual);
+        registry
+            .get("analytics.blocks_list")
+            .expect("operation exists")
+            .validate_result(&actual)
+            .expect("result schema holds");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocks_get() {
+    let Some(fixtures) = fixtures() else { return };
+    let registry = Registry::load().expect("contract loads");
+    let calls = fixtures.calls("analytics.blocks_get");
+    let keys = fixtures.manifest["blockKeys"]
+        .as_array()
+        .map_or(0, Vec::len);
+    assert_eq!(calls.len(), keys, "every block has a blocks_get golden");
+    for (file, inputs) in calls {
+        let golden = fixtures.golden(&file);
+        let captured = golden["body"]["generatedAt"]
+            .as_str()
+            .and_then(|stamp| stamp.get(..10))
+            .and_then(|day| day.parse().ok())
+            .unwrap_or(fixtures.as_of);
+        let engine = fixtures.engine_at(captured);
+        let args = object(json!({
+            "pk": fixtures.athlete,
+            "blockKey": inputs["blockKey"],
+            "refresh": inputs["refresh"],
+            "cacheOnly": inputs["cacheOnly"],
+        }));
+        let actual = engine.blocks_get(args).await.expect("block bundle builds");
+        assert_matches(&file, &golden["body"], &actual);
+        registry
+            .get("analytics.blocks_get")
+            .expect("operation exists")
+            .validate_result(&actual)
+            .expect("result schema holds");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sections_queue() {
+    let Some(fixtures) = fixtures() else { return };
+    let engine = fixtures.engine();
+    let registry = Registry::load().expect("contract loads");
+    for (file, inputs) in fixtures.calls("analytics.sections_queue") {
+        let args = object(json!({
+            "pk": fixtures.athlete,
+            "asOfDate": fixtures.as_of.to_string(),
+            "window": inputs["window"],
+        }));
+        let actual = engine.sections_queue(args).await.expect("queue builds");
+        registry
+            .get("analytics.sections_queue")
+            .expect("operation exists")
+            .validate_result(&actual)
+            .unwrap_or_else(|error| panic!("{file}: {error}"));
+    }
 }

@@ -22,6 +22,5 @@ export function findRouteRule(method: HttpMethod, path: string, query: Record<st
   const report = /\/(program-evaluation|correlation|ai-analysis|ai)$/.test(path)
   if (report) access = (query.cacheOnly === 'true' || query.cache_only === 'true' || (path.endsWith('/ai-analysis') && query.refresh === 'false')) && query.refresh !== 'true' ? 'read' : 'write'
   if (query.refresh === 'true') access = 'write'
-  if (path === '/api/analytics/budget/timeline') access = 'read'
   return { scope, access }
 }

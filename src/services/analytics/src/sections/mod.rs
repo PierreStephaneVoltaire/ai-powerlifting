@@ -31,6 +31,8 @@ pub struct Params {
     pub ref_date: Option<String>,
     pub week_start: Option<i64>,
     pub week_end: Option<i64>,
+    pub provided_maxes: Maxes,
+    pub projection_date: Option<String>,
 }
 
 pub struct Context<'a> {
@@ -54,6 +56,7 @@ pub struct Context<'a> {
     pub completed_history: Vec<&'a Session>,
     pub maxes: Maxes,
     pub maxes_method: &'static str,
+    pub projection_date: Option<String>,
 }
 
 fn sorted_desc(mut sessions: Vec<&Session>) -> Vec<&Session> {
@@ -180,7 +183,9 @@ impl<'a> Context<'a> {
         let competitions: Vec<&crate::model::Competition> = program.competitions.iter().collect();
         let from_competitions = e1rm::from_competitions(&competitions, end);
         let from_sessions = e1rm::from_sessions(&completed_history, 42, end);
-        let (maxes, method) = if !from_competitions.is_empty() {
+        let (maxes, method) = if !params.provided_maxes.is_empty() {
+            (params.provided_maxes, "provided")
+        } else if !from_competitions.is_empty() {
             (from_competitions, "comp_results")
         } else if !from_sessions.is_empty() {
             (from_sessions, "session_estimated")
@@ -208,6 +213,10 @@ impl<'a> Context<'a> {
             completed_history,
             maxes,
             maxes_method: method,
+            projection_date: params
+                .projection_date
+                .clone()
+                .filter(|text| !text.is_empty()),
         })
     }
 
@@ -250,4 +259,114 @@ pub fn compute_all(
         }
     }
     Ok(merged)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Glossary, Lift};
+    use serde_json::json;
+
+    fn fixture() -> ProgramData {
+        let mut sessions = Vec::new();
+        for week in 1..=8_i64 {
+            let day = chrono::NaiveDate::from_ymd_opt(2027, 1, 4).unwrap()
+                + Duration::days((week - 1) * 7);
+            let bump = week as f64 * 2.5;
+            sessions.push(Session::from_value(json!({
+                "date": day.to_string(),
+                "week_number": week,
+                "completed": true,
+                "block": "current",
+                "exercises": [
+                    {"name": "Squat", "sets": 3, "reps": 3, "kg": 140.0 + bump},
+                    {"name": "Bench Press", "sets": 3, "reps": 3, "kg": 100.0 + bump},
+                    {"name": "Deadlift", "sets": 3, "reps": 3, "kg": 170.0 + bump},
+                ],
+            })));
+        }
+        ProgramData::from_value(
+            &json!({"meta": {"program_start": "2027-01-04", "sex": "male", "current_body_weight_kg": 90.0}}),
+            sessions,
+        )
+    }
+
+    fn params() -> Params {
+        Params {
+            weeks: 8,
+            block: Some(String::new()),
+            ref_date: Some("2027-03-01".to_owned()),
+            week_start: Some(1),
+            week_end: Some(8),
+            ..Params::default()
+        }
+    }
+
+    fn today() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2027, 3, 1).unwrap()
+    }
+
+    #[test]
+    fn provided_maxes_replace_the_estimates_and_name_their_method() {
+        let program = fixture();
+        let glossary = Glossary::default();
+        let env = Env {
+            today: today(),
+            glossary: &glossary,
+        };
+        let mut provided = Maxes::default();
+        provided.set(Lift::Squat, 185.0);
+        provided.set(Lift::Bench, 122.5);
+        let overview = compute(
+            env,
+            &program,
+            "overview",
+            &Params {
+                provided_maxes: provided,
+                ..params()
+            },
+        )
+        .unwrap();
+        assert_eq!(overview["current_maxes"]["method"], "provided");
+        assert_eq!(overview["current_maxes"]["squat"], 185.0);
+        assert!(overview["current_maxes"]["deadlift"].is_null());
+        let estimated = compute(env, &program, "overview", &params()).unwrap();
+        assert_eq!(estimated["current_maxes"]["method"], "session_estimated");
+    }
+
+    #[test]
+    fn projection_date_adds_the_requested_meet_projection_only_when_asked() {
+        let program = fixture();
+        let glossary = Glossary::default();
+        let env = Env {
+            today: today(),
+            glossary: &glossary,
+        };
+        let plain = compute(env, &program, "overview", &params()).unwrap();
+        assert!(plain.get("requested_projection").is_none());
+        let asked = compute(
+            env,
+            &program,
+            "overview",
+            &Params {
+                projection_date: Some("2027-03-08".to_owned()),
+                ..params()
+            },
+        )
+        .unwrap();
+        let projection = &asked["requested_projection"];
+        assert!(projection["total"].as_f64().unwrap() > 0.0);
+        assert!(projection["lifts"]["squat"]["projected"].as_f64().unwrap() > 0.0);
+        let past = compute(
+            env,
+            &program,
+            "overview",
+            &Params {
+                projection_date: Some("2027-02-01".to_owned()),
+                ..params()
+            },
+        )
+        .unwrap();
+        assert!(past.get("requested_projection").is_none());
+    }
 }

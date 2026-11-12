@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from services import analytics_client
 from services.lib.aws import dynamodb_resource
 from services.lib.competition_entries import load_entries, with_competition_entries
 
@@ -39,8 +41,6 @@ def _decimal(value):
 
 
 def snapshot_entries(program: dict, entries: list[dict], snapshot_date, allow_retrospective: bool = False) -> list[dict]:
-    from .analytics import meet_projection
-
     target = (snapshot_date + timedelta(days=7)).isoformat()
     updates = []
     for entry in entries:
@@ -49,17 +49,18 @@ def snapshot_entries(program: dict, entries: list[dict], snapshot_date, allow_re
             continue
         if status not in ("confirmed", "optional") and not (allow_retrospective and status == "completed"):
             continue
-        projection = meet_projection(program, program.get("sessions", []), comp_date=target, ref_date=snapshot_date)
-        if "total" not in projection:
+        projection = analytics_client.projected_meet(program, target, snapshot_date.isoformat())
+        if not projection:
             continue
+        lifts = projection.get("lifts") or {}
         updates.append({
             "sk": entry["sk"],
             "name": entry.get("name"),
             "date": target,
             "projected_at_t_minus_1w": {
-                "squat_kg": projection.get("squat"),
-                "bench_kg": projection.get("bench"),
-                "deadlift_kg": projection.get("deadlift"),
+                "squat_kg": (lifts.get("squat") or {}).get("projected"),
+                "bench_kg": (lifts.get("bench") or {}).get("projected"),
+                "deadlift_kg": (lifts.get("deadlift") or {}).get("projected"),
                 "total_kg": projection.get("total"),
             },
             "projection_snapshot_date": snapshot_date.isoformat(),
@@ -72,7 +73,7 @@ async def health_snapshot_competition_projection(args: dict) -> dict:
     snapshot_date = datetime.strptime(args["date"], "%Y-%m-%d").date()
     entries = load_entries(pk)
     program = with_competition_entries(_load_program(pk, args.get("version") or "current"), pk, entries)
-    updates = snapshot_entries(program, entries, snapshot_date, bool(args.get("allow_retrospective")))
+    updates = await asyncio.to_thread(snapshot_entries, program, entries, snapshot_date, bool(args.get("allow_retrospective")))
     table = _entries_table()
     now = datetime.now(timezone.utc).isoformat()
     for update in updates:

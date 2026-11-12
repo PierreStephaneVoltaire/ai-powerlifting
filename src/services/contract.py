@@ -22,7 +22,7 @@ class Operation(BaseModel):
     name: str
     domain: str
     description: str
-    handler: str
+    handler: str | None = None
     input_schema: dict[str, Any]
     result_schema: dict[str, Any]
     execution: Literal["deterministic", "ai"] = "deterministic"

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -38,10 +40,14 @@ pub fn fixtures() -> Option<Fixtures> {
 
 impl Fixtures {
     pub fn engine(&self) -> Engine {
+        self.engine_at(self.as_of)
+    }
+
+    pub fn engine_at(&self, today: NaiveDate) -> Engine {
         Engine::new(
             Arc::new(FixtureSource::new(self.root.join("source"))),
             Cache::disabled(),
-            Clock::Fixed(self.as_of),
+            Clock::Fixed(today),
         )
     }
 

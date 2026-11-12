@@ -30,7 +30,10 @@ fn strength(correlation: &Correlation) -> &'static str {
 }
 
 fn evidence(correlation: &Correlation, facts: &BTreeMap<String, BlockFacts>) -> Vec<Evidence> {
-    let key = correlation.lift.clone().unwrap_or_else(|| "total".to_owned());
+    let key = correlation
+        .lift
+        .clone()
+        .unwrap_or_else(|| "total".to_owned());
     correlation
         .observations
         .iter()
@@ -83,7 +86,8 @@ fn tolerance_signals(
     let mut stalls = Vec::new();
     for (lift, variables) in &tolerance.by_lift {
         for (name, item) in variables {
-            let (Some(onset), Some(range)) = (item.stall_onset, item.positive_range.as_ref()) else {
+            let (Some(onset), Some(range)) = (item.stall_onset, item.positive_range.as_ref())
+            else {
                 continue;
             };
             let members = points
@@ -147,4 +151,87 @@ pub fn build(
     }
     did_not_work.extend(tolerance_signals(tolerance, points));
     (worked, did_not_work)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifetime::correlate::{Row, analyse};
+    use crate::lifetime::tolerance;
+
+    fn rows(sign: f64) -> Vec<Row> {
+        (0..8)
+            .map(|index| Row {
+                block_key: format!("block_{index}"),
+                exposures: BTreeMap::from([("squat.weekly_hard_sets".to_owned(), index as f64)]),
+                outcomes: BTreeMap::from([
+                    ("squat".to_owned(), sign * index as f64),
+                    ("total".to_owned(), sign * index as f64),
+                ]),
+            })
+            .collect()
+    }
+
+    fn facts() -> BTreeMap<String, BlockFacts> {
+        (0..8)
+            .map(|index| {
+                (
+                    format!("block_{index}"),
+                    BlockFacts {
+                        label: format!("Block {index}"),
+                        classification: BTreeMap::from([(
+                            "squat".to_owned(),
+                            "improved".to_owned(),
+                        )]),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn signals(sign: f64) -> (Vec<Signal>, Vec<Signal>) {
+        let correlations = analyse(&rows(sign));
+        build(
+            &correlations,
+            &tolerance::build(&BTreeMap::new()),
+            &BTreeMap::new(),
+            &facts(),
+        )
+    }
+
+    #[test]
+    fn positive_dose_response_is_worked_with_evidence_and_strength() {
+        let (worked, did_not_work) = signals(1.0);
+        assert!(did_not_work.is_empty());
+        let signal = worked
+            .iter()
+            .find(|signal| signal.outcome == "squat_e1rm_delta_per_week")
+            .expect("squat signal");
+        assert_eq!(signal.strength, "strong");
+        assert_eq!(signal.n, 8);
+        assert!(!signal.low_n);
+        assert_eq!(signal.evidence.len(), 8);
+        assert_eq!(signal.evidence[3].label, "Block 3");
+        assert_eq!(signal.evidence[3].classification, "improved");
+    }
+
+    #[test]
+    fn negative_dose_response_did_not_work() {
+        let (worked, did_not_work) = signals(-1.0);
+        assert!(worked.is_empty());
+        assert!(!did_not_work.is_empty());
+        assert!(did_not_work.iter().all(|signal| signal.tau.unwrap() < 0.0));
+    }
+
+    #[test]
+    fn weak_or_tiny_samples_produce_no_signal() {
+        let tiny: Vec<Row> = rows(1.0).into_iter().take(3).collect();
+        let (worked, did_not_work) = build(
+            &analyse(&tiny),
+            &tolerance::build(&BTreeMap::new()),
+            &BTreeMap::new(),
+            &facts(),
+        );
+        assert!(worked.is_empty() && did_not_work.is_empty());
+    }
 }

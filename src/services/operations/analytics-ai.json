@@ -3,7 +3,6 @@
     "name": "correlation_analysis",
     "domain": "analytics-ai",
     "description": "Generate a correlation analysis report across training variables. Analyzes how volume, intensity, RPE, and other factors correlate with progression. Results are reused while the source data is unchanged; refresh forces a new report.",
-    "handler": "services.handlers.analysis.correlation_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -70,7 +69,6 @@
     "name": "block_correlation_analysis",
     "domain": "analytics-ai",
     "description": "Generate an AI correlation report for a specific block. Analyzes relationships between training variables (volume, intensity, RPE) and outcomes (progression, fatigue). Uses AI to generate natural-language findings and summary.",
-    "handler": "services.handlers.analysis.block_correlation_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -137,7 +135,6 @@
     "name": "program_evaluation",
     "domain": "analytics-ai",
     "description": "Generate an AI program evaluation report for the current program. Assesses overall design, volume, intensity, exercise selection, and progression. Results are reused while the source data is unchanged; refresh forces a new report.",
-    "handler": "services.handlers.analysis.program_evaluation.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -218,7 +215,6 @@
     "name": "block_program_evaluation",
     "domain": "analytics-ai",
     "description": "Generate an AI program evaluation report for a specific block. Assesses the overall program design, exercise selection, volume distribution, and progression. Uses AI to produce a structured evaluation with recommendations.",
-    "handler": "services.handlers.analysis.block_program_evaluation.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -316,7 +312,6 @@
     "name": "multi_block_comparison_analysis",
     "domain": "analytics-ai",
     "description": "Generate a comparison report across multiple training blocks. Analyzes differences in volume, intensity, progression, and outcomes between blocks. Uses AI to produce a structured comparison.",
-    "handler": "services.handlers.analysis.multi_block_comparison_analysis.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -409,7 +404,6 @@
     "name": "analytics.block_evaluation",
     "domain": "analytics-ai",
     "description": "Return the cached AI evaluation for one block.",
-    "handler": "services.handlers.analysis_reports.block_evaluation",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -563,7 +557,6 @@
     "name": "analytics.correlation",
     "domain": "analytics-ai",
     "description": "Return the cached AI correlation report for one block.",
-    "handler": "services.handlers.analysis_reports.correlation",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -681,7 +674,6 @@
     "name": "analytics.compare_ai",
     "domain": "analytics-ai",
     "description": "Compare selected training blocks with the cached AI synthesis.",
-    "handler": "services.handlers.analysis_reports.compare_ai",
     "input_schema": {
       "type": "object",
       "properties": {

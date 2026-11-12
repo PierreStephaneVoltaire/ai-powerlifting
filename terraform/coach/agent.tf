@@ -124,7 +124,20 @@ resource "kubernetes_deployment_v1" "coach" {
             }
           }
 
+          env {
+            name  = "POWERLIFTING_S3_BUCKET"
+            value = var.dataset_bucket
+          }
 
+          env {
+            name  = "AWS_SHARED_CREDENTIALS_FILE"
+            value = "/secrets/aws/credentials"
+          }
+
+          env {
+            name  = "AWS_CONFIG_FILE"
+            value = "/secrets/aws/config"
+          }
 
           port {
             container_port = 8000
@@ -148,6 +161,12 @@ resource "kubernetes_deployment_v1" "coach" {
             name       = "state"
             mount_path = "/var/lib/coach"
           }
+
+          volume_mount {
+            name       = "aws"
+            mount_path = "/secrets/aws"
+            read_only  = true
+          }
         }
 
         volume {
@@ -155,6 +174,14 @@ resource "kubernetes_deployment_v1" "coach" {
 
           persistent_volume_claim {
             claim_name = kubernetes_persistent_volume_claim_v1.coach_state.metadata[0].name
+          }
+        }
+
+        volume {
+          name = "aws"
+
+          secret {
+            secret_name = var.aws_credentials_secret_name
           }
         }
       }

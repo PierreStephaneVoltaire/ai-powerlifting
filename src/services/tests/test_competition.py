@@ -182,7 +182,7 @@ def test_entering_a_meet_indexes_it_by_date_and_block_and_withdrawing_unindexes_
 
 def test_projection_snapshot_targets_entries_one_week_out(monkeypatch):
     module = importlib.import_module("services.handlers.competition.health_snapshot_competition_projection.core")
-    analytics = importlib.import_module("services.handlers.competition.health_snapshot_competition_projection.analytics")
+    analytics = importlib.import_module("services.lib.training_analysis")
     monkeypatch.setattr(analytics, "meet_projection", lambda *_args, **_kwargs: {"squat": 200, "bench": 125, "deadlift": 240, "total": 565})
     from datetime import date
     entries = [

@@ -1,16 +1,17 @@
 import importlib
-import httpx
-import sys
 from jsonschema import ValidationError
-from types import SimpleNamespace
 
 from services.contract import load_operations
 from services.dispatch import dispatch
 
 
+def _analytics_operations():
+    return {name: operation for domain in ("analytics", "analytics-ai", "analytics-export", "export") for name, operation in load_operations(domain).items()}
+
+
 def test_analytics_contracts_have_structured_results():
-    operations = load_operations("analytics")
-    assert len(operations) == 27
+    operations = _analytics_operations()
+    assert len(operations) == 30
     assert all(operation.result_schema for operation in operations.values())
 
 
@@ -20,168 +21,12 @@ def test_rankings_operations_live_in_their_own_domain():
     assert not set(rankings) & set(load_operations("analytics"))
 
 
-def test_ranking_percentiles_are_cached_per_dataset_athlete_numbers_and_filter(monkeypatch):
-    handler = importlib.import_module("services.handlers.analysis.powerlifting_ranking_percentile.handler")
-    records = {}
-    computed = []
-    identity = ["dataset-a"]
-    monkeypatch.setattr(handler, "load_data", lambda: object())
-    monkeypatch.setattr(handler.opl_dataset, "identity", lambda: identity[0])
-    monkeypatch.setattr(handler.valkey, "get_json", records.get)
-    monkeypatch.setattr(handler.valkey, "set_json", records.__setitem__)
-    monkeypatch.setattr(handler, "compute_ranking_percentiles", lambda _df, **kwargs: computed.append(kwargs) or {"global": {"total": len(computed)}})
-    args = {"pk": "athlete-a", "squat_kg": 200, "bench_kg": 130, "deadlift_kg": 250, "bodyweight_kg": 82, "sex_code": "M", "equipment": "Raw"}
-
-    assert handler.handler({"args": args}, None)["body"] == handler.handler({"args": args}, None)["body"]
-    assert len(computed) == 1
-    handler.handler({"args": {**args, "equipment": "Wraps"}}, None)
-    handler.handler({"args": {**args, "squat_kg": 205}}, None)
-    handler.handler({"args": {**args, "pk": "athlete-b"}}, None)
-    identity[0] = "dataset-b"
-    handler.handler({"args": args}, None)
-    assert len(computed) == 5
-
-
-def test_analysis_section_uses_supplied_snapshot(monkeypatch):
-    core = importlib.import_module("services.handlers.analysis.analysis_section.core")
-    monkeypatch.setattr(core, "_get_glossary_sync", lambda _table: [])
-    result = dispatch(
-        load_operations("analytics")["analysis_section"],
-        {
-            "pk": "athlete-1",
-            "program": {"meta": {"program_start": "2026-01-01"}, "sessions": []},
-            "section": "overview",
-            "ref_date": "2026-01-07",
-        },
-    )
-    assert "current_maxes" in result
-    assert result["sessions_analyzed"] == 0
-
-
-def test_shared_lift_calculations_are_used_by_analytics():
-    analytics = importlib.import_module("services.handlers.analysis_reports.analytics")
-    calculations = importlib.import_module("services.lib.lift_calculations")
-    assert analytics.estimate_1rm(100, 5, 8) == calculations.estimate_1rm(100, 5, 8)
-    assert analytics.calculate_dots(500, 80, "male") == calculations.calculate_dots(500, 80, "male")
-
-
 def test_internal_e1rm_keeps_precision_before_regression():
-    analytics = importlib.import_module("services.handlers.analysis_reports.analytics")
+    analytics = importlib.import_module("services.lib.training_analysis")
     calculations = importlib.import_module("services.lib.lift_calculations")
     assert calculations.estimate_1rm_value(100, 3, 8) == 100 / 0.875
     assert analytics._estimate_e1rm_from_set(100, 3, 8) == 114.28571428571429
     assert calculations.estimate_1rm(100, 3, 8)["e1rm"] == 114.3
-
-
-def test_e1rm_multiplier_suggestions_binding_uses_existing_calculation():
-    result = dispatch(
-        load_operations("analytics")["health_suggest_e1rm_multipliers"],
-        {
-            "pk": "athlete-1",
-            "program": {"sessions": [], "competitions": [], "lift_profiles": []},
-            "max_history": [],
-            "reference_date": "2026-09-13",
-        },
-    )
-    assert result == {"squat": None, "bench": None, "deadlift": None}
-
-
-def test_composite_operation_bindings_proxy_to_node_sidecar(monkeypatch):
-    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
-    composite = importlib.import_module("services.handlers.analysis_reports.composite")
-    calls = []
-
-    def fake_post(url, **kwargs):
-        calls.append((url, kwargs))
-        return httpx.Response(200, json={"data": {"schemaVersion": 6}, "error": None}, request=httpx.Request("POST", url))
-
-    monkeypatch.setattr(composite.httpx, "post", fake_post)
-    result = composite.call_node("analytics.manifest", {"pk": "athlete-1", "window": "current"})
-    assert result == {"schemaVersion": 6}
-    assert calls[0][0].endswith("/internal/analytics/operations/analytics.manifest")
-    assert calls[0][1]["headers"]["X-Athlete-Pk"] == "athlete-1"
-
-
-def test_composite_proxy_preserves_authenticated_person_without_forwarding_it_as_input(monkeypatch):
-    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
-    composite = importlib.import_module("services.handlers.analysis_reports.composite")
-    calls = []
-
-    def fake_post(url, **kwargs):
-        calls.append((url, kwargs))
-        return httpx.Response(200, json={"data": {"schemaVersion": 6}, "error": None}, request=httpx.Request("POST", url))
-
-    monkeypatch.setattr(composite.httpx, "post", fake_post)
-    composite.call_node("analytics.manifest", {"pk": "athlete-1", "_person_pk": "coach-1", "_if_job_id": "job-1"})
-    headers = calls[0][1]["headers"]
-    assert headers["X-Person-Pk"] == "coach-1"
-    assert headers["X-IF-Turn-Id"] == "job-1"
-    assert "X-PL-Principal" not in headers
-    assert headers["X-Internal-Token"] == "loopback-secret"
-    assert calls[0][1]["json"] == {"pk": "athlete-1"}
-
-
-def test_composite_block_cache_miss_preserves_not_found_status(monkeypatch):
-    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
-    composite = importlib.import_module("services.handlers.analysis_reports.composite")
-    from services.dispatch import OperationError
-
-    def fake_post(url, **kwargs):
-        return httpx.Response(404, json={"data": None, "error": "Block current not found"}, request=httpx.Request("POST", url))
-
-    monkeypatch.setattr(composite.httpx, "post", fake_post)
-    try:
-        composite.call_node("analytics.blocks_get", {"pk": "athlete-1", "blockKey": "current", "cacheOnly": True})
-    except OperationError as error:
-        assert error.status == 404
-        assert error.code == "cache_miss"
-    else:
-        raise AssertionError("cache miss must preserve 404")
-
-
-def test_composite_correlation_cache_miss_preserves_not_found_status(monkeypatch):
-    monkeypatch.setenv("ANALYTICS_NODE_TOKEN", "loopback-secret")
-    composite = importlib.import_module("services.handlers.analysis_reports.composite")
-    from services.dispatch import OperationError
-
-    def fake_post(url, **kwargs):
-        return httpx.Response(404, json={"data": None, "error": "Correlation report not found"}, request=httpx.Request("POST", url))
-
-    monkeypatch.setattr(composite.httpx, "post", fake_post)
-    try:
-        composite.call_node("analytics.correlation", {"pk": "athlete-1", "blockKey": "unknown", "cacheOnly": True})
-    except OperationError as error:
-        assert error.status == 404
-        assert error.code == "cache_miss"
-        assert str(error) == "Correlation report not found"
-    else:
-        raise AssertionError("cache miss must preserve 404")
-
-
-def test_composite_operation_contracts_have_importable_handlers():
-    operations = load_operations("analytics")
-    names = {name for name in operations if name.startswith("analytics.")}
-    assert names == {
-        "analytics.manifest",
-        "analytics.sections_queue",
-        "analytics.sections_get",
-        "analytics.sections_invalidate",
-        "analytics.weekly",
-        "analytics.bundle",
-        "analytics.regenerate",
-        "analytics.markdown",
-        "analytics.blocks_list",
-        "analytics.blocks_get",
-        "analytics.blocks_regenerate",
-        "analytics.block_evaluation",
-        "analytics.correlation",
-        "analytics.export",
-        "analytics.compare",
-        "analytics.compare_ai",
-    }
-    for operation in names:
-        module = importlib.import_module(operations[operation].handler)
-        assert callable(module.handler)
 
 
 def test_analysis_section_accepts_alert_list_from_handler():
@@ -194,38 +39,8 @@ def test_weekly_analysis_accepts_alert_list_from_handler():
     operation.validate_result({"alerts": [{"severity": "info", "source": "test", "message": "ok"}], "flags": []})
 
 
-def test_legacy_weekly_contract_matches_flat_handler_result(monkeypatch):
-    operation = load_operations("analytics")["analytics.weekly"]
-    flat_result = {
-            "week": 1,
-            "block": "current",
-            "lifts": {},
-            "fatigue_index": None,
-            "fatigue_components": None,
-            "compliance": {},
-            "current_maxes": {},
-            "estimated_dots": None,
-            "projections": [],
-            "projection_reason": None,
-            "flags": [],
-            "sessions_analyzed": 0,
-            "exercise_stats": {},
-            "alerts": [{"severity": "info", "source": "test", "message": "ok"}],
-            "specificity_target_competition": None,
-            "banister": None,
-            "monotony_strain": None,
-            "decoupling": None,
-            "taper_quality": None,
-        }
-    operation.validate_result(flat_result)
-
-    composite = importlib.import_module("services.handlers.analysis_reports.composite")
-    monkeypatch.setattr(composite, "call_node", lambda _operation, _args: flat_result)
-    assert dispatch(operation, {"pk": "athlete-1"}) == flat_result
-
-
 def test_composite_inputs_match_their_routes():
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     expected = {
         "analytics.manifest": {"pk", "asOfDate", "window"},
         "analytics.sections_queue": {"pk", "asOfDate", "window", "sections", "read_only"},
@@ -257,7 +72,7 @@ def test_composite_inputs_match_their_routes():
 
 
 def test_composite_ai_report_results_have_concrete_shapes():
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     operations["analytics.block_evaluation"].validate_result({"stance": "continue", "summary": "Stable"})
     operations["analytics.correlation"].validate_result({"findings": [], "summary": "Stable"})
 
@@ -359,7 +174,7 @@ def test_markdown_dispatch_scopes_delegated_documents_and_rechecks_access(monkey
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", build_analysis)
 
     access = {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     result = dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "refresh": True, "_access": access})
     assert "# Training Program" in result["markdown"]
     assert "visible session" in result["markdown"]
@@ -399,7 +214,7 @@ def test_markdown_athlete_reads_never_share_delegate_records(monkeypatch):
     core = importlib.import_module("services.handlers.analysis_reports.core")
     _markdown_sources(monkeypatch, core, {"meta": {"program_name": "Mine"}, "sessions": [], "phases": [], "goals": [], "competitions": []})
     monkeypatch.setattr(core, "_build_sectioned_week_analysis", lambda *args, **kwargs: {})
-    operations = load_operations("analytics")
+    operations = _analytics_operations()
     dispatch(operations["analytics.markdown"], {"pk": "athlete-a", "_access": {"is_self": False, "permissions": ["analytics:write", "sessions:read"]}})
     assert dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "cache_only": True, "_access": {"is_self": True}}) == {"cached": False, "cache_miss": True}
     dispatch(operations["get_analysis_markdown"], {"pk": "athlete-a", "_access": {"is_self": True}})
@@ -408,11 +223,10 @@ def test_markdown_athlete_reads_never_share_delegate_records(monkeypatch):
         assert result["markdown"].startswith("# Mine") and result["cached"] is True
 
 
-
 def test_overview_reports_why_upcoming_competitions_could_not_be_projected(monkeypatch):
     import importlib
 
-    analytics = importlib.import_module("services.handlers.analysis_reports.analytics")
+    analytics = importlib.import_module("services.lib.training_analysis")
     monkeypatch.setattr(analytics, "meet_projection", lambda *args, **kwargs: {"status": "insufficient_data", "reason": "No session data to estimate maxes from"})
     program = {
         "meta": {"program_start": "2026-10-06"},
