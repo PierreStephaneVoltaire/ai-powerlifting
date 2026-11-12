@@ -213,3 +213,18 @@ def test_mcp_control_authority_must_be_configured(configured, monkeypatch):
     assert next(x.header.value for x in response.ok_response.headers if x.header.key == 'x-pl-authorized-destination') == 'pl-calculations'
     http.host = 'attacker.example'
     assert ext_authz.Authorization().Check(request, None).status.code != 0
+
+
+def test_waypoint_source_principal_header_identifies_caller(configured):
+    def identity(principal_header):
+        request = external_auth_pb2.CheckRequest()
+        request.attributes.request.http.method = 'POST'
+        request.attributes.request.http.path = '/v1/identity'
+        request.attributes.request.http.raw_body = b'{}'
+        if principal_header is not None:
+            request.attributes.request.http.headers['x-pl-source-principal'] = principal_header
+        return ext_authz.Authorization().Check(request, None)
+
+    assert identity('spiffe://' + GATEWAY).status.code == 0
+    assert identity('spiffe://' + DOMAIN).status.code != 0
+    assert identity(None).status.code != 0

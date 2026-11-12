@@ -103,10 +103,10 @@ class Authorization(external_auth_pb2_grpc.AuthorizationServicer):
     def Check(self, request, context):
         try:
             attributes = request.attributes
-            source = credentials.workload(attributes.source.principal)
-            source_service = credentials.service_for(source)
             http = attributes.request.http
             headers, raw = envelope(http)
+            source = credentials.workload(headers.get('x-pl-source-principal') or attributes.source.principal)
+            source_service = credentials.service_for(source)
             path = urlsplit(http.path).path
             if http.method == 'POST' and path in {'/v1/identity', '/v1/principals', '/v1/access', '/v1/job-capabilities'}:
                 destination = 'pl-security'
