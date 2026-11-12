@@ -1,5 +1,15 @@
 # Handoff — 2026-11-12
 
+## Live state (verified 2026-11-12)
+
+- Site: https://dev.nolift.training (namespace `powerlifting`). Authentik runs in `if-portals`.
+- Test login: user `test`, password `Demo-a40a214db8a0` (reset today with `ak shell` in the authentik-server pod).
+  On the Authentik screen, use the username/password form, not "Continue with discord".
+- Verified in a headless browser through the real login: OAuth2 Proxy → Authentik → app,
+  `/api/auth/me` 200, the dashboard fully populated, the `/sessions` list, and the session
+  detail for 2026-11-12. No API calls returned 4xx/5xx.
+- All 17 `pl-*` services, oauth2-proxy, pl-security (2 replicas), backend and frontend are Running.
+
 ## Pending task: remove pl-security (ADR-0006 was rewritten today)
 
 `docs/adr/0006-ambient-mesh-and-authentik-only-login.md` now describes the target design. No code

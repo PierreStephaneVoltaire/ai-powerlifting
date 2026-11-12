@@ -164,6 +164,40 @@ def test_verified_login_links_discord_without_overwriting(configured, monkeypatc
     assert records[key]['mapped_pk'] == 'other'
 
 
+def test_discord_linking_skips_linked_aliases_and_tolerates_concurrent_links(configured, monkeypatch):
+    from types import SimpleNamespace
+    from botocore.exceptions import ClientError
+
+    issuer = 'https://discord.com'
+    key = credentials._identity_key(issuer, '123')
+    pointer = {'pk': key, 'mapped_pk': 'person', 'identity_issuer': issuer, 'identity_provider': 'discord', 'identity_sub': '123'}
+    records = {'person': {'pk': 'person'}}
+    calls = []
+
+    class Table:
+        name = 'users'
+
+        def __init__(self):
+            self.meta = SimpleNamespace(client=SimpleNamespace(transact_write_items=self.transact))
+
+        def get_item(self, Key, ConsistentRead):
+            return {'Item': records.get(Key['pk'])}
+
+        def transact(self, TransactItems):
+            calls.append(TransactItems)
+            records.setdefault(key, pointer)
+            raise ClientError({'Error': {'Code': 'TransactionCanceledException'}}, 'TransactWriteItems')
+
+    monkeypatch.setattr(credentials, '_get_table', Table)
+    credentials.link_discord_subjects('person', ['123'])
+    assert len(calls) == 1
+    credentials.link_discord_subjects('person', ['123'])
+    assert len(calls) == 1
+    records[key] = {**pointer, 'mapped_pk': 'other'}
+    with pytest.raises(ClientError):
+        credentials.link_discord_subjects('person', ['123'])
+
+
 def test_discord_restart_is_gateway_only(configured, monkeypatch):
     monkeypatch.setenv('PL_SECURITY_ALLOWED_CALLERS', json.dumps({GATEWAY: ['pl-coach-discord'], DOMAIN: ['pl-coach-discord']}))
     request = external_auth_pb2.CheckRequest()

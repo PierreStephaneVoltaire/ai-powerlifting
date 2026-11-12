@@ -6,6 +6,7 @@ import time
 from functools import lru_cache
 
 import jwt
+from botocore.exceptions import ClientError
 
 from services.handlers.user.identity_resolve.core import _get_table, _identity_key, _resolve_sync, _settings
 
@@ -74,25 +75,42 @@ def resolve_identity(token):
     return {'identity': verified, **result}
 
 
+def _linked_subjects(table, person, issuer, subjects):
+    linked = set()
+    for subject in subjects:
+        pointer = table.get_item(Key={'pk': _identity_key(issuer, subject)}, ConsistentRead=True).get('Item')
+        if pointer and pointer.get('mapped_pk') == person and pointer.get('identity_issuer') == issuer and pointer.get('identity_provider') == 'discord' and pointer.get('identity_sub') == subject:
+            linked.add(subject)
+    return linked
+
+
 def link_discord_subjects(person, subjects):
     subjects = sorted(set(subjects))
     if not subjects:
         return
     if not isinstance(person, str) or not person or len(subjects) > 99:
         raise ValueError('Invalid Discord aliases')
-    table = _get_table()
     issuer = 'https://discord.com'
-    writes = [{'ConditionCheck': {'TableName': table.name, 'Key': {'pk': person},
-                                  'ConditionExpression': 'attribute_exists(pk)'}}]
     for subject in subjects:
         if not re.fullmatch(r'\d{1,32}', subject):
             raise ValueError('Invalid Discord subject')
+    table = _get_table()
+    pending = [subject for subject in subjects if subject not in _linked_subjects(table, person, issuer, subjects)]
+    if not pending:
+        return
+    writes = [{'ConditionCheck': {'TableName': table.name, 'Key': {'pk': person},
+                                  'ConditionExpression': 'attribute_exists(pk)'}}]
+    for subject in pending:
         writes.append({'Put': {'TableName': table.name,
             'Item': {'pk': _identity_key(issuer, subject), 'mapped_pk': person, 'identity_issuer': issuer,
                      'identity_provider': 'discord', 'identity_sub': subject},
             'ConditionExpression': 'attribute_not_exists(pk) OR (mapped_pk = :person AND identity_issuer = :issuer AND identity_provider = :provider AND identity_sub = :subject)',
             'ExpressionAttributeValues': {':person': person, ':issuer': issuer, ':provider': 'discord', ':subject': subject}}})
-    table.meta.client.transact_write_items(TransactItems=writes)
+    try:
+        table.meta.client.transact_write_items(TransactItems=writes)
+    except ClientError as exc:
+        if exc.response['Error']['Code'] != 'TransactionCanceledException' or _linked_subjects(table, person, issuer, pending) != set(pending):
+            raise
 
 
 def existing_identity(token):
