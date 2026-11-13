@@ -411,6 +411,8 @@ export default function AnalysisPage() {
 
         if (result.status === 'complete' || (result.status === 'error' && result.payload)) {
           setError(null)
+        } else if (result.status === 'error') {
+          setError(result.error ?? `Section ${section} failed to compute`)
         }
 
         if (result.status === 'missing' && queueSettled && !requeuedSections.has(section)) {
@@ -942,7 +944,7 @@ export default function AnalysisPage() {
                   <SimpleGrid cols={3} spacing="xs">
                     <Stack gap={0} ta="center">
                       <Text fz="xs" c="dimmed">Sessions</Text>
-                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.pct)}>{data.compliance.pct.toFixed(0)}%</Text>
+                      <Text fz="xl" fw={700} c={complianceBadgeColor(data.compliance.pct ?? 0)}>{(data.compliance.pct ?? 0).toFixed(0)}%</Text>
                       <Text fz="xs" c="dimmed">{data.compliance.completed}/{data.compliance.planned}</Text>
                     </Stack>
                     <Stack gap={0} ta="center">

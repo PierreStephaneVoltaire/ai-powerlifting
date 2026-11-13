@@ -232,8 +232,8 @@ export interface WeeklyAnalysis {
     kendall_tau?: number | null
     r2?: number | null
     r_squared?: number | null
-    volume_change_pct?: number
-    intensity_change_pct?: number
+    volume_change_pct?: number | null
+    intensity_change_pct?: number | null
     failed_sets?: number
     rpe_trend?: string
   }>

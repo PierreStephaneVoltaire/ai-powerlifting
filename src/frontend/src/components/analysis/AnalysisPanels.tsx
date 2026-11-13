@@ -349,8 +349,8 @@ export function FatigueDimensionsPanel({ dimensions }: { dimensions: NonNullable
                 <Table.Td fw={500}>{row.week}</Table.Td>
                 {(['axial', 'neural', 'peripheral', 'systemic'] as const).map((dimension) => (
                   <Table.Td key={dimension} ta="right">
-                    {row[dimension].toFixed(2)}{hasNormalized ? 'x' : ''}
-                    {hasNormalized && row.raw && <Text span fz="xs" c="dimmed"> ({row.raw[dimension].toFixed(1)})</Text>}
+                    {typeof row[dimension] === 'number' ? `${row[dimension].toFixed(2)}${hasNormalized ? 'x' : ''}` : '--'}
+                    {hasNormalized && typeof row.raw?.[dimension] === 'number' && <Text span fz="xs" c="dimmed"> ({row.raw[dimension].toFixed(1)})</Text>}
                   </Table.Td>
                 ))}
               </Table.Tr>

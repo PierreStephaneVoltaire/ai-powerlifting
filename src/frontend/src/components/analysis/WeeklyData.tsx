@@ -110,12 +110,12 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
                           })()}
                         </Table.Td>
                         <Table.Td ta="right" visibleFrom="sm">
-                          {lift.volume_change_pct !== undefined
+                          {typeof lift.volume_change_pct === 'number'
                             ? <Text span fz="sm" c={lift.volume_change_pct >= 0 ? 'green' : 'red'}>{lift.volume_change_pct >= 0 ? '+' : ''}{lift.volume_change_pct.toFixed(0)}%</Text>
                             : <Text span fz="sm" c="dimmed">--</Text>}
                         </Table.Td>
                         <Table.Td ta="right" visibleFrom="sm">
-                          {lift.intensity_change_pct !== undefined
+                          {typeof lift.intensity_change_pct === 'number'
                             ? <Text span fz="sm" c={lift.intensity_change_pct >= 0 ? 'green' : 'red'}>{lift.intensity_change_pct >= 0 ? '+' : ''}{lift.intensity_change_pct.toFixed(0)}%</Text>
                             : <Text span fz="sm" c="dimmed">--</Text>}
                         </Table.Td>
