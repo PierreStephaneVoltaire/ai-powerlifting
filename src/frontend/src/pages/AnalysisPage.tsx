@@ -874,6 +874,21 @@ export default function AnalysisPage() {
         <>
           <AlertsStrip alerts={data.alerts || []} />
 
+          {/* Flags */}
+          {data.flags.length > 0 && (
+            <Paper withBorder p="md" className="if-card">
+              <Group gap="xs" mb="sm">
+                <AlertTriangle size={18} color="var(--mantine-color-yellow-5)" />
+                <Text fw={500}>Flags</Text>
+              </Group>
+              <Group gap="xs" wrap="wrap">
+                {data.flags.map(flag => (
+                  <Badge key={flag} color="yellow" variant="light">{flag}</Badge>
+                ))}
+              </Group>
+            </Paper>
+          )}
+
           {/* Top summary cards */}
           <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
             <Paper withBorder p="md" className="if-card">
@@ -1066,6 +1081,7 @@ export default function AnalysisPage() {
                   <Group gap="xs">
                     <TrendingUp size={18} />
                     <Text fw={500}>Form / Peaking Readiness</Text>
+                    <ChartLabel text="TSB is CTL minus ATL. Peak form is +5 to +15." />
                   </Group>
                   {banister && (
                     <Badge variant="light" color={banisterBadgeColor(banister.tsb_today)} size="sm">
@@ -1091,7 +1107,6 @@ export default function AnalysisPage() {
                       </Stack>
                     </SimpleGrid>
 
-                    <ChartLabel text="TSB is CTL minus ATL. Peak form is +5 to +15." formulaId="banister_ffm" />
                     {banisterSeries.length > 0 ? (
                       <>
                         <Box style={{ width: '100%', height: 320 }}>
@@ -1769,21 +1784,6 @@ export default function AnalysisPage() {
               </Accordion.Panel>
             </Accordion.Item>
           </Accordion>
-
-          {/* Flags */}
-          {data.flags.length > 0 && (
-            <Paper withBorder p="md" className="if-card">
-              <Group gap="xs" mb="sm">
-                <AlertTriangle size={18} color="var(--mantine-color-yellow-5)" />
-                <Text fw={500}>Flags</Text>
-              </Group>
-              <Group gap="xs" wrap="wrap">
-                {data.flags.map(flag => (
-                  <Badge key={flag} color="yellow" variant="light">{flag}</Badge>
-                ))}
-              </Group>
-            </Paper>
-          )}
 
           {/* Footer */}
           <Text size="xs" c="dimmed">

@@ -14,6 +14,7 @@ pub mod compare;
 pub mod config;
 pub mod constants;
 pub mod correlation;
+pub mod drivers;
 pub mod engine;
 pub mod error;
 pub mod grpc;

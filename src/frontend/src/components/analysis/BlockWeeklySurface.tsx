@@ -41,6 +41,8 @@ import {
   type WeeklyAnalysis,
   fetchBlockCorrelationReport,
 } from '@/api/analytics'
+import { ChartLabel } from '@/components/analysis/ChartLabel'
+import { DriversTable } from '@/components/analysis/DriversTable'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
 import { AcwrPanel, FatigueDimensionsPanel, InolPanel, SpecificityPanel } from '@/components/analysis/AnalysisPanels'
 import { recordsInBlock } from '@/utils/blockScope'
@@ -538,6 +540,7 @@ export function BlockWeeklySurface({
           <Group gap="xs">
             <Brain size={18} />
             <Text fw={500}>Exercise ROI Correlation</Text>
+            <ChartLabel text="What helps or hurts each main lift, with dose and an action." />
             {correlationReport && (
               <Badge color={correlationReport.cached ? 'blue' : 'green'} variant="light" size="sm">
                 {correlationReport.cached ? `Cached ${correlationReport.generated_at ? new Date(correlationReport.generated_at).toLocaleDateString() : ''}` : correlationReport.cache_miss ? 'Not generated' : 'Just generated'}
@@ -576,40 +579,7 @@ export function BlockWeeklySurface({
                   <Text size="sm" c="dimmed" mb="md" p="sm" fs="italic" style={{ background: 'var(--mantine-color-default-hover)', borderRadius: 'var(--mantine-radius-sm)' }}>{correlationReport.summary}</Text>
                 )}
                 {correlationReport.findings.length > 0 ? (
-                  <Box style={{ overflowX: 'auto' }}>
-                    <Table fz="sm">
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th ta="left">Exercise</Table.Th>
-                          <Table.Th ta="left">→ Lift</Table.Th>
-                          <Table.Th ta="left" w={{ base: 'auto', sm: 100 }}>Direction</Table.Th>
-                          <Table.Th ta="left" w={{ base: 'auto', sm: 100 }}>Strength</Table.Th>
-                          <Table.Th ta="left" visibleFrom="sm">Reasoning</Table.Th>
-                          <Table.Th ta="left" visibleFrom="sm">Caveat</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {correlationReport.findings.map((finding, index) => (
-                          <Table.Tr key={index} style={{ verticalAlign: 'top' }}>
-                            <Table.Td fw={500}>{finding.exercise}</Table.Td>
-                            <Table.Td>{finding.lift}</Table.Td>
-                            <Table.Td>
-                              <Badge size="xs" variant="light" color={finding.correlation_direction === 'positive' ? 'green' : finding.correlation_direction === 'negative' ? 'red' : 'gray'} style={{ textTransform: 'capitalize' }}>
-                                {finding.correlation_direction}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td>
-                              <Badge size="xs" variant="light" color={finding.strength === 'strong' ? 'violet' : finding.strength === 'moderate' ? 'blue' : 'gray'} style={{ textTransform: 'capitalize' }}>
-                                {finding.strength}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td fz="xs" visibleFrom="sm">{finding.reasoning}</Table.Td>
-                            <Table.Td c="dimmed" fz="xs" fs="italic" visibleFrom="sm">{finding.caveat}</Table.Td>
-                          </Table.Tr>
-                        ))}
-                      </Table.Tbody>
-                    </Table>
-                  </Box>
+                  <DriversTable findings={correlationReport.findings} />
                 ) : (
                   <Text size="sm" c="dimmed">No significant anatomically-relevant correlations found in this block.</Text>
                 )}

@@ -11,6 +11,8 @@ import (
 
 var readableDomains = []string{"profile", "program", "sessions", "competition", "federation", "glossary", "goals", "budget", "calculations", "performance", "weight-log", "templates", "imports", "lift-profiles", "analytics", "videos"}
 
+const CorrelationPromptVersion = "main-lift-drivers-v1"
+
 func Fingerprint(operation string, arguments map[string]any, identity map[string]any) (string, error) {
 	inputs := map[string]any{}
 	for key, value := range arguments {

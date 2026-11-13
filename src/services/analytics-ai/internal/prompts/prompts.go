@@ -96,6 +96,13 @@ type CorrelationInput struct {
 	E1rm               []WeekLifts
 	Accessory          []WeekAccessory
 	ExerciseROI        []ROIRow
+	ExerciseWeeks      []ExerciseDose
+	Exercises          []ExerciseInfo
+	MuscleWeeks        []MuscleDose
+	MuscleLandmarks    []MuscleLandmark
+	FatigueWeeks       []FatigueWeek
+	LiftSessions       []LiftSession
+	DriverStats        []DriverStat
 }
 
 type e1rmRow struct {
@@ -106,12 +113,6 @@ type e1rmRow struct {
 type accessoryRow struct {
 	Week  int
 	Cells []string
-}
-
-type roiRow struct {
-	Exercise string
-	PearsonR string
-	Weeks    int
 }
 
 type measurementLine struct {
@@ -135,7 +136,7 @@ type correlationView struct {
 	E1rmRows         []e1rmRow
 	Accessory        []string
 	AccessoryRows    []accessoryRow
-	ROI              []roiRow
+	Tables           []table
 }
 
 func Title(text string) string {
@@ -228,6 +229,10 @@ func (in CorrelationInput) view() correlationView {
 		row := lifts[week]
 		view.E1rmRows = append(view.E1rmRows, e1rmRow{week, fixed("%.1f", row.Squat), fixed("%.1f", row.Bench), fixed("%.1f", row.Deadlift)})
 	}
+	if in.hasDrivers() {
+		view.Tables = in.driverTables()
+		return view
+	}
 	view.Accessory = order
 	for _, week := range weeks {
 		cells := make([]string, 0, len(order))
@@ -236,13 +241,6 @@ func (in CorrelationInput) view() correlationView {
 			cells = append(cells, fixed("%.0f", &volume))
 		}
 		view.AccessoryRows = append(view.AccessoryRows, accessoryRow{week, cells})
-	}
-	for _, row := range in.ExerciseROI {
-		name := row.Exercise
-		if name == "" {
-			name = "?"
-		}
-		view.ROI = append(view.ROI, roiRow{name, fmt.Sprintf("%+.3f", row.PearsonR), row.WeeksObserved})
 	}
 	return view
 }

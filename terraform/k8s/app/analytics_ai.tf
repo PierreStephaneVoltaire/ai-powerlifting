@@ -94,8 +94,8 @@ resource "kubernetes_deployment_v1" "analytics_ai" {
           }
 
           resources {
-            limits   = { cpu = "500m", memory = "128Mi" }
-            requests = { cpu = "25m", memory = "32Mi" }
+            limits   = { cpu = "1", memory = "512Mi" }
+            requests = { cpu = "25m", memory = "64Mi" }
           }
 
           readiness_probe {

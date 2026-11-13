@@ -140,6 +140,38 @@ pub fn kendall_tau(xs: &[f64], ys: &[f64]) -> f64 {
         .unwrap_or(f64::NAN)
 }
 
+fn average_ranks(values: &[f64]) -> Vec<f64> {
+    let mut order: Vec<usize> = (0..values.len()).collect();
+    order.sort_by(|a, b| values[*a].total_cmp(&values[*b]));
+    let mut ranks = vec![0.0; values.len()];
+    let mut start = 0;
+    while start < order.len() {
+        let mut end = start;
+        while end + 1 < order.len() && values[order[end + 1]] == values[order[start]] {
+            end += 1;
+        }
+        let rank = (start + end) as f64 / 2.0 + 1.0;
+        for index in &order[start..=end] {
+            ranks[*index] = rank;
+        }
+        start = end + 1;
+    }
+    ranks
+}
+
+pub fn spearman(xs: &[f64], ys: &[f64]) -> Option<f64> {
+    if xs.len() != ys.len() || xs.len() < 3 {
+        return None;
+    }
+    let (rx, ry) = (average_ranks(xs), average_ranks(ys));
+    let (mx, my) = (mean(&rx), mean(&ry));
+    let covariance: f64 = rx.iter().zip(&ry).map(|(a, b)| (a - mx) * (b - my)).sum();
+    let spread_x: f64 = rx.iter().map(|a| (a - mx).powi(2)).sum();
+    let spread_y: f64 = ry.iter().map(|b| (b - my).powi(2)).sum();
+    let denominator = (spread_x * spread_y).sqrt();
+    (denominator > 0.0).then(|| covariance / denominator)
+}
+
 pub fn ols_slope(xs: &[f64], ys: &[f64]) -> f64 {
     let count = xs.len() as f64;
     if xs.len() < 2 {

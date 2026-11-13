@@ -105,6 +105,129 @@ message CorrelationInputsReply {
   repeated google.protobuf.Struct lift_profiles = 6;
   // Athlete measurements: height, wingspan, leg length, weight class, bodyweight.
   google.protobuf.Struct athlete_measurements = 7;
+  // One row per week and exercise for the main lifts and the highest transfer-weighted exercises.
+  repeated ExerciseWeek exercise_weeks = 8;
+  // Muscles, fatigue profile and lift transfer of each exercise in exercise_weeks.
+  repeated ExerciseProfile exercises = 9;
+  // Weighted weekly sets per muscle (primary 1.0, secondary 0.5).
+  repeated MuscleWeek muscle_weeks = 10;
+  // Volume landmarks of the muscles present in muscle_weeks.
+  repeated MuscleLandmark muscle_landmarks = 11;
+  // Weekly fatigue per dimension as a ratio to the chronic weekly baseline.
+  repeated FatigueWeek fatigue_weeks = 12;
+  // One row per main-lift session with the fatigue and muscle load of the 48 hours before it.
+  repeated LiftSession lift_sessions = 13;
+  // Precomputed evidence for exercise, muscle and sequence drivers.
+  repeated DriverStat driver_stats = 14;
+}
+
+// FatigueDims is one value per fatigue dimension.
+message FatigueDims {
+  double axial = 1;
+  double neural = 2;
+  double peripheral = 3;
+  double systemic = 4;
+}
+
+// LiftTransferWeights is the transfer of an exercise to each competition lift (0 to 1).
+message LiftTransferWeights {
+  double squat = 1;
+  double bench = 2;
+  double deadlift = 3;
+}
+
+// ExerciseWeek is the dose of one exercise in one training week.
+message ExerciseWeek {
+  // Block-local week number (1-based).
+  int32 week_number = 1;
+  // Exercise name as logged.
+  string exercise = 2;
+  // Executed sets.
+  double sets = 3;
+  // Executed reps (sets x reps per set).
+  double reps = 4;
+  // Executed volume in kg.
+  double volume_kg = 5;
+  // Number of sessions containing the exercise.
+  int32 sessions = 6;
+  // Average load as a percentage of the exercise e1RM, absent when unknown.
+  optional double avg_intensity_pct = 7;
+  // Average RPE, absent when none was logged.
+  optional double avg_rpe = 8;
+}
+
+// ExerciseProfile describes what an exercise trains and how it taxes the athlete.
+message ExerciseProfile {
+  // Exercise name as logged.
+  string name = 1;
+  repeated string primary_muscles = 2;
+  repeated string secondary_muscles = 3;
+  // Glossary fatigue profile, else the default profile.
+  FatigueDims fatigue = 4;
+  LiftTransferWeights lift_transfer = 5;
+  // Where lift_transfer came from: ai, rule or none.
+  string transfer_source = 6;
+}
+
+// MuscleWeek is the weighted set count of one muscle in one training week.
+message MuscleWeek {
+  int32 week_number = 1;
+  string muscle = 2;
+  double weighted_sets = 3;
+}
+
+// MuscleLandmark holds the weekly set landmarks of one muscle.
+message MuscleLandmark {
+  string muscle = 1;
+  double mev = 2;
+  double mav = 3;
+  double mrv = 4;
+}
+
+// FatigueWeek is the weekly fatigue ratio per dimension (1.0 is a typical week).
+message FatigueWeek {
+  int32 week_number = 1;
+  FatigueDims ratio = 2;
+}
+
+// LiftSession is one competition lift performed in one session.
+message LiftSession {
+  // Session date (YYYY-MM-DD).
+  string date = 1;
+  // squat, bench or deadlift.
+  string lift = 2;
+  // Best estimated 1RM of the lift in the session.
+  double top_e1rm_kg = 3;
+  // Percent difference to the best of the trailing three sessions of that lift, absent for the first.
+  optional double e1rm_residual_pct = 4;
+  // Average RPE of the lift in the session, absent when none was logged.
+  optional double avg_rpe = 5;
+  // Fatigue of the 48 hours before the session as a ratio to the typical daily load.
+  FatigueDims prior48h_fatigue = 6;
+  // Weighted sets per muscle in the 48 hours before the session, only muscles with sets above zero.
+  map<string, double> prior48h_muscle_sets = 7;
+}
+
+// DriverStat is precomputed evidence for one driver of one lift.
+message DriverStat {
+  // exercise, muscle or sequence.
+  string driver_type = 1;
+  // Exercise name, muscle name or fatigue dimension.
+  string driver = 2;
+  // squat, bench or deadlift.
+  string lift = 3;
+  // Spearman rho of weekly sets against the next week's e1RM change, for exercise and muscle drivers.
+  optional double rho = 4;
+  // Number of week pairs behind rho.
+  int32 n = 5;
+  // Sessions with prior-48h load at or above 1.25x typical, for sequence drivers.
+  int32 n_high = 6;
+  // Sessions below 1.25x typical, for sequence drivers.
+  int32 n_low = 7;
+  optional double mean_residual_pct_high = 8;
+  optional double mean_residual_pct_low = 9;
+  optional double mean_rpe_high = 10;
+  optional double mean_rpe_low = 11;
 }
 
 // WeeklyE1rm is the best estimated 1RM per lift in one training week.

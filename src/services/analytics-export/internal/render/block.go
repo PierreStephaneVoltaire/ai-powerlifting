@@ -469,6 +469,16 @@ func evaluationRows(evaluation map[string]any) []Row {
 	return rows
 }
 
+func joinText(values ...any) string {
+	parts := []string{}
+	for _, value := range values {
+		if candidate := text(value); candidate != "" {
+			parts = append(parts, candidate)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 func correlationRows(correlation map[string]any) []Row {
 	headers := Row{"Exercise", "Lift", "Direction", "Strength", "Reasoning", "Caveat"}
 	if correlation == nil {
@@ -483,8 +493,8 @@ func correlationRows(correlation map[string]any) []Row {
 	for _, raw := range findings {
 		finding := record(raw)
 		rows = append(rows, Row{
-			text(finding["exercise"]), text(finding["lift"]), text(finding["correlation_direction"]),
-			text(finding["strength"]), text(finding["reasoning"]), text(finding["caveat"]),
+			firstText(finding["driver"], finding["exercise"]), text(finding["lift"]), firstText(finding["effect"], finding["correlation_direction"]),
+			firstText(finding["confidence"], finding["strength"]), joinText(finding["evidence"], finding["mechanism"], finding["reasoning"]), joinText(finding["action"], finding["caveat"]),
 		})
 	}
 	return rows

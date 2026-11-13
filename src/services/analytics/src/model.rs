@@ -431,6 +431,7 @@ pub struct GlossaryEntry {
     pub secondary_muscles: Vec<String>,
     pub tertiary_muscles: Vec<String>,
     pub lift_transfer: Option<LiftTransfer>,
+    pub lift_transfer_source: String,
 }
 
 impl Glossary {
@@ -458,6 +459,12 @@ impl Glossary {
 
     pub fn entry(&self, key: &str) -> Option<&GlossaryEntry> {
         self.entries.get(key)
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = (&str, &GlossaryEntry)> {
+        self.entries
+            .iter()
+            .map(|(key, entry)| (key.as_str(), entry))
     }
 
     pub fn category(&self, key: &str) -> &str {
@@ -540,6 +547,11 @@ impl GlossaryEntry {
                 .get("lift_transfer")
                 .and_then(Value::as_object)
                 .map(LiftTransfer::from_map),
+            lift_transfer_source: map
+                .get("lift_transfer")
+                .and_then(Value::as_object)
+                .map(|transfer| text(transfer, "source"))
+                .unwrap_or_default(),
         }
     }
 }

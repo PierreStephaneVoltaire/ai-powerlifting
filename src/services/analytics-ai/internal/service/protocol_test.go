@@ -17,7 +17,7 @@ import (
 )
 
 var correlationAnswer = map[string]any{
-	"findings": []any{map[string]any{"exercise": "Leg Press", "lift": "squat", "correlation_direction": "positive", "strength": "moderate", "reasoning": "Quads.", "caveat": ""}},
+	"findings": []any{map[string]any{"driver_type": "exercise", "driver": "Leg Press", "lift": "squat", "effect": "helps", "confidence": "moderate", "evidence": "12 sets per week.", "mechanism": "Quads.", "action": "Keep as is", "caveat": ""}},
 	"summary":  "Leg press tracks squat.",
 }
 

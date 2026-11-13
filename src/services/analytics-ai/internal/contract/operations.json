@@ -2,7 +2,7 @@
   {
     "name": "correlation_analysis",
     "domain": "analytics-ai",
-    "description": "Generate a correlation analysis report across training variables. Analyzes how volume, intensity, RPE, and other factors correlate with progression. Results are reused while the source data is unchanged; refresh forces a new report.",
+    "description": "Generate an AI report of what helps or hurts Squat, Bench and Deadlift: exercises, muscles and session sequences, each with evidence and one action. Results are reused while the source data is unchanged; refresh forces a new report.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -36,7 +36,67 @@
       ],
       "properties": {
         "findings": {
-          "type": "array"
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "driver_type": {
+                "enum": [
+                  "exercise",
+                  "muscle",
+                  "sequence"
+                ]
+              },
+              "driver": {
+                "type": "string"
+              },
+              "lift": {
+                "enum": [
+                  "squat",
+                  "bench",
+                  "deadlift"
+                ]
+              },
+              "effect": {
+                "enum": [
+                  "helps",
+                  "hurts",
+                  "unclear"
+                ]
+              },
+              "confidence": {
+                "enum": [
+                  "strong",
+                  "moderate",
+                  "weak"
+                ]
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "mechanism": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string"
+              },
+              "caveat": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "driver_type",
+              "driver",
+              "lift",
+              "effect",
+              "confidence",
+              "evidence",
+              "mechanism",
+              "action",
+              "caveat"
+            ]
+          }
         },
         "summary": {
           "type": "string"
@@ -68,7 +128,7 @@
   {
     "name": "block_correlation_analysis",
     "domain": "analytics-ai",
-    "description": "Generate an AI correlation report for a specific block. Analyzes relationships between training variables (volume, intensity, RPE) and outcomes (progression, fatigue). Uses AI to generate natural-language findings and summary.",
+    "description": "Generate an AI report for a specific block of what helps or hurts Squat, Bench and Deadlift: exercises, muscles and session sequences, each with evidence and one action.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -102,7 +162,67 @@
       ],
       "properties": {
         "findings": {
-          "type": "array"
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "driver_type": {
+                "enum": [
+                  "exercise",
+                  "muscle",
+                  "sequence"
+                ]
+              },
+              "driver": {
+                "type": "string"
+              },
+              "lift": {
+                "enum": [
+                  "squat",
+                  "bench",
+                  "deadlift"
+                ]
+              },
+              "effect": {
+                "enum": [
+                  "helps",
+                  "hurts",
+                  "unclear"
+                ]
+              },
+              "confidence": {
+                "enum": [
+                  "strong",
+                  "moderate",
+                  "weak"
+                ]
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "mechanism": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string"
+              },
+              "caveat": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "driver_type",
+              "driver",
+              "lift",
+              "effect",
+              "confidence",
+              "evidence",
+              "mechanism",
+              "action",
+              "caveat"
+            ]
+          }
         },
         "summary": {
           "type": "string"
@@ -590,7 +710,67 @@
           "type": "object",
           "properties": {
             "findings": {
-              "type": "array"
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "driver_type": {
+                    "enum": [
+                      "exercise",
+                      "muscle",
+                      "sequence"
+                    ]
+                  },
+                  "driver": {
+                    "type": "string"
+                  },
+                  "lift": {
+                    "enum": [
+                      "squat",
+                      "bench",
+                      "deadlift"
+                    ]
+                  },
+                  "effect": {
+                    "enum": [
+                      "helps",
+                      "hurts",
+                      "unclear"
+                    ]
+                  },
+                  "confidence": {
+                    "enum": [
+                      "strong",
+                      "moderate",
+                      "weak"
+                    ]
+                  },
+                  "evidence": {
+                    "type": "string"
+                  },
+                  "mechanism": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "string"
+                  },
+                  "caveat": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "driver_type",
+                  "driver",
+                  "lift",
+                  "effect",
+                  "confidence",
+                  "evidence",
+                  "mechanism",
+                  "action",
+                  "caveat"
+                ]
+              }
             },
             "summary": {
               "type": "string"

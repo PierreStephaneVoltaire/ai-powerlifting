@@ -111,8 +111,10 @@ export function MuscleVolumeMap({ volume, title = 'Avg Weekly Sets by Muscle' }:
 
   return (
     <Stack gap="sm">
-      <Text fw={500}>{title}</Text>
-      <ChartLabel text="Average weekly sets per muscle, against its researched range." formulaId="volume_landmarks" mb="0" />
+      <Group gap={6} wrap="nowrap">
+        <Text fw={500}>{title}</Text>
+        <ChartLabel text="Average weekly sets per muscle, against its researched range." />
+      </Group>
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
         <Box>
           <Text size="xs" c="dimmed" ta="center" mb="xs">Front</Text>

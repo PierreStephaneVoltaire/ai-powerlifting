@@ -84,8 +84,10 @@ function inolZone(value: number, bounds: { low: number; high: number }) {
 export function InolPanel({ inol }: { inol: InolData }) {
   return (
     <Paper withBorder p="md" className="if-card">
-      <Text fw={500} mb={4}>Stimulus-Adjusted INOL (Window Average)</Text>
-      <ChartLabel text="Weekly INOL per lift, scaled by your stimulus coefficient." formulaId="inol" />
+      <Group gap={6} mb="xs" wrap="nowrap">
+        <Text fw={500}>Stimulus-Adjusted INOL (Window Average)</Text>
+        <ChartLabel text="Weekly INOL per lift, scaled by your stimulus coefficient." />
+      </Group>
       <SimpleGrid cols={{ base: 1, xs: 3 }} mb="sm">
         {Object.entries(inol.avg_inol).map(([lift, fallbackAdjusted]) => {
           const detail = inol.lifts?.[lift]
@@ -157,13 +159,15 @@ export function AcwrPanel({ acwr }: { acwr: NonNullable<WeeklyAnalysis['acwr']> 
   return (
     <Paper withBorder p="md" className="if-card">
       <Group justify="space-between" mb={4} align="flex-start">
-        <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
+        <Group gap={6} wrap="nowrap">
+          <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
+          <ChartLabel text="Acute load divided by chronic load, per dimension." />
+        </Group>
         <Badge color={composite.color} variant="light">
           Composite {ready.composite?.toFixed(2) ?? 'N/A'}
           <Text span visibleFrom="sm"> ({ready.composite_label ?? composite.label})</Text>
         </Badge>
       </Group>
-      <ChartLabel text="Acute load divided by chronic load, per dimension." formulaId="acwr" />
       {chartRows.length > 0 && (
         <Box style={{ width: '100%', height: 200 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -225,7 +229,10 @@ export function SpecificityPanel({
   return (
     <Paper withBorder p="md" className="if-card">
       <Group justify="space-between" align="flex-start" mb={4}>
-        <Text fw={500}>Specificity Ratio</Text>
+        <Group gap={6} wrap="nowrap">
+          <Text fw={500}>Specificity Ratio</Text>
+          <ChartLabel text="Share of sets that are competition-specific." />
+        </Group>
         {band ? (
           <Group gap="xs" wrap="wrap" justify="flex-end">
             <Badge variant="light" color={specificityStatusBadgeColor(specificity.narrow_status)}>
@@ -239,7 +246,6 @@ export function SpecificityPanel({
           <Badge variant="light" color="gray">No upcoming comp band</Badge>
         )}
       </Group>
-      <ChartLabel text="Share of sets that are competition-specific." formulaId="specificity_ratio" />
       {target && (
         <Text fz="xs" c="dimmed" mb="sm">
           Target: {target.name ?? 'Upcoming meet'}
@@ -289,8 +295,10 @@ export function FatigueDimensionsPanel({ dimensions }: { dimensions: NonNullable
 
   return (
     <Paper withBorder p="md" className="if-card">
-      <Text fw={500} mb={4}>Fatigue Dimensions (Weekly)</Text>
-      <ChartLabel text="Weekly load by recovery dimension, compared with your typical week." formulaId="fatigue_model" />
+      <Group gap={6} mb="xs" wrap="nowrap">
+        <Text fw={500}>Fatigue Dimensions (Weekly)</Text>
+        <ChartLabel text="Weekly load by recovery dimension, compared with your typical week." />
+      </Group>
       <Box style={{ width: '100%', height: 260 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ right: 72 }}>

@@ -85,7 +85,7 @@ async def estimate_stimulus(profile: dict, athlete_meta: dict | None = None) -> 
     athlete = _athlete_lines(athlete_meta)
     if athlete:
         described["athlete"] = athlete
-    args = await _call_tool(_ESTIMATE_SYSTEM_PROMPT, "Estimate the stimulus coefficient for this lift profile:\n" + json.dumps(described, indent=2), _ESTIMATE_TOOL_SCHEMA, "estimate_lift_profile_stimulus")
+    args = await _call_tool(_ESTIMATE_SYSTEM_PROMPT, "Estimate the stimulus coefficient for this lift profile:\n" + json.dumps(described, indent=2, default=float), _ESTIMATE_TOOL_SCHEMA, "estimate_lift_profile_stimulus")
     if not args:
         raise ValueError("The estimate returned no result")
     confidence = str(args.get("confidence", "low")).lower()

@@ -50,17 +50,9 @@
 | W4 | - | 2 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
 | W5 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
 | W6 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
-## Accessory Exercise ROI (pearson r between weekly volume and avg intensity)
-
-| Exercise | Pearson r | Weeks |
-|----------|-----------|-------|
-| Leg Press | +0.723 | 5 |
-| Curl | -0.310 | 4 |
-| Nothing | +0.000 | 0 |
 
 ## Task
-Analyze the data above. Identify which accessory exercises have volume trends
-that plausibly correlate with changes in Squat, Bench, or Deadlift e1RM.
-Only report anatomically relevant correlations as per the system instructions.
-Where the exercise ROI table gives a strong |r|, use it to upgrade confidence on
-anatomically-plausible findings — never invent correlations from ROI alone.
+Find which exercises, muscles and session sequences in the data above help or hurt
+Squat, Bench and Deadlift. Judge each driver by dose (frequency, sets, intensity, RPE),
+fatigue profile, session order and muscle landmarks. Cite numbers from the tables in
+every finding's evidence and give one concrete action for each.

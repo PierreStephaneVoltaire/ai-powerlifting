@@ -80,6 +80,7 @@ func correlationInput(reply *analyticsv1.CorrelationInputsReply, weeks int) prom
 			input.Accessory = append(input.Accessory, entry)
 		}
 	}
+	mapDrivers(&input, reply)
 	for _, profile := range reply.LiftProfiles {
 		fields := profile.AsMap()
 		input.LiftProfiles = append(input.LiftProfiles, prompts.LiftProfile{
@@ -98,12 +99,56 @@ func correlationInput(reply *analyticsv1.CorrelationInputsReply, weeks int) prom
 	return input
 }
 
+func dims(value *analyticsv1.FatigueDims) prompts.Dims {
+	return prompts.Dims{Axial: value.GetAxial(), Neural: value.GetNeural(), Peripheral: value.GetPeripheral(), Systemic: value.GetSystemic()}
+}
+
+func mapDrivers(input *prompts.CorrelationInput, reply *analyticsv1.CorrelationInputsReply) {
+	for _, row := range reply.ExerciseWeeks {
+		input.ExerciseWeeks = append(input.ExerciseWeeks, prompts.ExerciseDose{
+			Week: int(row.WeekNumber), Exercise: row.Exercise, Sets: row.Sets, Reps: row.Reps, VolumeKg: row.VolumeKg,
+			Sessions: int(row.Sessions), IntensityPct: row.AvgIntensityPct, RPE: row.AvgRpe,
+		})
+	}
+	for _, row := range reply.Exercises {
+		input.Exercises = append(input.Exercises, prompts.ExerciseInfo{
+			Name: row.Name, Primary: row.PrimaryMuscles, Secondary: row.SecondaryMuscles, Fatigue: dims(row.Fatigue),
+			Squat: row.GetLiftTransfer().GetSquat(), Bench: row.GetLiftTransfer().GetBench(), Deadlift: row.GetLiftTransfer().GetDeadlift(),
+			TransferSource: row.TransferSource,
+		})
+	}
+	for _, row := range reply.MuscleWeeks {
+		input.MuscleWeeks = append(input.MuscleWeeks, prompts.MuscleDose{Week: int(row.WeekNumber), Muscle: row.Muscle, Sets: row.WeightedSets})
+	}
+	for _, row := range reply.MuscleLandmarks {
+		input.MuscleLandmarks = append(input.MuscleLandmarks, prompts.MuscleLandmark{Muscle: row.Muscle, MEV: row.Mev, MAV: row.Mav, MRV: row.Mrv})
+	}
+	for _, row := range reply.FatigueWeeks {
+		input.FatigueWeeks = append(input.FatigueWeeks, prompts.FatigueWeek{Week: int(row.WeekNumber), Ratio: dims(row.Ratio)})
+	}
+	for _, row := range reply.LiftSessions {
+		input.LiftSessions = append(input.LiftSessions, prompts.LiftSession{
+			Date: row.Date, Lift: row.Lift, E1rmKg: row.TopE1RmKg, ResidualPct: row.E1RmResidualPct, RPE: row.AvgRpe,
+			Prior: dims(row.Prior48HFatigue), PriorMuscles: row.Prior48HMuscleSets,
+		})
+	}
+	for _, row := range reply.DriverStats {
+		input.DriverStats = append(input.DriverStats, prompts.DriverStat{
+			Type: row.DriverType, Driver: row.Driver, Lift: row.Lift, Rho: row.Rho, N: int(row.N), NHigh: int(row.NHigh), NLow: int(row.NLow),
+			ResidualHigh: row.MeanResidualPctHigh, ResidualLow: row.MeanResidualPctLow, RPEHigh: row.MeanRpeHigh, RPELow: row.MeanRpeLow,
+		})
+	}
+}
+
 func distinctWeeks(input prompts.CorrelationInput) int {
 	weeks := map[int]bool{}
 	for _, row := range input.E1rm {
 		weeks[row.Week] = true
 	}
 	for _, row := range input.Accessory {
+		weeks[row.Week] = true
+	}
+	for _, row := range input.ExerciseWeeks {
 		weeks[row.Week] = true
 	}
 	return len(weeks)
@@ -117,14 +162,21 @@ func trailingWindow(input prompts.CorrelationInput, start string, weeks int) (pr
 	for _, row := range input.Accessory {
 		latest = max(latest, row.Week)
 	}
+	for _, row := range input.ExerciseWeeks {
+		latest = max(latest, row.Week)
+	}
 	first := latest - weeks + 1
 	if first <= 1 {
 		return input, start
 	}
 	input.E1rm = slices.DeleteFunc(slices.Clone(input.E1rm), func(row prompts.WeekLifts) bool { return row.Week < first })
 	input.Accessory = slices.DeleteFunc(slices.Clone(input.Accessory), func(row prompts.WeekAccessory) bool { return row.Week < first })
+	input.ExerciseWeeks = slices.DeleteFunc(slices.Clone(input.ExerciseWeeks), func(row prompts.ExerciseDose) bool { return row.Week < first })
+	input.MuscleWeeks = slices.DeleteFunc(slices.Clone(input.MuscleWeeks), func(row prompts.MuscleDose) bool { return row.Week < first })
+	input.FatigueWeeks = slices.DeleteFunc(slices.Clone(input.FatigueWeeks), func(row prompts.FatigueWeek) bool { return row.Week < first })
 	if begin, err := time.Parse("2006-01-02", start); err == nil {
 		start = begin.AddDate(0, 0, 7*(first-1)).Format("2006-01-02")
+		input.LiftSessions = slices.DeleteFunc(slices.Clone(input.LiftSessions), func(row prompts.LiftSession) bool { return row.Date < start })
 	}
 	return input, start
 }

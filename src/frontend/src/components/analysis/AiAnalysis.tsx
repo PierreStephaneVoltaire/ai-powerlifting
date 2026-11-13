@@ -1,20 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useProgramStore } from '@/store/programStore';
 import { fetchCorrelationReport, fetchProgramEvaluation, type CorrelationReport, type ProgramEvaluationReport } from '@/api/analytics';
-import { Paper, Group, Text, Badge, Loader, Box, Table, Stack, SimpleGrid, Button } from '@mantine/core';
+import { Paper, Group, Text, Badge, Loader, Stack, SimpleGrid, Button } from '@mantine/core';
+import { ChartLabel } from './ChartLabel';
+import { DriversTable } from './DriversTable';
 import { Brain, RefreshCw, Trophy } from 'lucide-react';
-
-const CORR_DIR_BADGE: Record<string, string> = {
-  positive: 'green',
-  negative: 'red',
-  unclear: 'gray',
-};
-
-const CORR_STRENGTH_BADGE: Record<string, string> = {
-  strong: 'violet',
-  moderate: 'blue',
-  weak: 'gray',
-};
 
 interface AiAnalysisProps {
   effectiveWeeks: number;
@@ -121,6 +111,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode, readOnly = false }: AiAn
           <Group gap="xs">
             <Brain size={18} />
             <Text fw={500}>Exercise ROI Correlation</Text>
+            <ChartLabel text="What helps or hurts each main lift, with dose and an action." />
             {corrReport && (
               <Badge color={corrReport.cached ? 'blue' : 'green'} variant="light" size="sm">
                 {corrReport.cached ? `Cached ${corrReport.generated_at ? new Date(corrReport.generated_at).toLocaleDateString() : ''}` : corrReport.cache_miss ? 'Not generated' : 'Just generated'}
@@ -159,40 +150,7 @@ export function AiAnalysis({ effectiveWeeks, weeksMode, readOnly = false }: AiAn
                   <Text size="sm" c="dimmed" mb="md" p="sm" fs="italic" style={{ background: 'var(--mantine-color-default-hover)', borderRadius: 'var(--mantine-radius-sm)' }}>{corrReport.summary}</Text>
                 )}
                 {corrFindings.length > 0 ? (
-                  <Box style={{ overflowX: 'auto' }}>
-                    <Table fz="sm">
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th ta="left">Exercise</Table.Th>
-                          <Table.Th ta="left">→ Lift</Table.Th>
-                          <Table.Th ta="left" w={{ base: 'auto', sm: 100 }}>Direction</Table.Th>
-                          <Table.Th ta="left" w={{ base: 'auto', sm: 100 }}>Strength</Table.Th>
-                          <Table.Th ta="left" visibleFrom="sm">Reasoning</Table.Th>
-                          <Table.Th ta="left" visibleFrom="sm">Caveat</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {corrFindings.map((f, i) => (
-                          <Table.Tr key={i} style={{ verticalAlign: 'top' }}>
-                            <Table.Td fw={500}>{f.exercise}</Table.Td>
-                            <Table.Td>{f.lift}</Table.Td>
-                            <Table.Td>
-                              <Badge size="xs" variant="light" color={CORR_DIR_BADGE[f.correlation_direction] || 'gray'} style={{ textTransform: 'capitalize' }}>
-                                {f.correlation_direction}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td>
-                              <Badge size="xs" variant="light" color={CORR_STRENGTH_BADGE[f.strength] || 'gray'} style={{ textTransform: 'capitalize' }}>
-                                {f.strength}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td fz="xs" visibleFrom="sm">{f.reasoning}</Table.Td>
-                            <Table.Td c="dimmed" fz="xs" fs="italic" visibleFrom="sm">{f.caveat}</Table.Td>
-                          </Table.Tr>
-                        ))}
-                      </Table.Tbody>
-                    </Table>
-                  </Box>
+                  <DriversTable findings={corrFindings} />
                 ) : (
                   <Text size="sm" c="dimmed">No significant anatomically-relevant correlations found in this window.</Text>
                 )}

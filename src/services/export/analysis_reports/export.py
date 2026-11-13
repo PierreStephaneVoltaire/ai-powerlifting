@@ -1286,21 +1286,29 @@ def _md_correlation(correlation: dict) -> list[str]:
     if findings:
         for f in findings:
             parts = []
-            if f.get("exercise"):
-                parts.append(f["exercise"])
+            driver = f.get("driver") or f.get("exercise")
+            if driver:
+                parts.append(driver)
             if f.get("lift"):
                 parts.append(f"\u2192 {f['lift']}")
-            direction = f.get("correlation_direction")
-            strength = f.get("strength")
+            direction = f.get("effect") or f.get("correlation_direction")
+            strength = f.get("confidence") or f.get("strength")
             if direction and strength:
                 parts.append(f"({strength} {direction})")
-            if f.get("reasoning"):
-                parts.append(f"\u2014 {f['reasoning']}")
+            detail = _join(f.get("evidence"), f.get("mechanism"), f.get("reasoning"))
+            if detail:
+                parts.append(f"\u2014 {detail}")
+            if f.get("action"):
+                parts.append(f"Action: {f['action']}")
             lines.append(f"- {' '.join(parts)}")
     else:
         lines.append("No correlation findings reported.")
 
     return lines
+
+def _join(*values) -> str:
+    return " ".join(str(value) for value in values if value)
+
 
 def _md_program_evaluation(evaluation: dict) -> list[str]:
     if evaluation.get("insufficient_data"):
@@ -1622,12 +1630,12 @@ def _write_correlation_sheet(wb: Workbook, correlation: dict | None) -> None:
     if findings:
         for f in findings:
             values = [
-                _fmt(f.get("exercise")),
+                _fmt(f.get("driver") or f.get("exercise")),
                 _fmt(f.get("lift")),
-                _fmt(f.get("correlation_direction")),
-                _fmt(f.get("strength")),
-                _fmt(f.get("reasoning")),
-                _fmt(f.get("caveat")),
+                _fmt(f.get("effect") or f.get("correlation_direction")),
+                _fmt(f.get("confidence") or f.get("strength")),
+                _fmt(_join(f.get("evidence"), f.get("mechanism"), f.get("reasoning"))),
+                _fmt(_join(f.get("action"), f.get("caveat"))),
             ]
             for col_idx, v in enumerate(values, 1):
                 c = ws.cell(row=next_row, column=col_idx, value=v)

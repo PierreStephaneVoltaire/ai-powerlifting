@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{Env, Sessions};
+use crate::model::GlossaryEntry;
 use crate::util::round;
 
 const LANDMARKS_JSON: &str = include_str!("../../data/muscle_landmarks.json");
@@ -53,6 +54,18 @@ fn status(weekly: f64, landmark: Option<&Landmark>) -> &'static str {
     }
 }
 
+pub fn tiers(entry: &GlossaryEntry) -> [(&[String], f64); 3] {
+    [
+        (&entry.primary_muscles, 1.0),
+        (&entry.secondary_muscles, 0.5),
+        (&entry.tertiary_muscles, 0.25),
+    ]
+}
+
+pub fn landmark(muscle: &str) -> Option<&'static Landmark> {
+    LANDMARKS.muscles.get(muscle)
+}
+
 pub fn compute(env: Env<'_>, sessions: Sessions<'_>, weeks: i64) -> MuscleVolume {
     let weeks = weeks.max(1);
     let mut totals: BTreeMap<String, f64> = LANDMARKS
@@ -65,11 +78,7 @@ pub fn compute(env: Env<'_>, sessions: Sessions<'_>, weeks: i64) -> MuscleVolume
         let Some(entry) = env.glossary.entry(&exercise.key).filter(|_| sets > 0.0) else {
             continue;
         };
-        for (muscles, weight) in [
-            (&entry.primary_muscles, 1.0),
-            (&entry.secondary_muscles, 0.5),
-            (&entry.tertiary_muscles, 0.25),
-        ] {
+        for (muscles, weight) in tiers(entry) {
             for muscle in muscles {
                 *totals.entry(muscle.clone()).or_insert(0.0) += sets * weight;
             }

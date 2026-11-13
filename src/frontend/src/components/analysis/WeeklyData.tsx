@@ -39,8 +39,10 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
       {/* Per-lift breakdown */}
       {Object.keys(data.lifts).length > 0 && (
         <Paper withBorder p="md">
-          <Text fw={500} mb={4}>Per-Lift Breakdown</Text>
-          <ChartLabel text="Sets and frequency per lift. Expand a row for accessories." formulaId="specificity_ratio" />
+          <Group gap={6} mb="xs" wrap="nowrap">
+            <Text fw={500}>Per-Lift Breakdown</Text>
+            <ChartLabel text="Sets and frequency per lift. Expand a row for accessories." />
+          </Group>
           <Box style={{ overflowX: 'auto' }}>
             <Table fz="sm">
               <Table.Thead>
@@ -229,8 +231,10 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
       {/* Monotony & Strain */}
       {data.monotony_strain && data.monotony_strain.weekly.length > 0 && (
         <Paper withBorder p="md">
-          <Text fw={500} mb={4}>Foster Monotony &amp; Strain</Text>
-          <ChartLabel text="Monotony is how uniform daily load is. Above 2.0 is flagged." formulaId="monotony_strain" />
+          <Group gap={6} mb="xs" wrap="nowrap">
+            <Text fw={500}>Foster Monotony &amp; Strain</Text>
+            <ChartLabel text="Monotony is how uniform daily load is. Above 2.0 is flagged." />
+          </Group>
           {viewMode === 'raw' ? (
             <Box style={{ overflowX: 'auto' }}>
               <Table fz="sm">

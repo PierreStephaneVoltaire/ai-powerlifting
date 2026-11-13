@@ -11,10 +11,13 @@ use tonic::{Request, Response, Status};
 use crate::assemble::Scope;
 use crate::block_ops::workspace;
 use crate::blocks::index;
-use crate::blocks::scope::{program_for_block, scoped_entry};
+use crate::blocks::scope::{analysis_end, program_for_block, scoped_entry};
+use crate::calc::e1rm;
 use crate::correlation;
+use crate::drivers;
 use crate::engine::{Engine, to_value};
 use crate::error::Error;
+use crate::model::{Competition, Session};
 use crate::proto::analytics::analytics_data_server::{AnalyticsData, AnalyticsDataServer};
 use crate::proto::analytics::{
     AthleteRef, BlockKeys, BlockList, BlockRef, CorrelationInputsReply, DESCRIPTOR, ExerciseVolume,
@@ -257,6 +260,29 @@ impl AnalyticsData for Service {
         let entry = scoped_entry(&workspace, raw);
         let (program, _) = program_for_block(&workspace, &entry);
         let inputs = correlation::build(&program.sessions, &entry.start_date);
+        let env = self.engine.env(&loaded);
+        let completed: Vec<&Session> = program
+            .sessions
+            .iter()
+            .filter(|session| session.completed)
+            .collect();
+        let end = analysis_end(&entry);
+        let reference = crate::util::parse_date(end).unwrap_or(env.today);
+        let competitions: Vec<&Competition> = program.competitions.iter().collect();
+        let from_competitions = e1rm::from_competitions(&competitions, reference);
+        let maxes = if from_competitions.is_empty() {
+            e1rm::from_sessions_default(&completed, reference)
+        } else {
+            from_competitions
+        };
+        let drivers = drivers::build(drivers::Input {
+            env,
+            sessions: &program.sessions,
+            cutoff: &entry.start_date,
+            program_start: &entry.start_date,
+            maxes,
+            weekly_e1rm: &inputs.weekly_e1rm,
+        });
         let measurement = |key: &str| program.meta.get(key).cloned().unwrap_or(Value::Null);
         let measurements: serde_json::Map<String, Value> = [
             "height_cm",
@@ -305,6 +331,13 @@ impl AnalyticsData for Service {
                     .unwrap_or_default(),
             ),
             athlete_measurements: Some(to_struct(Value::Object(measurements))),
+            exercise_weeks: drivers.exercise_weeks,
+            exercises: drivers.exercises,
+            muscle_weeks: drivers.muscle_weeks,
+            muscle_landmarks: drivers.muscle_landmarks,
+            fatigue_weeks: drivers.fatigue_weeks,
+            lift_sessions: drivers.lift_sessions,
+            driver_stats: drivers.driver_stats,
         }))
     }
 }

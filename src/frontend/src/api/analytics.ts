@@ -804,11 +804,14 @@ export interface AiBlockComparisonResult {
 }
 
 export interface CorrelationFinding {
-  exercise: string
+  driver_type: 'exercise' | 'muscle' | 'sequence'
+  driver: string
   lift: 'squat' | 'bench' | 'deadlift'
-  correlation_direction: 'positive' | 'negative' | 'unclear'
-  strength: 'strong' | 'moderate' | 'weak'
-  reasoning: string
+  effect: 'helps' | 'hurts' | 'unclear'
+  confidence: 'strong' | 'moderate' | 'weak'
+  evidence: string
+  mechanism: string
+  action: string
   caveat: string
 }
 
@@ -824,10 +827,32 @@ export interface CorrelationReport {
   insufficient_data_reason?: string
 }
 
+function normalizeCorrelationFinding(raw: unknown): CorrelationFinding {
+  const f = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const str = (value: unknown) => (typeof value === 'string' ? value : '')
+  const legacyEffect = f.correlation_direction === 'positive' ? 'helps' : f.correlation_direction === 'negative' ? 'hurts' : 'unclear'
+  const effect = f.effect === 'helps' || f.effect === 'hurts' || f.effect === 'unclear' ? f.effect : legacyEffect
+  const rawConfidence = f.confidence ?? f.strength
+  const confidence = rawConfidence === 'strong' || rawConfidence === 'moderate' || rawConfidence === 'weak' ? rawConfidence : 'weak'
+  const driverType = f.driver_type === 'muscle' || f.driver_type === 'sequence' ? f.driver_type : 'exercise'
+  const lift = f.lift === 'bench' || f.lift === 'deadlift' ? f.lift : 'squat'
+  return {
+    driver_type: driverType,
+    driver: str(f.driver) || str(f.exercise),
+    lift,
+    effect,
+    confidence,
+    evidence: str(f.evidence),
+    mechanism: str(f.mechanism) || str(f.reasoning),
+    action: str(f.action),
+    caveat: str(f.caveat),
+  }
+}
+
 function normalizeCorrelationReport(data: unknown): CorrelationReport {
   const report = (data && typeof data === 'object') ? data as Partial<CorrelationReport> : {}
   return {
-    findings: Array.isArray(report.findings) ? report.findings : [],
+    findings: Array.isArray(report.findings) ? report.findings.map(normalizeCorrelationFinding) : [],
     summary: typeof report.summary === 'string' ? report.summary : '',
     generated_at: typeof report.generated_at === 'string' ? report.generated_at : '',
     window_start: typeof report.window_start === 'string' ? report.window_start : '',

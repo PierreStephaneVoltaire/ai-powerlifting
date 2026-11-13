@@ -2,16 +2,25 @@
   "type": "function",
   "function": {
     "name": "report_correlation_findings",
-    "description": "Report accessory exercise to big lift correlation findings",
+    "description": "Report which exercises, muscles and session sequences help or hurt the three main lifts",
     "parameters": {
       "type": "object",
       "properties": {
         "findings": {
           "type": "array",
+          "maxItems": 8,
           "items": {
             "type": "object",
             "properties": {
-              "exercise": {
+              "driver_type": {
+                "type": "string",
+                "enum": [
+                  "exercise",
+                  "muscle",
+                  "sequence"
+                ]
+              },
+              "driver": {
                 "type": "string"
               },
               "lift": {
@@ -22,15 +31,15 @@
                   "deadlift"
                 ]
               },
-              "correlation_direction": {
+              "effect": {
                 "type": "string",
                 "enum": [
-                  "positive",
-                  "negative",
+                  "helps",
+                  "hurts",
                   "unclear"
                 ]
               },
-              "strength": {
+              "confidence": {
                 "type": "string",
                 "enum": [
                   "strong",
@@ -38,19 +47,32 @@
                   "weak"
                 ]
               },
-              "reasoning": {
-                "type": "string"
+              "evidence": {
+                "type": "string",
+                "description": "One sentence with numbers from the payload"
+              },
+              "mechanism": {
+                "type": "string",
+                "description": "At most 2 sentences: muscles, fatigue dimension or transfer, tied to the lift profile"
+              },
+              "action": {
+                "type": "string",
+                "description": "One concrete program change, or 'Keep as is'"
               },
               "caveat": {
-                "type": "string"
+                "type": "string",
+                "description": "The confound specific to this finding, or an empty string"
               }
             },
             "required": [
-              "exercise",
+              "driver_type",
+              "driver",
               "lift",
-              "correlation_direction",
-              "strength",
-              "reasoning",
+              "effect",
+              "confidence",
+              "evidence",
+              "mechanism",
+              "action",
               "caveat"
             ]
           }

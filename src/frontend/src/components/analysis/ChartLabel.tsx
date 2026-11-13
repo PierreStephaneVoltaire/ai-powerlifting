@@ -1,19 +1,10 @@
-import { Anchor, Group, Text } from '@mantine/core'
+import { Tooltip } from '@mantine/core'
 import { Info } from 'lucide-react'
 
-interface ChartLabelProps {
-  text: string
-  formulaId: string
-  mb?: string
-}
-
-export function ChartLabel({ text, formulaId, mb = 'xs' }: ChartLabelProps) {
+export function ChartLabel({ text }: { text: string }) {
   return (
-    <Group gap={4} mb={mb} wrap="nowrap">
-      <Text fz="xs" c="dimmed">{text}</Text>
-      <Anchor href={`#formula-${formulaId}`} aria-label="Formula definition" lh={1}>
-        <Info size={12} />
-      </Anchor>
-    </Group>
+    <Tooltip label={text} withArrow multiline w={260} events={{ hover: true, focus: true, touch: true }}>
+      <Info size={14} tabIndex={0} aria-label={text} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)', flexShrink: 0 }} />
+    </Tooltip>
   )
 }

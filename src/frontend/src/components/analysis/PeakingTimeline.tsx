@@ -92,6 +92,7 @@ export function PeakingTimeline({ data }: PeakingTimelineProps) {
         <Group gap="xs">
           <TrendingUp size={18} />
           <Text fw={600}>Peaking Timeline</Text>
+          <ChartLabel text="Solid is actual TSB. Dashed is planned. Dots show specificity." />
         </Group>
         <Badge variant="light" color={data.status_color} size="sm">
           {data.status_label}
@@ -132,7 +133,6 @@ export function PeakingTimeline({ data }: PeakingTimelineProps) {
             </Stack>
           </SimpleGrid>
 
-          <ChartLabel text="Solid is actual TSB. Dashed is planned. Dots show specificity." formulaId="banister_ffm" />
           <Box style={{ width: '100%', height: 420 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData}>
