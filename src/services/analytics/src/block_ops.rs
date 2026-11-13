@@ -40,8 +40,14 @@ fn bundle_key(block_key: &str, tail: &str) -> String {
     format!("native_block#{CACHE_SCHEMA_VERSION}#{block_key}#{tail}")
 }
 
-fn lifetime_key(version: &str) -> String {
-    format!("native_lifetime#{version}")
+fn lifetime_key(version: &str, block_keys: &[String]) -> String {
+    if block_keys.is_empty() {
+        return format!("native_lifetime#{version}");
+    }
+    format!(
+        "native_lifetime#{version}#{}",
+        crate::js::sha1_prefix(&block_keys.join(","), 14)
+    )
 }
 
 fn mark_cached(mut saved: Value) -> Value {
@@ -57,6 +63,45 @@ impl Engine {
             .await
     }
 
+    async fn stored_bundle(&self, athlete: &str, block_key: &str) -> Option<Bundle> {
+        let snapshots = self.snapshots.as_ref()?;
+        match snapshots.read(athlete, block_key).await {
+            Ok(body) => serde_json::from_value(body?).ok(),
+            Err(error) => {
+                tracing::warn!(%error, block_key, "block snapshot read failed");
+                None
+            }
+        }
+    }
+
+    async fn store_bundle(&self, athlete: &str, bundle: &Bundle) {
+        let Some(snapshots) = self.snapshots.as_ref() else {
+            return;
+        };
+        let Ok(body) = to_value(bundle) else {
+            return;
+        };
+        if let Err(error) = snapshots
+            .write(athlete, &bundle.block.block_key, body)
+            .await
+        {
+            tracing::warn!(%error, block_key = bundle.block.block_key, "block snapshot write failed");
+        }
+    }
+
+    async fn is_stored(&self, athlete: &str, block_key: &str) -> bool {
+        let Some(snapshots) = self.snapshots.as_ref() else {
+            return true;
+        };
+        if block_key == blocks::DEFAULT_BLOCK {
+            return true;
+        }
+        snapshots
+            .list(athlete)
+            .await
+            .is_ok_and(|stored| stored.iter().any(|item| item.block_key == block_key))
+    }
+
     pub async fn bundle_for(
         &self,
         workspace: &Workspace<'_>,
@@ -67,10 +112,20 @@ impl Engine {
         cache_only: bool,
     ) -> Result<Option<Bundle>, Error> {
         let entry = scoped_entry(workspace, raw);
+        let past = !entry.is_current && self.snapshots.is_some();
         let cache_key = bundle_key(&raw.block_key, &entry.source_fingerprint);
         let latest_key = bundle_key(&raw.block_key, "latest");
         if !refresh || cache_only {
-            let mut saved = self.cache.read::<Bundle>(athlete, &cache_key).await;
+            let stored = if past {
+                self.stored_bundle(athlete, &raw.block_key).await
+            } else {
+                None
+            };
+            let was_stored = stored.is_some();
+            let mut saved = stored;
+            if saved.is_none() {
+                saved = self.cache.read::<Bundle>(athlete, &cache_key).await;
+            }
             if saved.is_none() && cache_only {
                 saved = self.cache.read::<Bundle>(athlete, &latest_key).await;
             }
@@ -78,6 +133,9 @@ impl Engine {
                 saved.block.label = entry.label.clone();
                 saved.block.is_current = entry.is_current;
                 saved.cached = true;
+                if past && !was_stored {
+                    self.store_bundle(athlete, &saved).await;
+                }
                 return Ok(Some(saved));
             }
         }
@@ -91,7 +149,40 @@ impl Engine {
         self.cache
             .write(athlete, &latest_key, &computed, false)
             .await;
+        if past {
+            self.store_bundle(athlete, &computed).await;
+        }
         Ok(Some(computed))
+    }
+
+    async fn annotate_stored(&self, athlete: &str, mut index: Value) -> Value {
+        let Some(snapshots) = self.snapshots.as_ref() else {
+            return index;
+        };
+        let stored = match snapshots.list(athlete).await {
+            Ok(stored) => stored,
+            Err(error) => {
+                tracing::warn!(%error, "block snapshot listing failed");
+                return index;
+            }
+        };
+        for entry in index.as_array_mut().into_iter().flatten() {
+            let Some(map) = entry.as_object_mut() else {
+                continue;
+            };
+            let current = map.get("isCurrent").and_then(Value::as_bool) == Some(true);
+            let found = map
+                .get("blockKey")
+                .and_then(Value::as_str)
+                .and_then(|key| stored.iter().find(|item| item.block_key == key))
+                .filter(|_| !current);
+            map.insert("stored".to_owned(), Value::Bool(found.is_some()));
+            map.insert(
+                "storedAt".to_owned(),
+                found.map_or(Value::Null, |item| Value::String(item.stored_at.clone())),
+            );
+        }
+        index
     }
 
     pub async fn blocks_list(&self, arguments: Map<String, Value>) -> Result<Value, Error> {
@@ -99,7 +190,7 @@ impl Engine {
         let version = self.cache.version(&args.pk).await;
         let key = index_key(&version);
         if let Some(saved) = self.cache.read::<Value>(&args.pk, &key).await {
-            return Ok(saved);
+            return Ok(self.annotate_stored(&args.pk, saved).await);
         }
         let loaded = match self.everything(&args.pk).await {
             Ok(loaded) => loaded,
@@ -109,7 +200,7 @@ impl Engine {
         let entries = index::build(&workspace(&loaded, self.clock.today()));
         let value = to_value(&entries)?;
         self.cache.write(&args.pk, &key, &value, false).await;
-        Ok(value)
+        Ok(self.annotate_stored(&args.pk, value).await)
     }
 
     pub async fn blocks_get(&self, arguments: Map<String, Value>) -> Result<Value, Error> {
@@ -120,6 +211,7 @@ impl Engine {
         let view = view_key(&args.block_key, &version);
         if (!refresh || cache_only)
             && let Some(saved) = self.cache.read::<Value>(&args.pk, &view).await
+            && self.is_stored(&args.pk, &args.block_key).await
         {
             return Ok(mark_cached(saved));
         }
@@ -218,14 +310,17 @@ impl Engine {
         let args: LifetimeArgs = args::parse(arguments)?;
         let refresh = args.refresh.unwrap_or(false);
         let version = self.cache.version(&args.pk).await;
-        let key = lifetime_key(&version);
+        let mut block_keys = args.block_keys.clone().unwrap_or_default();
+        block_keys.sort();
+        block_keys.dedup();
+        let key = lifetime_key(&version, &block_keys);
         if !refresh && let Some(saved) = self.cache.read::<Value>(&args.pk, &key).await {
             return Ok(saved);
         }
         if args.cache_only.unwrap_or(false) {
             return Err(Error::CacheMiss("Lifetime report is not cached".to_owned()));
         }
-        let report = self.compute_lifetime(&args.pk).await?;
+        let report = self.compute_lifetime(&args.pk, &block_keys).await?;
         let value = to_value(&report)?;
         self.cache.write(&args.pk, &key, &value, false).await;
         Ok(value)
@@ -234,13 +329,29 @@ impl Engine {
     pub async fn compute_lifetime(
         &self,
         athlete: &str,
+        block_keys: &[String],
     ) -> Result<lifetime::types::Lifetime, Error> {
         let loaded = self.everything(athlete).await?;
         let workspace = workspace(&loaded, self.clock.today());
         let entries = index::build(&workspace);
         let env = self.env(&loaded);
+        let selecting = !block_keys.is_empty();
         let mut bundles = Vec::new();
+        let mut current = None;
         for raw in &entries {
+            let wanted = if selecting {
+                !raw.is_current && block_keys.contains(&raw.block_key)
+            } else {
+                true
+            };
+            if selecting && raw.is_current {
+                current = self
+                    .bundle_for(&workspace, env, athlete, raw, true, false)
+                    .await?;
+            }
+            if !wanted {
+                continue;
+            }
             if let Some(bundle) = self
                 .bundle_for(&workspace, env, athlete, raw, raw.is_current, false)
                 .await?
@@ -256,7 +367,14 @@ impl Engine {
                 contexts.insert(bundle.block.block_key.clone(), context);
                 records.push(record);
             }
-            lifetime::assemble(records, &bundles, &contexts)
+            let report = lifetime::assemble(records, &bundles, &contexts);
+            match current {
+                Some(bundle) => {
+                    let (record, _) = lifetime::record_for(&workspace, env, &bundle);
+                    lifetime::with_current(report, record)
+                }
+                None => report,
+            }
         }))
     }
 
@@ -275,8 +393,8 @@ mod tests {
 
     #[test]
     fn lifetime_cache_key_is_versioned() {
-        assert_eq!(lifetime_key("0"), "native_lifetime#0");
-        assert_eq!(lifetime_key("42"), "native_lifetime#42");
+        assert_eq!(lifetime_key("0", &[]), "native_lifetime#0");
+        assert_eq!(lifetime_key("42", &[]), "native_lifetime#42");
     }
 
     #[test]

@@ -546,6 +546,16 @@ export interface FatigueProfile {
 
 export type FatigueProfileSource = 'ai_estimated' | 'manual'
 
+export type LiftTransferSource = 'ai' | 'rule' | 'user'
+
+export interface LiftTransfer {
+  squat: number
+  bench: number
+  deadlift: number
+  source: LiftTransferSource
+  reasoning: string
+}
+
 export interface E1rmEstimate {
   value_kg: number
   method: 'manual' | 'ai_backfill' | 'logged'
@@ -571,6 +581,7 @@ export interface GlossaryExercise {
   fatigue_profile?: FatigueProfile
   fatigue_profile_source?: FatigueProfileSource
   fatigue_profile_reasoning?: string | null
+  lift_transfer?: LiftTransfer
   e1rm_estimate?: E1rmEstimate
   archived?: boolean
 }

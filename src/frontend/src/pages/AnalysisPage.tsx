@@ -19,7 +19,7 @@ import {
 import { useProgramStore } from '@/store/programStore'
 import { useAuth } from '@/auth/AuthProvider'
 import { useCompetitionsStore } from '@/store/competitionsStore'
-import { fetchWeightLog, fetchGlossary } from '@/api/client'
+import { fetchWeightLog } from '@/api/client'
 import { executedSets } from '@/utils/volume'
 import { useSettingsStore } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
@@ -30,20 +30,21 @@ import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntrie
 import { parseWeekNumber, programWeekEndDate, programWeekStartDate, resolveTrainingWeekForDate, trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { userCompToCompetition } from '@/utils/competitions'
 import { FORMULA_DESCRIPTIONS } from '@/constants/formulaDescriptions'
-import type { WeightEntry, GlossaryExercise, Session, WeekStartDay } from '@powerlifting/types'
+import type { WeightEntry, Session, WeekStartDay } from '@powerlifting/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ReferenceLine, Legend } from 'recharts'
 import {
   Stack, Group, Paper, SimpleGrid, Text, Badge, Table,
-  Button, Center, Select, Progress, Accordion, SegmentedControl, Box, Loader, Tooltip,
+  Button, Center, Select, Accordion, SegmentedControl, Box, Loader, Tooltip,
 } from '@mantine/core'
 import { AiAnalysis } from '@/components/analysis/AiAnalysis'
 import { AlertsStrip } from '@/components/analysis/AlertsStrip'
 import { LifetimeComparePanel, PastBlocksPanel } from '@/components/analysis/BlockAnalytics'
 import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
+import { AcwrPanel, FatigueDimensionsPanel, InolPanel, SpecificityPanel } from '@/components/analysis/AnalysisPanels'
+import { ChartHelp } from '@/components/analysis/ChartHelp'
 import MaxesPage from '@/pages/MaxesPage'
 import { recordsInBlock } from '@/utils/blockScope'
-import { glossaryCategoryLookup, glossaryMuscleLookup, muscleGroupAverages, perLiftBreakdown } from '@/utils/weeklyBreakdown'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -194,20 +195,6 @@ function taperQualityBadgeColor(label: string) {
   return 'red'
 }
 
-function specificityStatusBadgeColor(status?: string) {
-  if (status === 'within_expected') return 'green'
-  if (status === 'below_expected') return 'yellow'
-  if (status === 'above_expected') return 'red'
-  return 'gray'
-}
-
-function specificityStatusLabel(status?: string) {
-  if (status === 'within_expected') return 'Within expected range'
-  if (status === 'below_expected') return 'Below expected'
-  if (status === 'above_expected') return 'Above expected'
-  return 'No band'
-}
-
 function volumeConfidenceColor(confidence?: string) {
   if (confidence === 'high') return 'green'
   if (confidence === 'medium') return 'blue'
@@ -216,45 +203,6 @@ function volumeConfidenceColor(confidence?: string) {
 }
 
 const LIFT_LABELS: Record<string, string> = { squat: 'Squat', bench: 'Bench', deadlift: 'Deadlift' }
-
-const DEFAULT_INOL_THRESHOLDS: Record<string, { low: number; high: number }> = {
-  squat: { low: 1.6, high: 3.5 },
-  bench: { low: 2.0, high: 5.0 },
-  deadlift: { low: 1.0, high: 2.5 },
-}
-
-const ACWR_ZONE_META: Record<string, { color: string; label: string }> = {
-  detraining_trend: { color: 'gray', label: 'Detraining trend' },
-  steady_load: { color: 'green', label: 'Steady load' },
-  rapid_increase: { color: 'yellow', label: 'Rapid increase' },
-  load_spike: { color: 'red', label: 'Load spike' },
-  undertraining: { color: 'gray', label: 'Detraining trend' },
-  optimal: { color: 'green', label: 'Steady load' },
-  caution: { color: 'yellow', label: 'Rapid increase' },
-  danger: { color: 'red', label: 'Load spike' },
-  unknown: { color: 'gray', label: 'Unknown' },
-}
-
-function getInolThresholds(lift: string, thresholds?: Record<string, { low: number; high: number }>) {
-  return thresholds?.[lift] ?? DEFAULT_INOL_THRESHOLDS[lift] ?? { low: 2.0, high: 4.0 }
-}
-
-function getInolZoneMeta(value: number, thresholds: { low: number; high: number }) {
-  if (value < thresholds.low) {
-    return { color: 'yellow', label: 'Low stimulus' }
-  }
-  if (value > thresholds.high) {
-    return { color: 'red', label: 'Overreaching' }
-  }
-  return { color: 'green', label: 'Productive' }
-}
-
-function getAcwrZoneMeta(zone?: string | null) {
-  return ACWR_ZONE_META[zone ?? 'unknown'] ?? {
-    color: 'gray',
-    label: zone ? zone.replace(/_/g, ' ') : 'Unknown',
-  }
-}
 
 type TrendRow = {
   week: number
@@ -357,7 +305,6 @@ export default function AnalysisPage() {
   const [regenerating, setRegenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
-  const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
   const asOfDate = useMemo(() => toDateStr(new Date()), [])
   const currentWeekStartDay = weekStartForBlock(program, 'current')
 
@@ -539,7 +486,6 @@ export default function AnalysisPage() {
   useEffect(() => {
     if (activeSection !== 'weekly') return
     fetchWeightLog(version).then(setWeightLog).catch(console.error)
-    fetchGlossary().then(setGlossary).catch(console.error)
   }, [activeSection, version])
 
   const handleRegenerateAnalysis = async () => {
@@ -581,17 +527,6 @@ export default function AnalysisPage() {
       s.date <= analysisWindowEndStr
     )
   }, [analysisWindowEndStr, analysisWindowStartStr, program?.sessions])
-
-  const glossaryMuscles = useMemo(() => glossaryMuscleLookup(glossary), [glossary])
-
-  const glossaryCategory = useMemo(() => glossaryCategoryLookup(glossary), [glossary])
-
-  const muscleGroupAvgWeekly = useMemo(
-    () => muscleGroupAverages(filteredSessions, glossaryMuscles, effectiveWeeks),
-    [effectiveWeeks, glossaryMuscles, filteredSessions],
-  )
-
-  const perLiftDetails = useMemo(() => perLiftBreakdown(filteredSessions, glossaryCategory), [glossaryCategory, filteredSessions])
 
   const avgSessionsPerWeek = data ? Math.round((data.sessions_analyzed / effectiveWeeks) * 10) / 10 : null
 
@@ -1154,6 +1089,13 @@ export default function AnalysisPage() {
                       </Stack>
                     </SimpleGrid>
 
+                    <ChartHelp
+                      description="Daily Banister fitness-fatigue model. CTL is slow-moving fitness, ATL is fast-moving fatigue, and TSB is the gap between them (form)."
+                      range="TSB +5 to +15 is the peaking window · -10 to +5 building · -30 to -10 heavy overload · below -30 deep overload · above +15 risk of detraining"
+                      units="load points per day (normalised to your own typical day; 1.0 = a typical training day)"
+                      relation="TSB = CTL - ATL. Negative TSB means fatigue is above fitness (normal mid-block); TSB rises as ATL falls during a taper while CTL holds."
+                      formulaId="banister_ffm"
+                    />
                     {banisterSeries.length > 0 ? (
                       <>
                         <Box style={{ width: '100%', height: 320 }}>
@@ -1345,59 +1287,7 @@ export default function AnalysisPage() {
             </Stack>
           )}
 
-          {/* INOL */}
-          {data.inol && data.inol.avg_inol && (
-            <Paper withBorder p="md" className="if-card">
-              <Group gap="xs" mb="sm">
-                <Text fw={500}>Stimulus-Adjusted INOL (Window Average)</Text>
-                <Tooltip label="INOL means intensity-number-of-lifts. Here it is adjusted by your lift-profile stimulus coefficient to reflect how hard the same workload is for you." withArrow multiline w={320}>
-                  <Info size={14} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)' }} />
-                </Tooltip>
-              </Group>
-              <SimpleGrid cols={3} mb="sm">
-                {Object.entries(data.inol.avg_inol).map(([lift, val]) => {
-                  const coefficient = data.inol?.stimulus_coefficients?.[lift] ?? 1
-                  const baseThresholds = getInolThresholds(lift, data.inol?.thresholds)
-                  const adjusted = data.inol?.phase_adjusted_thresholds?.[lift]
-                  const displayThresholds = adjusted
-                    ? { low: adjusted.display_low, high: adjusted.display_high }
-                    : baseThresholds
-                  const zoneMeta = getInolZoneMeta(val, displayThresholds)
-                  const raw = data.inol?.raw_avg_inol?.[lift]
-                  const trend = data.inol?.trend_pressure?.[lift]
-                  const rampGrace = data.inol?.ramp_up_grace?.[lift]
-                  return (
-                    <Stack key={lift} gap={2} ta="center" p="sm" style={{ borderRadius: 'var(--mantine-radius-sm)', background: `var(--mantine-color-${zoneMeta.color}-light)` }}>
-                      <Text fz="xs" c="dimmed" tt="capitalize">{lift}</Text>
-                      <Text fz="xl" fw={700} c={zoneMeta.color}>{val.toFixed(2)}</Text>
-                      {typeof raw === 'number' && <Text fz="xs" c="dimmed">Raw {raw.toFixed(2)}</Text>}
-                      <Text fz="xs" c="dimmed">Stimulus x{coefficient.toFixed(2)}</Text>
-                      <Text fz="xs" c="dimmed">{zoneMeta.label}</Text>
-                      <Text fz="xs" c="dimmed" visibleFrom="sm">
-                        Target {(adjusted?.low ?? baseThresholds.low).toFixed(1)} - {(adjusted?.high ?? baseThresholds.high).toFixed(1)}
-                      </Text>
-                      <Text fz="xs" c="dimmed" visibleFrom="sm">
-                        Display {displayThresholds.low.toFixed(1)} - {displayThresholds.high.toFixed(1)}
-                      </Text>
-                      {trend && (
-                        <Text fz="xs" c="dimmed" visibleFrom="sm">
-                          Trend {(trend.value * 100).toFixed(0)}%
-                        </Text>
-                      )}
-                      {rampGrace && <Badge color="blue" variant="light" size="xs">Ramp-up grace</Badge>}
-                    </Stack>
-                  )
-                })}
-              </SimpleGrid>
-              {data.inol.flags.length > 0 && (
-                <Group gap="xs" wrap="wrap">
-                  {data.inol.flags.map(flag => (
-                    <Badge key={flag} color="yellow" variant="light">{flag}</Badge>
-                  ))}
-                </Group>
-              )}
-            </Paper>
-          )}
+          {data.inol && data.inol.avg_inol && <InolPanel inol={data.inol} />}
 
           {volumeLandmarkEntries.length > 0 && (
             <Paper withBorder p="md" className="if-card">
@@ -1444,52 +1334,7 @@ export default function AnalysisPage() {
             </Paper>
           )}
 
-          {/* ACWR */}
-          {data.acwr && !('status' in data.acwr) && (
-            <Paper withBorder p="md" className="if-card">
-              <Group justify="space-between" mb="sm">
-                <Group gap="xs">
-                  <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
-                  <Tooltip label="EWMA ACWR means exponentially weighted moving average acute:chronic workload ratio. It compares short-term load to longer-term load while weighting recent work more heavily." withArrow multiline w={340}>
-                    <Info size={14} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)' }} />
-                  </Tooltip>
-                </Group>
-                <Badge
-                  color={getAcwrZoneMeta((data.acwr as any).composite_zone).color}
-                  variant="light"
-                >
-                  Composite: {(data.acwr as any).composite?.toFixed(2) ?? 'N/A'}
-                  <Text span visibleFrom="sm"> ({(data.acwr as any).composite_label ?? getAcwrZoneMeta((data.acwr as any).composite_zone).label})</Text>
-                </Badge>
-              </Group>
-              <Text fz="xs" c="dimmed" mb="sm">
-                Daily EWMA acute/chronic ratio. The labels describe workload pattern, not validated injury risk.
-              </Text>
-              <SimpleGrid cols={4} spacing="md">
-                {Object.entries((data.acwr as any).dimensions).map(([dim, info]: [string, any]) => {
-                  const zoneMeta = getAcwrZoneMeta(info.zone)
-                  return (
-                    <Stack key={dim} gap={2} ta="center" p="sm" style={{ borderRadius: 'var(--mantine-radius-sm)', background: `var(--mantine-color-${zoneMeta.color}-light)` }}>
-                      <Text fz="xs" tt="capitalize">{dim}</Text>
-                      <Text fz="xl" fw={700}>{info.value?.toFixed(2) ?? '--'}</Text>
-                      <Text fz="xs" visibleFrom="sm">{info.label ?? zoneMeta.label}</Text>
-                    </Stack>
-                  )
-                })}
-              </SimpleGrid>
-            </Paper>
-          )}
-          {data.acwr && 'status' in data.acwr && (
-            <Paper withBorder p="md" className="if-card">
-              <Group gap="xs" mb="xs">
-                <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
-                <Tooltip label="EWMA ACWR means exponentially weighted moving average acute:chronic workload ratio. It compares short-term load to longer-term load while weighting recent work more heavily." withArrow multiline w={340}>
-                  <Info size={14} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)' }} />
-                </Tooltip>
-              </Group>
-              <Text fz="sm" c="dimmed">{(data.acwr as any).reason ?? 'Not enough data yet. Keep logging sessions.'}</Text>
-            </Paper>
-          )}
+          {data.acwr && <AcwrPanel acwr={data.acwr} />}
 
           {/* RI Distribution */}
           {data.ri_distribution && (
@@ -1528,123 +1373,12 @@ export default function AnalysisPage() {
             </Paper>
           )}
 
-          {/* Specificity Ratio */}
           {data.specificity_ratio && (
-            <Paper withBorder p="md" className="if-card">
-              <Group justify="space-between" align="flex-start" mb="sm">
-                <Group gap="xs">
-                  <Text fw={500}>Specificity Ratio</Text>
-                  <Tooltip label="Specificity ratio shows how much of your work is directly specific to competition. Narrow counts only SBD sets. Broad counts SBD plus closely related secondary work." withArrow multiline w={320}>
-                    <Info size={14} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)' }} />
-                  </Tooltip>
-                </Group>
-                {data.specificity_ratio.expected_band ? (
-                  <Group gap="xs" wrap="wrap" justify="flex-end">
-                    <Badge
-                      variant="light"
-                      color={specificityStatusBadgeColor(data.specificity_ratio.narrow_status)}
-                    >
-                      Narrow {specificityStatusLabel(data.specificity_ratio.narrow_status)}
-                    </Badge>
-                    <Badge
-                      variant="light"
-                      color={specificityStatusBadgeColor(data.specificity_ratio.broad_status)}
-                    >
-                      Broad {specificityStatusLabel(data.specificity_ratio.broad_status)}
-                    </Badge>
-                  </Group>
-                ) : (
-                  <Badge variant="light" color="gray">No upcoming comp band</Badge>
-                )}
-              </Group>
-              {data.specificity_target_competition && (
-                <Text fz="xs" c="dimmed" mb="sm">
-                  Specificity target: {data.specificity_target_competition.name ?? 'Upcoming meet'}
-                  {data.specificity_target_competition.date ? ` (${data.specificity_target_competition.date})` : ''}
-                  {data.specificity_target_competition.selection_reason ? ` • ${String(data.specificity_target_competition.selection_reason).replace(/_/g, ' ')}` : ''}
-                </Text>
-              )}
-              <SimpleGrid cols={2} spacing="md">
-                <Stack gap="xs">
-                  <Text fz="xs" c="dimmed">Narrow (SBD only)</Text>
-                  <Progress value={Math.min(data.specificity_ratio.narrow * 100, 100)} />
-                  <Text fz="sm" fw={500}>{(data.specificity_ratio.narrow * 100).toFixed(1)}%</Text>
-                </Stack>
-                <Stack gap="xs">
-                  <Text fz="xs" c="dimmed">Broad (SBD + secondary)</Text>
-                  <Progress value={Math.min(data.specificity_ratio.broad * 100, 100)} color="blue" />
-                  <Text fz="sm" fw={500}>{(data.specificity_ratio.broad * 100).toFixed(1)}%</Text>
-                </Stack>
-              </SimpleGrid>
-              {data.specificity_ratio.expected_band && (
-                <Text fz="xs" c="dimmed" mt="sm">
-                  Expected band at {data.specificity_ratio.expected_band.weeks_to_comp?.toFixed(1) ?? '--'} weeks out:
-                  {' '}
-                  narrow {data.specificity_ratio.expected_band.narrow.min.toFixed(2)} - {data.specificity_ratio.expected_band.narrow.max.toFixed(2)}
-                  {' '}| broad {data.specificity_ratio.expected_band.broad.min.toFixed(2)} - {data.specificity_ratio.expected_band.broad.max.toFixed(2)}
-                </Text>
-              )}
-              <Text fz="xs" c="dimmed" mt="sm">{data.specificity_ratio.sbd_sets} SBD sets / {data.specificity_ratio.total_sets} total sets</Text>
-              {data.specificity_ratio.flags && data.specificity_ratio.flags.length > 0 && (
-                <Group gap="xs" wrap="wrap" mt="sm">
-                  {data.specificity_ratio.flags.map(flag => (
-                    <Badge key={flag} color="yellow" variant="light">{flag}</Badge>
-                  ))}
-                </Group>
-              )}
-            </Paper>
+            <SpecificityPanel specificity={data.specificity_ratio} target={data.specificity_target_competition} />
           )}
 
-          {/* Fatigue Dimensions */}
           {data.fatigue_dimensions && Object.keys(data.fatigue_dimensions.weekly).length > 0 && (
-            <Paper withBorder p="md" className="if-card">
-              <Text fw={500} mb="sm">Fatigue Dimensions (Weekly)</Text>
-              <Box visibleFrom="sm" style={{ overflowX: 'auto' }}>
-                <Table fz="sm">
-                  <Table.Thead><Table.Tr><Table.Th>Week</Table.Th><Table.Th ta="right">Axial</Table.Th><Table.Th ta="right">Neural</Table.Th><Table.Th ta="right">Peripheral</Table.Th><Table.Th ta="right">Systemic</Table.Th></Table.Tr></Table.Thead>
-                  <Table.Tbody>
-                    {Object.entries(data.fatigue_dimensions.weekly)
-                      .sort(([a], [b]) => Number(a) - Number(b)).slice(-8)
-                      .map(([week, dims]) => (
-                        <Table.Tr key={week}>
-                          <Table.Td fw={500}>W{week}</Table.Td>
-                          <Table.Td ta="right">{dims.axial.toFixed(1)}</Table.Td>
-                          <Table.Td ta="right">{dims.neural.toFixed(1)}</Table.Td>
-                          <Table.Td ta="right">{dims.peripheral.toFixed(1)}</Table.Td>
-                          <Table.Td ta="right">{dims.systemic.toFixed(1)}</Table.Td>
-                        </Table.Tr>
-                      ))}
-                  </Table.Tbody>
-                </Table>
-              </Box>
-              <Stack hiddenFrom="sm" gap="xs">
-                {Object.entries(data.fatigue_dimensions.weekly)
-                  .sort(([a], [b]) => Number(a) - Number(b)).slice(-8)
-                  .map(([week, dims]) => (
-                    <Paper key={week} p="sm" bg="var(--mantine-color-default-hover)" radius="sm">
-                      <Text fw={700} mb={4}>Week {week}</Text>
-                      <SimpleGrid cols={4} spacing="xs">
-                        <Stack gap={0} ta="center">
-                          <Text fz="xs" c="dimmed">Axial</Text>
-                          <Text fz="sm" fw={500}>{dims.axial.toFixed(1)}</Text>
-                        </Stack>
-                        <Stack gap={0} ta="center">
-                          <Text fz="xs" c="dimmed">Neural</Text>
-                          <Text fz="sm" fw={500}>{dims.neural.toFixed(1)}</Text>
-                        </Stack>
-                        <Stack gap={0} ta="center">
-                          <Text fz="xs" c="dimmed">Periph</Text>
-                          <Text fz="sm" fw={500}>{dims.peripheral.toFixed(1)}</Text>
-                        </Stack>
-                        <Stack gap={0} ta="center">
-                          <Text fz="xs" c="dimmed">Systemic</Text>
-                          <Text fz="sm" fw={500}>{dims.systemic.toFixed(1)}</Text>
-                        </Stack>
-                      </SimpleGrid>
-                    </Paper>
-                  ))}
-              </Stack>
-            </Paper>
+            <FatigueDimensionsPanel dimensions={data.fatigue_dimensions} />
           )}
 
           {/* Projections */}
@@ -1991,8 +1725,6 @@ export default function AnalysisPage() {
           <WeeklyData
             data={data}
             viewMode={viewMode}
-            perLiftDetails={perLiftDetails}
-            muscleGroupAvgWeekly={muscleGroupAvgWeekly}
             analysisWeeks={effectiveWeeks}
             unit={unit}
           />

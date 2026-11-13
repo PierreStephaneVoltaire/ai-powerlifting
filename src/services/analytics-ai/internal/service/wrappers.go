@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 
 	"powerlifting/analytics-ai/internal/apperr"
 	"powerlifting/analytics-ai/internal/pyjson"
@@ -66,15 +67,23 @@ func (s *Service) compareReport(ctx context.Context, call request) (any, error) 
 	if truthy(call.arguments["read_only"]) {
 		refresh, cacheOnly = false, true
 	}
-	keys, _ := call.arguments["blockKeys"].([]any)
-	if keys == nil {
-		keys = []any{}
-	}
 	var requested []string
-	for _, key := range keys {
-		requested = append(requested, key.(string))
+	rawKeys, _ := call.arguments["blockKeys"].([]any)
+	for _, key := range rawKeys {
+		if text, ok := key.(string); ok {
+			requested = append(requested, text)
+		}
 	}
-	comparison, err := s.Source.Compare(ctx, call.principal(), requested)
+	blocks, err := s.Source.Blocks(ctx, call.principal())
+	if err != nil {
+		return nil, err
+	}
+	resolved := reports.ResolveKeys(blocks, requested)
+	keys := make([]any, 0, len(resolved))
+	for _, key := range resolved {
+		keys = append(keys, key)
+	}
+	comparison, err := s.Source.Compare(ctx, call.principal(), resolved)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +101,19 @@ func (s *Service) compareReport(ctx context.Context, call request) (any, error) 
 	}
 	sum := sha256.Sum256(fingerprint)
 	selected, _ := comparison["selectedBlockKeys"].([]any)
+	deterministic := comparison
+	if len(resolved) > 0 {
+		if lifetime, err := s.Source.SelectedLifetime(ctx, call.principal(), resolved); err == nil {
+			deterministic = maps.Clone(comparison)
+			deterministic["lifetime"] = lifetime
+		}
+	}
 	cached := false
 	if object, isObject := summary.(map[string]any); isObject {
 		cached = object["cached"] == true
 	}
 	return map[string]any{
 		"schemaVersion": comparisonSchemaVersion, "generatedAt": s.Now().UTC().Format("2006-01-02T15:04:05.000Z"), "cached": cached,
-		"selectedBlockKeys": selected, "sourceFingerprint": hex.EncodeToString(sum[:]), "report": summary, "deterministic": comparison,
+		"selectedBlockKeys": selected, "sourceFingerprint": hex.EncodeToString(sum[:]), "report": summary, "deterministic": deterministic,
 	}, nil
 }

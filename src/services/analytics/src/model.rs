@@ -4,7 +4,7 @@ use chrono::NaiveDate;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 
-use crate::util::{int_of, num, num_of, parse_date, present, text, truthy_of};
+use crate::util::{int_of, normalize_name, num, num_of, parse_date, present, text, truthy_of};
 
 pub const DEFAULT_BLOCK: &str = "current";
 
@@ -28,7 +28,7 @@ impl Exercise {
             .unwrap_or_default()
             .to_owned();
         let lower = name.to_lowercase();
-        let key = lower.trim().to_owned();
+        let key = normalize_name(&name);
         let statuses = value
             .get("set_statuses")
             .and_then(Value::as_array)
@@ -367,15 +367,70 @@ fn block_id(block: &Map<String, Value>) -> String {
 #[derive(Debug, Default)]
 pub struct Glossary {
     entries: HashMap<String, GlossaryEntry>,
-    categories: HashMap<String, String>,
     count: usize,
 }
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct LiftTransfer {
+    pub squat: f64,
+    pub bench: f64,
+    pub deadlift: f64,
+}
+
+impl LiftTransfer {
+    pub fn canonical(lift: Lift) -> Self {
+        let mut transfer = Self::default();
+        match lift {
+            Lift::Squat => transfer.squat = 1.0,
+            Lift::Bench => transfer.bench = 1.0,
+            Lift::Deadlift => transfer.deadlift = 1.0,
+        }
+        transfer
+    }
+
+    pub fn get(self, lift: Lift) -> f64 {
+        match lift {
+            Lift::Squat => self.squat,
+            Lift::Bench => self.bench,
+            Lift::Deadlift => self.deadlift,
+        }
+    }
+
+    pub fn strongest(self) -> Option<(Lift, f64)> {
+        Lift::ALL
+            .into_iter()
+            .map(|lift| (lift, self.get(lift)))
+            .filter(|(_, value)| *value > 0.0)
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+    }
+
+    pub fn max(self) -> f64 {
+        self.strongest().map_or(0.0, |(_, value)| value)
+    }
+
+    fn from_map(map: &Map<String, Value>) -> Self {
+        let read = |key: &str| num_of(map.get(key)).clamp(0.0, 1.0);
+        Self {
+            squat: read("squat"),
+            bench: read("bench"),
+            deadlift: read("deadlift"),
+        }
+    }
+}
+
+pub const NARROW_TRANSFER: f64 = 0.9;
 
 #[derive(Debug)]
 pub struct GlossaryEntry {
     pub profile: Option<[f64; 4]>,
     pub e1rm: Option<f64>,
     pub category: String,
+    pub fatigue_category: String,
+    pub archived: bool,
+    pub primary_muscles: Vec<String>,
+    pub secondary_muscles: Vec<String>,
+    pub tertiary_muscles: Vec<String>,
+    pub lift_transfer: Option<LiftTransfer>,
 }
 
 impl Glossary {
@@ -385,12 +440,14 @@ impl Glossary {
             ..Self::default()
         };
         for item in items.iter().filter_map(Value::as_object) {
-            let key = text(item, "name").to_lowercase().trim().to_owned();
+            let key = normalize_name(&text(item, "name"));
             let entry = GlossaryEntry::from_map(item);
-            glossary
-                .categories
-                .insert(key.clone(), text(item, "category"));
-            glossary.entries.entry(key).or_insert(entry);
+            match glossary.entries.get(&key) {
+                Some(existing) if !existing.archived || entry.archived => {}
+                _ => {
+                    glossary.entries.insert(key, entry);
+                }
+            }
         }
         glossary
     }
@@ -404,8 +461,44 @@ impl Glossary {
     }
 
     pub fn category(&self, key: &str) -> &str {
-        self.categories.get(key).map_or("", String::as_str)
+        self.entries
+            .get(key)
+            .map_or("", |entry| entry.category.as_str())
     }
+
+    pub fn transfer(&self, key: &str) -> LiftTransfer {
+        if let Some(lift) = Lift::from_name(key) {
+            return LiftTransfer::canonical(lift);
+        }
+        self.entries
+            .get(key)
+            .and_then(|entry| entry.lift_transfer)
+            .unwrap_or_default()
+    }
+
+    pub fn narrow_lift(&self, key: &str) -> Option<Lift> {
+        if let Some(lift) = Lift::from_name(key) {
+            return Some(lift);
+        }
+        self.transfer(key)
+            .strongest()
+            .filter(|(_, value)| *value >= NARROW_TRANSFER)
+            .map(|(lift, _)| lift)
+    }
+}
+
+fn string_list(map: &Map<String, Value>, key: &str) -> Vec<String> {
+    map.get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|item| item.trim().to_lowercase())
+                .filter(|item| !item.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 impl GlossaryEntry {
@@ -438,6 +531,15 @@ impl GlossaryEntry {
             profile,
             e1rm: e1rm.filter(|value| *value > 0.0),
             category,
+            fatigue_category: text(map, "fatigue_category"),
+            archived: truthy_of(map.get("archived")),
+            primary_muscles: string_list(map, "primary_muscles"),
+            secondary_muscles: string_list(map, "secondary_muscles"),
+            tertiary_muscles: string_list(map, "tertiary_muscles"),
+            lift_transfer: map
+                .get("lift_transfer")
+                .and_then(Value::as_object)
+                .map(LiftTransfer::from_map),
         }
     }
 }
@@ -510,6 +612,7 @@ pub struct ProgramData {
     pub competitions: Vec<Competition>,
     pub lift_profiles: Vec<LiftProfile>,
     pub sessions: Vec<Session>,
+    pub history: Vec<Session>,
     pub settings_sex: String,
     pub root: Map<String, Value>,
 }
@@ -519,6 +622,19 @@ static EMPTY: std::sync::LazyLock<ProgramData> = std::sync::LazyLock::new(Progra
 impl ProgramData {
     pub fn empty() -> &'static Self {
         &EMPTY
+    }
+
+    pub fn with_history(mut self, history: Vec<Session>) -> Self {
+        self.history = history;
+        self
+    }
+
+    pub fn all_sessions(&self) -> &[Session] {
+        if self.history.is_empty() {
+            &self.sessions
+        } else {
+            &self.history
+        }
     }
 
     pub fn from_value(program: &Value, sessions: Vec<Session>) -> Self {
@@ -549,6 +665,7 @@ impl ProgramData {
                 .filter_map(LiftProfile::from_value)
                 .collect(),
             sessions,
+            history: Vec::new(),
             settings_sex,
             root: program.as_object().cloned().unwrap_or_default(),
         }

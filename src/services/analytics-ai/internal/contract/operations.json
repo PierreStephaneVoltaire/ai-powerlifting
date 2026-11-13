@@ -673,7 +673,7 @@
   {
     "name": "analytics.compare_ai",
     "domain": "analytics-ai",
-    "description": "Compare selected training blocks with the cached AI synthesis.",
+    "description": "Evaluate the current block with the selected past block analyses as historical context, and compare them.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -775,13 +775,16 @@
               "type": "array"
             },
             "trendSeries": {
-              "type": "object"
+              "type": "array"
             },
             "volumeTolerance": {
               "type": "object"
             },
             "missingDataSummary": {
               "type": "array"
+            },
+            "lifetime": {
+              "type": "object"
             }
           },
           "required": [

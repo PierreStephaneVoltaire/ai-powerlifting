@@ -79,6 +79,70 @@ func (x *AthleteRef) GetRefresh() bool {
 	return false
 }
 
+// LifetimeRef selects the blocks a lifetime report is computed over.
+type LifetimeRef struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Athlete partition key.
+	AthletePk string `protobuf:"bytes,1,opt,name=athlete_pk,json=athletePk,proto3" json:"athlete_pk,omitempty"`
+	// When true, cached records are ignored and recomputed.
+	Refresh bool `protobuf:"varint,2,opt,name=refresh,proto3" json:"refresh,omitempty"`
+	// Past block keys to include. Empty behaves like Lifetime.
+	BlockKeys     []string `protobuf:"bytes,3,rep,name=block_keys,json=blockKeys,proto3" json:"block_keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LifetimeRef) Reset() {
+	*x = LifetimeRef{}
+	mi := &file_analytics_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LifetimeRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LifetimeRef) ProtoMessage() {}
+
+func (x *LifetimeRef) ProtoReflect() protoreflect.Message {
+	mi := &file_analytics_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LifetimeRef.ProtoReflect.Descriptor instead.
+func (*LifetimeRef) Descriptor() ([]byte, []int) {
+	return file_analytics_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *LifetimeRef) GetAthletePk() string {
+	if x != nil {
+		return x.AthletePk
+	}
+	return ""
+}
+
+func (x *LifetimeRef) GetRefresh() bool {
+	if x != nil {
+		return x.Refresh
+	}
+	return false
+}
+
+func (x *LifetimeRef) GetBlockKeys() []string {
+	if x != nil {
+		return x.BlockKeys
+	}
+	return nil
+}
+
 // BlockRef selects one training block of one athlete.
 type BlockRef struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -94,7 +158,7 @@ type BlockRef struct {
 
 func (x *BlockRef) Reset() {
 	*x = BlockRef{}
-	mi := &file_analytics_proto_msgTypes[1]
+	mi := &file_analytics_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -106,7 +170,7 @@ func (x *BlockRef) String() string {
 func (*BlockRef) ProtoMessage() {}
 
 func (x *BlockRef) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[1]
+	mi := &file_analytics_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -119,7 +183,7 @@ func (x *BlockRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlockRef.ProtoReflect.Descriptor instead.
 func (*BlockRef) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{1}
+	return file_analytics_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *BlockRef) GetAthletePk() string {
@@ -156,7 +220,7 @@ type BlockKeys struct {
 
 func (x *BlockKeys) Reset() {
 	*x = BlockKeys{}
-	mi := &file_analytics_proto_msgTypes[2]
+	mi := &file_analytics_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -168,7 +232,7 @@ func (x *BlockKeys) String() string {
 func (*BlockKeys) ProtoMessage() {}
 
 func (x *BlockKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[2]
+	mi := &file_analytics_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -181,7 +245,7 @@ func (x *BlockKeys) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlockKeys.ProtoReflect.Descriptor instead.
 func (*BlockKeys) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{2}
+	return file_analytics_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *BlockKeys) GetAthletePk() string {
@@ -217,7 +281,7 @@ type Snapshot struct {
 
 func (x *Snapshot) Reset() {
 	*x = Snapshot{}
-	mi := &file_analytics_proto_msgTypes[3]
+	mi := &file_analytics_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -229,7 +293,7 @@ func (x *Snapshot) String() string {
 func (*Snapshot) ProtoMessage() {}
 
 func (x *Snapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[3]
+	mi := &file_analytics_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -242,7 +306,7 @@ func (x *Snapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
 func (*Snapshot) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{3}
+	return file_analytics_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Snapshot) GetProgram() *structpb.Struct {
@@ -291,7 +355,7 @@ type Report struct {
 
 func (x *Report) Reset() {
 	*x = Report{}
-	mi := &file_analytics_proto_msgTypes[4]
+	mi := &file_analytics_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -303,7 +367,7 @@ func (x *Report) String() string {
 func (*Report) ProtoMessage() {}
 
 func (x *Report) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[4]
+	mi := &file_analytics_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -316,7 +380,7 @@ func (x *Report) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Report.ProtoReflect.Descriptor instead.
 func (*Report) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{4}
+	return file_analytics_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Report) GetBody() *structpb.Struct {
@@ -337,7 +401,7 @@ type BlockList struct {
 
 func (x *BlockList) Reset() {
 	*x = BlockList{}
-	mi := &file_analytics_proto_msgTypes[5]
+	mi := &file_analytics_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -349,7 +413,7 @@ func (x *BlockList) String() string {
 func (*BlockList) ProtoMessage() {}
 
 func (x *BlockList) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[5]
+	mi := &file_analytics_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,7 +426,7 @@ func (x *BlockList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlockList.ProtoReflect.Descriptor instead.
 func (*BlockList) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{5}
+	return file_analytics_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BlockList) GetBlocks() []*structpb.Struct {
@@ -395,7 +459,7 @@ type CorrelationInputsReply struct {
 
 func (x *CorrelationInputsReply) Reset() {
 	*x = CorrelationInputsReply{}
-	mi := &file_analytics_proto_msgTypes[6]
+	mi := &file_analytics_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +471,7 @@ func (x *CorrelationInputsReply) String() string {
 func (*CorrelationInputsReply) ProtoMessage() {}
 
 func (x *CorrelationInputsReply) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[6]
+	mi := &file_analytics_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +484,7 @@ func (x *CorrelationInputsReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CorrelationInputsReply.ProtoReflect.Descriptor instead.
 func (*CorrelationInputsReply) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{6}
+	return file_analytics_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CorrelationInputsReply) GetBlockKey() string {
@@ -489,7 +553,7 @@ type WeeklyE1Rm struct {
 
 func (x *WeeklyE1Rm) Reset() {
 	*x = WeeklyE1Rm{}
-	mi := &file_analytics_proto_msgTypes[7]
+	mi := &file_analytics_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +565,7 @@ func (x *WeeklyE1Rm) String() string {
 func (*WeeklyE1Rm) ProtoMessage() {}
 
 func (x *WeeklyE1Rm) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[7]
+	mi := &file_analytics_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +578,7 @@ func (x *WeeklyE1Rm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WeeklyE1Rm.ProtoReflect.Descriptor instead.
 func (*WeeklyE1Rm) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{7}
+	return file_analytics_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WeeklyE1Rm) GetWeekNumber() int32 {
@@ -558,7 +622,7 @@ type WeeklyAccessoryVolume struct {
 
 func (x *WeeklyAccessoryVolume) Reset() {
 	*x = WeeklyAccessoryVolume{}
-	mi := &file_analytics_proto_msgTypes[8]
+	mi := &file_analytics_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +634,7 @@ func (x *WeeklyAccessoryVolume) String() string {
 func (*WeeklyAccessoryVolume) ProtoMessage() {}
 
 func (x *WeeklyAccessoryVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[8]
+	mi := &file_analytics_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,7 +647,7 @@ func (x *WeeklyAccessoryVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WeeklyAccessoryVolume.ProtoReflect.Descriptor instead.
 func (*WeeklyAccessoryVolume) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{8}
+	return file_analytics_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WeeklyAccessoryVolume) GetWeekNumber() int32 {
@@ -613,7 +677,7 @@ type ExerciseVolume struct {
 
 func (x *ExerciseVolume) Reset() {
 	*x = ExerciseVolume{}
-	mi := &file_analytics_proto_msgTypes[9]
+	mi := &file_analytics_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -625,7 +689,7 @@ func (x *ExerciseVolume) String() string {
 func (*ExerciseVolume) ProtoMessage() {}
 
 func (x *ExerciseVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[9]
+	mi := &file_analytics_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -638,7 +702,7 @@ func (x *ExerciseVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExerciseVolume.ProtoReflect.Descriptor instead.
 func (*ExerciseVolume) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{9}
+	return file_analytics_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ExerciseVolume) GetName() string {
@@ -664,7 +728,13 @@ const file_analytics_proto_rawDesc = "" +
 	"AthleteRef\x12\x1d\n" +
 	"\n" +
 	"athlete_pk\x18\x01 \x01(\tR\tathletePk\x12\x18\n" +
-	"\arefresh\x18\x02 \x01(\bR\arefresh\"`\n" +
+	"\arefresh\x18\x02 \x01(\bR\arefresh\"e\n" +
+	"\vLifetimeRef\x12\x1d\n" +
+	"\n" +
+	"athlete_pk\x18\x01 \x01(\tR\tathletePk\x12\x18\n" +
+	"\arefresh\x18\x02 \x01(\bR\arefresh\x12\x1d\n" +
+	"\n" +
+	"block_keys\x18\x03 \x03(\tR\tblockKeys\"`\n" +
 	"\bBlockRef\x12\x1d\n" +
 	"\n" +
 	"athlete_pk\x18\x01 \x01(\tR\tathletePk\x12\x1b\n" +
@@ -712,14 +782,15 @@ const file_analytics_proto_rawDesc = "" +
 	"\texercises\x18\x02 \x03(\v2).powerlifting.analytics.v1.ExerciseVolumeR\texercises\"A\n" +
 	"\x0eExerciseVolume\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\tvolume_kg\x18\x02 \x01(\x01R\bvolumeKg2\xb6\x04\n" +
+	"\tvolume_kg\x18\x02 \x01(\x01R\bvolumeKg2\x95\x05\n" +
 	"\rAnalyticsData\x12Y\n" +
 	"\vGetSnapshot\x12%.powerlifting.analytics.v1.AthleteRef\x1a#.powerlifting.analytics.v1.Snapshot\x12X\n" +
 	"\x0eGetBlockBundle\x12#.powerlifting.analytics.v1.BlockRef\x1a!.powerlifting.analytics.v1.Report\x12Y\n" +
 	"\n" +
 	"ListBlocks\x12%.powerlifting.analytics.v1.AthleteRef\x1a$.powerlifting.analytics.v1.BlockList\x12R\n" +
 	"\aCompare\x12$.powerlifting.analytics.v1.BlockKeys\x1a!.powerlifting.analytics.v1.Report\x12T\n" +
-	"\bLifetime\x12%.powerlifting.analytics.v1.AthleteRef\x1a!.powerlifting.analytics.v1.Report\x12k\n" +
+	"\bLifetime\x12%.powerlifting.analytics.v1.AthleteRef\x1a!.powerlifting.analytics.v1.Report\x12]\n" +
+	"\x10SelectedLifetime\x12&.powerlifting.analytics.v1.LifetimeRef\x1a!.powerlifting.analytics.v1.Report\x12k\n" +
 	"\x11CorrelationInputs\x12#.powerlifting.analytics.v1.BlockRef\x1a1.powerlifting.analytics.v1.CorrelationInputsReplyB\xea\x01\n" +
 	"\x1dcom.powerlifting.analytics.v1B\x0eAnalyticsProtoP\x01Z3powerlifting/analytics-ai/gen/analytics;analyticsv1\xa2\x02\x03PAX\xaa\x02\x19Powerlifting.Analytics.V1\xca\x02\x19Powerlifting\\Analytics\\V1\xe2\x02%Powerlifting\\Analytics\\V1\\GPBMetadata\xea\x02\x1bPowerlifting::Analytics::V1b\x06proto3"
 
@@ -735,47 +806,50 @@ func file_analytics_proto_rawDescGZIP() []byte {
 	return file_analytics_proto_rawDescData
 }
 
-var file_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_analytics_proto_goTypes = []any{
 	(*AthleteRef)(nil),             // 0: powerlifting.analytics.v1.AthleteRef
-	(*BlockRef)(nil),               // 1: powerlifting.analytics.v1.BlockRef
-	(*BlockKeys)(nil),              // 2: powerlifting.analytics.v1.BlockKeys
-	(*Snapshot)(nil),               // 3: powerlifting.analytics.v1.Snapshot
-	(*Report)(nil),                 // 4: powerlifting.analytics.v1.Report
-	(*BlockList)(nil),              // 5: powerlifting.analytics.v1.BlockList
-	(*CorrelationInputsReply)(nil), // 6: powerlifting.analytics.v1.CorrelationInputsReply
-	(*WeeklyE1Rm)(nil),             // 7: powerlifting.analytics.v1.WeeklyE1rm
-	(*WeeklyAccessoryVolume)(nil),  // 8: powerlifting.analytics.v1.WeeklyAccessoryVolume
-	(*ExerciseVolume)(nil),         // 9: powerlifting.analytics.v1.ExerciseVolume
-	(*structpb.Struct)(nil),        // 10: google.protobuf.Struct
+	(*LifetimeRef)(nil),            // 1: powerlifting.analytics.v1.LifetimeRef
+	(*BlockRef)(nil),               // 2: powerlifting.analytics.v1.BlockRef
+	(*BlockKeys)(nil),              // 3: powerlifting.analytics.v1.BlockKeys
+	(*Snapshot)(nil),               // 4: powerlifting.analytics.v1.Snapshot
+	(*Report)(nil),                 // 5: powerlifting.analytics.v1.Report
+	(*BlockList)(nil),              // 6: powerlifting.analytics.v1.BlockList
+	(*CorrelationInputsReply)(nil), // 7: powerlifting.analytics.v1.CorrelationInputsReply
+	(*WeeklyE1Rm)(nil),             // 8: powerlifting.analytics.v1.WeeklyE1rm
+	(*WeeklyAccessoryVolume)(nil),  // 9: powerlifting.analytics.v1.WeeklyAccessoryVolume
+	(*ExerciseVolume)(nil),         // 10: powerlifting.analytics.v1.ExerciseVolume
+	(*structpb.Struct)(nil),        // 11: google.protobuf.Struct
 }
 var file_analytics_proto_depIdxs = []int32{
-	10, // 0: powerlifting.analytics.v1.Snapshot.program:type_name -> google.protobuf.Struct
-	10, // 1: powerlifting.analytics.v1.Snapshot.sessions:type_name -> google.protobuf.Struct
-	10, // 2: powerlifting.analytics.v1.Snapshot.weight_log:type_name -> google.protobuf.Struct
-	10, // 3: powerlifting.analytics.v1.Snapshot.goals:type_name -> google.protobuf.Struct
-	10, // 4: powerlifting.analytics.v1.Snapshot.competitions:type_name -> google.protobuf.Struct
-	10, // 5: powerlifting.analytics.v1.Report.body:type_name -> google.protobuf.Struct
-	10, // 6: powerlifting.analytics.v1.BlockList.blocks:type_name -> google.protobuf.Struct
-	7,  // 7: powerlifting.analytics.v1.CorrelationInputsReply.weekly_e1rm:type_name -> powerlifting.analytics.v1.WeeklyE1rm
-	8,  // 8: powerlifting.analytics.v1.CorrelationInputsReply.weekly_accessory:type_name -> powerlifting.analytics.v1.WeeklyAccessoryVolume
-	10, // 9: powerlifting.analytics.v1.CorrelationInputsReply.lift_profiles:type_name -> google.protobuf.Struct
-	10, // 10: powerlifting.analytics.v1.CorrelationInputsReply.athlete_measurements:type_name -> google.protobuf.Struct
-	9,  // 11: powerlifting.analytics.v1.WeeklyAccessoryVolume.exercises:type_name -> powerlifting.analytics.v1.ExerciseVolume
+	11, // 0: powerlifting.analytics.v1.Snapshot.program:type_name -> google.protobuf.Struct
+	11, // 1: powerlifting.analytics.v1.Snapshot.sessions:type_name -> google.protobuf.Struct
+	11, // 2: powerlifting.analytics.v1.Snapshot.weight_log:type_name -> google.protobuf.Struct
+	11, // 3: powerlifting.analytics.v1.Snapshot.goals:type_name -> google.protobuf.Struct
+	11, // 4: powerlifting.analytics.v1.Snapshot.competitions:type_name -> google.protobuf.Struct
+	11, // 5: powerlifting.analytics.v1.Report.body:type_name -> google.protobuf.Struct
+	11, // 6: powerlifting.analytics.v1.BlockList.blocks:type_name -> google.protobuf.Struct
+	8,  // 7: powerlifting.analytics.v1.CorrelationInputsReply.weekly_e1rm:type_name -> powerlifting.analytics.v1.WeeklyE1rm
+	9,  // 8: powerlifting.analytics.v1.CorrelationInputsReply.weekly_accessory:type_name -> powerlifting.analytics.v1.WeeklyAccessoryVolume
+	11, // 9: powerlifting.analytics.v1.CorrelationInputsReply.lift_profiles:type_name -> google.protobuf.Struct
+	11, // 10: powerlifting.analytics.v1.CorrelationInputsReply.athlete_measurements:type_name -> google.protobuf.Struct
+	10, // 11: powerlifting.analytics.v1.WeeklyAccessoryVolume.exercises:type_name -> powerlifting.analytics.v1.ExerciseVolume
 	0,  // 12: powerlifting.analytics.v1.AnalyticsData.GetSnapshot:input_type -> powerlifting.analytics.v1.AthleteRef
-	1,  // 13: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:input_type -> powerlifting.analytics.v1.BlockRef
+	2,  // 13: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:input_type -> powerlifting.analytics.v1.BlockRef
 	0,  // 14: powerlifting.analytics.v1.AnalyticsData.ListBlocks:input_type -> powerlifting.analytics.v1.AthleteRef
-	2,  // 15: powerlifting.analytics.v1.AnalyticsData.Compare:input_type -> powerlifting.analytics.v1.BlockKeys
+	3,  // 15: powerlifting.analytics.v1.AnalyticsData.Compare:input_type -> powerlifting.analytics.v1.BlockKeys
 	0,  // 16: powerlifting.analytics.v1.AnalyticsData.Lifetime:input_type -> powerlifting.analytics.v1.AthleteRef
-	1,  // 17: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:input_type -> powerlifting.analytics.v1.BlockRef
-	3,  // 18: powerlifting.analytics.v1.AnalyticsData.GetSnapshot:output_type -> powerlifting.analytics.v1.Snapshot
-	4,  // 19: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:output_type -> powerlifting.analytics.v1.Report
-	5,  // 20: powerlifting.analytics.v1.AnalyticsData.ListBlocks:output_type -> powerlifting.analytics.v1.BlockList
-	4,  // 21: powerlifting.analytics.v1.AnalyticsData.Compare:output_type -> powerlifting.analytics.v1.Report
-	4,  // 22: powerlifting.analytics.v1.AnalyticsData.Lifetime:output_type -> powerlifting.analytics.v1.Report
-	6,  // 23: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:output_type -> powerlifting.analytics.v1.CorrelationInputsReply
-	18, // [18:24] is the sub-list for method output_type
-	12, // [12:18] is the sub-list for method input_type
+	1,  // 17: powerlifting.analytics.v1.AnalyticsData.SelectedLifetime:input_type -> powerlifting.analytics.v1.LifetimeRef
+	2,  // 18: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:input_type -> powerlifting.analytics.v1.BlockRef
+	4,  // 19: powerlifting.analytics.v1.AnalyticsData.GetSnapshot:output_type -> powerlifting.analytics.v1.Snapshot
+	5,  // 20: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:output_type -> powerlifting.analytics.v1.Report
+	6,  // 21: powerlifting.analytics.v1.AnalyticsData.ListBlocks:output_type -> powerlifting.analytics.v1.BlockList
+	5,  // 22: powerlifting.analytics.v1.AnalyticsData.Compare:output_type -> powerlifting.analytics.v1.Report
+	5,  // 23: powerlifting.analytics.v1.AnalyticsData.Lifetime:output_type -> powerlifting.analytics.v1.Report
+	5,  // 24: powerlifting.analytics.v1.AnalyticsData.SelectedLifetime:output_type -> powerlifting.analytics.v1.Report
+	7,  // 25: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:output_type -> powerlifting.analytics.v1.CorrelationInputsReply
+	19, // [19:26] is the sub-list for method output_type
+	12, // [12:19] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name
 	12, // [12:12] is the sub-list for extension extendee
 	0,  // [0:12] is the sub-list for field type_name
@@ -786,14 +860,14 @@ func file_analytics_proto_init() {
 	if File_analytics_proto != nil {
 		return
 	}
-	file_analytics_proto_msgTypes[7].OneofWrappers = []any{}
+	file_analytics_proto_msgTypes[8].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_analytics_proto_rawDesc), len(file_analytics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

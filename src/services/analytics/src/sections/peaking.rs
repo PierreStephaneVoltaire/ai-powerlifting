@@ -19,22 +19,33 @@ pub struct Peaking {
 }
 
 pub fn banister_of(context: &Context<'_>) -> Computed<Banister> {
-    banister::banister_ffm(
+    let window_start = context.window_start.as_deref().and_then(parse_date);
+    let mut banister = banister::banister_ffm(
         context.env,
-        &context.completed_history,
+        &context.full_history,
         &context.program_start,
         &context.maxes,
         Some(context.end),
-    )
+    );
+    if let Computed::Ready(result) = &mut banister {
+        result.tsb_label = banister::tsb_label(result.tsb_today, context.planned_overreach);
+        if let Some(start) = window_start {
+            result
+                .series
+                .retain(|point| parse_date(&point.date).is_some_and(|date| date >= start));
+        }
+    }
+    banister
 }
 
 pub fn monotony_of(context: &Context<'_>) -> MonotonyStrain {
     banister::monotony_strain(
         context.env,
-        &context.completed_history,
+        &context.full_history,
         &context.program_start,
         &context.maxes,
         Some(context.end),
+        context.window_start.as_deref().and_then(parse_date),
     )
 }
 

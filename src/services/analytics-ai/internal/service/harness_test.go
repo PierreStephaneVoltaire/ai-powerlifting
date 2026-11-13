@@ -81,12 +81,29 @@ func (f *fakeSource) Bundle(_ context.Context, p data.Principal, key string) (ma
 	return map[string]any{"block": map[string]any{"blockKey": key}, "weekly": map[string]any{"fatigue_index": 1.5}, "sourceFingerprint": "fp-" + key}, nil
 }
 
-func (f *fakeSource) Compare(_ context.Context, p data.Principal, _ []string) (map[string]any, error) {
+func (f *fakeSource) Compare(_ context.Context, p data.Principal, keys []string) (map[string]any, error) {
 	f.record(p)
-	return f.compare, nil
+	if len(keys) == 0 {
+		return f.compare, nil
+	}
+	selected := []any{}
+	for _, key := range keys {
+		selected = append(selected, key)
+	}
+	comparison := map[string]any{}
+	for key, value := range f.compare {
+		comparison[key] = value
+	}
+	comparison["selectedBlockKeys"] = append(selected, "current")
+	return comparison, nil
 }
 
 func (f *fakeSource) Lifetime(_ context.Context, p data.Principal) (map[string]any, error) {
+	f.record(p)
+	return f.lifetime, nil
+}
+
+func (f *fakeSource) SelectedLifetime(_ context.Context, p data.Principal, _ []string) (map[string]any, error) {
 	f.record(p)
 	return f.lifetime, nil
 }
@@ -186,8 +203,8 @@ func newHarness(t *testing.T) *harness {
 	h := &harness{access: &fakeAccess{}, coach: stub, exporter: &fakeExporter{}, backend: generation.NewMemory(), redis: server, clock: &clock}
 	h.source = &fakeSource{
 		blocks: []map[string]any{
-			{"blockKey": "block_1", "label": "Block 1", "isCurrent": false, "startDate": "2026-01-05", "endDate": "2026-03-01", "weekCount": float64(8), "phases": []any{}},
-			{"blockKey": "block_short", "label": "Short", "isCurrent": false, "startDate": "2026-04-05", "endDate": "2026-04-20", "weekCount": float64(2), "phases": []any{}},
+			{"blockKey": "block_1", "label": "Block 1", "isCurrent": false, "stored": true, "startDate": "2026-01-05", "endDate": "2026-03-01", "weekCount": float64(8), "phases": []any{}},
+			{"blockKey": "block_short", "label": "Short", "isCurrent": false, "stored": false, "startDate": "2026-04-05", "endDate": "2026-04-20", "weekCount": float64(2), "phases": []any{}},
 			{"blockKey": "current", "label": "Current", "isCurrent": true, "startDate": "2026-09-01", "endDate": "", "weekCount": float64(10), "phases": []any{}},
 		},
 		compare: map[string]any{

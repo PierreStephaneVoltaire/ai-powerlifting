@@ -337,8 +337,14 @@ pub fn program_for_block(
                 .collect(),
         ),
     );
+    let history = workspace
+        .program
+        .all_sessions()
+        .iter()
+        .map(|session| Session::from_value(session.raw.clone()))
+        .collect();
     (
-        ProgramData::from_value(&Value::Object(root), sessions),
+        ProgramData::from_value(&Value::Object(root), sessions).with_history(history),
         scoped_goals,
     )
 }

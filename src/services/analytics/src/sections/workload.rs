@@ -4,6 +4,8 @@ use serde::Serialize;
 
 use super::Context;
 use crate::calc::Computed;
+use crate::calc::lift_breakdown::{self, LiftBreakdown};
+use crate::calc::muscle_volume::{self, MuscleVolume};
 use crate::calc::progression::{progression_rate, rpe_drift, volume_intensity};
 use crate::util::{int_of, round};
 
@@ -37,24 +39,30 @@ pub struct ExerciseStats {
 pub struct Workload {
     pub lifts: BTreeMap<String, LiftWorkload>,
     pub exercise_stats: BTreeMap<String, ExerciseStats>,
+    pub per_lift: BTreeMap<String, LiftBreakdown>,
+    pub muscle_volume: MuscleVolume,
 }
 
 fn exercise_stats(context: &Context<'_>) -> BTreeMap<String, ExerciseStats> {
-    let mut stats: BTreeMap<String, ExerciseStats> = BTreeMap::new();
+    let mut stats: BTreeMap<String, (String, ExerciseStats)> = BTreeMap::new();
     for exercise in context
         .completed_in_window
         .iter()
         .flat_map(|session| &session.exercises)
     {
-        let name = exercise.name.trim();
         let sets = exercise.executed_sets();
-        if name.is_empty() || sets <= 0.0 {
+        if exercise.key.is_empty() || sets <= 0.0 {
             continue;
         }
-        let entry = stats.entry(name.to_owned()).or_insert(ExerciseStats {
-            total_sets: 0,
-            total_volume: 0.0,
-            max_kg: 0.0,
+        let (_, entry) = stats.entry(exercise.key.clone()).or_insert_with(|| {
+            (
+                exercise.name.trim().to_owned(),
+                ExerciseStats {
+                    total_sets: 0,
+                    total_volume: 0.0,
+                    max_kg: 0.0,
+                },
+            )
         });
         entry.total_sets += int_of(sets);
         entry.total_volume += sets * exercise.reps * exercise.kg;
@@ -62,11 +70,14 @@ fn exercise_stats(context: &Context<'_>) -> BTreeMap<String, ExerciseStats> {
             entry.max_kg = exercise.kg;
         }
     }
-    for entry in stats.values_mut() {
-        entry.total_volume = round(entry.total_volume, 1);
-        entry.max_kg = round(entry.max_kg, 1);
-    }
     stats
+        .into_values()
+        .map(|(name, mut entry)| {
+            entry.total_volume = round(entry.total_volume, 1);
+            entry.max_kg = round(entry.max_kg, 1);
+            (name, entry)
+        })
+        .collect()
 }
 
 pub fn build(context: &Context<'_>) -> (Workload, Vec<String>) {
@@ -131,7 +142,7 @@ pub fn build(context: &Context<'_>) -> (Workload, Vec<String>) {
             name,
             &context.program_start,
             4,
-            context.phases,
+            &context.phases,
         );
         let rpe_trend = match &drift {
             Computed::Ready(result) => {
@@ -181,6 +192,12 @@ pub fn build(context: &Context<'_>) -> (Workload, Vec<String>) {
         Workload {
             lifts,
             exercise_stats: exercise_stats(context),
+            per_lift: lift_breakdown::compute(context.env, &context.completed_in_window),
+            muscle_volume: muscle_volume::compute(
+                context.env,
+                &context.completed_in_window,
+                context.selected_week_count,
+            ),
         },
         flags,
     )

@@ -1,10 +1,12 @@
 use chrono::{Duration, NaiveDate};
 use serde_json::Value;
 
-use crate::calc::weeks::{current_week, date_bounds, find_phase, in_week_window, resolve_window};
+use crate::calc::weeks::{
+    current_week, date_bounds, find_phase, in_week_window, planned_overreach, resolve_window,
+};
 use crate::calc::{Env, e1rm};
 use crate::error::Error;
-use crate::model::{Maxes, Phase, ProgramData, Session};
+use crate::model::{DEFAULT_BLOCK, Maxes, Phase, ProgramData, Session};
 use crate::scope::BlockScope;
 use crate::util::parse_date;
 
@@ -39,10 +41,12 @@ pub struct Context<'a> {
     pub env: Env<'a>,
     pub program: &'a ProgramData,
     pub sessions: Vec<&'a Session>,
-    pub phases: &'a [Phase],
+    pub phases: Vec<Phase>,
+    pub planned_overreach: bool,
+    pub full_history: Vec<&'a Session>,
     pub program_start: String,
     pub current_week: i64,
-    pub current_phase: Option<&'a Phase>,
+    pub current_phase: Option<Phase>,
     pub phase_name: String,
     pub end: NaiveDate,
     pub window_start: Option<String>,
@@ -81,16 +85,37 @@ impl<'a> Context<'a> {
                     .collect(),
                 None => program.sessions.iter().collect(),
             };
-        let week = current_week(&program_start, &sessions, env.today);
-        let current_phase = find_phase(&program.phases, week);
-        let phase_name =
-            current_phase.map_or_else(|| "Unknown".to_owned(), |phase| phase.name.clone());
         let window_end = params.window_end.clone().filter(|text| !text.is_empty());
         let end = match (&window_end, &params.ref_date) {
             (Some(text), _) => date_of(text)?,
             (None, Some(text)) if !text.is_empty() => date_of(text)?,
             _ => env.today,
         };
+        let week = current_week(&program_start, &sessions, end);
+        let resolved_block = scope.resolve(params.block.as_deref().unwrap_or_default());
+        let phases: Vec<Phase> = program
+            .phases
+            .iter()
+            .filter(|phase| {
+                let key = if phase.block.is_empty() {
+                    DEFAULT_BLOCK
+                } else {
+                    phase.block.as_str()
+                };
+                scope.in_block(key, &resolved_block)
+            })
+            .cloned()
+            .collect();
+        let current_phase = find_phase(&phases, week).cloned();
+        let overreach = planned_overreach(current_phase.as_ref());
+        let phase_name = current_phase
+            .as_ref()
+            .map_or_else(|| "Unknown".to_owned(), |phase| phase.name.clone());
+        let full_history: Vec<&Session> = program
+            .all_sessions()
+            .iter()
+            .filter(|session| session.completed && session.date.is_some_and(|date| date <= end))
+            .collect();
         let start = match params
             .window_start
             .as_deref()
@@ -196,7 +221,9 @@ impl<'a> Context<'a> {
             env,
             program,
             sessions,
-            phases: &program.phases,
+            phases,
+            planned_overreach: overreach,
+            full_history,
             program_start,
             current_week: week,
             current_phase,
@@ -221,7 +248,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn target_rpe_midpoint(&self) -> Option<f64> {
-        self.current_phase.and_then(Phase::target_midpoint)
+        self.current_phase.as_ref().and_then(Phase::target_midpoint)
     }
 }
 

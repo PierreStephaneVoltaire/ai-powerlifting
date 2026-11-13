@@ -67,7 +67,7 @@ fn exercise_sessions<'a>(
                 && session
                     .exercises
                     .iter()
-                    .any(|exercise| exercise.lower == name_lower)
+                    .any(|exercise| exercise.key == name_lower)
         })
         .collect()
 }
@@ -85,7 +85,7 @@ pub fn progression_rate(
     } else {
         program_start
     };
-    let name_lower = exercise.to_lowercase();
+    let name_lower = crate::util::normalize_name(exercise);
     let cutoff = reference - Duration::days(LOOKBACK_DAYS);
     let in_range: Vec<&crate::model::Session> = exercise_sessions(sessions, &name_lower)
         .into_iter()
@@ -112,7 +112,7 @@ pub fn progression_rate(
         for item in session
             .exercises
             .iter()
-            .filter(|item| item.lower == name_lower)
+            .filter(|item| item.key == name_lower)
         {
             if item.failed_sets() > 0
                 || item.executed_sets() <= 0.0
@@ -174,7 +174,7 @@ pub fn volume_intensity(
     } else {
         program_start
     };
-    let name_lower = exercise.to_lowercase();
+    let name_lower = crate::util::normalize_name(exercise);
     let mut weekly: BTreeMap<i64, (f64, f64, i64)> = BTreeMap::new();
     for session in sessions.iter().filter(|session| session.completed) {
         let Some(week) = session.week(program_start) else {
@@ -183,7 +183,7 @@ pub fn volume_intensity(
         for item in session
             .exercises
             .iter()
-            .filter(|item| item.lower == name_lower)
+            .filter(|item| item.key == name_lower)
         {
             let entry = weekly.entry(week).or_default();
             entry.0 += item.executed_sets() * item.reps * item.kg;
@@ -220,7 +220,7 @@ pub fn rpe_drift(
     } else {
         program_start
     };
-    let name_lower = exercise.to_lowercase();
+    let name_lower = crate::util::normalize_name(exercise);
     let in_exercise = exercise_sessions(sessions, &name_lower);
     if in_exercise.len() < 3 {
         return Computed::insufficient(format!(
@@ -248,7 +248,7 @@ pub fn rpe_drift(
             None => session
                 .exercises
                 .iter()
-                .find(|item| item.lower == name_lower)
+                .find(|item| item.key == name_lower)
                 .and_then(|item| item.rpe),
         };
         if let Some(rpe) = rpe {

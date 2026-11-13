@@ -5,7 +5,6 @@ import {
   Brain,
   CheckCircle,
   Dumbbell,
-  Info,
   Moon,
   RefreshCw,
   Ruler,
@@ -19,16 +18,14 @@ import {
   Button,
   Group,
   Paper,
-  Progress,
   SimpleGrid,
   Loader,
   Stack,
   Table,
   Text,
-  Tooltip,
   SegmentedControl,
 } from '@mantine/core'
-import type { Program, Session, WeightEntry, GlossaryExercise, ExerciseCategory } from '@powerlifting/types'
+import type { Program, Session, WeightEntry } from '@powerlifting/types'
 import type { Sex } from '@powerlifting/types'
 import type { Unit } from '@/store/settingsStore'
 import { calculateDots } from '@/utils/dots'
@@ -36,7 +33,7 @@ import { bestSetE1rm, mainLiftFor } from '@/utils/sbdE1rm'
 import { calculateIpfGl, getIpfGlModeLabel, type IpfGlMode } from '@/utils/ipfGl'
 import { toDisplayUnit, formatBodyweight, formatDisplayWeight } from '@/utils/units'
 import { buildBodyweightTrend, latestBodyweightOnOrBefore, mergeBodyweightEntries } from '@/utils/bodyweight'
-import { fetchGlossary, fetchWeightLog } from '@/api/client'
+import { fetchWeightLog } from '@/api/client'
 import { fetchViewedWeightLog } from '@/api/profiles'
 import {
   type BlockAnalysisBundle,
@@ -44,8 +41,8 @@ import {
   type WeeklyAnalysis,
   fetchBlockCorrelationReport,
 } from '@/api/analytics'
-import { executedSets, exerciseVolume, normalizeExerciseName } from '@/utils/volume'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
+import { AcwrPanel, FatigueDimensionsPanel, InolPanel, SpecificityPanel } from '@/components/analysis/AnalysisPanels'
 import { recordsInBlock } from '@/utils/blockScope'
 
 function fatigueBadgeColor(score: number | null): string {
@@ -69,50 +66,6 @@ function complianceBadgeColor(pct: number | null): string {
   if (pct >= 80) return 'green'
   if (pct >= 50) return 'yellow'
   return 'red'
-}
-
-function specificityStatusBadgeColor(status?: string) {
-  if (status === 'within_expected') return 'green'
-  if (status === 'below_expected') return 'yellow'
-  if (status === 'above_expected') return 'red'
-  return 'gray'
-}
-
-function specificityStatusLabel(status?: string) {
-  if (status === 'within_expected') return 'Within expected range'
-  if (status === 'below_expected') return 'Below expected'
-  if (status === 'above_expected') return 'Above expected'
-  return 'No band'
-}
-
-function getInolThresholds(lift: string, thresholds?: Record<string, { low: number; high: number }>) {
-  const defaultThresholds: Record<string, { low: number; high: number }> = {
-    squat: { low: 1.6, high: 3.5 },
-    bench: { low: 2.0, high: 5.0 },
-    deadlift: { low: 1.0, high: 2.5 },
-  }
-  return thresholds?.[lift] ?? defaultThresholds[lift] ?? { low: 2.0, high: 4.0 }
-}
-
-function getInolZoneMeta(value: number, thresholds: { low: number; high: number }) {
-  if (value < thresholds.low) return { color: 'yellow', label: 'Low stimulus' }
-  if (value > thresholds.high) return { color: 'red', label: 'Overreaching' }
-  return { color: 'green', label: 'Productive' }
-}
-
-function getAcwrZoneMeta(zone?: string | null) {
-  const map: Record<string, { color: string; label: string }> = {
-    detraining_trend: { color: 'gray', label: 'Detraining trend' },
-    steady_load: { color: 'green', label: 'Steady load' },
-    rapid_increase: { color: 'yellow', label: 'Rapid increase' },
-    load_spike: { color: 'red', label: 'Load spike' },
-    undertraining: { color: 'gray', label: 'Detraining trend' },
-    optimal: { color: 'green', label: 'Steady load' },
-    caution: { color: 'yellow', label: 'Rapid increase' },
-    danger: { color: 'red', label: 'Load spike' },
-    unknown: { color: 'gray', label: 'Unknown' },
-  }
-  return map[zone ?? 'unknown'] ?? { color: 'gray', label: zone ? zone.replace(/_/g, ' ') : 'Unknown' }
 }
 
 function formatSignedDeltaKg(deltaKg: number, unit: Unit) {
@@ -160,7 +113,6 @@ export function BlockWeeklySurface({
 }) {
   const [viewMode, setViewMode] = useState<'raw' | 'graph'>('raw')
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
-  const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
   const [correlationReport, setCorrelationReport] = useState<CorrelationReport | null>(null)
   const [correlationLoading, setCorrelationLoading] = useState(false)
   const [correlationError, setCorrelationError] = useState<string | null>(null)
@@ -178,7 +130,6 @@ export function BlockWeeklySurface({
   useEffect(() => {
     const weightLogRequest = viewAthlete ? fetchViewedWeightLog(viewAthlete, version) : fetchWeightLog(version)
     weightLogRequest.then(setWeightLog).catch(() => undefined)
-    fetchGlossary().then(setGlossary).catch(() => undefined)
   }, [version, viewAthlete])
 
   const loadCorrelation = (refresh = false, cacheOnly = false) => {
@@ -200,85 +151,7 @@ export function BlockWeeklySurface({
     loadCorrelation(false, true)
   }, [analysisWindow.weeks, bundle.block.blockKey, viewAthlete])
 
-  const glossaryMuscles = useMemo(() => {
-    const lookup = new Map<string, { primary: string[]; secondary: string[]; tertiary: string[] }>()
-    for (const ex of glossary) {
-      lookup.set(normalizeExerciseName(ex.name), {
-        primary: ex.primary_muscles,
-        secondary: ex.secondary_muscles,
-        tertiary: ex.tertiary_muscles ?? [],
-      })
-    }
-    return lookup
-  }, [glossary])
-
-  const glossaryCategory = useMemo(() => {
-    const lookup = new Map<string, ExerciseCategory>()
-    for (const ex of glossary) {
-      lookup.set(normalizeExerciseName(ex.name), ex.category)
-    }
-    return lookup
-  }, [glossary])
-
   const avgSessionsPerWeek = Math.round((bundle.weekly.sessions_analyzed / Math.max(1, analysisWindow.weeks)) * 10) / 10
-
-  const muscleGroupAvgWeekly = useMemo(() => {
-    if (!glossaryMuscles.size || !filteredSessions.length) return { sets: {}, volume: {} }
-    const mgSets: Record<string, number> = {}
-    const mgVol: Record<string, number> = {}
-    for (const s of filteredSessions) {
-      for (const ex of s.exercises || []) {
-        const muscles = glossaryMuscles.get(normalizeExerciseName(ex.name))
-        if (!muscles) continue
-        const sets = executedSets(ex)
-        const vol = exerciseVolume(ex)
-        for (const m of muscles.primary) { mgSets[m] = (mgSets[m] || 0) + sets; mgVol[m] = (mgVol[m] || 0) + vol }
-        for (const m of muscles.secondary) { mgSets[m] = (mgSets[m] || 0) + sets * 0.5; mgVol[m] = (mgVol[m] || 0) + vol * 0.5 }
-        for (const m of muscles.tertiary) { mgSets[m] = (mgSets[m] || 0) + sets * 0.25; mgVol[m] = (mgVol[m] || 0) + vol * 0.25 }
-      }
-    }
-    const avgSets: Record<string, number> = {}
-    const avgVol: Record<string, number> = {}
-    for (const m of Object.keys(mgSets)) {
-      avgSets[m] = Math.round((mgSets[m] / Math.max(1, analysisWindow.weeks)) * 10) / 10
-      avgVol[m] = Math.round(mgVol[m] / Math.max(1, analysisWindow.weeks))
-    }
-    return { sets: avgSets, volume: avgVol }
-  }, [analysisWindow.weeks, filteredSessions, glossaryMuscles])
-
-  const perLiftDetails = useMemo(() => {
-    if (!glossaryCategory.size || !filteredSessions.length) return {}
-    const numWeeks = new Set(filteredSessions.map(s => s.week_number)).size || 1
-    const result: Record<string, { frequency: number; raw_sets: number; accessories: { name: string; sets: number; volume: number }[] }> = {}
-    for (const [liftName, category] of [['squat', 'squat'], ['bench', 'bench'], ['deadlift', 'deadlift']] as const) {
-      let liftSessions = 0, rawSets = 0
-      const accessoryMap: Record<string, { sets: number; volume: number }> = {}
-      for (const s of filteredSessions) {
-        let hasLift = false
-        for (const ex of s.exercises || []) {
-          const exLower = ex.name.toLowerCase().trim()
-          const info = glossaryCategory.get(normalizeExerciseName(ex.name))
-          const isMainLift = exLower === liftName || (liftName === 'bench' && exLower === 'bench press')
-          if (isMainLift || (info && info === category)) hasLift = true
-          if (isMainLift) rawSets += executedSets(ex)
-          if (info && info === category && !isMainLift) {
-            const sets = executedSets(ex)
-            const vol = exerciseVolume(ex)
-            if (!accessoryMap[ex.name]) accessoryMap[ex.name] = { sets: 0, volume: 0 }
-            accessoryMap[ex.name].sets += sets
-            accessoryMap[ex.name].volume += vol
-          }
-        }
-        if (hasLift) liftSessions++
-      }
-      result[liftName] = {
-        frequency: Math.round((liftSessions / numWeeks) * 10) / 10,
-        raw_sets: rawSets,
-        accessories: Object.entries(accessoryMap).map(([name, d]) => ({ name, ...d })).sort((a, b) => b.volume - a.volume),
-      }
-    }
-    return result
-  }, [filteredSessions, glossaryCategory])
 
   const projectionCalibration = bundle.weekly.projection_calibration ?? null
 
@@ -553,71 +426,9 @@ export function BlockWeeklySurface({
         </Paper>
       </SimpleGrid>
 
-      {bundle.weekly.inol?.avg_inol && (
-        <Paper withBorder p="md">
-          <Group gap="xs" mb="sm">
-            <Text fw={500}>Stimulus-Adjusted INOL (Window Average)</Text>
-            <Tooltip label="INOL means intensity-number-of-lifts. Here it is adjusted by your lift-profile stimulus coefficient to reflect how hard the same workload is for you." withArrow multiline w={320}>
-              <Info size={14} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)' }} />
-            </Tooltip>
-          </Group>
-          <SimpleGrid cols={3} mb="sm">
-            {Object.entries(bundle.weekly.inol.avg_inol).map(([lift, val]) => {
-              const coefficient = bundle.weekly.inol?.stimulus_coefficients?.[lift] ?? 1
-              const baseThresholds = getInolThresholds(lift, bundle.weekly.inol?.thresholds)
-              const adjusted = bundle.weekly.inol?.phase_adjusted_thresholds?.[lift]
-              const displayThresholds = adjusted ? { low: adjusted.display_low, high: adjusted.display_high } : baseThresholds
-              const zoneMeta = getInolZoneMeta(val, displayThresholds)
-              const raw = bundle.weekly.inol?.raw_avg_inol?.[lift]
-              const trend = bundle.weekly.inol?.trend_pressure?.[lift]
-              const rampGrace = bundle.weekly.inol?.ramp_up_grace?.[lift]
-              return (
-                <Stack key={lift} gap={2} ta="center" p="sm" style={{ borderRadius: 'var(--mantine-radius-sm)', background: `var(--mantine-color-${zoneMeta.color}-light)` }}>
-                  <Text fz="xs" c="dimmed" tt="capitalize">{lift}</Text>
-                  <Text fz="xl" fw={700} c={zoneMeta.color}>{val.toFixed(2)}</Text>
-                  {typeof raw === 'number' && <Text fz="xs" c="dimmed">Raw {raw.toFixed(2)}</Text>}
-                  <Text fz="xs" c="dimmed">Stimulus x{coefficient.toFixed(2)}</Text>
-                  <Text fz="xs" c="dimmed">{zoneMeta.label}</Text>
-                  <Text fz="xs" c="dimmed">Target {(adjusted?.low ?? baseThresholds.low).toFixed(1)} - {(adjusted?.high ?? baseThresholds.high).toFixed(1)}</Text>
-                  {trend && <Text fz="xs" c="dimmed">Trend {(trend.value * 100).toFixed(0)}%</Text>}
-                  {rampGrace && <Badge color="blue" variant="light" size="xs">Ramp-up grace</Badge>}
-                </Stack>
-              )
-            })}
-          </SimpleGrid>
-        </Paper>
-      )}
+      {bundle.weekly.inol?.avg_inol && <InolPanel inol={bundle.weekly.inol} />}
 
-      {bundle.weekly.acwr && !('status' in bundle.weekly.acwr) && (
-        <Paper withBorder p="md">
-          <Group justify="space-between" mb="sm">
-            <Group gap="xs">
-              <Text fw={500}>EWMA ACWR (daily workload ratio)</Text>
-              <Tooltip label="EWMA ACWR means exponentially weighted moving average acute:chronic workload ratio. It compares short-term load to longer-term load while weighting recent work more heavily." withArrow multiline w={340}>
-                <Info size={14} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)' }} />
-              </Tooltip>
-            </Group>
-            <Badge color={getAcwrZoneMeta((bundle.weekly.acwr as any).composite_zone).color} variant="light">
-              Composite: {(bundle.weekly.acwr as any).composite?.toFixed(2) ?? 'N/A'} ({(bundle.weekly.acwr as any).composite_label ?? getAcwrZoneMeta((bundle.weekly.acwr as any).composite_zone).label})
-            </Badge>
-          </Group>
-          <Text fz="xs" c="dimmed" mb="sm">
-            Daily EWMA acute/chronic ratio. The labels describe workload pattern, not validated injury risk.
-          </Text>
-          <SimpleGrid cols={4} spacing="md">
-            {Object.entries((bundle.weekly.acwr as any).dimensions).map(([dim, info]: [string, any]) => {
-              const zoneMeta = getAcwrZoneMeta(info.zone)
-              return (
-                <Stack key={dim} gap={2} ta="center" p="sm" style={{ borderRadius: 'var(--mantine-radius-sm)', background: `var(--mantine-color-${zoneMeta.color}-light)` }}>
-                  <Text fz="xs" tt="capitalize">{dim}</Text>
-                  <Text fz="xl" fw={700}>{info.value?.toFixed(2) ?? '--'}</Text>
-                  <Text fz="xs">{info.label ?? zoneMeta.label}</Text>
-                </Stack>
-              )
-            })}
-          </SimpleGrid>
-        </Paper>
-      )}
+      {bundle.weekly.acwr && <AcwrPanel acwr={bundle.weekly.acwr} />}
 
       {bundle.weekly.ri_distribution && (
         <Paper withBorder p="md">
@@ -639,50 +450,11 @@ export function BlockWeeklySurface({
       )}
 
       {bundle.weekly.specificity_ratio && (
-        <Paper withBorder p="md">
-          <Group justify="space-between" align="flex-start" mb="sm">
-            <Group gap="xs">
-              <Text fw={500}>Specificity Ratio</Text>
-              <Tooltip label="Specificity ratio shows how much of your work is directly specific to competition. Narrow counts only SBD sets. Broad counts SBD plus closely related secondary work." withArrow multiline w={320}>
-                <Info size={14} style={{ cursor: 'help', color: 'var(--mantine-color-gray-6)' }} />
-              </Tooltip>
-            </Group>
-            {bundle.weekly.specificity_ratio.expected_band ? (
-              <Group gap="xs" wrap="wrap" justify="flex-end">
-                <Badge variant="light" color={specificityStatusBadgeColor(bundle.weekly.specificity_ratio.narrow_status)}>Narrow {specificityStatusLabel(bundle.weekly.specificity_ratio.narrow_status)}</Badge>
-                <Badge variant="light" color={specificityStatusBadgeColor(bundle.weekly.specificity_ratio.broad_status)}>Broad {specificityStatusLabel(bundle.weekly.specificity_ratio.broad_status)}</Badge>
-              </Group>
-            ) : <Badge variant="light" color="gray">No upcoming comp band</Badge>}
-          </Group>
-          <SimpleGrid cols={2} spacing="md">
-            <Stack gap="xs">
-              <Text fz="xs" c="dimmed">Narrow (SBD only)</Text>
-              <Progress value={Math.min(bundle.weekly.specificity_ratio.narrow * 100, 100)} />
-              <Text fz="sm" fw={500}>{(bundle.weekly.specificity_ratio.narrow * 100).toFixed(1)}%</Text>
-            </Stack>
-            <Stack gap="xs">
-              <Text fz="xs" c="dimmed">Broad (SBD + secondary)</Text>
-              <Progress value={Math.min(bundle.weekly.specificity_ratio.broad * 100, 100)} color="blue" />
-              <Text fz="sm" fw={500}>{(bundle.weekly.specificity_ratio.broad * 100).toFixed(1)}%</Text>
-            </Stack>
-          </SimpleGrid>
-        </Paper>
+        <SpecificityPanel specificity={bundle.weekly.specificity_ratio} target={bundle.weekly.specificity_target_competition} />
       )}
 
       {bundle.weekly.fatigue_dimensions && Object.keys(bundle.weekly.fatigue_dimensions.weekly).length > 0 && (
-        <Paper withBorder p="md">
-          <Text fw={500} mb="sm">Fatigue Dimensions (Weekly)</Text>
-          <Box style={{ overflowX: 'auto' }}>
-            <Table fz="sm">
-              <Table.Thead><Table.Tr><Table.Th>Week</Table.Th><Table.Th ta="right">Axial</Table.Th><Table.Th ta="right">Neural</Table.Th><Table.Th ta="right">Peripheral</Table.Th><Table.Th ta="right">Systemic</Table.Th></Table.Tr></Table.Thead>
-              <Table.Tbody>
-                {Object.entries(bundle.weekly.fatigue_dimensions.weekly).sort(([a], [b]) => Number(a) - Number(b)).slice(-8).map(([week, dims]) => (
-                  <Table.Tr key={week}><Table.Td fw={500}>W{week}</Table.Td><Table.Td ta="right">{dims.axial.toFixed(1)}</Table.Td><Table.Td ta="right">{dims.neural.toFixed(1)}</Table.Td><Table.Td ta="right">{dims.peripheral.toFixed(1)}</Table.Td><Table.Td ta="right">{dims.systemic.toFixed(1)}</Table.Td></Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Box>
-        </Paper>
+        <FatigueDimensionsPanel dimensions={bundle.weekly.fatigue_dimensions} />
       )}
 
       {bundle.weekly.projections.filter((p) => p && typeof p === 'object').length > 0 ? (
@@ -875,8 +647,6 @@ export function BlockWeeklySurface({
       <WeeklyData
         data={bundle.weekly as WeeklyAnalysis}
         viewMode={viewMode}
-        perLiftDetails={perLiftDetails}
-        muscleGroupAvgWeekly={muscleGroupAvgWeekly}
         analysisWeeks={analysisWindow.weeks}
         unit={unit}
       />

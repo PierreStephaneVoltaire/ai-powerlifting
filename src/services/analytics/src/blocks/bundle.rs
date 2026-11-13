@@ -34,9 +34,7 @@ pub fn summary_from_weekly(weekly: &Value) -> Summary {
                 .collect()
         })
         .unwrap_or_default();
-    let muscle = ["muscle_map", "muscle_group_avg_weekly", "muscle_volume"]
-        .iter()
-        .find_map(|key| weekly.get(*key).filter(|value| !value.is_null()))
+    let muscle = at("/muscle_volume/muscles")
         .filter(|value| value.is_object())
         .cloned()
         .unwrap_or_else(|| Value::Object(serde_json::Map::new()));

@@ -21,13 +21,14 @@ import {
   Tooltip,
   SegmentedControl,
   Progress,
+  NumberInput,
 } from '@mantine/core'
 import * as api from '@/api/client'
 import { ExerciseMuscleMap } from '@/components/glossary/ExerciseMuscleMap'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
-import type { GlossaryExercise, MuscleGroup, ExerciseCategory, Equipment, FatigueProfile, FatigueProfileSource } from '@powerlifting/types'
+import type { GlossaryExercise, MuscleGroup, ExerciseCategory, Equipment, FatigueProfile, FatigueProfileSource, LiftTransfer } from '@powerlifting/types'
 
 interface FatigueSliderProps {
   label: string
@@ -156,6 +157,8 @@ export default function GlossaryPage() {
   const [fatigueProfile, setFatigueProfile] = useState<FatigueProfile | null>(null)
   const [fatigueSource, setFatigueSource] = useState<FatigueProfileSource | null>(null)
   const [fatigueReasoning, setFatigueReasoning] = useState<string | null>(null)
+  const [liftTransfer, setLiftTransfer] = useState<LiftTransfer | null>(null)
+  const [isEstimatingTransfer, setIsEstimatingTransfer] = useState(false)
   const [e1rmEstimate, setE1rmEstimate] = useState<GlossaryExercise['e1rm_estimate'] | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [hasE1rmFilter, setHasE1rmFilter] = useState<'all' | 'with' | 'without'>('all')
@@ -229,6 +232,7 @@ export default function GlossaryPage() {
         fatigue_profile: fatigueProfile || undefined,
         fatigue_profile_source: fatigueSource || undefined,
         fatigue_profile_reasoning: fatigueReasoning,
+        lift_transfer: liftTransfer || undefined,
         e1rm_estimate: e1rmEstimate || undefined,
       }
 
@@ -243,6 +247,7 @@ export default function GlossaryPage() {
       setFatigueProfile(null)
       setFatigueSource(null)
       setFatigueReasoning(null)
+      setLiftTransfer(null)
       setE1rmEstimate(null)
       loadExercises()
     } catch (err) {
@@ -279,6 +284,7 @@ export default function GlossaryPage() {
     setFatigueProfile(exercise.fatigue_profile || null)
     setFatigueSource(exercise.fatigue_profile_source || null)
     setFatigueReasoning(exercise.fatigue_profile_reasoning || null)
+    setLiftTransfer(exercise.lift_transfer || null)
     setE1rmEstimate(exercise.e1rm_estimate || null)
     setShowAddForm(true)
   }
@@ -333,6 +339,39 @@ export default function GlossaryPage() {
       pushToast({ message: 'Fatigue estimation failed', type: 'error' })
     } finally {
       setIsEstimating(false)
+    }
+  }
+
+  function handleTransferChange(lift: 'squat' | 'bench' | 'deadlift', value: number | string) {
+    const next = Math.max(0, Math.min(1, Number(value) || 0))
+    setLiftTransfer((prev) => ({
+      squat: prev?.squat ?? 0,
+      bench: prev?.bench ?? 0,
+      deadlift: prev?.deadlift ?? 0,
+      reasoning: prev?.reasoning ?? '',
+      [lift]: next,
+      source: 'user',
+    }))
+  }
+
+  async function handleEstimateTransfer() {
+    setIsEstimatingTransfer(true)
+    try {
+      const result = await api.estimateLiftTransfer({
+        name: formData.name || '',
+        category: formData.category,
+        equipment: formData.equipment,
+        primary_muscles: formData.primary_muscles,
+        secondary_muscles: formData.secondary_muscles,
+        tertiary_muscles: formData.tertiary_muscles,
+        description: formData.description,
+        how_to_perform: formData.how_to_perform,
+      })
+      setLiftTransfer(result.lift_transfer)
+    } catch {
+      pushToast({ message: 'Lift transfer estimation failed', type: 'error' })
+    } finally {
+      setIsEstimatingTransfer(false)
     }
   }
 
@@ -621,6 +660,7 @@ export default function GlossaryPage() {
               setFatigueProfile(null)
               setFatigueSource(null)
               setFatigueReasoning(null)
+              setLiftTransfer(null)
               setE1rmEstimate(null)
             }}
             disabled={readOnly}
@@ -782,6 +822,56 @@ export default function GlossaryPage() {
                 </Text>
               </Box>
             )}
+          </Paper>
+
+          <Paper withBorder p="md" radius="md" className="if-card">
+            <Group justify="space-between" mb="sm">
+              <Group gap="xs">
+                <Text size="sm" fw={600}>Lift Transfer</Text>
+                {liftTransfer && (
+                  <Tooltip
+                    label={liftTransfer.reasoning || 'No reasoning recorded'}
+                    multiline
+                    w={280}
+                    withArrow
+                    position="top-start"
+                  >
+                    <Badge
+                      variant="light"
+                      color={liftTransfer.source === 'ai' ? 'blue' : liftTransfer.source === 'rule' ? 'gray' : 'green'}
+                      size="xs"
+                      style={{ cursor: 'help' }}
+                    >
+                      {liftTransfer.source === 'ai' ? 'AI Estimated' : liftTransfer.source === 'rule' ? 'Rule Default' : 'Manual Override'}
+                    </Badge>
+                  </Tooltip>
+                )}
+              </Group>
+              <Button
+                size="compact-xs"
+                variant="light"
+                onClick={handleEstimateTransfer}
+                disabled={isEstimatingTransfer || !formData.name || readOnly}
+                leftSection={isEstimatingTransfer ? <Loader size={12} /> : <RefreshCw size={12} />}
+              >
+                {isEstimatingTransfer ? 'Estimating...' : 'Estimate transfer'}
+              </Button>
+            </Group>
+            <SimpleGrid cols={3}>
+              {(['squat', 'bench', 'deadlift'] as const).map((lift) => (
+                <NumberInput
+                  key={lift}
+                  label={lift.charAt(0).toUpperCase() + lift.slice(1)}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  decimalScale={2}
+                  value={liftTransfer?.[lift] ?? 0}
+                  onChange={(v) => handleTransferChange(lift, v)}
+                  disabled={readOnly}
+                />
+              ))}
+            </SimpleGrid>
           </Paper>
 
           {/* e1RM Estimate Section */}

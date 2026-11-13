@@ -1,10 +1,11 @@
 import { Fragment, useState } from 'react';
 import { Paper, Text, Box, Table, Group, Button, Badge, SimpleGrid, Stack, Tooltip as MantineTooltip } from '@mantine/core';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts';
-import type { WeeklyAnalysis } from '@/api/analytics';
+import type { MonotonyStrainRow, WeeklyAnalysis } from '@/api/analytics';
 import { toDisplayUnit, formatDisplayWeight } from '@/utils/units';
 import { Unit } from '@/store/settingsStore';
 import { MuscleWorkloadMap } from '@/components/analysis/MuscleWorkloadMap';
+import { ChartHelp } from '@/components/analysis/ChartHelp';
 
 const CHART_COLORS = [
   '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6',
@@ -18,16 +19,19 @@ function rpeTrendIcon(trend?: string) {
   return <Text span size="xs" fw={500} c="dimmed">&#9644; stable</Text>;
 }
 
+function monotonyColor(row: MonotonyStrainRow): string {
+  if ((row.nonzero_training_days ?? 0) < 3) return 'dimmed';
+  return row.monotony > 2 ? 'red' : 'green';
+}
+
 interface WeeklyDataProps {
   data: WeeklyAnalysis;
   viewMode: 'raw' | 'graph';
-  perLiftDetails: Record<string, { frequency: number; raw_sets: number; accessories: { name: string; sets: number; volume: number }[] }>;
-  muscleGroupAvgWeekly: { sets: Record<string, number>; volume: Record<string, number> };
   analysisWeeks: number;
   unit: Unit;
 }
 
-export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekly, analysisWeeks, unit }: WeeklyDataProps) {
+export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataProps) {
   const [expandedLifts, setExpandedLifts] = useState<Set<string>>(new Set());
 
   return (
@@ -35,14 +39,22 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
       {/* Per-lift breakdown */}
       {Object.keys(data.lifts).length > 0 && (
         <Paper withBorder p="md">
-          <Text fw={500} mb="sm">Per-Lift Breakdown</Text>
+          <Text fw={500} mb={4}>Per-Lift Breakdown</Text>
+          <ChartHelp
+            description="One row per competition lift. Main sets are the lift itself; weighted sets add every exercise that trains it, each counted by its transfer weight (e.g. lunges and leg press for squat, RDLs for deadlift). Expand a row to see those accessories."
+            range="Transfer 1.0 is the lift itself; 0.9 and above counts as the same movement for frequency; lower values count as partial work."
+            units="sets per window; volume in kg x reps; frequency in sessions per week"
+            relation="Weighted sets = main sets + sum of accessory sets x transfer. Freq counts sessions with near-identical work; 'any' also counts sessions with any related work."
+            formulaId="specificity_ratio"
+          />
           <Box style={{ overflowX: 'auto' }}>
             <Table fz="sm">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Exercise</Table.Th>
                   <Table.Th ta="right">Freq</Table.Th>
-                  <Table.Th ta="right">Sets</Table.Th>
+                  <Table.Th ta="right">Main sets</Table.Th>
+                  <Table.Th ta="right" visibleFrom="sm">Weighted sets</Table.Th>
                   <Table.Th ta="right">Progression</Table.Th>
                   <Table.Th ta="right" visibleFrom="sm">Fit Quality</Table.Th>
                   <Table.Th ta="right" visibleFrom="sm">Volume %</Table.Th>
@@ -54,7 +66,7 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
               <Table.Tbody>
                 {Object.entries(data.lifts).map(([name, lift]) => {
                   const liftKey = name.toLowerCase().replace(' press', '');
-                  const details = perLiftDetails[liftKey];
+                  const details = data.per_lift?.[liftKey];
                   const isExpanded = expandedLifts.has(name);
                   return (
                     <Fragment key={name}>
@@ -78,8 +90,9 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                             )}
                           </Group>
                         </Table.Td>
-                        <Table.Td ta="right">{details ? <Text span fz="sm">{details.frequency}/wk</Text> : <Text span fz="sm" c="dimmed">--</Text>}</Table.Td>
+                        <Table.Td ta="right">{details ? <Text span fz="sm">{details.frequency}/wk <Text span fz="xs" c="dimmed">({details.exposure_frequency} any)</Text></Text> : <Text span fz="sm" c="dimmed">--</Text>}</Table.Td>
                         <Table.Td ta="right">{details ? <Text span fz="sm">{details.raw_sets}</Text> : <Text span fz="sm" c="dimmed">--</Text>}</Table.Td>
+                        <Table.Td ta="right" visibleFrom="sm">{details ? <Text span fz="sm">{details.sets}</Text> : <Text span fz="sm" c="dimmed">--</Text>}</Table.Td>
                         <Table.Td ta="right">
                           {lift.progression_rate_kg_per_week !== undefined && lift.progression_rate_kg_per_week !== null
                             ? <Text span fz="sm" c={lift.progression_rate_kg_per_week >= 0 ? 'green' : 'red'}>{lift.progression_rate_kg_per_week >= 0 ? '+' : ''}{formatDisplayWeight(lift.progression_rate_kg_per_week, unit)} {unit}/wk</Text>
@@ -121,14 +134,17 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                       </Table.Tr>
                       {isExpanded && details && details.accessories.length > 0 && (
                         <Table.Tr>
-                          <Table.Td colSpan={9}>
+                          <Table.Td colSpan={10}>
                             <Box ml="md">
-                              <Text fz="xs" c="dimmed" mb="xs">Accessory / Secondary Work</Text>
+                              <Text fz="xs" c="dimmed" mb="xs">
+                                Accessory work counted toward {name}: {details.sets} weighted sets from {details.raw_sets} main sets, {Math.round(toDisplayUnit(details.volume, unit)).toLocaleString()} {unit} weighted volume
+                              </Text>
                               <SimpleGrid cols={{ base: 2, md: 3, lg: 4 }}>
                                 {details.accessories.map(a => (
                                   <Box key={a.name} p="xs" style={{ borderRadius: 'var(--mantine-radius-sm)', background: 'var(--mantine-color-default)' }}>
                                     <Text fz="xs" fw={500}>{a.name}</Text>
-                                    <Text fz="xs" c="dimmed">{a.sets} sets · {Math.round(toDisplayUnit(a.volume, unit)).toLocaleString()} {unit}</Text>
+                                    <Text fz="xs" c="dimmed">transfer {a.transfer.toFixed(2)} · {a.sets} sets = {a.weighted_sets} weighted</Text>
+                                    <Text fz="xs" c="dimmed">{Math.round(toDisplayUnit(a.volume, unit)).toLocaleString()} {unit}</Text>
                                   </Box>
                                 ))}
                               </SimpleGrid>
@@ -210,16 +226,23 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
       )}
 
       {/* Muscle Workload */}
-      {Object.keys(muscleGroupAvgWeekly.sets).length > 0 && (
+      {data.muscle_volume && Object.keys(data.muscle_volume.muscles).length > 0 && (
         <Paper withBorder p="md">
-          <MuscleWorkloadMap setsPerWeek={muscleGroupAvgWeekly.sets} analysisWeeks={analysisWeeks} />
+          <MuscleWorkloadMap muscleVolume={data.muscle_volume} analysisWeeks={analysisWeeks} />
         </Paper>
       )}
 
       {/* Monotony & Strain */}
       {data.monotony_strain && data.monotony_strain.weekly.length > 0 && (
         <Paper withBorder p="md">
-          <Text fw={500} mb="sm">Foster Monotony &amp; Strain</Text>
+          <Text fw={500} mb={4}>Foster Monotony &amp; Strain</Text>
+          <ChartHelp
+            description="How uniform each week's daily load was (monotony) and how much load that uniformity accumulated (strain), on load normalised to your own typical day. Weeks marked partial have fewer than 7 observed days, so treat them as provisional."
+            range="Monotony above 2.0 is flagged only in weeks with 3 or more training days. Strain Index above 1.5 means the week's strain jumped over the 4-week median."
+            units="Monotony and Raw are ratios; Strain is normalised load x monotony (1.0 = a typical training day's load); Strain Index is a multiple of the prior 4-week median strain"
+            relation="Monotony = mean daily load / spread of daily load (Raw is uncapped, Monotony is capped at 7). Strain = weekly load x Monotony. Strain Index = Strain / median of the previous 4 weeks."
+            formulaId="monotony_strain"
+          />
           {viewMode === 'raw' ? (
             <Box style={{ overflowX: 'auto' }}>
               <Table fz="sm">
@@ -240,8 +263,11 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                     .sort((a, b) => a.week_start.localeCompare(b.week_start))
                     .map((row) => (
                       <Table.Tr key={row.week_start}>
-                        <Table.Td fw={500}>{row.week_start}</Table.Td>
-                        <Table.Td ta="right" c={row.monotony > 2 ? 'red' : 'green'}>{row.monotony.toFixed(2)}</Table.Td>
+                        <Table.Td fw={500}>
+                          {row.week_start}
+                          {row.partial && <Badge ml="xs" color="gray" variant="light" size="xs">partial {row.days_observed ?? '?'}/7 days</Badge>}
+                        </Table.Td>
+                        <Table.Td ta="right" c={monotonyColor(row)}>{row.monotony.toFixed(2)}</Table.Td>
                         <Table.Td ta="right">{typeof row.monotony_raw === 'number' ? row.monotony_raw.toFixed(2) : '--'}</Table.Td>
                         <Table.Td ta="right">{row.strain.toFixed(1)}</Table.Td>
                         <Table.Td ta="right" visibleFrom="sm">{typeof row.strain_index === 'number' ? row.strain_index.toFixed(2) : '--'}</Table.Td>
@@ -266,7 +292,10 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                 .map((row) => (
                   <Paper key={row.week_start} p="sm" bg="var(--mantine-color-default-hover)" radius="sm">
                     <Group justify="space-between" mb={4} wrap="wrap">
-                      <Text fw={700}>{row.week_start}</Text>
+                      <Group gap="xs">
+                        <Text fw={700}>{row.week_start}</Text>
+                        {row.partial && <Badge color="gray" variant="light" size="xs">partial {row.days_observed ?? '?'}/7 days</Badge>}
+                      </Group>
                       <Group gap="xs" wrap="wrap">
                         {row.flags.length > 0 ? row.flags.map(flag => (
                           <Badge key={flag} color="yellow" variant="light" size="sm">{flag}</Badge>
@@ -276,7 +305,7 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                     <SimpleGrid cols={4} spacing="xs">
                       <Stack gap={0} ta="center">
                         <Text fz="xs" c="dimmed">Monotony</Text>
-                        <Text fz="sm" fw={500} c={row.monotony > 2 ? 'red' : 'green'}>{row.monotony.toFixed(2)}</Text>
+                        <Text fz="sm" fw={500} c={monotonyColor(row)}>{row.monotony.toFixed(2)}</Text>
                       </Stack>
                       <Stack gap={0} ta="center">
                         <Text fz="xs" c="dimmed">Raw</Text>
@@ -296,54 +325,6 @@ export function WeeklyData({ data, viewMode, perLiftDetails, muscleGroupAvgWeekl
                   </Paper>
                 ))}
             </Stack>
-          )}
-        </Paper>
-      )}
-
-      {/* Avg Weekly by Muscle Group */}
-      {Object.keys(muscleGroupAvgWeekly.sets).length > 0 && (
-        <Paper withBorder p="md">
-          <Text fw={500} mb="sm">Avg Weekly by Muscle Group</Text>
-          {viewMode === 'raw' ? (
-            <Box style={{ overflowX: 'auto' }}>
-              <Table fz="sm">
-                <Table.Thead><Table.Tr><Table.Th>Muscle Group</Table.Th><Table.Th ta="right">Avg Sets/wk</Table.Th><Table.Th ta="right">Avg Vol/wk ({unit})</Table.Th></Table.Tr></Table.Thead>
-                <Table.Tbody>
-                  {Object.entries(muscleGroupAvgWeekly.sets).sort((a, b) => (muscleGroupAvgWeekly.volume[b[0]] || 0) - (muscleGroupAvgWeekly.volume[a[0]] || 0)).map(([muscle, sets]) => (
-                    <Table.Tr key={muscle}>
-                      <Table.Td fw={500}>{muscle.replace(/_/g, ' ')}</Table.Td>
-                      <Table.Td ta="right">{sets}</Table.Td>
-                      <Table.Td ta="right">{Math.round(toDisplayUnit(muscleGroupAvgWeekly.volume[muscle] || 0, unit)).toLocaleString()}</Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Box>
-          ) : (
-            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-              <Box>
-                <Text fz="xs" c="dimmed" ta="center" mb="xs">Avg Sets/wk</Text>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={Object.entries(muscleGroupAvgWeekly.sets).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name: name.replace(/_/g, ' '), 'Avg Sets/wk': value }))}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={60} />
-                    <YAxis /><RechartsTooltip />
-                    <Bar dataKey="Avg Sets/wk" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Box>
-              <Box>
-                <Text fz="xs" c="dimmed" ta="center" mb="xs">Avg Vol/wk ({unit})</Text>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={Object.entries(muscleGroupAvgWeekly.volume).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name: name.replace(/_/g, ' '), 'Avg Vol/wk': toDisplayUnit(value, unit) }))}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={60} />
-                    <YAxis /><RechartsTooltip />
-                    <Bar dataKey="Avg Vol/wk" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Box>
-            </SimpleGrid>
           )}
         </Paper>
       )}

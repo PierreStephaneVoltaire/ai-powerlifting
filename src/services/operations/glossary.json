@@ -17,7 +17,46 @@
           "required": [
             "name"
           ],
-          "additionalProperties": true
+          "additionalProperties": true,
+          "properties": {
+            "lift_transfer": {
+              "type": "object",
+              "properties": {
+                "squat": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "bench": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "deadlift": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "source": {
+                  "enum": [
+                    "ai",
+                    "rule",
+                    "user"
+                  ]
+                },
+                "reasoning": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "squat",
+                "bench",
+                "deadlift",
+                "source",
+                "reasoning"
+              ]
+            }
+          }
         }
       },
       "required": [
@@ -126,7 +165,7 @@
   {
     "name": "exercise_remove",
     "domain": "glossary",
-    "description": "Permanently remove a glossary exercise by ID. This is a hard delete — the exercise is removed from the table.",
+    "description": "Permanently remove a glossary exercise by ID. This is a hard delete \u2014 the exercise is removed from the table.",
     "handler": "services.glossary.exercise_remove.handler",
     "input_schema": {
       "type": "object",
@@ -210,7 +249,7 @@
   {
     "name": "exercise_get_glossary",
     "domain": "glossary",
-    "description": "Get the full glossary for a user — all exercises with their metadata, E1RM values, and muscle group assignments.",
+    "description": "Get the full glossary for a user \u2014 all exercises with their metadata, E1RM values, and muscle group assignments.",
     "handler": "services.glossary.exercise_get_glossary.handler",
     "input_schema": {
       "type": "object",
@@ -444,6 +483,142 @@
       ]
     },
     "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "glossary_estimate_lift_transfer",
+    "domain": "glossary",
+    "description": "Estimate how much an exercise transfers to the squat, bench and deadlift with AI. With id the result is stored as lift_transfer; with an inline exercise it is only returned.",
+    "handler": "services.glossary.glossary_estimate_lift_transfer.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exercise": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "id"
+          ]
+        },
+        {
+          "required": [
+            "exercise"
+          ]
+        }
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "lift_transfer_estimated"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lift_transfer": {
+          "type": "object",
+          "properties": {
+            "squat": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "bench": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "deadlift": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "source": {
+              "enum": [
+                "ai",
+                "rule",
+                "user"
+              ]
+            },
+            "reasoning": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "squat",
+            "bench",
+            "deadlift",
+            "source",
+            "reasoning"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "lift_transfer"
+      ]
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "glossary_backfill_lift_transfer",
+    "domain": "glossary",
+    "description": "Apply rule-based lift_transfer defaults to every exercise missing it. With queue_ai, also returns the ids to estimate with glossary_estimate_lift_transfer.",
+    "handler": "services.glossary.glossary_backfill_lift_transfer.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "queue_ai": {
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "lift_transfer_backfilled"
+        },
+        "updated": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "ai_candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "updated",
+        "total",
+        "ai_candidates"
+      ]
+    },
+    "execution": "deterministic",
     "ownership": "athlete"
   },
   {

@@ -192,6 +192,7 @@ fn lift_landmark(
                     ProgramData::empty(),
                     program_start,
                     Some(reference),
+                    None,
                 )
                 .score,
             );

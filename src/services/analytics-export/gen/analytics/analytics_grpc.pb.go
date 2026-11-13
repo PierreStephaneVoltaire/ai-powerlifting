@@ -26,6 +26,7 @@ const (
 	AnalyticsData_ListBlocks_FullMethodName        = "/powerlifting.analytics.v1.AnalyticsData/ListBlocks"
 	AnalyticsData_Compare_FullMethodName           = "/powerlifting.analytics.v1.AnalyticsData/Compare"
 	AnalyticsData_Lifetime_FullMethodName          = "/powerlifting.analytics.v1.AnalyticsData/Lifetime"
+	AnalyticsData_SelectedLifetime_FullMethodName  = "/powerlifting.analytics.v1.AnalyticsData/SelectedLifetime"
 	AnalyticsData_CorrelationInputs_FullMethodName = "/powerlifting.analytics.v1.AnalyticsData/CorrelationInputs"
 )
 
@@ -48,6 +49,9 @@ type AnalyticsDataClient interface {
 	Compare(ctx context.Context, in *BlockKeys, opts ...grpc.CallOption) (*Report, error)
 	// Lifetime returns the holistic all-blocks report (analytics.lifetime).
 	Lifetime(ctx context.Context, in *AthleteRef, opts ...grpc.CallOption) (*Report, error)
+	// SelectedLifetime returns the lifetime report over the selected past blocks (analytics.lifetime with blockKeys).
+	// The body also carries current_vs_history: the current block placed against the selected blocks' ranges.
+	SelectedLifetime(ctx context.Context, in *LifetimeRef, opts ...grpc.CallOption) (*Report, error)
 	// CorrelationInputs returns the weekly e1RM and accessory volume series consumed by the AI correlation prompts.
 	CorrelationInputs(ctx context.Context, in *BlockRef, opts ...grpc.CallOption) (*CorrelationInputsReply, error)
 }
@@ -110,6 +114,16 @@ func (c *analyticsDataClient) Lifetime(ctx context.Context, in *AthleteRef, opts
 	return out, nil
 }
 
+func (c *analyticsDataClient) SelectedLifetime(ctx context.Context, in *LifetimeRef, opts ...grpc.CallOption) (*Report, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Report)
+	err := c.cc.Invoke(ctx, AnalyticsData_SelectedLifetime_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *analyticsDataClient) CorrelationInputs(ctx context.Context, in *BlockRef, opts ...grpc.CallOption) (*CorrelationInputsReply, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CorrelationInputsReply)
@@ -139,6 +153,9 @@ type AnalyticsDataServer interface {
 	Compare(context.Context, *BlockKeys) (*Report, error)
 	// Lifetime returns the holistic all-blocks report (analytics.lifetime).
 	Lifetime(context.Context, *AthleteRef) (*Report, error)
+	// SelectedLifetime returns the lifetime report over the selected past blocks (analytics.lifetime with blockKeys).
+	// The body also carries current_vs_history: the current block placed against the selected blocks' ranges.
+	SelectedLifetime(context.Context, *LifetimeRef) (*Report, error)
 	// CorrelationInputs returns the weekly e1RM and accessory volume series consumed by the AI correlation prompts.
 	CorrelationInputs(context.Context, *BlockRef) (*CorrelationInputsReply, error)
 	mustEmbedUnimplementedAnalyticsDataServer()
@@ -165,6 +182,9 @@ func (UnimplementedAnalyticsDataServer) Compare(context.Context, *BlockKeys) (*R
 }
 func (UnimplementedAnalyticsDataServer) Lifetime(context.Context, *AthleteRef) (*Report, error) {
 	return nil, status.Error(codes.Unimplemented, "method Lifetime not implemented")
+}
+func (UnimplementedAnalyticsDataServer) SelectedLifetime(context.Context, *LifetimeRef) (*Report, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectedLifetime not implemented")
 }
 func (UnimplementedAnalyticsDataServer) CorrelationInputs(context.Context, *BlockRef) (*CorrelationInputsReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method CorrelationInputs not implemented")
@@ -280,6 +300,24 @@ func _AnalyticsData_Lifetime_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalyticsData_SelectedLifetime_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LifetimeRef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsDataServer).SelectedLifetime(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsData_SelectedLifetime_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsDataServer).SelectedLifetime(ctx, req.(*LifetimeRef))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AnalyticsData_CorrelationInputs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BlockRef)
 	if err := dec(in); err != nil {
@@ -324,6 +362,10 @@ var AnalyticsData_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Lifetime",
 			Handler:    _AnalyticsData_Lifetime_Handler,
+		},
+		{
+			MethodName: "SelectedLifetime",
+			Handler:    _AnalyticsData_SelectedLifetime_Handler,
 		},
 		{
 			MethodName: "CorrelationInputs",

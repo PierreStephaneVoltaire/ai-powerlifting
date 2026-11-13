@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "unit": "hard sets per muscle per week",
+  "set_weighting": {"primary": 1.0, "secondary": 0.5, "tertiary": 0.25},
+  "status_rules": {
+    "below_mev": "weekly_sets < mev",
+    "productive": "mev <= weekly_sets <= mav_high",
+    "near_mrv": "mav_high < weekly_sets <= mrv",
+    "above_mrv": "weekly_sets > mrv"
+  },
+  "sources": [
+    {
+      "id": "rp_volume_landmarks_chart",
+      "citation": "Israetel M. / Renaissance Periodization. Training Volume Landmarks for Muscle Growth (MV, MEV, MAV, MRV chart).",
+      "url": "https://rpstrength.com/training-volume-landmarks-muscle-growth/",
+      "note": "Values marked rp_chart were read from a transcription of the RP chart (biceps, back, abs, calves, chest)."
+    },
+    {
+      "id": "rp_volume_landmarks_summary",
+      "citation": "Israetel M., Hoffmann J., Smith C.W. Scientific Principles of Hypertrophy Training (Renaissance Periodization), per-muscle landmark summaries.",
+      "url": "https://research.poin-t-go.com/en/research/training-volume-landmarks-hypertrophy",
+      "note": "Values marked rp_summary come from secondary summaries of the RP guide (triceps, quads, hamstrings, side delts, traps). MV values for these are from the RP guide and were not independently re-verified."
+    },
+    {
+      "id": "schoenfeld_2017",
+      "citation": "Schoenfeld BJ, Ogborn D, Krieger JW. Dose-response relationship between weekly resistance training volume and increases in muscle mass: a systematic review and meta-analysis. J Sports Sci 2017;35(11):1073-1082.",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6303131",
+      "note": "Corroborates MEV: graded dose-response with 10+ weekly direct sets per muscle producing greater hypertrophy than fewer than 5."
+    }
+  ],
+  "muscles": {
+    "chest": {"mv": 8, "mev": 10, "mav_low": 12, "mav_high": 20, "mrv": 22, "basis": "rp_chart"},
+    "lats": {"mv": 8, "mev": 10, "mav_low": 14, "mav_high": 22, "mrv": 25, "basis": "rp_chart", "note": "RP lists one back group; applied to lats."},
+    "biceps": {"mv": 4, "mev": 8, "mav_low": 14, "mav_high": 20, "mrv": 26, "basis": "rp_chart"},
+    "triceps": {"mv": 4, "mev": 6, "mav_low": 10, "mav_high": 14, "mrv": 18, "basis": "rp_summary"},
+    "front_delts": {"mv": 0, "mev": 0, "mav_low": 6, "mav_high": 8, "mrv": 12, "basis": "rp_guide_unverified", "note": "RP states pressing covers front delts; value not re-verified online."},
+    "side_delts": {"mv": 0, "mev": 8, "mav_low": 16, "mav_high": 22, "mrv": 26, "basis": "rp_summary"},
+    "rear_delts": {"mv": 0, "mev": 8, "mav_low": 16, "mav_high": 22, "mrv": 26, "basis": "rp_guide_unverified", "note": "RP groups rear delts with shoulders; value not re-verified online."},
+    "quads": {"mv": 6, "mev": 8, "mav_low": 12, "mav_high": 18, "mrv": 20, "basis": "rp_summary"},
+    "hamstrings": {"mv": 4, "mev": 6, "mav_low": 10, "mav_high": 16, "mrv": 20, "basis": "rp_summary"},
+    "glutes": {"mv": 0, "mev": 0, "mav_low": 4, "mav_high": 12, "mrv": 16, "basis": "rp_guide_unverified", "note": "Value not re-verified online."},
+    "calves": {"mv": 6, "mev": 8, "mav_low": 12, "mav_high": 16, "mrv": 20, "basis": "rp_chart"},
+    "traps": {"mv": 0, "mev": 0, "mav_low": 12, "mav_high": 20, "mrv": 26, "basis": "rp_summary"},
+    "core": {"mv": 0, "mev": 0, "mav_low": 16, "mav_high": 20, "mrv": 25, "basis": "rp_chart", "note": "RP abs group; MAV depends on current ab volume."}
+  },
+  "unrated_muscles": ["tibialis_anterior", "hip_flexors", "adductors", "rhomboids", "teres_major", "forearms", "erectors", "lower_back", "obliques", "serratus"]
+}

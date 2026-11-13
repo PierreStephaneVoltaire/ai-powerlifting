@@ -18,6 +18,7 @@ func (l Lifetime) tables() []Table {
 		{"Blocks", "Blocks", l.blockRows()},
 		{"Classification", "Classification", l.classificationRows()},
 		{"Correlations", "Correlations", l.correlationRows()},
+		{"Current Block vs History", "Current vs History", l.currentRows()},
 		{"What Worked", "Worked", signalRows(l.Report["worked"])},
 		{"What Did Not Work", "Did Not Work", signalRows(l.Report["did_not_work"])},
 		{"Data Limits", "Data Limits", limitRows(l.Report["data_limits"])},
@@ -58,6 +59,22 @@ func (l Lifetime) overviewRows() []Row {
 		{"Minimum block weeks", l.Report["min_block_weeks"]},
 		{"Block keys", strings.Join(l.BlockKeys, "; ")},
 	}
+}
+
+func (l Lifetime) currentRows() []Row {
+	metrics := list(record(l.Report["current_vs_history"])["metrics"])
+	if len(metrics) == 0 {
+		return nil
+	}
+	rows := []Row{{"Metric", "Current", "Min", "Median", "Max", "Blocks", "Position"}}
+	for _, raw := range metrics {
+		item := record(raw)
+		rows = append(rows, Row{
+			text(item["metric"]), numberOrBlank(item["current"]), numberOrBlank(item["min"]), numberOrBlank(item["median"]),
+			numberOrBlank(item["max"]), numberOrBlank(item["n"]), text(item["position"]),
+		})
+	}
+	return rows
 }
 
 func (l Lifetime) blockRows() []Row {

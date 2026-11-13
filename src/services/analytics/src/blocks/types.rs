@@ -75,6 +75,10 @@ pub struct BlockEntry {
     pub data_quality_flags: Vec<Flag>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_status: Option<CacheStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema, PartialEq)]

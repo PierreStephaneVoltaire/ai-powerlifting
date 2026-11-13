@@ -1,7 +1,6 @@
 use chrono::{Duration, NaiveDate};
 use serde::Serialize;
 
-use super::weeks::{current_week, find_phase};
 use super::{Env, Sessions, e1rm, fatigue};
 use crate::model::{Competition, Maxes, ProgramData, Session};
 use crate::util::{clamp, mean, num_of, round, theil_sen};
@@ -209,6 +208,7 @@ pub fn compute(
     program: &ProgramData,
     program_start: &str,
     reference: Option<NaiveDate>,
+    target_rpe: Option<f64>,
 ) -> Readiness {
     let owned_start;
     let program_start = if program_start.is_empty() {
@@ -249,10 +249,7 @@ pub fn compute(
         })
         .filter_map(|session| session.session_rpe)
         .collect();
-    let week = current_week(program_start, &eligible, env.today);
-    let target = find_phase(&program.phases, week)
-        .and_then(|phase| phase.target_midpoint())
-        .unwrap_or(7.5);
+    let target = target_rpe.unwrap_or(7.5);
     let rpe_penalty = (!rpes.is_empty()).then(|| clamp((mean(&rpes) - target) / 2.0, 0.0, 1.0));
 
     let wellness = wellness_penalty(&eligible, 14, reference);

@@ -19,6 +19,7 @@ export interface BanisterAnalysis {
   tsb_label: string
   series: BanisterSeriesPoint[]
   load_baselines?: Record<string, number>
+  baseline_weeks_used?: number
   model?: string
 }
 
@@ -29,6 +30,8 @@ export interface MonotonyStrainRow {
   strain: number
   strain_index?: number | null
   nonzero_training_days?: number
+  days_observed?: number
+  partial?: boolean
   flags: string[]
 }
 
@@ -70,6 +73,85 @@ export interface VolumeLandmark {
   mav: number | null
   mrv: number | null
   confidence: 'low' | 'medium' | 'high'
+}
+
+export interface DimensionRatios {
+  axial: number
+  neural: number
+  peripheral: number
+  systemic: number
+}
+
+export interface AcwrDimension {
+  value: number | null
+  acute?: number | null
+  chronic?: number | null
+  zone: string
+  label?: string
+}
+
+export interface AcwrResult {
+  composite: number | null
+  composite_zone: string
+  composite_label?: string | null
+  dimensions: Record<string, AcwrDimension>
+  weights_used?: DimensionRatios
+}
+
+export interface InolLift {
+  raw: number
+  adjusted: number
+  coefficient: number
+  coefficient_source: 'profile' | 'default'
+}
+
+export interface PerLiftAccessory {
+  name: string
+  transfer: number
+  sets: number
+  weighted_sets: number
+  volume: number
+}
+
+export interface PerLiftBreakdown {
+  sets: number
+  raw_sets: number
+  volume: number
+  raw_volume: number
+  frequency: number
+  exposure_frequency: number
+  accessories: PerLiftAccessory[]
+}
+
+export type MuscleVolumeStatus = 'below_mev' | 'productive' | 'near_mrv' | 'above_mrv' | 'unrated'
+
+export interface MuscleLandmarks {
+  mv: number
+  mev: number
+  mav_low: number
+  mav_high: number
+  mrv: number
+  basis: string
+}
+
+export interface MuscleVolumeEntry {
+  weekly_sets: number
+  total_sets: number
+  landmarks: MuscleLandmarks | null
+  status: MuscleVolumeStatus
+}
+
+export interface MuscleVolumeSource {
+  id: string
+  citation: string
+  url: string
+  note?: string
+}
+
+export interface MuscleVolume {
+  weeks: number
+  muscles: Record<string, MuscleVolumeEntry>
+  sources: MuscleVolumeSource[]
 }
 
 export interface AnalyticsAlert {
@@ -142,6 +224,8 @@ export interface WeeklyAnalysis {
     planned_exercises?: Array<Record<string, unknown>>
   }>
   block: string
+  per_lift?: Record<string, PerLiftBreakdown>
+  muscle_volume?: MuscleVolume
   lifts: Record<string, {
     progression_rate_kg_per_week?: number | null
     fit_quality?: number | null
@@ -235,6 +319,8 @@ export interface WeeklyAnalysis {
     raw_per_lift_per_week?: Record<string, Record<string, number>>
     
     raw_avg_inol?: Record<string, number>
+    lifts?: Record<string, InolLift>
+    coefficient_sources?: Record<string, 'profile' | 'default'>
     stimulus_coefficients?: Record<string, number>
     thresholds?: Record<string, { low: number; high: number }>
     phase_adjusted_thresholds?: Record<string, {
@@ -252,12 +338,7 @@ export interface WeeklyAnalysis {
     ramp_up_grace?: Record<string, boolean>
     flags: string[]
   } | null
-  acwr?: {
-    composite: number | null
-    composite_zone: string
-    composite_label?: string | null
-    dimensions: Record<string, { value: number | null; zone: string; label?: string }>
-  } | { status: 'insufficient_data'; reason: string } | null
+  acwr?: AcwrResult | { status: 'insufficient_data'; reason: string } | null
   ri_distribution?: {
     overall: Record<string, { count: number; pct: number }>
     per_lift: Record<string, Record<string, { count: number; pct: number }>>
@@ -269,6 +350,7 @@ export interface WeeklyAnalysis {
     total_sets: number
     sbd_sets: number
     secondary_sets?: number
+    weighted_sets?: number
     expected_band?: {
       weeks_to_comp: number | null
       narrow: { min: number; max: number }
@@ -302,8 +384,12 @@ export interface WeeklyAnalysis {
     external_readiness_confidence?: number
   }
   fatigue_dimensions?: {
-    weekly: Record<string, { axial: number; neural: number; peripheral: number; systemic: number }>
-    acwr: Record<string, any>
+    weekly: Record<string, DimensionRatios>
+    normalized?: Record<string, DimensionRatios>
+    chronic_baseline?: DimensionRatios
+    baseline_weeks_used?: number
+    dimension_weights?: DimensionRatios
+    acwr: AcwrResult | { status: 'insufficient_data'; reason: string } | Record<string, unknown>
     spike: Record<string, any>
   }
   taper_quality?: TaperQualityAnalysis | InsufficientDataResponse | null
@@ -404,6 +490,8 @@ export interface ProgramBlockIndexEntry {
   trainingOnly: boolean
   comparisonEligible: boolean
   dataQualityFlags: DataQualityFlag[]
+  stored?: boolean
+  storedAt?: string | null
   cacheStatus?: {
     cached: boolean
     generatedAt?: string
@@ -534,10 +622,45 @@ export interface BlockComparisonRow {
   }>
 }
 
+export interface LifetimeReferenceMetric {
+  metric: string
+  kind: 'exposure' | 'outcome'
+  lift: string | null
+  current: number
+  n: number
+  min: number
+  median: number
+  max: number
+  position: 'below_range' | 'within_range' | 'above_range'
+}
+
+export interface LifetimeSignal {
+  variable: string
+  outcome: string
+  lift: string | null
+  statement: string
+  strength: string
+  n: number
+  low_n: boolean
+}
+
+export interface LifetimeComparison {
+  current_vs_history?: {
+    block_key: string
+    label: string
+    reference_block_keys: string[]
+    metrics: LifetimeReferenceMetric[]
+  }
+  worked?: LifetimeSignal[]
+  did_not_work?: LifetimeSignal[]
+  data_limits?: string[]
+}
+
 export interface BlockComparisonResult {
   schemaVersion: number
   generatedAt: string
   selectedBlockKeys: string[]
+  lifetime?: LifetimeComparison
   rows: BlockComparisonRow[]
   trends: {
     actualTotal: Array<{ blockKey: string; label: string; value: number | null }>

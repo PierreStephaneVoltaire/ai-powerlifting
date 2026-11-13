@@ -28,6 +28,7 @@ type Source interface {
 	Bundle(ctx context.Context, p Principal, blockKey string) (map[string]any, error)
 	Compare(ctx context.Context, p Principal, blockKeys []string) (map[string]any, error)
 	Lifetime(ctx context.Context, p Principal) (map[string]any, error)
+	SelectedLifetime(ctx context.Context, p Principal, blockKeys []string) (map[string]any, error)
 	Correlation(ctx context.Context, p Principal, blockKey string) (*analyticsv1.CorrelationInputsReply, error)
 	Snapshot(ctx context.Context, p Principal) (*analyticsv1.Snapshot, error)
 }
@@ -84,6 +85,14 @@ func (a Analytics) Compare(ctx context.Context, p Principal, blockKeys []string)
 
 func (a Analytics) Lifetime(ctx context.Context, p Principal) (map[string]any, error) {
 	reply, err := a.Client.Lifetime(p.Outgoing(ctx), &analyticsv1.AthleteRef{AthletePk: p.Athlete})
+	if err != nil {
+		return nil, err
+	}
+	return reply.GetBody().AsMap(), nil
+}
+
+func (a Analytics) SelectedLifetime(ctx context.Context, p Principal, blockKeys []string) (map[string]any, error) {
+	reply, err := a.Client.SelectedLifetime(p.Outgoing(ctx), &analyticsv1.LifetimeRef{AthletePk: p.Athlete, BlockKeys: blockKeys})
 	if err != nil {
 		return nil, err
 	}

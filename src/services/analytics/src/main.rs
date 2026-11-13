@@ -7,6 +7,7 @@ use pl_analytics::cache::Cache;
 use pl_analytics::config::{Config, SourceKind};
 use pl_analytics::engine::{Clock, Engine};
 use pl_analytics::operations::{Registry, Service};
+use pl_analytics::snapshots::S3Snapshots;
 use pl_analytics::source::Source;
 use pl_analytics::source::dynamo::DynamoSource;
 use pl_analytics::source::fixture::FixtureSource;
@@ -22,9 +23,9 @@ static GLOBAL: MiMalloc = MiMalloc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .json()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,aws_config=warn,aws_smithy_runtime=warn,aws_sdk_dynamodb=warn")),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            EnvFilter::new("info,aws_config=warn,aws_smithy_runtime=warn,aws_sdk_dynamodb=warn,aws_sdk_s3=warn")
+        }))
         .init();
     let config = Config::from_env();
     let source: Arc<dyn Source> = match config.source {
@@ -33,8 +34,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         SourceKind::Fixture => Arc::new(FixtureSource::new(config.fixture_dir.clone())),
     };
-    let engine = Engine::new(source, Cache::connect(&config.valkey_url), Clock::System)
+    let mut engine = Engine::new(source, Cache::connect(&config.valkey_url), Clock::System)
         .with_ai(Ai::connect_lazy(&config.ai_grpc_url));
+    if let Some(bucket) = config.snapshot_bucket.clone() {
+        engine = engine.with_snapshots(Arc::new(
+            S3Snapshots::connect(bucket, config.region.clone()).await,
+        ));
+    }
     let port = config.port;
     let grpc_address = SocketAddr::from(([0, 0, 0, 0], config.grpc_port));
     let allowed_callers = config.grpc_allowed_callers.clone();

@@ -9,7 +9,7 @@ use super::fatigue::{self, FatigueWindow};
 use super::weeks::{infer_program_start, week_start_for};
 use super::{Computed, Dims, Env, Sessions, e1rm};
 use crate::constants;
-use crate::model::{Competition, Lift, Maxes, ProgramData, Session};
+use crate::model::{Competition, Lift, Maxes, NARROW_TRANSFER, ProgramData, Session};
 use crate::util::{
     clamp, int_of, median, num, num_of, ols_slope, parse_date, present, round, truthy_of,
 };
@@ -126,7 +126,8 @@ pub struct Specificity {
     pub broad: f64,
     pub total_sets: i64,
     pub sbd_sets: i64,
-    pub secondary_sets: i64,
+    pub secondary_sets: f64,
+    pub weighted_sets: f64,
     pub expected_band: Option<ExpectedBand>,
     pub narrow_status: &'static str,
     pub broad_status: &'static str,
@@ -138,7 +139,7 @@ pub fn specificity_ratio(
     sessions: Sessions<'_>,
     weeks_to_comp: Option<f64>,
 ) -> Computed<Specificity> {
-    let (mut total, mut sbd, mut secondary) = (0i64, 0i64, 0i64);
+    let (mut total, mut narrow_sets, mut secondary) = (0i64, 0i64, 0.0_f64);
     for session in sessions.iter().filter(|session| session.completed) {
         for exercise in &session.exercises {
             let sets = exercise.sets_int();
@@ -146,26 +147,19 @@ pub fn specificity_ratio(
                 continue;
             }
             total += sets;
-            if matches!(
-                exercise.key.as_str(),
-                "squat" | "bench press" | "bench" | "deadlift"
-            ) {
-                sbd += sets;
-            } else if !env.glossary.is_empty()
-                && matches!(
-                    env.glossary.category(&exercise.key),
-                    "squat" | "bench" | "deadlift"
-                )
-            {
-                secondary += sets;
+            let transfer = env.glossary.transfer(&exercise.key).max();
+            if transfer >= NARROW_TRANSFER {
+                narrow_sets += sets;
+            } else {
+                secondary += sets as f64 * transfer;
             }
         }
     }
     if total == 0 {
         return Computed::insufficient("No working sets for specificity ratio");
     }
-    let narrow = round(sbd as f64 / total as f64, 3);
-    let broad = round((sbd + secondary) as f64 / total as f64, 3);
+    let narrow = round(narrow_sets as f64 / total as f64, 3);
+    let broad = round((narrow_sets as f64 + secondary) / total as f64, 3);
     let band = expected_band(weeks_to_comp);
     let mut flags = Vec::new();
     let (mut narrow_status, mut broad_status) = ("unknown", "unknown");
@@ -191,8 +185,9 @@ pub fn specificity_ratio(
         narrow,
         broad,
         total_sets: total,
-        sbd_sets: sbd,
-        secondary_sets: secondary,
+        sbd_sets: narrow_sets,
+        secondary_sets: round(secondary, 2),
+        weighted_sets: round(narrow_sets as f64 + secondary, 2),
         expected_band: band.zip(weeks_to_comp).map(|(band, weeks)| ExpectedBand {
             weeks_to_comp: round(weeks, 1),
             narrow: band.narrow,

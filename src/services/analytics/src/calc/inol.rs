@@ -3,13 +3,15 @@ use std::collections::BTreeMap;
 use chrono::NaiveDate;
 use serde::Serialize;
 
-use super::weeks::{find_phase, infer_program_start};
-use super::{ByLift, Computed, Sessions, deload, e1rm};
-use crate::model::{Lift, LiftProfile, Maxes, Phase};
+use super::weeks::{find_phase, infer_program_start, week_start_for};
+use super::{ByLift, Computed, Sessions, deload, e1rm, fatigue};
+use crate::model::{Glossary, Lift, LiftProfile, Maxes, Phase};
 use crate::util::{clamp, median, round};
 
 const EPSILON: f64 = 0.02;
 const INTENSITY_CEILING: f64 = 0.995;
+const COEFFICIENT_MIN: f64 = 0.5;
+const COEFFICIENT_MAX: f64 = 2.0;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Bounds {
@@ -34,26 +36,35 @@ fn default_bounds(lift: Lift) -> Bounds {
     }
 }
 
-fn profile_for(profiles: &[LiftProfile], lift: Lift) -> impl Iterator<Item = &LiftProfile> {
-    profiles
-        .iter()
-        .filter(move |profile| profile.lift == lift.key())
+fn profile_for(profiles: &[LiftProfile], lift: Lift) -> Option<&LiftProfile> {
+    profiles.iter().find(|profile| profile.lift == lift.key())
 }
 
-pub fn stimulus_coefficient(profiles: &[LiftProfile], lift: Lift) -> f64 {
-    let mut coefficient = 1.0;
-    for profile in profile_for(profiles, lift) {
-        coefficient = round(
-            clamp(profile.stimulus_coefficient.unwrap_or(1.0), 1.0, 2.0),
-            2,
-        );
-    }
-    coefficient
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Coefficient {
+    pub value: f64,
+    pub source: &'static str,
+}
+
+pub fn stimulus_coefficient(profiles: &[LiftProfile], lift: Lift) -> Coefficient {
+    profile_for(profiles, lift)
+        .and_then(|profile| profile.stimulus_coefficient)
+        .filter(|value| (COEFFICIENT_MIN..=COEFFICIENT_MAX).contains(value))
+        .map_or(
+            Coefficient {
+                value: 1.0,
+                source: "default",
+            },
+            |value| Coefficient {
+                value: round(value, 2),
+                source: "profile",
+            },
+        )
 }
 
 pub fn thresholds(profiles: &[LiftProfile], lift: Lift) -> Bounds {
     let mut bounds = default_bounds(lift);
-    for profile in profile_for(profiles, lift) {
+    if let Some(profile) = profile_for(profiles, lift) {
         if let Some(low) = profile.inol_low_threshold {
             bounds.low = round(low.max(0.0), 2);
         }
@@ -110,16 +121,18 @@ struct WeekRi {
 
 fn weekly_volume_ri(
     sessions: Sessions<'_>,
-    program_start: &str,
+    glossary: &Glossary,
+    anchor: NaiveDate,
     maxes: &Maxes,
-) -> ByLift<BTreeMap<i64, WeekRi>> {
-    let mut result: ByLift<BTreeMap<i64, WeekRi>> = ByLift::new();
+) -> ByLift<BTreeMap<NaiveDate, WeekRi>> {
+    let mut result: ByLift<BTreeMap<NaiveDate, WeekRi>> = ByLift::new();
     for session in sessions.iter().filter(|session| session.completed) {
-        let Some(week) = session.week(program_start) else {
+        let Some(date) = session.date else {
             continue;
         };
+        let week = week_start_for(date, anchor);
         for exercise in &session.exercises {
-            let Some(lift) = Lift::from_name(&exercise.key) else {
+            let Some(lift) = glossary.narrow_lift(&exercise.key) else {
                 continue;
             };
             let max = maxes.get(lift).unwrap_or(0.0);
@@ -162,12 +175,22 @@ pub struct TrendPressure {
 }
 
 #[derive(Debug, Serialize)]
+pub struct LiftInol {
+    pub raw: f64,
+    pub adjusted: f64,
+    pub coefficient: f64,
+    pub coefficient_source: &'static str,
+}
+
+#[derive(Debug, Serialize)]
 pub struct Inol {
+    pub lifts: ByLift<LiftInol>,
     pub per_lift_per_week: ByLift<BTreeMap<i64, f64>>,
     pub avg_inol: ByLift<f64>,
     pub raw_per_lift_per_week: ByLift<BTreeMap<i64, f64>>,
     pub raw_avg_inol: ByLift<f64>,
     pub stimulus_coefficients: ByLift<f64>,
+    pub coefficient_sources: ByLift<&'static str>,
     pub thresholds: ByLift<Bounds>,
     pub phase_adjusted_thresholds: ByLift<AdjustedBounds>,
     pub trend_pressure: ByLift<TrendPressure>,
@@ -187,8 +210,10 @@ fn average(weeks: &BTreeMap<i64, f64>) -> f64 {
 }
 
 pub struct InolInput<'a> {
+    pub glossary: &'a Glossary,
     pub sessions: Sessions<'a>,
     pub history: Sessions<'a>,
+    pub seed: Sessions<'a>,
     pub program_start: &'a str,
     pub maxes: &'a Maxes,
     pub profiles: &'a [LiftProfile],
@@ -204,9 +229,14 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
     } else {
         input.history
     };
+    let seed: Sessions<'_> = if input.seed.is_empty() {
+        basis
+    } else {
+        input.seed
+    };
     let estimated;
     let maxes = if input.maxes.is_empty() {
-        estimated = e1rm::from_sessions_default(basis, input.reference.unwrap_or(input.today));
+        estimated = e1rm::from_sessions_default(seed, input.reference.unwrap_or(input.today));
         &estimated
     } else {
         input.maxes
@@ -221,14 +251,19 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
     } else {
         input.program_start
     };
+    let mut latest_dates: BTreeMap<i64, NaiveDate> = BTreeMap::new();
     let mut raw: ByLift<BTreeMap<i64, f64>> = ByLift::new();
     let mut adjusted: ByLift<BTreeMap<i64, f64>> = ByLift::new();
     for session in input.sessions.iter().filter(|session| session.completed) {
         let Some(week) = session.week(program_start) else {
             continue;
         };
+        if let Some(date) = session.date {
+            let slot = latest_dates.entry(week).or_insert(date);
+            *slot = (*slot).max(date);
+        }
         for exercise in &session.exercises {
-            let Some(lift) = Lift::from_name(&exercise.key) else {
+            let Some(lift) = input.glossary.narrow_lift(&exercise.key) else {
                 continue;
             };
             let max = maxes.get(lift).unwrap_or(0.0);
@@ -240,7 +275,7 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
             let denominator =
                 ((1.0 - intensity.min(INTENSITY_CEILING)).powi(2) + EPSILON.powi(2)).sqrt();
             let contribution = (reps as f64 / (100.0 * denominator)) * sets as f64;
-            let coefficient = stimulus_coefficient(input.profiles, lift);
+            let coefficient = stimulus_coefficient(input.profiles, lift).value;
             *raw.entry(lift, BTreeMap::new).entry(week).or_insert(0.0) += contribution;
             *adjusted
                 .entry(lift, BTreeMap::new)
@@ -251,7 +286,7 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
     if adjusted.is_empty() {
         return Computed::insufficient("No qualifying sets for INOL");
     }
-    let raw_avg = ByLift(
+    let raw_avg: ByLift<f64> = ByLift(
         raw.0
             .iter()
             .map(|(lift, weeks)| (*lift, average(weeks)))
@@ -269,9 +304,11 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
         .filter_map(|load| Some((load.week, load.effective_index?)))
         .collect();
     let (low_factor, high_factor) = uncertainty(input.selected_weeks);
-    let volume_ri = weekly_volume_ri(basis, program_start, maxes);
+    let anchor = fatigue::week_anchor(program_start, seed);
+    let volume_ri = anchor.map(|anchor| weekly_volume_ri(seed, input.glossary, anchor, maxes));
 
     let mut result = Inol {
+        lifts: ByLift::new(),
         per_lift_per_week: ByLift(
             adjusted
                 .0
@@ -286,8 +323,9 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
                 .map(|(lift, weeks)| (*lift, round_weeks(weeks)))
                 .collect(),
         ),
-        raw_avg_inol: raw_avg,
+        raw_avg_inol: raw_avg.clone(),
         stimulus_coefficients: ByLift::new(),
+        coefficient_sources: ByLift::new(),
         thresholds: ByLift::new(),
         phase_adjusted_thresholds: ByLift::new(),
         trend_pressure: ByLift::new(),
@@ -304,7 +342,9 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
         let effective_week = latest.and_then(|week| effective.get(&week).copied());
         let multiplier = phase_multiplier(phase, effective_week);
         let bounds = thresholds(input.profiles, lift);
-        let (adjusted_low, adjusted_high) = (bounds.low * multiplier, bounds.high * multiplier);
+        let coefficient = stimulus_coefficient(input.profiles, lift);
+        let scale = coefficient.value * multiplier;
+        let (adjusted_low, adjusted_high) = (bounds.low * scale, bounds.high * scale);
         let (display_low, display_high) = (adjusted_low * low_factor, adjusted_high * high_factor);
         let mut grace = effective_week.is_some_and(|week| week <= 2);
         if grace && let Some(phase) = phase {
@@ -314,14 +354,18 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
                 && phase.target_rpe_max.unwrap_or(0.0) < 9.0;
         }
         let (mut pressure, mut volume_ratio, mut ri_ratio) = (0.0, 1.0, 1.0);
-        if let Some(latest) = latest {
+        let latest_start = latest
+            .and_then(|week| latest_dates.get(&week))
+            .zip(anchor)
+            .map(|(date, anchor)| week_start_for(*date, anchor));
+        if let (Some(latest_start), Some(volume_ri)) = (latest_start, volume_ri.as_ref()) {
             let history_weeks = volume_ri.get(lift);
-            let current = history_weeks.and_then(|weeks| weeks.get(&latest));
+            let current = history_weeks.and_then(|weeks| weeks.get(&latest_start));
             let previous: Vec<&WeekRi> = history_weeks
                 .map(|weeks| {
                     weeks
                         .iter()
-                        .filter(|(week, row)| **week < latest && row.volume > 0.0)
+                        .filter(|(week, row)| **week < latest_start && row.volume > 0.0)
                         .map(|(_, row)| row)
                         .collect::<Vec<_>>()
                 })
@@ -387,10 +431,23 @@ pub fn compute(input: InolInput<'_>) -> Computed<Inol> {
                 ri_ratio: round(ri_ratio, 3),
             },
         ));
+        result.lifts.0.push((
+            lift,
+            LiftInol {
+                raw: raw_avg.get(lift).copied().unwrap_or(0.0),
+                adjusted: *average_value,
+                coefficient: coefficient.value,
+                coefficient_source: coefficient.source,
+            },
+        ));
         result
             .stimulus_coefficients
             .0
-            .push((lift, stimulus_coefficient(input.profiles, lift)));
+            .push((lift, coefficient.value));
+        result
+            .coefficient_sources
+            .0
+            .push((lift, coefficient.source));
         result.thresholds.0.push((lift, bounds));
     }
     result.avg_inol = avg;

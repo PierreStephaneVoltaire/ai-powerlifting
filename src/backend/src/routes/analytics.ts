@@ -113,6 +113,16 @@ analyticsRouter.post('/fatigue-profile/estimate', async (req, res) => {
   }
 })
 
+analyticsRouter.post('/lift-transfer/estimate', async (req, res) => {
+  try {
+    const exercise = req.body?.exercise ?? req.body
+    const data = await invokeToolDirect('glossary_estimate_lift_transfer', { exercise, pk: req.mapped_pk })
+    res.json({ data, error: null })
+  } catch (err) {
+    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
+  }
+})
+
 analyticsRouter.post('/muscle-groups/estimate', async (req, res) => {
   try {
     const body = req.body ?? {}

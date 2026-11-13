@@ -20,6 +20,9 @@ service AnalyticsData {
   rpc Compare(BlockKeys) returns (Report);
   // Lifetime returns the holistic all-blocks report (analytics.lifetime).
   rpc Lifetime(AthleteRef) returns (Report);
+  // SelectedLifetime returns the lifetime report over the selected past blocks (analytics.lifetime with blockKeys).
+  // The body also carries current_vs_history: the current block placed against the selected blocks' ranges.
+  rpc SelectedLifetime(LifetimeRef) returns (Report);
   // CorrelationInputs returns the weekly e1RM and accessory volume series consumed by the AI correlation prompts.
   rpc CorrelationInputs(BlockRef) returns (CorrelationInputsReply);
 }
@@ -30,6 +33,16 @@ message AthleteRef {
   string athlete_pk = 1;
   // When true, cached records are ignored and recomputed.
   bool refresh = 2;
+}
+
+// LifetimeRef selects the blocks a lifetime report is computed over.
+message LifetimeRef {
+  // Athlete partition key.
+  string athlete_pk = 1;
+  // When true, cached records are ignored and recomputed.
+  bool refresh = 2;
+  // Past block keys to include. Empty behaves like Lifetime.
+  repeated string block_keys = 3;
 }
 
 // BlockRef selects one training block of one athlete.

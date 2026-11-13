@@ -4,7 +4,7 @@ use chrono::{Duration, NaiveDate};
 use serde::Serialize;
 
 use super::weeks::week_start_for;
-use super::{Computed, Dims, Env, Sessions, deload, e1rm, fatigue};
+use super::{Computed, Dims, Env, Sessions, e1rm, fatigue};
 use crate::model::{Lift, Maxes, Session};
 use crate::util::{median, ols_slope, parse_date, population_sd, round};
 
@@ -30,45 +30,8 @@ fn resolved_maxes<'a>(
     }
 }
 
-pub fn dimension_baselines(
-    env: Env<'_>,
-    sessions: Sessions<'_>,
-    program_start: &str,
-    maxes: &Maxes,
-) -> Dims {
-    let weekly = fatigue::weekly_by_dimension(env, sessions, program_start, maxes);
-    let excluded: Vec<i64> = deload::detect(sessions, program_start)
-        .iter()
-        .filter(|load| load.excluded())
-        .map(|load| load.week)
-        .collect();
-    let valid: Vec<&Dims> = weekly
-        .iter()
-        .filter(|(week, _)| !excluded.contains(week))
-        .map(|(_, dims)| dims)
-        .collect();
-    let mut baselines = Dims {
-        axial: 1.0,
-        neural: 1.0,
-        peripheral: 1.0,
-        systemic: 1.0,
-    };
-    if valid.len() >= 3 {
-        let baseline = |pick: fn(&Dims) -> f64| {
-            let mut values: Vec<f64> = valid
-                .iter()
-                .map(|dims| pick(dims))
-                .filter(|value| *value > 0.0)
-                .collect();
-            values.sort_by(f64::total_cmp);
-            (!values.is_empty()).then(|| (median(&values) / 7.0).max(1.0))
-        };
-        baselines.axial = baseline(|dims| dims.axial).unwrap_or(1.0);
-        baselines.neural = baseline(|dims| dims.neural).unwrap_or(1.0);
-        baselines.peripheral = baseline(|dims| dims.peripheral).unwrap_or(1.0);
-        baselines.systemic = baseline(|dims| dims.systemic).unwrap_or(1.0);
-    }
-    baselines
+pub fn daily_baselines(baseline: &fatigue::ChronicBaseline) -> Dims {
+    baseline.weekly.map(|weekly| (weekly / 7.0).max(1.0))
 }
 
 pub fn normalized_load(dims: Dims, baselines: Dims) -> f64 {
@@ -79,11 +42,15 @@ pub fn normalized_load(dims: Dims, baselines: Dims) -> f64 {
             + 0.15 * dims.systemic / baselines.systemic.max(1.0))
 }
 
-pub fn tsb_label(tsb: f64) -> &'static str {
+pub fn tsb_label(tsb: f64, planned_overreach: bool) -> &'static str {
     if tsb < -30.0 {
         "Deep overload"
     } else if tsb < -10.0 {
-        "Productive overreach"
+        if planned_overreach {
+            "Planned overreach"
+        } else {
+            "Productive fatigue"
+        }
     } else if tsb <= 5.0 {
         "Building"
     } else if tsb <= 15.0 {
@@ -109,6 +76,7 @@ pub struct Banister {
     pub tsb_label: &'static str,
     pub series: Vec<BanisterPoint>,
     pub load_baselines: Dims,
+    pub baseline_weeks_used: usize,
     pub model: &'static str,
 }
 
@@ -126,8 +94,9 @@ pub fn banister_ffm(
     let Some(first) = daily.keys().next().copied() else {
         return none();
     };
-    let baselines = dimension_baselines(env, sessions, program_start, maxes);
     let last = reference.unwrap_or(env.today);
+    let chronic = fatigue::chronic_baseline(env, sessions, maxes, last, program_start);
+    let baselines = daily_baselines(&chronic);
     let mut loads: Vec<(NaiveDate, f64)> = Vec::new();
     let mut day = first;
     while day <= last {
@@ -162,10 +131,11 @@ pub fn banister_ffm(
         ctl_today: current.ctl,
         atl_today: current.atl,
         tsb_today: current.tsb,
-        tsb_label: tsb_label(current.tsb),
+        tsb_label: tsb_label(current.tsb, false),
         series,
         load_baselines: baselines.map(|value| round(value, 3)),
-        model: "normalized_dimension_banister_v2",
+        baseline_weeks_used: chronic.weeks_used,
+        model: "normalized_dimension_banister_v3",
     })
 }
 
@@ -211,6 +181,8 @@ pub struct MonotonyWeek {
     pub monotony_raw: f64,
     pub strain: f64,
     pub nonzero_training_days: usize,
+    pub days_observed: usize,
+    pub partial: bool,
     pub strain_index: Option<f64>,
     pub flags: Vec<&'static str>,
 }
@@ -222,6 +194,7 @@ pub struct Latest {
     pub strain: f64,
     pub strain_index: Option<f64>,
     pub nonzero_training_days: usize,
+    pub partial: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -231,40 +204,49 @@ pub struct MonotonyStrain {
     pub latest: Option<Latest>,
 }
 
-impl MonotonyStrain {
-    pub fn monotony(&self) -> Option<f64> {
-        self.latest.as_ref().map(|latest| latest.monotony)
-    }
-
-    pub fn strain(&self) -> Option<f64> {
-        self.latest.as_ref().map(|latest| latest.strain)
-    }
-}
-
 pub fn monotony_strain(
     env: Env<'_>,
     sessions: Sessions<'_>,
     program_start: &str,
     maxes: &Maxes,
     reference: Option<NaiveDate>,
+    window_start: Option<NaiveDate>,
 ) -> MonotonyStrain {
+    let empty = || MonotonyStrain {
+        weekly: Vec::new(),
+        latest: None,
+    };
     let mut storage = Maxes::default();
     let maxes = resolved_maxes(env, sessions, maxes, &mut storage);
-    let (series, start) = composite_daily_loads(env, sessions, program_start, maxes, reference);
-    let Some(start) = start.filter(|_| !series.is_empty()) else {
-        return MonotonyStrain {
-            weekly: Vec::new(),
-            latest: None,
-        };
+    let daily = fatigue::daily_by_dimension(env, sessions, maxes);
+    let Some(first) = daily.keys().next().copied() else {
+        return empty();
     };
-    let mut by_week: BTreeMap<NaiveDate, Vec<f64>> = BTreeMap::new();
-    for row in &series {
-        by_week
-            .entry(week_start_for(row.date, start))
-            .or_default()
-            .push(row.load);
+    let last = reference.unwrap_or(env.today);
+    let Some(anchor) = fatigue::week_anchor(program_start, sessions) else {
+        return empty();
+    };
+    if last < first {
+        return empty();
     }
-    let mut weekly: Vec<MonotonyWeek> = by_week
+    let baselines = daily_baselines(&fatigue::chronic_baseline(
+        env,
+        sessions,
+        maxes,
+        last,
+        program_start,
+    ));
+    let mut by_week: BTreeMap<NaiveDate, Vec<f64>> = BTreeMap::new();
+    let mut day = first;
+    while day <= last {
+        let dims = daily.get(&day).copied().unwrap_or_default();
+        by_week
+            .entry(week_start_for(day, anchor))
+            .or_default()
+            .push(normalized_load(dims, baselines).max(0.0));
+        day += Duration::days(1);
+    }
+    let mut weekly: Vec<(NaiveDate, MonotonyWeek)> = by_week
         .iter()
         .map(|(week_start, loads)| {
             let total: f64 = loads.iter().sum();
@@ -275,23 +257,28 @@ pub fn monotony_strain(
                 .max(MONOTONY_ABSOLUTE_SD_FLOOR);
             let raw = if mean > 0.0 { mean / denominator } else { 0.0 };
             let monotony = raw.min(MONOTONY_DISPLAY_CAP);
-            MonotonyWeek {
-                week_start: week_start.to_string(),
-                monotony: round(monotony, 3),
-                monotony_raw: round(raw, 3),
-                strain: round(total * monotony, 3),
-                nonzero_training_days: loads.iter().filter(|load| **load > 0.0).count(),
-                strain_index: None,
-                flags: Vec::new(),
-            }
+            (
+                *week_start,
+                MonotonyWeek {
+                    week_start: week_start.to_string(),
+                    monotony: round(monotony, 3),
+                    monotony_raw: round(raw, 3),
+                    strain: round(total * monotony, 3),
+                    nonzero_training_days: loads.iter().filter(|load| **load > 0.0).count(),
+                    days_observed: loads.len(),
+                    partial: loads.len() < 7,
+                    strain_index: None,
+                    flags: Vec::new(),
+                },
+            )
         })
         .collect();
     for index in 0..weekly.len() {
         let previous: Vec<f64> = weekly[index.saturating_sub(4)..index]
             .iter()
-            .map(|row| row.strain)
+            .map(|(_, row)| row.strain)
             .collect();
-        let row = &mut weekly[index];
+        let row = &mut weekly[index].1;
         if row.nonzero_training_days >= 3 && row.monotony > 2.0 {
             row.flags.push("high_monotony");
         }
@@ -304,12 +291,20 @@ pub fn monotony_strain(
             }
         }
     }
+    let weekly: Vec<MonotonyWeek> = weekly
+        .into_iter()
+        .filter(|(week_start, _)| {
+            window_start.is_none_or(|start| *week_start + Duration::days(6) >= start)
+        })
+        .map(|(_, row)| row)
+        .collect();
     let latest = weekly.last().map(|row| Latest {
         monotony: row.monotony,
         monotony_raw: row.monotony_raw,
         strain: row.strain,
         strain_index: row.strain_index,
         nonzero_training_days: row.nonzero_training_days,
+        partial: row.partial,
     });
     MonotonyStrain { weekly, latest }
 }

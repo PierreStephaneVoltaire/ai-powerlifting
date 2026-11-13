@@ -121,4 +121,6 @@ pub struct LifetimeArgs {
     pub pk: String,
     pub refresh: Option<bool>,
     pub cache_only: Option<bool>,
+    #[serde(rename = "blockKeys")]
+    pub block_keys: Option<Vec<String>>,
 }

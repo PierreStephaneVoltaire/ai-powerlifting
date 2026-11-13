@@ -30,6 +30,7 @@ pub mod records;
 pub mod routes;
 pub mod scope;
 pub mod sections;
+pub mod snapshots;
 pub mod source;
 pub mod structs;
 #[cfg(test)]

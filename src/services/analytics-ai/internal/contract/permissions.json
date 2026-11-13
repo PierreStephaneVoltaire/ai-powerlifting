@@ -200,6 +200,12 @@
   "glossary_estimate_fatigue": {
     "permission": "glossary:write"
   },
+  "glossary_estimate_lift_transfer": {
+    "permission": "glossary:write"
+  },
+  "glossary_backfill_lift_transfer": {
+    "permission": "glossary:write"
+  },
   "glossary_estimate_muscles": {
     "permission": "glossary:write"
   },

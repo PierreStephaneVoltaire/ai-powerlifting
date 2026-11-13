@@ -264,6 +264,11 @@ pub fn build(raw: RawData, mode: Scope<'_>) -> Result<Loaded, Error> {
         .into_iter()
         .map(|item| public_session(item, &phases))
         .collect();
+    let history: Vec<Session> = if target.is_some() {
+        public.iter().cloned().map(Session::from_value).collect()
+    } else {
+        Vec::new()
+    };
     if let Some((block, target)) = &target {
         public.retain(|session| {
             session.as_object().is_some_and(|map| {
@@ -276,7 +281,7 @@ pub fn build(raw: RawData, mode: Scope<'_>) -> Result<Loaded, Error> {
     root.insert("competitions".to_owned(), Value::Array(competitions));
     let sessions = public.into_iter().map(Session::from_value).collect();
     Ok(Loaded {
-        program: ProgramData::from_value(&program, sessions),
+        program: ProgramData::from_value(&program, sessions).with_history(history),
         glossary: Glossary::from_values(&take_list(glossary, "exercises")),
         weight_log: scoped_weight_log(
             take_list(weight_log, "entries"),

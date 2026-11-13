@@ -3,6 +3,7 @@ package reports
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"powerlifting/analytics-ai/internal/prompts"
 )
@@ -46,13 +47,76 @@ func insufficientComparison(reason string) map[string]any {
 	return report
 }
 
-func MultiBlock(ctx context.Context, env Env) (map[string]any, []string, error) {
-	var keys []string
-	for _, key := range asList(env.Args["block_keys"]) {
-		if text, ok := key.(string); ok {
-			keys = append(keys, text)
+func ResolveKeys(blocks []map[string]any, requested []string) []string {
+	past := map[string]bool{}
+	var order []string
+	tracked := false
+	for _, block := range blocks {
+		if current, _ := block["isCurrent"].(bool); current {
+			continue
+		}
+		key := asString(block["blockKey"])
+		past[key] = true
+		order = append(order, key)
+		if _, present := block["stored"]; present {
+			tracked = true
 		}
 	}
+	var keys []string
+	if len(requested) > 0 {
+		for _, key := range requested {
+			if past[key] && !slices.Contains(keys, key) {
+				keys = append(keys, key)
+			}
+		}
+		return keys
+	}
+	for _, block := range blocks {
+		key := asString(block["blockKey"])
+		if !past[key] || (tracked && block["stored"] != true) {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func historicalReference(lifetime map[string]any) any {
+	if lifetime == nil {
+		return nil
+	}
+	reference := map[string]any{}
+	for key, value := range lifetime {
+		if key != "blocks" {
+			reference[key] = value
+		}
+	}
+	return reference
+}
+
+func currentBlockPayload(ctx context.Context, env Env, blocks []map[string]any, key string, bundle map[string]any, comparison map[string]any, correlation, evaluation any) (any, error) {
+	entry, found := FindBlock(blocks, key)
+	if !found {
+		return nil, nil
+	}
+	snapshot, err := env.Source.Snapshot(ctx, env.Principal)
+	if err != nil {
+		return nil, err
+	}
+	sessions := blockSessions(snapshot.Sessions, entry)
+	weeks := completedWeeks(sessions)
+	return map[string]any{
+		"block_key": key, "block_analysis": bundle, "correlation_report": correlation, "program_evaluation_report": evaluation,
+		"evaluation_context": evaluationPayload(entry, weeks, sessions, snapshot.Program.AsMap(), bundle, comparison),
+	}, nil
+}
+
+func MultiBlock(ctx context.Context, env Env) (map[string]any, []string, error) {
+	blocks, err := env.Source.Blocks(ctx, env.Principal)
+	if err != nil {
+		return nil, nil, err
+	}
+	keys := ResolveKeys(blocks, stringList(env.Args["block_keys"]))
 	comparison, err := env.Source.Compare(ctx, env.Principal, keys)
 	if err != nil {
 		return nil, nil, err
@@ -65,7 +129,9 @@ func MultiBlock(ctx context.Context, env Env) (map[string]any, []string, error) 
 	for _, row := range asList(comparison["rows"]) {
 		rows[asString(asMap(row)["blockKey"])] = asMap(row)
 	}
-	correlations, evaluations, blocks := map[string]any{}, map[string]any{}, []any{}
+	var current any
+	var historical []any
+	var past []string
 	for _, key := range selected {
 		bundle, err := env.Source.Bundle(ctx, env.Principal, key)
 		if err != nil {
@@ -73,15 +139,28 @@ func MultiBlock(ctx context.Context, env Env) (map[string]any, []string, error) 
 		}
 		correlation := savedOrNil(env.Saved(ctx, "block_correlation_analysis", key))
 		evaluation := savedOrNil(env.Saved(ctx, "block_program_evaluation", key))
-		correlations[key], evaluations[key] = correlation, evaluation
-		blocks = append(blocks, map[string]any{
-			"block_analysis": bundle, "competitions": rows[key]["competitions"], "goals": rows[key]["goals"],
+		if entry, found := FindBlock(blocks, key); found && entry.Current {
+			if current, err = currentBlockPayload(ctx, env, blocks, key, bundle, comparison, correlation, evaluation); err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
+		past = append(past, key)
+		historical = append(historical, map[string]any{
+			"block_key": key, "block_analysis": bundle, "competitions": rows[key]["competitions"], "goals": rows[key]["goals"],
 			"correlation_report": correlation, "program_evaluation_report": evaluation,
 		})
 	}
+	var lifetime map[string]any
+	if len(past) > 0 {
+		if lifetime, err = env.Source.SelectedLifetime(ctx, env.Principal, past); err != nil {
+			lifetime = nil
+		}
+	}
 	payload := StripMarkers(map[string]any{
-		"schema_version": 6, "selected_block_keys": selected, "deterministic": comparison,
-		"correlation_reports": correlations, "program_evaluation_reports": evaluations, "blocks": blocks,
+		"schema_version": 7, "task": "Evaluate the current block with the selected past blocks as historical context.",
+		"selected_block_keys": selected, "historical_block_keys": past, "current_block": current, "historical_blocks": historical,
+		"deterministic": comparison, "lifetime_reference": historicalReference(lifetime),
 	})
 	user, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {

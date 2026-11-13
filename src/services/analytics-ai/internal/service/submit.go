@@ -251,7 +251,7 @@ func (s *Service) runner(call request, generationID string, attempt int) (execut
 			_ = store.Update(ctx, generationID, attempt, generation.Item{"status": "failed", "error": err.Error()})
 			return
 		}
-		if name == "multi_block_comparison_analysis" && !truthy(call.arguments["block_keys"]) {
+		if name == "multi_block_comparison_analysis" {
 			s.saveLifetime(ctx, call, result, selected)
 		}
 	}

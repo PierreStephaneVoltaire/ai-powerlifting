@@ -110,20 +110,8 @@ pub fn date_bounds(sessions: &[&crate::model::Session]) -> Option<(NaiveDate, Na
     Some((*dates.first()?, *dates.last()?))
 }
 
-pub fn planned_overreach(
-    phases: &[Phase],
-    week: Option<i64>,
-    program_start: &str,
-    today: NaiveDate,
-) -> bool {
-    if phases.is_empty() {
-        return false;
-    }
-    let week = week.unwrap_or_else(|| current_week(program_start, &[], today));
-    find_phase(phases, week).is_some_and(|phase| {
-        phase.intent.to_lowercase().contains("overreach")
-            || phase.target_rpe_max.unwrap_or(0.0) >= 9.0
-    })
+pub fn planned_overreach(phase: Option<&Phase>) -> bool {
+    phase.is_some_and(|phase| phase.text().contains("overreach"))
 }
 
 pub fn phase_label(phase: Option<&Phase>) -> String {

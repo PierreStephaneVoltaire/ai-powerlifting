@@ -266,6 +266,28 @@ pub struct Signal {
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct Reference {
+    pub metric: String,
+    pub kind: String,
+    pub lift: Option<String>,
+    pub current: f64,
+    pub n: i64,
+    pub min: f64,
+    pub median: f64,
+    pub max: f64,
+    pub position: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct CurrentVsHistory {
+    pub block_key: String,
+    pub label: String,
+    pub reference_block_keys: Vec<String>,
+    pub current: BlockRecord,
+    pub metrics: Vec<Reference>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Lifetime {
     pub schema_version: i64,
     pub generated_at: String,
@@ -283,4 +305,6 @@ pub struct Lifetime {
     #[serde(rename = "did_not_work")]
     pub did_not_work: Vec<Signal>,
     pub data_limits: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_vs_history: Option<CurrentVsHistory>,
 }

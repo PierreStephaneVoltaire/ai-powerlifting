@@ -56,6 +56,11 @@ resource "kubernetes_deployment_v1" "analytics" {
           }
 
           env {
+            name  = "POWERLIFTING_S3_BUCKET"
+            value = var.dataset_bucket
+          }
+
+          env {
             name  = "AWS_SHARED_CREDENTIALS_FILE"
             value = "/secrets/aws/credentials"
           }

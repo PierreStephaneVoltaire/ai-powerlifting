@@ -18,7 +18,7 @@ use crate::error::Error;
 use crate::proto::analytics::analytics_data_server::{AnalyticsData, AnalyticsDataServer};
 use crate::proto::analytics::{
     AthleteRef, BlockKeys, BlockList, BlockRef, CorrelationInputsReply, DESCRIPTOR, ExerciseVolume,
-    Report, Snapshot, WeeklyAccessoryVolume, WeeklyE1rm,
+    LifetimeRef, Report, Snapshot, WeeklyAccessoryVolume, WeeklyE1rm,
 };
 use crate::source::Window;
 use crate::structs::{to_struct, to_structs};
@@ -213,6 +213,23 @@ impl AnalyticsData for Service {
         let Value::Object(arguments) = serde_json::json!({
             "pk": reference.athlete_pk,
             "refresh": reference.refresh,
+        }) else {
+            return Err(Status::internal("invalid arguments"));
+        };
+        self.report(self.engine.lifetime_report(arguments).await)
+            .await
+    }
+
+    async fn selected_lifetime(
+        &self,
+        request: Request<LifetimeRef>,
+    ) -> Result<Response<Report>, Status> {
+        let reference = request.get_ref().clone();
+        authorize(&request, &reference.athlete_pk)?;
+        let Value::Object(arguments) = serde_json::json!({
+            "pk": reference.athlete_pk,
+            "refresh": reference.refresh,
+            "blockKeys": reference.block_keys,
         }) else {
             return Err(Status::internal("invalid arguments"));
         };

@@ -13,6 +13,8 @@ pub mod fatigue;
 pub mod inol;
 pub mod intensity;
 pub mod landmarks;
+pub mod lift_breakdown;
+pub mod muscle_volume;
 pub mod peaking;
 pub mod progression;
 pub mod projection;

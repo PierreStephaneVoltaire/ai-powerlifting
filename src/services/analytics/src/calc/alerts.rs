@@ -8,7 +8,6 @@ use super::banister::{Banister, Decoupling, MonotonyStrain};
 use super::peaking::Specificity;
 use super::projection::Projection;
 use super::readiness::Readiness;
-use super::weeks::planned_overreach;
 use super::{Computed, Env, Sessions, fatigue, readiness};
 use crate::model::{Maxes, ProgramData, Session};
 use crate::util::round;
@@ -39,6 +38,8 @@ pub struct AlertInput<'a> {
     pub specificity: Option<&'a Specificity>,
     pub monotony: &'a Option<MonotonyStrain>,
     pub readiness: &'a Readiness,
+    pub planned_overreach: bool,
+    pub target_rpe: Option<f64>,
 }
 
 fn alert(
@@ -68,12 +69,7 @@ pub fn generate(
     window_weeks: i64,
 ) -> Vec<Alert> {
     let program_start = program.meta.program_start();
-    let overreach = planned_overreach(
-        &program.phases,
-        Some(input.week).filter(|week| *week != 0),
-        &program_start,
-        env.today,
-    );
+    let overreach = input.planned_overreach;
     let lookback_weeks = window_weeks.max(1);
     let past: Vec<&Session> = sessions
         .iter()
@@ -190,6 +186,7 @@ pub fn generate(
             program,
             &program_start,
             Some(reference - Duration::days(7)),
+            input.target_rpe,
         );
         if previous.score < 50.0 {
             alerts.push(alert(

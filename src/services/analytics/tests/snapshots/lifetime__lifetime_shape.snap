@@ -526,7 +526,6 @@ expression: shape(&report)
   ],
   "worked": [
     {
-      "statement": "string",
       "strength": "string",
       "n": "number",
       "low_n": "bool",
@@ -535,12 +534,13 @@ expression: shape(&report)
       "variable": "string",
       "outcome": "string",
       "lift": "string",
+      "statement": "string",
       "evidence": [
         {
-          "outcome": "number",
           "block_key": "string",
           "label": "string",
           "exposure": "number",
+          "outcome": "number",
           "classification": "string"
         }
       ]

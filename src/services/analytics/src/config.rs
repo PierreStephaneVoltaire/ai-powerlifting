@@ -21,6 +21,7 @@ pub struct Config {
     pub profile_url: String,
     pub valkey_url: String,
     pub region: String,
+    pub snapshot_bucket: Option<String>,
     pub port: u16,
     pub grpc_port: u16,
     pub ai_grpc_url: String,
@@ -48,6 +49,8 @@ impl Config {
             profile_url: var("PL_PROFILE_URL", "http://pl-profile:8000"),
             valkey_url: var("VALKEY_URL", "redis://pl-valkey:6379"),
             region: var("AWS_REGION", "ca-central-1"),
+            snapshot_bucket: Some(var("POWERLIFTING_S3_BUCKET", ""))
+                .filter(|name| !name.is_empty()),
             port: var("PORT", "8000").parse().unwrap_or(8000),
             grpc_port: var("GRPC_PORT", "50051").parse().unwrap_or(50051),
             ai_grpc_url: var("ANALYTICS_AI_GRPC_URL", "http://pl-analytics-ai:50051"),

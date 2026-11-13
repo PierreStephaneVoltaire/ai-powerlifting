@@ -9,6 +9,7 @@ use crate::assemble::{self, Loaded, Scope};
 use crate::cache::Cache;
 use crate::calc::Env;
 use crate::error::Error;
+use crate::snapshots::Snapshots;
 use crate::source::{Source, Window};
 
 #[derive(Clone, Copy, Debug)]
@@ -32,6 +33,7 @@ pub struct Engine {
     pub cache: Cache,
     pub clock: Clock,
     pub ai: Ai,
+    pub snapshots: Option<Arc<dyn Snapshots>>,
 }
 
 pub fn to_value<T: Serialize>(value: &T) -> Result<Value, Error> {
@@ -45,11 +47,17 @@ impl Engine {
             cache,
             clock,
             ai: Ai::disabled(),
+            snapshots: None,
         }
     }
 
     pub fn with_ai(mut self, ai: Ai) -> Self {
         self.ai = ai;
+        self
+    }
+
+    pub fn with_snapshots(mut self, snapshots: Arc<dyn Snapshots>) -> Self {
+        self.snapshots = Some(snapshots);
         self
     }
 

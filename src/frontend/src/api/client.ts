@@ -28,6 +28,7 @@ import type {
   VideoLibraryItem,
   VideoSort,
   FatigueProfile,
+  LiftTransfer,
   LiftProfile,
   SessionWellness,
   ImportPending,
@@ -607,6 +608,23 @@ export async function estimateFatigueProfile(exercise: {
 }): Promise<FatigueProfile & { reasoning: string }> {
   const res = await api.post<ApiResponse<FatigueProfile & { reasoning: string }>>(
     '/analytics/fatigue-profile/estimate',
+    exercise
+  )
+  return res.data.data
+}
+
+export async function estimateLiftTransfer(exercise: {
+  name: string
+  category?: string
+  equipment?: string
+  primary_muscles?: string[]
+  secondary_muscles?: string[]
+  tertiary_muscles?: string[]
+  description?: string
+  how_to_perform?: string
+}): Promise<{ lift_transfer: LiftTransfer }> {
+  const res = await api.post<ApiResponse<{ lift_transfer: LiftTransfer }>>(
+    '/analytics/lift-transfer/estimate',
     exercise
   )
   return res.data.data

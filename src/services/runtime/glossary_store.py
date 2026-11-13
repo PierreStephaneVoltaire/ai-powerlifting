@@ -139,6 +139,28 @@ class GlossaryStore:
             None, lambda: self.update_exercise_sync(exercise_id, fields)
         )
 
+    def update_exercises_sync(self, updates: dict[str, dict]) -> int:
+        exercises = self.get_glossary_sync()
+        applied = 0
+        for i, ex in enumerate(exercises):
+            fields = updates.get(ex.get("id"))
+            if fields:
+                exercises[i] = self._normalize_exercise({**ex, **fields})
+                applied += 1
+        if applied:
+            self.table.put_item(Item=self._floats_to_decimals({
+                "pk": self._pk,
+                "sk": self.GLOSSARY_SK,
+                "exercises": exercises,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }))
+        return applied
+
+    async def update_exercises(self, updates: dict[str, dict]) -> int:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, lambda: self.update_exercises_sync(updates)
+        )
+
     def set_e1rm_sync(
         self, 
         exercise_id: str, 

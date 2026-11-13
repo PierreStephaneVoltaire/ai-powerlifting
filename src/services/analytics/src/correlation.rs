@@ -38,7 +38,7 @@ pub fn build(sessions: &[Session], cutoff: &str) -> Inputs {
         };
         for exercise in &session.exercises {
             let sets = exercise.executed_sets();
-            let name_lower = exercise.lower.as_str();
+            let name_lower = exercise.key.as_str();
             if exercise.kg > 0.0 && exercise.reps > 0.0 && sets > 0.0 {
                 let e1rm = if exercise.reps < 30.0 {
                     exercise.kg * (1.0 + exercise.reps / 30.0)

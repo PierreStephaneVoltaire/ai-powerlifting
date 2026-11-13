@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{Duration, NaiveDate};
 use serde::Serialize;
 
-use super::weeks::{calendar_week, infer_program_start};
+use super::weeks::{calendar_week, infer_program_start, week_start_for};
 use super::{Computed, Dims, Env, Sessions, acwr, banister, deload, e1rm};
 use crate::model::{Exercise, Maxes};
 use crate::util::{clamp, median, parse_date, round};
@@ -21,6 +21,7 @@ const HALF_LIFE_DAYS: Dims = Dims {
     systemic: 2.0,
 };
 const BASELINE_LOOKBACK_DAYS: i64 = 56;
+const CHRONIC_BASELINE_WEEKS: i64 = 12;
 const BASELINE_GAP_DAYS: i64 = 14;
 const DEFAULT_PROFILE: Dims = Dims {
     axial: 0.3,
@@ -179,6 +180,94 @@ pub fn daily_by_dimension(
         }
     }
     daily
+}
+
+pub fn week_anchor(program_start: &str, sessions: Sessions<'_>) -> Option<NaiveDate> {
+    parse_date(program_start)
+        .filter(|_| !program_start.is_empty())
+        .or_else(|| sessions.iter().filter_map(|session| session.date).min())
+}
+
+pub fn weekly_by_date(
+    env: Env<'_>,
+    sessions: Sessions<'_>,
+    maxes: &Maxes,
+    anchor: NaiveDate,
+) -> BTreeMap<NaiveDate, Dims> {
+    let mut weekly: BTreeMap<NaiveDate, Dims> = BTreeMap::new();
+    for (date, dims) in daily_by_dimension(env, sessions, maxes) {
+        weekly
+            .entry(week_start_for(date, anchor))
+            .or_default()
+            .add(dims, 1.0);
+    }
+    weekly
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ChronicBaseline {
+    pub weekly: Dims,
+    pub weeks_used: usize,
+}
+
+pub fn chronic_baseline(
+    env: Env<'_>,
+    sessions: Sessions<'_>,
+    maxes: &Maxes,
+    reference: NaiveDate,
+    program_start: &str,
+) -> ChronicBaseline {
+    let unit = Dims {
+        axial: 1.0,
+        neural: 1.0,
+        peripheral: 1.0,
+        systemic: 1.0,
+    };
+    let Some(anchor) = week_anchor(program_start, sessions) else {
+        return ChronicBaseline {
+            weekly: unit,
+            weeks_used: 0,
+        };
+    };
+    let weekly = weekly_by_date(env, sessions, maxes, anchor);
+    let floor = reference - Duration::weeks(CHRONIC_BASELINE_WEEKS);
+    let in_range = |start: &NaiveDate| *start > floor && *start <= reference;
+    let complete: Vec<&Dims> = weekly
+        .iter()
+        .filter(|(start, _)| in_range(start) && **start + Duration::days(6) <= reference)
+        .map(|(_, dims)| dims)
+        .collect();
+    let rows = if complete.is_empty() {
+        weekly
+            .iter()
+            .filter(|(start, _)| in_range(start))
+            .map(|(_, dims)| dims)
+            .collect()
+    } else {
+        complete
+    };
+    let center = |pick: fn(&Dims) -> f64| {
+        let mut values: Vec<f64> = rows
+            .iter()
+            .map(|dims| pick(dims))
+            .filter(|value| *value > 0.0)
+            .collect();
+        values.sort_by(f64::total_cmp);
+        if values.is_empty() {
+            1.0
+        } else {
+            median(&values).max(1.0)
+        }
+    };
+    ChronicBaseline {
+        weekly: Dims {
+            axial: center(|dims| dims.axial),
+            neural: center(|dims| dims.neural),
+            peripheral: center(|dims| dims.peripheral),
+            systemic: center(|dims| dims.systemic),
+        },
+        weeks_used: rows.len(),
+    }
 }
 
 pub struct Reservoir {
@@ -458,6 +547,12 @@ pub fn fatigue_index(
         .min()
         .unwrap_or(1);
     let last_week = calendar_week(end, start_day);
+    let monotony_rows: BTreeMap<NaiveDate, banister::MonotonyWeek> =
+        banister::monotony_strain(env, &history, program_start, maxes, Some(end), None)
+            .weekly
+            .into_iter()
+            .filter_map(|row| Some((parse_date(&row.week_start)?, row)))
+            .collect();
     let mut weekly: BTreeMap<i64, WeekFi> = BTreeMap::new();
     let mut streak = 0.0_f64;
     for week in first_week..=last_week {
@@ -531,7 +626,7 @@ pub fn fatigue_index(
             if sets <= 0 || exercise.kg <= 0.0 || exercise.reps_int() <= 0 {
                 continue;
             }
-            let max = match exercise.lower.as_str() {
+            let max = match exercise.key.as_str() {
                 "squat" => maxes.squat,
                 "bench" | "bench press" => maxes.bench,
                 "deadlift" => maxes.deadlift,
@@ -567,16 +662,14 @@ pub fn fatigue_index(
             1.0,
         );
 
-        let current_strain = banister::monotony_strain(env, members, program_start, maxes, None);
-        let (monotony, strain) = (
-            current_strain.monotony().unwrap_or(0.0),
-            current_strain.strain().unwrap_or(0.0),
-        );
+        let (monotony, strain) = monotony_rows
+            .get(&week_start)
+            .map_or((0.0, 0.0), |row| (row.monotony, row.strain));
         let prior: Vec<f64> = (week - 4..week)
-            .filter_map(|prior_week| by_week.get(&prior_week))
-            .filter_map(|prior_sessions| {
-                banister::monotony_strain(env, prior_sessions, program_start, maxes, None).strain()
+            .filter_map(|prior_week| {
+                monotony_rows.get(&(start_day + Duration::days((prior_week - 1) * 7)))
             })
+            .map(|row| row.strain)
             .collect();
         let median_strain = if prior.is_empty() {
             0.0
@@ -589,18 +682,10 @@ pub fn fatigue_index(
             0.0
         });
 
-        let acwr_value = acwr::compute(
-            env,
-            &history,
-            program_start,
-            maxes,
-            None,
-            None,
-            Some(week_end),
-        )
-        .ready()
-        .and_then(|result| result.composite)
-        .unwrap_or(0.0);
+        let acwr_value = acwr::compute(env, &history, maxes, false, Some(week_end))
+            .ready()
+            .and_then(|result| result.composite)
+            .unwrap_or(0.0);
         let overload = if deload_weeks.contains(&week) {
             false
         } else {

@@ -1097,6 +1097,20 @@
             "null"
           ]
         },
+        "per_lift": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Per main lift (squat, bench, deadlift): lift_transfer-weighted sets and volume, raw SBD sets and volume, narrow and exposure frequency per week, and accessories with their transfer."
+        },
+        "muscle_volume": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Weekly sets per muscle (primary 1, secondary 0.5, tertiary 0.25) against researched MV/MEV/MAV/MRV landmarks, with a status per muscle and cited sources."
+        },
         "alerts": {
           "type": "array",
           "items": {
@@ -1331,7 +1345,7 @@
   {
     "name": "analytics.blocks_list",
     "domain": "analytics",
-    "description": "List analyzed training blocks and their cache/data quality status.",
+    "description": "List analyzed training blocks with data quality flags; past blocks report whether an analysis snapshot is stored in S3.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1381,6 +1395,17 @@
               "string",
               "null"
             ]
+          },
+          "stored": {
+            "type": "boolean",
+            "description": "True when the past block's analysis snapshot is stored in S3. Absent when snapshot storage is disabled; always false for the current block."
+          },
+          "storedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Timestamp the snapshot was last written to S3."
           }
         },
         "required": [
@@ -1616,7 +1641,7 @@
   {
     "name": "analytics.lifetime",
     "domain": "analytics",
-    "description": "Holistic deterministic report across every training block: per-block exposure and outcomes, exposure-outcome correlations, volume tolerance bands, and what worked or did not work.",
+    "description": "Deterministic lifetime report over selected past blocks (all past blocks when none are selected): per-block exposure and outcomes, exposure-outcome correlations, volume tolerance bands, and what worked or did not work. With blockKeys, adds currentVsHistory placing the current block's metrics against the min/median/max of the selected past blocks.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1631,6 +1656,15 @@
         "cache_only": {
           "type": "boolean",
           "default": false
+        },
+        "blockKeys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Past block keys to include. The current block is never part of the selection; it is placed against the selected blocks."
         }
       },
       "additionalProperties": false
@@ -1661,6 +1695,91 @@
         },
         "classification": {
           "type": "object"
+        },
+        "current_vs_history": {
+          "type": "object",
+          "description": "Present only when blockKeys is supplied.",
+          "properties": {
+            "block_key": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "reference_block_keys": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "current": {
+              "type": "object"
+            },
+            "metrics": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "metric": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "exposure",
+                      "outcome"
+                    ]
+                  },
+                  "lift": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "current": {
+                    "type": "number"
+                  },
+                  "n": {
+                    "type": "integer"
+                  },
+                  "min": {
+                    "type": "number"
+                  },
+                  "median": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  },
+                  "position": {
+                    "type": "string",
+                    "enum": [
+                      "below_range",
+                      "within_range",
+                      "above_range"
+                    ]
+                  }
+                },
+                "required": [
+                  "metric",
+                  "kind",
+                  "current",
+                  "n",
+                  "min",
+                  "median",
+                  "max",
+                  "position"
+                ]
+              }
+            }
+          },
+          "required": [
+            "block_key",
+            "label",
+            "reference_block_keys",
+            "current",
+            "metrics"
+          ]
         }
       },
       "required": [

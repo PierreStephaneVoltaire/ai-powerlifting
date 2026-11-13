@@ -11,6 +11,7 @@ use crate::records::timestamp;
 pub mod correlate;
 pub mod exposure;
 pub mod outcome;
+pub mod reference;
 pub mod signals;
 pub mod tolerance;
 pub mod types;
@@ -56,74 +57,76 @@ pub fn record_for(
     (record, context)
 }
 
+pub fn row_of(record: &BlockRecord) -> Row {
+    let mut row = Row {
+        block_key: record.block_key.clone(),
+        ..Row::default()
+    };
+    let exposure = &record.exposure;
+    for lift in LIFTS {
+        let Some(item) = exposure.lifts.get(lift) else {
+            continue;
+        };
+        row.exposures
+            .insert(format!("{lift}.weekly_hard_sets"), item.weekly_hard_sets);
+        row.exposures
+            .insert(format!("{lift}.weekly_tonnage_kg"), item.weekly_tonnage_kg);
+        row.exposures
+            .insert(format!("{lift}.weekly_frequency"), item.weekly_frequency);
+        for (name, value) in [("avg_inol", item.avg_inol), ("avg_rpe", item.avg_rpe)] {
+            if let Some(value) = value {
+                row.exposures.insert(format!("{lift}.{name}"), value);
+            }
+        }
+    }
+    let globals = [
+        ("acwr_peak", exposure.acwr_peak),
+        ("monotony_mean", exposure.monotony.mean),
+        ("strain_mean", exposure.strain.mean),
+        ("compliance_pct", exposure.compliance_pct),
+        ("deload_per_10_weeks", Some(exposure.deload.per_10_weeks)),
+        ("fatigue_index", exposure.fatigue.index),
+        ("specificity_narrow", exposure.specificity.narrow),
+        ("training_days_per_week", exposure.training_days_per_week),
+        ("weekly_hard_sets", Some(exposure.weekly_hard_sets)),
+        ("weekly_tonnage_kg", Some(exposure.weekly_tonnage_kg)),
+        ("fatigue_axial_mean", exposure.fatigue.dimension_mean.axial),
+        (
+            "fatigue_neural_mean",
+            exposure.fatigue.dimension_mean.neural,
+        ),
+        (
+            "fatigue_peripheral_mean",
+            exposure.fatigue.dimension_mean.peripheral,
+        ),
+        (
+            "fatigue_systemic_mean",
+            exposure.fatigue.dimension_mean.systemic,
+        ),
+    ];
+    for (name, value) in globals {
+        if let Some(value) = value {
+            row.exposures.insert(name.to_owned(), value);
+        }
+    }
+    for key in correlate::OUTCOMES {
+        if let Some(value) = record
+            .outcome
+            .e1rm
+            .get(key)
+            .and_then(|change| change.delta_per_week)
+        {
+            row.outcomes.insert(key.to_owned(), value);
+        }
+    }
+    row
+}
+
 fn rows_of(records: &[BlockRecord]) -> Vec<Row> {
     records
         .iter()
         .filter(|record| record.week_count >= MIN_BLOCK_WEEKS)
-        .map(|record| {
-            let mut row = Row {
-                block_key: record.block_key.clone(),
-                ..Row::default()
-            };
-            let exposure = &record.exposure;
-            for lift in LIFTS {
-                let Some(item) = exposure.lifts.get(lift) else {
-                    continue;
-                };
-                row.exposures
-                    .insert(format!("{lift}.weekly_hard_sets"), item.weekly_hard_sets);
-                row.exposures
-                    .insert(format!("{lift}.weekly_tonnage_kg"), item.weekly_tonnage_kg);
-                row.exposures
-                    .insert(format!("{lift}.weekly_frequency"), item.weekly_frequency);
-                for (name, value) in [("avg_inol", item.avg_inol), ("avg_rpe", item.avg_rpe)] {
-                    if let Some(value) = value {
-                        row.exposures.insert(format!("{lift}.{name}"), value);
-                    }
-                }
-            }
-            let globals = [
-                ("acwr_peak", exposure.acwr_peak),
-                ("monotony_mean", exposure.monotony.mean),
-                ("strain_mean", exposure.strain.mean),
-                ("compliance_pct", exposure.compliance_pct),
-                ("deload_per_10_weeks", Some(exposure.deload.per_10_weeks)),
-                ("fatigue_index", exposure.fatigue.index),
-                ("specificity_narrow", exposure.specificity.narrow),
-                ("training_days_per_week", exposure.training_days_per_week),
-                ("weekly_hard_sets", Some(exposure.weekly_hard_sets)),
-                ("weekly_tonnage_kg", Some(exposure.weekly_tonnage_kg)),
-                ("fatigue_axial_mean", exposure.fatigue.dimension_mean.axial),
-                (
-                    "fatigue_neural_mean",
-                    exposure.fatigue.dimension_mean.neural,
-                ),
-                (
-                    "fatigue_peripheral_mean",
-                    exposure.fatigue.dimension_mean.peripheral,
-                ),
-                (
-                    "fatigue_systemic_mean",
-                    exposure.fatigue.dimension_mean.systemic,
-                ),
-            ];
-            for (name, value) in globals {
-                if let Some(value) = value {
-                    row.exposures.insert(name.to_owned(), value);
-                }
-            }
-            for key in correlate::OUTCOMES {
-                if let Some(value) = record
-                    .outcome
-                    .e1rm
-                    .get(key)
-                    .and_then(|change| change.delta_per_week)
-                {
-                    row.outcomes.insert(key.to_owned(), value);
-                }
-            }
-            row
-        })
+        .map(row_of)
         .collect()
 }
 
@@ -248,5 +251,19 @@ pub fn assemble(
         pattern_signals: comparison.pattern_signals,
         worked,
         did_not_work,
+        current_vs_history: None,
     }
+}
+
+pub fn with_current(mut report: Lifetime, current: BlockRecord) -> Lifetime {
+    let history: Vec<(&BlockRecord, Row)> = report
+        .blocks
+        .iter()
+        .filter(|record| record.week_count >= MIN_BLOCK_WEEKS)
+        .map(|record| (record, row_of(record)))
+        .collect();
+    let current_row = row_of(&current);
+    let section = reference::build(current, &current_row, &history);
+    report.current_vs_history = Some(section);
+    report
 }

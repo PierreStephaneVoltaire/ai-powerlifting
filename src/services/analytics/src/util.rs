@@ -165,6 +165,42 @@ pub fn ols_slope(xs: &[f64], ys: &[f64]) -> f64 {
         .unwrap_or(0.0)
 }
 
+fn singularize(word: &str) -> &str {
+    if word.ends_with("sses")
+        || word.ends_with("ches")
+        || word.ends_with("shes")
+        || word.ends_with("xes")
+    {
+        &word[..word.len() - 2]
+    } else if word.ends_with('s') && !word.ends_with("ss") {
+        &word[..word.len() - 1]
+    } else {
+        word
+    }
+}
+
+pub fn normalize_name(name: &str) -> String {
+    let mut stripped = String::with_capacity(name.len());
+    let mut depth = 0usize;
+    for character in name.chars() {
+        match character {
+            '(' => {
+                depth += 1;
+                stripped.push(' ');
+            }
+            ')' if depth > 0 => depth -= 1,
+            _ if depth == 0 => stripped.push(character),
+            _ => {}
+        }
+    }
+    stripped
+        .to_lowercase()
+        .split_whitespace()
+        .map(singularize)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

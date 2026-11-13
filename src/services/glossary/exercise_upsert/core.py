@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import os
 
+from services.glossary.lift_transfer_rules import ensure_lift_transfer
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,5 +37,5 @@ async def exercise_upsert(args: dict) -> dict:
         existing = await store.get_exercise_by_id(exercise["id"])
         if existing:
             exercise = {**existing, **exercise}
-    exercise_id = await store.upsert_exercise(exercise)
+    exercise_id = await store.upsert_exercise(ensure_lift_transfer(exercise))
     return {"status": "upserted", "id": exercise_id}

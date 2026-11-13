@@ -293,10 +293,16 @@ F_systemic   = profile.systemic   * weight * reps * (1 + 0.30 * I)
 
 ### Implementation notes
 
+- Exercise names go through one normalizer everywhere (lowercase, trim, strip
+  parentheticals, singularize each word), the same one the frontend uses.
 - Only squat, bench, deadlift get a direct current-max lookup for `I`.
-- Non-SBD exercises fall back to `I = 0.70` for neural scaling.
+- Non-SBD exercises use the glossary e1RM when present, then an RPE-based
+  estimate, then a category default.
 - Weekly totals multiply per-set values by `sets`.
 - Missing glossary fatigue profiles fall back to category defaults.
+- Each weekly total is also reported as `normalized`: the ratio to the athlete's
+  chronic weekly baseline per dimension (median of the last 12 complete weeks of
+  full history, all blocks). 1.0 is a typical week.
 
 ### What's different
 
@@ -375,19 +381,30 @@ Used by: INOL card, AI paths.
 ### Equation
 
 ```text
-INOL = sets * reps / (1 - intensity_ratio)
+INOL = sets * reps / (100 * sqrt((1 - intensity_ratio)^2 + 0.02^2))
 stimulus_adjusted_INOL = INOL * stimulus_coefficient
 ```
 
-- `stimulus_coefficient` comes from the per-lift `LiftProfile`.
+- `stimulus_coefficient` comes from the `LiftProfile` of the same lift. It must
+  be within 0.5 - 2.0; otherwise it is ignored and the coefficient is 1.0 with
+  source `default`. There is no clamp inside the range.
+- The lift of an exercise comes from the glossary `lift_transfer` (a transfer of
+  at least 0.9 counts toward that lift; canonical SBD names are 1.0).
+- Output per lift: `raw`, `adjusted`, `coefficient`, `coefficient_source`.
+- Trend-pressure baselines (previous 4 weeks of volume and relative intensity)
+  use the athlete's full history, not only the selected block.
 
 ### Thresholds
 
+Thresholds are defined on raw INOL and scaled by the stimulus coefficient (and
+the phase multiplier) before they are compared with the adjusted value, so the
+comparison is the same as comparing raw INOL with raw thresholds.
+
 | Label | Low | High |
 |-------|-----|------|
-| Underwork | below `inol_low_threshold` | - |
+| Underwork | below `inol_low_threshold * coefficient` | - |
 | Sweet spot | at least low | at most high |
-| Overreach | - | above `inol_high_threshold` |
+| Overreach | - | above `inol_high_threshold * coefficient` |
 
 ### What's different
 
@@ -415,8 +432,18 @@ Used by: fatigue/readiness.
 ### Equation
 
 ```text
-ACWR = acute_load / chronic_load
+ACWR = EWMA_7d(load) / EWMA_28d(load)         (per dimension)
+composite = sum(w_d * ACWR_d) / sum(w_d)     (only dimensions with a ratio)
 ```
+
+- Computed from the athlete's full session history (all blocks); the selected
+  window only limits what is displayed.
+- A dimension without a ratio (no chronic load) is excluded and the remaining
+  weights are renormalised (`weights_used`).
+- Each dimension exposes `acute`, `chronic` and `value` (the ratio).
+- The "expected during planned overreach" suffix is added only to elevated zones
+  (rapid increase, load spike), and only when the active phase of the block is
+  explicitly tagged as overreach (phase name or intent contains "overreach").
 
 ### Thresholds
 
@@ -488,9 +515,14 @@ Used by: peaking section, comp alignment.
 ### Equation
 
 ```text
-SR_narrow = SBD sets / total sets
-SR_broad  = (SBD + secondary category) / total sets
+SR_narrow = sets with lift_transfer >= 0.9 / total sets
+SR_broad  = (narrow sets + sum(sets * lift_transfer) over the rest) / total sets
 ```
+
+`lift_transfer` comes from the glossary (`{squat, bench, deadlift}`, 0 - 1; an
+exercise's transfer is its largest value). Canonical SBD names are 1.0 and an
+exercise with no `lift_transfer` is 0. Competition variants (pause, tempo,
+spoto) count as narrow.
 
 Only **executed** sets count.
 
@@ -507,7 +539,8 @@ Only **executed** sets count.
 ### What's different
 
 Textbook specificity is usually just "% of work that is competition lifts." This
-adds a **broad** ratio (competition lifts + same-category accessories) and
+adds a **broad** ratio (competition lifts and variants, plus accessories weighted
+by how much they transfer to the lifts) and
 **timeline-relative expected bands** so the ratio is judged against where you are
 in the prep, not a flat target.
 
@@ -515,7 +548,24 @@ in the prep, not a flat target.
 
 - Pro: the broad ratio credits close-grip bench / pause squats etc. without
   pretending they're competition lifts.
-- Con: "secondary category" depends on glossary classification quality.
+- Con: depends on the quality of the glossary `lift_transfer` estimates.
+
+### Per-lift breakdown
+
+`workload.per_lift` reports, for each main lift: `sets` and `volume` weighted by
+transfer, `raw_sets` and `raw_volume` (exact SBD names), `frequency` (sessions per
+week with narrow exposure), `exposure_frequency` (sessions with any transfer), and
+the accessories with their transfer. High-transfer accessories (lunges to squat,
+RDLs to deadlift, close-grip to bench) count at their transfer weight.
+
+### Muscle volume
+
+`workload.muscle_volume` reports weekly sets per muscle (primary 1, secondary
+0.5, tertiary 0.25, from the glossary) against the MV / MEV / MAV / MRV landmarks
+in `data/muscle_landmarks.json` (Renaissance Periodization; Schoenfeld, Ogborn and
+Krieger 2017 corroborates MEV). Status per muscle: `below_mev` (below MEV),
+`productive` (MEV to the top of MAV), `near_mrv` (above MAV, up to MRV),
+`above_mrv`; muscles without a published landmark are `unrated`.
 
 ---
 
@@ -526,13 +576,32 @@ Used by: peaking section.
 ### Equation
 
 ```text
-CTL  = EWMA(7-day load, large time constant)
-ATL  = EWMA(7-day load, small time constant)
+load = 100 * sum(w_d * dimension_d / daily_baseline_d)   (normalized daily load)
+CTL  = EWMA(load, 42-day time constant)
+ATL  = EWMA(load, 7-day time constant)
 TSB  = CTL - ATL
-Monotony = mean(daily load) / std(daily load)
+Monotony = mean(daily load) / std(daily load)            (per calendar week)
 Strain   = Monotony * sum(load)
 TaperQuality = score from load reduction, monotony drop, TSB rise
 ```
+
+- CTL, ATL, TSB and the monotony strain baseline are seeded from the full
+  session history (all blocks); the series and weekly rows shown are restricted to
+  the selected window.
+- `daily_baseline` is the chronic weekly baseline per dimension (see section 6)
+  divided by 7.
+- Monotony and strain use the normalized load. A week with fewer than 7 observed
+  days is flagged `partial`. `high_monotony` needs at least 3 training days.
+
+### TSB labels
+
+| Label | TSB |
+|-------|-----|
+| Deep overload | below -30 |
+| Productive fatigue | -30 to -10 (shown as "Planned overreach" only when the current block's active phase is tagged overreach) |
+| Building | -10 to +5 |
+| Peaking window | +5 to +15 |
+| Detraining risk | above +15 |
 
 ### Taper quality thresholds
 

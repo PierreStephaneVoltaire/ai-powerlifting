@@ -207,6 +207,8 @@ pub fn build(workspace: &Workspace<'_>) -> Vec<BlockEntry> {
                 linked_competition: linked,
                 data_quality_flags: flags,
                 cache_status: None,
+                stored: None,
+                stored_at: None,
                 block,
             }
         })

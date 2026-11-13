@@ -8,6 +8,7 @@ use super::types::{
     Spread,
 };
 use crate::blocks::strength::{LIFTS, canonical_lift};
+use crate::calc::weeks::{find_phase, planned_overreach};
 use crate::calc::{Env, acwr};
 use crate::js::round_or_null;
 use crate::model::{Maxes, ProgramData, Session};
@@ -124,8 +125,11 @@ fn maxes_of(weekly: &Value) -> Maxes {
 }
 
 fn acwr_peak(env: Env<'_>, program: &ProgramData, weekly: &Value) -> Option<f64> {
-    let completed: Vec<&Session> = program.sessions.iter().filter(|s| s.completed).collect();
-    let start = program.meta.program_start();
+    let completed: Vec<&Session> = program
+        .all_sessions()
+        .iter()
+        .filter(|s| s.completed)
+        .collect();
     let maxes = maxes_of(weekly);
     let mut last_day: BTreeMap<i64, NaiveDate> = BTreeMap::new();
     for session in &completed {
@@ -137,17 +141,10 @@ fn acwr_peak(env: Env<'_>, program: &ProgramData, weekly: &Value) -> Option<f64>
     last_day
         .into_iter()
         .filter_map(|(week, date)| {
-            acwr::compute(
-                env,
-                &completed,
-                &start,
-                &maxes,
-                Some(&program.phases),
-                Some(week),
-                Some(date),
-            )
-            .into_ready()
-            .and_then(|value| value.composite)
+            let overreach = planned_overreach(find_phase(&program.phases, week));
+            acwr::compute(env, &completed, &maxes, overreach, Some(date))
+                .into_ready()
+                .and_then(|value| value.composite)
         })
         .reduce(f64::max)
 }

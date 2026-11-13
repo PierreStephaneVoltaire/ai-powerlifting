@@ -62,6 +62,8 @@ pub fn build(context: &Context<'_>) -> Alerts {
         specificity: specificity.as_ref(),
         monotony: &monotony,
         readiness: &readiness,
+        planned_overreach: context.planned_overreach,
+        target_rpe: context.target_rpe_midpoint(),
     };
     Alerts {
         alerts: alerts::generate(

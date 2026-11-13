@@ -374,16 +374,16 @@ func TestAllBlocksNarrativeIsSavedThroughExport(t *testing.T) {
 		t.Fatalf("expected one export, got %d", len(h.exporter.reports))
 	}
 	saved := h.exporter.reports[0]
-	if saved.Narrative["overall_summary"] != "Blocks compared." || saved.Report["athlete"] != "athlete_1" || len(saved.BlockKeys) != 2 || saved.GeneratedAt == "" {
+	if saved.Narrative["overall_summary"] != "Blocks compared." || saved.Report["athlete"] != "athlete_1" || len(saved.BlockKeys) != 1 || saved.GeneratedAt == "" {
 		t.Fatalf("unexpected export %+v", saved)
 	}
 }
 
 func TestExplicitBlockSelectionIsNotExported(t *testing.T) {
 	h := newHarness(t)
-	runComparison(t, h, []any{"block_1"})
+	runComparison(t, h, []any{"block_short"})
 	if len(h.exporter.reports) != 0 {
-		t.Fatal("only the all-blocks narrative feeds the lifetime report")
+		t.Fatal("only a selection of every stored past block feeds the lifetime report")
 	}
 }
 

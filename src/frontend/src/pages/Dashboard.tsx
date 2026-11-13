@@ -25,6 +25,7 @@ import { displayWeight, toDisplayUnit, fromDisplayUnit } from '@/utils/units'
 import { phaseColor, phasesForBlock } from '@/utils/phases'
 import { resolveTrainingWeekForDate, weekStartForBlock } from '@/utils/weekStart'
 import SetupOnboarding from '@/components/setup/SetupOnboarding'
+import { MuscleWorkloadMap } from '@/components/analysis/MuscleWorkloadMap'
 import { Activity, Scale, Trophy, TrendingUp, Edit2, Save, X, Plus, Trash2, Download, Dumbbell, Ruler, HeartPulse, User } from 'lucide-react'
 import {
   Stack,
@@ -1142,6 +1143,15 @@ export default function Dashboard() {
         </section>
       </div>
 
+      {currentBlockWeekly?.muscle_volume && Object.keys(currentBlockWeekly.muscle_volume.muscles).length > 0 && (
+        <section className="if-mock-card">
+          <MuscleWorkloadMap
+            muscleVolume={currentBlockWeekly.muscle_volume}
+            analysisWeeks={dashboardAnalysisWindow?.weeks ?? currentBlockWeekly.muscle_volume.weeks}
+            title="Muscle workload (current block)"
+          />
+        </section>
+      )}
     </Stack>
   )
 }

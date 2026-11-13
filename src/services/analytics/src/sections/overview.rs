@@ -197,11 +197,11 @@ pub fn deload_info(context: &Context<'_>) -> DeloadInfo {
 pub fn compliance_of(context: &Context<'_>) -> Compliance {
     match (context.selected_week_start, context.selected_week_end) {
         (Some(start), Some(end)) => {
-            compliance::for_week_window(&context.sessions, context.phases, start, end, context.end)
+            compliance::for_week_window(&context.sessions, &context.phases, start, end, context.end)
         }
         _ => compliance::for_trailing_weeks(
             &context.sessions,
-            context.phases,
+            &context.phases,
             &context.program_start,
             context.selected_week_count,
             context.end,

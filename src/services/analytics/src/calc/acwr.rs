@@ -3,9 +3,8 @@ use std::collections::BTreeMap;
 use chrono::{Duration, NaiveDate};
 use serde::Serialize;
 
-use super::weeks::{current_week, infer_program_start, planned_overreach};
 use super::{Computed, Dims, Env, Sessions, e1rm, fatigue};
-use crate::model::{Maxes, Phase};
+use crate::model::Maxes;
 use crate::util::round;
 
 const ACUTE_LAMBDA: f64 = 2.0 / (7.0 + 1.0);
@@ -15,6 +14,8 @@ const MIN_DAYS: i64 = 25;
 #[derive(Debug, Serialize)]
 pub struct Dimension {
     pub value: Option<f64>,
+    pub acute: Option<f64>,
+    pub chronic: Option<f64>,
     pub zone: &'static str,
     pub label: String,
 }
@@ -33,6 +34,7 @@ pub struct Acwr {
     pub composite_zone: &'static str,
     pub composite_label: String,
     pub dimensions: DimensionSet,
+    pub weights_used: Dims,
 }
 
 pub fn zone(value: Option<f64>) -> &'static str {
@@ -53,14 +55,20 @@ fn label(zone: &str, planned_overreach: bool) -> String {
         "load_spike" => "Load spike",
         _ => "Unknown",
     };
-    if planned_overreach && zone != "unknown" {
+    if planned_overreach && matches!(zone, "rapid_increase" | "load_spike") {
         format!("{base} (expected during planned overreach)")
     } else {
         base.to_owned()
     }
 }
 
-fn ewma(loads: &[f64]) -> Option<f64> {
+struct Ratio {
+    value: f64,
+    acute: f64,
+    chronic: f64,
+}
+
+fn ewma(loads: &[f64]) -> Option<Ratio> {
     if (loads.len() as i64) < MIN_DAYS {
         return None;
     }
@@ -70,7 +78,11 @@ fn ewma(loads: &[f64]) -> Option<f64> {
         acute = ACUTE_LAMBDA * load + (1.0 - ACUTE_LAMBDA) * acute;
         chronic = CHRONIC_LAMBDA * load + (1.0 - CHRONIC_LAMBDA) * chronic;
     }
-    (chronic > 1e-12).then(|| round(acute / chronic, 3))
+    (chronic > 1e-12).then(|| Ratio {
+        value: round(acute / chronic, 3),
+        acute: round(acute, 1),
+        chronic: round(chronic, 1),
+    })
 }
 
 fn dimensional(
@@ -109,52 +121,61 @@ fn dimensional(
         series(|dims| dims.systemic),
     ];
     let weights = super::DIMENSION_WEIGHTS.each();
-    let any_valid = values.iter().any(Option::is_some);
-    let composite = any_valid.then(|| {
+    let weight_total: f64 = values
+        .iter()
+        .zip(weights)
+        .filter(|(value, _)| value.is_some())
+        .map(|(_, weight)| weight)
+        .sum();
+    let used = |index: usize| {
+        if values[index].is_some() && weight_total > 0.0 {
+            weights[index] / weight_total
+        } else {
+            0.0
+        }
+    };
+    let composite = (weight_total > 0.0).then(|| {
         round(
             values
                 .iter()
-                .zip(weights)
-                .map(|(value, weight)| value.unwrap_or(0.0) * weight)
+                .enumerate()
+                .map(|(index, value)| value.as_ref().map_or(0.0, |ratio| ratio.value) * used(index))
                 .sum(),
             3,
         )
     });
     let composite_zone = zone(composite);
-    let dimension = |value: Option<f64>| Dimension {
-        value,
-        zone: zone(value),
-        label: label(zone(value), overreach),
+    let dimension = |ratio: &Option<Ratio>| {
+        let value = ratio.as_ref().map(|ratio| ratio.value);
+        Dimension {
+            value,
+            acute: ratio.as_ref().map(|ratio| ratio.acute),
+            chronic: ratio.as_ref().map(|ratio| ratio.chronic),
+            zone: zone(value),
+            label: label(zone(value), overreach),
+        }
     };
     Computed::Ready(Acwr {
         composite,
         composite_zone,
         composite_label: label(composite_zone, overreach),
         dimensions: DimensionSet {
-            axial: dimension(values[0]),
-            neural: dimension(values[1]),
-            peripheral: dimension(values[2]),
-            systemic: dimension(values[3]),
+            axial: dimension(&values[0]),
+            neural: dimension(&values[1]),
+            peripheral: dimension(&values[2]),
+            systemic: dimension(&values[3]),
         },
+        weights_used: Dims::from_each([used(0), used(1), used(2), used(3)]).map(|w| round(w, 4)),
     })
 }
 
 pub fn compute(
     env: Env<'_>,
     sessions: Sessions<'_>,
-    program_start: &str,
     maxes: &Maxes,
-    phases: Option<&[Phase]>,
-    week: Option<i64>,
+    planned_overreach: bool,
     reference: Option<NaiveDate>,
 ) -> Computed<Acwr> {
-    let owned_start;
-    let program_start = if program_start.is_empty() {
-        owned_start = infer_program_start(sessions);
-        owned_start.as_str()
-    } else {
-        program_start
-    };
     let estimated;
     let maxes = if maxes.is_empty() {
         estimated = e1rm::from_sessions_default(sessions, env.today);
@@ -162,8 +183,6 @@ pub fn compute(
     } else {
         maxes
     };
-    let week = week.unwrap_or_else(|| current_week(program_start, sessions, env.today));
     let daily = fatigue::daily_by_dimension(env, sessions, maxes);
-    let overreach = planned_overreach(phases.unwrap_or(&[]), Some(week), program_start, env.today);
-    dimensional(&daily, overreach, reference.unwrap_or(env.today))
+    dimensional(&daily, planned_overreach, reference.unwrap_or(env.today))
 }

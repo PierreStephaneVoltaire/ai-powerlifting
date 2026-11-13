@@ -19,7 +19,7 @@ _ESTIMATE_TOOL_SCHEMA = {
         "parameters": {
             "type": "object",
             "properties": {
-                "stimulus_coefficient": {"type": "number", "minimum": 1, "maximum": 2},
+                "stimulus_coefficient": {"type": "number", "minimum": 1, "maximum": 2, "description": "1.00 plus the summed per-field adjustments, two decimals"},
                 "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
                 "reasoning": {"type": "string"},
             },
@@ -61,14 +61,31 @@ def _clamp(value: Any) -> float:
     return max(1.0, min(2.0, round(round(raw / 0.05) * 0.05, 2)))
 
 
-async def estimate_stimulus(profile: dict) -> dict:
+def _athlete_lines(meta: dict | None) -> dict:
+    if not meta:
+        return {}
+    fields = {
+        "bodyweight_kg": meta.get("current_body_weight_kg"),
+        "height_cm": meta.get("height_cm"),
+        "arm_wingspan_cm": meta.get("arm_wingspan_cm"),
+        "leg_length_cm": meta.get("leg_length_cm"),
+        "sex": meta.get("sex"),
+    }
+    return {key: value for key, value in fields.items() if value not in (None, "", 0)}
+
+
+async def estimate_stimulus(profile: dict, athlete_meta: dict | None = None) -> dict:
     profile = clean(profile)
     if profile is None:
         raise ValueError("Invalid lift. Expected squat, bench, or deadlift.")
     gaps = missing(profile)
     if gaps:
         raise ValueError("Choose every option before estimating: " + ", ".join(gaps))
-    args = await _call_tool(_ESTIMATE_SYSTEM_PROMPT, "Estimate the stimulus coefficient for this lift profile:\n" + json.dumps(describe(profile), indent=2), _ESTIMATE_TOOL_SCHEMA, "estimate_lift_profile_stimulus")
+    described = describe(profile)
+    athlete = _athlete_lines(athlete_meta)
+    if athlete:
+        described["athlete"] = athlete
+    args = await _call_tool(_ESTIMATE_SYSTEM_PROMPT, "Estimate the stimulus coefficient for this lift profile:\n" + json.dumps(described, indent=2), _ESTIMATE_TOOL_SCHEMA, "estimate_lift_profile_stimulus")
     if not args:
         raise ValueError("The estimate returned no result")
     confidence = str(args.get("confidence", "low")).lower()
