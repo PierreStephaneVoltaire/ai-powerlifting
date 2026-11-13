@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"powerlifting/analytics-ai/internal/apperr"
@@ -235,6 +236,7 @@ func (s *Service) runner(call request, generationID string, attempt int) (execut
 			return nil, err
 		}
 		if err := call.operation.ValidateResult(result); err != nil {
+			slog.WarnContext(ctx, "invalid result", "operation", name, "error", err.Error())
 			return nil, apperr.InvalidResult()
 		}
 		return result, nil

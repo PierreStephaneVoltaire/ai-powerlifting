@@ -512,6 +512,7 @@
             "status": {
               "enum": [
                 "starting",
+                "queued",
                 "running",
                 "succeeded",
                 "failed",
@@ -629,6 +630,7 @@
             "status": {
               "enum": [
                 "starting",
+                "queued",
                 "running",
                 "succeeded",
                 "failed",

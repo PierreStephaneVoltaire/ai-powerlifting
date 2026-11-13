@@ -26,6 +26,7 @@ operation_ai = {
   glossary_estimate_muscles       = { provider = "", model = "", effort = "" }
   muscle_group_estimate           = { provider = "", model = "", effort = "" }
   glossary_estimate_fatigue       = { provider = "", model = "", effort = "" }
+  glossary_estimate_lift_transfer = { provider = "", model = "", effort = "" }
   fatigue_profile_estimate        = { provider = "", model = "", effort = "" }
   glossary_estimate_e1rm          = { provider = "", model = "", effort = "" }
   glossary_generate_text          = { provider = "", model = "", effort = "" }

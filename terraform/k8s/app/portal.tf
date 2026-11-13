@@ -68,6 +68,11 @@ resource "kubernetes_deployment_v1" "backend" {
 
 
           env {
+            name  = "IF_API_URL"
+            value = local.service_env.IF_API_URL
+          }
+
+          env {
             name = "MEDIA_SIGNING_PRIVATE_KEY"
             value_from {
               secret_key_ref {

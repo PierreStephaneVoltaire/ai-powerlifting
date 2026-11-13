@@ -97,12 +97,23 @@ impl Default for Readiness {
     }
 }
 
+const RETRY_INITIAL: Duration = Duration::from_secs(2);
+const RETRY_MAX: Duration = Duration::from_secs(60);
+
 pub async fn boot<S: ObjectStore>(store: &S, data_dir: &Path, readiness: &Readiness) {
-    let phase = match prepare(store, data_dir).await {
-        Ok(loaded) => Phase::Ready(Arc::new(loaded)),
-        Err(error) => {
-            tracing::error!(%error, "OpenPowerlifting dataset load failed");
-            Phase::Failed(error)
+    let mut delay = RETRY_INITIAL;
+    let phase = loop {
+        match prepare(store, data_dir).await {
+            Ok(loaded) => break Phase::Ready(Arc::new(loaded)),
+            Err(error @ DatasetError::Failed(_)) => {
+                tracing::warn!(%error, next_retry_secs = delay.as_secs(), "OpenPowerlifting dataset load failed, retrying");
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(RETRY_MAX);
+            }
+            Err(error) => {
+                tracing::error!(%error, "OpenPowerlifting dataset load failed");
+                break Phase::Failed(error);
+            }
         }
     };
     readiness.set(phase);

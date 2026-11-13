@@ -36,7 +36,7 @@ import {
   Box
 } from '@mantine/core'
 import { useAuth } from '@/auth/AuthProvider'
-import type { Exercise, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
+import type { Exercise, MuscleGroup, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 type BigThreeLift = typeof LIFT_ORDER[number]
@@ -610,6 +610,9 @@ export default function Dashboard() {
     : mergeLiftProfiles()
   )
   const currentBlockWeekly = mergeDashboardAnalysisSections(dashboardSectionPayloads)
+  const dashboardMuscleSets = Object.fromEntries(
+    Object.entries(currentBlockWeekly?.muscle_volume?.muscles ?? {}).map(([muscle, entry]) => [muscle, entry.weekly_sets]),
+  ) as Partial<Record<MuscleGroup, number>>
   const currentBlockFatigue = currentBlockWeekly?.fatigue_index ?? null
   const currentBlockFatigueComponents = currentBlockWeekly?.fatigue_components ?? null
   const fatigueSectionLoading = sectionPending(dashboardSectionStatuses, dashboardSectionPayloads, 'fatigue_readiness')
@@ -1143,11 +1146,11 @@ export default function Dashboard() {
         </section>
       </div>
 
-      {currentBlockWeekly?.muscle_volume && Object.keys(currentBlockWeekly.muscle_volume.muscles).length > 0 && (
+      {Object.keys(dashboardMuscleSets).length > 0 && (
         <section className="if-mock-card">
           <MuscleWorkloadMap
-            muscleVolume={currentBlockWeekly.muscle_volume}
-            analysisWeeks={dashboardAnalysisWindow?.weeks ?? currentBlockWeekly.muscle_volume.weeks}
+            setsPerWeek={dashboardMuscleSets}
+            analysisWeeks={dashboardAnalysisWindow?.weeks ?? currentBlockWeekly?.muscle_volume?.weeks ?? 1}
             title="Muscle workload (current block)"
           />
         </section>

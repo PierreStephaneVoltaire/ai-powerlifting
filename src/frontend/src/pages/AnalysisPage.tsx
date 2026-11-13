@@ -42,7 +42,7 @@ import { LifetimeComparePanel, PastBlocksPanel } from '@/components/analysis/Blo
 import { PeakingTimeline } from '@/components/analysis/PeakingTimeline'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
 import { AcwrPanel, FatigueDimensionsPanel, InolPanel, SpecificityPanel } from '@/components/analysis/AnalysisPanels'
-import { ChartHelp } from '@/components/analysis/ChartHelp'
+import { ChartLabel } from '@/components/analysis/ChartLabel'
 import MaxesPage from '@/pages/MaxesPage'
 import { recordsInBlock } from '@/utils/blockScope'
 
@@ -1089,13 +1089,7 @@ export default function AnalysisPage() {
                       </Stack>
                     </SimpleGrid>
 
-                    <ChartHelp
-                      description="Daily Banister fitness-fatigue model. CTL is slow-moving fitness, ATL is fast-moving fatigue, and TSB is the gap between them (form)."
-                      range="TSB +5 to +15 is the peaking window · -10 to +5 building · -30 to -10 heavy overload · below -30 deep overload · above +15 risk of detraining"
-                      units="load points per day (normalised to your own typical day; 1.0 = a typical training day)"
-                      relation="TSB = CTL - ATL. Negative TSB means fatigue is above fitness (normal mid-block); TSB rises as ATL falls during a taper while CTL holds."
-                      formulaId="banister_ffm"
-                    />
+                    <ChartLabel text="TSB is CTL minus ATL. Peak form is +5 to +15." formulaId="banister_ffm" />
                     {banisterSeries.length > 0 ? (
                       <>
                         <Box style={{ width: '100%', height: 320 }}>

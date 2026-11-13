@@ -16,7 +16,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { AcwrResult, WeeklyAnalysis } from '@/api/analytics'
-import { ChartHelp } from '@/components/analysis/ChartHelp'
+import { ChartLabel } from '@/components/analysis/ChartLabel'
 
 const TOOLTIP_STYLE = {
   backgroundColor: 'var(--mantine-color-body)',
@@ -81,38 +81,17 @@ function inolZone(value: number, bounds: { low: number; high: number }) {
   return { color: 'green', label: 'Within target' }
 }
 
-function formatBounds(inol: InolData): string {
-  return Object.keys(inol.avg_inol)
-    .map((lift) => {
-      const adjusted = inol.phase_adjusted_thresholds?.[lift]
-      const base = inol.thresholds?.[lift] ?? DEFAULT_INOL_THRESHOLDS[lift]
-      const low = adjusted?.display_low ?? base?.low
-      const high = adjusted?.display_high ?? base?.high
-      if (low === undefined || high === undefined) return null
-      return `${lift} ${low.toFixed(1)}-${high.toFixed(1)}`
-    })
-    .filter(Boolean)
-    .join(' · ')
-}
-
 export function InolPanel({ inol }: { inol: InolData }) {
   return (
     <Paper withBorder p="md" className="if-card">
       <Text fw={500} mb={4}>Stimulus-Adjusted INOL (Window Average)</Text>
-      <ChartHelp
-        description="Weekly intensity-weighted load per lift (INOL), averaged over the window, then scaled by the stimulus coefficient from your lift profile."
-        range={`${formatBounds(inol)} (phase-adjusted; above target is a prompt to check the plan, not a verdict)`}
-        units="INOL per week, dimensionless"
-        relation="Adjusted = Raw x coefficient. A 'default' coefficient of 1.00 means the lift has no profile coefficient; profile values are accepted only between 0.5 and 2.0."
-        formulaId="inol"
-      />
+      <ChartLabel text="Weekly INOL per lift, scaled by your stimulus coefficient." formulaId="inol" />
       <SimpleGrid cols={{ base: 1, xs: 3 }} mb="sm">
         {Object.entries(inol.avg_inol).map(([lift, fallbackAdjusted]) => {
           const detail = inol.lifts?.[lift]
           const adjustedValue = detail?.adjusted ?? fallbackAdjusted
           const raw = detail?.raw ?? inol.raw_avg_inol?.[lift]
           const coefficient = detail?.coefficient ?? inol.stimulus_coefficients?.[lift] ?? 1
-          const source = detail?.coefficient_source ?? inol.coefficient_sources?.[lift] ?? 'default'
           const bounds = inol.phase_adjusted_thresholds?.[lift]
           const base = inol.thresholds?.[lift] ?? DEFAULT_INOL_THRESHOLDS[lift] ?? { low: 2, high: 4 }
           const display = bounds ? { low: bounds.display_low, high: bounds.display_high } : base
@@ -122,10 +101,8 @@ export function InolPanel({ inol }: { inol: InolData }) {
             <Stack key={lift} gap={2} ta="center" p="sm" style={{ borderRadius: 'var(--mantine-radius-sm)', background: `var(--mantine-color-${zone.color}-light)` }}>
               <Text fz="xs" c="dimmed" tt="capitalize">{lift}</Text>
               <Text fz="xl" fw={700}>{adjustedValue.toFixed(2)}</Text>
-              <Text fz="xs" c="dimmed">adjusted</Text>
               {typeof raw === 'number' && <Text fz="xs" c="dimmed">raw {raw.toFixed(2)} x {coefficient.toFixed(2)}</Text>}
-              <Text fz="xs" c="dimmed">coefficient from {source === 'profile' ? 'lift profile' : 'default (no profile)'}</Text>
-              <Text fz="xs" fw={500}>{zone.label} ({display.low.toFixed(1)}-{display.high.toFixed(1)})</Text>
+              <Text fz="xs" fw={500} c={zone.color}>target {display.low.toFixed(1)}–{display.high.toFixed(1)}</Text>
               {bounds && bounds.phase_multiplier !== 1 && (
                 <Text fz="xs" c="dimmed">phase multiplier x{bounds.phase_multiplier.toFixed(2)}</Text>
               )}
@@ -186,13 +163,7 @@ export function AcwrPanel({ acwr }: { acwr: NonNullable<WeeklyAnalysis['acwr']> 
           <Text span visibleFrom="sm"> ({ready.composite_label ?? composite.label})</Text>
         </Badge>
       </Group>
-      <ChartHelp
-        description="Acute (7-day EWMA) load divided by chronic (28-day EWMA) load, per fatigue dimension. The composite is the weighted mean of the dimensions that have a ratio, with weights renormalised. Labels describe load pattern, not injury risk."
-        range="0.8-1.3 steady load (shaded) · below 0.8 detraining trend · 1.3-1.5 rapid increase · above 1.5 load spike"
-        units="ratio, 1.0 = acute load equals chronic load"
-        relation="Ratio = acute / chronic. Bars show the ratio; each card lists the acute and chronic loads behind it and its weight in the composite."
-        formulaId="acwr"
-      />
+      <ChartLabel text="Acute load divided by chronic load, per dimension." formulaId="acwr" />
       {chartRows.length > 0 && (
         <Box style={{ width: '100%', height: 200 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -200,7 +171,7 @@ export function AcwrPanel({ acwr }: { acwr: NonNullable<WeeklyAnalysis['acwr']> 
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--mantine-color-default-border)" />
               <XAxis dataKey="dimension" {...AXIS_PROPS} />
               <YAxis domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} {...AXIS_PROPS} />
-              <ReferenceArea y1={0.8} y2={1.3} fill="var(--mantine-color-green-5)" fillOpacity={0.12} strokeOpacity={0} />
+              <ReferenceArea y1={0.8} y2={1.3} fill="var(--mantine-color-green-5)" fillOpacity={0.12} strokeOpacity={0} label={{ value: '0.8–1.3 normal', position: 'insideTopRight', fill: 'var(--mantine-color-dimmed)', fontSize: 11 }} />
               <ReferenceLine y={1} stroke="var(--mantine-color-dimmed)" strokeDasharray="4 4" />
               <RechartsTooltip
                 contentStyle={TOOLTIP_STYLE}
@@ -268,15 +239,7 @@ export function SpecificityPanel({
           <Badge variant="light" color="gray">No upcoming comp band</Badge>
         )}
       </Group>
-      <ChartHelp
-        description="Share of your sets that are competition-specific. Narrow counts only the competition lifts. Broad adds accessories weighted by how closely each transfers to a competition lift, so accessories raise it instead of diluting it."
-        range={band
-          ? `${band.weeks_to_comp?.toFixed(1) ?? '--'} weeks out: narrow ${(band.narrow.min * 100).toFixed(0)}-${(band.narrow.max * 100).toFixed(0)}% · broad ${(band.broad.min * 100).toFixed(0)}-${(band.broad.max * 100).toFixed(0)}%`
-          : 'No band without an upcoming competition; the expected share rises as the meet approaches.'}
-        units="% of total sets"
-        relation="Broad is always at least Narrow; the gap is transfer-weighted accessory work."
-        formulaId="specificity_ratio"
-      />
+      <ChartLabel text="Share of sets that are competition-specific." formulaId="specificity_ratio" />
       {target && (
         <Text fz="xs" c="dimmed" mb="sm">
           Target: {target.name ?? 'Upcoming meet'}
@@ -288,12 +251,12 @@ export function SpecificityPanel({
         <Stack gap="xs">
           <Text fz="xs" c="dimmed">Narrow (competition lifts only)</Text>
           <Progress value={Math.min(specificity.narrow * 100, 100)} />
-          <Text fz="sm" fw={500}>{(specificity.narrow * 100).toFixed(1)}%</Text>
+          <Text fz="sm" fw={500}>{(specificity.narrow * 100).toFixed(1)}%{band && <Text span fz="xs" c="dimmed"> expected {(band.narrow.min * 100).toFixed(0)}–{(band.narrow.max * 100).toFixed(0)}%</Text>}</Text>
         </Stack>
         <Stack gap="xs">
           <Text fz="xs" c="dimmed">Broad (transfer-weighted)</Text>
           <Progress value={Math.min(specificity.broad * 100, 100)} color="blue" />
-          <Text fz="sm" fw={500}>{(specificity.broad * 100).toFixed(1)}%</Text>
+          <Text fz="sm" fw={500}>{(specificity.broad * 100).toFixed(1)}%{band && <Text span fz="xs" c="dimmed"> expected {(band.broad.min * 100).toFixed(0)}–{(band.broad.max * 100).toFixed(0)}%</Text>}</Text>
         </Stack>
       </SimpleGrid>
       <Text fz="xs" c="dimmed" mt="sm">
@@ -327,23 +290,15 @@ export function FatigueDimensionsPanel({ dimensions }: { dimensions: NonNullable
   return (
     <Paper withBorder p="md" className="if-card">
       <Text fw={500} mb={4}>Fatigue Dimensions (Weekly)</Text>
-      <ChartHelp
-        description={hasNormalized
-          ? `Each week's load in four recovery dimensions, divided by your own typical week (median of the last 12 complete weeks${dimensions.baseline_weeks_used ? `, ${dimensions.baseline_weeks_used} used` : ''}). Axial is spinal loading, neural is high-intensity demand, peripheral is local muscle work, systemic is whole-body work.`
-          : 'Weekly load in four recovery dimensions: axial (spinal compression), neural (high-intensity demand), peripheral (local muscle work) and systemic (whole-body work).'}
-        range={hasNormalized ? '1.0 is a typical week for you; above 1.0 is heavier than usual, below 1.0 is lighter.' : undefined}
-        units={hasNormalized ? 'multiple of your typical week (1.0 = typical); raw load units in the tooltip' : 'raw load units'}
-        relation="Dimensions overlap (a heavy deadlift loads axial, neural and systemic together), so compare each line to its own 1.0 line, not to the other lines."
-        formulaId="fatigue_model"
-      />
+      <ChartLabel text="Weekly load by recovery dimension, compared with your typical week." formulaId="fatigue_model" />
       <Box style={{ width: '100%', height: 260 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows}>
+          <LineChart data={rows} margin={{ right: 72 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--mantine-color-default-border)" />
             <XAxis dataKey="week" {...AXIS_PROPS} />
             <YAxis {...AXIS_PROPS} domain={[0, (max: number) => Math.max(1.5, Math.ceil(max * 10) / 10)]} />
             {hasNormalized && (
-              <ReferenceLine y={1} stroke="var(--mantine-color-dimmed)" strokeDasharray="4 4" label={{ value: 'typical week', position: 'insideTopRight', fill: 'var(--mantine-color-dimmed)', fontSize: 11 }} />
+              <ReferenceLine y={1} stroke="var(--mantine-color-dimmed)" strokeDasharray="4 4" label={{ value: '1.0 = typical week', position: 'insideTopLeft', fill: 'var(--mantine-color-dimmed)', fontSize: 11 }} />
             )}
             <RechartsTooltip
               contentStyle={TOOLTIP_STYLE}
@@ -357,7 +312,22 @@ export function FatigueDimensionsPanel({ dimensions }: { dimensions: NonNullable
             />
             <Legend />
             {(['axial', 'neural', 'peripheral', 'systemic'] as const).map((dimension) => (
-              <Line key={dimension} type="monotone" dataKey={dimension} name={dimension} stroke={DIMENSION_COLORS[dimension]} strokeWidth={2} dot={{ r: 3 }} />
+              <Line
+                key={dimension}
+                type="monotone"
+                dataKey={dimension}
+                name={dimension}
+                stroke={DIMENSION_COLORS[dimension]}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                label={(props: { x?: number; y?: number; value?: number; index?: number }) =>
+                  props.index === rows.length - 1 && typeof props.value === 'number' && typeof props.x === 'number' && typeof props.y === 'number' ? (
+                    <text key={dimension} x={props.x + 8} y={props.y + 4} fontSize={11} fill={DIMENSION_COLORS[dimension]}>
+                      {`${dimension} ${props.value.toFixed(2)}`}
+                    </text>
+                  ) : <g key={`${dimension}-${props.index}`} />
+                }
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>

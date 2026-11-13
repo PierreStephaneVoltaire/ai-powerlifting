@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"maps"
 	"net/http"
 	"time"
@@ -107,6 +108,7 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 		return Response{}, err
 	}
 	if err := operation.ValidateResult(result); err != nil {
+		slog.WarnContext(ctx, "invalid result", "operation", name, "error", err.Error())
 		return Response{}, apperr.InvalidResult()
 	}
 	if caller.Nested || job == "" {

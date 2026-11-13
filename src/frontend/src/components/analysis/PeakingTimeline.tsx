@@ -23,7 +23,7 @@ import {
   YAxis,
 } from 'recharts'
 import { TrendingUp } from 'lucide-react'
-import { ChartHelp } from '@/components/analysis/ChartHelp'
+import { ChartLabel } from '@/components/analysis/ChartLabel'
 import type { PeakingTimeline as PeakingTimelineData } from '@/api/analytics'
 
 interface PeakingTimelineProps {
@@ -132,13 +132,7 @@ export function PeakingTimeline({ data }: PeakingTimelineProps) {
             </Stack>
           </SimpleGrid>
 
-          <ChartHelp
-            description="Actual TSB (solid) is form from logged training. Projected TSB (dashed) assumes the planned sessions are completed through the meet. Dots are weekly specificity, read on the right axis."
-            range={`Green band: TSB ${data.peak_window.min > 0 ? '+' : ''}${data.peak_window.min} to +${data.peak_window.max} is the peaking window. Blue bands: expected narrow specificity by weeks out${data.specificity_bands.length ? '' : ' (none for this meet)'}.`}
-            units="TSB in load points (left axis) · specificity as a share of sets, 0-100% (right axis)"
-            relation="TSB = CTL - ATL, so it climbs as the taper removes fatigue. The projected line should enter the green band on meet day while the specificity dots (narrow: competition lifts, broad: transfer-weighted accessories too) move into the rising blue bands."
-            formulaId="banister_ffm"
-          />
+          <ChartLabel text="Solid is actual TSB. Dashed is planned. Dots show specificity." formulaId="banister_ffm" />
           <Box style={{ width: '100%', height: 420 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData}>

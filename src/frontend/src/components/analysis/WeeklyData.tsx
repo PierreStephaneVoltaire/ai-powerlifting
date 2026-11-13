@@ -4,8 +4,8 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, B
 import type { MonotonyStrainRow, WeeklyAnalysis } from '@/api/analytics';
 import { toDisplayUnit, formatDisplayWeight } from '@/utils/units';
 import { Unit } from '@/store/settingsStore';
-import { MuscleWorkloadMap } from '@/components/analysis/MuscleWorkloadMap';
-import { ChartHelp } from '@/components/analysis/ChartHelp';
+import { MuscleVolumeMap } from '@/components/analysis/MuscleVolumeMap';
+import { ChartLabel } from '@/components/analysis/ChartLabel';
 
 const CHART_COLORS = [
   '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6',
@@ -40,13 +40,7 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
       {Object.keys(data.lifts).length > 0 && (
         <Paper withBorder p="md">
           <Text fw={500} mb={4}>Per-Lift Breakdown</Text>
-          <ChartHelp
-            description="One row per competition lift. Main sets are the lift itself; weighted sets add every exercise that trains it, each counted by its transfer weight (e.g. lunges and leg press for squat, RDLs for deadlift). Expand a row to see those accessories."
-            range="Transfer 1.0 is the lift itself; 0.9 and above counts as the same movement for frequency; lower values count as partial work."
-            units="sets per window; volume in kg x reps; frequency in sessions per week"
-            relation="Weighted sets = main sets + sum of accessory sets x transfer. Freq counts sessions with near-identical work; 'any' also counts sessions with any related work."
-            formulaId="specificity_ratio"
-          />
+          <ChartLabel text="Sets and frequency per lift. Expand a row for accessories." formulaId="specificity_ratio" />
           <Box style={{ overflowX: 'auto' }}>
             <Table fz="sm">
               <Table.Thead>
@@ -228,7 +222,7 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
       {/* Muscle Workload */}
       {data.muscle_volume && Object.keys(data.muscle_volume.muscles).length > 0 && (
         <Paper withBorder p="md">
-          <MuscleWorkloadMap muscleVolume={data.muscle_volume} analysisWeeks={analysisWeeks} />
+          <MuscleVolumeMap volume={data.muscle_volume} />
         </Paper>
       )}
 
@@ -236,13 +230,7 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
       {data.monotony_strain && data.monotony_strain.weekly.length > 0 && (
         <Paper withBorder p="md">
           <Text fw={500} mb={4}>Foster Monotony &amp; Strain</Text>
-          <ChartHelp
-            description="How uniform each week's daily load was (monotony) and how much load that uniformity accumulated (strain), on load normalised to your own typical day. Weeks marked partial have fewer than 7 observed days, so treat them as provisional."
-            range="Monotony above 2.0 is flagged only in weeks with 3 or more training days. Strain Index above 1.5 means the week's strain jumped over the 4-week median."
-            units="Monotony and Raw are ratios; Strain is normalised load x monotony (1.0 = a typical training day's load); Strain Index is a multiple of the prior 4-week median strain"
-            relation="Monotony = mean daily load / spread of daily load (Raw is uncapped, Monotony is capped at 7). Strain = weekly load x Monotony. Strain Index = Strain / median of the previous 4 weeks."
-            formulaId="monotony_strain"
-          />
+          <ChartLabel text="Monotony is how uniform daily load is. Above 2.0 is flagged." formulaId="monotony_strain" />
           {viewMode === 'raw' ? (
             <Box style={{ overflowX: 'auto' }}>
               <Table fz="sm">
