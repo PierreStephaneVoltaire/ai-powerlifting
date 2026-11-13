@@ -466,7 +466,9 @@ jobs:
           kubectl -n istio-system rollout status deployment/istiod --timeout=180s
           namespace="$(terraform -chdir=core output -raw namespace)"
           for deployment in cloudflared nolift-waypoint oauth2-proxy powerlifting-app-backend powerlifting-app-frontend pl-analytics pl-analytics-ai pl-analytics-export pl-valkey pl-prompt-cache pl-prompt-cache-mcp pl-budget pl-calculations pl-competition pl-export pl-federation pl-glossary pl-goals pl-imports pl-lift-profiles pl-performance pl-profile pl-program pl-rankings pl-sessions pl-templates pl-videos pl-weight-log; do
-            kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout=180s
+            rollout_timeout=180s
+            if [ "$deployment" = "pl-rankings" ]; then rollout_timeout=900s; fi
+            kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout="$rollout_timeout"
           done
           if [ "$APPLY_COACH" = "true" ]; then
             terraform -chdir=../coach init -input=false \

@@ -36,6 +36,11 @@ resource "kubernetes_deployment_v1" "analytics" {
           image_pull_policy = "IfNotPresent"
 
           env {
+            name  = "PORT"
+            value = "8000"
+          }
+
+          env {
             name  = "VALKEY_URL"
             value = local.service_env.VALKEY_URL
           }

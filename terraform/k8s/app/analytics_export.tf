@@ -36,6 +36,11 @@ resource "kubernetes_deployment_v1" "analytics_export" {
           image_pull_policy = "IfNotPresent"
 
           env {
+            name  = "PORT"
+            value = "8000"
+          }
+
+          env {
             name  = "POWERLIFTING_S3_BUCKET"
             value = var.dataset_bucket
           }
