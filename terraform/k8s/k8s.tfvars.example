@@ -51,3 +51,14 @@ tables = {
   goals               = ""
   budget              = ""
 }
+llm_domain                   = ""
+litellm_providers = {
+  chatgpt    = { type = "chatgpt" }
+  openrouter = { type = "openrouter" }
+}
+litellm_models = {
+  pl-standard  = [{ provider = "chatgpt", model = "gpt-5.6-sol" }]
+  pl-light     = [{ provider = "chatgpt", model = "gpt-5.6-luna" }]
+  pl-documents = [{ provider = "chatgpt", model = "gpt-6-astra" }]
+}
+litellm_fallbacks = {}

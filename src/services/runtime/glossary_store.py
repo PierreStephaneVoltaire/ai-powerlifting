@@ -16,6 +16,10 @@ from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
 
+def _name_key(name: Any) -> str:
+    return " ".join(str(name or "").casefold().split())
+
+
 class GlossaryStore:
     """DynamoDB-backed store for the exercise glossary."""
 
@@ -311,12 +315,18 @@ class GlossaryStore:
         exercise = dict(exercise)
         exercise["id"] = exercise_id
         exercise = self._to_canonical(exercise)
-        existing_index = None
-        for i, ex in enumerate(exercises):
-            if ex.get("id") == exercise_id:
-                existing_index = i
-                break
-        if existing_index is not None:
+        existing_index = next((i for i, ex in enumerate(exercises) if ex.get("id") == exercise_id), None)
+        name_key = _name_key(exercise.get("name"))
+        same_name = next((i for i, ex in enumerate(exercises) if name_key and _name_key(ex.get("name")) == name_key and ex.get("id") != exercise_id), None)
+        if same_name is not None and existing_index is not None:
+            raise ValueError(f"An exercise named {exercises[same_name].get('name')} already exists")
+        if same_name is not None:
+            merged = {**{key: value for key, value in exercise.items() if value not in (None, "", [], {})}, **{key: value for key, value in exercises[same_name].items() if value not in (None, "", [], {})}}
+            merged["id"] = exercises[same_name]["id"]
+            merged["name"] = exercises[same_name].get("name")
+            exercises[same_name] = self._to_canonical(merged)
+            exercise_id = merged["id"]
+        elif existing_index is not None:
             exercises[existing_index] = exercise
         else:
             exercises.append(exercise)

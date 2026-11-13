@@ -56,9 +56,6 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 			return nil, apperr.Forbidden("Reserved authorization fields cannot be supplied")
 		}
 	}
-	if !operation.Public && caller.Person == "" {
-		return nil, apperr.Forbidden("Authenticated Person required")
-	}
 	access, err := s.access.Fetch(ctx, name, arguments, caller)
 	if err != nil {
 		return nil, err

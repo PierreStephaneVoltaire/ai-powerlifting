@@ -46,8 +46,7 @@ func TestInboundChecksRunInTheSpecifiedOrder(t *testing.T) {
 	}{
 		{"generation without a turn wins over an unknown operation", "nope", args(nil), generation, 403, "Generation requires an active native turn", false},
 		{"unknown operation before reserved fields", "nope", args(map[string]any{"_access": 1}), person(), 404, "Unknown operation", false},
-		{"reserved fields before the missing person", "block_correlation_analysis", args(map[string]any{"_person_pk": "x"}), noPerson, 403, "Reserved authorization fields", false},
-		{"missing person before access evaluation", "block_correlation_analysis", args(nil), noPerson, 403, "Authenticated Person required", false},
+		{"reserved fields before access evaluation", "block_correlation_analysis", args(map[string]any{"_person_pk": "x"}), noPerson, 403, "Reserved authorization fields", false},
 		{"athlete scope conflict after access evaluation", "block_correlation_analysis", args(map[string]any{"pk": "someone_else"}), person(), 403, "ownership conflicts", true},
 		{"validation after scoping", "block_correlation_analysis", args(map[string]any{"block_key": 7}), person(), 422, "validation", true},
 		{"nested call without an execution", "block_correlation_analysis", args(nil), nested, 409, "Nested operation requires an active domain execution", true},

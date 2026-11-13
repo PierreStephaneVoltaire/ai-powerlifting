@@ -38,6 +38,18 @@ ROI → Main-Lift Drivers rework: **complete, compiles, scoped tests green** (sp
 - **Not yet verified against real data.** The Rust gRPC test was compiled but not run, and nothing has looked at the UI in a browser. After deploy, and after the AI quota resets, run a correlation with `refresh:true` and check the findings quality.
 - Known limit: `driver_stats` covers the whole block even when the trailing-weeks window is shorter.
 
+Later fixes, also uncommitted and verified (cargo check, scoped go test, tsc):
+
+- **Anonymous analysis (403 "Authenticated Person required"):** pl-analytics, pl-rankings, pl-analytics-ai and pl-analytics-export had a Person gate that Python never had. Python only requires a Person for `ownership: person` ops, and every op in these four is athlete-owned. The gate is removed in the `operations.rs` files and `service.go`, and its two Go test rows are dropped. `Resume` keeps its Person check, matching Python.
+- **Dashboard long decimals:** `utils/units.ts` `toDisplayUnit` and `displayWeight` now round kg to 0.1. The kg branch printed the raw value, and the Rust analytics returns full precision where the old Node path rounded. **Not confirmed against the operator's screen.** If they still see long decimals, ask which value.
+
+- **Analysis page muscle maps:** the original `MuscleWorkloadMap` is restored in `WeeklyData.tsx`, and the new `MuscleVolumeMap` stays directly below it. Both stay; never replace one with the other.
+- **Glossary uniqueness:** `runtime/glossary_store.py` `upsert_exercise_sync` now enforces case- and whitespace-insensitive unique names.
+  - An add with an existing name fills that entry's missing fields and returns its id.
+  - A rename onto an existing name raises an error.
+  - Checked offline; `test_glossary.py` can't import locally because `redis` isn't installed.
+  - The live data still has one duplicate pair: `Ab Rollout` (`ed5adf46…`) and `ab rollout` (`2289309c…`). It needs a merge, pending operator OK: keep `ed5adf46`, copy over its missing fatigue_profile fields, remove `2289309c`.
+
 ## Unfinished work
 
 ### 1. Main-Lift Drivers: verify after deploy

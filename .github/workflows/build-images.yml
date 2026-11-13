@@ -298,6 +298,8 @@ jobs:
       TF_VAR_app_zone: ${{ vars.APP_ZONE }}
       TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN }}
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
+      TF_VAR_llm_domain: ${{ vars.LLM_DOMAIN }}
+      TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -329,6 +331,8 @@ jobs:
       TF_VAR_app_zone: ${{ vars.APP_ZONE }}
       TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN }}
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
+      TF_VAR_llm_domain: ${{ vars.LLM_DOMAIN }}
+      TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
     steps:
       - uses: actions/checkout@v4
 

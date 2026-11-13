@@ -14,7 +14,7 @@ export const toDisplayBodyweight = (kg: number, unit: 'kg' | 'lb'): number =>
   Number((unit === 'lb' ? kg * KG_TO_LB : kg).toFixed(2))
 
 export const toDisplayUnit = (kg: number, unit: 'kg' | 'lb'): number =>
-  unit === 'lb' ? Math.round(kg * KG_TO_LB) : kg
+  unit === 'lb' ? Math.round(kg * KG_TO_LB) : Math.round(kg * 10) / 10
 
 export const formatDisplayWeight = (kg: number, unit: 'kg' | 'lb'): string =>
   unit === 'lb' ? String(toDisplayUnit(kg, unit)) : toDisplayUnit(kg, unit).toFixed(1)
@@ -26,7 +26,7 @@ export const displayBodyweight = (kg: number, unit: 'kg' | 'lb'): string =>
   `${formatBodyweight(kg, unit)} ${unit}`
 
 export const displayWeight = (kg: number, unit: 'kg' | 'lb'): string =>
-  unit === 'lb' ? `${toDisplayUnit(kg, unit)} lb` : `${kg} kg`
+  `${toDisplayUnit(kg, unit)} ${unit}`
 
 export const fromDisplayUnit = (value: number, unit: 'kg' | 'lb'): number =>
   unit === 'lb' ? lbToKg(value) : value

@@ -187,7 +187,6 @@ func TestErrorShapesMatchTheFastAPIContract(t *testing.T) {
 	}{
 		{"unknown operation", http.MethodPost, "/operations/nope", `{}`, identity, 404, `{"detail":"Unknown operation"}`},
 		{"body must be an object", http.MethodPost, "/operations/block_correlation_analysis", `[1]`, identity, 422, `"dict_type"`},
-		{"missing person", http.MethodPost, "/operations/block_correlation_analysis", `{}`, map[string]string{"X-Athlete-Pk": "a"}, 403, `"code":"forbidden"`},
 		{"generation without a turn", http.MethodPost, "/operations/block_correlation_analysis", `{}`, map[string]string{"X-IF-Generation-Id": "g"}, 403, `Generation requires an active native turn`},
 		{"unknown generation", http.MethodGet, "/generations/missing", ``, identity, 404, `"code":"not_found"`},
 		{"athlete required for generations", http.MethodGet, "/generations/missing", ``, map[string]string{"X-Person-Pk": "p"}, 403, `Authenticated Athlete required`},

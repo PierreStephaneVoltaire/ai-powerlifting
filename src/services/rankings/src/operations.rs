@@ -207,9 +207,6 @@ impl Service {
                 "Reserved authorization fields cannot be supplied",
             ));
         }
-        if operation.ownership != Ownership::Public && caller.person.is_empty() {
-            return Err(Error::Forbidden("Authenticated Person required"));
-        }
         let access = access::fetch(
             &self.http,
             &self.config.profile_url,

@@ -4,6 +4,8 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, B
 import type { MonotonyStrainRow, WeeklyAnalysis } from '@/api/analytics';
 import { toDisplayUnit, formatDisplayWeight } from '@/utils/units';
 import { Unit } from '@/store/settingsStore';
+import type { MuscleGroup } from '@powerlifting/types';
+import { MuscleWorkloadMap } from '@/components/analysis/MuscleWorkloadMap';
 import { MuscleVolumeMap } from '@/components/analysis/MuscleVolumeMap';
 import { ChartLabel } from '@/components/analysis/ChartLabel';
 
@@ -222,6 +224,15 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
       )}
 
       {/* Muscle Workload */}
+      {data.muscle_volume && Object.keys(data.muscle_volume.muscles ?? {}).length > 0 && (
+        <Paper withBorder p="md">
+          <MuscleWorkloadMap
+            setsPerWeek={Object.fromEntries(Object.entries(data.muscle_volume.muscles).map(([muscle, entry]) => [muscle, entry.weekly_sets])) as Partial<Record<MuscleGroup, number>>}
+            analysisWeeks={analysisWeeks}
+          />
+        </Paper>
+      )}
+
       {data.muscle_volume && Object.keys(data.muscle_volume.muscles ?? {}).length > 0 && (
         <Paper withBorder p="md">
           <MuscleVolumeMap volume={data.muscle_volume} />

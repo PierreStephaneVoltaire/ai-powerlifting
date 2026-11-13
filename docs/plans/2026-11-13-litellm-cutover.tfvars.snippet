@@ -1,0 +1,26 @@
+coach_providers = {
+  litellm = { auth = "api_key", base_url = "http://litellm.powerlifting.svc.cluster.local:4000/v1", max_concurrent = 4 }
+}
+coach_provider_api_keys = {}
+conversation_ai         = { provider = "litellm", model = "pl-standard", effort = "medium" }
+operation_ai = {
+  block_correlation_analysis      = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  block_program_evaluation        = { provider = "litellm", model = "pl-standard", effort = "high" }
+  correlation_analysis            = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  multi_block_comparison_analysis = { provider = "litellm", model = "pl-standard", effort = "high" }
+  program_evaluation              = { provider = "litellm", model = "pl-standard", effort = "high" }
+  template_evaluate               = { provider = "litellm", model = "pl-standard", effort = "high" }
+  import_parse_file               = { provider = "litellm", model = "pl-documents", effort = "high" }
+  lift_profile_suggest            = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  lift_profile_estimate_stimulus  = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  glossary_estimate_muscles       = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  muscle_group_estimate           = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  glossary_estimate_fatigue       = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  glossary_estimate_lift_transfer = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  fatigue_profile_estimate        = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  glossary_estimate_e1rm          = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  glossary_generate_text          = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  budget_advisor                  = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  budget_priority_timeline        = { provider = "litellm", model = "pl-standard", effort = "medium" }
+  chat_guard                      = { provider = "litellm", model = "pl-light", effort = "low" }
+}
