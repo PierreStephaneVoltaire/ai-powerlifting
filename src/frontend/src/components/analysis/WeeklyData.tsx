@@ -220,7 +220,7 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
       )}
 
       {/* Muscle Workload */}
-      {data.muscle_volume && Object.keys(data.muscle_volume.muscles).length > 0 && (
+      {data.muscle_volume && Object.keys(data.muscle_volume.muscles ?? {}).length > 0 && (
         <Paper withBorder p="md">
           <MuscleVolumeMap volume={data.muscle_volume} />
         </Paper>
