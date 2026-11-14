@@ -35,6 +35,7 @@ repositories = {
   rankings  = ""
   analytics_ai = ""
   analytics_export = ""
+  glossary  = ""
   backend   = ""
   frontend  = ""
 }
@@ -50,6 +51,7 @@ tables = {
   user_federations    = ""
   goals               = ""
   budget              = ""
+  glossary            = ""
 }
 llm_domain                   = ""
 litellm_providers = {
@@ -61,6 +63,7 @@ litellm_models = {
   pl-standard  = [{ provider = "chatgpt", model = "gpt-5.6-terra" }]
   pl-light     = [{ provider = "chatgpt", model = "gpt-6-luna" }]
   pl-documents = [{ provider = "chatgpt", model = "gpt-6-astra" }]
+  pl-background = [{ provider = "openrouter", model = "deepseek/deepseek-v4-flash" }]
 }
 litellm_fallbacks = {}
 litellm_admins            = []

@@ -6,7 +6,6 @@ require (
 	github.com/aws/aws-lambda-go v1.55.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.74.0
-	golang.org/x/text v0.44.0
 )
 
 require (

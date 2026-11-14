@@ -21,7 +21,7 @@ def _get_program_store(pk):
 def _get_glossary_store(pk):
     from services.runtime.glossary_store import GlossaryStore
 
-    return GlossaryStore(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk, os.getenv("AWS_REGION", "ca-central-1"))
+    return GlossaryStore(pk=pk, region=os.getenv("AWS_REGION", "ca-central-1"))
 
 
 def _get_import_store(pk):
@@ -238,7 +238,7 @@ async def _dispatch(args):
         raise ValueError("No training sessions were found in the uploaded file")
     _normalize_exercise_names(parsed)
     glossary = _get_glossary_store(pk)
-    await glossary.get_glossary()
+    exercises = await glossary.get_glossary()
     names = {
         exercise.get("name")
         for session in parsed.get("sessions", [])
@@ -247,7 +247,7 @@ async def _dispatch(args):
     }
     resolved = {}
     for name in names:
-        glossary_id = await glossary.fuzzy_resolve(name, threshold=0.92)
+        glossary_id = await glossary.fuzzy_resolve(name, threshold=0.92, exercises=exercises)
         if glossary_id:
             resolved[name] = glossary_id
     for session in parsed.get("sessions", []):

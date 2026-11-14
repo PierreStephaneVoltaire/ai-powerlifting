@@ -4,7 +4,7 @@ from pathlib import Path
 from services.runtime.contract import load_operations
 import services.runtime.dispatch
 
-NATIVE_DOMAINS = {"analytics", "analytics-ai", "analytics-export", "rankings"}
+NATIVE_DOMAINS = {"analytics", "analytics-ai", "analytics-export", "rankings", "glossary"}
 
 
 def test_every_registered_handler_imports_with_service_dependencies():

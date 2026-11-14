@@ -26,6 +26,7 @@ variable "tables" {
     user_federations    = string
     goals               = string
     budget              = string
+    glossary            = string
   })
 }
 

@@ -16,7 +16,6 @@ on:
       - "src/tsconfig.json"
       - "scripts/image_tag.py"
       - "scripts/migrate_identity_pointers.py"
-      - "scripts/migrate_glossary_table.py"
       - ".github/workflows/**"
       - ".github/actions/**"
       - ".github/image-filters.yml"
@@ -371,11 +370,6 @@ jobs:
         run: |
           python scripts/migrate_identity_pointers.py
           python scripts/migrate_identity_pointers.py --apply
-
-      - name: Migrate glossary table
-        run: |
-          python scripts/migrate_glossary_table.py
-          python scripts/migrate_glossary_table.py --apply
 
       - env:
           K8S_TFVARS: ${{ secrets.K8S_TFVARS }}

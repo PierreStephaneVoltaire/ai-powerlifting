@@ -38,7 +38,7 @@ def _get_template_store():
 
 def _get_glossary(args):
     from services.runtime.glossary_store import GlossaryStore
-    return GlossaryStore(os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"), pk=args["pk"], region=os.environ.get("AWS_REGION", "ca-central-1")).get_glossary_sync()
+    return GlossaryStore(pk=args["pk"], region=os.environ.get("AWS_REGION", "ca-central-1")).get_glossary_sync()
 
 
 def template_actor(args):

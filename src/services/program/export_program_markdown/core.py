@@ -61,17 +61,10 @@ def _sanitize_decimals(obj: Any) -> Any:
     return obj
 
 
-def _get_glossary_sync(table_name: str, pk: str) -> list[dict]:
-    """Fetch glossary from DynamoDB for the active health partition."""
-    from services.runtime.aws import dynamodb_resource
+def _get_glossary_sync(pk: str) -> list[dict]:
+    from services.runtime.glossary_store import GlossaryStore
 
-    dynamodb = dynamodb_resource("dynamodb", region_name="ca-central-1")
-    table = dynamodb.Table(table_name)
-    resp = table.get_item(Key={"pk": pk, "sk": "glossary#v1"})
-    item = resp.get("Item")
-    if not item:
-        return []
-    return _sanitize_decimals(item.get("exercises", []))
+    return GlossaryStore(pk=pk).get_glossary_sync()
 
 
 def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
@@ -134,7 +127,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store) -> dict:
     }
 
     try:
-        glossary = _get_glossary_sync(IF_HEALTH_TABLE_NAME, active_pk)
+        glossary = _get_glossary_sync(active_pk)
     except Exception as e:
         logger.warning("export: glossary fetch failed (%s); continuing without it", e)
         glossary = []

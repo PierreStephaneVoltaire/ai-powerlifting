@@ -125,11 +125,7 @@ is personal only (overlay).
   `program/export_program_markdown` read via it.
 - Backend `exerciseController.ts` unchanged except types; frontend shows
   "personal" vs "generic" fatigue.
-- One-time migration `scripts/migrate_glossary_table.py` (dry run by default,
-  `--apply`), run by the pipeline like `migrate_identity_pointers.py`: each
-  `glossary#v1` exercise → catalog definition (`generic_status = pending`) +
-  that athlete's overlay (personal fatigue, e1rm, archived). Old items are left in
-  place; the operator deletes them after verification.
+- No migration code.
 
 ## 6. Pipeline
 
@@ -150,6 +146,6 @@ is personal only (overlay).
 - [ ] **A3. Verify Codex → LiteLLM → OpenRouter non-GPT** (scratchpad only, report).
 - [ ] **A4. Pipeline** (`.github/**`, Packer, ECR list).
 - [ ] **B. Cutover:** k8s `glossary.tf` (remove from `services.tf`), coach op +
-  alias, Rust/Python readers, migration script, delete Python
+  alias, Rust/Python readers, delete Python
   `services/glossary/`, frontend fields.
 - [ ] **C. Verify after pipeline (operator).**

@@ -32,7 +32,7 @@ def _get_template_store():
 def _glossary(pk):
     from services.runtime.glossary_store import GlossaryStore
     try:
-        return GlossaryStore(os.getenv("IF_HEALTH_TABLE_NAME", "if-health"), pk=pk or "operator", region=os.getenv("AWS_REGION", "ca-central-1")).get_glossary_sync()
+        return GlossaryStore(pk=pk or "operator", region=os.getenv("AWS_REGION", "ca-central-1")).get_glossary_sync()
     except Exception:
         return []
 

@@ -7,13 +7,14 @@ from services.runtime.template_patch import Resolver, apply_operations, patch_ha
 
 def _resolver(args: dict) -> Resolver:
     from services.runtime.glossary_store import GlossaryStore
-    store = GlossaryStore(os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"), pk=args["pk"], region=os.environ.get("AWS_REGION", "ca-central-1"))
-    by_id = {str(entry.get("id")): entry for entry in store.get_glossary_sync() if entry.get("id")}
+    store = GlossaryStore(pk=args["pk"], region=os.environ.get("AWS_REGION", "ca-central-1"))
+    exercises = store.get_glossary_sync()
+    by_id = {str(entry.get("id")): entry for entry in exercises if entry.get("id")}
     cache: dict[str, dict | None] = {}
 
     def resolve(name: str) -> dict | None:
         if name not in cache:
-            entry_id = store.fuzzy_resolve_sync(name)
+            entry_id = store.fuzzy_resolve_sync(name, exercises=exercises)
             cache[name] = by_id.get(str(entry_id)) if entry_id else None
         return cache[name]
 

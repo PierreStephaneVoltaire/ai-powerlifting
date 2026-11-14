@@ -30,6 +30,7 @@ operation_ai = {
   fatigue_profile_estimate        = { provider = "", model = "", effort = "" }
   glossary_estimate_e1rm          = { provider = "", model = "", effort = "" }
   glossary_generate_text          = { provider = "", model = "", effort = "" }
+  glossary_generic_estimate       = { provider = "litellm", model = "pl-background", effort = "minimal" }
   budget_advisor                  = { provider = "", model = "", effort = "" }
   budget_priority_timeline        = { provider = "", model = "", effort = "" }
 }

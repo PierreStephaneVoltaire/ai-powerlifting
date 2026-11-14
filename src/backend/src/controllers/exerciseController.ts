@@ -60,7 +60,6 @@ export async function getGlossary(pk: string): Promise<GlossaryStore> {
   const glossary = await callOperation('exercise_get_glossary', { pk })
   return {
     pk,
-    sk: 'glossary#v1',
     exercises: Array.isArray(glossary?.exercises)
       ? glossary.exercises.map(normalizeStoredExercise)
       : [],

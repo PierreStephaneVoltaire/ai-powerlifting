@@ -28,7 +28,11 @@ import { ExerciseMuscleMap } from '@/components/glossary/ExerciseMuscleMap'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
-import type { GlossaryExercise, MuscleGroup, ExerciseCategory, Equipment, FatigueProfile, FatigueProfileSource, LiftTransfer } from '@powerlifting/types'
+import type { GlossaryExercise, MuscleGroup, ExerciseCategory, Equipment, FatigueProfile, FatigueProfileSource, GenericStatus, LiftTransfer } from '@powerlifting/types'
+
+function formatFatigue(profile: FatigueProfile): string {
+  return `axial ${Math.round(profile.axial * 100)}, neural ${Math.round(profile.neural * 100)}, peripheral ${Math.round(profile.peripheral * 100)}, systemic ${Math.round(profile.systemic * 100)}`
+}
 
 interface FatigueSliderProps {
   label: string
@@ -157,6 +161,9 @@ export default function GlossaryPage() {
   const [fatigueProfile, setFatigueProfile] = useState<FatigueProfile | null>(null)
   const [fatigueSource, setFatigueSource] = useState<FatigueProfileSource | null>(null)
   const [fatigueReasoning, setFatigueReasoning] = useState<string | null>(null)
+  const [genericFatigue, setGenericFatigue] = useState<FatigueProfile | null>(null)
+  const [genericStatus, setGenericStatus] = useState<GenericStatus | null>(null)
+  const [fatiguePersonalized, setFatiguePersonalized] = useState(false)
   const [liftTransfer, setLiftTransfer] = useState<LiftTransfer | null>(null)
   const [isEstimatingTransfer, setIsEstimatingTransfer] = useState(false)
   const [e1rmEstimate, setE1rmEstimate] = useState<GlossaryExercise['e1rm_estimate'] | null>(null)
@@ -229,9 +236,9 @@ export default function GlossaryPage() {
         how_to_perform: formData.how_to_perform || '',
         why_do_it: formData.why_do_it || '',
         video_url: videoUrl,
-        fatigue_profile: fatigueProfile || undefined,
-        fatigue_profile_source: fatigueSource || undefined,
-        fatigue_profile_reasoning: fatigueReasoning,
+        fatigue_profile: fatiguePersonalized ? fatigueProfile || undefined : undefined,
+        fatigue_profile_source: fatiguePersonalized ? fatigueSource || undefined : undefined,
+        fatigue_profile_reasoning: fatiguePersonalized ? fatigueReasoning : null,
         lift_transfer: liftTransfer || undefined,
         e1rm_estimate: e1rmEstimate || undefined,
       }
@@ -247,6 +254,9 @@ export default function GlossaryPage() {
       setFatigueProfile(null)
       setFatigueSource(null)
       setFatigueReasoning(null)
+      setGenericFatigue(null)
+      setGenericStatus(null)
+      setFatiguePersonalized(false)
       setLiftTransfer(null)
       setE1rmEstimate(null)
       loadExercises()
@@ -284,6 +294,9 @@ export default function GlossaryPage() {
     setFatigueProfile(exercise.fatigue_profile || null)
     setFatigueSource(exercise.fatigue_profile_source || null)
     setFatigueReasoning(exercise.fatigue_profile_reasoning || null)
+    setGenericFatigue(exercise.generic_fatigue_profile || null)
+    setGenericStatus(exercise.generic_status || null)
+    setFatiguePersonalized(!!exercise.fatigue_profile_personalized)
     setLiftTransfer(exercise.lift_transfer || null)
     setE1rmEstimate(exercise.e1rm_estimate || null)
     setShowAddForm(true)
@@ -311,6 +324,7 @@ export default function GlossaryPage() {
     })
     setFatigueSource('manual')
     setFatigueReasoning(null)
+    setFatiguePersonalized(true)
   }
 
   async function handleReEstimate() {
@@ -333,8 +347,9 @@ export default function GlossaryPage() {
         peripheral: result.peripheral,
         systemic: result.systemic,
       })
-      setFatigueSource('ai_estimated')
+      setFatigueSource('ai_personal')
       setFatigueReasoning(result.reasoning)
+      setFatiguePersonalized(true)
     } catch {
       pushToast({ message: 'Fatigue estimation failed', type: 'error' })
     } finally {
@@ -447,7 +462,7 @@ export default function GlossaryPage() {
 
   async function handleBulkEstimateFatigue() {
     const candidates = exercises.filter((e) => showArchived || !e.archived)
-    const missingEstimates = candidates.filter(e => !e.fatigue_profile || e.fatigue_profile_source !== 'ai_estimated')
+    const missingEstimates = candidates.filter(e => !e.fatigue_profile || !e.fatigue_profile_personalized)
     const shouldReEstimateAll = candidates.length > 0 && missingEstimates.length === 0
     const toEstimate = shouldReEstimateAll ? candidates : missingEstimates
     if (toEstimate.length === 0) {
@@ -455,7 +470,7 @@ export default function GlossaryPage() {
       return
     }
 
-    if (!confirm(`${shouldReEstimateAll ? 'Re-estimate' : 'Estimate'} fatigue profiles for ${toEstimate.length} exercises? This will call the AI backend multiple times${shouldReEstimateAll ? ' and overwrite existing AI fatigue profiles' : ''}.`)) return
+    if (!confirm(`${shouldReEstimateAll ? 'Re-estimate' : 'Estimate'} fatigue profiles for ${toEstimate.length} exercises? This will call the AI backend multiple times${shouldReEstimateAll ? ' and overwrite your personal fatigue profiles' : ''}.`)) return
 
     setIsBulkEstimatingFatigue(true)
     setBulkProgress({ current: 0, total: toEstimate.length, label: 'Estimating fatigue profiles' })
@@ -629,7 +644,7 @@ export default function GlossaryPage() {
             loading={isBulkEstimatingFatigue}
             disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles || readOnly}
           >
-            {isBulkEstimatingFatigue && bulkProgress ? `Fatigue (${bulkProgress.current}/${bulkProgress.total})` : 'Estimate Fatigue'}
+            {isBulkEstimatingFatigue && bulkProgress ? `Fatigue (${bulkProgress.current}/${bulkProgress.total})` : 'Personalize Fatigue'}
           </Button>
           <Button
             variant="light"
@@ -660,6 +675,9 @@ export default function GlossaryPage() {
               setFatigueProfile(null)
               setFatigueSource(null)
               setFatigueReasoning(null)
+              setGenericFatigue(null)
+              setGenericStatus(null)
+              setFatiguePersonalized(false)
               setLiftTransfer(null)
               setE1rmEstimate(null)
             }}
@@ -765,10 +783,10 @@ export default function GlossaryPage() {
                 {fatigueSource && (
                   <Badge
                     variant="light"
-                    color={fatigueSource === 'ai_estimated' ? 'blue' : 'green'}
+                    color={fatiguePersonalized ? 'blue' : 'gray'}
                     size="xs"
                   >
-                    {fatigueSource === 'ai_estimated' ? 'AI Estimated' : 'Manual Override'}
+                    {fatiguePersonalized ? (fatigueSource === 'manual' ? 'Personal (manual)' : 'Personal (AI)') : 'Shared default'}
                   </Badge>
                 )}
               </Group>
@@ -779,10 +797,19 @@ export default function GlossaryPage() {
                 disabled={isEstimating || !formData.name || readOnly}
                 leftSection={isEstimating ? <Loader size={12} /> : <RefreshCw size={12} />}
               >
-                {isEstimating ? 'Estimating...' : 'AI Estimate'}
+                {isEstimating ? 'Estimating...' : 'Personalize with AI'}
               </Button>
             </Group>
             
+            {fatiguePersonalized && genericFatigue && (
+              <Text size="xs" c="dimmed" mb="xs">
+                Shared default{genericStatus && genericStatus !== 'ready' ? ` (${genericStatus})` : ''}: {formatFatigue(genericFatigue)}
+              </Text>
+            )}
+            {!fatiguePersonalized && genericStatus && genericStatus !== 'ready' && (
+              <Text size="xs" c="dimmed" mb="xs">Shared default is {genericStatus}.</Text>
+            )}
+
             <Stack gap="xs">
               <FatigueSlider
                 label="Axial (Spinal Loading)"
@@ -814,7 +841,7 @@ export default function GlossaryPage() {
               />
             </Stack>
             
-            {fatigueSource === 'ai_estimated' && fatigueReasoning && (
+            {fatiguePersonalized && fatigueSource !== 'manual' && fatigueReasoning && (
               <Box mt="sm" p="xs" style={{ background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
                 <Text size="xs" fw={500} mb={2} c="dimmed">AI Reasoning:</Text>
                 <Text size="xs" fs="italic" style={{ maxHeight: 100, overflowY: 'auto' }}>
@@ -1129,8 +1156,8 @@ export default function GlossaryPage() {
                         {EQUIPMENT_LABELS[exercise.equipment]}
                       </Badge>
                       {exercise.fatigue_profile && (
-                        <Badge variant="light" color="blue" size="sm">
-                          {exercise.fatigue_profile_source === 'ai_estimated' ? 'AI FP' : 'Manual FP'}
+                        <Badge variant="light" color={exercise.fatigue_profile_personalized ? 'blue' : 'gray'} size="sm">
+                          {exercise.fatigue_profile_personalized ? 'Personal FP' : 'Shared FP'}
                         </Badge>
                       )}
                       {exercise.e1rm_estimate && (

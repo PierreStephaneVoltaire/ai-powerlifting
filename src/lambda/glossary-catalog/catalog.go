@@ -8,7 +8,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"golang.org/x/text/cases"
 )
 
 const (
@@ -46,7 +45,7 @@ type catalog struct {
 }
 
 func nameKey(name string) string {
-	return cases.Fold().String(strings.Join(strings.Fields(name), " "))
+	return strings.Join(strings.Fields(strings.ToLower(name)), " ")
 }
 
 func (c *catalog) ensure(ctx context.Context, image map[string]types.AttributeValue) error {
