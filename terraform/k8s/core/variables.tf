@@ -19,7 +19,6 @@ variable "tables" {
     powerlifting        = string
     users               = string
     sessions            = string
-    analysis_cache      = string
     master_competitions = string
     user_competitions   = string
     master_federations  = string

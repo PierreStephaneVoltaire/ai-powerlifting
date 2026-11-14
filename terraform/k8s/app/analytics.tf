@@ -41,6 +41,11 @@ resource "kubernetes_deployment_v1" "analytics" {
           }
 
           env {
+            name  = "BUILD_ID"
+            value = local.images.analytics
+          }
+
+          env {
             name  = "VALKEY_URL"
             value = local.service_env.VALKEY_URL
           }

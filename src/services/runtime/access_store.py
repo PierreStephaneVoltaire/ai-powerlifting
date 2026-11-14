@@ -22,7 +22,7 @@ def pages(table, method: str, **arguments):
 
 
 def person_record(identifier: str) -> dict | None:
-    if not identifier:
+    if not identifier or identifier == 'anonymous':
         return None
     table = database().Table(os.getenv('IF_USER_TABLE', 'if-user'))
     direct = table.get_item(Key={'pk': identifier}, ConsistentRead=True).get('Item')
@@ -51,6 +51,8 @@ def current_context(person: str, athlete: str) -> dict:
     context = evaluate_facts(person, athlete, owner, actor, grants, dates)
     if owner and 'profile:read' in context['permissions']:
         context['athlete_display_name'] = owner.get('display_name') or owner.get('nickname') or athlete
+    if owner and 'performance:read' in context['permissions'] and owner.get('sex') in ('male', 'female'):
+        context['athlete_sex'] = owner['sex']
     return context
 
 

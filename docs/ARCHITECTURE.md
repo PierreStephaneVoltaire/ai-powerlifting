@@ -175,8 +175,11 @@ flowchart LR
   Export["pl-analytics-export"]
   Features["AI-enabled domain operations<br/>pl-templates, pl-glossary, pl-imports,<br/>pl-lift-profiles, pl-budget"]
   Coach["pl-coach<br/>Codex runtime"]
-  Valkey[("pl-valkey<br/>analysis + reply caches")]
+  Valkey[("pl-valkey<br/>analysis, report pointers,<br/>prompt cache entries")]
+  PromptCache["pl-prompt-cache-api<br/>exact + semantic lookup"]
   CacheMCP["pl-prompt-cache-mcp<br/>semantic cache tools"]
+  Decisions["OpenAI Decisions API<br/>gpt-6-luna"]
+  Reports[("S3 analysis-reports/<br/>finished AI reports")]
   Qdrant[("pl-prompt-cache<br/>Qdrant vectors")]
   State[("pl-coach-state PVC<br/>jobs + Codex state")]
 
@@ -203,17 +206,34 @@ flowchart LR
   Coach -->|"Responses API"| Aliases
   Router --> ChatGPT & OpenRouter & Compat
   Analytics --> Valkey
-  AI --> Valkey
+  AI -->|"report pointer + reservation"| Valkey
+  AI -->|"finished reports"| Reports
+  AI -->|"lookup before inference,<br/>store after"| PromptCache
+  Features -->|"lookup before inference,<br/>store after"| PromptCache
   Coach -->|"exact reply cache"| Valkey
-  Coach -->|"semantic reply lookup"| CacheMCP --> Qdrant
+  Coach -->|"semantic reply lookup"| CacheMCP
+  PromptCache -->|"exact key + entries"| Valkey
+  PromptCache -->|"top 3 candidates"| CacheMCP --> Qdrant
+  PromptCache -->|"same / contextual /<br/>temporal / none"| Decisions
   Coach --> State
 ```
 
 AI-capable operations hand inference to the Coach and resume with its
 validated response. The analytics services also exchange computed data over
 gRPC; report generation and export run outside the deterministic analytics
-process. Valkey stores cached results, while Qdrant supports semantic prompt
-and reply lookup through its own MCP service.
+process. Every domain AI call, from the Python runtime and from pl-analytics-ai,
+asks `pl-prompt-cache-api` before it starts inference and tells it after
+inference. I made one service own this so the cache logic exists once and the
+callers stay thin. The service checks Valkey for an exact match first. If that
+misses, it asks `pl-prompt-cache-mcp` for the top three Qdrant candidates for
+that Athlete and operation, then sends them in one request to the OpenAI
+Decisions API (`POST /v1/decisions`, model `gpt-6-luna`) so a small model
+judges whether a stored answer still holds. Valkey keeps the entries and the
+fast report pointers, Qdrant only holds the search index, and S3 holds
+finished AI reports. A cache service error never fails an operation; it is
+just a miss. Coach chat replies are separate: they keep their own exact and
+semantic reply cache in `src/services/coach/chat_cache.py`, and only domain AI
+operations go through `pl-prompt-cache-api`.
 
 ### Storage and media
 
@@ -380,9 +400,11 @@ erDiagram
 | `if-health` | DynamoDB | Program document, glossary, max history, weight log |
 | `if-sessions` | DynamoDB | Sessions (separate from program; merged by version in `programController.getProgram()`) |
 | `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
-| `if-powerlifting-analysis-cache` | DynamoDB | AI generation records |
-| `pl-valkey` | Valkey | Deterministic analysis sections, block bundles, markdown exports and ranking percentiles, keyed by source fingerprint, no TTL (LRU eviction) |
-| `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Domain AI prompt index, one collection per Athlete and operation; answers live in Valkey under the entry id |
+| `if-powerlifting-analysis-cache` | DynamoDB | Legacy and no longer used. It held AI generation records before they moved to S3 and Valkey. The operator deletes it; nothing may read or write it |
+| `analysis-reports/{athlete}/{generation_id}.json` | S3 (powerlifting bucket) | Finished AI reports (correlation / ROI, program evaluation, block comparison and any other generation), saved after the calculations. Valkey holds the pointer |
+| `pl-valkey` | Valkey | Deterministic analysis sections, block bundles, markdown exports and ranking percentiles, keyed by source fingerprint, no TTL (LRU eviction). Also the report pointer and in-flight reservation (`pl:report:{athlete}:{generation_id}`), the per-Athlete `pl:analysis-version`, the `pl:analysis-build` marker, and prompt cache exact keys and entries (`pl:ai-cache:*`, 30-day TTL) |
+| `pl-prompt-cache-api` | Go service | Owns the domain AI prompt cache: exact Valkey lookup, Qdrant candidates through the MCP service, one Decisions API call, store after inference |
+| `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Semantic search index only. Domain AI prompts use one collection per Athlete and operation; Coach chat replies use separate collections named `chat_template_{version}` (`src/services/coach/chat_cache.py`). Each domain AI point carries an entry id and the entry itself lives in Valkey at `pl:ai-cache:entry:{entry_id}`. Losing it costs semantic hits, never answers |
 | `if-powerlifting-user-competitions` | DynamoDB | Independent Athlete-owned Competition Entries and Attempts |
 | `if-powerlifting-master-competitions` | DynamoDB | Master competition directory |
 | `if-powerlifting-master-federations` | DynamoDB | Federation library + qualification standards |
@@ -487,22 +509,39 @@ flowchart TB
 - Section API keys are window-scoped (`current`, `previous_1/2/4/8`, `block`).
 - The legacy `weekly-bundle` endpoint still exists for compatibility/export
   tooling; the Weekly tab reads sections instead.
-- AI correlation and program-evaluation reports cache separately and only
-  regenerate on explicit refresh (never via the main regenerate endpoint).
+- AI correlation, program-evaluation and block-comparison reports cache
+  separately and only regenerate on explicit refresh (never via the main
+  regenerate endpoint). After the calculations, the finished report is saved to
+  S3 at `analysis-reports/{athlete}/{generation_id}.json`. Valkey holds a small
+  pointer at `pl:report:{athlete}:{generation_id}` and the in-flight
+  reservation (`SET NX` with a TTL). If the pointer is gone, the read goes to
+  S3 at the known key and restores the pointer. DynamoDB is not involved.
 - Section and block keys contain the per-Athlete analysis version (plus the
   as-of date for current-block windows). Unchanged data is always a hit; an
-  analysis-input write bumps the version, so nothing is explicitly deleted and
-  orphaned keys age out under LRU.
+  analysis-input write bumps the version, so older entries become unreachable
+  and age out under LRU. A code change is different: when the build id changes,
+  analytics sweeps `pl:analysis:*` once on startup.
 - Ranking percentiles key on the OpenPowerlifting file identity (name, size,
   mtime), the comparison year, the Athlete, their numbers and the filter.
-- Domain AI calls (`services/ai.py`) reuse an identical request for the same
-  Athlete and operation directly from Valkey. Otherwise, when that scope's Qdrant
-  collection has entries, a Luna Specialist searches it with the
-  `prompt_cache` MCP tool (`qdrant-find`) and returns a matching entry id or
-  null. Only a confident match from the same scope is reused; otherwise the
-  normal Specialist answers and the request is stored through `qdrant-store`.
+- Domain AI calls go through `pl-prompt-cache-api` (key from the LiteLLM
+  provider keys, `openai`). The lookup order is fixed. First an exact Valkey
+  key of Athlete, operation, analysis version and request hash. Then, on a
+  miss, the top three Qdrant candidates for that Athlete and operation via
+  `pl-prompt-cache-mcp`. Then one OpenAI Decisions API call (`POST
+  /v1/decisions`, `gpt-6-luna`) that answers each candidate with one choice:
+  `same` (reuse as is), `contextual` (the ask or its data differs, so the
+  answer would change), `temporal` (the answer depends on the date and the
+  date moved) or `none`. A hit is the first candidate that answers `same` with
+  confidence of at least 0.8. Any error, refusal, timeout or missing key is a
+  miss, and the caller then runs inference and stores the result. The decision
+  is a single bounded call inside the cache service, not a Specialist run with
+  tools, so the cache can never block or fail an operation. The old Luna
+  Specialist design is gone; do not bring it back.
 - Writes to analysis inputs (an allowlist in `services/analysis_version.py`)
-  bump a per-Athlete version in Valkey from `dispatch`. Section, manifest,
+  bump a per-Athlete version in Valkey from `dispatch`. The bump targets the
+  Athlete the call runs under, not the raw `pk` argument, because a
+  person-scoped write such as settings would otherwise bump the Person and
+  leave the Athlete's analysis stale. Section, manifest,
   block, markdown and report-generation lookups key on that version, so a
   cache hit never reloads the program. Persisted requirements
   record the source domains and Competition Entry scope; every reference/job
@@ -513,6 +552,30 @@ flowchart TB
 - Historical exports preserve archived Program/Session data and merge independent
   Competition Entries through the same read projection. Exporting does not
   generate a missing AI report.
+
+### Cache design rules
+
+These are rules, not preferences. I keep seeing designs that break them, so
+they are written down here.
+
+- Caches live only in Valkey or S3. Never DynamoDB. DynamoDB holds the data
+  the caches are computed from, and a cache table there only adds cost and a
+  second source of truth.
+- Caches invalidate outdated entries. They are never versioned by a hand-bumped
+  constant in a key or path, because someone forgets to bump it. Data changes
+  invalidate through the Athlete's `pl:analysis-version`, which is bumped on an
+  analysis-input write for the Athlete the call runs under. Code changes
+  invalidate by build: analytics reads `BUILD_ID` on startup, and when it
+  differs from `pl:analysis-build` it sweeps its own `pl:analysis:*` keys once
+  (one replica, guarded by a lock) and records the new build. Snapshots carry
+  the build id in their body, and a snapshot from another build is treated as
+  missing. API fields such as `schemaVersion` stay as response values for the
+  frontend; they never appear in a key or path.
+- Person to Athlete resolution uses the `mapped_pk` from
+  `access_store.current_context`. No ad-hoc user lookups or scans to find an
+  Athlete.
+- Visitor (signed-out) views read cached results only and never start
+  inference. A miss for a visitor stays a miss until the owner generates it.
 
 ## AI execution model
 

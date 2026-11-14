@@ -9,7 +9,7 @@ use crate::access;
 use crate::auth;
 use crate::caller::Caller;
 use crate::config::{Config, DOMAIN};
-use crate::engine::Engine;
+use crate::engine::{ATHLETE_SEX, Engine};
 use crate::error::Error;
 use crate::handlers::Handler;
 
@@ -220,9 +220,11 @@ impl Service {
         if caller.nested && caller.active_job().is_empty() {
             return Err(Error::NestedWithoutExecution);
         }
-        let result = self
-            .engine
-            .run(operation.handler, scoped, &caller.person)
+        let result = ATHLETE_SEX
+            .scope(
+                access::athlete_sex(&access),
+                self.engine.run(operation.handler, scoped, &caller.person),
+            )
             .await?;
         operation.validate_result(&result)?;
         if caller.nested || caller.active_job().is_empty() {

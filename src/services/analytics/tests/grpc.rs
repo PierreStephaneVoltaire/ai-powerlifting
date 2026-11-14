@@ -28,9 +28,15 @@ async fn start() -> Option<Running> {
     let engine = fixtures.engine();
     let allowed = Arc::new(vec!["pl-analytics-ai".to_owned()]);
     tokio::spawn(async move {
-        grpc::serve_on(engine, &allowed, incoming, async {
-            let _ = stopped.await;
-        })
+        grpc::serve_on(
+            engine,
+            "http://127.0.0.1:1".to_owned(),
+            &allowed,
+            incoming,
+            async {
+                let _ = stopped.await;
+            },
+        )
         .await
     });
     let channel = Channel::from_shared(format!("http://{address}"))

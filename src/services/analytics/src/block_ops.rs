@@ -15,9 +15,6 @@ use crate::error::Error;
 use crate::lifetime;
 use crate::records::timestamp;
 use crate::source::Window;
-use crate::windows::CACHE_SCHEMA_VERSION;
-
-const BLOCK_INDEX_SCHEMA_VERSION: i64 = 2;
 
 pub fn workspace(loaded: &Loaded, today: chrono::NaiveDate) -> Workspace<'_> {
     Workspace {
@@ -29,15 +26,15 @@ pub fn workspace(loaded: &Loaded, today: chrono::NaiveDate) -> Workspace<'_> {
 }
 
 fn index_key(version: &str) -> String {
-    format!("native_block_index#{CACHE_SCHEMA_VERSION}#{BLOCK_INDEX_SCHEMA_VERSION}#{version}")
+    format!("native_block_index#{version}")
 }
 
 fn view_key(block_key: &str, version: &str) -> String {
-    format!("native_block_view#{CACHE_SCHEMA_VERSION}#{block_key}#{version}")
+    format!("native_block_view#{block_key}#{version}")
 }
 
 fn bundle_key(block_key: &str, tail: &str) -> String {
-    format!("native_block#{CACHE_SCHEMA_VERSION}#{block_key}#{tail}")
+    format!("native_block#{block_key}#{tail}")
 }
 
 fn lifetime_key(version: &str, block_keys: &[String]) -> String {
@@ -66,7 +63,14 @@ impl Engine {
     async fn stored_bundle(&self, athlete: &str, block_key: &str) -> Option<Bundle> {
         let snapshots = self.snapshots.as_ref()?;
         match snapshots.read(athlete, block_key).await {
-            Ok(body) => serde_json::from_value(body?).ok(),
+            Ok(body) => {
+                let body = body?;
+                let stored_build = body.get("buildId").and_then(Value::as_str);
+                if stored_build != self.build_id.as_deref() {
+                    return None;
+                }
+                serde_json::from_value(body).ok()
+            }
             Err(error) => {
                 tracing::warn!(%error, block_key, "block snapshot read failed");
                 None
@@ -78,9 +82,12 @@ impl Engine {
         let Some(snapshots) = self.snapshots.as_ref() else {
             return;
         };
-        let Ok(body) = to_value(bundle) else {
+        let Ok(mut body) = to_value(bundle) else {
             return;
         };
+        if let (Some(map), Some(build_id)) = (body.as_object_mut(), &self.build_id) {
+            map.insert("buildId".to_owned(), Value::String(build_id.clone()));
+        }
         if let Err(error) = snapshots
             .write(athlete, &bundle.block.block_key, body)
             .await
@@ -399,11 +406,11 @@ mod tests {
 
     #[test]
     fn block_cache_keys_keep_the_python_layout() {
-        assert_eq!(index_key("7"), "native_block_index#6#2#7");
-        assert_eq!(view_key("current", "7"), "native_block_view#6#current#7");
+        assert_eq!(index_key("7"), "native_block_index#7");
+        assert_eq!(view_key("current", "7"), "native_block_view#current#7");
         assert_eq!(
             bundle_key("current", "latest"),
-            "native_block#6#current#latest"
+            "native_block#current#latest"
         );
     }
 }

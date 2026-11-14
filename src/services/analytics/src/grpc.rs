@@ -8,14 +8,16 @@ use tonic::transport::Server as Transport;
 use tonic::transport::server::TcpIncoming;
 use tonic::{Request, Response, Status};
 
+use crate::access;
 use crate::assemble::Scope;
 use crate::block_ops::workspace;
 use crate::blocks::index;
 use crate::blocks::scope::{analysis_end, program_for_block, scoped_entry};
 use crate::calc::e1rm;
+use crate::caller::Caller;
 use crate::correlation;
 use crate::drivers;
-use crate::engine::{Engine, to_value};
+use crate::engine::{ATHLETE_SEX, Engine, to_value};
 use crate::error::Error;
 use crate::model::{Competition, Session};
 use crate::proto::analytics::analytics_data_server::{AnalyticsData, AnalyticsDataServer};
@@ -110,11 +112,45 @@ fn authorize<T>(request: &Request<T>, athlete: &str) -> Result<(), Status> {
 
 pub struct Service {
     engine: Engine,
+    http: reqwest::Client,
+    profile_url: String,
 }
 
 impl Service {
-    pub fn new(engine: Engine) -> Self {
-        Self { engine }
+    pub fn new(engine: Engine, profile_url: String) -> Self {
+        Self {
+            engine,
+            http: reqwest::Client::new(),
+            profile_url,
+        }
+    }
+
+    async fn with_sex<T, F: std::future::Future>(
+        &self,
+        request: &Request<T>,
+        work: F,
+    ) -> F::Output {
+        let sex = match request.extensions().get::<Principal>() {
+            Some(principal) => {
+                let caller = Caller {
+                    person: principal.person.clone(),
+                    athlete: principal.athlete.clone(),
+                    ..Caller::default()
+                };
+                access::fetch(
+                    &self.http,
+                    &self.profile_url,
+                    "",
+                    &Default::default(),
+                    &caller,
+                )
+                .await
+                .ok()
+                .and_then(|context| access::athlete_sex(&context))
+            }
+            None => None,
+        };
+        ATHLETE_SEX.scope(sex, work).await
     }
 
     async fn report(&self, value: Result<Value, Error>) -> Result<Response<Report>, Status> {
@@ -134,8 +170,11 @@ impl AnalyticsData for Service {
         let athlete = request.get_ref().athlete_pk.clone();
         authorize(&request, &athlete)?;
         let loaded = self
-            .engine
-            .load(&athlete, &Window::default(), Scope::Everything)
+            .with_sex(
+                &request,
+                self.engine
+                    .load(&athlete, &Window::default(), Scope::Everything),
+            )
             .await
             .map_err(status_of)?;
         let mut root = loaded.program.root.clone();
@@ -173,7 +212,11 @@ impl AnalyticsData for Service {
         let Value::Object(arguments) = arguments else {
             return Err(Status::internal("invalid arguments"));
         };
-        self.report(self.engine.blocks_get(arguments).await).await
+        self.report(
+            self.with_sex(&request, self.engine.blocks_get(arguments))
+                .await,
+        )
+        .await
     }
 
     async fn list_blocks(
@@ -183,8 +226,7 @@ impl AnalyticsData for Service {
         let athlete = request.get_ref().athlete_pk.clone();
         authorize(&request, &athlete)?;
         let entries = self
-            .engine
-            .list_blocks_typed(&athlete)
+            .with_sex(&request, self.engine.list_blocks_typed(&athlete))
             .await
             .map_err(status_of)?;
         let values = entries
@@ -206,8 +248,11 @@ impl AnalyticsData for Service {
         }) else {
             return Err(Status::internal("invalid arguments"));
         };
-        self.report(self.engine.compare_blocks(arguments).await)
-            .await
+        self.report(
+            self.with_sex(&request, self.engine.compare_blocks(arguments))
+                .await,
+        )
+        .await
     }
 
     async fn lifetime(&self, request: Request<AthleteRef>) -> Result<Response<Report>, Status> {
@@ -219,8 +264,11 @@ impl AnalyticsData for Service {
         }) else {
             return Err(Status::internal("invalid arguments"));
         };
-        self.report(self.engine.lifetime_report(arguments).await)
-            .await
+        self.report(
+            self.with_sex(&request, self.engine.lifetime_report(arguments))
+                .await,
+        )
+        .await
     }
 
     async fn selected_lifetime(
@@ -236,8 +284,11 @@ impl AnalyticsData for Service {
         }) else {
             return Err(Status::internal("invalid arguments"));
         };
-        self.report(self.engine.lifetime_report(arguments).await)
-            .await
+        self.report(
+            self.with_sex(&request, self.engine.lifetime_report(arguments))
+                .await,
+        )
+        .await
     }
 
     async fn correlation_inputs(
@@ -247,8 +298,11 @@ impl AnalyticsData for Service {
         let reference = request.get_ref().clone();
         authorize(&request, &reference.athlete_pk)?;
         let loaded = self
-            .engine
-            .load(&reference.athlete_pk, &Window::default(), Scope::Everything)
+            .with_sex(
+                &request,
+                self.engine
+                    .load(&reference.athlete_pk, &Window::default(), Scope::Everything),
+            )
             .await
             .map_err(status_of)?;
         let workspace = workspace(&loaded, self.engine.clock.today());
@@ -344,15 +398,24 @@ impl AnalyticsData for Service {
 
 pub async fn serve(
     engine: Engine,
+    profile_url: String,
     allowed: &[String],
     address: SocketAddr,
     shutdown: impl std::future::Future<Output = ()>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    serve_on(engine, allowed, TcpIncoming::bind(address)?, shutdown).await
+    serve_on(
+        engine,
+        profile_url,
+        allowed,
+        TcpIncoming::bind(address)?,
+        shutdown,
+    )
+    .await
 }
 
 pub async fn serve_on(
     engine: Engine,
+    profile_url: String,
     allowed: &[String],
     incoming: TcpIncoming,
     shutdown: impl std::future::Future<Output = ()>,
@@ -362,7 +425,7 @@ pub async fn serve_on(
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(DESCRIPTOR)
         .build_v1()?;
-    let data = AnalyticsDataServer::new(Service::new(engine))
+    let data = AnalyticsDataServer::new(Service::new(engine, profile_url))
         .max_decoding_message_size(MAX_MESSAGE_BYTES)
         .max_encoding_message_size(MAX_MESSAGE_BYTES);
     let service = InterceptedService::new(data, Guard::new(allowed));

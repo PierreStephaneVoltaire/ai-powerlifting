@@ -133,5 +133,6 @@ def dispatch(operation: Operation, arguments: dict[str, Any]) -> Any:
     except Exception as exc:
         raise OperationError(500, "invalid_result", "Domain returned an invalid result") from exc
     from .analysis_version import record_write
-    record_write(operation.name, arguments.get("pk"))
+    access = arguments.get("_access") or {}
+    record_write(operation.name, access.get("athlete_pk") or access.get("own_athlete_pk"))
     return result

@@ -108,6 +108,7 @@ export function BlockWeeklySurface({
   sex,
   version,
   viewAthlete,
+  readOnlyAthlete,
 }: {
   program: Program | null
   bundle: BlockAnalysisBundle
@@ -115,7 +116,9 @@ export function BlockWeeklySurface({
   sex: Sex | null
   version: string
   viewAthlete?: string
+  readOnlyAthlete?: string
 }) {
+  const dataAthlete = viewAthlete ?? readOnlyAthlete
   const [viewMode, setViewMode] = useState<'raw' | 'graph'>('raw')
   const [weightLog, setWeightLog] = useState<WeightEntry[]>([])
   const [correlationReport, setCorrelationReport] = useState<CorrelationReport | null>(null)
@@ -133,9 +136,9 @@ export function BlockWeeklySurface({
   )
 
   useEffect(() => {
-    const weightLogRequest = viewAthlete ? fetchViewedWeightLog(viewAthlete, version) : fetchWeightLog(version)
+    const weightLogRequest = dataAthlete ? fetchViewedWeightLog(dataAthlete, version) : fetchWeightLog(version)
     weightLogRequest.then(setWeightLog).catch(() => undefined)
-  }, [version, viewAthlete])
+  }, [version, dataAthlete])
 
   const loadCorrelation = (refresh = false, cacheOnly = false) => {
     if (analysisWindow.weeks < 4) {
@@ -146,7 +149,7 @@ export function BlockWeeklySurface({
     }
     setCorrelationLoading(true)
     setCorrelationError(null)
-    fetchBlockCorrelationReport(bundle.block.blockKey, { refresh, cacheOnly, viewAthlete })
+    fetchBlockCorrelationReport(bundle.block.blockKey, { refresh, cacheOnly, viewAthlete: dataAthlete })
       .then(setCorrelationReport)
       .catch((error: unknown) => setCorrelationError(error instanceof Error ? error.message : 'Failed to load ROI correlation'))
       .finally(() => setCorrelationLoading(false))
@@ -154,7 +157,7 @@ export function BlockWeeklySurface({
 
   useEffect(() => {
     loadCorrelation(false, true)
-  }, [analysisWindow.weeks, bundle.block.blockKey, viewAthlete])
+  }, [analysisWindow.weeks, bundle.block.blockKey, dataAthlete])
 
   const banisterSeries = useMemo(() => {
     const banister = bundle.weekly.banister
@@ -576,7 +579,7 @@ export function BlockWeeklySurface({
               </Badge>
             )}
           </Group>
-          {analysisWindow.weeks >= 4 && !viewAthlete && (
+          {analysisWindow.weeks >= 4 && !dataAthlete && (
             <Button
               variant="subtle"
               size="xs"
