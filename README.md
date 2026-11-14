@@ -230,119 +230,45 @@ operation manifest in [`src/services/operations/`](src/services/operations/).
 The diagrams below separate incoming traffic, the service inventory, and the
 supporting infrastructure so each component stays visible.
 
-### Every service and how they connect
+### Entry points and identity
 
 ```mermaid
 flowchart TB
-  UI["Browser<br/>React PWA"]
+  UI["Browser<br/>React PWA · Vite + Mantine"]
   DiscordApp["Discord"]
   CF["Cloudflare<br/>DNS + tunnel"]
-  ChatGPT["ChatGPT subscription"]
-  OpenRouter["OpenRouter"]
 
-  subgraph Cluster["k3s · powerlifting namespace · Istio ambient mesh"]
-    subgraph Edge["Edge"]
-      Tunnel["cloudflared"]
-      Gateway["edge-powerlifting<br/>NGINX Gateway Fabric"]
-      Waypoint["nolift-waypoint<br/>mTLS + caller allow-lists"]
-    end
-
-    subgraph Identity["Identity"]
-      Proxy["oauth2-proxy<br/>browser session"]
-      Auth["authentik-server<br/>OIDC"]
-      AuthWorker["authentik-worker"]
-      AuthPG[("authentik-postgres<br/>CNPG")]
-    end
-
-    subgraph Portal["Portal"]
-      FE["powerlifting-app-frontend<br/>static PWA"]
-      BE["powerlifting-app-backend<br/>Express API"]
-    end
-
-    subgraph Domains["Domain services · Python"]
-      Program["pl-program"]
-      Sessions["pl-sessions"]
-      Templates["pl-templates"]
-      Glossary["pl-glossary"]
-      LiftProfiles["pl-lift-profiles"]
-      Competition["pl-competition"]
-      Federation["pl-federation"]
-      Goals["pl-goals"]
-      Budget["pl-budget"]
-      WeightLog["pl-weight-log"]
-      Performance["pl-performance"]
-      Calculations["pl-calculations"]
-      Profile["pl-profile<br/>identity + access_context"]
-      Videos["pl-videos"]
-      Imports["pl-imports"]
-      Export["pl-export"]
-    end
-
-    subgraph Analysis["Analysis"]
-      Analytics["pl-analytics<br/>Rust"]
-      AnalyticsAI["pl-analytics-ai<br/>Go"]
-      AnalyticsExport["pl-analytics-export<br/>Go"]
-      Rankings["pl-rankings<br/>Rust"]
-    end
-
-    subgraph AI["AI runtime"]
-      Coach["pl-coach<br/>Codex worker"]
-      Bot["pl-coach-discord<br/>gateway bot"]
-      CacheMCP["pl-prompt-cache-mcp"]
-      Qdrant[("pl-prompt-cache<br/>Qdrant")]
-    end
-
-    subgraph LLM["LiteLLM layer · llm.nolift.training"]
-      LiteLLM["litellm<br/>providers + model aliases + fallbacks"]
-      LLMPG[("litellm-postgres<br/>CNPG · UI users")]
-    end
-
-    Valkey[("pl-valkey<br/>sessions + caches")]
+  subgraph Cluster["k3s · powerlifting namespace"]
+    Tunnel["cloudflared"]
+    Gateway["NGINX Gateway Fabric"]
+    FE["powerlifting-app-frontend<br/>static PWA"]
+    Proxy["oauth2-proxy<br/>browser login + session"]
+    BE["powerlifting-app-backend<br/>Express API"]
+    Valkey[("pl-valkey<br/>sessions + application cache")]
+    Auth["authentik-server<br/>OIDC identity authority"]
+    AuthWorker["authentik-worker<br/>background tasks"]
+    Postgres[("CNPG Postgres<br/>Authentik data")]
+    Coach["pl-coach<br/>Codex worker"]
+    Bot["pl-coach-discord<br/>gateway bot"]
+    LiteLLM["litellm<br/>model aliases"]
   end
 
   UI --> CF --> Tunnel --> Gateway
   Gateway -->|"/"| FE
-  Gateway -->|"/api, /oauth2"| Proxy
-  Gateway -->|"auth host"| Auth
-  Gateway -->|"llm host"| LiteLLM
-
-  Proxy -->|"authenticated API"| BE
+  Gateway -->|"/api and /oauth2"| Proxy
+  Gateway -->|"auth hostname"| Auth
+  Proxy -->|"authenticated API requests"| BE
   Proxy <-->|"OIDC"| Auth
-  Proxy -->|"sessions"| Valkey
-  Auth <-->|"identity source"| DiscordApp
-  Auth & AuthWorker --> AuthPG
-
-  BE -->|"HTTP operations"| Domains
-  BE --> Analytics & AnalyticsAI & AnalyticsExport & Rankings
-  BE -->|"AI jobs + polling"| Coach
-  BE -->|"cache"| Valkey
-
-  Domains -->|"access_context"| Profile
-  Program & Competition & Templates & Export & Profile -->|"analysis reads"| Analytics
-  Domains -->|"AI operations"| Coach
-  Domains -->|"cache"| Valkey
-
-  Analytics -->|"domain reads"| Domains
-  Analytics -->|"gRPC Reports"| AnalyticsAI
-  AnalyticsAI -->|"gRPC AnalyticsData"| Analytics
-  AnalyticsAI -->|"gRPC Exports"| AnalyticsExport
-  AnalyticsExport -->|"gRPC AnalyticsData"| Analytics
-  Analytics --> Rankings
-  AnalyticsAI -->|"AI jobs"| Coach
-  Analytics & AnalyticsAI & Rankings -->|"cache"| Valkey
-
+  Auth <-->|"Discord identity source"| DiscordApp
+  Auth --> Postgres
+  AuthWorker --> Postgres
+  Proxy -->|"login sessions"| Valkey
+  BE -->|"application cache"| Valkey
+  BE -->|"AI jobs and polling"| Coach
   DiscordApp <-->|"websocket"| Bot
   Bot -->|"chat"| Coach
-  Coach -->|"MCP tools"| Domains
-  Coach --> Analytics & AnalyticsAI & Rankings
-  Coach -->|"exact reply cache"| Valkey
-  Coach -->|"semantic lookup"| CacheMCP --> Qdrant
-  Coach -->|"Responses API · aliases pl-standard, pl-light, pl-documents"| LiteLLM
-
-  LiteLLM -->|"chatgpt/ deployments"| ChatGPT
-  LiteLLM -->|"openrouter/ deployments"| OpenRouter
-  LiteLLM -->|"admin UI SSO"| Auth
-  LiteLLM --> LLMPG
+  Gateway -->|"llm hostname"| LiteLLM
+  Coach -->|"model calls"| LiteLLM
 ```
 
 Authentik is the only login authority; Discord is its identity source.
