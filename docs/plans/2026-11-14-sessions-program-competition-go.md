@@ -105,7 +105,7 @@ Python templates domain keeps its own code).
     `competition.tf` (one file per service, 128Mi, pl-sessions 2 replicas),
     keeping Service names, ports, service accounts, mesh callers and
     `cache_callers` (Valkey) equivalent to today. `fmt` + `validate` only.
-- [ ] **D. Delete legacy Python (single agent, after B).**
+- [x] **D. Delete legacy Python (single agent, after B).**
   - Carve-out first: move `FORMULA_REFERENCE` into
     `templates/template_evaluate/` (or `runtime/`), and give
     `export/export_program_history` its own read of the program (via

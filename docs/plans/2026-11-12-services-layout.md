@@ -70,3 +70,5 @@ src/services/
 | calculations, budget, competition, glossary, goals, imports, lift_profiles, sessions, weight | same-named domain/tests |
 
 Shared pytest fixtures (`block_live_aws`, `memory_valkey`) move from `tests/conftest.py` to `src/conftest.py`.
+
+> Update 2026-11-14: `sessions`, `program` and `competition` are now native Go services (`sessions-go/`, `program-go/`, `competition-go/`); their Python domain packages are deleted, so the rows above for them no longer apply. See `2026-11-14-sessions-program-competition-go.md`.
