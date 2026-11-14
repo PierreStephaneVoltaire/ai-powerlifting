@@ -20,6 +20,25 @@ on:
       - ".github/image-filters.yml"
       - "!**/*.md"
 
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "src/backend/**"
+      - "src/frontend/**"
+      - "src/dependencies/**"
+      - "src/services/**"
+      - "src/lambda/**"
+      - "docker/**"
+      - "terraform/**"
+      - "src/package.json"
+      - "src/package-lock.json"
+      - "src/tsconfig.json"
+      - "scripts/image_tag.py"
+      - "scripts/migrate_identity_pointers.py"
+      - ".github/workflows/**"
+      - ".github/image-filters.yml"
+      - "!**/*.md"
+
   workflow_dispatch:
     inputs:
       backend_only:
@@ -42,6 +61,7 @@ concurrency:
 permissions:
   id-token: write
   contents: read
+  pull-requests: read
 
 env:
   AWS_REGION: ca-central-1
@@ -51,9 +71,10 @@ env:
 
 jobs:
   changes:
-    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ github.event_name == 'pull_request' || (github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
     runs-on: ubuntu-latest
     outputs:
+      deploy: ${{ steps.deploy.outputs.deploy }}
       backend: ${{ steps.result.outputs.backend }}
       frontend: ${{ steps.result.outputs.frontend }}
       services: ${{ steps.result.outputs.services }}
@@ -65,10 +86,20 @@ jobs:
 
       - id: release
         env:
-          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           image_tag="$(python3 scripts/image_tag.py "$RELEASE_BRANCH")"
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+
+      - id: deploy
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] \
+            || { [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "master" ]; } \
+            || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply_terraform }}" = "true" ]; }; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - id: filter
         if: ${{ github.event_name != 'workflow_dispatch' }}
@@ -319,10 +350,10 @@ jobs:
         run: terraform plan -input=false -no-color -var="region=${{ env.AWS_REGION }}"
 
   terraform-apply:
-    needs: terraform-plan
+    needs: [changes, terraform-plan]
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ github.ref_type == 'branch' && needs.terraform-plan.result == 'success' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true')) }}
+    if: ${{ needs.changes.outputs.deploy == 'true' && needs.terraform-plan.result == 'success' }}
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -360,9 +391,7 @@ jobs:
     runs-on: powerlifting-k8s
     if: >-
       ${{ always()
-      && github.ref_type == 'branch'
-      && (github.event_name == 'push'
-        || (github.event_name == 'workflow_dispatch' && inputs.apply_terraform == 'true'))
+      && needs.changes.outputs.deploy == 'true'
       && github.triggering_actor == github.repository_owner
       && github.actor == github.repository_owner
       && !contains(needs.*.result, 'failure')
