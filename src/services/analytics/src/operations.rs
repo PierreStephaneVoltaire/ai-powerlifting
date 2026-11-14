@@ -313,15 +313,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_person_is_denied_without_access_call() {
-        let stub = profile(200, json!({})).await;
+    async fn missing_person_defers_to_access_context() {
+        let stub = profile(403, json!({"detail": "no"})).await;
         let anonymous = Caller {
             athlete: "athlete_1".to_owned(),
             ..Caller::default()
         };
         let result = service(&stub).call(OPERATION, Map::new(), &anonymous).await;
         assert!(forbidden(result));
-        assert!(stub.hits.lock().unwrap().is_empty());
+        assert_eq!(stub.hits.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

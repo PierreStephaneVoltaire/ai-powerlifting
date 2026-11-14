@@ -92,4 +92,3 @@ Code is done (see above). Once deployed and the quota resets:
   `python migrate_glossary.py --health-table if-health --glossary-table <glossary_table_name> --pk operator --person sir_simpalot --apply`
 - [ ] After the Go `pl-glossary` is deployed and verified: delete the old item `if-health` `pk=operator, sk=glossary#v1`.
 - [ ] Add to GH: `K8S_TFVARS` (`repositories.glossary`, `tables.glossary`, `litellm_models.pl-background = [{provider="openrouter", model="deepseek/deepseek-v4-flash"}]`), `COACH_TFVARS` (`operation_ai.glossary_generic_estimate = {provider="litellm", model="pl-background", effort="minimal"}`), AWS tfvars (`glossary_table_name`, `glossary_catalog_function_name`), repo var `STAGE_DEPLOY_BRANCHES`, environment branch rule `refs/pull/*/merge` on `stage` and `main`.
-- [ ] Phase B2 (Rust `pl-analytics` reads the new table) was still running at handoff; review/commit `src/services/analytics/**`.

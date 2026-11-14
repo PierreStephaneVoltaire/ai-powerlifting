@@ -4,6 +4,7 @@ use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::types::AttributeValue;
 use serde_json::Value;
 
+use super::glossary::effective_exercises;
 use super::{Fetching, Loading, RawData, Source, Window};
 use crate::config::Tables;
 use crate::error::Error;
@@ -156,6 +157,33 @@ impl DynamoSource {
         .await
     }
 
+    async fn glossary_items(&self, pk: &str) -> Result<Vec<Value>, Error> {
+        let values = HashMap::from([
+            (":pk".to_owned(), AttributeValue::S(pk.to_owned())),
+            (
+                ":prefix".to_owned(),
+                AttributeValue::S("EXERCISE#".to_owned()),
+            ),
+        ]);
+        self.query_all(
+            &self.tables.glossary,
+            None,
+            "pk = :pk AND begins_with(sk, :prefix)",
+            HashMap::new(),
+            values,
+        )
+        .await
+    }
+
+    async fn effective_glossary(&self, athlete: &str) -> Result<Value, Error> {
+        let overlay_pk = format!("ATHLETE#{athlete}");
+        let (catalog, overlays) = tokio::try_join!(
+            self.glossary_items("CATALOG"),
+            self.glossary_items(&overlay_pk),
+        )?;
+        Ok(effective_exercises(catalog, overlays))
+    }
+
     async fn load_all(&self, athlete: &str, window: &Window) -> Result<RawData, Error> {
         let health = &self.tables.health;
         let pointer = self.get(health, athlete, "program#current", true).await?;
@@ -173,7 +201,7 @@ impl DynamoSource {
             self.competitions(athlete, window),
             self.goals(athlete),
             self.get(health, athlete, "weight_log#current", false),
-            self.get(health, athlete, "glossary#v1", false),
+            self.effective_glossary(athlete),
         )?;
         Ok(RawData {
             pointer,
@@ -194,6 +222,6 @@ impl Source for DynamoSource {
     }
 
     fn glossary<'a>(&'a self, athlete: &'a str) -> Fetching<'a> {
-        Box::pin(self.get(&self.tables.health, athlete, "glossary#v1", false))
+        Box::pin(self.effective_glossary(athlete))
     }
 }
