@@ -46,6 +46,11 @@ resource "kubernetes_deployment_v1" "analytics_ai" {
           }
 
           env {
+            name  = "PROMPT_CACHE_URL"
+            value = local.service_env.PROMPT_CACHE_URL
+          }
+
+          env {
             name  = "IF_API_URL"
             value = local.service_env.IF_API_URL
           }
@@ -63,6 +68,11 @@ resource "kubernetes_deployment_v1" "analytics_ai" {
           env {
             name  = "AI_GRPC_ALLOWED_CALLERS"
             value = "pl-analytics"
+          }
+
+          env {
+            name  = "POWERLIFTING_S3_BUCKET"
+            value = var.dataset_bucket
           }
 
           env {

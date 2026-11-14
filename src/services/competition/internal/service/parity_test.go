@@ -21,8 +21,8 @@ const person, athlete = "person-1", "athlete-1"
 
 type fakeAccess struct{ extra map[string]any }
 
-func (f *fakeAccess) Fetch(_ context.Context, _ string, _ map[string]any, _ auth.Caller) (map[string]any, error) {
-	access := map[string]any{"settings_pk": person}
+func (f *fakeAccess) Fetch(_ context.Context, _ string, _ map[string]any, caller auth.Caller) (map[string]any, error) {
+	access := map[string]any{"settings_pk": person, "athlete_pk": caller.Athlete}
 	for key, value := range f.extra {
 		access[key] = value
 	}

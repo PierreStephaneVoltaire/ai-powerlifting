@@ -9,9 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-
 	"powerlifting/analytics-ai/internal/pyjson"
 )
 
@@ -168,7 +165,7 @@ func TestRefreshRegeneratesSucceededReports(t *testing.T) {
 	}
 }
 
-func TestCompleteShardsAndResult(t *testing.T) {
+func TestCompleteAndResult(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newStore()
 	record, _, _ := store.Reserve(ctx, "gen", "op", "person", false, nil)
@@ -177,14 +174,8 @@ func TestCompleteShardsAndResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	done, _ := store.Get(ctx, "gen")
-	if done.Status != StatusDone || done.Shards != 3 {
+	if done.Status != StatusDone {
 		t.Fatalf("got %+v", done)
-	}
-	for index := 0; index < 3; index++ {
-		shard, _ := store.Backend.Get(ctx, "analysis#athlete_1", "native_generation#gen#result#1#"+string(rune('0'+index)))
-		if shard == nil || shard["expires_at"] == nil || len(shard["payload"].(string)) > 80000 {
-			t.Fatalf("shard %d: %v", index, shard)
-		}
 	}
 	result, err := store.Result(ctx, done)
 	if err != nil {
@@ -197,76 +188,31 @@ func TestCompleteShardsAndResult(t *testing.T) {
 	if done.Requirements != nil {
 		t.Fatal("requirements must stay null when none were stored")
 	}
-	if expires := store.Backendexpiry(t, "gen"); expires != 1_800_000_000+180*24*3600 {
-		t.Fatalf("expires_at %d", expires)
-	}
 }
 
-func (s Store) Backendexpiry(t *testing.T, id string) int64 {
-	t.Helper()
-	item, _ := s.Backend.Get(context.Background(), s.pk(), s.sk(id))
-	return int64(toInt(item["expires_at"]))
+func TestPointerRestoredFromObject(t *testing.T) {
+	ctx := context.Background()
+	reports := NewMemory()
+	store := Store{Athlete: "athlete_1", Backend: reports, Now: time.Now}
+	record, _, _ := store.Reserve(ctx, "gen", "op", "person", false, nil)
+	if err := store.Complete(ctx, "gen", map[string]any{"summary": "kept"}, record.Attempt); err != nil {
+		t.Fatal(err)
+	}
+	delete(reports.Pointers.(*memoryPointers).items, pointerKey("athlete_1", "gen"))
+	restored, err := store.Get(ctx, "gen")
+	if err != nil || restored == nil || restored.Status != StatusDone {
+		t.Fatalf("missing pointer must be restored from the stored report: %+v %v", restored, err)
+	}
+	if _, found, _ := reports.Pointers.Get(ctx, pointerKey("athlete_1", "gen")); !found {
+		t.Fatal("pointer must be written back")
+	}
 }
 
 func TestResultIncomplete(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newStore()
 	record, _, _ := store.Reserve(ctx, "gen", "op", "person", false, nil)
-	record.Shards = 2
 	if _, err := store.Result(ctx, record); !errors.Is(err, ErrIncomplete) {
 		t.Fatalf("got %v", err)
-	}
-}
-
-type fakeAPI struct {
-	puts    []*dynamodb.PutItemInput
-	updates []*dynamodb.UpdateItemInput
-	failPut bool
-}
-
-func (f *fakeAPI) GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
-	return &dynamodb.GetItemOutput{}, nil
-}
-
-func (f *fakeAPI) PutItem(_ context.Context, input *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
-	f.puts = append(f.puts, input)
-	if f.failPut {
-		return nil, &types.ConditionalCheckFailedException{}
-	}
-	return &dynamodb.PutItemOutput{}, nil
-}
-
-func (f *fakeAPI) UpdateItem(_ context.Context, input *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
-	f.updates = append(f.updates, input)
-	return &dynamodb.UpdateItemOutput{}, &types.ConditionalCheckFailedException{}
-}
-
-func TestDynamoConditions(t *testing.T) {
-	api := &fakeAPI{}
-	backend := Dynamo{API: api, Table: "if-powerlifting-analysis-cache"}
-	ctx := context.Background()
-	item := Item{"pk": "analysis#a", "sk": "native_generation#g", "attempt": 2, "access_requirements": nil}
-	if created, err := backend.PutIfAbsent(ctx, item); err != nil || !created {
-		t.Fatalf("put if absent: %v %v", created, err)
-	}
-	if *api.puts[0].ConditionExpression != "attribute_not_exists(pk)" {
-		t.Fatal("wrong absent condition")
-	}
-	if _, isNull := api.puts[0].Item["access_requirements"].(*types.AttributeValueMemberNULL); !isNull {
-		t.Fatal("nil requirements must be stored as NULL")
-	}
-	api.failPut = true
-	if created, err := backend.PutIfCurrent(ctx, item, "failed", 1); err != nil || created {
-		t.Fatalf("lost race must be reported, not raised: %v %v", created, err)
-	}
-	if *api.puts[1].ConditionExpression != "#status=:previous AND attempt=:attempt" {
-		t.Fatal("wrong current condition")
-	}
-	if err := backend.Update(ctx, "analysis#a", "native_generation#g", 2, Item{"status": "succeeded", "shards": 1}); err != nil {
-		t.Fatalf("stale attempt must be ignored: %v", err)
-	}
-	update := api.updates[0]
-	if *update.UpdateExpression != "SET #f0=:v0, #f1=:v1" || *update.ConditionExpression != "#attempt=:attempt" {
-		t.Fatalf("unexpected update %s / %s", *update.UpdateExpression, *update.ConditionExpression)
 	}
 }

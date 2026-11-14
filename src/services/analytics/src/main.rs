@@ -34,7 +34,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         SourceKind::Fixture => Arc::new(FixtureSource::new(config.fixture_dir.clone())),
     };
-    let mut engine = Engine::new(source, Cache::connect(&config.valkey_url), Clock::System)
+    let cache = Cache::connect(&config.valkey_url);
+    if let Some(build_id) = &config.build_id {
+        cache.sweep_for_build(build_id).await;
+    }
+    let mut engine = Engine::new(source, cache, Clock::System)
+        .with_build_id(config.build_id.clone())
         .with_ai(Ai::connect_lazy(&config.ai_grpc_url));
     if let Some(bucket) = config.snapshot_bucket.clone() {
         engine = engine.with_snapshots(Arc::new(
@@ -43,6 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let port = config.port;
     let grpc_address = SocketAddr::from(([0, 0, 0, 0], config.grpc_port));
+    let profile_url = config.profile_url.clone();
     let allowed_callers = config.grpc_allowed_callers.clone();
     let grpc_engine = engine.clone();
     let service = Arc::new(Service::new(config, Registry::load()?, engine));
@@ -53,8 +59,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "pl-analytics listening"
     );
     tokio::spawn(async move {
-        if let Err(error) =
-            grpc::serve(grpc_engine, &allowed_callers, grpc_address, shutdown()).await
+        if let Err(error) = grpc::serve(
+            grpc_engine,
+            profile_url,
+            &allowed_callers,
+            grpc_address,
+            shutdown(),
+        )
+        .await
         {
             tracing::error!(%error, "gRPC server stopped");
         }

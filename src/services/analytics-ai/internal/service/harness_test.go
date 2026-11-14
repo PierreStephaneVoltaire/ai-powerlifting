@@ -181,7 +181,7 @@ type harness struct {
 	source   *fakeSource
 	coach    *stubCoach
 	exporter *fakeExporter
-	backend  *generation.Memory
+	backend  *generation.Reports
 	redis    *miniredis.Miniredis
 	clock    *time.Time
 }
@@ -229,12 +229,49 @@ func newHarness(t *testing.T) *harness {
 		date := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC).AddDate(0, 0, 7*(week-1)).Format("2006-01-02")
 		h.source.snapshot.Sessions = append(h.source.snapshot.Sessions, mustStruct(map[string]any{"date": date, "week_number": float64(week), "completed": true, "exercises": []any{map[string]any{"name": "Squat", "sets": float64(3), "reps": float64(5), "kg": float64(150)}}}))
 	}
-	manager := execution.New(cache.Prompts{KV: kv})
+	manager := execution.New(cache.Prompts{KV: kv, URL: newPromptCacheServer(t).URL})
 	h.svc = &Service{
 		Registry: registry, Access: h.access, Coach: coach.HTTP{URL: stub.server.URL, Client: stub.server.Client()}, Source: h.source,
 		Exporter: h.exporter, KV: kv, Backend: h.backend, Executions: manager, Now: func() time.Time { return clock },
 	}
 	return h
+}
+
+func newPromptCacheServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	var mu sync.Mutex
+	entries := map[string]json.RawMessage{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Athlete   string          `json:"athlete"`
+			Operation string          `json:"operation"`
+			Request   json.RawMessage `json:"request"`
+			Response  json.RawMessage `json:"response"`
+			Context   json.RawMessage `json:"context"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		key := body.Athlete + "|" + body.Operation + "|" + string(body.Request) + "|" + string(body.Context)
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/lookup":
+			if response, ok := entries[key]; ok {
+				_ = json.NewEncoder(w).Encode(map[string]any{"hit": true, "layer": "exact", "response": response})
+				return
+			}
+			_, _ = w.Write([]byte(`{"hit":false}`))
+		case "/store":
+			entries[key] = body.Response
+			_, _ = w.Write([]byte(`{"entry_id":"e"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
 func person() auth.Caller {

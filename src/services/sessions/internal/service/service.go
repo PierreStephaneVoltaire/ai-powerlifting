@@ -97,7 +97,7 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 		return nil, apperr.InvalidResult()
 	}
 	if slices.Contains(analysisInputWrites, name) {
-		s.versions.Bump(ctx, athleteOf(scoped))
+		s.versions.Bump(ctx, auth.AnalysisAthlete(access))
 	}
 	if caller.Nested || caller.ActiveJob() == "" {
 		return result, nil

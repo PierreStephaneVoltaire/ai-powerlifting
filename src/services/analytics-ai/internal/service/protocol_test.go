@@ -174,7 +174,7 @@ func TestFullProtocolSubmitChallengeResumeComplete(t *testing.T) {
 	}
 
 	record, _ := h.svc.store("athlete_1").Get(context.Background(), generationID)
-	if record.Status != generation.StatusDone || record.Shards != 1 {
+	if record.Status != generation.StatusDone {
 		t.Fatalf("generation must be persisted: %+v", record)
 	}
 	cachedResponse, body := submitBlockCorrelation(t, h, map[string]any{"cache_only": true})

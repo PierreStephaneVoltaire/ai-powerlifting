@@ -7,7 +7,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { allTimeMaxByExercise, maxByCategoryInWindow, categorizeExercise } from '@/utils/volume'
 import { displayWeight } from '@/utils/units'
 import type { LiftCategory } from '@/utils/volume'
-import type { GlossaryExercise } from '@powerlifting/types'
+import type { GlossaryExercise, Program } from '@powerlifting/types'
 
 const BIG3_COLORS: Record<string, string> = {
   squat: '#ef4444',
@@ -58,8 +58,9 @@ function Big3Pie({ maxes }: { maxes: Record<string, number> }) {
   )
 }
 
-export default function MaxesPage() {
-  const { program } = useProgramStore()
+export default function MaxesPage({ viewProgram }: { viewProgram?: Program | null } = {}) {
+  const { program: ownProgram } = useProgramStore()
+  const program = viewProgram !== undefined ? viewProgram : ownProgram
   const { unit } = useSettingsStore()
   const [block, setBlock] = useState('current')
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])

@@ -13,7 +13,8 @@ from services.runtime import prompt_cache
 @pytest.fixture(autouse=True)
 def prompt_cache_store(monkeypatch):
     store = {"exact": None, "remembered": []}
-    monkeypatch.setattr(prompt_cache, "exact", lambda *_args: store["exact"])
+    monkeypatch.setattr(prompt_cache, "request_context", lambda _athlete: {"date": "2026-11-14", "analysis_version": "0"})
+    monkeypatch.setattr(prompt_cache, "lookup", lambda *_args: (store["exact"], "exact") if store["exact"] is not None else None)
     monkeypatch.setattr(prompt_cache, "remember", lambda *args: store["remembered"].append(args))
     return store
 from services.runtime.contract import Operation
@@ -148,7 +149,7 @@ def test_cache_miss_delegates_once_and_saves_the_answer(monkeypatch, prompt_cach
         return await _finish(result, pending['execution_id'])
 
     assert asyncio.run(check()) == {'status': 'succeeded', 'result': {'value': 3}}
-    [(athlete, operation, request, response)] = prompt_cache_store["remembered"]
+    [(athlete, operation, request, response, _context)] = prompt_cache_store["remembered"]
     assert (athlete, operation) == ('athlete-a', 'test_operation')
     assert request['messages'] == [{'role': 'user', 'content': 'Return a value'}]
     assert json.loads(response['choices'][0]['message']['content']) == {'value': 3}

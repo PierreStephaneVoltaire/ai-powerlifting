@@ -25,12 +25,12 @@ type access struct {
 	calls int
 }
 
-func (a *access) Fetch(_ context.Context, _ string, _ map[string]any, _ auth.Caller) (map[string]any, error) {
+func (a *access) Fetch(_ context.Context, _ string, _ map[string]any, caller auth.Caller) (map[string]any, error) {
 	a.calls++
 	if a.err != nil {
 		return nil, a.err
 	}
-	result := map[string]any{"settings_pk": "person_1"}
+	result := map[string]any{"settings_pk": "person_1", "athlete_pk": caller.Athlete}
 	for key, value := range a.extra {
 		result[key] = value
 	}

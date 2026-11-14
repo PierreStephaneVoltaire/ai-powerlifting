@@ -2416,6 +2416,13 @@
         "athlete_display_name": {
           "type": "string"
         },
+        "athlete_sex": {
+          "type": "string",
+          "enum": [
+            "male",
+            "female"
+          ]
+        },
         "competition_scope": {
           "type": "object",
           "properties": {

@@ -20,7 +20,11 @@ pub async fn fetch(
         .timeout(TIMEOUT)
         .header("X-Person-Pk", &caller.person)
         .header("X-Athlete-Pk", &caller.athlete)
-        .json(&json!({"operation": operation, "arguments": arguments}))
+        .json(&if operation.is_empty() {
+            json!({})
+        } else {
+            json!({"operation": operation, "arguments": arguments})
+        })
         .send()
         .await
         .map_err(|_| Error::AccessUnavailable)?;
@@ -28,4 +32,12 @@ pub async fn fetch(
         return Err(Error::AccessDenied(response.status()));
     }
     response.json().await.map_err(|_| Error::AccessUnavailable)
+}
+
+pub fn athlete_sex(access: &Value) -> Option<String> {
+    access
+        .get("athlete_sex")
+        .and_then(Value::as_str)
+        .filter(|sex| matches!(*sex, "male" | "female"))
+        .map(str::to_owned)
 }

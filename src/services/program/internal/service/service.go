@@ -75,7 +75,7 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 	if err := operation.ValidateResult(result); err != nil {
 		return nil, apperr.InvalidResult()
 	}
-	s.versions.Record(ctx, name, caller.Athlete)
+	s.versions.Record(ctx, name, auth.AnalysisAthlete(access))
 	if caller.Nested || caller.ActiveJob() == "" {
 		return result, nil
 	}

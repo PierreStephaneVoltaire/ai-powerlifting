@@ -3,6 +3,8 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -54,32 +56,45 @@ func TestRequestHashMatchesPython(t *testing.T) {
 	}
 }
 
-func TestKeyLayout(t *testing.T) {
-	if got := Key("athlete_1", "block_correlation_analysis", "abc"); got != "pl:ai-cache:exact:athlete_1:block_correlation_analysis:abc" {
-		t.Fatal(got)
+func TestPromptsLookupAndRememberUseCacheService(t *testing.T) {
+	server := miniredis.RunT(t)
+	_ = server.Set("pl:analysis-version:athlete_1", "4")
+	kv := Redis{Client: redis.NewClient(&redis.Options{Addr: server.Addr()})}
+	bodies := map[string]promptBody{}
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body promptBody
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies[r.URL.Path] = body
+		if r.URL.Path == "/lookup" {
+			_, _ = w.Write([]byte(`{"hit":true,"layer":"semantic","response":{"choices":[]}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"entry_id":"e"}`))
+	}))
+	defer service.Close()
+	prompts := Prompts{KV: kv, URL: service.URL, Now: func() time.Time { return time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC) }}
+	ctx := context.Background()
+	request := Request{Messages: []any{map[string]any{"role": "user", "content": "hi"}}, Tools: []any{}}
+	response, layer, hit := prompts.Lookup(ctx, "athlete_1", "op", request)
+	if !hit || layer != "semantic" || response["choices"] == nil {
+		t.Fatalf("lookup %v %s %v", response, layer, hit)
+	}
+	prompts.Remember(ctx, "athlete_1", "op", request, map[string]any{"choices": []any{}})
+	for _, path := range []string{"/lookup", "/store"} {
+		body := bodies[path]
+		if body.Athlete != "athlete_1" || body.Operation != "op" || body.Context != (promptContext{Date: "2026-11-14", AnalysisVersion: "4"}) {
+			t.Fatalf("%s body %+v", path, body)
+		}
 	}
 }
 
-func TestPromptRoundTripUsesTTLAndKey(t *testing.T) {
+func TestPromptsServiceFailureIsMiss(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) }))
+	defer service.Close()
 	server := miniredis.RunT(t)
-	kv := Redis{Client: redis.NewClient(&redis.Options{Addr: server.Addr()})}
-	prompts := Prompts{KV: kv}
-	ctx := context.Background()
-	request := Request{Messages: []any{map[string]any{"role": "user", "content": "hi"}}, Tools: []any{}}
-	if _, hit := prompts.Exact(ctx, "athlete_1", "op", request); hit {
+	prompts := Prompts{KV: Redis{Client: redis.NewClient(&redis.Options{Addr: server.Addr()})}, URL: service.URL}
+	if _, _, hit := prompts.Lookup(context.Background(), "a", "op", Request{}); hit {
 		t.Fatal("unexpected hit")
-	}
-	prompts.Remember(ctx, "athlete_1", "op", request, map[string]any{"choices": []any{}})
-	if _, hit := prompts.Exact(ctx, "athlete_1", "op", request); !hit {
-		t.Fatal("expected hit")
-	}
-	hash, _ := request.Hash()
-	key := Key("athlete_1", "op", hash)
-	if !server.Exists(key) || server.TTL(key) != 30*24*time.Hour {
-		t.Fatalf("key %s ttl %v", key, server.TTL(key))
-	}
-	if _, hit := prompts.Exact(ctx, "athlete_2", "op", request); hit {
-		t.Fatal("cache must be athlete scoped")
 	}
 }
 

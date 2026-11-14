@@ -99,15 +99,15 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 	if err := operation.ValidateResult(result); err != nil {
 		return nil, apperr.InvalidResult()
 	}
-	s.recordWrite(ctx, name, scoped)
+	s.recordWrite(ctx, name, access)
 	if caller.Nested || caller.ActiveJob() == "" {
 		return result, nil
 	}
 	return map[string]any{"status": "succeeded", "result": result}, nil
 }
 
-func (s *Service) recordWrite(ctx context.Context, name string, arguments map[string]any) {
-	athlete, _ := arguments["pk"].(string)
+func (s *Service) recordWrite(ctx context.Context, name string, access map[string]any) {
+	athlete := auth.AnalysisAthlete(access)
 	if athlete == "" || !analysisInputWrites[name] {
 		return
 	}

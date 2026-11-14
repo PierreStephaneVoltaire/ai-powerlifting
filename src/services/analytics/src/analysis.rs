@@ -4,7 +4,7 @@ use crate::args::{self, ExerciseArgs, SectionArgs, SuggestArgs};
 use crate::assemble::{self, Loaded, Scope};
 use crate::calc::progression::{progression_rate, rpe_drift};
 use crate::calc::projection::multiplier_suggestions;
-use crate::engine::{Engine, to_value};
+use crate::engine::{Engine, access_sex, to_value, with_default_sex};
 use crate::error::Error;
 use crate::model::{Lift, Maxes, ProgramData, Session};
 use crate::sections::{self, Params};
@@ -33,6 +33,7 @@ impl Engine {
         let Some(mut program) = program.filter(Value::is_object) else {
             return self.load(athlete, &Window::default(), scope).await;
         };
+        with_default_sex(&mut program, access_sex());
         let listed = match sessions {
             Some(Value::Array(items)) => items,
             _ => match program.get_mut("sessions").map(Value::take) {

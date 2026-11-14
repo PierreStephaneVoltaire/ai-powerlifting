@@ -9,7 +9,7 @@ use crate::access;
 use crate::auth;
 use crate::caller::Caller;
 use crate::config::{Config, DOMAIN};
-use crate::engine::Engine;
+use crate::engine::{ATHLETE_SEX, Engine};
 use crate::error::Error;
 use crate::handlers::Handler;
 
@@ -220,9 +220,11 @@ impl Service {
         if caller.nested && caller.active_job().is_empty() {
             return Err(Error::NestedWithoutExecution);
         }
-        let result = self
-            .engine
-            .run(operation.handler, scoped, &caller.person)
+        let result = ATHLETE_SEX
+            .scope(
+                access::athlete_sex(&access),
+                self.engine.run(operation.handler, scoped, &caller.person),
+            )
             .await?;
         operation.validate_result(&result)?;
         if caller.nested || caller.active_job().is_empty() {
@@ -313,15 +315,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_person_is_denied_without_access_call() {
-        let stub = profile(200, json!({})).await;
+    async fn empty_person_reaches_access_context_and_its_denial_propagates() {
+        let stub = profile(403, json!({"detail": "no"})).await;
         let anonymous = Caller {
             athlete: "athlete_1".to_owned(),
             ..Caller::default()
         };
         let result = service(&stub).call(OPERATION, Map::new(), &anonymous).await;
         assert!(forbidden(result));
-        assert!(stub.hits.lock().unwrap().is_empty());
+        let hits = stub.hits.lock().unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0["x-person-pk"], "");
     }
 
     #[tokio::test]
