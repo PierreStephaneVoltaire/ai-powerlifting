@@ -12,7 +12,7 @@ import (
 	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/redis/go-redis/v9"
 
 	analyticsv1 "powerlifting/analytics-ai/gen/analytics"
@@ -44,6 +44,9 @@ func run() error {
 	cfg := config.FromEnv()
 	if cfg.CoachURL == "" {
 		return errors.New("IF_API_URL is required")
+	}
+	if cfg.Bucket == "" {
+		return errors.New("POWERLIFTING_S3_BUCKET is required")
 	}
 	registry, err := contract.Load()
 	if err != nil {
@@ -77,8 +80,8 @@ func run() error {
 		Source:     data.Analytics{Client: analyticsv1.NewAnalyticsDataClient(analyticsConn)},
 		Exporter:   data.Export{Client: exportv1.NewExportsClient(exportConn)},
 		KV:         kv,
-		Backend:    generation.Dynamo{API: dynamodb.NewFromConfig(awsCfg), Table: cfg.Table},
-		Executions: execution.New(cache.Prompts{KV: kv}),
+		Backend:    generation.Reports{Pointers: generation.Valkey{Client: kv.Client}, Objects: generation.S3{Client: s3.NewFromConfig(awsCfg), Bucket: cfg.Bucket}, Prefix: cfg.ReportsPrefix},
+		Executions: execution.New(cache.Prompts{KV: kv, URL: cfg.PromptCacheURL, HTTP: httpClient}),
 		Now:        time.Now,
 	}
 

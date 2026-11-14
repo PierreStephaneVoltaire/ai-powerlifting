@@ -23,6 +23,7 @@ pub struct Config {
     pub valkey_url: String,
     pub region: String,
     pub snapshot_bucket: Option<String>,
+    pub build_id: Option<String>,
     pub port: u16,
     pub grpc_port: u16,
     pub ai_grpc_url: String,
@@ -52,6 +53,7 @@ impl Config {
             region: var("AWS_REGION", "ca-central-1"),
             snapshot_bucket: Some(var("POWERLIFTING_S3_BUCKET", ""))
                 .filter(|name| !name.is_empty()),
+            build_id: Some(var("BUILD_ID", "")).filter(|id| !id.is_empty()),
             port: var("PORT", "8000").parse().unwrap_or(8000),
             grpc_port: var("GRPC_PORT", "50051").parse().unwrap_or(50051),
             ai_grpc_url: var("ANALYTICS_AI_GRPC_URL", "http://pl-analytics-ai:50051"),

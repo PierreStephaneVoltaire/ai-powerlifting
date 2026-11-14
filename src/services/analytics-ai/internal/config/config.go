@@ -11,11 +11,13 @@ type Config struct {
 	GRPCPort       string
 	ProfileURL     string
 	ValkeyURL      string
+	PromptCacheURL string
 	CoachURL       string
 	AnalyticsGRPC  string
 	ExportGRPC     string
 	AllowedCallers []string
-	Table          string
+	Bucket         string
+	ReportsPrefix  string
 	Region         string
 }
 
@@ -38,11 +40,13 @@ func FromEnv() Config {
 		GRPCPort:       port(value("GRPC_PORT", "50051")),
 		ProfileURL:     strings.TrimRight(value("PL_PROFILE_URL", "http://pl-profile:8000"), "/"),
 		ValkeyURL:      value("VALKEY_URL", "redis://pl-valkey:6379"),
+		PromptCacheURL: strings.TrimRight(value("PROMPT_CACHE_URL", "http://pl-prompt-cache-api.powerlifting.svc.cluster.local:8000"), "/"),
 		CoachURL:       strings.TrimRight(os.Getenv("IF_API_URL"), "/"),
 		AnalyticsGRPC:  value("ANALYTICS_GRPC_URL", "pl-analytics:50051"),
 		ExportGRPC:     value("EXPORT_GRPC_URL", "pl-analytics-export:50051"),
 		AllowedCallers: callers,
-		Table:          value("ANALYSIS_CACHE_TABLE_NAME", "if-powerlifting-analysis-cache"),
+		Bucket:         os.Getenv("POWERLIFTING_S3_BUCKET"),
+		ReportsPrefix:  strings.Trim(value("ANALYSIS_REPORTS_PREFIX", "analysis-reports"), "/"),
 		Region:         value("AWS_REGION", "ca-central-1"),
 	}
 }

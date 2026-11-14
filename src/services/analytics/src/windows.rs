@@ -9,7 +9,6 @@ use crate::scope::BlockScope;
 use crate::util::parse_date;
 
 pub const CACHE_SCHEMA_VERSION: i64 = 6;
-pub const SECTION_CACHE_SCHEMA_VERSION: i64 = 4;
 pub const MANIFEST_SCHEMA_VERSION: i64 = 6;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -239,7 +238,7 @@ pub fn build(program: &ProgramData, as_of: NaiveDate) -> Result<Windows, Error> 
 
 pub fn source_key(version: &str, start: Option<&str>, end: Option<&str>) -> String {
     format!(
-        "s{SECTION_CACHE_SCHEMA_VERSION}-v{version}-{}-{}",
+        "v{version}-{}-{}",
         start.unwrap_or_default(),
         end.unwrap_or_default()
     )

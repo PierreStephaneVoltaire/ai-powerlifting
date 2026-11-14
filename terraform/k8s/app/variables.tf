@@ -16,6 +16,7 @@ variable "repositories" {
     analytics        = string
     rankings         = string
     analytics_ai     = string
+    prompt_cache_api = string
     analytics_export = string
     glossary         = string
     backend          = string

@@ -147,8 +147,8 @@ func (e *execution) signal() {
 func (m *Manager) infer(ctx context.Context, current *execution, request cache.Request) (map[string]any, error) {
 	started := time.Now()
 	hash, _ := request.Hash()
-	if response, hit := m.Prompts.Exact(ctx, current.meta.Athlete, current.meta.Operation, request); hit {
-		m.log(current, "exact", hash, started)
+	if response, layer, hit := m.Prompts.Lookup(ctx, current.meta.Athlete, current.meta.Operation, request); hit {
+		m.log(current, layer, hash, started)
 		return response, nil
 	}
 	answers := make(chan map[string]any, 1)

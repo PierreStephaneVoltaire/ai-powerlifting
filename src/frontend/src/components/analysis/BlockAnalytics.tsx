@@ -148,12 +148,14 @@ function ProgramEvaluationSection({
   error,
   onRefresh,
   readOnly = false,
+  viewAthlete,
 }: {
   report: ProgramEvaluationReport | null
   loading: boolean
   error: string | null
   onRefresh: () => void
   readOnly?: boolean
+  viewAthlete?: string
 }) {
   return (
     <Paper withBorder p="md">
@@ -165,9 +167,11 @@ function ProgramEvaluationSection({
           {report?.cache_miss && <Badge color="gray" variant="light" size="sm">Not generated</Badge>}
           {report?.insufficient_data && <Badge color="yellow" variant="light" size="sm">Limited data</Badge>}
         </Group>
-        <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} loading={loading} onClick={onRefresh} disabled={readOnly}>
-          {report?.cache_miss ? 'Generate' : 'Refresh'}
-        </Button>
+        {!viewAthlete && (
+          <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} loading={loading} onClick={onRefresh} disabled={readOnly}>
+            {report?.cache_miss ? 'Generate' : 'Refresh'}
+          </Button>
+        )}
       </Group>
       {error && <Text c="red" fz="sm">{error}</Text>}
       {loading && !report ? (
@@ -212,6 +216,7 @@ function BlockAnalysisDetails({
   sex,
   onBundleUpdated,
   readOnly = false,
+  viewAthlete,
 }: {
   bundle: BlockAnalysisBundle
   unit: WeightUnit
@@ -220,6 +225,7 @@ function BlockAnalysisDetails({
   sex: 'male' | 'female'
   onBundleUpdated: (bundle: BlockAnalysisBundle) => void
   readOnly?: boolean
+  viewAthlete?: string
 }) {
   const outcome = bundle.historical.competitionOutcome
   const summary = bundle.historical.analyticsSummary
@@ -252,7 +258,7 @@ function BlockAnalysisDetails({
   const loadProgramEvaluation = (refresh = false, cacheOnly = false) => {
     setProgramEvaluationLoading(true)
     setProgramEvaluationError(null)
-    fetchBlockProgramEvaluation(bundle.block.blockKey, refresh, cacheOnly)
+    fetchBlockProgramEvaluation(bundle.block.blockKey, refresh, cacheOnly, viewAthlete)
       .then(setProgramEvaluation)
       .catch((err) => setProgramEvaluationError(err.message))
       .finally(() => setProgramEvaluationLoading(false))
@@ -280,7 +286,7 @@ function BlockAnalysisDetails({
 
   return (
     <Stack gap="md">
-      <Group justify="flex-end" wrap="wrap">
+      {!viewAthlete && <Group justify="flex-end" wrap="wrap">
         <Button
           component="a"
           href={blockAnalysisExportUrl(bundle.block.blockKey, 'xlsx')}
@@ -300,7 +306,7 @@ function BlockAnalysisDetails({
         >
           Export Markdown
         </Button>
-      </Group>
+      </Group>}
       <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }}>
         <Paper withBorder p="md">
           <Group gap="xs" mb="xs">
@@ -352,9 +358,11 @@ function BlockAnalysisDetails({
             </Group>
             <Text fz="xs" c="dimmed">Set the athlete's maxes at the beginning of this block so deltas are not inferred from early sessions.</Text>
           </Stack>
-          <Button size="xs" leftSection={<Save size={14} />} loading={savingStartMaxes} onClick={saveStartMaxes} disabled={readOnly}>
-            Save
-          </Button>
+          {!viewAthlete && (
+            <Button size="xs" leftSection={<Save size={14} />} loading={savingStartMaxes} onClick={saveStartMaxes} disabled={readOnly}>
+              Save
+            </Button>
+          )}
         </Group>
         {startMaxError && <Text c="red" fz="sm" mb="sm">{startMaxError}</Text>}
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
@@ -492,6 +500,7 @@ function BlockAnalysisDetails({
         error={programEvaluationError}
         onRefresh={() => loadProgramEvaluation(true)}
         readOnly={readOnly}
+        viewAthlete={viewAthlete}
       />
 
       <BlockWeeklySurface
@@ -500,14 +509,17 @@ function BlockAnalysisDetails({
         unit={unit}
         sex={sex}
         version={version}
+        readOnlyAthlete={viewAthlete}
       />
     </Stack>
   )
 }
 
-export function PastBlocksPanel({ unit, readOnly = false }: { unit: WeightUnit; readOnly?: boolean }) {
-  const { program, version } = useProgramStore()
-  const { sex } = useSettingsStore()
+export function PastBlocksPanel({ unit, readOnly = false, viewAthlete, viewProgram, viewSex }: { unit: WeightUnit; readOnly?: boolean; viewAthlete?: string; viewProgram?: Program | null; viewSex?: 'male' | 'female' | null }) {
+  const { program: ownProgram, version } = useProgramStore()
+  const { sex: ownSex } = useSettingsStore()
+  const program = viewAthlete ? viewProgram ?? null : ownProgram
+  const sex = viewAthlete ? viewSex ?? ownSex : ownSex
   const [blocks, setBlocks] = useState<ProgramBlockIndexEntry[]>([])
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [bundle, setBundle] = useState<BlockAnalysisBundle | null>(null)
@@ -520,7 +532,7 @@ export function PastBlocksPanel({ unit, readOnly = false }: { unit: WeightUnit; 
   useEffect(() => {
     setLoadingBlocks(true)
     setError(null)
-    fetchProgramBlocks()
+    fetchProgramBlocks(viewAthlete)
       .then((result) => {
         setBlocks(result)
         const first = sortedPastBlocks(result)[0]
@@ -528,13 +540,13 @@ export function PastBlocksPanel({ unit, readOnly = false }: { unit: WeightUnit; 
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoadingBlocks(false))
-  }, [])
+  }, [viewAthlete])
 
   const loadAnalysis = (blockKey: string, refresh = false) => {
     setSelectedKey(blockKey)
     setLoadingAnalysis(true)
     setError(null)
-    fetchBlockAnalysis(blockKey, refresh)
+    fetchBlockAnalysis(blockKey, refresh, viewAthlete)
       .then(setBundle)
       .catch((err) => setError(err.message))
       .finally(() => setLoadingAnalysis(false))
@@ -611,29 +623,33 @@ export function PastBlocksPanel({ unit, readOnly = false }: { unit: WeightUnit; 
                       <Button size="xs" variant="light" leftSection={<Eye size={14} />} onClick={() => loadAnalysis(block.blockKey, false)}>
                         View
                       </Button>
-                      <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} onClick={() => loadAnalysis(block.blockKey, true)} disabled={readOnly}>
-                        Refresh
-                      </Button>
-                      <Button
-                        component="a"
-                        href={blockAnalysisExportUrl(block.blockKey, 'xlsx')}
-                        download
-                        size="xs"
-                        variant="subtle"
-                        leftSection={<Download size={14} />}
-                      >
-                        Excel
-                      </Button>
-                      <Button
-                        component="a"
-                        href={blockAnalysisExportUrl(block.blockKey, 'markdown')}
-                        download
-                        size="xs"
-                        variant="subtle"
-                        leftSection={<Download size={14} />}
-                      >
-                        Markdown
-                      </Button>
+                      {!viewAthlete && (
+                        <>
+                          <Button size="xs" variant="subtle" leftSection={<RefreshCw size={14} />} onClick={() => loadAnalysis(block.blockKey, true)} disabled={readOnly}>
+                            Refresh
+                          </Button>
+                          <Button
+                            component="a"
+                            href={blockAnalysisExportUrl(block.blockKey, 'xlsx')}
+                            download
+                            size="xs"
+                            variant="subtle"
+                            leftSection={<Download size={14} />}
+                          >
+                            Excel
+                          </Button>
+                          <Button
+                            component="a"
+                            href={blockAnalysisExportUrl(block.blockKey, 'markdown')}
+                            download
+                            size="xs"
+                            variant="subtle"
+                            leftSection={<Download size={14} />}
+                          >
+                            Markdown
+                          </Button>
+                        </>
+                      )}
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -653,6 +669,7 @@ export function PastBlocksPanel({ unit, readOnly = false }: { unit: WeightUnit; 
           sex={sex}
           onBundleUpdated={setBundle}
           readOnly={readOnly}
+          viewAthlete={viewAthlete}
         />
       )}
     </Stack>
@@ -932,7 +949,7 @@ function CurrentVsHistorySection({ comparison }: { comparison: BlockComparisonRe
   )
 }
 
-export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightUnit; readOnly?: boolean }) {
+export function LifetimeComparePanel({ unit, readOnly = false, viewAthlete }: { unit: WeightUnit; readOnly?: boolean; viewAthlete?: string }) {
   const [blocks, setBlocks] = useState<ProgramBlockIndexEntry[]>([])
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [comparison, setComparison] = useState<AiBlockComparisonResult | null>(null)
@@ -950,7 +967,7 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
     let cancelled = false
     setLoading(true)
     setError(null)
-    fetchProgramBlocks()
+    fetchProgramBlocks(viewAthlete)
       .then((result) => {
         if (cancelled) return null
         const defaultKeys = result
@@ -962,6 +979,7 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
         return fetchAiBlockComparison({
           blockKeys: defaultKeys,
           cacheOnly: true,
+          viewAthlete,
         })
       })
       .then((result) => {
@@ -976,7 +994,7 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [viewAthlete])
 
   const runComparison = () => {
     if (readOnly) return
@@ -1032,12 +1050,14 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
             <GitCompare size={18} />
             <Title order={3} fz="lg">Lifetime Compare</Title>
           </Group>
-          <Group gap="xs">
-            <Button size="xs" variant="light" onClick={setAllPastBlocks} disabled={readOnly}>All stored past blocks</Button>
-            <Button size="xs" leftSection={<Brain size={14} />} onClick={runComparison} disabled={!hasSourceBlocks || loading || readOnly}>
-              {comparison && !isMissingAiResult ? 'Regenerate AI Analysis' : 'Run AI Lifetime Analysis'}
-            </Button>
-          </Group>
+          {!viewAthlete && (
+            <Group gap="xs">
+              <Button size="xs" variant="light" onClick={setAllPastBlocks} disabled={readOnly}>All stored past blocks</Button>
+              <Button size="xs" leftSection={<Brain size={14} />} onClick={runComparison} disabled={!hasSourceBlocks || loading || readOnly}>
+                {comparison && !isMissingAiResult ? 'Regenerate AI Analysis' : 'Run AI Lifetime Analysis'}
+              </Button>
+            </Group>
+          )}
         </Group>
 
         <Group gap="lg" align="flex-start">
@@ -1068,11 +1088,11 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
                     setComparison(null)
                   }}
                   label={`${block.label}${block.linkedCompetition ? ` (${block.linkedCompetition.date})` : ' (training only)'}`}
-                  disabled={readOnly || !block.stored}
+                  disabled={readOnly || !!viewAthlete || !block.stored}
                 />
                 {block.stored ? (
                   <Badge color="green" variant="light" size="sm">Stored</Badge>
-                ) : (
+                ) : viewAthlete ? null : (
                   <Button
                     size="compact-xs"
                     variant="light"
@@ -1102,7 +1122,7 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
             </Paper>
           ) : (
             <Stack gap="md">
-              {isMissingAiResult ? (
+              {isMissingAiResult ? viewAthlete ? null : (
                 <Paper withBorder p="lg">
                   <Group gap="xs" mb="xs">
                     <AlertTriangle size={18} />

@@ -247,10 +247,10 @@ mod tests {
 
     #[test]
     fn fingerprints_match_the_node_format() {
-        assert_eq!(windows::source_key("54", None, None), "s4-v54--");
+        assert_eq!(windows::source_key("54", None, None), "v54--");
         assert_eq!(
             windows::source_key("3", Some("2026-01-01"), Some("2026-02-01")),
-            "s4-v3-2026-01-01-2026-02-01"
+            "v3-2026-01-01-2026-02-01"
         );
     }
 
@@ -259,9 +259,9 @@ mod tests {
         let key = key();
         assert_eq!(
             key.section_record("overview"),
-            "native_section#2026-11-11#previous_4#overview#s4-v54--"
+            "native_section#2026-11-11#previous_4#overview#v54--"
         );
-        assert_eq!(key.windows_record(), "native_windows#2026-11-11#s4-v54--");
+        assert_eq!(key.windows_record(), "native_windows#2026-11-11#v54--");
     }
 
     #[test]
@@ -295,14 +295,14 @@ mod tests {
 
     #[test]
     fn status_json_uses_the_documented_casing() {
-        let value = serde_json::to_value(SectionStatus::missing("overview", "s4-v1--"))
-            .expect("serializes");
+        let value =
+            serde_json::to_value(SectionStatus::missing("overview", "v1--")).expect("serializes");
         assert_eq!(
             value,
             serde_json::json!({
                 "sectionKey": "overview",
                 "status": "missing",
-                "sourceFingerprint": "s4-v1--",
+                "sourceFingerprint": "v1--",
                 "cached": false
             })
         );

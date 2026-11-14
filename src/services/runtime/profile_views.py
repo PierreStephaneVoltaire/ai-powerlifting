@@ -62,6 +62,7 @@ def visible_profile(owner, actor, vocabulary, details=False):
         sessions = SessionStore(os.getenv('IF_SESSIONS_TABLE_NAME', 'if-sessions'), pk=athlete, region=os.getenv('AWS_REGION', 'ca-central-1')).list_sessions_sync(program_sk, program.get('phases', [])) if 'sessions:read' in allowed or 'performance:read' in allowed else []
         derived = profile_core._build_profile(owner, None, program, sessions)
         if 'performance:read' in allowed:
+            result['sex'] = owner.get('sex') if owner.get('sex') in ('male', 'female') else None
             result['summary'] = derived['summary']
             if 'weight-log:read' not in allowed:
                 result['summary']['bodyweight_kg'] = None

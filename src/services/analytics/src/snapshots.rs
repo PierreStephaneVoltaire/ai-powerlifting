@@ -8,7 +8,6 @@ use aws_sdk_s3::primitives::{ByteStream, DateTimeFormat};
 use serde_json::Value;
 
 use crate::error::Error;
-use crate::windows::CACHE_SCHEMA_VERSION;
 
 pub type Stored<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
@@ -29,15 +28,12 @@ pub fn prefix(athlete: &str) -> String {
 }
 
 pub fn object_key(athlete: &str, block_key: &str) -> String {
-    format!(
-        "{}{block_key}/v{CACHE_SCHEMA_VERSION}.json",
-        prefix(athlete)
-    )
+    format!("{}{block_key}/snapshot.json", prefix(athlete))
 }
 
 fn block_of(athlete: &str, key: &str) -> Option<String> {
     let rest = key.strip_prefix(&prefix(athlete))?;
-    let block = rest.strip_suffix(&format!("/v{CACHE_SCHEMA_VERSION}.json"))?;
+    let block = rest.strip_suffix("/snapshot.json")?;
     (!block.is_empty() && !block.contains('/')).then(|| block.to_owned())
 }
 

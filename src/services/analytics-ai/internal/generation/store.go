@@ -2,18 +2,11 @@ package generation
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	"encoding/json"
 	"time"
-
-	"powerlifting/analytics-ai/internal/pyjson"
 )
 
-const (
-	shardSize  = 80000
-	retention  = 180 * 24 * time.Hour
-	StatusDone = "succeeded"
-)
+const StatusDone = "succeeded"
 
 var terminal = map[string]bool{"succeeded": true, "failed": true, "cancelled": true, "uncertain": true}
 
@@ -27,7 +20,6 @@ type Record struct {
 	JobID        string
 	Attempt      int
 	UpdatedAt    int64
-	Shards       int
 	Requirements map[string]any
 	Error        any
 	Fingerprint  string
@@ -39,12 +31,6 @@ type Store struct {
 	Now     func() time.Time
 }
 
-func (s Store) pk() string { return "analysis#" + s.Athlete }
-
-func (s Store) sk(id string) string { return "native_generation#" + id }
-
-func (s Store) expires() int64 { return s.Now().Add(retention).Unix() }
-
 func toInt(value any) int {
 	switch typed := value.(type) {
 	case int:
@@ -53,6 +39,9 @@ func toInt(value any) int {
 		return int(typed)
 	case float64:
 		return int(typed)
+	case json.Number:
+		number, _ := typed.Int64()
+		return int(number)
 	}
 	return 0
 }
@@ -75,7 +64,6 @@ func record(item Item) *Record {
 		JobID:        text(item["job_id"]),
 		Attempt:      toInt(item["attempt"]),
 		UpdatedAt:    int64(toInt(item["updated_at"])),
-		Shards:       toInt(item["shards"]),
 		Requirements: requirements,
 		Error:        item["error"],
 		Fingerprint:  text(item["source_fingerprint"]),
@@ -83,7 +71,7 @@ func record(item Item) *Record {
 }
 
 func (s Store) Get(ctx context.Context, id string) (*Record, error) {
-	item, err := s.Backend.Get(ctx, s.pk(), s.sk(id))
+	item, err := s.Backend.Get(ctx, s.Athlete, id)
 	if err != nil {
 		return nil, err
 	}
@@ -103,9 +91,12 @@ func (s Store) Reserve(ctx context.Context, id, operation, owner string, retry b
 		attempt = current.Attempt + 1
 	}
 	item := Item{
-		"pk": s.pk(), "sk": s.sk(id), "generation_id": id, "source_fingerprint": id, "operation": operation,
+		"athlete": s.Athlete, "generation_id": id, "source_fingerprint": id, "operation": operation,
 		"owner": owner, "status": "starting", "attempt": attempt, "updated_at": s.Now().Unix(),
-		"access_requirements": requirements, "expires_at": s.expires(),
+		"access_requirements": requirements,
+	}
+	if requirements == nil {
+		item["access_requirements"] = nil
 	}
 	var created bool
 	if current == nil {
@@ -125,44 +116,20 @@ func (s Store) Reserve(ctx context.Context, id, operation, owner string, retry b
 
 func (s Store) Update(ctx context.Context, id string, attempt int, fields Item) error {
 	fields["updated_at"] = s.Now().Unix()
-	return s.Backend.Update(ctx, s.pk(), s.sk(id), attempt, fields)
+	return s.Backend.Update(ctx, s.Athlete, id, attempt, fields)
 }
 
 func (s Store) Complete(ctx context.Context, id string, result any, attempt int) error {
-	payload, err := pyjson.Encode(result)
-	if err != nil {
-		return err
-	}
-	shards := 0
-	for start := 0; start < len(payload) || shards == 0; start += shardSize {
-		end := min(start+shardSize, len(payload))
-		shard := Item{"pk": s.pk(), "sk": s.sk(fmt.Sprintf("%s#result#%d#%d", id, attempt, shards)), "payload": string(payload[start:end]), "expires_at": s.expires()}
-		if err := s.Backend.Put(ctx, shard); err != nil {
-			return err
-		}
-		shards++
-	}
-	return s.Update(ctx, id, attempt, Item{"status": StatusDone, "shards": shards, "expires_at": s.expires()})
+	return s.Backend.Save(ctx, s.Athlete, id, attempt, Item{"status": StatusDone, "updated_at": s.Now().Unix()}, result)
 }
 
 func (s Store) Result(ctx context.Context, rec *Record) (any, error) {
-	var builder strings.Builder
-	if rec.Shards == 0 {
-		return nil, ErrIncomplete
-	}
-	for index := 0; index < rec.Shards; index++ {
-		shard, err := s.Backend.Get(ctx, s.pk(), s.sk(fmt.Sprintf("%s#result#%d#%d", rec.ID, rec.Attempt, index)))
-		if err != nil {
-			return nil, err
-		}
-		if shard == nil {
-			return nil, ErrIncomplete
-		}
-		builder.WriteString(text(shard["payload"]))
-	}
-	value, err := pyjson.Decode([]byte(builder.String()))
+	value, err := s.Backend.Result(ctx, s.Athlete, rec.ID)
 	if err != nil {
 		return nil, err
+	}
+	if value == nil {
+		return nil, ErrIncomplete
 	}
 	if object, ok := value.(map[string]any); ok {
 		object["cached"] = true

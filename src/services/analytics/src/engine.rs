@@ -34,6 +34,35 @@ pub struct Engine {
     pub clock: Clock,
     pub ai: Ai,
     pub snapshots: Option<Arc<dyn Snapshots>>,
+    pub build_id: Option<String>,
+}
+
+tokio::task_local! {
+    pub static ATHLETE_SEX: Option<String>;
+}
+
+pub fn with_default_sex(program: &mut Value, sex: Option<String>) {
+    let Some(sex) = sex else { return };
+    let present = |pointer: &str| {
+        program
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .is_some_and(|text| !text.is_empty())
+    };
+    if present("/meta/sex") || present("/settings/sex") {
+        return;
+    }
+    if program
+        .get("settings")
+        .is_none_or(|settings| !settings.is_object())
+    {
+        program["settings"] = Value::Object(Default::default());
+    }
+    program["settings"]["sex"] = Value::String(sex);
+}
+
+pub fn access_sex() -> Option<String> {
+    ATHLETE_SEX.try_with(Clone::clone).ok().flatten()
 }
 
 pub fn to_value<T: Serialize>(value: &T) -> Result<Value, Error> {
@@ -48,11 +77,17 @@ impl Engine {
             clock,
             ai: Ai::disabled(),
             snapshots: None,
+            build_id: None,
         }
     }
 
     pub fn with_ai(mut self, ai: Ai) -> Self {
         self.ai = ai;
+        self
+    }
+
+    pub fn with_build_id(mut self, build_id: Option<String>) -> Self {
+        self.build_id = build_id;
         self
     }
 
@@ -67,7 +102,8 @@ impl Engine {
         window: &Window,
         scope: Scope<'_>,
     ) -> Result<Loaded, Error> {
-        let raw = self.source.load(athlete, window).await?;
+        let mut raw = self.source.load(athlete, window).await?;
+        with_default_sex(&mut raw.program, access_sex());
         assemble::build(raw, scope)
     }
 

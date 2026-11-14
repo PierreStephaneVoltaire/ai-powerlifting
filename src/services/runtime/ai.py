@@ -54,11 +54,12 @@ async def completion(payload: dict[str, Any]) -> httpx.Response:
         raise RuntimeError("Domain AI requires an active IF execution; direct model calls are disabled")
     request = prompt_cache.cache_request(payload)
     started = time.monotonic()
-    response = await asyncio.to_thread(prompt_cache.exact, execution.athlete, execution.operation, request)
-    cache_layer = "exact" if response is not None else "none"
+    context = await asyncio.to_thread(prompt_cache.request_context, execution.athlete)
+    hit = await asyncio.to_thread(prompt_cache.lookup, execution.athlete, execution.operation, request, context)
+    response, cache_layer = hit if hit else (None, "none")
     if response is None:
         response = await _delegate(execution, payload.get("messages", []), payload.get("tools", []), payload.get("response_format"), SPECIALIST_INSTRUCTION)
-        await asyncio.to_thread(prompt_cache.remember, execution.athlete, execution.operation, request, response)
+        await asyncio.to_thread(prompt_cache.remember, execution.athlete, execution.operation, request, response, context)
     llm_log.emit(
         "ai_request",
         operation=execution.operation,

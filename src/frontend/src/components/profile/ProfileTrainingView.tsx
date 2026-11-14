@@ -5,6 +5,8 @@ import type { Exercise, Program, Session } from '@powerlifting/types'
 import { fetchViewedProgram } from '@/api/profiles'
 import { fetchBlockAnalysis, fetchProgramBlocks, type BlockAnalysisBundle } from '@/api/analytics'
 import { BlockWeeklySurface } from '@/components/analysis/BlockWeeklySurface'
+import { LifetimeComparePanel, PastBlocksPanel } from '@/components/analysis/BlockAnalytics'
+import MaxesPage from '@/pages/MaxesPage'
 import { useSettingsStore } from '@/store/settingsStore'
 import { toDisplayUnit } from '@/utils/units'
 
@@ -150,6 +152,7 @@ function ReadOnlyAnalysis({ athlete, program, unit, sex }: { athlete: string; pr
   const [bundle, setBundle] = useState<BlockAnalysisBundle | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [section, setSection] = useState('weekly')
 
   useEffect(() => {
     let cancelled = false
@@ -173,14 +176,37 @@ function ReadOnlyAnalysis({ athlete, program, unit, sex }: { athlete: string; pr
 
   return (
     <Stack gap="md" data-testid="profile-analysis">
-      <BlockWeeklySurface
-        program={program}
-        bundle={bundle}
-        unit={unit}
-        sex={program.meta?.sex ?? sex}
-        version="current"
-        viewAthlete={athlete}
-      />
+      <div className="if-tab-group">
+        {[
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'blocks', label: 'Past Blocks' },
+          { value: 'compare', label: 'Lifetime Compare' },
+          { value: 'maxes', label: 'Maxes' },
+        ].map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className="if-tab-button"
+            data-active={section === item.value}
+            onClick={() => setSection(item.value)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {section === 'weekly' && (
+        <BlockWeeklySurface
+          program={program}
+          bundle={bundle}
+          unit={unit}
+          sex={program.meta?.sex ?? sex}
+          version="current"
+          viewAthlete={athlete}
+        />
+      )}
+      {section === 'blocks' && <PastBlocksPanel unit={unit} readOnly viewAthlete={athlete} viewProgram={program} viewSex={program.meta?.sex ?? sex} />}
+      {section === 'compare' && <LifetimeComparePanel unit={unit} readOnly viewAthlete={athlete} />}
+      {section === 'maxes' && <MaxesPage viewProgram={program} />}
     </Stack>
   )
 }

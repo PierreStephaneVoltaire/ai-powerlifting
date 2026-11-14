@@ -3,7 +3,7 @@ use serde_json::{Map, Value, json};
 use crate::args::{self, WeeklyArgs, WindowArgs};
 use crate::assemble::{Loaded, Scope};
 use crate::calc::Env;
-use crate::engine::{Engine, to_value};
+use crate::engine::{ATHLETE_SEX, Engine, access_sex, to_value};
 use crate::error::Error;
 use crate::records::{
     AnalysisKey, QueueMode, SECTION_KEYS, SectionStatus, normalize_sections, queue, section_status,
@@ -239,7 +239,7 @@ impl Engine {
             return;
         }
         let engine = self.clone();
-        tokio::spawn(async move {
+        let run = async move {
             if let Err(error) = engine.run_sections(&key, &sections).await {
                 tracing::error!(%error, "analysis section run failed");
                 for section in &sections {
@@ -250,7 +250,8 @@ impl Engine {
                         .await;
                 }
             }
-        });
+        };
+        tokio::spawn(ATHLETE_SEX.scope(access_sex(), run));
     }
 
     async fn run_sections(&self, key: &AnalysisKey, requested: &[String]) -> Result<(), Error> {

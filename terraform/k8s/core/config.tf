@@ -19,7 +19,6 @@ resource "kubernetes_config_map_v1" "app" {
     IF_HEALTH_TABLE_NAME                   = var.tables.powerlifting
     IF_SESSIONS_TABLE_NAME                 = var.tables.sessions
     WORKOUT_VIDEOS_TABLE_NAME              = var.workout_videos_table
-    ANALYSIS_CACHE_TABLE_NAME              = var.tables.analysis_cache
     POWERLIFTING_MASTER_COMPETITIONS_TABLE = var.tables.master_competitions
     POWERLIFTING_USER_COMPETITIONS_TABLE   = var.tables.user_competitions
     POWERLIFTING_MASTER_FEDERATIONS_TABLE  = var.tables.master_federations

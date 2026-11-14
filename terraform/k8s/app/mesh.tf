@@ -9,6 +9,7 @@ locals {
     "pl-analytics-export" = ["powerlifting-app-backend", "pl-analytics-ai"]
     "pl-rankings"         = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
     "litellm"             = ["pl-coach"]
+    "pl-prompt-cache-api" = concat(["pl-analytics-ai"], [for name in local.mesh_domains : "pl-${name}"])
   }
 
   mesh_callers = merge(
@@ -18,11 +19,11 @@ locals {
 
   cache_callers = {
     "pl-valkey" = concat(
-      ["powerlifting-app-backend", "oauth2-proxy", "pl-analytics", "pl-analytics-ai", "pl-rankings", "pl-coach"],
+      ["powerlifting-app-backend", "oauth2-proxy", "pl-analytics", "pl-analytics-ai", "pl-prompt-cache-api", "pl-rankings", "pl-coach"],
       [for name in local.mesh_domains : "pl-${name}"],
     )
     "pl-prompt-cache"     = ["pl-prompt-cache-mcp"]
-    "pl-prompt-cache-mcp" = ["pl-coach"]
+    "pl-prompt-cache-mcp" = ["pl-coach", "pl-prompt-cache-api"]
   }
 
   mesh_services = merge(
@@ -33,6 +34,7 @@ locals {
       pl-rankings         = { service = "pl-rankings", app = "pl-rankings", ports = [8000] }
       pl-glossary         = { service = "pl-glossary", app = "pl-glossary", ports = [8000] }
       litellm             = { service = "litellm", app = "litellm", ports = [4000] }
+      pl-prompt-cache-api = { service = "pl-prompt-cache-api", app = "pl-prompt-cache-api", ports = [8000] }
     },
     { for name, service in kubernetes_service_v1.service : service.metadata[0].name => { service = service.metadata[0].name, app = service.spec[0].selector.app, ports = [8000] } },
   )

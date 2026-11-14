@@ -2,66 +2,61 @@ package generation
 
 import (
 	"context"
-	"maps"
 	"sync"
+	"time"
 )
 
-type Memory struct {
+type memoryPointers struct {
 	mu    sync.Mutex
-	items map[string]Item
+	items map[string]string
 }
 
-func NewMemory() *Memory { return &Memory{items: map[string]Item{}} }
-
-func memoryKey(pk, sk string) string { return pk + "\x00" + sk }
-
-func (m *Memory) Get(_ context.Context, pk, sk string) (Item, error) {
+func (m *memoryPointers) Get(_ context.Context, key string) (string, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	item, ok := m.items[memoryKey(pk, sk)]
-	if !ok {
-		return nil, nil
-	}
-	return maps.Clone(item), nil
+	value, ok := m.items[key]
+	return value, ok, nil
 }
 
-func (m *Memory) PutIfAbsent(_ context.Context, item Item) (bool, error) {
+func (m *memoryPointers) SetNX(_ context.Context, key, value string, _ time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	key := memoryKey(item["pk"].(string), item["sk"].(string))
 	if _, exists := m.items[key]; exists {
 		return false, nil
 	}
-	m.items[key] = maps.Clone(item)
+	m.items[key] = value
 	return true, nil
 }
 
-func (m *Memory) PutIfCurrent(_ context.Context, item Item, status string, attempt int) (bool, error) {
+func (m *memoryPointers) Swap(_ context.Context, key, previous, next string, _ time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	key := memoryKey(item["pk"].(string), item["sk"].(string))
-	current, exists := m.items[key]
-	if !exists || current["status"] != status || toInt(current["attempt"]) != attempt {
+	if m.items[key] != previous {
 		return false, nil
 	}
-	m.items[key] = maps.Clone(item)
+	m.items[key] = next
 	return true, nil
 }
 
-func (m *Memory) Put(_ context.Context, item Item) error {
+type memoryObjects struct {
+	mu    sync.Mutex
+	items map[string][]byte
+}
+
+func (m *memoryObjects) Get(_ context.Context, key string) ([]byte, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.items[memoryKey(item["pk"].(string), item["sk"].(string))] = maps.Clone(item)
+	body, ok := m.items[key]
+	return body, ok, nil
+}
+
+func (m *memoryObjects) Put(_ context.Context, key string, body []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.items[key] = body
 	return nil
 }
 
-func (m *Memory) Update(_ context.Context, pk, sk string, attempt int, fields Item) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	current, exists := m.items[memoryKey(pk, sk)]
-	if !exists || toInt(current["attempt"]) != attempt {
-		return nil
-	}
-	maps.Copy(current, fields)
-	return nil
+func NewMemory() *Reports {
+	return &Reports{Pointers: &memoryPointers{items: map[string]string{}}, Objects: &memoryObjects{items: map[string][]byte{}}, Prefix: "analysis-reports"}
 }

@@ -1100,12 +1100,13 @@ export async function fetchBlockProgramEvaluation(
   blockKey: string,
   refresh = false,
   cacheOnly = false,
+  viewAthlete?: string,
 ): Promise<ProgramEvaluationReport> {
   const params = new URLSearchParams({
     refresh: String(refresh),
     cacheOnly: String(cacheOnly),
   })
-  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/program-evaluation?${params.toString()}`)
+  const res = await api.get(`/analytics/blocks/${encodeURIComponent(blockKey)}/program-evaluation?${params.toString()}`, viewAthlete ? { powerliftingViewAthlete: viewAthlete } : undefined)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return normalizeProgramEvaluation(await resolveReport(body.data, cacheOnly))
@@ -1125,8 +1126,10 @@ export async function fetchAiBlockComparison(options: {
   blockKeys?: string[]
   refresh?: boolean
   cacheOnly?: boolean
+  viewAthlete?: string
 }): Promise<AiBlockComparisonResult> {
-  const res = await api.post('/analytics/block-comparison/ai', options)
+  const { viewAthlete, ...payload } = options
+  const res = await api.post('/analytics/block-comparison/ai', payload, viewAthlete ? { powerliftingViewAthlete: viewAthlete } : undefined)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return { ...body.data, report: await resolveReport(body.data.report, options.cacheOnly) }
