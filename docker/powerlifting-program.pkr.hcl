@@ -34,14 +34,14 @@ build {
 
   provisioner "shell-local" {
     inline = [
-      "rm -rf .build/program-go && mkdir -p .build/program-go",
-      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/program-go:/out\" -w /workspace/services/program-go public.ecr.aws/docker/library/golang:1-bookworm go build -trimpath -ldflags '-s -w' -o /out/pl-program ."
+      "rm -rf .build/program && mkdir -p .build/program",
+      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/program:/out\" -w /workspace/services/program public.ecr.aws/docker/library/golang:1-bookworm go build -trimpath -ldflags '-s -w' -o /out/pl-program ."
     ]
   }
 
   provisioner "file" {
     generated   = true
-    source      = ".build/program-go/pl-program"
+    source      = ".build/program/pl-program"
     destination = "/pl-program"
   }
 

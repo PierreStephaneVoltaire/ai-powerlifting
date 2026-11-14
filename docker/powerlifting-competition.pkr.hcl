@@ -34,14 +34,14 @@ build {
 
   provisioner "shell-local" {
     inline = [
-      "rm -rf .build/competition-go && mkdir -p .build/competition-go",
-      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/competition-go:/out\" -w /workspace/services/competition-go public.ecr.aws/docker/library/golang:1-bookworm go build -trimpath -ldflags '-s -w' -o /out/pl-competition ."
+      "rm -rf .build/competition && mkdir -p .build/competition",
+      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/competition:/out\" -w /workspace/services/competition public.ecr.aws/docker/library/golang:1-bookworm go build -trimpath -ldflags '-s -w' -o /out/pl-competition ."
     ]
   }
 
   provisioner "file" {
     generated   = true
-    source      = ".build/competition-go/pl-competition"
+    source      = ".build/competition/pl-competition"
     destination = "/pl-competition"
   }
 

@@ -34,14 +34,14 @@ build {
 
   provisioner "shell-local" {
     inline = [
-      "rm -rf .build/sessions-go && mkdir -p .build/sessions-go",
-      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/sessions-go:/out\" -w /workspace/services/sessions-go public.ecr.aws/docker/library/golang:1-bookworm go build -trimpath -ldflags '-s -w' -o /out/pl-sessions ."
+      "rm -rf .build/sessions && mkdir -p .build/sessions",
+      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/sessions:/out\" -w /workspace/services/sessions public.ecr.aws/docker/library/golang:1-bookworm go build -trimpath -ldflags '-s -w' -o /out/pl-sessions ."
     ]
   }
 
   provisioner "file" {
     generated   = true
-    source      = ".build/sessions-go/pl-sessions"
+    source      = ".build/sessions/pl-sessions"
     destination = "/pl-sessions"
   }
 

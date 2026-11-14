@@ -24,9 +24,9 @@ Subagents read this file as their spec. Model: the analytics rewrite
 
 | Service (unchanged k8s name) | Go module dir | Ops (from `operations/<x>.json`) |
 |---|---|---|
-| `pl-sessions` (2 replicas) | `src/services/sessions-go/` | `operations/sessions.json` (10 ops) |
-| `pl-program` | `src/services/program-go/` | `operations/program.json` (18 ops, incl. `export_program_markdown`, `health_setup_initialize`) |
-| `pl-competition` | `src/services/competition-go/` | `operations/competition.json` (5 ops) |
+| `pl-sessions` (2 replicas) | `src/services/sessions/` | `operations/sessions.json` (10 ops) |
+| `pl-program` | `src/services/program/` | `operations/program.json` (18 ops, incl. `export_program_markdown`, `health_setup_initialize`) |
+| `pl-competition` | `src/services/competition/` | `operations/competition.json` (5 ops) |
 
 Service names, ports (HTTP :8000, route `POST /operations/<op>`, `POST /mcp`) and
 the `operations/*.json` contracts are unchanged, so the backend, coach, Discord
@@ -85,7 +85,7 @@ Program-specific: `export_program_markdown` renders markdown with
 `text/template`; `FORMULA_REFERENCE` (used by Python
 `templates/template_evaluate`) must stay available to Python — see Phase D.
 `health_setup_initialize` applies a template: implement the needed template
-read/apply logic natively in program-go (read-only on template items; the
+read/apply logic natively in program (read-only on template items; the
 Python templates domain keeps its own code).
 
 ## Phases
