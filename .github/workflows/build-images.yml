@@ -178,6 +178,12 @@ jobs:
             repository: powerlifting-analytics-ai
           - image: powerlifting-analytics-export
             repository: powerlifting-analytics-export
+          - image: powerlifting-sessions
+            repository: powerlifting-sessions
+          - image: powerlifting-program
+            repository: powerlifting-program
+          - image: powerlifting-competition
+            repository: powerlifting-competition
     steps:
       - uses: actions/checkout@v4
 

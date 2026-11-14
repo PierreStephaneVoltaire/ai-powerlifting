@@ -35,6 +35,9 @@ repositories = {
   rankings  = ""
   analytics_ai = ""
   analytics_export = ""
+  sessions = ""
+  program = ""
+  competition = ""
   backend   = ""
   frontend  = ""
 }

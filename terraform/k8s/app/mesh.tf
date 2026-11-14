@@ -12,7 +12,7 @@ locals {
   }
 
   mesh_callers = merge(
-    { for name in local.mesh_domains : "pl-${name}" => name == "profile" ? concat(local.domain_callers, ["pl-rankings", "pl-analytics-ai", "pl-analytics-export"]) : local.domain_callers },
+    { for name in local.mesh_domains : "pl-${name}" => name == "profile" ? concat(local.domain_callers, ["pl-rankings", "pl-analytics-ai", "pl-analytics-export", "pl-sessions", "pl-program", "pl-competition"]) : local.domain_callers },
     local.native_callers,
   )
 
@@ -31,6 +31,9 @@ locals {
       pl-analytics-ai     = { service = "pl-analytics-ai", app = "pl-analytics-ai", ports = [8000, 50051] }
       pl-analytics-export = { service = "pl-analytics-export", app = "pl-analytics-export", ports = [8000, 50051] }
       pl-rankings         = { service = "pl-rankings", app = "pl-rankings", ports = [8000] }
+      pl-sessions         = { service = "pl-sessions", app = "pl-sessions", ports = [8000] }
+      pl-program          = { service = "pl-program", app = "pl-program", ports = [8000] }
+      pl-competition      = { service = "pl-competition", app = "pl-competition", ports = [8000] }
       litellm             = { service = "litellm", app = "litellm", ports = [4000] }
     },
     { for name, service in kubernetes_service_v1.service : service.metadata[0].name => { service = service.metadata[0].name, app = service.spec[0].selector.app, ports = [8000] } },
@@ -99,7 +102,7 @@ resource "kubectl_manifest" "l4_waypoint_only" {
     }
   })
 
-  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.litellm]
+  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.sessions, kubernetes_service_v1.program, kubernetes_service_v1.competition, kubernetes_service_v1.litellm]
 }
 
 resource "kubectl_manifest" "edge_only" {
@@ -151,5 +154,5 @@ resource "kubectl_manifest" "service_callers" {
     }
   })
 
-  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.litellm]
+  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.sessions, kubernetes_service_v1.program, kubernetes_service_v1.competition, kubernetes_service_v1.litellm]
 }
