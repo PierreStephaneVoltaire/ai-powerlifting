@@ -244,6 +244,12 @@ async fn blocks_get() {
             "cacheOnly": inputs["cacheOnly"],
         }));
         let actual = engine.blocks_get(args).await.expect("block bundle builds");
+        if std::env::var("REGEN").is_ok() {
+            let mut out = golden.clone();
+            out["body"] = actual.clone();
+            std::fs::write(fixtures.root.join("golden").join(&file), serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
+            continue;
+        }
         assert_matches(&file, &golden["body"], &actual);
         registry
             .get("analytics.blocks_get")
