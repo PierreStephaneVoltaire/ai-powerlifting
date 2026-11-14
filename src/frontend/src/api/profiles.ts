@@ -19,6 +19,7 @@ export interface PublicProfile {
   federation?: string | null
   weight_class_kg?: number | null
   practicing_for?: string | null
+  sex?: 'male' | 'female' | null
   summary?: {
     squat_kg: number | null
     bench_kg: number | null

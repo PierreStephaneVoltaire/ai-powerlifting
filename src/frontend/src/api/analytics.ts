@@ -1164,12 +1164,12 @@ export async function fetchBlockCorrelationReport(
   return normalizeCorrelationReport(await resolveReport(body.data, options.cacheOnly))
 }
 
-export async function fetchProgramEvaluation(refresh = false, cacheOnly = false): Promise<ProgramEvaluationReport> {
+export async function fetchProgramEvaluation(refresh = false, cacheOnly = false, viewAthlete?: string): Promise<ProgramEvaluationReport> {
   const params = new URLSearchParams({
     refresh: String(refresh),
     cacheOnly: String(cacheOnly),
   })
-  const res = await api.get(`/analytics/program-evaluation?${params.toString()}`)
+  const res = await api.get(`/analytics/program-evaluation?${params.toString()}`, viewAthlete ? { powerliftingViewAthlete: viewAthlete } : undefined)
   const body = res.data
   if (body.error) throw new Error(body.error)
   return normalizeProgramEvaluation(await resolveReport(body.data, cacheOnly))

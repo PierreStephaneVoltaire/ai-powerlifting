@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from services.runtime.ai import completion
-from services.runtime.lift_profiles import LIFTS, clean, clean_options, describe, fields, missing, now, suggest_tool_schema
+from services.runtime.lift_profiles import LIFTS, body_fat_label, clean, clean_options, describe, fields, missing, now, suggest_tool_schema
 from services.runtime.prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,7 @@ def _athlete_lines(meta: dict | None) -> dict:
         "height_cm": meta.get("height_cm"),
         "arm_wingspan_cm": meta.get("arm_wingspan_cm"),
         "leg_length_cm": meta.get("leg_length_cm"),
+        "body_fat_range": body_fat_label(meta),
         "sex": meta.get("sex"),
     }
     return {key: value for key, value in fields.items() if value not in (None, "", 0)}

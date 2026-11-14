@@ -12,7 +12,7 @@ HANDLER_PERMISSIONS = [f'{domain}:read' for domain in ('profile', 'program', 'se
 PROGRAM_FIELDS = {'phases': 'program', 'diet_notes': 'program', 'supplements': 'program', 'supplement_phases': 'program', 'sessions': 'sessions', 'competitions': 'competition', 'competition': 'competition', 'lift_profiles': 'lift-profiles', 'current_maxes': 'performance', 'goals': 'goals', 'weight_log': 'weight-log', 'max_history': 'performance', 'federation_library': 'federation'}
 META_DOMAINS = {
     'competition': ('practicing_for', 'weight_class_kg', 'weight_class_confirm_by', 'attempt_pct', 'lift_attempt_settings'),
-    'weight-log': ('current_body_weight_kg', 'current_body_weight_lb', 'height_cm', 'arm_wingspan_cm', 'leg_length_cm'),
+    'weight-log': ('current_body_weight_kg', 'current_body_weight_lb', 'height_cm', 'arm_wingspan_cm', 'leg_length_cm', 'body_fat_range'),
     'performance': ('target_squat_kg', 'target_bench_kg', 'target_dl_kg', 'target_total_kg', 'manual_maxes'),
     'federation': ('federation',),
 }

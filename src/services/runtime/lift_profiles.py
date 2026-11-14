@@ -6,6 +6,18 @@ from typing import Any
 
 LIFTS = ("squat", "bench", "deadlift")
 NOTES_LIMIT = 1000
+BODY_FAT_LABELS = {
+    "under_10": "Under 10%",
+    "10_15": "10 to 15%",
+    "15_20": "15 to 20%",
+    "20_25": "20 to 25%",
+    "25_30": "25 to 30%",
+    "over_30": "Over 30%",
+}
+
+
+def body_fat_label(meta: dict | None) -> str | None:
+    return BODY_FAT_LABELS.get((meta or {}).get("body_fat_range"))
 
 
 @lru_cache(maxsize=1)
@@ -26,11 +38,17 @@ def _valid(field: dict, value: Any) -> str | None:
     return value if value in {option["value"] for option in field["options"]} else None
 
 
+def _migrated(field: dict, value: Any) -> Any:
+    legacy = field.get("legacy") or {}
+    key = str(value or "").strip()
+    return legacy[key] if key in legacy else value
+
+
 def clean_options(lift: str, options: Any) -> dict[str, str]:
     options = options if isinstance(options, dict) else {}
     cleaned = {}
     for field in fields(lift):
-        value = _valid(field, options.get(field["key"]))
+        value = _valid(field, _migrated(field, options.get(field["key"])))
         if value:
             cleaned[field["key"]] = value
     for field in fields(lift):

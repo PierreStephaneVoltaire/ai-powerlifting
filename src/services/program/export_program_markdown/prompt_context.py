@@ -5,7 +5,7 @@ prompt sections for correlation / block evaluation models.
 """
 from __future__ import annotations
 
-from services.runtime.lift_profiles import describe as describe_lift_profile
+from services.runtime.lift_profiles import body_fat_label, describe as describe_lift_profile
 
 from datetime import date, datetime
 from typing import Any, Optional
@@ -64,6 +64,7 @@ def summarize_program_meta(meta: dict[str, Any]) -> dict[str, Any]:
         "height_cm": meta.get("height_cm"),
         "arm_wingspan_cm": meta.get("arm_wingspan_cm"),
         "leg_length_cm": meta.get("leg_length_cm"),
+        "body_fat_range": body_fat_label(meta),
         "attempt_pct": meta.get("attempt_pct"),
     }
 
@@ -108,6 +109,7 @@ def summarize_measurements(meta: dict[str, Any]) -> dict[str, Any]:
         "height_cm": meta.get("height_cm"),
         "arm_wingspan_cm": meta.get("arm_wingspan_cm"),
         "leg_length_cm": meta.get("leg_length_cm"),
+        "body_fat_range": body_fat_label(meta),
         "current_body_weight_kg": meta.get("current_body_weight_kg"),
         "weight_class_kg": meta.get("weight_class_kg"),
     }

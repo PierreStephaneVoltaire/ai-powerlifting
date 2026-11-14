@@ -9,6 +9,12 @@ const ROUTE_SCOPES: Record<string, Scope> = {
   templates: 'templates', export: 'program', import: 'imports', grants: 'grants', settings: 'settings', onboarding: 'settings', setup: 'settings', stats: 'analytics', jobs: 'settings',
 }
 
+const READ_ONLY_POSTS = new Set(['/api/analytics/analysis/sections/queue', '/api/analytics/block-comparison', '/api/analytics/block-comparison/ai'])
+
+export function isReadOnlyPost(method: string, path: string): boolean {
+  return method === 'POST' && READ_ONLY_POSTS.has(path)
+}
+
 export function findRouteRule(method: HttpMethod, path: string, query: Record<string, unknown> = {}): { scope: Scope; access: Access } | null {
   const segments = path.split('/').filter(Boolean)
   if (segments[0] !== 'api') return null
@@ -21,6 +27,7 @@ export function findRouteRule(method: HttpMethod, path: string, query: Record<st
   if (segments[1] === 'templates' && segments[3] === 'apply') access = 'read'
   const report = /\/(program-evaluation|correlation|ai-analysis|ai)$/.test(path)
   if (report) access = (query.cacheOnly === 'true' || query.cache_only === 'true' || (path.endsWith('/ai-analysis') && query.refresh === 'false')) && query.refresh !== 'true' ? 'read' : 'write'
+  if (isReadOnlyPost(method, path)) access = 'read'
   if (query.refresh === 'true') access = 'write'
   return { scope, access }
 }

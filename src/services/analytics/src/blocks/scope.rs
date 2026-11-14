@@ -323,9 +323,23 @@ pub fn program_for_block(
                 .collect(),
         ),
     );
+    let upcoming: Vec<Value> = if entry.is_current && entry.linked_competition.is_none() {
+        workspace
+            .program
+            .competitions
+            .iter()
+            .filter(|competition| {
+                iso_date(&context_end)
+                    .is_some_and(|end| competition.date.is_some_and(|date| date > end))
+            })
+            .map(|competition| competition.raw.clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
     root.insert(
         "competitions".to_owned(),
-        Value::Array(competitions.into_iter().cloned().collect()),
+        Value::Array(competitions.into_iter().cloned().chain(upcoming).collect()),
     );
     root.insert(
         "diet_notes".to_owned(),

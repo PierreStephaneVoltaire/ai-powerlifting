@@ -399,11 +399,11 @@ mod tests {
 
     #[test]
     fn block_cache_keys_keep_the_python_layout() {
-        assert_eq!(index_key("7"), "native_block_index#5#2#7");
-        assert_eq!(view_key("current", "7"), "native_block_view#5#current#7");
+        assert_eq!(index_key("7"), "native_block_index#6#2#7");
+        assert_eq!(view_key("current", "7"), "native_block_view#6#current#7");
         assert_eq!(
             bundle_key("current", "latest"),
-            "native_block#5#current#latest"
+            "native_block#6#current#latest"
         );
     }
 }

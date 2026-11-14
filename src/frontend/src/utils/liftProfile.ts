@@ -13,6 +13,7 @@ export interface LiftProfileField {
   label: string
   options: LiftProfileOption[]
   locked?: { when: Record<string, string>; value: string }
+  legacy?: Record<string, string | null>
 }
 
 const DEFINITIONS = definitions as Record<Lift | 'common', LiftProfileField[]>
@@ -32,7 +33,8 @@ export function lockedValue(field: LiftProfileField, options: Record<string, str
 export function cleanOptions(lift: Lift, options: Record<string, string> | undefined): Record<string, string> {
   const cleaned: Record<string, string> = {}
   for (const field of liftProfileFields(lift)) {
-    const value = options?.[field.key]
+    const stored = options?.[field.key]
+    const value = stored && field.legacy && stored in field.legacy ? field.legacy[stored] : stored
     if (value && field.options.some((option) => option.value === value)) cleaned[field.key] = value
   }
   for (const field of liftProfileFields(lift)) {

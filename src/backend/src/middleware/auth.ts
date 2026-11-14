@@ -4,6 +4,7 @@ import { groupsFromSettings, type AuthIdentity } from '../auth/identity'
 import { operationScope } from '../utils/operationScope'
 import { AppError } from './errorHandler'
 import { configureMeshAuthentication } from './meshAuth'
+import { isReadOnlyPost } from '../auth/scopes'
 
 declare global { namespace Express { interface User {
   discord_id: string; username: string; avatar: string | null; actor_mapped_pk: string; identity: AuthIdentity
@@ -50,6 +51,7 @@ export async function resolvePk(req: Request, _res: Response, next: NextFunction
 
 export function requireWriteAuth(req: Request, _res: Response, next: NextFunction): void {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
+  if (isReadOnlyPost(req.method, req.path)) return next()
   if (!req.user) return next(new AppError('Sign in required', 401, 'AUTH_REQUIRED'))
   if (req.readOnly) return next(new AppError('Read-only access: writes are not permitted', 403, 'READ_ONLY'))
   next()

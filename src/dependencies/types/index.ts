@@ -40,6 +40,7 @@ export interface ProgramMeta {
   height_cm?: number
   arm_wingspan_cm?: number
   leg_length_cm?: number
+  body_fat_range?: string
   manual_maxes?: {
     squat: number
     bench: number

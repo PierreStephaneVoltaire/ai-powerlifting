@@ -931,7 +931,7 @@ class ProgramStore:
         "current_body_weight_kg", "current_body_weight_lb",
         "manual_maxes", "lift_attempt_settings",
         "target_squat_kg", "target_bench_kg", "target_dl_kg", "target_total_kg",
-        "attempt_pct", "height_cm", "arm_wingspan_cm", "leg_length_cm",
+        "attempt_pct", "height_cm", "arm_wingspan_cm", "leg_length_cm", "body_fat_range",
         "blocks",
     )
 

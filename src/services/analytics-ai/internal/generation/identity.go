@@ -9,7 +9,7 @@ import (
 	"powerlifting/analytics-ai/internal/pyjson"
 )
 
-var readableDomains = []string{"profile", "program", "sessions", "competition", "federation", "glossary", "goals", "budget", "calculations", "performance", "weight-log", "templates", "imports", "lift-profiles", "analytics", "videos"}
+var readableDomains = []string{"profile", "program", "sessions", "competition", "federation", "glossary", "goals", "calculations", "performance", "weight-log", "templates", "lift-profiles", "analytics", "videos"}
 
 const CorrelationPromptVersion = "main-lift-drivers-v1"
 

@@ -5,6 +5,7 @@ from services.runtime.ai import completion
 import json
 import logging
 
+from services.runtime.lift_profiles import body_fat_label
 from services.runtime.prompts.loader import load_system_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,7 @@ def _format_athlete_context(meta: dict | None) -> list[str]:
         ("height_cm", meta.get("height_cm")),
         ("arm_wingspan_cm", meta.get("arm_wingspan_cm")),
         ("leg_length_cm", meta.get("leg_length_cm")),
+        ("body_fat_range", body_fat_label(meta)),
         ("sex", meta.get("sex")),
     ]
     present = [(k, v) for k, v in fields if v not in (None, "", 0)]

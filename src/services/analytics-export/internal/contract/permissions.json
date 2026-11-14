@@ -60,7 +60,7 @@
     "permission": "analytics:write"
   },
   "analytics.sections_queue": {
-    "permission": "analytics:write"
+    "permission": "analytics:read"
   },
   "analytics.weekly": {
     "permission": "analytics:read"

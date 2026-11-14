@@ -55,6 +55,22 @@
       {"value": "few_inches_up", "label": "A few inches up"},
       {"value": "mid_range", "label": "Mid-range"},
       {"value": "lockout", "label": "Lockout"}
+    ]},
+    {"key": "dominant_muscle", "label": "Dominant muscle", "options": [
+      {"value": "chest", "label": "Chest"},
+      {"value": "balanced", "label": "Balanced"},
+      {"value": "triceps", "label": "Triceps"}
+    ]},
+    {"key": "weekly_frequency", "label": "Days a week you recover from", "options": [
+      {"value": "1", "label": "1 day a week"},
+      {"value": "2", "label": "2 days a week"},
+      {"value": "3_4", "label": "3 to 4 days a week"},
+      {"value": "5_plus", "label": "5 or more days a week"}
+    ]},
+    {"key": "rep_range", "label": "Rep range you recover from", "options": [
+      {"value": "low", "label": "1 to 3 reps only"},
+      {"value": "mid", "label": "Up to 6 reps"},
+      {"value": "high", "label": "6 or more reps"}
     ]}
   ],
   "squat": [
@@ -63,19 +79,31 @@
       {"value": "low", "label": "Low"}
     ]},
     {"key": "hand_width", "label": "Hand width", "options": [
-      {"value": "narrow", "label": "Narrow"},
+      {"value": "narrow", "label": "Narrow (hands near shoulders)"},
       {"value": "medium", "label": "Medium"},
       {"value": "wide", "label": "Wide"}
     ]},
-    {"key": "stance", "label": "Stance", "options": [
-      {"value": "narrow", "label": "Narrow"},
+    {"key": "stance", "label": "Stance", "legacy": {"narrow": null}, "options": [
+      {"value": "hip_width", "label": "Hip width"},
+      {"value": "slightly_inside_shoulder", "label": "Slightly inside shoulder width"},
       {"value": "shoulder_width", "label": "Shoulder width"},
-      {"value": "wide", "label": "Wide"}
+      {"value": "slightly_outside_shoulder", "label": "Slightly outside shoulder width"},
+      {"value": "wide", "label": "Wide (well outside shoulders)"}
     ]},
     {"key": "toe_angle", "label": "Toe angle", "options": [
-      {"value": "forward", "label": "Forward"},
-      {"value": "slight_out", "label": "Slight out"},
-      {"value": "wide_out", "label": "Wide out"}
+      {"value": "forward", "label": "Forward (0 to 10 degrees)"},
+      {"value": "slight_out", "label": "Slightly out (10 to 30 degrees)"},
+      {"value": "wide_out", "label": "Wide out (over 30 degrees)"}
+    ]},
+    {"key": "torso_angle", "label": "Torso angle", "options": [
+      {"value": "upright", "label": "Upright (chest stays up)"},
+      {"value": "moderate_lean", "label": "Moderate forward lean"},
+      {"value": "pronounced_lean", "label": "Pronounced forward lean (hip hinge)"}
+    ]},
+    {"key": "dominant_muscle", "label": "Dominant muscle", "options": [
+      {"value": "quads", "label": "Quads"},
+      {"value": "balanced", "label": "Balanced"},
+      {"value": "posterior_chain", "label": "Posterior chain (glutes, hamstrings, back)"}
     ]},
     {"key": "descent", "label": "Descent", "options": [
       {"value": "controlled_no_bounce", "label": "Controlled, no bounce"},
@@ -93,14 +121,32 @@
       {"value": "out_of_hole", "label": "Out of the hole"},
       {"value": "mid_range", "label": "Mid-range"},
       {"value": "near_lockout", "label": "Near lockout"}
+    ]},
+    {"key": "weekly_frequency", "label": "Days a week you recover from", "options": [
+      {"value": "1", "label": "1 day a week"},
+      {"value": "2", "label": "2 days a week"},
+      {"value": "3_4", "label": "3 to 4 days a week"},
+      {"value": "5_plus", "label": "5 or more days a week"}
+    ]},
+    {"key": "rep_range", "label": "Rep range you recover from", "options": [
+      {"value": "low", "label": "1 to 3 reps only"},
+      {"value": "mid", "label": "Up to 6 reps"},
+      {"value": "high", "label": "6 or more reps"}
     ]}
   ],
   "deadlift": [
-    {"key": "stance", "label": "Stance", "options": [
-      {"value": "conventional_narrow", "label": "Conventional narrow"},
-      {"value": "conventional_hip_width", "label": "Conventional hip width"},
+    {"key": "stance", "label": "Stance", "legacy": {"conventional_hip_width": "hip_width", "conventional_narrow": null}, "options": [
+      {"value": "feet_together", "label": "Feet together"},
+      {"value": "hip_width", "label": "Hip width"},
+      {"value": "slightly_inside_shoulder", "label": "Slightly inside shoulder width"},
+      {"value": "shoulder_width", "label": "Shoulder width"},
       {"value": "semi_sumo", "label": "Semi-sumo"},
       {"value": "sumo", "label": "Sumo"}
+    ]},
+    {"key": "toe_angle", "label": "Toe angle", "options": [
+      {"value": "forward", "label": "Forward (0 to 10 degrees)"},
+      {"value": "slight_out", "label": "Slightly out (10 to 30 degrees)"},
+      {"value": "wide_out", "label": "Wide out (over 30 degrees)"}
     ]},
     {"key": "grip", "label": "Grip", "options": [
       {"value": "double_overhand", "label": "Double overhand"},
@@ -108,20 +154,39 @@
       {"value": "hook", "label": "Hook"},
       {"value": "straps", "label": "Straps"}
     ]},
-    {"key": "start", "label": "Start", "options": [
-      {"value": "static_wedge", "label": "Static (wedge)"},
-      {"value": "dynamic", "label": "Dynamic (grip and rip)"}
+    {"key": "start", "label": "Start", "legacy": {"static_wedge": "static_full_wedge"}, "options": [
+      {"value": "dynamic", "label": "Dynamic (drop hips and pull)"},
+      {"value": "static_no_wedge", "label": "Static, no wedge"},
+      {"value": "static_full_wedge", "label": "Static, full wedge (slack pulled, hips set)"}
     ]},
     {"key": "hip_height", "label": "Hip height", "locked": {"when": {"stance": "sumo"}, "value": "low"}, "options": [
-      {"value": "low", "label": "Low"},
+      {"value": "low", "label": "Low (thighs near parallel, squat-like)"},
       {"value": "mid", "label": "Mid"},
-      {"value": "high", "label": "High"}
+      {"value": "high", "label": "High (hips well above knees)"},
+      {"value": "near_stiff_leg", "label": "Near stiff-leg (knees barely bent)"}
+    ]},
+    {"key": "dominant_muscle", "label": "Dominant muscle", "options": [
+      {"value": "legs", "label": "Legs (quads)"},
+      {"value": "balanced", "label": "Balanced"},
+      {"value": "back", "label": "Back (erectors, upper back)"},
+      {"value": "hamstrings", "label": "Hamstrings"}
     ]},
     {"key": "sticking_point", "label": "Sticking point", "options": [
       {"value": "off_floor", "label": "Off the floor"},
       {"value": "below_knee", "label": "Below knee"},
       {"value": "at_knee", "label": "At knee"},
       {"value": "lockout", "label": "Lockout"}
+    ]},
+    {"key": "weekly_frequency", "label": "Days a week you recover from", "options": [
+      {"value": "1", "label": "1 day a week"},
+      {"value": "2", "label": "2 days a week"},
+      {"value": "3_4", "label": "3 to 4 days a week"},
+      {"value": "5_plus", "label": "5 or more days a week"}
+    ]},
+    {"key": "rep_range", "label": "Rep range you recover from", "options": [
+      {"value": "low", "label": "1 to 3 reps only"},
+      {"value": "mid", "label": "Up to 6 reps"},
+      {"value": "high", "label": "6 or more reps"}
     ]}
   ],
   "common": [

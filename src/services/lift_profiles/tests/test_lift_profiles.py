@@ -13,6 +13,7 @@ BENCH_OPTIONS = {
     "grip_width": "wide", "bar_in_hand": "low_palm_thumb_wrapped", "touch_point": "lower_chest", "arch": "moderate",
     "elbows_descent": "45_degrees", "feet": "heels_down", "leg_drive": "timed", "descent_speed": "controlled",
     "at_chest": "sink", "bar_path": "j_curve", "sticking_point": "mid_range",
+    "dominant_muscle": "balanced", "weekly_frequency": "2", "rep_range": "mid",
 }
 
 
@@ -42,9 +43,9 @@ def test_lift_profile_contracts_describe_all_outputs():
 def test_option_definitions_match_the_requested_form():
     from services.runtime.lift_profiles import definitions, fields
 
-    assert [field["key"] for field in fields("bench")] == ["grip_width", "bar_in_hand", "touch_point", "arch", "elbows_descent", "feet", "leg_drive", "descent_speed", "at_chest", "bar_path", "sticking_point"]
-    assert [field["key"] for field in fields("squat")] == ["bar_position", "hand_width", "stance", "toe_angle", "descent", "knee_gear", "sticking_point"]
-    assert [field["key"] for field in fields("deadlift")] == ["stance", "grip", "start", "hip_height", "sticking_point"]
+    assert [field["key"] for field in fields("bench")] == ["grip_width", "bar_in_hand", "touch_point", "arch", "elbows_descent", "feet", "leg_drive", "descent_speed", "at_chest", "bar_path", "sticking_point", "dominant_muscle", "weekly_frequency", "rep_range"]
+    assert [field["key"] for field in fields("squat")] == ["bar_position", "hand_width", "stance", "toe_angle", "torso_angle", "dominant_muscle", "descent", "knee_gear", "sticking_point", "weekly_frequency", "rep_range"]
+    assert [field["key"] for field in fields("deadlift")] == ["stance", "toe_angle", "grip", "start", "hip_height", "dominant_muscle", "sticking_point", "weekly_frequency", "rep_range"]
     assert [option["value"] for option in definitions()["common"][0]["options"]] == ["low", "moderate", "high"]
 
 
@@ -68,7 +69,7 @@ def test_describe_and_missing_use_option_labels():
     profile = clean({"lift": "squat", "options": {"bar_position": "low", "stance": "shoulder_width"}, "volume_tolerance": "high"})
     assert describe(profile)["technique"] == {"Bar position": "Low", "Stance": "Shoulder width"}
     assert technique_text(profile) == "Bar position: Low; Stance: Shoulder width"
-    assert missing(profile) == ["Hand width", "Toe angle", "Descent", "Knee gear", "Sticking point"]
+    assert missing(profile) == ["Hand width", "Toe angle", "Torso angle", "Dominant muscle", "Descent", "Knee gear", "Sticking point", "Days a week you recover from", "Rep range you recover from"]
 
 
 def test_suggest_keeps_known_options_ignores_nulls_and_invalid_values(monkeypatch):

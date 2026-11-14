@@ -146,7 +146,7 @@ function ReadOnlySessions({ program, unit }: { program: Program; unit: 'kg' | 'l
   )
 }
 
-function ReadOnlyAnalysis({ athlete, program, unit }: { athlete: string; program: Program; unit: 'kg' | 'lb' }) {
+function ReadOnlyAnalysis({ athlete, program, unit, sex }: { athlete: string; program: Program; unit: 'kg' | 'lb'; sex: 'male' | 'female' | null }) {
   const [bundle, setBundle] = useState<BlockAnalysisBundle | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -177,7 +177,7 @@ function ReadOnlyAnalysis({ athlete, program, unit }: { athlete: string; program
         program={program}
         bundle={bundle}
         unit={unit}
-        sex={program.meta?.sex ?? null}
+        sex={program.meta?.sex ?? sex}
         version="current"
         viewAthlete={athlete}
       />
@@ -185,7 +185,7 @@ function ReadOnlyAnalysis({ athlete, program, unit }: { athlete: string; program
   )
 }
 
-export default function ProfileTrainingView({ athlete, tab, analysisAvailable }: { athlete: string; tab: ProfileTrainingTab; analysisAvailable: boolean }) {
+export default function ProfileTrainingView({ athlete, tab, analysisAvailable, sex = null }: { athlete: string; tab: ProfileTrainingTab; analysisAvailable: boolean; sex?: 'male' | 'female' | null }) {
   const { unit } = useSettingsStore()
   const [program, setProgram] = useState<Program | null>(null)
   const [loading, setLoading] = useState(true)
@@ -207,7 +207,7 @@ export default function ProfileTrainingView({ athlete, tab, analysisAvailable }:
   if (error || !program) return <Alert color="yellow" icon={<AlertCircle size={16} />}>{error ?? 'Sessions are unavailable.'}</Alert>
   if (tab === 'analysis') {
     return analysisAvailable
-      ? <ReadOnlyAnalysis athlete={athlete} program={program} unit={unit} />
+      ? <ReadOnlyAnalysis athlete={athlete} program={program} unit={unit} sex={sex} />
       : <Alert color="yellow" icon={<AlertCircle size={16} />}>This Athlete has not shared their Analysis.</Alert>
   }
   return <ReadOnlySessions program={program} unit={unit} />

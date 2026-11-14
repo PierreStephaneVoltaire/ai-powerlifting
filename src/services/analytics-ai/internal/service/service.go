@@ -121,8 +121,14 @@ type request struct {
 	access    auth.Access
 }
 
+const anonymousPerson = "anonymous"
+
 func (r request) principal() data.Principal {
-	return data.Principal{Person: r.caller.Person, Athlete: r.caller.Athlete}
+	person := r.caller.Person
+	if person == "" {
+		person = anonymousPerson
+	}
+	return data.Principal{Person: person, Athlete: r.caller.Athlete}
 }
 
 func (r request) clone() request {

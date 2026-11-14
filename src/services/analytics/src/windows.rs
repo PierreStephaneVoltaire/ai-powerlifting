@@ -8,7 +8,7 @@ use crate::model::{DEFAULT_BLOCK, ProgramData};
 use crate::scope::BlockScope;
 use crate::util::parse_date;
 
-pub const CACHE_SCHEMA_VERSION: i64 = 5;
+pub const CACHE_SCHEMA_VERSION: i64 = 6;
 pub const SECTION_CACHE_SCHEMA_VERSION: i64 = 4;
 pub const MANIFEST_SCHEMA_VERSION: i64 = 6;
 

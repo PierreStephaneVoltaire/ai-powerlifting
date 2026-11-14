@@ -32,6 +32,7 @@ import {
   Group,
   Text,
   TextInput,
+  Select,
   Loader,
   Box
 } from '@mantine/core'
@@ -41,6 +42,15 @@ import type { Exercise, MuscleGroup, Phase, WeightEntry, LiftProfile, Session, S
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
 type BigThreeLift = typeof LIFT_ORDER[number]
 type MaxDrafts = Record<BigThreeLift, string>
+
+const BODY_FAT_OPTIONS = [
+  { value: 'under_10', label: 'Under 10%' },
+  { value: '10_15', label: '10 to 15%' },
+  { value: '15_20', label: '15 to 20%' },
+  { value: '20_25', label: '20 to 25%' },
+  { value: '25_30', label: '25 to 30%' },
+  { value: 'over_30', label: 'Over 30%' },
+]
 
 const DASHBOARD_ANALYSIS_WINDOW = 'block'
 const DASHBOARD_ANALYSIS_SECTIONS: AnalysisSectionKey[] = ['overview', 'fatigue_readiness', 'workload']
@@ -251,6 +261,7 @@ export default function Dashboard() {
   const [localHeight, setLocalHeight] = useState('')
   const [localWingspan, setLocalWingspan] = useState('')
   const [localLegLength, setLocalLegLength] = useState('')
+  const [localBodyFat, setLocalBodyFat] = useState<string | null>(null)
   const [dashboardAnalysisWindow, setDashboardAnalysisWindow] = useState<AnalysisWindow | null>(null)
   const [dashboardSectionPayloads, setDashboardSectionPayloads] = useState<Partial<Record<AnalysisSectionKey, Partial<WeeklyAnalysis>>>>({})
   const [dashboardSectionStatuses, setDashboardSectionStatuses] = useState<Partial<Record<AnalysisSectionKey, string>>>({})
@@ -551,6 +562,7 @@ export default function Dashboard() {
     setLocalHeight(numberDraft(meta.height_cm))
     setLocalWingspan(numberDraft(meta.arm_wingspan_cm))
     setLocalLegLength(numberDraft(meta.leg_length_cm))
+    setLocalBodyFat(meta.body_fat_range ?? null)
     setEditingMeasurements(true)
   }
 
@@ -567,6 +579,7 @@ export default function Dashboard() {
       for (const [field, value] of [['height_cm', height], ['arm_wingspan_cm', wingspan], ['leg_length_cm', legLength]] as const) {
         await updateMetaField(version, field, value)
       }
+      await updateMetaField(version, 'body_fat_range', localBodyFat ?? '')
       await useProgramStore.getState().loadProgram(version)
       pushToast({ message: 'Measurements updated', type: 'success' })
       setEditingMeasurements(false)
@@ -634,10 +647,12 @@ export default function Dashboard() {
   ]
   const actualTotalKg = actualMaxes.squat + actualMaxes.bench + actualMaxes.deadlift
   const targetTotalKg = meta.target_total_kg || meta.target_squat_kg + meta.target_bench_kg + meta.target_dl_kg
+  const bodyFatLabel = BODY_FAT_OPTIONS.find((option) => option.value === meta.body_fat_range)?.label
   const measurementRows = [
     { label: 'Height', value: meta.height_cm ? `${meta.height_cm}` : '--', unit: 'cm' },
     { label: 'Arm wingspan', value: meta.arm_wingspan_cm ? `${meta.arm_wingspan_cm}` : '--', unit: 'cm' },
     { label: 'Leg length', value: meta.leg_length_cm ? `${meta.leg_length_cm}` : '--', unit: 'cm' },
+    { label: 'Body fat', value: bodyFatLabel ?? '--', unit: '' },
   ]
 
   return (
@@ -831,6 +846,10 @@ export default function Dashboard() {
                   <Text size="xs" c="dimmed">cm</Text>
                 </Group>
               ))}
+              <Group gap="xs" wrap="nowrap">
+                <Text size="xs" c="dimmed" w={86}>Body fat</Text>
+                <Select data={BODY_FAT_OPTIONS} value={localBodyFat} onChange={setLocalBodyFat} placeholder="Not set" clearable size="xs" style={{ flex: 1 }} data-testid="dashboard-body-fat" />
+              </Group>
             </Stack>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

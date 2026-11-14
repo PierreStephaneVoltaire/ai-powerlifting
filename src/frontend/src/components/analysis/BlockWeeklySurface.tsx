@@ -43,7 +43,10 @@ import {
 } from '@/api/analytics'
 import { ChartLabel } from '@/components/analysis/ChartLabel'
 import { DriversTable } from '@/components/analysis/DriversTable'
+import { AiAnalysis } from '@/components/analysis/AiAnalysis'
+import { AlertsStrip } from '@/components/analysis/AlertsStrip'
 import { WeeklyData } from '@/components/analysis/WeeklyData'
+import { AnalysisFlags, CompetitionsSection, FormulaReference, PeakingSection, VolumeLandmarksSection } from '@/components/analysis/WeeklyPeakingSections'
 import { AcwrPanel, FatigueDimensionsPanel, InolPanel, SpecificityPanel } from '@/components/analysis/AnalysisPanels'
 import { recordsInBlock } from '@/utils/blockScope'
 
@@ -152,6 +155,24 @@ export function BlockWeeklySurface({
   useEffect(() => {
     loadCorrelation(false, true)
   }, [analysisWindow.weeks, bundle.block.blockKey, viewAthlete])
+
+  const banisterSeries = useMemo(() => {
+    const banister = bundle.weekly.banister
+    if (!banister || 'status' in banister) return []
+    return banister.series.filter((point) => point.date >= analysisWindow.start && point.date <= analysisWindow.end)
+  }, [analysisWindow.end, analysisWindow.start, bundle.weekly.banister])
+
+  const competitions = useMemo(
+    () => (program?.competitions ?? [])
+      .filter((competition) => ['optional', 'confirmed', 'completed'].includes(competition.status))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [program?.competitions],
+  )
+
+  const upcomingCompetition = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return competitions.find((competition) => (competition.status === 'confirmed' || competition.status === 'optional') && competition.date >= today) ?? null
+  }, [competitions])
 
   const avgSessionsPerWeek = Math.round((bundle.weekly.sessions_analyzed / Math.max(1, analysisWindow.weeks)) * 10) / 10
 
@@ -353,6 +374,10 @@ export function BlockWeeklySurface({
         />
       </Group>
 
+      {viewAthlete && <AlertsStrip alerts={bundle.weekly.alerts || []} />}
+
+      {viewAthlete && <AnalysisFlags flags={bundle.weekly.flags ?? []} />}
+
       <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
         <Paper withBorder p="md">
           <Group gap="xs" mb="xs"><Dumbbell size={18} /><Text fw={500}>Estimated 1 Rep Maxes</Text></Group>
@@ -428,7 +453,11 @@ export function BlockWeeklySurface({
         </Paper>
       </SimpleGrid>
 
+      {viewAthlete && <PeakingSection data={bundle.weekly} banisterSeries={banisterSeries} upcomingCompetition={upcomingCompetition} />}
+
       {bundle.weekly.inol?.avg_inol && <InolPanel inol={bundle.weekly.inol} />}
+
+      {viewAthlete && <VolumeLandmarksSection data={bundle.weekly} />}
 
       {bundle.weekly.acwr && <AcwrPanel acwr={bundle.weekly.acwr} />}
 
@@ -614,12 +643,29 @@ export function BlockWeeklySurface({
         </Paper>
       )}
 
+      {viewAthlete && <CompetitionsSection competitions={competitions} unit={unit} />}
+
       <WeeklyData
         data={bundle.weekly as WeeklyAnalysis}
         viewMode={viewMode}
         analysisWeeks={analysisWindow.weeks}
         unit={unit}
       />
+
+      {viewAthlete && (
+        <>
+          <AiAnalysis effectiveWeeks={analysisWindow.weeks} weeksMode="block" viewAthlete={viewAthlete} viewProgram={program} evaluationOnly />
+
+          <FormulaReference />
+        </>
+      )}
+
+      {viewAthlete && (
+        <Text size="xs" c="dimmed">
+          Week {analysisWindow.weekStart === analysisWindow.weekEnd ? analysisWindow.weekStart : `${analysisWindow.weekStart}-${analysisWindow.weekEnd}`} selected
+          {' '}({bundle.weekly.block}) &middot; {bundle.weekly.sessions_analyzed} sessions analyzed
+        </Text>
+      )}
     </Stack>
   )
 }
