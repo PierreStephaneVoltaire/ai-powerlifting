@@ -153,9 +153,6 @@
   "exercise_remove": {
     "permission": "glossary:write"
   },
-  "exercise_search": {
-    "permission": "glossary:read"
-  },
   "exercise_set_e1rm": {
     "permission": "glossary:write"
   },
@@ -203,7 +200,7 @@
   "glossary_estimate_lift_transfer": {
     "permission": "glossary:write"
   },
-  "glossary_backfill_lift_transfer": {
+  "glossary_generic_estimate": {
     "permission": "glossary:write"
   },
   "glossary_estimate_muscles": {
