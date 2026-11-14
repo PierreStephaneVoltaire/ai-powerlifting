@@ -48,7 +48,7 @@ Goal: register the ChatGPT subscription once in LiteLLM, add OpenRouter and any 
 
 #### SSO and database
 
-- Admin UI login is Authentik SSO (Discord source). `core/litellm_identity.tf` defines the OAuth2 provider `nolift-litellm`, application `litellm`, and an expression policy that allows only usernames in `litellm_sso_users`. The client id and secret go to SSM `/powerlifting/litellm/sso_client_id` and `/sso_client_secret`.
+- Admin UI login is Authentik SSO (Discord source). `core/litellm_identity.tf` defines the OAuth2 provider `nolift-litellm`, application `litellm`, and an expression policy that allows only usernames in `litellm_admins`, plus a `litellm` scope that sends `litellm_role` = `proxy_admin` for those users (LiteLLM reads it via `GENERIC_USER_ROLE_ATTRIBUTE`). The client id and secret go to SSM `/powerlifting/litellm/sso_client_id` and `/sso_client_secret`.
 - LiteLLM gets `GENERIC_*` env pointing at `https://<auth_domain>/application/o/{authorize,token,userinfo}/`, `PROXY_BASE_URL=https://<llm_domain>`, `GENERIC_USER_ID_ATTRIBUTE=preferred_username`, and default role `proxy_admin`. `UI_USERNAME` and `UI_PASSWORD` stay as break-glass.
 - SSO needs a database: `core/litellm_postgres.tf` adds the CloudNativePG cluster `litellm-postgres` (1 instance, 1Gi). The password is in SSM `/powerlifting/litellm/db_password`. `STORE_MODEL_IN_DB` stays false, so the config file stays the source of truth.
 

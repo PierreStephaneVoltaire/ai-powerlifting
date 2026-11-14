@@ -2,8 +2,9 @@ variable "llm_domain" {
   type = string
 }
 
-variable "litellm_sso_users" {
-  type = list(string)
+variable "litellm_admins" {
+  description = "Authentik usernames allowed into the LiteLLM UI, each as proxy_admin"
+  type        = list(string)
 }
 
 resource "authentik_provider_oauth2" "litellm" {
@@ -18,6 +19,7 @@ resource "authentik_provider_oauth2" "litellm" {
     data.authentik_property_mapping_provider_scope.openid.id,
     data.authentik_property_mapping_provider_scope.email.id,
     data.authentik_property_mapping_provider_scope.profile.id,
+    authentik_property_mapping_provider_scope.litellm_role.id,
   ]
   allowed_redirect_uris = [
     {
@@ -37,9 +39,15 @@ resource "authentik_application" "litellm" {
   policy_engine_mode = "any"
 }
 
+resource "authentik_property_mapping_provider_scope" "litellm_role" {
+  name       = "litellm-role"
+  scope_name = "litellm"
+  expression = "return {\"litellm_role\": \"proxy_admin\" if request.user.username in ${jsonencode(var.litellm_admins)} else \"internal_user_viewer\"}"
+}
+
 resource "authentik_policy_expression" "litellm_users" {
   name       = "litellm-allowed-users"
-  expression = "return request.user.username in ${jsonencode(var.litellm_sso_users)}"
+  expression = "return request.user.username in ${jsonencode(var.litellm_admins)}"
 }
 
 resource "authentik_policy_binding" "litellm_users" {

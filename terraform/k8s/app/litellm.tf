@@ -211,7 +211,7 @@ resource "kubernetes_deployment_v1" "litellm" {
 
           env {
             name  = "GENERIC_SCOPE"
-            value = "openid email profile"
+            value = "openid email profile litellm"
           }
 
           env {
@@ -220,8 +220,8 @@ resource "kubernetes_deployment_v1" "litellm" {
           }
 
           env {
-            name  = "GENERIC_ROLE_MAPPINGS_DEFAULT_ROLE"
-            value = "proxy_admin"
+            name  = "GENERIC_USER_ROLE_ATTRIBUTE"
+            value = "litellm_role"
           }
 
           env {
