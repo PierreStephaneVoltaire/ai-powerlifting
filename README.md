@@ -29,7 +29,7 @@ comp prep and adjust it based on perceived needs or bugs I run into.
 
 ### My numbers
 
-My last completed meet (data pulled straight from the app's DynamoDB store):
+My last completed meet:
 
 |                                               | Squat  | Bench  | Deadlift | **Total**  | Bodyweight |
 | --------------------------------------------- | ------ | ------ | -------- | ---------- | ---------- |
@@ -164,21 +164,16 @@ job is done.
 ```mermaid
 sequenceDiagram
   participant UI as Browser
-  participant OP as oauth2-proxy
-  participant BE as powerlifting-app-backend
-  participant SVC as pl-glossary (any domain service)
-  participant C as pl-coach (Codex)
-  participant L as litellm
-  participant P as ChatGPT subscription / OpenRouter
-  UI->>OP: request an AI feature
-  OP->>BE: verified identity
+  participant BE as Express backend
+  participant SVC as Domain service
+  participant C as Coach
+  participant M as LiteLLM
+  UI->>BE: request an AI feature
   BE->>SVC: run the operation
   SVC->>C: start a job
   SVC-->>C: needs the model (prompt + JSON shape)
-  C->>L: Responses API, model alias (pl-standard)
-  L->>P: routed deployment, fallback alias on failure
-  P-->>L: completion
-  L-->>C: JSON
+  C->>M: prompt, by model alias
+  M-->>C: JSON
   C->>C: validate, retry up to 3 times
   C->>SVC: resume with the answer
   SVC-->>C: result
@@ -224,267 +219,98 @@ pod while it's in use. API-key providers can go higher.
 
 ## Architecture
 
-The stack runs on a **bare-metal k3s** node behind a Cloudflare tunnel. There
-are **20 typed HTTP/MCP domain services**, each with its own Deployment and
-operation manifest in [`src/services/operations/`](src/services/operations/).
-The diagrams below separate incoming traffic, the service inventory, and the
-supporting infrastructure so each component stays visible.
-
-### Entry points and identity
-
 ```mermaid
-flowchart TB
-  UI["Browser<br/>React PWA · Vite + Mantine"]
-  DiscordApp["Discord"]
-  CF["Cloudflare<br/>DNS + tunnel"]
+flowchart LR
+  subgraph Clients["Clients"]
+    UI["React PWA<br/>Vite + Mantine"]
+    DiscordApp["Discord"]
+  end
 
-  subgraph Cluster["k3s · powerlifting namespace"]
+  subgraph Edge["Edge"]
+    CF["Cloudflare<br/>DNS + tunnel"]
+  end
+
+  subgraph Cluster["k3s cluster"]
     Tunnel["cloudflared"]
     Gateway["NGINX Gateway Fabric"]
-    FE["powerlifting-app-frontend<br/>static PWA"]
-    Proxy["oauth2-proxy<br/>browser login + session"]
-    BE["powerlifting-app-backend<br/>Express API"]
-    Valkey[("pl-valkey<br/>sessions + application cache")]
-    Auth["authentik-server<br/>OIDC identity authority"]
-    AuthWorker["authentik-worker<br/>background tasks"]
-    Postgres[("CNPG Postgres<br/>Authentik data")]
+    FE["Frontend<br/>static PWA"]
+    BE["Express API<br/>sessions, auth, cache"]
+    Valkey[("Valkey<br/>cache + sessions")]
+    Services["16 typed domain services<br/>HTTP + MCP"]
+    Analytics["pl-analytics<br/>Rust"]
+    AnalyticsAI["pl-analytics-ai<br/>Go, AI reports"]
+    AnalyticsExport["pl-analytics-export<br/>Go, exports"]
+    Rankings["pl-rankings<br/>Rust, OpenPowerlifting data"]
     Coach["pl-coach<br/>Codex worker"]
     Bot["pl-coach-discord<br/>gateway bot"]
-    LiteLLM["litellm<br/>model aliases"]
+    LiteLLM["LiteLLM<br/>model aliases + fallbacks"]
+    Runner["Actions runner<br/>applies k8s stacks"]
+    Auth["Authentik + Discord OAuth"]
+    Postgres[("Postgres<br/>CNPG, Authentik data")]
+    Monitoring["Prometheus, Loki,<br/>Grafana"]
+  end
+
+  subgraph AWS["AWS"]
+    DDB[("DynamoDB")]
+    S3[("S3<br/>videos, media, dataset")]
+    CDN["CloudFront<br/>signed media"]
+    Sync["Lambda<br/>master-sync"]
+    Thumbs["Lambda<br/>video thumbnails"]
   end
 
   UI --> CF --> Tunnel --> Gateway
-  Gateway -->|"/"| FE
-  Gateway -->|"/api and /oauth2"| Proxy
-  Gateway -->|"auth hostname"| Auth
-  Proxy -->|"authenticated API requests"| BE
-  Proxy <-->|"OIDC"| Auth
-  Auth <-->|"Discord identity source"| DiscordApp
+  Tunnel -->|"auth host"| Auth
   Auth --> Postgres
-  AuthWorker --> Postgres
-  Proxy -->|"login sessions"| Valkey
-  BE -->|"application cache"| Valkey
-  BE -->|"AI jobs and polling"| Coach
+  Gateway -->|"/"| FE
+  Gateway -->|"/api"| BE
+  BE --> Valkey
+  BE -->|"typed operations"| Services
+  BE -->|"AI jobs"| Coach
+  BE --> Auth
+  Services --- Analytics
+  Analytics <-->|"gRPC"| AnalyticsAI
+  AnalyticsAI -->|"gRPC"| AnalyticsExport
+  AnalyticsAI -->|"AI jobs"| Coach
+  Services --- Rankings
+  Services -->|"inference steps"| Coach
+  Coach -->|"tools"| Services
   DiscordApp <-->|"websocket"| Bot
-  Bot -->|"chat"| Coach
-  Gateway -->|"llm hostname"| LiteLLM
+  Bot --> Coach
   Coach -->|"model calls"| LiteLLM
+  Tunnel -->|"llm host"| LiteLLM
+  Services --> DDB
+  Services --> S3
+  Rankings --> S3
+  S3 --> CDN --> UI
+  S3 -->|"upload event"| Thumbs --> DDB
+  DDB -->|"stream"| Sync --> DDB
+  Runner -.->|"terraform"| Cluster
 ```
 
-Authentik is the only login authority; Discord is its identity source.
-OAuth2 Proxy owns the Valkey-backed browser session and forwards the verified
-identity to Express. Express no longer holds a Passport session or a direct
-Discord OAuth callback. Both public hostnames pass through NGINX.
+The stack runs on a **bare-metal k3s** node to keep costs down, behind a
+Cloudflare tunnel so nothing is exposed directly. Each domain (sessions,
+program, templates, analytics, rankings and so on) is its own small service, so
+something heavy like loading the OpenPowerlifting dataset for rankings can't
+take the rest down with it. Only the heavy compute (analytics and rankings) is
+Rust; the AI reports and exports split off from it are small Go services. AWS
+holds the data, plus two Lambdas that are still around: master-sync, which
+copies the competition directory to every athlete, and video thumbnails.
 
-### Every domain service
+Every model call goes through LiteLLM at `llm.nolift.training`. The ChatGPT
+subscription is logged in there once instead of in each pod, and the app only
+asks for an alias like `pl-standard`, so I can group providers and set
+fallbacks (OpenRouter and so on) without touching the app.
 
-Each box below is a separate service, with typed HTTP operations for the
-backend and MCP tools for the Coach. The four frames organize the inventory
-by purpose; they are not shared processes or extra routing layers.
+Logins go through Authentik with Discord as the identity source, backed by a
+CNPG Postgres cluster in the same k3s node. Prometheus, Loki and Grafana watch
+the cluster; Grafana is reached by port-forward on `localhost:3000`.
 
-```mermaid
-flowchart TB
-  BE["Express backend<br/>HTTP operations"]
-  Coach["pl-coach<br/>MCP tools"]
-
-  subgraph Training["Training"]
-    direction TB
-    Program["pl-program<br/>programs, blocks, phases, notes"]
-    Sessions["pl-sessions<br/>planned and logged training"]
-    Templates["pl-templates<br/>reusable programs + evaluation"]
-    Glossary["pl-glossary<br/>exercises, muscles, fatigue profiles"]
-    LiftProfiles["pl-lift-profiles<br/>technique + stimulus tuning"]
-    Program ~~~ Sessions ~~~ Templates ~~~ Glossary ~~~ LiftProfiles
-  end
-
-  subgraph MeetPrep["Meet preparation"]
-    direction TB
-    Competition["pl-competition<br/>entries, attempts, results"]
-    Federation["pl-federation<br/>master directory + user library"]
-    Goals["pl-goals<br/>athlete goals"]
-    Budget["pl-budget<br/>expenses, advice, purchase timeline"]
-    WeightLog["pl-weight-log<br/>dated bodyweight entries"]
-    Competition ~~~ Federation ~~~ Goals ~~~ Budget ~~~ WeightLog
-  end
-
-  subgraph Analysis["Analysis and performance"]
-    direction TB
-    Analytics["pl-analytics<br/>deterministic analysis · Rust"]
-    AnalyticsAI["pl-analytics-ai<br/>AI report workflows · Go"]
-    AnalyticsExport["pl-analytics-export<br/>block + lifetime exports · Go"]
-    Performance["pl-performance<br/>current maxes, history, targets"]
-    Calculations["pl-calculations<br/>e1RM, DOTS, units, percentages"]
-    Rankings["pl-rankings<br/>OpenPowerlifting comparisons · Rust"]
-    Analytics ~~~ AnalyticsAI ~~~ AnalyticsExport ~~~ Performance ~~~ Calculations ~~~ Rankings
-  end
-
-  subgraph Records["Profiles and data exchange"]
-    direction TB
-    Profile["pl-profile<br/>identity, grants, relationships, notes"]
-    Videos["pl-videos<br/>lift library + media metadata"]
-    Imports["pl-imports<br/>parse, review, apply spreadsheets"]
-    Export["pl-export<br/>program history + Markdown"]
-    Profile ~~~ Videos ~~~ Imports ~~~ Export
-  end
-  BE --> Training & MeetPrep & Analysis & Records
-  Coach --> Training & MeetPrep & Analysis & Records
-```
-
-The sixteen Python services share the `if-powerlifting-fns` image. Analytics
-and Rankings have their own Rust images; Analytics AI and Analytics Export
-have their own Go images. The old analytics reports sidecar has been replaced
-by these separate services.
-
-Every service checks application permissions at its HTTP/MCP boundary using
-the current grants and publication settings. `pl-profile` manages those
-records; it is not a central authorization hop for every operation.
-
-### Analytics, AI and caches
-
-All model traffic goes through the **LiteLLM layer** at `llm.nolift.training`.
-LiteLLM holds the provider credentials (from SSM Parameter Store) and the
-ChatGPT subscription login, once. Apps only name **model aliases**
-(`pl-standard`, `pl-light`, `pl-documents`); each alias groups one or more
-provider deployments and can fall back to another alias. The admin UI signs in
-through Authentik, limited to the users in `litellm_admins`.
-
-```mermaid
-flowchart LR
-  Analytics["pl-analytics"]
-  AI["pl-analytics-ai"]
-  Export["pl-analytics-export"]
-  Features["AI-enabled domain operations<br/>pl-templates, pl-glossary, pl-imports,<br/>pl-lift-profiles, pl-budget"]
-  Coach["pl-coach<br/>Codex runtime"]
-  Valkey[("pl-valkey<br/>analysis + reply caches")]
-  CacheMCP["pl-prompt-cache-mcp<br/>semantic cache tools"]
-  Qdrant[("pl-prompt-cache<br/>Qdrant vectors")]
-  State[("pl-coach-state PVC<br/>jobs + Codex state")]
-
-  subgraph LLM["LiteLLM layer"]
-    direction TB
-    Aliases["model aliases<br/>pl-standard · pl-light · pl-documents"]
-    Router["router<br/>load balancing + alias fallbacks"]
-    Creds["provider credentials<br/>SSM /powerlifting/litellm/*"]
-    Token[("litellm-chatgpt-token PVC<br/>subscription login")]
-    Aliases --> Router --> Creds
-    Router --> Token
-  end
-
-  ChatGPT["ChatGPT subscription"]
-  OpenRouter["OpenRouter"]
-  Compat["OpenAI-compatible providers"]
-
-  Analytics -->|"gRPC: generate reports"| AI
-  AI -->|"gRPC: analysis data"| Analytics
-  AI -->|"gRPC: export context"| Export
-  Export -->|"gRPC: analysis data"| Analytics
-  AI -->|"inference jobs"| Coach
-  Features -->|"inference jobs"| Coach
-  Coach -->|"Responses API"| Aliases
-  Router --> ChatGPT & OpenRouter & Compat
-  Analytics --> Valkey
-  AI --> Valkey
-  Coach -->|"exact reply cache"| Valkey
-  Coach -->|"semantic reply lookup"| CacheMCP --> Qdrant
-  Coach --> State
-```
-
-AI-capable operations hand inference to the Coach and resume with its
-validated response. The analytics services also exchange computed data over
-gRPC; report generation and export run outside the deterministic analytics
-process. Valkey stores cached results, while Qdrant supports semantic prompt
-and reply lookup through its own MCP service.
-
-### Storage and media
-
-```mermaid
-flowchart LR
-  subgraph Services["Domain + analysis services"]
-    direction TB
-    SvcList["pl-program · pl-sessions · pl-templates · pl-glossary<br/>pl-lift-profiles · pl-competition · pl-federation · pl-goals<br/>pl-budget · pl-weight-log · pl-performance · pl-calculations<br/>pl-profile · pl-videos · pl-imports · pl-export<br/>pl-analytics · pl-analytics-ai · pl-analytics-export"]
-  end
-  BE["Express backend"]
-  Rankings["pl-rankings"]
-  UI["Browser"]
-
-  subgraph AWS["AWS"]
-    DDB[("DynamoDB<br/>profiles, training, grants,<br/>competitions, budgets")]
-    Master[("DynamoDB<br/>master competitions + federations")]
-    S3[("S3<br/>videos, thumbnails, media,<br/>reports + OpenPowerlifting dataset")]
-    CDN["CloudFront<br/>private S3 origin"]
-    Sync["master-sync Lambda"]
-    Thumbs["video-thumbnail Lambda<br/>FFmpeg"]
-  end
-
-  Services -->|"domain records"| DDB
-  Services -->|"files and reports"| S3
-  Rankings -->|"load dataset"| S3
-  UI -->|"video upload"| BE -->|"bounded multipart upload"| S3
-  BE -->|"authorize video, redirect to signed URL"| UI
-  S3 -->|"media delivery"| CDN --> UI
-  S3 -->|"videos/ upload event"| Thumbs
-  Thumbs -->|"thumbnail file"| S3
-  Thumbs -->|"video metadata"| DDB
-  Master -->|"DynamoDB Streams"| Sync -->|"update athlete directories"| DDB
-```
-
-Application data stays in DynamoDB and S3; Postgres is for Authentik.
-Thumbnails are served unsigned through CloudFront. Full videos require an
-authorized redirect to a signed CDN URL; budget media and avatars retain
-their authorized API endpoints. The two retained AWS Lambdas generate video
-thumbnails and copy master competition/federation updates to athlete directories.
-See [ADR 0004](docs/adr/0004-media-delivery-through-cdn.md) for media access
-and signed-URL expiry.
-
-### Mesh, monitoring and deployment
-
-Istio Ambient supplies workload identity and strict mTLS through `ztunnel`.
-The `nolift-waypoint` enforces service caller policies; each service still
-checks the acting Person's permissions. `istiod` manages the mesh and the
-Istio CNI enrolls workloads. These transport controls apply across the service
-diagrams above; see [ADR 0006](docs/adr/0006-ambient-mesh-and-authentik-only-login.md).
-
-```mermaid
-flowchart LR
-  subgraph Monitoring["monitoring namespace"]
-    Node["node-exporter<br/>host metrics"]
-    Containers["cAdvisor<br/>container metrics"]
-    Kube["kube-state-metrics<br/>Kubernetes object state"]
-    Events["event-exporter<br/>Kubernetes events"]
-    Prometheus["Prometheus"]
-    Promtail["Promtail<br/>container logs"]
-    Loki["Loki"]
-    Grafana["Grafana"]
-    Node & Containers & Kube & Events --> Prometheus
-    Events -->|"event records"| Loki
-    Promtail --> Loki
-    Grafana -->|"query metrics"| Prometheus
-    Grafana -->|"query logs"| Loki
-  end
-
-  CI["GitHub Actions"] -->|"build and publish images"| ECR["AWS ECR"]
-  CI -->|"kubernetes-apply job"| Runner["In-cluster Actions runner"]
-  Runner -->|"Terraform stacks"| Workloads["k3s workloads"]
-  Workloads -->|"pull images"| ECR
-  Workloads -->|"container logs"| Promtail
-```
-
-Grafana is reached by port-forward on `localhost:3000`. Infrastructure is
-Terraform, with separate states for each scope:
-
-| Location | Scope |
-| --- | --- |
-| `terraform/` | AWS and Cloudflare resources, applied by CI |
-| `terraform/k8s/core` | Namespaces, secrets, runner, Authentik, CNPG Postgres, monitoring |
-| `terraform/k8s/perms` | Kubernetes service accounts and RBAC |
-| `terraform/k8s/network` | NGINX Gateway, HTTP routes, Cloudflare tunnel |
-| `terraform/k8s/mesh` | Istio control plane, CNI and ztunnel |
-| `terraform/k8s/app` | Portal, domain services, caches, OAuth2 Proxy, waypoint and service policies |
-| `terraform/coach` | Coach, Discord bot and persistent state |
-
-The in-cluster runner applies the Kubernetes stacks and the separate Coach
-state after their images are published. See
-[`terraform/k8s/README.md`](terraform/k8s/README.md) for the deployment flow.
+Infrastructure is Terraform, split into a few stacks: AWS and Cloudflare in
+`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`
+(applied by a runner inside the cluster; `core` holds namespaces, secrets, the
+Actions runner, Authentik, Postgres and monitoring),
+and the Coach in `terraform/coach`. See
+[`terraform/k8s/README.md`](terraform/k8s/README.md).
 
 For more on the request flow, data model and caching, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
