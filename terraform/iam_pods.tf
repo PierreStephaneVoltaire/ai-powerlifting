@@ -31,6 +31,8 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-sessions/index/*",
           module.powerlifting_dynamodb.workout_videos_table_arn,
           "${module.powerlifting_dynamodb.workout_videos_table_arn}/index/*",
+          module.powerlifting_dynamodb.glossary_table_arn,
+          "${module.powerlifting_dynamodb.glossary_table_arn}/index/*",
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-user",
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-user/index/*",
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-proposals",

@@ -1,0 +1,5 @@
+{{template "exercise" .Exercise}}
+{{- with .Exercise.Description}}
+Notes: {{.}}{{end}}
+{{- with .Exercise.HowToPerform}}
+How performed: {{.}}{{end}}

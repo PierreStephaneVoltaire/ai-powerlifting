@@ -1,0 +1,30 @@
+{
+  "name_rules": [
+    {"id": "competition", "pattern": "^(competition |conventional |sumo |back |barbell )?(squat|bench press|bench|deadlift)$", "lift": "$name", "value": 1.0},
+    {"id": "close_grip_bench", "pattern": "close.?grip|larsen", "lift": "bench", "value": 0.85},
+    {"id": "front_or_bar_squat", "pattern": "\\b(front|safety.?bar|ssb|high.?bar)\\b.*\\bsquat\\b", "lift": "squat", "value": 0.8},
+    {"id": "paused_variant", "pattern": "\\b(pause|paused|tempo|pin|spoto|deficit)\\b", "lift": "$name", "value": 0.9, "requires_name_lift": true},
+    {"id": "block_pull", "pattern": "block pull", "lift": "deadlift", "value": 0.9},
+    {"id": "hinge", "pattern": "\\brdl\\b|\\bsldl\\b|romanian|stiff.?leg|good.?morning", "lift": "deadlift", "value": 0.6},
+    {"id": "quad_unilateral_or_machine", "pattern": "lunge|split squat|leg press|step.?up|hack squat", "lift": "squat", "value": 0.4},
+    {"id": "lift_variation", "pattern": "\\b(squat|bench|deadlift)\\b", "lift": "$name", "value": 0.6, "requires_name_lift": true}
+  ],
+  "category_variation": {"squat": 0.6, "bench": 0.6, "deadlift": 0.6},
+  "isolation": {
+    "primary_value": 0.15,
+    "secondary_value": 0.05,
+    "muscle_lifts": {
+      "quads": ["squat"],
+      "glutes": ["squat", "deadlift"],
+      "hamstrings": ["deadlift"],
+      "adductors": ["squat"],
+      "erectors": ["deadlift"],
+      "lower_back": ["deadlift"],
+      "lats": ["deadlift"],
+      "traps": ["deadlift"],
+      "chest": ["bench"],
+      "triceps": ["bench"],
+      "front_delts": ["bench"]
+    }
+  }
+}

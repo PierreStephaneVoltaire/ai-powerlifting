@@ -1,0 +1,114 @@
+{
+  "type": "function",
+  "function": {
+    "name": "estimate_muscle_groups",
+    "description": "Estimate primary, secondary, and tertiary muscle groups for an exercise",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "primary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "quads",
+              "hamstrings",
+              "glutes",
+              "calves",
+              "tibialis_anterior",
+              "hip_flexors",
+              "adductors",
+              "chest",
+              "triceps",
+              "front_delts",
+              "side_delts",
+              "rear_delts",
+              "lats",
+              "traps",
+              "rhomboids",
+              "teres_major",
+              "biceps",
+              "forearms",
+              "erectors",
+              "lower_back",
+              "core",
+              "obliques",
+              "serratus"
+            ]
+          }
+        },
+        "secondary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "quads",
+              "hamstrings",
+              "glutes",
+              "calves",
+              "tibialis_anterior",
+              "hip_flexors",
+              "adductors",
+              "chest",
+              "triceps",
+              "front_delts",
+              "side_delts",
+              "rear_delts",
+              "lats",
+              "traps",
+              "rhomboids",
+              "teres_major",
+              "biceps",
+              "forearms",
+              "erectors",
+              "lower_back",
+              "core",
+              "obliques",
+              "serratus"
+            ]
+          }
+        },
+        "tertiary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "quads",
+              "hamstrings",
+              "glutes",
+              "calves",
+              "tibialis_anterior",
+              "hip_flexors",
+              "adductors",
+              "chest",
+              "triceps",
+              "front_delts",
+              "side_delts",
+              "rear_delts",
+              "lats",
+              "traps",
+              "rhomboids",
+              "teres_major",
+              "biceps",
+              "forearms",
+              "erectors",
+              "lower_back",
+              "core",
+              "obliques",
+              "serratus"
+            ]
+          }
+        },
+        "reasoning": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "primary_muscles",
+        "secondary_muscles",
+        "tertiary_muscles",
+        "reasoning"
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{{define "exercise"}}Exercise: {{.Name}}
+{{- with .Category}}
+Category: {{.}}{{end}}
+{{- with .Equipment}}
+Equipment: {{.}}{{end}}
+{{- with .Primary}}
+{{$.Label "Primary"}} muscles: {{join .}}{{end}}
+{{- with .Secondary}}
+{{$.Label "Secondary"}} muscles: {{join .}}{{end}}
+{{- with .Tertiary}}
+{{$.Label "Tertiary"}} muscles: {{join .}}{{end}}{{end}}
+{{define "lines"}}{{if .}}
+
+{{range .}}{{.}}
+{{end}}{{end}}{{end}}

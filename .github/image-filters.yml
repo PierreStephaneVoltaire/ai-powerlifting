@@ -26,6 +26,7 @@ kubernetes:
   - 'terraform/coach/**'
   - 'terraform/security/**'
   - 'scripts/migrate_identity_pointers.py'
+  - 'scripts/migrate_glossary_table.py'
 terraform:
   - 'terraform/**'
   - 'src/lambda/**'

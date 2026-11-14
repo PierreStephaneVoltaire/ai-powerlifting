@@ -1,0 +1,29 @@
+{
+  "type": "function",
+  "function": {
+    "name": "generate_glossary_text",
+    "description": "Generate concise exercise glossary prose",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "What the exercise is, in 1-2 concise sentences."
+        },
+        "how_to_perform": {
+          "type": "string",
+          "description": "How to perform the exercise, in 3-5 concise steps."
+        },
+        "why_do_it": {
+          "type": "string",
+          "description": "Why the exercise is useful for powerlifting training."
+        }
+      },
+      "required": [
+        "description",
+        "how_to_perform",
+        "why_do_it"
+      ]
+    }
+  }
+}

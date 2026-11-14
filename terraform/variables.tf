@@ -37,3 +37,11 @@ variable "auth_domain" {
   type = string
 }
 
+
+variable "glossary_table_name" {
+  type = string
+}
+
+variable "glossary_catalog_function_name" {
+  type = string
+}
