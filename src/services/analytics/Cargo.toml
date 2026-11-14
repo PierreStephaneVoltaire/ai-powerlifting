@@ -1,0 +1,55 @@
+[package]
+name = "pl-analytics"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+
+[workspace]
+
+[dependencies]
+aws-config = "1.8.18"
+aws-sdk-dynamodb = "1"
+aws-sdk-s3 = "1.137.0"
+axum = { version = "0.8.9", features = ["json"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+jsonschema = "0.61.1"
+kendalls = "1.0.0"
+linregress = "0.5"
+mimalloc = "0.1.52"
+redis = { version = "1.8.1", features = ["tokio-comp", "connection-manager"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_dynamo = { version = "4", features = ["aws-sdk-dynamodb+1"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+statrs = "0.19"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal"] }
+tower-http = { version = "0.7.1", features = ["trace", "compression-gzip", "timeout"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
+utoipa = { version = "6.0.0", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "10.0.2", features = ["axum", "vendored"] }
+prost = "0.14"
+prost-types = "0.14"
+sha1 = "0.10"
+sha2 = "0.10"
+tonic = "0.14"
+tonic-health = "0.14"
+tonic-prost = "0.14"
+tonic-reflection = "0.14"
+
+[dev-dependencies]
+insta = { version = "1", features = ["json"] }
+
+[build-dependencies]
+protoc-bin-vendored = "3"
+tonic-prost-build = "0.14"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.test]
+opt-level = 1

@@ -3,7 +3,7 @@
     "name": "fatigue_profile_estimate",
     "domain": "lift-profiles",
     "description": "Estimate the four-dimensional fatigue profile for an exercise using AI.",
-    "handler": "services.handlers.lift_profiles.fatigue_profile_estimate.handler",
+    "handler": "services.lift_profiles.fatigue_profile_estimate.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -64,7 +64,7 @@
     "name": "muscle_group_estimate",
     "domain": "lift-profiles",
     "description": "Estimate primary, secondary, and tertiary muscle groups for an exercise using AI.",
-    "handler": "services.handlers.lift_profiles.muscle_group_estimate.handler",
+    "handler": "services.lift_profiles.muscle_group_estimate.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -137,7 +137,7 @@
     "name": "lift_profile_estimate_stimulus",
     "domain": "lift-profiles",
     "description": "Estimate an INOL stimulus coefficient from a structured lift profile; every technique option must be chosen.",
-    "handler": "services.handlers.lift_profiles.lift_profile_estimate_stimulus.handler",
+    "handler": "services.lift_profiles.lift_profile_estimate_stimulus.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -239,7 +239,7 @@
     "name": "lift_profile_suggest",
     "domain": "lift-profiles",
     "description": "Pick structured technique options for one lift from the lifter's own description. Returns the options only; nothing is saved.",
-    "handler": "services.handlers.lift_profiles.lift_profile_suggest.handler",
+    "handler": "services.lift_profiles.lift_profile_suggest.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -353,7 +353,7 @@
     "name": "program_update_lift_profiles",
     "domain": "lift-profiles",
     "description": "Replace the lift_profiles array on a program version. Lift profiles define per-exercise stimulus targets and configuration used by the AI analysis tools.",
-    "handler": "services.handlers.program.program_update_lift_profiles.handler",
+    "handler": "services.lift_profiles.program_update_lift_profiles.handler",
     "input_schema": {
       "type": "object",
       "properties": {

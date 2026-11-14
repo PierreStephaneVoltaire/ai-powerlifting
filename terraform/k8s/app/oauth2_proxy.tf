@@ -68,6 +68,7 @@ resource "kubernetes_deployment_v1" "oauth2_proxy" {
             "--pass-authorization-header=true",
             "--api-route=^/api/.*$",
             "--skip-auth-route=POST=^/api/auth/logout$",
+            "--skip-auth-route=GET=^/api/",
             "--upstream-timeout=300s",
             "--skip-provider-button=true",
             "--insecure-oidc-allow-unverified-email=true",

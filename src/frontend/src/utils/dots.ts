@@ -1,7 +1,7 @@
 import type { Sex, DotsResult } from '@powerlifting/types'
 
-import { DOTS_COEFFICIENTS, calculateDots } from '../../../backend/src/utils/calculations'
-export { calculateDots } from '../../../backend/src/utils/calculations'
+import { DOTS_COEFFICIENTS, calculateDots } from './calculations'
+export { calculateDots } from './calculations'
 
 export function calculateDotsFromLifts(
   squatKg: number,

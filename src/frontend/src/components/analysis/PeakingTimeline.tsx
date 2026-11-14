@@ -23,6 +23,7 @@ import {
   YAxis,
 } from 'recharts'
 import { TrendingUp } from 'lucide-react'
+import { ChartLabel } from '@/components/analysis/ChartLabel'
 import type { PeakingTimeline as PeakingTimelineData } from '@/api/analytics'
 
 interface PeakingTimelineProps {
@@ -43,21 +44,34 @@ function formatPeakOffset(peakDeltaDays: number | null): string {
 export function PeakingTimeline({ data }: PeakingTimelineProps) {
   const chartData = useMemo(() => {
     if (!data?.series?.length) return []
-    return data.series.map(point => ({
-      date: point.date,
-      actual_tsb: point.actual_tsb,
-      projected_tsb: point.projected_tsb,
-    }))
-  }, [data])
-
-  const specificityPoints = useMemo(() => {
-    if (!data?.specificity_points?.length) return []
-    return data.specificity_points.map(point => ({
-      date: point.date,
-      narrow: point.narrow,
-      broad: point.broad,
-      weeks_to_comp: point.weeks_to_comp,
-    }))
+    type Row = {
+      date: string
+      actual_tsb: number | null
+      projected_tsb: number | null
+      narrow?: number
+      broad?: number
+    }
+    const rows = new Map<string, Row>()
+    const rowFor = (date: string): Row => {
+      const existing = rows.get(date)
+      if (existing) return existing
+      const created: Row = { date, actual_tsb: null, projected_tsb: null }
+      rows.set(date, created)
+      return created
+    }
+    for (const point of data.series) {
+      const row = rowFor(point.date)
+      row.actual_tsb = point.actual_tsb
+      row.projected_tsb = point.projected_tsb
+    }
+    for (const point of data.specificity_points ?? []) {
+      const row = rowFor(point.date)
+      row.narrow = point.narrow
+      row.broad = point.broad
+    }
+    if (data.comp_date) rowFor(data.comp_date)
+    rowFor(data.current_date)
+    return Array.from(rows.values()).sort((a, b) => a.date.localeCompare(b.date))
   }, [data])
 
   if (!data) return null
@@ -78,6 +92,7 @@ export function PeakingTimeline({ data }: PeakingTimelineProps) {
         <Group gap="xs">
           <TrendingUp size={18} />
           <Text fw={600}>Peaking Timeline</Text>
+          <ChartLabel text="Solid is actual TSB. Dashed is planned. Dots show specificity." />
         </Group>
         <Badge variant="light" color={data.status_color} size="sm">
           {data.status_label}
@@ -221,7 +236,7 @@ export function PeakingTimeline({ data }: PeakingTimelineProps) {
                   stroke="#2563eb"
                   strokeWidth={2}
                   dot={false}
-                  connectNulls={false}
+                  connectNulls
                 />
                 <Line
                   yAxisId="left"
@@ -236,20 +251,25 @@ export function PeakingTimeline({ data }: PeakingTimelineProps) {
                 />
                 <Scatter
                   yAxisId="right"
-                  data={specificityPoints}
-                  name="Weekly specificity"
+                  name="Narrow specificity"
                   dataKey="narrow"
                   fill="#f59e0b"
                   stroke="#f59e0b"
                   fillOpacity={0.8}
                 />
+                <Scatter
+                  yAxisId="right"
+                  name="Broad specificity"
+                  dataKey="broad"
+                  fill="#0ea5e9"
+                  stroke="#0ea5e9"
+                  fillOpacity={0.8}
+                  shape="diamond"
+                />
               </ComposedChart>
             </ResponsiveContainer>
           </Box>
 
-          <Text fz="xs" c="dimmed">
-            Green band: target TSB range (+5 to +15). Blue shaded bands: expected specificity by weeks out.
-          </Text>
           {!data.peak_date && data.closest_peak_date && (
             <Text fz="xs" c="dimmed">
               Closest projected peak, not true peaking-window entry.

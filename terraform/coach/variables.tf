@@ -86,3 +86,8 @@ variable "coach_replicas" {
   description = "Coach pods; must be 1 while any provider uses the ChatGPT subscription login"
   type        = number
 }
+
+variable "dataset_bucket" {
+  description = "Bucket holding lifetime/<athlete>/latest.md reports that Coach reads for template evaluation"
+  type        = string
+}

@@ -33,3 +33,11 @@ variable "auth_hostname" {
 variable "auth_origin_url" {
   type = string
 }
+
+variable "llm_hostname" {
+  type = string
+}
+
+variable "llm_origin_url" {
+  type = string
+}

@@ -3,7 +3,7 @@
     "name": "calculate_attempts",
     "domain": "competition",
     "description": "Calculate three competition attempts for a lift.",
-    "handler": "services.handlers.competition.calculate_attempts.handler",
+    "handler": "services.competition.calculate_attempts.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -88,7 +88,7 @@
     "name": "health_list_competitions",
     "domain": "competition",
     "description": "List or mutate the athlete's directory competition entries.",
-    "handler": "services.handlers.competition.health_list_competitions.handler",
+    "handler": "services.competition.health_list_competitions.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -141,7 +141,7 @@
     "name": "health_update_user_competition",
     "domain": "competition",
     "description": "Patch an athlete's directory competition entry.",
-    "handler": "services.handlers.competition.health_list_competitions.handler",
+    "handler": "services.competition.health_list_competitions.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -174,7 +174,7 @@
     "name": "health_complete_user_competition",
     "domain": "competition",
     "description": "Complete an athlete's directory competition entry.",
-    "handler": "services.handlers.competition.health_list_competitions.handler",
+    "handler": "services.competition.health_list_competitions.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -212,7 +212,7 @@
     "name": "health_snapshot_competition_projection",
     "domain": "competition",
     "description": "Snapshot projected totals one week before each confirmed or optional competition entry.",
-    "handler": "services.handlers.competition.health_snapshot_competition_projection.handler",
+    "handler": "services.competition.health_snapshot_competition_projection.handler",
     "input_schema": {
       "type": "object",
       "properties": {

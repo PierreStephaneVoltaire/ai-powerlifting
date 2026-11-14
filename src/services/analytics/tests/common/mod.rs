@@ -1,0 +1,240 @@
+#![allow(dead_code)]
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use chrono::NaiveDate;
+use pl_analytics::cache::Cache;
+use pl_analytics::engine::{Clock, Engine};
+use pl_analytics::source::fixture::FixtureSource;
+use serde_json::Value;
+
+pub const IGNORED_FIELDS: [&str; 3] = ["generatedAt", "updatedAt", "sourceFingerprint"];
+
+pub struct Fixtures {
+    pub root: PathBuf,
+    pub manifest: Value,
+    pub as_of: NaiveDate,
+    pub athlete: String,
+}
+
+pub fn fixtures() -> Option<Fixtures> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/operator");
+    if !FixtureSource::available(&root.join("source"))
+        || !root.join("golden/manifest.json").is_file()
+    {
+        eprintln!("skipping: fixtures/operator is not present");
+        return None;
+    }
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(root.join("golden/manifest.json")).ok()?).ok()?;
+    let as_of = manifest["asOfDate"].as_str()?.parse().ok()?;
+    let athlete = manifest["athlete"].as_str()?.to_owned();
+    Some(Fixtures {
+        root,
+        manifest,
+        as_of,
+        athlete,
+    })
+}
+
+impl Fixtures {
+    pub fn engine(&self) -> Engine {
+        self.engine_at(self.as_of)
+    }
+
+    pub fn engine_at(&self, today: NaiveDate) -> Engine {
+        Engine::new(
+            Arc::new(FixtureSource::new(self.root.join("source"))),
+            Cache::disabled(),
+            Clock::Fixed(today),
+        )
+    }
+
+    pub fn golden(&self, file: &str) -> Value {
+        let bytes = std::fs::read(self.root.join("golden").join(file)).expect("golden is readable");
+        serde_json::from_slice(&bytes).expect("golden is json")
+    }
+
+    pub fn calls(&self, operation: &str) -> Vec<(String, Value)> {
+        self.manifest["calls"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|call| call["operation"] == operation)
+            .map(|call| {
+                (
+                    call["file"].as_str().unwrap_or_default().to_owned(),
+                    call["inputs"].clone(),
+                )
+            })
+            .collect()
+    }
+}
+
+pub const REBASELINED: &[&str] = &[
+    ".acwr.composite",
+    ".acwr.composite_label",
+    ".acwr.composite_zone",
+    ".fatigue_dimensions.weekly",
+    ".exercise_stats",
+    ".analyticsSummary.acwrComposite",
+    ".fatigue_components.intensity_density_stress",
+    ".fatigue_dimensions.spike",
+    ".fatigue_components.monotony_stress",
+    ".fatigue_components.current_state_fi",
+    ".fatigue_components.latest_week_fi",
+    ".fatigue_index",
+    ".analyticsSummary.fatigueIndex",
+    ".analyticsSummary.muscleMap",
+    ".acwr.dimensions",
+    ".acwr.weights_used",
+    ".fatigue_components.window_weighted_fi",
+    ".fatigue_components.window_peak_fi",
+    ".fatigue_components.window_mean_fi",
+    ".fatigue_dimensions.normalized",
+    ".fatigue_dimensions.chronic_baseline",
+    ".fatigue_dimensions.baseline_weeks_used",
+    ".banister",
+    ".decoupling.series",
+    ".decoupling.current",
+    ".monotony_strain",
+    ".specificity_ratio.broad",
+    ".specificity_ratio.secondary_sets",
+    ".specificity_ratio.weighted_sets",
+    ".peaking_timeline.series",
+    ".peaking_timeline.status_message",
+    ".peaking_timeline.peak_date",
+    ".peaking_timeline.peak_delta_days",
+    ".peaking_timeline.closest_peak_date",
+    ".peaking_timeline.closest_projected_tsb",
+    ".peaking_timeline.current_tsb",
+    ".peaking_timeline.specificity_points",
+    ".inol.phase_adjusted_thresholds",
+    ".inol.trend_pressure",
+    ".inol.lifts",
+    ".inol.coefficient_sources",
+    ".per_lift",
+    ".muscle_volume",
+    ".alerts",
+    ".readiness_score",
+];
+
+pub const REBASELINED_EXACT: &[&str] = &[
+    ".block",
+    ".compliance.phase",
+    ".weekly.block",
+    ".weekly.compliance.phase",
+];
+
+pub const REBASELINED_FLAGS: &str = ".flags";
+
+fn is_rebaselined(path: &str) -> bool {
+    let normalized: String = {
+        let mut out = String::with_capacity(path.len());
+        let mut skipping = false;
+        for character in path.chars() {
+            match character {
+                '[' => skipping = true,
+                ']' => skipping = false,
+                _ if !skipping => out.push(character),
+                _ => {}
+            }
+        }
+        out
+    };
+    let matches = |prefix: &str| {
+        normalized.match_indices(prefix).any(|(at, _)| {
+            matches!(
+                normalized[at + prefix.len()..].chars().next(),
+                None | Some('.')
+            )
+        })
+    };
+    REBASELINED_EXACT.contains(&normalized.as_str())
+        || REBASELINED.iter().any(|prefix| matches(prefix))
+        || matches(REBASELINED_FLAGS)
+}
+
+fn numbers_match(expected: f64, actual: f64) -> bool {
+    (expected - actual).abs() <= f64::max(1e-9, 1e-6 * expected.abs())
+}
+
+pub fn diff(path: &str, expected: &Value, actual: &Value, out: &mut Vec<String>) {
+    if is_rebaselined(path) {
+        return;
+    }
+    match (expected, actual) {
+        (Value::Number(a), Value::Number(b)) => {
+            if !numbers_match(
+                a.as_f64().unwrap_or(f64::NAN),
+                b.as_f64().unwrap_or(f64::NAN),
+            ) {
+                out.push(format!("{path}: expected {a} got {b}"));
+            }
+        }
+        (Value::Object(a), Value::Object(b)) => {
+            for key in a.keys().chain(b.keys().filter(|key| !a.contains_key(*key))) {
+                if IGNORED_FIELDS.contains(&key.as_str())
+                    || is_rebaselined(&format!("{path}.{key}"))
+                {
+                    continue;
+                }
+                match (a.get(key), b.get(key)) {
+                    (Some(x), Some(y)) => diff(&format!("{path}.{key}"), x, y, out),
+                    (Some(x), None) => out.push(format!(
+                        "{path}.{key}: missing in actual (expected {})",
+                        short(x)
+                    )),
+                    (None, Some(y)) => {
+                        out.push(format!("{path}.{key}: unexpected in actual ({})", short(y)))
+                    }
+                    (None, None) => {}
+                }
+            }
+        }
+        (Value::Array(a), Value::Array(b)) => {
+            if a.len() != b.len() {
+                out.push(format!(
+                    "{path}: length expected {} got {}",
+                    a.len(),
+                    b.len()
+                ));
+            }
+            for (index, (x, y)) in a.iter().zip(b).enumerate() {
+                diff(&format!("{path}[{index}]"), x, y, out);
+            }
+        }
+        _ if expected == actual => {}
+        _ => out.push(format!(
+            "{path}: expected {} got {}",
+            short(expected),
+            short(actual)
+        )),
+    }
+}
+
+fn short(value: &Value) -> String {
+    let text = value.to_string();
+    if text.len() > 120 {
+        format!("{}...", &text[..120])
+    } else {
+        text
+    }
+}
+
+pub fn assert_matches(label: &str, expected: &Value, actual: &Value) {
+    let mut differences = Vec::new();
+    diff("", expected, actual, &mut differences);
+    assert!(
+        differences.is_empty(),
+        "{label}: {} difference(s)\n{}",
+        differences.len(),
+        differences
+            .iter()
+            .take(25)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

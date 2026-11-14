@@ -10,7 +10,7 @@ data "archive_file" "lambda" {
   }
 
   source {
-    content  = file("${path.module}/../../../src/services/lib/media_notifications.py")
+    content  = file("${path.module}/../../../src/services/videos/media_notifications.py")
     filename = "notifications.py"
   }
 }

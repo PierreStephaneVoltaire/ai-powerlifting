@@ -9,3 +9,7 @@ variable "app_domain" {
 variable "auth_domain" {
   type = string
 }
+
+variable "llm_domain" {
+  type = string
+}

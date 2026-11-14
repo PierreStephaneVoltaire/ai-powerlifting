@@ -53,6 +53,7 @@ import {
   type BlockAnalysisBundle,
   type BlockComparisonResult,
   type DataQualityFlag,
+  type LifetimeReferenceMetric,
   type ProgramEvaluationReport,
   type ProgramBlockIndexEntry,
 } from '@/api/analytics'
@@ -69,10 +70,10 @@ function flagColor(flag: DataQualityFlag): string {
 }
 
 function cacheBadge(block: ProgramBlockIndexEntry) {
-  if (block.cacheStatus?.cached) {
-    return <Badge color="green" variant="light" size="sm">Cached</Badge>
+  if (block.stored) {
+    return <Badge color="green" variant="light" size="sm">Stored</Badge>
   }
-  return <Badge color="gray" variant="light" size="sm">Generate</Badge>
+  return <Badge color="gray" variant="light" size="sm">Not stored</Badge>
 }
 
 function kg(value: number | null | undefined, unit: WeightUnit): string {
@@ -873,17 +874,76 @@ function ConsolidatedRoiSection({ comparison, unit }: { comparison: BlockCompari
   )
 }
 
+const POSITION_LABELS: Record<LifetimeReferenceMetric['position'], { label: string; color: string }> = {
+  below_range: { label: 'Below range', color: 'orange' },
+  within_range: { label: 'Within range', color: 'green' },
+  above_range: { label: 'Above range', color: 'blue' },
+}
+
+function CurrentVsHistorySection({ comparison }: { comparison: BlockComparisonResult }) {
+  const reference = comparison.lifetime?.current_vs_history
+  if (!reference) return null
+  const metrics = [...reference.metrics].sort((a, b) => {
+    const rank = (item: LifetimeReferenceMetric) => (item.position === 'within_range' ? 1 : 0)
+    return rank(a) - rank(b) || a.metric.localeCompare(b.metric)
+  })
+  const outside = metrics.filter((item) => item.position !== 'within_range').length
+  return (
+    <Paper withBorder p="md">
+      <Group gap="xs" mb="xs">
+        <GitCompare size={18} />
+        <Text fw={500}>{reference.label} against {reference.reference_block_keys.length} past block{reference.reference_block_keys.length === 1 ? '' : 's'}</Text>
+      </Group>
+      <Text fz="xs" c="dimmed" mb="sm">
+        Each current-block metric next to the min, median and max across the selected past blocks. {outside} of {metrics.length} metrics sit outside the historical range.
+      </Text>
+      <Box style={{ overflow: 'auto', maxHeight: 420 }}>
+        <Table fz="sm" stickyHeader>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Metric</Table.Th>
+              <Table.Th ta="right">Current</Table.Th>
+              <Table.Th ta="right">Min</Table.Th>
+              <Table.Th ta="right">Median</Table.Th>
+              <Table.Th ta="right">Max</Table.Th>
+              <Table.Th ta="right">Blocks</Table.Th>
+              <Table.Th>Position</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {metrics.map((item) => {
+              const position = POSITION_LABELS[item.position]
+              return (
+                <Table.Tr key={`${item.kind}-${item.metric}`}>
+                  <Table.Td>{item.metric.replace(/[._]/g, ' ')}</Table.Td>
+                  <Table.Td ta="right">{metric(item.current, 2)}</Table.Td>
+                  <Table.Td ta="right">{metric(item.min, 2)}</Table.Td>
+                  <Table.Td ta="right">{metric(item.median, 2)}</Table.Td>
+                  <Table.Td ta="right">{metric(item.max, 2)}</Table.Td>
+                  <Table.Td ta="right">{item.n}</Table.Td>
+                  <Table.Td><Badge color={position.color} variant="light" size="sm">{position.label}</Badge></Table.Td>
+                </Table.Tr>
+              )
+            })}
+          </Table.Tbody>
+        </Table>
+      </Box>
+    </Paper>
+  )
+}
+
 export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightUnit; readOnly?: boolean }) {
   const [blocks, setBlocks] = useState<ProgramBlockIndexEntry[]>([])
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [comparison, setComparison] = useState<AiBlockComparisonResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [storingKey, setStoringKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const currentBlock = useMemo(() => blocks.find((block) => block.isCurrent) ?? null, [blocks])
-  const selectableBlocks = useMemo(() => sortedPastBlocks(blocks).filter((block) => block.cacheStatus?.cached), [blocks])
+  const pastBlocks = useMemo(() => sortedPastBlocks(blocks), [blocks])
   const sourceComparison = comparison?.deterministic ?? null
-  const hasSourceBlocks = Boolean(currentBlock?.cacheStatus?.cached) || selectedKeys.length > 0
+  const hasSourceBlocks = selectedKeys.length > 0
   const isMissingAiResult = comparison?.report?.cache_miss === true
 
   useEffect(() => {
@@ -894,10 +954,11 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
       .then((result) => {
         if (cancelled) return null
         const defaultKeys = result
-          .filter((block) => !block.isCurrent && block.cacheStatus?.cached)
+          .filter((block) => !block.isCurrent && block.stored)
           .map((block) => block.blockKey)
         setBlocks(result)
         setSelectedKeys(defaultKeys)
+        if (!defaultKeys.length) return null
         return fetchAiBlockComparison({
           blockKeys: defaultKeys,
           cacheOnly: true,
@@ -931,8 +992,23 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
       .finally(() => setLoading(false))
   }
 
+  const analyseAndStore = (blockKey: string) => {
+    if (readOnly) return
+    setStoringKey(blockKey)
+    setError(null)
+    fetchBlockAnalysis(blockKey)
+      .then(() => fetchProgramBlocks())
+      .then((result) => {
+        setBlocks(result)
+        setSelectedKeys((current) => Array.from(new Set([...current, blockKey])))
+        setComparison(null)
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setStoringKey(null))
+  }
+
   const setAllPastBlocks = () => {
-    setSelectedKeys(blocks.filter((block) => !block.isCurrent && block.cacheStatus?.cached).map((block) => block.blockKey))
+    setSelectedKeys(blocks.filter((block) => !block.isCurrent && block.stored).map((block) => block.blockKey))
     setComparison(null)
   }
 
@@ -957,7 +1033,7 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
             <Title order={3} fz="lg">Lifetime Compare</Title>
           </Group>
           <Group gap="xs">
-            <Button size="xs" variant="light" onClick={setAllPastBlocks} disabled={readOnly}>All saved past blocks</Button>
+            <Button size="xs" variant="light" onClick={setAllPastBlocks} disabled={readOnly}>All stored past blocks</Button>
             <Button size="xs" leftSection={<Brain size={14} />} onClick={runComparison} disabled={!hasSourceBlocks || loading || readOnly}>
               {comparison && !isMissingAiResult ? 'Regenerate AI Analysis' : 'Run AI Lifetime Analysis'}
             </Button>
@@ -968,36 +1044,50 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
           <Stack gap="xs" style={{ minWidth: 260 }}>
             {currentBlock ? (
               <Checkbox
-                checked={Boolean(currentBlock.cacheStatus?.cached)}
+                checked
                 disabled
                 label={`Current block-to-date (${currentBlock.label})`}
               />
             ) : (
               <Badge color="yellow" variant="light">No current block found</Badge>
             )}
-            <Text fz="xs" c="dimmed">Uses saved block analyses as AI source input. Current block-to-date is included when available.</Text>
+            <Text fz="xs" c="dimmed">The current block is evaluated against the selected past blocks. It is never stored.</Text>
           </Stack>
-          <Group gap="xs" wrap="wrap" style={{ flex: 1 }}>
-            {selectableBlocks.length ? selectableBlocks.map((block) => (
-              <Checkbox
-                key={block.blockKey}
-                checked={selectedKeys.includes(block.blockKey)}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked
-                  setSelectedKeys((current) =>
-                    checked
-                      ? Array.from(new Set([...current, block.blockKey]))
-                      : current.filter((key) => key !== block.blockKey),
-                  )
-                  setComparison(null)
-                }}
-                label={`${block.label}${block.linkedCompetition ? ` (${block.linkedCompetition.date})` : ' (training only)'}`}
-                disabled={readOnly}
-              />
+          <Stack gap="xs" style={{ flex: 1 }}>
+            {pastBlocks.length ? pastBlocks.map((block) => (
+              <Group key={block.blockKey} gap="sm">
+                <Checkbox
+                  checked={selectedKeys.includes(block.blockKey)}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked
+                    setSelectedKeys((current) =>
+                      checked
+                        ? Array.from(new Set([...current, block.blockKey]))
+                        : current.filter((key) => key !== block.blockKey),
+                    )
+                    setComparison(null)
+                  }}
+                  label={`${block.label}${block.linkedCompetition ? ` (${block.linkedCompetition.date})` : ' (training only)'}`}
+                  disabled={readOnly || !block.stored}
+                />
+                {block.stored ? (
+                  <Badge color="green" variant="light" size="sm">Stored</Badge>
+                ) : (
+                  <Button
+                    size="compact-xs"
+                    variant="light"
+                    onClick={() => analyseAndStore(block.blockKey)}
+                    loading={storingKey === block.blockKey}
+                    disabled={readOnly || storingKey !== null}
+                  >
+                    Analyse &amp; store
+                  </Button>
+                )}
+              </Group>
             )) : (
-              <Text fz="sm" c="dimmed">No saved past block analyses are available yet.</Text>
+              <Text fz="sm" c="dimmed">No past blocks are available yet.</Text>
             )}
-          </Group>
+          </Stack>
         </Group>
       </Paper>
 
@@ -1008,7 +1098,7 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
           {!sourceComparison || sourceComparison.rows.length === 0 ? (
             <Paper withBorder p="lg">
               <Text fw={500}>No source analyses selected</Text>
-              <Text fz="sm" c="dimmed">No current or past block analyses were available for comparison.</Text>
+              <Text fz="sm" c="dimmed">Select at least one stored past block to compare the current block against.</Text>
             </Paper>
           ) : (
             <Stack gap="md">
@@ -1025,6 +1115,8 @@ export function LifetimeComparePanel({ unit, readOnly = false }: { unit: WeightU
               ) : (
                 <AiReportSection comparison={comparison} />
               )}
+
+              <CurrentVsHistorySection comparison={sourceComparison} />
 
               <SimpleGrid cols={{ base: 1, lg: 2 }}>
                 <Paper withBorder p="md">

@@ -9,12 +9,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from services.lib import llm_log
-from services.lib.template_patch import patch_hash
+from services.runtime import llm_log
+from services.runtime.template_patch import patch_hash
 
 from . import chat_cache, guard
 from .catalog import Operation, operations
 from .config import AISettings, Provider, Settings
+from .lifetime import with_lifetime_report
 from .model import Model, ModelError, ToolServer, workspace_for
 from .operations import run_operation
 from .services import PowerliftingServices, Scope, ServiceError
@@ -48,9 +49,11 @@ class LimitedModel:
         self.model = model
         self.slots = {name: asyncio.Semaphore(provider.max_concurrent) for name, provider in providers.items()}
 
-    async def complete(self, ai: AISettings, instructions: str, prompt: str) -> str:
+    async def complete(self, ai: AISettings, instructions: str, prompt: str, workspace: Path | None = None) -> str:
         async with self.slots[ai.provider]:
-            return await self.model.complete(ai, instructions, prompt)
+            if workspace is None:
+                return await self.model.complete(ai, instructions, prompt)
+            return await self.model.complete(ai, instructions, prompt, workspace=workspace)
 
     async def converse(self, ai: AISettings, *args, **kwargs):
         async with self.slots[ai.provider]:
@@ -105,7 +108,8 @@ class Runner:
         generation = {"generation_id": payload["generation_id"], "generation_attempt": payload.get("generation_attempt", 0)} if payload.get("generation_id") else None
         async def work():
             with llm_log.scope(kind="operation", operation=operation.name, job_id=job.job_id, person=owner, athlete=athlete):
-                return await run_operation(self.services, self.model, self.settings.operation_ai, scope, operation, payload.get("arguments") or {}, job.job_id, generation)
+                model = await with_lifetime_report(self.settings, self.model, job) if operation.name == "template_evaluate" else self.model
+                return await run_operation(self.services, model, self.settings.operation_ai, scope, operation, payload.get("arguments") or {}, job.job_id, generation)
 
         self._spawn(job, work)
         return job

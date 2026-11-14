@@ -8,7 +8,7 @@ working — this file is only layout + operating rules.
 
 - `src/frontend/` — React + Vite app
 - `src/backend/` — Express API (Node)
-- `src/services/` — eighteen typed HTTP/MCP domain services; handlers and shared `lib/`,
+- `src/services/` — eighteen typed HTTP/MCP domain services; one folder per service (`<domain>/` plus shared `runtime/`),
   with manifests in `operations/`.
 - `src/lambda/` — the retained `video-thumbnail` and `master-sync` AWS Lambdas only.
 - `terraform/` — AWS and Cloudflare (applied by CI), plus `k8s/` and `coach/`

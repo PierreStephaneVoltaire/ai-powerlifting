@@ -13,7 +13,14 @@ resource "kubernetes_secret_v1" "backend" {
 }
 
 resource "kubernetes_deployment_v1" "backend" {
-  depends_on       = [kubectl_manifest.backend_from_oauth2_proxy, kubectl_manifest.strict_mtls]
+  depends_on = [
+    kubectl_manifest.backend_from_oauth2_proxy,
+    kubectl_manifest.strict_mtls,
+    kubernetes_service_v1.analytics,
+    kubernetes_service_v1.rankings,
+    kubernetes_service_v1.analytics_ai,
+    kubernetes_service_v1.analytics_export,
+  ]
   wait_for_rollout = false
 
   metadata {
@@ -59,6 +66,11 @@ resource "kubernetes_deployment_v1" "backend" {
             }
           }
 
+
+          env {
+            name  = "IF_API_URL"
+            value = local.service_env.IF_API_URL
+          }
 
           env {
             name = "MEDIA_SIGNING_PRIVATE_KEY"

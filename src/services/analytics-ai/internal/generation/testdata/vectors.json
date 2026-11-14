@@ -1,0 +1,78 @@
+{
+ "fingerprints": [
+  {
+   "operation": "correlation_analysis",
+   "inputs": "{\"pk\": \"athlete_1\", \"weeks\": 4, \"block\": \"current\", \"refresh\": true, \"cache_only\": false, \"_person_pk\": \"p\"}",
+   "identity": "{\"access_requirements\": {\"permissions\": [\"analytics:read\", \"program:read\"], \"competition_ids\": [\"COMP#1\", \"COMP#2\"]}, \"analysis_version\": \"7\", \"date\": \"2026-11-12\"}",
+   "id": "6f4eb28fa99451da717154d63fe3a1be684c0351dc81200055d1edfb6e1838af"
+  },
+  {
+   "operation": "block_correlation_analysis",
+   "inputs": "{\"pk\": \"athlete_1\", \"block_key\": \"block_22869d7d72295e\"}",
+   "identity": "{\"access_requirements\": {\"permissions\": [\"analytics:read\", \"program:read\"], \"competition_ids\": [\"COMP#1\", \"COMP#2\"]}, \"analysis_version\": \"7\", \"date\": \"2026-11-12\"}",
+   "id": "808fe20143bb5327bd924efcd6324d357d138c7476cbdac14f14751446d762eb"
+  },
+  {
+   "operation": "program_evaluation",
+   "inputs": "{\"pk\": \"athlete_1\"}",
+   "identity": "{\"access_requirements\": {\"permissions\": [], \"competition_ids\": []}}",
+   "id": "2516442226aa0eea629d1963c536fb00cc7b43e7b7fc67ddf0dce8e8f473e36a"
+  },
+  {
+   "operation": "multi_block_comparison_analysis",
+   "inputs": "{\"pk\": \"athlete_1\", \"block_keys\": [\"b\", \"a\", \"c\"]}",
+   "identity": "{\"access_requirements\": {\"permissions\": [\"analytics:read\", \"program:read\"], \"competition_ids\": [\"COMP#1\", \"COMP#2\"]}, \"analysis_version\": \"7\", \"date\": \"2026-11-12\"}",
+   "id": "a041406696de8c98ef89fb7a8096c56dce7dbf1c32bceb2e06945cc13d5aa954"
+  },
+  {
+   "operation": "multi_block_comparison_analysis",
+   "inputs": "{\"pk\": \"athlete_1\", \"block_keys\": []}",
+   "identity": "{\"access_requirements\": {\"permissions\": [\"analytics:read\", \"program:read\"], \"competition_ids\": [\"COMP#1\", \"COMP#2\"]}, \"analysis_version\": \"7\", \"date\": \"2026-11-12\"}",
+   "id": "594b4142e8306a871cf839715daa1c3dc32af87761f0f1051ef4f3e566fcfe8e"
+  },
+  {
+   "operation": "block_program_evaluation",
+   "inputs": "{\"pk\": \"ath\u00e9l\u00e8te\", \"block_key\": \"caf\u00e9 \u2603 \ud83d\ude00\", \"weeks\": 12, \"window_start\": \"2026-01-05\"}",
+   "identity": "{\"access_requirements\": {\"permissions\": [\"analytics:read\", \"program:read\"], \"competition_ids\": [\"COMP#1\", \"COMP#2\"]}, \"analysis_version\": \"7\", \"date\": \"2026-11-12\"}",
+   "id": "66fe4e9c963c64ef788b7c4c45ecbba8ebedfa8803d69a5f64fdfddcc5339261"
+  },
+  {
+   "operation": "x",
+   "inputs": "{\"f\": 1.0, \"g\": 0.1, \"h\": 100.0, \"i\": 1e16, \"j\": 1e-5, \"k\": 2.5e+20, \"l\": -0.0, \"m\": 123456789.125, \"n\": 1e15, \"o\": 0.0001, \"p\": 1.5E3, \"q\": 12345678901234567890, \"r\": -0, \"s\": 3.14159265358979}",
+   "identity": "{\"access_requirements\": {\"permissions\": [], \"competition_ids\": []}}",
+   "id": "f8b9796b79727ddde1bd7c0958516e31be03263429f45644d8deb6d02615ada7"
+  },
+  {
+   "operation": "x",
+   "inputs": "{\"s\": \"tab\\t nl\\n cr\\r q\\\" bs\\\\ bell\\u0007 del\\u007f slash/ \\u2028\", \"b\": true, \"n\": null, \"e\": {}, \"a\": [], \"z\": {\"b\": 1, \"a\": [1, 2, {\"d\": null, \"c\": false}]}}",
+   "identity": "{\"access_requirements\": {\"permissions\": [], \"competition_ids\": []}}",
+   "id": "4fe2b1f89c7e90b7b57299acb982335de57397ff444a77cd6c70b8f992884fc2"
+  },
+  {
+   "operation": "x",
+   "inputs": "{\"\u00e9\": 1, \"e\": 2, \"\ud83d\ude00\": 3, \"z\": 4, \"A\": 5, \"_u\": 6, \"refresh\": true}",
+   "identity": "{\"access_requirements\": {\"permissions\": [], \"competition_ids\": []}}",
+   "id": "a8fbd3ec41c8aeb57a4ef5845c90e4941d3f868a1d675e382810921cf21e43ca"
+  },
+  {
+   "operation": "x",
+   "inputs": "{\"pk\": \"a\"}",
+   "identity": "null",
+   "id": "d3013817092f12f8eaedbd87d7bb67016b582b1b6ef6af92eba977720a898800"
+  }
+ ],
+ "requests": [
+  {
+   "request": "{\"messages\": [{\"role\": \"system\", \"content\": \"s\"}, {\"role\": \"user\", \"content\": \"h\u00e9llo \u2603\"}], \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"f\", \"parameters\": {\"type\": \"object\", \"properties\": {\"a\": {\"type\": [\"number\", \"null\"]}}}}}], \"response_format\": null}",
+   "hash": "3b34c2f11f07252b017effa7e713d08f9c34891baa98216e64f31160dfb39469"
+  },
+  {
+   "request": "{\"messages\": [], \"tools\": null, \"response_format\": null}",
+   "hash": "c8edf9b86e3b437678376ee6a2b7427c3dc859b49ceae28961dc4e5d03ffac27"
+  },
+  {
+   "request": "{\"messages\": [{\"role\": \"user\", \"content\": \"x\"}], \"tools\": [], \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"schema\": {\"minimum\": 1.5}}}}",
+   "hash": "43f3f1fb2050f7961d729aad6893ccb4297e465d455e41ca94f130709fa10602"
+  }
+ ]
+}

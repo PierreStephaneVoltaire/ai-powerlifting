@@ -1,6 +1,7 @@
 locals {
   service_env = {
     IF_API_URL                  = "http://pl-coach.${var.namespace}.svc.cluster.local:8000"
+    PL_SERVICE_URL_TEMPLATE     = "http://pl-{domain}.${var.namespace}.svc.cluster.local:8000"
     VALKEY_URL                  = "redis://pl-valkey.${var.namespace}.svc.cluster.local:6379"
     PROMPT_CACHE_QDRANT_URL     = "http://pl-prompt-cache.${var.namespace}.svc.cluster.local:6333"
     PROMPT_CACHE_MCP_URL        = "http://pl-prompt-cache-mcp.${var.namespace}.svc.cluster.local:8000/mcp"
@@ -16,14 +17,13 @@ locals {
     "pl-competition"   = merge(local.small, { domain = "competition" })
     "pl-export"        = { domain = "export", limits = { cpu = "1", memory = "512Mi" }, requests = { cpu = "50m", memory = "128Mi" } }
     "pl-federation"    = merge(local.small, { domain = "federation" })
-    "pl-glossary"      = merge(local.small, { domain = "glossary" })
+    "pl-glossary"      = { domain = "glossary", limits = { cpu = "500m", memory = "384Mi" }, requests = { cpu = "25m", memory = "64Mi" } }
     "pl-goals"         = merge(local.small, { domain = "goals" })
     "pl-imports"       = merge(local.small, { domain = "imports" })
     "pl-lift-profiles" = merge(local.small, { domain = "lift-profiles" })
     "pl-performance"   = merge(local.small, { domain = "performance" })
     "pl-profile"       = merge(local.small, { domain = "profile" })
     "pl-program"       = merge(local.small, { domain = "program" })
-    "pl-rankings"      = { domain = "rankings", limits = { cpu = "1", memory = "3Gi" }, requests = { cpu = "25m", memory = "768Mi" } }
     "pl-sessions"      = merge(local.small, { domain = "sessions" })
     "pl-templates"     = merge(local.small, { domain = "templates" })
     "pl-videos"        = merge(local.small, { domain = "videos" })
@@ -72,11 +72,6 @@ resource "kubernetes_deployment_v1" "service" {
           env {
             name  = "PL_DOMAIN"
             value = each.value.domain
-          }
-
-          env {
-            name  = "POWERLIFTING_S3_BUCKET"
-            value = var.dataset_bucket
           }
 
           dynamic "env" {

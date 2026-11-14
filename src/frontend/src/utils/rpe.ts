@@ -1,5 +1,5 @@
-import { setPercentage } from '../../../backend/src/utils/calculations'
-export { estimateSetE1rm } from '../../../backend/src/utils/calculations'
+import { setPercentage } from './calculations'
+export { estimateSetE1rm } from './calculations'
 
 const RPE_ROWS = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10] as const
 

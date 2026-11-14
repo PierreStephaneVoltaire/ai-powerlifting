@@ -1,0 +1,227 @@
+{
+ "weeks": 6,
+ "window_start": "2026-09-07",
+ "weeks_to_primary_comp": 8.25,
+ "lift_profiles": [
+  {
+   "lift": "squat",
+   "style_notes": "High bar",
+   "sticking_points": "out of the hole",
+   "primary_muscle": "quads",
+   "volume_tolerance": "moderate"
+  },
+  {
+   "lift": "bench press"
+  },
+  {
+   "lift": "deadlift",
+   "sticking_points": "lockout",
+   "volume_tolerance": "low"
+  },
+  {
+   "style_notes": "orphan"
+  }
+ ],
+ "athlete_measurements": {
+  "height_cm": 180,
+  "arm_wingspan_cm": 185.5,
+  "leg_length_cm": null,
+  "weight_class_kg": 83,
+  "current_body_weight_kg": 84.2
+ },
+ "caloric_status": "surplus",
+ "bodyweight_trend": {
+  "latest": 84.2,
+  "direction": "up",
+  "change": 1.3
+ },
+ "weekly_e1rm": [
+  {
+   "week": 1,
+   "squat": 180.04,
+   "bench": 120.0,
+   "deadlift": null
+  },
+  {
+   "week": 2,
+   "squat": null,
+   "bench": 121.25,
+   "deadlift": 220.0
+  },
+  {
+   "week": 3,
+   "squat": 183.35,
+   "bench": null,
+   "deadlift": null
+  },
+  {
+   "week": 5,
+   "squat": 185.0,
+   "bench": 123.0,
+   "deadlift": 225.55
+  },
+  {
+   "week": 6,
+   "squat": 0.0,
+   "bench": 124.5,
+   "deadlift": 226.0
+  }
+ ],
+ "weekly_accessory": [
+  {
+   "week": 1,
+   "exercises": [
+    {
+     "name": "Tr\u00edceps Pushdown",
+     "volume_kg": 1200.5
+    },
+    {
+     "name": "Acc 0",
+     "volume_kg": 100.0
+    },
+    {
+     "name": "Acc 1",
+     "volume_kg": 110.0
+    },
+    {
+     "name": "Acc 2",
+     "volume_kg": 120.0
+    },
+    {
+     "name": "Acc 3",
+     "volume_kg": 130.0
+    },
+    {
+     "name": "Acc 4",
+     "volume_kg": 140.0
+    },
+    {
+     "name": "Acc 5",
+     "volume_kg": 150.0
+    },
+    {
+     "name": "Acc 6",
+     "volume_kg": 160.0
+    },
+    {
+     "name": "Acc 7",
+     "volume_kg": 170.0
+    },
+    {
+     "name": "Acc 8",
+     "volume_kg": 180.0
+    },
+    {
+     "name": "Acc 9",
+     "volume_kg": 190.0
+    },
+    {
+     "name": "Acc 10",
+     "volume_kg": 200.0
+    },
+    {
+     "name": "Acc 11",
+     "volume_kg": 210.0
+    },
+    {
+     "name": "Acc 12",
+     "volume_kg": 220.0
+    },
+    {
+     "name": "Acc 13",
+     "volume_kg": 230.0
+    },
+    {
+     "name": "Acc 14",
+     "volume_kg": 240.0
+    },
+    {
+     "name": "Acc 15",
+     "volume_kg": 250.0
+    },
+    {
+     "name": "Acc 16",
+     "volume_kg": 260.0
+    },
+    {
+     "name": "Acc 17",
+     "volume_kg": 270.0
+    },
+    {
+     "name": "Acc 18",
+     "volume_kg": 280.0
+    },
+    {
+     "name": "Acc 19",
+     "volume_kg": 290.0
+    },
+    {
+     "name": "Acc 20",
+     "volume_kg": 300.0
+    },
+    {
+     "name": "Acc 21",
+     "volume_kg": 310.0
+    },
+    {
+     "name": "Acc 22",
+     "volume_kg": 320.0
+    },
+    {
+     "name": "Acc 23",
+     "volume_kg": 330.0
+    }
+   ]
+  },
+  {
+   "week": 2,
+   "exercises": [
+    {
+     "name": "Tr\u00edceps Pushdown",
+     "volume_kg": 1500.0
+    },
+    {
+     "name": "Leg Press",
+     "volume_kg": 2500.5
+    }
+   ]
+  },
+  {
+   "week": 3,
+   "exercises": [
+    {
+     "name": "Leg Press",
+     "volume_kg": 0.5
+    }
+   ]
+  },
+  {
+   "week": 4,
+   "exercises": [
+    {
+     "name": "Leg Press",
+     "volume_kg": 2.5
+    },
+    {
+     "name": "Acc 3",
+     "volume_kg": 3.5
+    }
+   ]
+  }
+ ],
+ "exercise_roi": [
+  {
+   "exercise": "Leg Press",
+   "pearson_r": 0.7234,
+   "weeks_observed": 5
+  },
+  {
+   "exercise": "Curl",
+   "pearson_r": -0.31,
+   "weeks_observed": 4
+  },
+  {
+   "exercise": "Nothing"
+  }
+ ]
+}

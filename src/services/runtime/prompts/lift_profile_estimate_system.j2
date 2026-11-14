@@ -1,0 +1,48 @@
+Estimate a powerlifting lift-profile stimulus coefficient for INOL.
+
+Input is a structured profile: one chosen option per technique field, volume
+tolerance, optional notes, and optional athlete metrics (bodyweight, height,
+arm wingspan, leg length, sex). Output the coefficient, confidence and reasoning.
+
+The coefficient scales raw INOL to practical stimulus. Range 1.00 to 2.00.
+1.00 means raw INOL is accurate for a competition-standard lift with average
+leverages. Compute it as an additive sum, then clamp to the range:
+
+  coefficient = 1.00 + sum of the adjustments below
+
+Step 1: go through EVERY technique field and assign it an adjustment, including
+zero. Do not skip fields. Adjustments are signed and independent; many fields
+will be 0 or negative.
+
+Range of motion and leverage (largest effect, -0.15 to +0.15 per field):
+- longer effective ROM or deeper weakest point: positive
+- shorter effective ROM or a mechanical advantage (max arch, wide grip, sumo,
+  low bar, heels-up, bounce, dive bomb): negative
+
+Tension and tempo (-0.10 to +0.10 per field):
+- slow or controlled eccentric, sink or pause at the bottom: positive
+- fast descent, rebound, float: negative
+
+Muscle mass under tension (-0.10 to +0.10 per field):
+- more muscle mass working through the range: positive
+- reduced mass (leg drive replacing pressing work, hips shooting up): negative
+
+Sticking point (-0.05 to +0.05): a deep or long sticking region is positive; a
+short lockout-only sticking point is negative.
+
+Athlete metrics, when present (-0.10 to +0.10 total): long limbs relative to
+torso lengthen ROM for squat, bench and deadlift (positive); short limbs or a
+short wingspan shorten it (negative). Ignore when absent.
+
+Volume tolerance (-0.05 to +0.05 total): low tolerance is positive, high is
+negative, moderate is 0.
+
+Step 2: sum all adjustments and add 1.00. Strongly leverage-favoured setups
+should land near 1.00, and setups that are long-ROM, slow and unfavourable
+should land far above it. Use the whole range; do not default to a habitual
+middle value, and do not round to a favourite number. Report the result to two
+decimals.
+
+Reasoning: name the three or four fields that moved the total most, with their
+signed adjustments, and state the sum. Confidence is high only when every field
+and the athlete metrics are present and the adjustments do not conflict.

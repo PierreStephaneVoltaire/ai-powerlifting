@@ -1,0 +1,58 @@
+## Analysis window: Last 6 weeks (from 2026-09-07)
+
+**Weeks to primary competition:** 8.2
+
+## Athlete Lift Profiles
+
+### Squat
+  Style: High bar
+  Sticking points: out of the hole
+  Primary muscle: quads
+  Volume tolerance: moderate
+
+### Bench Press
+
+### Deadlift
+  Sticking points: lockout
+  Volume tolerance: low
+
+### ?
+  Style: orphan
+
+## Athlete Measurements
+
+  height cm: 180
+  arm wingspan cm: 185.5
+  weight class kg: 83
+  current body weight kg: 84.2
+
+**Caloric status:** surplus
+
+**Body weight trend:** 84.2 kg, up (+1.3 kg over window)
+## Weekly e1RM Estimates (kg)
+
+| Week | Squat | Bench | Deadlift |
+|------|-------|-------|----------|
+| W1 | 180.0 | 120.0 | - |
+| W2 | - | 121.2 | 220.0 |
+| W3 | 183.3 | - | - |
+| W4 | - | - | - |
+| W5 | 185.0 | 123.0 | 225.6 |
+| W6 | - | 124.5 | 226.0 |
+
+## Weekly Accessory Volume (sets × reps × kg) — Top 20
+
+| Week | Tríceps Pushdown | Leg Press | Acc 23 | Acc 22 | Acc 21 | Acc 20 | Acc 19 | Acc 18 | Acc 17 | Acc 16 | Acc 15 | Acc 14 | Acc 13 | Acc 12 | Acc 11 | Acc 10 | Acc 9 | Acc 8 | Acc 7 | Acc 6 | 
+|------|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| W1 | 1200 | - | 330 | 320 | 310 | 300 | 290 | 280 | 270 | 260 | 250 | 240 | 230 | 220 | 210 | 200 | 190 | 180 | 170 | 160 | 
+| W2 | 1500 | 2500 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W3 | - | 0 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W4 | - | 2 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W5 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W6 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+
+## Task
+Find which exercises, muscles and session sequences in the data above help or hurt
+Squat, Bench and Deadlift. Judge each driver by dose (frequency, sets, intensity, RPE),
+fatigue profile, session order and muscle landmarks. Cite numbers from the tables in
+every finding's evidence and give one concrete action for each.

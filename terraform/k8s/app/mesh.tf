@@ -1,10 +1,24 @@
 locals {
-  mesh_domains = ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "rankings", "sessions", "templates", "videos", "weight-log"]
-  mesh_callers = { for destination in concat(["pl-analytics"], [for name in local.mesh_domains : "pl-${name}"]) : destination => ["powerlifting-app-backend", "pl-analytics", "pl-coach"] }
+  mesh_domains            = ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "sessions", "templates", "videos", "weight-log"]
+  domain_callers          = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
+  analysis_domain_callers = ["pl-competition", "pl-export", "pl-profile", "pl-program", "pl-templates"]
+
+  native_callers = {
+    "pl-analytics"        = concat(["powerlifting-app-backend", "pl-coach", "pl-analytics-ai", "pl-analytics-export"], local.analysis_domain_callers)
+    "pl-analytics-ai"     = ["powerlifting-app-backend", "pl-coach", "pl-analytics"]
+    "pl-analytics-export" = ["powerlifting-app-backend", "pl-analytics-ai"]
+    "pl-rankings"         = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
+    "litellm"             = ["pl-coach"]
+  }
+
+  mesh_callers = merge(
+    { for name in local.mesh_domains : "pl-${name}" => name == "profile" ? concat(local.domain_callers, ["pl-rankings", "pl-analytics-ai", "pl-analytics-export"]) : local.domain_callers },
+    local.native_callers,
+  )
 
   cache_callers = {
     "pl-valkey" = concat(
-      ["powerlifting-app-backend", "oauth2-proxy", "pl-analytics", "pl-coach"],
+      ["powerlifting-app-backend", "oauth2-proxy", "pl-analytics", "pl-analytics-ai", "pl-rankings", "pl-coach"],
       [for name in local.mesh_domains : "pl-${name}"],
     )
     "pl-prompt-cache"     = ["pl-prompt-cache-mcp"]
@@ -12,13 +26,20 @@ locals {
   }
 
   mesh_services = merge(
-    { pl-analytics = { service = "pl-analytics", app = "pl-analytics", port = 8000 } },
-    { for name, service in kubernetes_service_v1.service : service.metadata[0].name => { service = service.metadata[0].name, app = service.spec[0].selector.app, port = 8000 } },
+    {
+      pl-analytics        = { service = "pl-analytics", app = "pl-analytics", ports = [8000, 50051] }
+      pl-analytics-ai     = { service = "pl-analytics-ai", app = "pl-analytics-ai", ports = [8000, 50051] }
+      pl-analytics-export = { service = "pl-analytics-export", app = "pl-analytics-export", ports = [8000, 50051] }
+      pl-rankings         = { service = "pl-rankings", app = "pl-rankings", ports = [8000] }
+      litellm             = { service = "litellm", app = "litellm", ports = [4000] }
+    },
+    { for name, service in kubernetes_service_v1.service : service.metadata[0].name => { service = service.metadata[0].name, app = service.spec[0].selector.app, ports = [8000] } },
   )
 
   edge_only_services = {
     "powerlifting-app-frontend" = { selector = { app = "powerlifting-app-frontend" }, port = 3001, caller = "edge-powerlifting" }
     "oauth2-proxy"              = { selector = { app = "oauth2-proxy" }, port = 4180, caller = "edge-powerlifting" }
+    "litellm"                   = { selector = { app = "litellm" }, port = 4000, caller = "edge-powerlifting" }
     "edge-powerlifting"         = { selector = { "gateway.networking.k8s.io/gateway-name" = "edge" }, port = 80, caller = "cloudflared" }
   }
 }
@@ -78,7 +99,7 @@ resource "kubectl_manifest" "l4_waypoint_only" {
     }
   })
 
-  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics]
+  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.litellm]
 }
 
 resource "kubectl_manifest" "edge_only" {
@@ -125,10 +146,10 @@ resource "kubectl_manifest" "service_callers" {
       action     = "ALLOW"
       rules = [{
         from = [{ source = { principals = [for caller in local.mesh_callers[each.key] : "cluster.local/ns/${var.namespace}/sa/${caller}"] } }]
-        to   = [{ operation = { ports = [tostring(each.value.port)] } }]
+        to   = [{ operation = { ports = [for port in each.value.ports : tostring(port)] } }]
       }]
     }
   })
 
-  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics]
+  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.litellm]
 }

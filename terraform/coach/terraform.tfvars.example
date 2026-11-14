@@ -26,10 +26,21 @@ operation_ai = {
   glossary_estimate_muscles       = { provider = "", model = "", effort = "" }
   muscle_group_estimate           = { provider = "", model = "", effort = "" }
   glossary_estimate_fatigue       = { provider = "", model = "", effort = "" }
+  glossary_estimate_lift_transfer = { provider = "", model = "", effort = "" }
   fatigue_profile_estimate        = { provider = "", model = "", effort = "" }
   glossary_estimate_e1rm          = { provider = "", model = "", effort = "" }
   glossary_generate_text          = { provider = "", model = "", effort = "" }
   budget_advisor                  = { provider = "", model = "", effort = "" }
   budget_priority_timeline        = { provider = "", model = "", effort = "" }
 }
+dataset_bucket = "<powerlifting-dataset-bucket-name>"
 coach_replicas = 1
+
+# LiteLLM cutover (after the one-time device login), replace the providers and AI models above:
+# coach_providers = {
+#   litellm = { auth = "api_key", base_url = "http://litellm.powerlifting.svc.cluster.local:4000/v1", max_concurrent = 4 }
+# }
+# conversation_ai = { provider = "litellm", model = "<alias>", effort = "medium" }
+# operation_ai = {
+#   program_evaluation = { provider = "litellm", model = "<alias>", effort = "high" }
+# }

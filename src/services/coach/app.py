@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from jsonschema import ValidationError, validate
 from pydantic import BaseModel, Field
 
-from services.mesh import caller
+from services.runtime.mesh import caller
 from .config import Settings, load
 from .model import CodexModel, Model
 from .runner import Runner

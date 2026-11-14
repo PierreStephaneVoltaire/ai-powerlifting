@@ -1,0 +1,274 @@
+"""User-scoped competition reads/writes against the if-powerlifting-user-competitions
+DynamoDB table. The master-sync lambda seeds one item per (user, master_competition)
+when the master record changes; this handler is the read + patch surface for the
+backend (and the agent, when it needs to look at one user at a time).
+
+Items are keyed pk=<mapped_pk>, sk="COMP#<master_id>". Each item carries the master
+fields copied at sync time plus user-owned fields (user_status, weight_class_kg,
+body_weight_kg, results, post_meet_report, ...).
+"""
+from __future__ import annotations
+
+import logging
+import copy
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Any, Optional
+
+from services.runtime.aws import dynamodb_resource
+from boto3.dynamodb.conditions import Key
+
+from services.runtime.block_scope import active_block_id_for, in_block, stamp
+from services.runtime.competition_entries import participation_date
+from services.competition.countries import country_code
+
+from .config import AWS_REGION, HEALTH_PROGRAM_PK, POWERLIFTING_USER_COMPETITIONS_TABLE
+
+logger = logging.getLogger(__name__)
+
+_table = None
+
+
+def _get_table():
+    global _table
+    if _table is None:
+        _table = dynamodb_resource("dynamodb", region_name=AWS_REGION).Table(
+            POWERLIFTING_USER_COMPETITIONS_TABLE
+        )
+    return _table
+
+
+def _from_item(item: Optional[dict]) -> Optional[dict]:
+    if item is None:
+        return None
+    out: dict = {}
+    for k, v in item.items():
+        if isinstance(v, Decimal):
+            out[k] = float(v)
+        elif isinstance(v, dict):
+            out[k] = _from_item(v)
+        elif isinstance(v, list):
+            out[k] = [_from_item(x) if isinstance(x, dict) else (float(x) if isinstance(x, Decimal) else x) for x in v]
+        else:
+            out[k] = v
+    return out
+
+
+def _to_decimal(value: Any) -> Any:
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _to_decimal(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_decimal(v) for v in value]
+    return value
+
+
+_MUTABLE_FIELDS = {
+    "units",
+    "user_status",
+    "weight_class_kg",
+    "body_weight_kg",
+    "targets",
+    "results",
+    "post_meet_report",
+    "hotel_required",
+    "counts_toward_federation_ids",
+    "between_comp_plan",
+    "comp_day_protocol",
+    "decision_date",
+    "attempt_selection",
+    "projected_at_t_minus_1w",
+    "projection_snapshot_date",
+    "notes",
+}
+
+
+def _attempt_id(master_id: str, lift: str, attempt_number: int) -> str:
+    return f"{master_id}:{lift}:{attempt_number}"
+
+
+def _normalise_report(master_id: str, incoming: Any, existing: Any) -> dict:
+    if not isinstance(incoming, dict):
+        raise ValueError("post_meet_report must be an object")
+    previous = existing if isinstance(existing, dict) else {}
+    previous_attempts = previous.get("attempts") if isinstance(previous.get("attempts"), list) else []
+    by_id: dict[str, dict] = {}
+    by_position: dict[tuple[str, int], str] = {}
+    for raw in previous_attempts:
+        if not isinstance(raw, dict):
+            continue
+        lift = raw.get("lift")
+        number = raw.get("attempt_number")
+        if lift in {"squat", "bench", "deadlift"} and number in {1, 2, 3}:
+            item = copy.deepcopy(raw)
+            item["attempt_id"] = str(item.get("attempt_id") or _attempt_id(master_id, lift, number))
+            by_id[item["attempt_id"]] = item
+            by_position[(lift, number)] = item["attempt_id"]
+
+    attempts = incoming.get("attempts")
+    if attempts is not None and not isinstance(attempts, list):
+        raise ValueError("post_meet_report.attempts must be an array")
+    seen_positions: set[tuple[str, int]] = set()
+    for raw in attempts or []:
+        if not isinstance(raw, dict):
+            raise ValueError("post_meet_report.attempts entries must be objects")
+        lift = raw.get("lift")
+        number = raw.get("attempt_number")
+        if lift not in {"squat", "bench", "deadlift"} or number not in {1, 2, 3}:
+            raise ValueError("attempt lift and attempt_number are invalid")
+        position = (lift, number)
+        if position in seen_positions:
+            raise ValueError("duplicate attempt identity")
+        seen_positions.add(position)
+        existing_id = by_position.get(position)
+        supplied_id = str(raw["attempt_id"]) if raw.get("attempt_id") else None
+        if existing_id and supplied_id and supplied_id != existing_id:
+            raise ValueError("attempt identity is immutable")
+        attempt_id = existing_id or supplied_id or _attempt_id(master_id, lift, number)
+        prior = by_id.get(attempt_id)
+        if prior and (prior.get("lift") != lift or prior.get("attempt_number") != number):
+            raise ValueError("attempt identity is immutable")
+        item = {**(prior or {}), **copy.deepcopy(raw), "attempt_id": attempt_id}
+        by_id[attempt_id] = item
+        by_position[position] = attempt_id
+
+    report = {**copy.deepcopy(previous), **copy.deepcopy(incoming)}
+    if attempts is not None or previous_attempts:
+        report["attempts"] = list(by_id.values())
+    return report
+
+
+def list_competitions(args: dict) -> list[dict]:
+    pk = args.get("pk") or HEALTH_PROGRAM_PK
+    country = country_code(args.get("country"))
+    state = (args.get("state") or "").strip().lower() or None
+
+    table = _get_table()
+    items: list[dict] = []
+    last_key = None
+    while True:
+        query_kwargs = {
+            "KeyConditionExpression": Key("pk").eq(pk) & Key("sk").begins_with("COMP#"),
+        }
+        if last_key:
+            query_kwargs["ExclusiveStartKey"] = last_key
+        response = table.query(**query_kwargs)
+        for raw in response.get("Items", []) or []:
+            comp = _from_item(raw) or {}
+            comp.pop("pk", None)
+            sk = str(comp.pop("sk", "") or "")
+            comp["master_id"] = comp.get("master_id") or sk.removeprefix("COMP#") or None
+            comp["units"] = comp.get("units") if comp.get("units") in {"kg", "lb"} else "kg"
+            if country and country_code(comp.get("venue_country")) != country:
+                continue
+            if state and (comp.get("venue_state") or "").strip().lower() != state:
+                continue
+            items.append(comp)
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            break
+
+    if args.get("block_id"):
+        active = active_block_id_for(pk)
+        items = [comp for comp in items if _is_directory_entry(comp) or in_block(comp, args["block_id"], active)]
+    items.sort(key=lambda c: c.get("start_date") or "")
+    return items
+
+
+def _is_directory_entry(comp: dict) -> bool:
+    return (comp.get("user_status") or comp.get("status") or "available") == "available"
+
+
+def update_user_competition(args: dict, operation: str = "update") -> dict:
+    pk = args.get("pk") or HEALTH_PROGRAM_PK
+    master_id = args.get("master_id")
+    if not master_id:
+        raise ValueError("master_id is required")
+    patch = args.get("patch")
+    if not isinstance(patch, dict):
+        raise ValueError("patch must be an object")
+    unknown = set(patch) - _MUTABLE_FIELDS
+    if unknown:
+        raise ValueError(f"competition fields are not editable: {', '.join(sorted(unknown))}")
+    if "units" in patch and patch["units"] not in {"kg", "lb"}:
+        raise ValueError("competition.units must be kg or lb")
+
+    table = _get_table()
+    sk = f"COMP#{master_id}"
+    key = {"pk": pk, "sk": sk}
+    current_raw = table.get_item(Key=key, ConsistentRead=True).get("Item")
+    if not current_raw:
+        raise ValueError(f"Competition not found: {master_id}")
+    current = _from_item(current_raw) or {}
+    current["units"] = current.get("units") if current.get("units") in {"kg", "lb"} else "kg"
+
+    applied = copy.deepcopy(patch)
+    if not current.get("block_id") and not _is_directory_entry({**current, **applied}):
+        stamp(applied, None, active_block_id_for(pk))
+    entry_date = participation_date({**current, **applied})
+    if entry_date and current.get("entry_date") != entry_date:
+        applied["entry_date"] = entry_date
+    removed = ["entry_date"] if not entry_date and current.get("entry_date") else []
+    if "post_meet_report" in applied:
+        if applied["post_meet_report"] is None and isinstance(current.get("post_meet_report"), dict) and current["post_meet_report"].get("attempts"):
+            applied["post_meet_report"] = copy.deepcopy(current["post_meet_report"])
+        elif applied["post_meet_report"] is not None:
+            applied["post_meet_report"] = _normalise_report(master_id, applied["post_meet_report"], current.get("post_meet_report"))
+    now = datetime.now(timezone.utc).isoformat()
+    result = {**{key: value for key, value in current.items() if key not in removed}, **copy.deepcopy(applied), "updated_at": now}
+    result.pop("pk", None)
+    result.pop("sk", None)
+    names = {"#updated_at": "updated_at"}
+    values = {":updated": now}
+    sets = ["#updated_at = :updated"]
+    for field in removed:
+        names[f"#{field}"] = field
+    for field, value in applied.items():
+        names[f"#{field}"] = field
+        values[f":value_{field}"] = _to_decimal(value)
+        sets.append(f"#{field} = :value_{field}")
+    table.update_item(
+        Key=key,
+        UpdateExpression="SET " + ", ".join(sets) + (" REMOVE " + ", ".join(f"#{field}" for field in removed) if removed else ""),
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )
+    return result
+
+
+def complete_user_competition(args: dict) -> dict:
+    pk = args.get("pk") or HEALTH_PROGRAM_PK
+    master_id = args.get("master_id")
+    if not master_id:
+        raise ValueError("master_id is required")
+    patch = {
+        "user_status": "completed",
+        "body_weight_kg": args.get("body_weight_kg"),
+        "results": args.get("results"),
+    }
+    if args.get("post_meet_report") is not None:
+        patch["post_meet_report"] = args["post_meet_report"]
+    return update_user_competition({
+        "pk": pk,
+        "master_id": master_id,
+        "patch": patch
+    }, operation="complete")
+
+
+async def health_list_competitions(args: dict) -> dict:
+    op = args.get("op")
+    if not op:
+        if args.get("master_id") and args.get("patch") is not None:
+            op = "update"
+        elif args.get("master_id") and args.get("results") is not None:
+            op = "complete"
+        else:
+            op = "list"
+    if op == "list":
+        return {"competitions": list_competitions(args)}
+    if op == "update":
+        return update_user_competition(args)
+    if op == "complete":
+        return complete_user_competition(args)
+    raise ValueError(f"unknown op: {op}")

@@ -122,7 +122,7 @@ round_to_2.5(v) = round(v / 2.5) * 2.5`,
   {
     id: 'fatigue_model',
     title: 'Fatigue Model',
-    summary: '4 dimensions (axial, neural, peripheral, systemic) per exercise. Nonlinear load scaling with an intensity-gated neural term.',
+    summary: '4 dimensions (axial, neural, peripheral, systemic) per exercise. Nonlinear load scaling with an intensity-gated neural term. Each weekly total is also reported normalized: the ratio to the athlete\'s chronic weekly baseline per dimension (median of the last 12 complete weeks of full history), so 1.0 is a typical week. Non-SBD intensity uses the glossary e1RM when present.',
     formula: `F_axial = profile.axial * weight^1.30 * reps
 F_peripheral = profile.peripheral * weight^1.15 * reps
 F_systemic = profile.systemic * weight * reps * (1 + 0.30 * I)
@@ -169,33 +169,34 @@ FI = 0.10*fail + 0.12*spike + 0.15*rpe + 0.34*reservoir
   {
     id: 'inol',
     title: 'INOL',
-    summary: 'Selected-window stimulus-adjusted INOL with phase-adjusted target ranges, ramp-up grace, uncertainty bands, and volume/intensity trend pressure.',
+    summary: 'Selected-window stimulus-adjusted INOL with phase-adjusted target ranges, ramp-up grace, uncertainty bands, and volume/intensity trend pressure. Trend baselines use the full history across blocks. Reports raw, adjusted, the coefficient and where it came from per lift.',
     formula: `raw_set_INOL = reps / (100 * sqrt((1 - min(I, 0.995))^2 + 0.02^2))
 raw_weekly_INOL = sum(raw_set_INOL * sets)
 adjusted_weekly_INOL = raw_weekly_INOL * lift_stimulus_coefficient
-TargetRange_l,w = BaseRange_l * PhaseMultiplier_w
+TargetRange_l,w = BaseRange_l * lift_stimulus_coefficient * PhaseMultiplier_w
 DisplayRange = TargetRange widened for small selected windows
 TrendPressure = 0.60*volume_spike + 0.40*RI_spike
 I = weight / E_now (per set)`,
     variables: [
       { name: 'reps', description: 'Repetitions in the set' },
       { name: 'I', description: 'Intensity ratio (weight / estimated max)' },
-      { name: 'lift_stimulus_coefficient', description: 'Lift-profile multiplier from 1 to 2; baseline is 1.0' },
+      { name: 'lift_stimulus_coefficient', description: 'Multiplier from the profile of the same lift, valid from 0.5 to 2.0 and not clamped inside that range; outside it the profile value is ignored and the coefficient is 1.0 (source: default)' },
     ],
     thresholds: [
-      { label: 'Squat', value: '1.6 - 3.5', flag: 'Default productive range; profile overrides may change this' },
-      { label: 'Bench', value: '2.0 - 5.0', flag: 'Default productive range; profile overrides may change this' },
-      { label: 'Deadlift', value: '1.0 - 2.5', flag: 'Default productive range; profile overrides may change this' },
+      { label: 'Squat', value: '1.6 - 3.5', flag: 'Default raw range, scaled by the stimulus coefficient before comparing with adjusted INOL' },
+      { label: 'Bench', value: '2.0 - 5.0', flag: 'Default raw range, scaled by the stimulus coefficient before comparing with adjusted INOL' },
+      { label: 'Deadlift', value: '1.0 - 2.5', flag: 'Default raw range, scaled by the stimulus coefficient before comparing with adjusted INOL' },
     ],
   },
   {
     id: 'acwr',
     title: 'ACWR (Acute:Chronic Workload Ratio)',
-    summary: 'Per-dimension workload ratio with weighted composite. Uses daily EWMA loads and labels that describe workload pattern, not injury prediction.',
+    summary: 'Per-dimension workload ratio with weighted composite. Uses daily EWMA loads seeded from the full history across blocks and labels that describe workload pattern, not injury prediction. Dimensions without a ratio are excluded and the weights renormalised; acute and chronic values are shown per dimension. The planned-overreach note appears only on elevated zones and only when the active phase is tagged overreach.',
     formula: `EWMA_acute_d,t = 0.25 * load_d,t + 0.75 * EWMA_acute_d,t-1
 EWMA_chronic_d,t = (2/29) * load_d,t + (27/29) * EWMA_chronic_d,t-1
 ACWR_d = EWMA_acute_d,t / EWMA_chronic_d,t
-Composite = 0.30*axial + 0.30*neural + 0.25*peripheral + 0.15*systemic`,
+Composite = sum(w_d * ACWR_d) / sum(w_d) over dimensions with a ratio
+w = axial 0.30, neural 0.30, peripheral 0.25, systemic 0.15`,
     variables: [
       { name: 'load_d,t', description: 'Daily load in dimension d on day t' },
       { name: 'EWMA_acute', description: '7-day acute EWMA seeded from the first 7 days' },
@@ -211,7 +212,7 @@ Composite = 0.30*axial + 0.30*neural + 0.25*peripheral + 0.15*systemic`,
   {
     id: 'banister_ffm',
     title: 'Banister Fitness-Fatigue Model',
-    summary: 'Daily normalized dimension load drives CTL, ATL, and TSB. Future peaking projections use the same normalized load units as historical data.',
+    summary: 'Daily normalized dimension load drives CTL, ATL, and TSB. Seeded from the full history across blocks; only the displayed series is limited to the selected window. Future peaking projections use the same normalized load units as historical data.',
     formula: `load_t = 100 * (0.30*F_axial/B_axial + 0.30*F_neural/B_neural + 0.25*F_peripheral/B_peripheral + 0.15*F_systemic/B_systemic)
 CTL_t = (2/43) * load_t + (1 - 2/43) * CTL_t-1
 ATL_t = (2/8) * load_t + (1 - 2/8) * ATL_t-1
@@ -225,7 +226,7 @@ CTL_0 = ATL_0 = mean(load first 14 days)`,
     ],
     thresholds: [
       { label: 'Deep overload', value: '< -30', flag: 'Very high accumulated fatigue' },
-      { label: 'Productive overreach', value: '-30 to -10', flag: 'Heavy but useful overload' },
+      { label: 'Productive fatigue', value: '-30 to -10', flag: 'Heavy but useful fatigue; shown as Planned overreach only when the active phase is tagged overreach' },
       { label: 'Building', value: '-10 to +5', flag: 'Fitness is building' },
       { label: 'Peaking window', value: '+5 to +15', flag: 'Best readiness for platform work' },
       { label: 'Detraining risk', value: '> +15', flag: 'Too little stimulus / too much freshness' },
@@ -234,13 +235,13 @@ CTL_0 = ATL_0 = mean(load first 14 days)`,
   {
     id: 'monotony_strain',
     title: 'Foster Monotony & Strain',
-    summary: 'Weekly load consistency and accumulated strain. Catches repeated moderate loading that ACWR can miss.',
+    summary: 'Weekly load consistency and accumulated strain on normalized load, restricted to the selected window. Weeks with fewer than 7 observed days are flagged partial, and high monotony needs at least 3 training days. Catches repeated moderate loading that ACWR can miss.',
     formula: `Monotony = mean(daily_load) / max(SD(daily_load), 0.10*mean(daily_load), load_floor)
 Monotony_display = min(Monotony, 7.0)
 Strain = weekly_load * Monotony_display
 StrainIndex = Strain / rolling_4wk_median(Strain)`,
     variables: [
-      { name: 'daily_load_week', description: 'Composite daily loads inside one training week' },
+      { name: 'daily_load_week', description: 'Normalized daily loads (1.0 = typical day) inside one calendar week' },
       { name: 'weekly_load', description: 'Sum of daily loads for the week' },
       { name: 'Monotony_week', description: 'Load consistency ratio for the week' },
       { name: 'Strain_week', description: 'Weekly load multiplied by monotony' },
@@ -307,8 +308,8 @@ Light: RI < 0.70`,
     id: 'specificity_ratio',
     title: 'Specificity Ratio',
     summary: 'Measures direct and broad powerlifting specificity against the selected target competition timeline. Only executed sets are counted toward the ratio.',
-    formula: `SR_narrow = SBD sets / total sets
-SR_broad = (SBD + secondary category) / total sets
+    formula: `SR_narrow = sets with lift_transfer >= 0.9 / total sets
+SR_broad = (narrow sets + sum(sets * lift_transfer) of the rest) / total sets
 Expected band selected by weeks_to_comp:
   16+ weeks  -> narrow 0.30-0.50, broad 0.60-0.75
   12-16 weeks -> narrow 0.40-0.55, broad 0.65-0.80
@@ -316,8 +317,8 @@ Expected band selected by weeks_to_comp:
   4-8 weeks   -> narrow 0.60-0.75, broad 0.80-0.90
   0-4 weeks   -> narrow 0.70-0.85, broad 0.85-0.95`,
     variables: [
-      { name: 'SBD sets', description: 'Executed sets of squat, bench, or deadlift' },
-      { name: 'secondary', description: 'Same-category exercises actually performed (e.g. close-grip bench)' },
+      { name: 'narrow sets', description: 'Executed sets of squat, bench, deadlift and competition variants (lift_transfer at least 0.9)' },
+      { name: 'lift_transfer', description: 'Glossary estimate of how much an exercise transfers to each lift, 0 to 1; accessories such as lunges, RDLs and close-grip bench count at that weight' },
       { name: 'total sets', description: 'All working sets actually executed across all exercises' },
       { name: 'weeks_to_comp', description: 'Weeks remaining until the next competition, if one exists' },
     ],

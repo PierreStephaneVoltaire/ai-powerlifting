@@ -1,0 +1,338 @@
+{
+  "type": "function",
+  "function": {
+    "name": "report_program_evaluation",
+    "description": "Report a conservative performance evaluation for a powerlifting block",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "stance": {
+          "type": "string",
+          "enum": [
+            "continue",
+            "monitor",
+            "adjust",
+            "critical"
+          ],
+          "description": "Overall recommendation stance"
+        },
+        "summary": {
+          "type": "string",
+          "description": "2-4 sentence overall summary of the block"
+        },
+        "what_is_working": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "what_is_not_working": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "competition_alignment": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "competition": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "primary",
+                  "practice"
+                ]
+              },
+              "weeks_to_comp": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "alignment": {
+                "type": "string",
+                "enum": [
+                  "good",
+                  "mixed",
+                  "poor"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "competition",
+              "role",
+              "alignment",
+              "reason"
+            ]
+          }
+        },
+        "goal_status": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "goal": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "primary",
+                  "secondary",
+                  "optional"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "achieved",
+                  "on_track",
+                  "at_risk",
+                  "off_track",
+                  "unclear"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "goal",
+              "priority",
+              "status",
+              "reason"
+            ]
+          }
+        },
+        "competition_strategy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "competition": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "prioritize",
+                  "supporting",
+                  "practice",
+                  "deprioritize",
+                  "drop"
+                ]
+              },
+              "approach": {
+                "type": "string",
+                "enum": [
+                  "all_out",
+                  "qualify_only",
+                  "minimum_total",
+                  "podium_push",
+                  "train_through",
+                  "conservative_pr",
+                  "drop"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "alternative_strategies": {
+                "type": "array",
+                "description": "Alternative viable approaches for this competition. Present when multiple paths to the athlete's goals exist.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "approach": {
+                      "type": "string",
+                      "enum": [
+                        "all_out",
+                        "qualify_only",
+                        "minimum_total",
+                        "podium_push",
+                        "train_through",
+                        "conservative_pr",
+                        "drop"
+                      ]
+                    },
+                    "target_total_kg": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "target_weight_class_kg": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "approach",
+                    "reason"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "competition",
+              "priority",
+              "approach",
+              "reason"
+            ]
+          }
+        },
+        "weight_class_strategy": {
+          "type": "object",
+          "properties": {
+            "recommendation": {
+              "type": "string"
+            },
+            "recommended_weight_class_kg": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "viable_options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "weight_class_kg": {
+                    "type": "number"
+                  },
+                  "suitability": {
+                    "type": "string",
+                    "enum": [
+                      "best",
+                      "viable",
+                      "risky"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "weight_class_kg",
+                  "suitability",
+                  "reason"
+                ]
+              }
+            }
+          },
+          "required": [
+            "recommendation",
+            "recommended_weight_class_kg",
+            "viable_options"
+          ]
+        },
+        "small_changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "change": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              },
+              "risk": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "moderate",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "change",
+              "why",
+              "risk",
+              "priority"
+            ]
+          }
+        },
+        "external_factors": {
+          "type": "array",
+          "description": "Diet, sleep, bodyweight, supplements, stress, or other external confounders separated from program structure.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "factor": {
+                "type": "string"
+              },
+              "impact": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "moderate",
+                  "high"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "separate_from_program": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "factor",
+              "impact",
+              "reason",
+              "separate_from_program"
+            ]
+          }
+        },
+        "monitoring_focus": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conclusion": {
+          "type": "string",
+          "description": "Short final recommendation"
+        },
+        "insufficient_data": {
+          "type": "boolean"
+        },
+        "insufficient_data_reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "stance",
+        "summary",
+        "what_is_working",
+        "what_is_not_working",
+        "competition_alignment",
+        "goal_status",
+        "competition_strategy",
+        "weight_class_strategy",
+        "small_changes",
+        "external_factors",
+        "monitoring_focus",
+        "conclusion"
+      ]
+    }
+  }
+}

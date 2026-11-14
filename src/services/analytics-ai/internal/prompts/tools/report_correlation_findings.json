@@ -1,0 +1,99 @@
+{
+  "type": "function",
+  "function": {
+    "name": "report_correlation_findings",
+    "description": "Report which exercises, muscles and session sequences help or hurt the three main lifts",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "findings": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "driver_type": {
+                "type": "string",
+                "enum": [
+                  "exercise",
+                  "muscle",
+                  "sequence"
+                ]
+              },
+              "driver": {
+                "type": "string"
+              },
+              "lift": {
+                "type": "string",
+                "enum": [
+                  "squat",
+                  "bench",
+                  "deadlift"
+                ]
+              },
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "helps",
+                  "hurts",
+                  "unclear"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "strong",
+                  "moderate",
+                  "weak"
+                ]
+              },
+              "evidence": {
+                "type": "string",
+                "description": "One sentence with numbers from the payload"
+              },
+              "mechanism": {
+                "type": "string",
+                "description": "At most 2 sentences: muscles, fatigue dimension or transfer, tied to the lift profile"
+              },
+              "action": {
+                "type": "string",
+                "description": "One concrete program change, or 'Keep as is'"
+              },
+              "caveat": {
+                "type": "string",
+                "description": "The confound specific to this finding, or an empty string"
+              }
+            },
+            "required": [
+              "driver_type",
+              "driver",
+              "lift",
+              "effect",
+              "confidence",
+              "evidence",
+              "mechanism",
+              "action",
+              "caveat"
+            ]
+          }
+        },
+        "summary": {
+          "type": "string",
+          "description": "1-2 sentence overall summary of the correlation analysis"
+        },
+        "insufficient_data": {
+          "type": "boolean",
+          "description": "True if data is insufficient for meaningful analysis"
+        },
+        "insufficient_data_reason": {
+          "type": "string",
+          "description": "If insufficient_data is true, explain why"
+        }
+      },
+      "required": [
+        "findings",
+        "summary"
+      ]
+    }
+  }
+}

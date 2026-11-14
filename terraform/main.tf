@@ -2,7 +2,7 @@ module "ecr" {
   source = "./modules/ecr"
 
   repository_prefix                = "if"
-  repository_names                 = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-coach-agent", "powerlifting-coach-discord", "powerlifting-fns"]
+  repository_names                 = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-rankings", "powerlifting-analytics-ai", "powerlifting-analytics-export", "powerlifting-coach-agent", "powerlifting-coach-discord", "powerlifting-fns"]
   untagged_expiry_repository_names = ["powerlifting-fns"]
 }
 
@@ -69,5 +69,7 @@ module "tunnel" {
   zone_plan            = var.cloudflare_zone_plan
   auth_hostname        = var.auth_domain
   auth_origin_url      = var.tunnel_origin_url
+  llm_hostname         = var.llm_domain
+  llm_origin_url       = var.tunnel_origin_url
   token_parameter_name = "/powerlifting/k8s/tunnel-token"
 }

@@ -34,17 +34,23 @@ build {
   sources = ["source.docker.powerlifting_coach_discord"]
 
   provisioner "shell" {
-    inline = ["mkdir -p /opt/powerlifting/services"]
+    inline = ["mkdir -p /opt/powerlifting/services/runtime"]
   }
 
   provisioner "file" {
-    sources     = ["../src/services/__init__.py", "../src/services/mesh.py", "../src/services/coach_discord"]
+    sources     = ["../src/services/__init__.py", "../src/services/coach_discord"]
     destination = "/opt/powerlifting/services/"
+  }
+
+  provisioner "file" {
+    sources     = ["../src/services/runtime/__init__.py", "../src/services/runtime/mesh.py"]
+    destination = "/opt/powerlifting/services/runtime/"
   }
 
   provisioner "shell" {
     inline = [
       "pip install --no-cache-dir -r /opt/powerlifting/services/coach_discord/requirements.txt",
+      "rm -rf /opt/powerlifting/services/coach_discord/tests",
       "find /opt/powerlifting -name __pycache__ -type d -prune -exec rm -rf {} +",
       "useradd -m -u 10001 relay"
     ]
