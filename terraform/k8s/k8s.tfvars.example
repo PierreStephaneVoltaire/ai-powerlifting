@@ -39,6 +39,7 @@ repositories = {
   sessions = ""
   program = ""
   competition = ""
+  profile = ""
   backend   = ""
   frontend  = ""
 }

@@ -21,6 +21,7 @@ variable "repositories" {
     sessions         = string
     program          = string
     competition      = string
+    profile          = string
     backend          = string
     frontend         = string
   })

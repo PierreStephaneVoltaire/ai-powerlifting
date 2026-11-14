@@ -186,6 +186,8 @@ jobs:
             repository: powerlifting-program
           - image: powerlifting-competition
             repository: powerlifting-competition
+          - image: powerlifting-profile
+            repository: powerlifting-profile
     steps:
       - uses: actions/checkout@v4
 

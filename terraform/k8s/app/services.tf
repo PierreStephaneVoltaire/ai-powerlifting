@@ -22,7 +22,6 @@ locals {
     "pl-imports"       = merge(local.small, { domain = "imports" })
     "pl-lift-profiles" = merge(local.small, { domain = "lift-profiles" })
     "pl-performance"   = merge(local.small, { domain = "performance" })
-    "pl-profile"       = merge(local.small, { domain = "profile" })
     "pl-templates"     = merge(local.small, { domain = "templates" })
     "pl-videos"        = merge(local.small, { domain = "videos" })
     "pl-weight-log"    = merge(local.small, { domain = "weight-log" })
@@ -86,19 +85,6 @@ resource "kubernetes_deployment_v1" "service" {
             }
           }
 
-
-          dynamic "env" {
-            for_each = each.key == "pl-profile" ? [1] : []
-            content {
-              name = "DISCORD_BOT_TOKEN"
-              value_from {
-                secret_key_ref {
-                  name = "powerlifting-profile-secrets"
-                  key  = "DISCORD_BOT_TOKEN"
-                }
-              }
-            }
-          }
 
           port {
             container_port = 8000

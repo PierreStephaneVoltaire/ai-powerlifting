@@ -119,3 +119,20 @@ Python templates domain keeps its own code).
   403s, UI: log a session, edit program meta/phases, block notes, diet notes,
   supplements, competitions list, attempt calculator, export program markdown,
   new block / setup.
+
+## pl-profile (Go) - same pattern
+
+- [x] **Profile rewrite, deploy and Python removal.**
+  - `src/services/profile/` (module `powerlifting/profile`), 44 ops from
+    `operations/profile.json` (handler fields removed, embedded copy in
+    `internal/contract/operations.json`); `master_copy_seed_user` returns 501.
+  - Python `services/profile/` and `runtime/{tag_catalog,profile_views,handler_context}.py`
+    deleted (only profile ops used them); `runtime/publication.py` keeps
+    `program_view`, `session_view`, `operation_result`; `runtime/dispatch.py`
+    drops the person/grant/identity branches and tag post-processing;
+    `test_handler_imports` skips `profile`.
+  - Deploy: `docker/powerlifting-profile.pkr.hcl`, ECR `powerlifting-profile`,
+    CI matrix and PR image list, services-image exclusion,
+    `terraform/k8s/app/profile.tf` (1 replica, 256Mi, `GOMEMLIMIT=200MiB`,
+    `DISCORD_BOT_TOKEN` from `powerlifting-profile-secrets`, moved blocks out of
+    `services.tf`), explicit `pl-profile` entry in `mesh.tf`.

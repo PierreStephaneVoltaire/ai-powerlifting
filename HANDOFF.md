@@ -85,3 +85,10 @@ Code is done (see above). Once deployed and the quota resets:
 - Rust only for compute-heavy services; Go for the rest. Never split a service by layer.
 - No git writes, no comments in code, no new low-value tests, never write fixtures to prod.
 - Check live state (kubectl / git) before claiming anything. Clean build artifacts (shared disk).
+
+## pl-profile (Go rewrite of `services.profile`) — 2026-11-14
+
+- Module is at `src/services/profile/` (module path `powerlifting/profile`); the Python package, `runtime/{tag_catalog,profile_views,handler_context}.py` and their tests are deleted. Deploy wiring is in place (packer, ECR `powerlifting-profile`, CI, `terraform/k8s/app/profile.tf`). K8S_TFVARS `repositories` needs a `profile` key before the next apply.
+- `master_copy_seed_user` could not be ported: the Python handler imported `master_copy.MasterCopyService`, which does not exist in the repository. It returns 501 `not_served`. Needs the operator to say where `master_copy` lives, or to drop the op from `profile.json`.
+- `profile.json` holds 44 operations, not 45.
+- Goldens live outside the repo (`scratchpad/goldens/profile/capture.py`, moto-backed); run `PL_GOLDENS_DIR=<dir> go test ./...`.
