@@ -86,7 +86,7 @@ these are definition-level, so they write to the catalog when the athlete's
 exercise is in the catalog, otherwise to the overlay. `glossary_estimate_e1rm`
 is personal only (overlay).
 
-## 3. Service `pl-glossary` in Go (`src/services/glossary-go/`)
+## 3. Service `pl-glossary` in Go (`src/services/glossary/`)
 
 - Same k8s Service name `pl-glossary`, HTTP :8000, `POST /operations/<op>`,
   `POST /mcp`, `/healthz`, `/docs`. Contract `operations/glossary.json` keeps op
@@ -136,11 +136,11 @@ is personal only (overlay).
   gets no terraform apply.
 - Build the Go lambda before the AWS terraform plan.
 - New image `powerlifting-glossary` (Packer, like `powerlifting-analytics-export.pkr.hcl`),
-  ECR repo, matrix + rollout list; the services image excludes `glossary-go`.
+  ECR repo, matrix + rollout list; the services image excludes `glossary`.
 
 ## Phases
 
-- [ ] **A1. glossary-go service** (own dir only).
+- [ ] **A1. glossary service** (own dir only).
 - [ ] **A2. AWS: table + GSI + stream + Go lambda + IAM** (root `terraform/` +
   `src/lambda/glossary-catalog/`).
 - [ ] **A3. Verify Codex → LiteLLM → OpenRouter non-GPT** (scratchpad only, report).

@@ -55,6 +55,11 @@ resource "kubernetes_deployment_v1" "glossary" {
           }
 
           env {
+            name  = "PROMPT_CACHE_URL"
+            value = local.service_env.PROMPT_CACHE_URL
+          }
+
+          env {
             name  = "IF_API_URL"
             value = local.service_env.IF_API_URL
           }

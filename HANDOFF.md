@@ -89,6 +89,7 @@ Code is done (see above). Once deployed and the quota resets:
 ## Glossary table (branch `glossary`, 2026-11-14)
 
 - [ ] After the pipeline creates the glossary table: run the one-off migration (kept outside the repo, session scratchpad `migrate_glossary.py`; dry run = 100 catalog items, 92 operator overlays):
-  `python migrate_glossary.py --health-table if-health --glossary-table <glossary_table_name> --pk operator --person sir_simpalot --apply`
+  `python migrate_glossary.py --health-table if-health --glossary-table if-powerlifting-glossary --pk operator --person sir_simpalot --apply`
 - [ ] After the Go `pl-glossary` is deployed and verified: delete the old item `if-health` `pk=operator, sk=glossary#v1`.
-- [ ] Add to GH: `K8S_TFVARS` (`repositories.glossary`, `tables.glossary`, `litellm_models.pl-background = [{provider="openrouter", model="deepseek/deepseek-v4-flash"}]`), `COACH_TFVARS` (`operation_ai.glossary_generic_estimate = {provider="litellm", model="pl-background", effort="minimal"}`), AWS tfvars (`glossary_table_name`, `glossary_catalog_function_name`), repo var `STAGE_DEPLOY_BRANCHES`, environment branch rule `refs/pull/*/merge` on `stage` and `main`.
+- [x] GH config set 2026-11-14: `K8S_TFVARS` (repositories.glossary, tables.glossary, litellm_models.pl-background), `COACH_TFVARS` (operation_ai.glossary_generic_estimate), repo vars `GLOSSARY_TABLE_NAME`, `GLOSSARY_CATALOG_FUNCTION_NAME`.
+- [ ] Operator: set repo var `STAGE_DEPLOY_BRANCHES` (head-branch globs allowed to deploy to stage; empty = none) and environment branch rule `refs/pull/*/merge` on `stage` and `main`.
