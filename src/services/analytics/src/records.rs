@@ -295,8 +295,8 @@ mod tests {
 
     #[test]
     fn status_json_uses_the_documented_casing() {
-        let value = serde_json::to_value(SectionStatus::missing("overview", "v1--"))
-            .expect("serializes");
+        let value =
+            serde_json::to_value(SectionStatus::missing("overview", "v1--")).expect("serializes");
         assert_eq!(
             value,
             serde_json::json!({

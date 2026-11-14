@@ -42,10 +42,7 @@ impl Cache {
         let Some(mut connection) = self.manager.clone() else {
             return;
         };
-        match connection
-            .get::<_, Option<String>>(BUILD_KEY)
-            .await
-        {
+        match connection.get::<_, Option<String>>(BUILD_KEY).await {
             Ok(current) if current.as_deref() == Some(build_id) => return,
             Ok(_) => {}
             Err(error) => {
