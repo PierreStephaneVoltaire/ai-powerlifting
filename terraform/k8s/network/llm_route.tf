@@ -12,6 +12,9 @@ resource "kubectl_manifest" "llm_headers" {
           proxy_set_header X-Internal-Api-Token "";
           proxy_read_timeout 900s;
           proxy_buffering off;
+          proxy_buffer_size 64k;
+          proxy_buffers 8 64k;
+          proxy_busy_buffers_size 128k;
           client_max_body_size 50M;
           add_header X-Content-Type-Options "nosniff" always;
           add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;

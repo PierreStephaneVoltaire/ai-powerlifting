@@ -42,7 +42,7 @@ resource "authentik_application" "litellm" {
 resource "authentik_property_mapping_provider_scope" "litellm_role" {
   name       = "litellm-role"
   scope_name = "litellm"
-  expression = "return {\"litellm_role\": \"proxy_admin\" if request.user.username in ${jsonencode(var.litellm_admins)} else \"internal_user_viewer\"}"
+  expression = "return {\"litellm_role\": \"proxy_admin\" if user.username in ${jsonencode(var.litellm_admins)} else \"internal_user_viewer\"}"
 }
 
 resource "authentik_policy_expression" "litellm_users" {

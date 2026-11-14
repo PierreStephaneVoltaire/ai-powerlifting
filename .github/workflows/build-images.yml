@@ -416,7 +416,7 @@ jobs:
           umask 077
           printf '%s' "$K8S_TFVARS" > "$RUNNER_TEMP/k8s.tfvars"
 
-      - if: ${{ needs.build-coach.result == 'success' }}
+      - if: ${{ needs.build-coach.result == 'success' || needs.changes.outputs.kubernetes == 'true' }}
         env:
           COACH_TFVARS: ${{ secrets.COACH_TFVARS }}
         run: |
@@ -450,7 +450,7 @@ jobs:
 
       - env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          APPLY_COACH: ${{ needs.build-coach.result == 'success' }}
+          APPLY_COACH: ${{ needs.build-coach.result == 'success' || needs.changes.outputs.kubernetes == 'true' }}
         working-directory: terraform/k8s
         run: |
           set -euo pipefail

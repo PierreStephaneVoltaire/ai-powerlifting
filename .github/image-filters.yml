@@ -6,8 +6,6 @@ backend:
   - 'src/**/package*.json'
   - 'src/**/tsconfig*.json'
   - 'scripts/image_tag.py'
-  - '.github/workflows/**'
-  - '.github/image-filters.yml'
 frontend:
   - 'src/frontend/**'
   - 'src/dependencies/**'
@@ -15,10 +13,7 @@ frontend:
   - 'src/**/package*.json'
   - 'src/**/tsconfig*.json'
   - 'scripts/image_tag.py'
-  - '.github/workflows/**'
-  - '.github/image-filters.yml'
 services:
-  - 'terraform/coach/**'
   - 'src/services/**'
   - 'src/backend/src/**'
   - 'src/dependencies/**'
@@ -26,8 +21,6 @@ services:
   - 'src/**/package*.json'
   - 'src/**/tsconfig*.json'
   - 'scripts/image_tag.py'
-  - '.github/workflows/**'
-  - '.github/image-filters.yml'
 kubernetes:
   - 'terraform/k8s/**'
   - 'terraform/coach/**'
