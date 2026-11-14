@@ -47,7 +47,7 @@ variable "litellm_image" {
 }
 
 data "aws_ssm_parameter" "litellm" {
-  for_each        = toset(["master_key", "ui_username", "ui_password", "sso_client_id", "sso_client_secret", "db_password"])
+  for_each        = toset(["master_key", "sso_client_id", "sso_client_secret", "db_password"])
   name            = "/powerlifting/litellm/${each.key}"
   with_decryption = true
 }
@@ -89,7 +89,11 @@ locals {
           deployment.weight != null ? { weight = deployment.weight } : {},
         )
       }]])
-      general_settings = { master_key = "os.environ/LITELLM_MASTER_KEY" }
+      general_settings = {
+        master_key                              = "os.environ/LITELLM_MASTER_KEY"
+        disable_env_credential_login            = true
+        disable_password_login_when_sso_enabled = true
+      }
     },
     length(local.litellm_credentials) > 0 ? { credential_list = local.litellm_credentials } : {},
     length(var.litellm_fallbacks) > 0 ? { router_settings = { fallbacks = [for alias, targets in var.litellm_fallbacks : { (alias) = targets }] } } : {},
@@ -105,8 +109,6 @@ resource "kubernetes_secret_v1" "litellm" {
   data = merge(
     {
       LITELLM_MASTER_KEY = data.aws_ssm_parameter.litellm["master_key"].value
-      UI_USERNAME        = data.aws_ssm_parameter.litellm["ui_username"].value
-      UI_PASSWORD        = data.aws_ssm_parameter.litellm["ui_password"].value
 
       GENERIC_CLIENT_ID     = data.aws_ssm_parameter.litellm["sso_client_id"].value
       GENERIC_CLIENT_SECRET = data.aws_ssm_parameter.litellm["sso_client_secret"].value

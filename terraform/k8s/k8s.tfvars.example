@@ -57,8 +57,9 @@ litellm_providers = {
   openrouter = { type = "openrouter" }
 }
 litellm_models = {
-  pl-standard  = [{ provider = "chatgpt", model = "gpt-5.6-sol" }]
-  pl-light     = [{ provider = "chatgpt", model = "gpt-5.6-luna" }]
+  pl-analysis  = [{ provider = "chatgpt", model = "gpt-6-sol" }]
+  pl-standard  = [{ provider = "chatgpt", model = "gpt-5.6-terra" }]
+  pl-light     = [{ provider = "chatgpt", model = "gpt-6-luna" }]
   pl-documents = [{ provider = "chatgpt", model = "gpt-6-astra" }]
 }
 litellm_fallbacks = {}
