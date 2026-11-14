@@ -16,11 +16,14 @@ Goal: register the ChatGPT subscription once in LiteLLM, add OpenRouter and any 
 
 ## Changes
 
-### 1. Secrets Manager: root `terraform/` (AWS stack)
+### 1. SSM Parameter Store: root `terraform/` (AWS stack)
 
-- `aws_secretsmanager_secret` `powerlifting/litellm`, with a version whose JSON holds:
-  - `master_key`: `random_password`, prefixed `sk-`
-  - `provider_keys`: new sensitive var `litellm_provider_keys`, `map(string)` of provider name to API key
+- SecureString parameters, like `/powerlifting/k8s/tunnel-token`:
+  - `/powerlifting/litellm/master_key`: `random_password`, prefixed `sk-`
+  - `/powerlifting/litellm/ui_username`: required var `litellm_ui_username`
+  - `/powerlifting/litellm/ui_password`: `random_password`, 32 characters
+  - `/powerlifting/litellm/provider_keys/<provider>`: one per entry of sensitive var `litellm_provider_keys`
+- The earlier Secrets Manager secret is dropped from state with `removed` blocks (`destroy = false`); the operator deletes it by hand.
 - Never delete existing AWS resources.
 
 ### 2. Tunnel and DNS: root `terraform/modules/tunnel` + `main.tf`
@@ -39,9 +42,15 @@ Goal: register the ChatGPT subscription once in LiteLLM, add OpenRouter and any 
   - `model_list`: one entry per alias deployment, `model_name` is the alias, `litellm_credential_name` is the provider, `model_info.mode: responses`
   - `router_settings.fallbacks` only when fallbacks are set
   - `general_settings.master_key: os.environ/LITELLM_MASTER_KEY`
-- A k8s Secret holds `LITELLM_MASTER_KEY` and one `<PROVIDER>_API_KEY` per `provider_keys` entry.
+- Values are read from SSM. A k8s Secret holds `LITELLM_MASTER_KEY`, `UI_USERNAME`, `UI_PASSWORD` and one `<PROVIDER>_API_KEY` per provider key parameter, so the admin UI uses its own login, not the defaults.
 - Deployment `litellm`: pinned `ghcr.io/berriai/litellm:v1.108.8`, 1 replica (single-writer token), `CHATGPT_TOKEN_DIR=/data/chatgpt` on a 1Gi local-path PVC, port 4000, `/health/liveliness` probes, memory 256Mi request and 1Gi limit, ambient mesh, ServiceAccount `litellm`.
 - Service `litellm` on :4000, port name `http`. No database: master-key auth only.
+
+#### SSO and database
+
+- Admin UI login is Authentik SSO (Discord source). `core/litellm_identity.tf` defines the OAuth2 provider `nolift-litellm`, application `litellm`, and an expression policy that allows only usernames in `litellm_sso_users`. The client id and secret go to SSM `/powerlifting/litellm/sso_client_id` and `/sso_client_secret`.
+- LiteLLM gets `GENERIC_*` env pointing at `https://<auth_domain>/application/o/{authorize,token,userinfo}/`, `PROXY_BASE_URL=https://<llm_domain>`, `GENERIC_USER_ID_ATTRIBUTE=preferred_username`, and default role `proxy_admin`. `UI_USERNAME` and `UI_PASSWORD` stay as break-glass.
+- SSO needs a database: `core/litellm_postgres.tf` adds the CloudNativePG cluster `litellm-postgres` (1 instance, 1Gi). The password is in SSM `/powerlifting/litellm/db_password`. `STORE_MODEL_IN_DB` stays false, so the config file stays the source of truth.
 
 ### 4. Mesh and route
 
@@ -57,7 +66,7 @@ Goal: register the ChatGPT subscription once in LiteLLM, add OpenRouter and any 
 ### 6. Secrets plumbing
 
 - The OpenRouter key comes from the operator's `~/.bashrc` (`OPENROUTER_API_KEY`). It goes into `litellm_provider_keys` (`{"openrouter": "<key>"}`) in the gitignored root tfvars and the `LITELLM_PROVIDER_KEYS` GitHub secret; never print it.
-- Update the tfvars and GitHub secrets the pipeline uses (`K8S_TFVARS`, `LITELLM_PROVIDER_KEYS`, `COACH_TFVARS`) with `gh secret set` from the local files.
+- Update the tfvars and GitHub secrets the pipeline uses (`K8S_TFVARS`, `LITELLM_PROVIDER_KEYS`, the `LITELLM_UI_USERNAME` Actions variable, `COACH_TFVARS`) with `gh secret set` from the local files.
 
 ## Operator step after deploy (one time)
 

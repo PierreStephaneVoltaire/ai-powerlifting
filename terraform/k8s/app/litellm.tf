@@ -33,25 +33,44 @@ variable "litellm_fallbacks" {
   }
 }
 
+variable "llm_domain" {
+  type = string
+}
+
+variable "auth_domain" {
+  type = string
+}
+
 variable "litellm_image" {
   type    = string
   default = "ghcr.io/berriai/litellm:v1.108.8"
 }
 
-data "aws_secretsmanager_secret_version" "litellm" {
-  secret_id = "powerlifting/litellm"
+data "aws_ssm_parameter" "litellm" {
+  for_each        = toset(["master_key", "ui_username", "ui_password", "sso_client_id", "sso_client_secret", "db_password"])
+  name            = "/powerlifting/litellm/${each.key}"
+  with_decryption = true
+}
+
+data "aws_ssm_parameters_by_path" "litellm_provider_keys" {
+  path            = "/powerlifting/litellm/provider_keys"
+  with_decryption = true
 }
 
 locals {
-  litellm_secret = jsondecode(data.aws_secretsmanager_secret_version.litellm.secret_string)
+  litellm_provider_keys = zipmap(
+    [for name in nonsensitive(data.aws_ssm_parameters_by_path.litellm_provider_keys.names) : basename(name)],
+    data.aws_ssm_parameters_by_path.litellm_provider_keys.values,
+  )
 
-  litellm_key_names = nonsensitive(keys(local.litellm_secret.provider_keys))
+  litellm_key_names = keys(local.litellm_provider_keys)
 
   litellm_env_names = { for name in local.litellm_key_names : name => "${upper(replace(name, "-", "_"))}_API_KEY" }
 
   litellm_credentials = [
     for name, provider in var.litellm_providers : {
       credential_name = name
+      credential_info = { custom_llm_provider = provider.type }
       credential_values = merge(
         contains(local.litellm_key_names, name) ? { api_key = "os.environ/${local.litellm_env_names[name]}" } : {},
         provider.base_url != null ? { api_base = provider.base_url } : {},
@@ -84,8 +103,16 @@ resource "kubernetes_secret_v1" "litellm" {
   }
 
   data = merge(
-    { LITELLM_MASTER_KEY = local.litellm_secret.master_key },
-    { for name in local.litellm_key_names : local.litellm_env_names[name] => local.litellm_secret.provider_keys[name] },
+    {
+      LITELLM_MASTER_KEY = data.aws_ssm_parameter.litellm["master_key"].value
+      UI_USERNAME        = data.aws_ssm_parameter.litellm["ui_username"].value
+      UI_PASSWORD        = data.aws_ssm_parameter.litellm["ui_password"].value
+
+      GENERIC_CLIENT_ID     = data.aws_ssm_parameter.litellm["sso_client_id"].value
+      GENERIC_CLIENT_SECRET = data.aws_ssm_parameter.litellm["sso_client_secret"].value
+      DATABASE_URL          = "postgresql://litellm:${data.aws_ssm_parameter.litellm["db_password"].value}@litellm-postgres-rw.${var.namespace}.svc.cluster.local:5432/litellm"
+    },
+    { for name in local.litellm_key_names : local.litellm_env_names[name] => local.litellm_provider_keys[name] },
   )
 }
 
@@ -160,6 +187,46 @@ resource "kubernetes_deployment_v1" "litellm" {
           env {
             name  = "CHATGPT_TOKEN_DIR"
             value = "/data/chatgpt"
+          }
+
+          env {
+            name  = "PROXY_BASE_URL"
+            value = "https://${var.llm_domain}"
+          }
+
+          env {
+            name  = "GENERIC_AUTHORIZATION_ENDPOINT"
+            value = "https://${var.auth_domain}/application/o/authorize/"
+          }
+
+          env {
+            name  = "GENERIC_TOKEN_ENDPOINT"
+            value = "https://${var.auth_domain}/application/o/token/"
+          }
+
+          env {
+            name  = "GENERIC_USERINFO_ENDPOINT"
+            value = "https://${var.auth_domain}/application/o/userinfo/"
+          }
+
+          env {
+            name  = "GENERIC_SCOPE"
+            value = "openid email profile"
+          }
+
+          env {
+            name  = "GENERIC_USER_ID_ATTRIBUTE"
+            value = "preferred_username"
+          }
+
+          env {
+            name  = "GENERIC_ROLE_MAPPINGS_DEFAULT_ROLE"
+            value = "proxy_admin"
+          }
+
+          env {
+            name  = "STORE_MODEL_IN_DB"
+            value = "False"
           }
 
           env_from {

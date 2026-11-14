@@ -8,7 +8,7 @@ locals {
     "pl-analytics-ai"     = ["powerlifting-app-backend", "pl-coach", "pl-analytics"]
     "pl-analytics-export" = ["powerlifting-app-backend", "pl-analytics-ai"]
     "pl-rankings"         = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
-    "litellm"             = ["pl-coach", "edge-powerlifting"]
+    "litellm"             = ["pl-coach"]
   }
 
   mesh_callers = merge(
@@ -39,6 +39,7 @@ locals {
   edge_only_services = {
     "powerlifting-app-frontend" = { selector = { app = "powerlifting-app-frontend" }, port = 3001, caller = "edge-powerlifting" }
     "oauth2-proxy"              = { selector = { app = "oauth2-proxy" }, port = 4180, caller = "edge-powerlifting" }
+    "litellm"                   = { selector = { app = "litellm" }, port = 4000, caller = "edge-powerlifting" }
     "edge-powerlifting"         = { selector = { "gateway.networking.k8s.io/gateway-name" = "edge" }, port = 80, caller = "cloudflared" }
   }
 }

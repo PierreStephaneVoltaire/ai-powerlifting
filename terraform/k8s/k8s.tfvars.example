@@ -62,3 +62,4 @@ litellm_models = {
   pl-documents = [{ provider = "chatgpt", model = "gpt-6-astra" }]
 }
 litellm_fallbacks = {}
+litellm_sso_users            = []
