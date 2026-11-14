@@ -164,16 +164,21 @@ job is done.
 ```mermaid
 sequenceDiagram
   participant UI as Browser
-  participant BE as Express backend
-  participant SVC as Domain service
-  participant C as Coach
-  participant M as Model
-  UI->>BE: request an AI feature
+  participant OP as oauth2-proxy
+  participant BE as powerlifting-app-backend
+  participant SVC as pl-glossary (any domain service)
+  participant C as pl-coach (Codex)
+  participant L as litellm
+  participant P as ChatGPT subscription / OpenRouter
+  UI->>OP: request an AI feature
+  OP->>BE: verified identity
   BE->>SVC: run the operation
   SVC->>C: start a job
   SVC-->>C: needs the model (prompt + JSON shape)
-  C->>M: prompt
-  M-->>C: JSON
+  C->>L: Responses API, model alias (pl-standard)
+  L->>P: routed deployment, fallback alias on failure
+  P-->>L: completion
+  L-->>C: JSON
   C->>C: validate, retry up to 3 times
   C->>SVC: resume with the answer
   SVC-->>C: result
@@ -225,42 +230,119 @@ operation manifest in [`src/services/operations/`](src/services/operations/).
 The diagrams below separate incoming traffic, the service inventory, and the
 supporting infrastructure so each component stays visible.
 
-### Entry points and identity
+### Every service and how they connect
 
 ```mermaid
 flowchart TB
-  UI["Browser<br/>React PWA · Vite + Mantine"]
+  UI["Browser<br/>React PWA"]
   DiscordApp["Discord"]
   CF["Cloudflare<br/>DNS + tunnel"]
+  ChatGPT["ChatGPT subscription"]
+  OpenRouter["OpenRouter"]
 
-  subgraph Cluster["k3s · powerlifting namespace"]
-    Tunnel["cloudflared"]
-    Gateway["NGINX Gateway Fabric"]
-    FE["powerlifting-app-frontend<br/>static PWA"]
-    Proxy["oauth2-proxy<br/>browser login + session"]
-    BE["powerlifting-app-backend<br/>Express API"]
-    Valkey[("pl-valkey<br/>sessions + application cache")]
-    Auth["authentik-server<br/>OIDC identity authority"]
-    AuthWorker["authentik-worker<br/>background tasks"]
-    Postgres[("CNPG Postgres<br/>Authentik data")]
-    Coach["pl-coach<br/>Codex worker"]
-    Bot["pl-coach-discord<br/>gateway bot"]
+  subgraph Cluster["k3s · powerlifting namespace · Istio ambient mesh"]
+    subgraph Edge["Edge"]
+      Tunnel["cloudflared"]
+      Gateway["edge-powerlifting<br/>NGINX Gateway Fabric"]
+      Waypoint["nolift-waypoint<br/>mTLS + caller allow-lists"]
+    end
+
+    subgraph Identity["Identity"]
+      Proxy["oauth2-proxy<br/>browser session"]
+      Auth["authentik-server<br/>OIDC"]
+      AuthWorker["authentik-worker"]
+      AuthPG[("authentik-postgres<br/>CNPG")]
+    end
+
+    subgraph Portal["Portal"]
+      FE["powerlifting-app-frontend<br/>static PWA"]
+      BE["powerlifting-app-backend<br/>Express API"]
+    end
+
+    subgraph Domains["Domain services · Python"]
+      Program["pl-program"]
+      Sessions["pl-sessions"]
+      Templates["pl-templates"]
+      Glossary["pl-glossary"]
+      LiftProfiles["pl-lift-profiles"]
+      Competition["pl-competition"]
+      Federation["pl-federation"]
+      Goals["pl-goals"]
+      Budget["pl-budget"]
+      WeightLog["pl-weight-log"]
+      Performance["pl-performance"]
+      Calculations["pl-calculations"]
+      Profile["pl-profile<br/>identity + access_context"]
+      Videos["pl-videos"]
+      Imports["pl-imports"]
+      Export["pl-export"]
+    end
+
+    subgraph Analysis["Analysis"]
+      Analytics["pl-analytics<br/>Rust"]
+      AnalyticsAI["pl-analytics-ai<br/>Go"]
+      AnalyticsExport["pl-analytics-export<br/>Go"]
+      Rankings["pl-rankings<br/>Rust"]
+    end
+
+    subgraph AI["AI runtime"]
+      Coach["pl-coach<br/>Codex worker"]
+      Bot["pl-coach-discord<br/>gateway bot"]
+      CacheMCP["pl-prompt-cache-mcp"]
+      Qdrant[("pl-prompt-cache<br/>Qdrant")]
+    end
+
+    subgraph LLM["LiteLLM layer · llm.nolift.training"]
+      LiteLLM["litellm<br/>providers + model aliases + fallbacks"]
+      LLMPG[("litellm-postgres<br/>CNPG · UI users")]
+    end
+
+    Valkey[("pl-valkey<br/>sessions + caches")]
   end
 
   UI --> CF --> Tunnel --> Gateway
   Gateway -->|"/"| FE
-  Gateway -->|"/api and /oauth2"| Proxy
-  Gateway -->|"auth hostname"| Auth
-  Proxy -->|"authenticated API requests"| BE
+  Gateway -->|"/api, /oauth2"| Proxy
+  Gateway -->|"auth host"| Auth
+  Gateway -->|"llm host"| LiteLLM
+
+  Proxy -->|"authenticated API"| BE
   Proxy <-->|"OIDC"| Auth
-  Auth <-->|"Discord identity source"| DiscordApp
-  Auth --> Postgres
-  AuthWorker --> Postgres
-  Proxy -->|"login sessions"| Valkey
-  BE -->|"application cache"| Valkey
-  BE -->|"AI jobs and polling"| Coach
+  Proxy -->|"sessions"| Valkey
+  Auth <-->|"identity source"| DiscordApp
+  Auth & AuthWorker --> AuthPG
+
+  BE -->|"HTTP operations"| Domains
+  BE --> Analytics & AnalyticsAI & AnalyticsExport & Rankings
+  BE -->|"AI jobs + polling"| Coach
+  BE -->|"cache"| Valkey
+
+  Domains -->|"access_context"| Profile
+  Program & Competition & Templates & Export & Profile -->|"analysis reads"| Analytics
+  Domains -->|"AI operations"| Coach
+  Domains -->|"cache"| Valkey
+
+  Analytics -->|"domain reads"| Domains
+  Analytics -->|"gRPC Reports"| AnalyticsAI
+  AnalyticsAI -->|"gRPC AnalyticsData"| Analytics
+  AnalyticsAI -->|"gRPC Exports"| AnalyticsExport
+  AnalyticsExport -->|"gRPC AnalyticsData"| Analytics
+  Analytics --> Rankings
+  AnalyticsAI -->|"AI jobs"| Coach
+  Analytics & AnalyticsAI & Rankings -->|"cache"| Valkey
+
   DiscordApp <-->|"websocket"| Bot
   Bot -->|"chat"| Coach
+  Coach -->|"MCP tools"| Domains
+  Coach --> Analytics & AnalyticsAI & Rankings
+  Coach -->|"exact reply cache"| Valkey
+  Coach -->|"semantic lookup"| CacheMCP --> Qdrant
+  Coach -->|"Responses API · aliases pl-standard, pl-light, pl-documents"| LiteLLM
+
+  LiteLLM -->|"chatgpt/ deployments"| ChatGPT
+  LiteLLM -->|"openrouter/ deployments"| OpenRouter
+  LiteLLM -->|"admin UI SSO"| Auth
+  LiteLLM --> LLMPG
 ```
 
 Authentik is the only login authority; Discord is its identity source.
@@ -333,18 +415,38 @@ records; it is not a central authorization hop for every operation.
 
 ### Analytics, AI and caches
 
+All model traffic goes through the **LiteLLM layer** at `llm.nolift.training`.
+LiteLLM holds the provider credentials (from SSM Parameter Store) and the
+ChatGPT subscription login, once. Apps only name **model aliases**
+(`pl-standard`, `pl-light`, `pl-documents`); each alias groups one or more
+provider deployments and can fall back to another alias. The admin UI signs in
+through Authentik, limited to the users in `litellm_admins`.
+
 ```mermaid
 flowchart LR
   Analytics["pl-analytics"]
   AI["pl-analytics-ai"]
   Export["pl-analytics-export"]
-  Features["AI-enabled operations<br/>templates, glossary, imports,<br/>lift profiles, budget"]
+  Features["AI-enabled domain operations<br/>pl-templates, pl-glossary, pl-imports,<br/>pl-lift-profiles, pl-budget"]
   Coach["pl-coach<br/>Codex runtime"]
-  Model["Configured model provider"]
   Valkey[("pl-valkey<br/>analysis + reply caches")]
   CacheMCP["pl-prompt-cache-mcp<br/>semantic cache tools"]
   Qdrant[("pl-prompt-cache<br/>Qdrant vectors")]
   State[("pl-coach-state PVC<br/>jobs + Codex state")]
+
+  subgraph LLM["LiteLLM layer"]
+    direction TB
+    Aliases["model aliases<br/>pl-standard · pl-light · pl-documents"]
+    Router["router<br/>load balancing + alias fallbacks"]
+    Creds["provider credentials<br/>SSM /powerlifting/litellm/*"]
+    Token[("litellm-chatgpt-token PVC<br/>subscription login")]
+    Aliases --> Router --> Creds
+    Router --> Token
+  end
+
+  ChatGPT["ChatGPT subscription"]
+  OpenRouter["OpenRouter"]
+  Compat["OpenAI-compatible providers"]
 
   Analytics -->|"gRPC: generate reports"| AI
   AI -->|"gRPC: analysis data"| Analytics
@@ -352,7 +454,8 @@ flowchart LR
   Export -->|"gRPC: analysis data"| Analytics
   AI -->|"inference jobs"| Coach
   Features -->|"inference jobs"| Coach
-  Coach <-->|"prompt / JSON"| Model
+  Coach -->|"Responses API"| Aliases
+  Router --> ChatGPT & OpenRouter & Compat
   Analytics --> Valkey
   AI --> Valkey
   Coach -->|"exact reply cache"| Valkey
@@ -370,7 +473,10 @@ and reply lookup through its own MCP service.
 
 ```mermaid
 flowchart LR
-  Services["Domain services<br/>listed individually above"]
+  subgraph Services["Domain + analysis services"]
+    direction TB
+    SvcList["pl-program · pl-sessions · pl-templates · pl-glossary<br/>pl-lift-profiles · pl-competition · pl-federation · pl-goals<br/>pl-budget · pl-weight-log · pl-performance · pl-calculations<br/>pl-profile · pl-videos · pl-imports · pl-export<br/>pl-analytics · pl-analytics-ai · pl-analytics-export"]
+  end
   BE["Express backend"]
   Rankings["pl-rankings"]
   UI["Browser"]
