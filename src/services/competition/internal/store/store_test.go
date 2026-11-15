@@ -226,3 +226,16 @@ func TestMemoryStoreBehavesLikeTheTables(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestGlossaryEntriesQueryGlossaryTable(t *testing.T) {
+	api := &fakeAPI{pages: [][]map[string]types.AttributeValue{{row("EXERCISE#a")}}}
+	d := Dynamo{API: api, Tables: Tables{Glossary: "glossary"}}
+	items, err := d.GlossaryEntries(context.Background(), "CATALOG")
+	if err != nil || len(items) != 1 {
+		t.Fatalf("%v %v", err, items)
+	}
+	query := api.queries[0]
+	if *query.TableName != "glossary" || query.ExpressionAttributeValues[":prefix"].(*types.AttributeValueMemberS).Value != "EXERCISE#" {
+		t.Fatalf("%+v", query)
+	}
+}

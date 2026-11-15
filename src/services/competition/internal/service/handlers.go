@@ -238,11 +238,10 @@ func (s *Service) snapshotProgram(ctx context.Context, athlete, version string, 
 	for index, row := range rows {
 		entryItems[index] = row
 	}
-	glossary, err := s.Programs.Item(ctx, athlete, glossarySK)
+	exercises, err := s.effectiveExercises(ctx, athlete)
 	if err != nil {
 		return projection.Program{}, err
 	}
-	exercises, _ := glossary["exercises"].([]any)
 	meta, _ := item["meta"].(map[string]any)
 	return projection.Program{
 		Glossary:     projection.GlossaryFromItems(exercises),

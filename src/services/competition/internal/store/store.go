@@ -34,6 +34,7 @@ type Programs interface {
 	Item(ctx context.Context, pk, sk string) (Item, error)
 	Versions(ctx context.Context, pk string) ([]Item, error)
 	Sessions(ctx context.Context, pk, programSK string) ([]Item, error)
+	GlossaryEntries(ctx context.Context, pk string) ([]Item, error)
 }
 
 type AnalysisVersions interface {
@@ -45,6 +46,9 @@ const (
 	ProgramSKPrefix   = "program#v"
 	SessionSKPrefix   = "session#"
 	EntrySKPrefix     = "COMP#"
+	GlossarySKPrefix  = "EXERCISE#"
+	GlossaryCatalogPK = "CATALOG"
+	GlossaryAthletePK = "ATHLETE#"
 	EntriesByDate     = "entries-by-date"
 	AnalysisVersionPK = "pl:analysis-version:"
 )

@@ -10,21 +10,23 @@ import (
 )
 
 type Memory struct {
-	mu           sync.Mutex
-	EntryItems   map[[2]string]Item
-	HealthItems  map[[2]string]Item
-	SessionItems map[[2]string]Item
-	Bumps        map[string]int
-	Updates      int
-	FailUpdate   error
+	mu            sync.Mutex
+	EntryItems    map[[2]string]Item
+	HealthItems   map[[2]string]Item
+	SessionItems  map[[2]string]Item
+	GlossaryItems map[[2]string]Item
+	Bumps         map[string]int
+	Updates       int
+	FailUpdate    error
 }
 
 func NewMemory() *Memory {
 	return &Memory{
-		EntryItems:   map[[2]string]Item{},
-		HealthItems:  map[[2]string]Item{},
-		SessionItems: map[[2]string]Item{},
-		Bumps:        map[string]int{},
+		EntryItems:    map[[2]string]Item{},
+		HealthItems:   map[[2]string]Item{},
+		SessionItems:  map[[2]string]Item{},
+		GlossaryItems: map[[2]string]Item{},
+		Bumps:         map[string]int{},
 	}
 }
 
@@ -41,6 +43,8 @@ func (m *Memory) table(name string) map[[2]string]Item {
 		return m.EntryItems
 	case "health":
 		return m.HealthItems
+	case "glossary":
+		return m.GlossaryItems
 	}
 	return m.SessionItems
 }
@@ -135,6 +139,12 @@ func (m *Memory) Item(_ context.Context, pk, sk string) (Item, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return copyOf(m.HealthItems[[2]string{pk, sk}]), nil
+}
+
+func (m *Memory) GlossaryEntries(_ context.Context, pk string) ([]Item, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return pick(m.GlossaryItems, pk, GlossarySKPrefix, all), nil
 }
 
 func (m *Memory) Versions(_ context.Context, pk string) ([]Item, error) {
