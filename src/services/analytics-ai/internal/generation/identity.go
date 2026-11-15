@@ -5,22 +5,11 @@ import (
 	"encoding/hex"
 	"slices"
 	"strings"
-	"sync"
 
-	"powerlifting/analytics-ai/internal/prompts"
 	"powerlifting/analytics-ai/internal/pyjson"
 )
 
 var readableDomains = []string{"profile", "program", "sessions", "competition", "federation", "glossary", "goals", "calculations", "performance", "weight-log", "templates", "lift-profiles", "analytics", "videos"}
-
-var CorrelationPromptHash = sync.OnceValue(func() string {
-	schema, err := pyjson.Encode(prompts.Tool("report_correlation_findings"))
-	if err != nil {
-		panic(err)
-	}
-	sum := sha256.Sum256([]byte(prompts.CorrelationSystem() + "\x00" + string(schema)))
-	return hex.EncodeToString(sum[:])
-})
 
 func Fingerprint(operation string, arguments map[string]any, identity map[string]any) (string, error) {
 	inputs := map[string]any{}

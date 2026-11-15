@@ -9,9 +9,9 @@ import (
 	"maps"
 
 	"powerlifting/analytics-ai/internal/apperr"
-	"powerlifting/analytics-ai/internal/cache"
 	"powerlifting/analytics-ai/internal/coach"
 	"powerlifting/analytics-ai/internal/contract"
+	"powerlifting/analytics-ai/internal/data"
 	"powerlifting/analytics-ai/internal/execution"
 	"powerlifting/analytics-ai/internal/generation"
 	"powerlifting/analytics-ai/internal/reports"
@@ -50,31 +50,43 @@ func (s *Service) inputs(operation string, arguments map[string]any) map[string]
 	return inputs
 }
 
-func (s *Service) identity(ctx context.Context, inputs map[string]any, athlete string, access map[string]any) map[string]any {
+func (s *Service) identity(ctx context.Context, inputs map[string]any, principal data.Principal, access map[string]any) (map[string]any, error) {
 	identity := map[string]any{
 		"access_requirements": generation.ReadRequirements(access),
-		"analysis_version":    cache.AnalysisVersion(ctx, s.KV, athlete),
 	}
-	block, scoped := inputs["block_key"].(string)
-	if !scoped || block == "current" {
-		if _, multi := inputs["block_keys"]; !multi {
-			identity["date"] = s.Now().UTC().Format("2006-01-02")
+	current := inputs["block_key"] == "current" || inputs["block"] == "current"
+	if keys, multi := inputs["block_keys"].([]any); multi {
+		for _, key := range keys {
+			current = current || key == "current"
 		}
+	} else if inputs["block_key"] == nil && inputs["block"] == nil {
+		current = true
 	}
-	return identity
+	if current {
+		blocks, err := s.Source.Blocks(ctx, principal)
+		if err != nil {
+			return nil, err
+		}
+		entry, found := reports.FindBlock(blocks, "current")
+		if !found {
+			return nil, apperr.NotFound("Current block not found")
+		}
+		identity["current_block_start"] = entry.Start
+	}
+	return identity, nil
 }
 
-func (s *Service) report(ctx context.Context, operation string, arguments map[string]any, athlete string, access map[string]any) (report, error) {
+func (s *Service) report(ctx context.Context, operation string, arguments map[string]any, principal data.Principal, access map[string]any) (report, error) {
 	inputs := s.inputs(operation, arguments)
-	identity := s.identity(ctx, inputs, athlete, access)
-	if operation == "correlation_analysis" || operation == "block_correlation_analysis" {
-		identity["prompt_version"] = generation.CorrelationPromptHash()
+	identity, err := s.identity(ctx, inputs, principal, access)
+	if err != nil {
+		return report{}, err
 	}
 	id, err := generation.Fingerprint(operation, inputs, identity)
 	if err != nil {
 		return report{}, apperr.Internal(err.Error())
 	}
-	return report{id: id, identity: identity, store: s.store(athlete)}, nil
+	return report{id: id, identity: identity, store: s.store(principal.Athlete)}, nil
 }
 
 func missing(id, status string) map[string]any {
@@ -92,7 +104,7 @@ func (s *Service) cachedResult(ctx context.Context, r report, record *generation
 func (s *Service) submit(ctx context.Context, call request) (any, error) {
 	name := call.operation.Name
 	athlete, person := call.caller.Athlete, call.caller.Person
-	r, err := s.report(ctx, name, call.arguments, athlete, call.access)
+	r, err := s.report(ctx, name, call.arguments, call.principal(), call.access)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +185,7 @@ func (s *Service) start(ctx context.Context, call request) (Response, error) {
 	}
 	store := s.store(athlete)
 	if generationID == "" {
-		r, err := s.report(ctx, name, call.arguments, athlete, call.access)
+		r, err := s.report(ctx, name, call.arguments, call.principal(), call.access)
 		if err != nil {
 			return Response{}, err
 		}
@@ -266,7 +278,7 @@ func (s *Service) runner(call request, generationID string, attempt int) (execut
 func (s *Service) saved(call request) reports.SavedReport {
 	return func(ctx context.Context, operation, blockKey string) map[string]any {
 		arguments := map[string]any{"pk": call.caller.Athlete, "block_key": blockKey}
-		r, err := s.report(ctx, operation, arguments, call.caller.Athlete, call.access)
+		r, err := s.report(ctx, operation, arguments, call.principal(), call.access)
 		if err != nil {
 			return nil
 		}

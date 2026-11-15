@@ -401,7 +401,7 @@ erDiagram
 | `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
 | `if-powerlifting-analysis-cache` | DynamoDB | Legacy and no longer used. It held AI generation records before they moved to S3 and Valkey. The operator deletes it; nothing may read or write it |
 | `analysis-reports/{athlete}/{generation_id}.json` | S3 (powerlifting bucket) | Finished AI reports (correlation / ROI, program evaluation, block comparison and any other generation), saved after the calculations. Valkey holds the pointer |
-| `pl-valkey` | Valkey | Deterministic analysis sections, block bundles, markdown exports and ranking percentiles, keyed by source fingerprint, no TTL (LRU eviction). Also the report pointer and in-flight reservation (`pl:report:{athlete}:{generation_id}`), the per-Athlete `pl:analysis-version`, the `pl:analysis-build` marker, and prompt cache exact keys and entries (`pl:ai-cache:*`, 30-day TTL) |
+| `pl-valkey` | Valkey | Deterministic analysis sections, block bundles and markdown exports (30-day TTL), ranking percentiles (7-day TTL), and prompt cache keys and entries (`pl:ai-cache:*`, 30-day TTL). AI report pointers (`pl:report:{athlete}:{generation_id}`) have no TTL once complete; in-flight reservations expire after one hour. Also holds the per-Athlete `pl:analysis-version` and `pl:analysis-build` marker |
 | `pl-prompt-cache-api` | Go service | Owns the domain AI prompt cache: exact Valkey lookup, Qdrant candidates through the MCP service, one Decisions API call, store after inference |
 | `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Semantic search index only. Domain AI prompts use one collection per Athlete and operation; Coach chat replies use separate collections named `chat_template_{version}` (`src/services/coach/chat_cache.py`). Each domain AI point carries an entry id and the entry itself lives in Valkey at `pl:ai-cache:entry:{entry_id}`. Losing it costs semantic hits, never answers |
 | `if-powerlifting-user-competitions` | DynamoDB | Independent Athlete-owned Competition Entries and Attempts |
@@ -497,7 +497,7 @@ flowchart TB
   Manifest --> Need{Section cached?}
   Need -- yes --> Read[read from\npl-valkey]
   Need -- no --> Queue[queue analysis_section]
-  Queue --> Write[write pl-valkey, no TTL]
+  Queue --> Write[write pl-valkey, 30-day TTL]
   Read --> FE[frontend renders]
   Write --> FE
   Regen[POST analysis/regenerate\nor Regenerate button] --> Inv[invalidate + requeue\nselected window only]
@@ -508,15 +508,24 @@ flowchart TB
   tooling; the Weekly tab reads sections instead.
 - AI correlation, program-evaluation and block-comparison reports cache
   separately and only regenerate on explicit refresh (never via the main
-  regenerate endpoint). After the calculations, the finished report is saved to
+  regenerate endpoint). Their IDs are stable for the Athlete, report inputs,
+  block and access scope: training-data versions, today's date and prompt
+  revisions never invalidate a finished report. The current block's start date
+  distinguishes it from a later current block. Data changes can make a report
+  stale; the Analysis UI's explicit refresh replaces it. This is separate from
+  input-sensitive prompt caching for glossary and profile AI features.
+  After the calculations, the finished report is saved to
   S3 at `analysis-reports/{athlete}/{generation_id}.json`. Valkey holds a small
   pointer at `pl:report:{athlete}:{generation_id}` and the in-flight
-  reservation (`SET NX` with a TTL). If the pointer is gone, the read goes to
-  S3 at the known key and restores the pointer. DynamoDB is not involved.
+  reservation (`SET NX` with a one-hour TTL). Finished reports and their pointers
+  have no TTL. Explicit regeneration replaces the report at the same S3 key;
+  bucket versioning can retain previous object versions. If the pointer is gone,
+  the read goes to S3 at the known key and restores the pointer. DynamoDB is not
+  involved.
 - Section and block keys contain the per-Athlete analysis version (plus the
   as-of date for current-block windows). Unchanged data is always a hit; an
   analysis-input write bumps the version, so older entries become unreachable
-  and age out under LRU. A code change is different: when the build id changes,
+  and expire after 30 days or are evicted under LRU. When the build id changes,
   analytics sweeps `pl:analysis:*` once on startup.
 - Ranking percentiles key on the OpenPowerlifting file identity (name, size,
   mtime), the comparison year, the Athlete, their numbers and the filter.
@@ -538,9 +547,9 @@ flowchart TB
   bump a per-Athlete version in Valkey from `dispatch`. The bump targets the
   Athlete the call runs under, not the raw `pk` argument, because a
   person-scoped write such as settings would otherwise bump the Person and
-  leave the Athlete's analysis stale. Section, manifest,
-  block, markdown and report-generation lookups key on that version, so a
-  cache hit never reloads the program. Persisted requirements
+  leave the Athlete's analysis stale. Deterministic section, manifest,
+  block and markdown lookups key on that version. Saved AI reports do not:
+  only explicit regeneration replaces them. Persisted requirements
   record the source domains and Competition Entry scope; every reference/job
   read checks them against current permissions. Legacy results without source
   requirements are readable only by the Athlete until regenerated.
@@ -558,8 +567,12 @@ they are written down here.
 - Caches live only in Valkey or S3. Never DynamoDB. DynamoDB holds the data
   the caches are computed from, and a cache table there only adds cost and a
   second source of truth.
-- Caches invalidate outdated entries. They are never versioned by a hand-bumped
-  constant in a key or path, because someone forgets to bump it. Data changes
+- Saved Analysis AI reports persist until explicit regeneration, even when
+  inputs, dates, prompts or builds change. Reads return the saved report and
+  never start inference. A miss means no report exists for that report scope.
+  Glossary and profile AI features retain input-sensitive caching.
+- Deterministic and prompt caches invalidate outdated entries. They are never
+  versioned by a hand-bumped constant in a key or path. Data changes
   invalidate through the Athlete's `pl:analysis-version`, which is bumped on an
   analysis-input write for the Athlete the call runs under. Code changes
   invalidate by build: analytics reads `BUILD_ID` on startup, and when it
@@ -626,8 +639,9 @@ their association and show submission feedback; a pill appears after approval.
 
 Ordinary Program reads fetch current domain state. They do not use the gateway's
 former seven-day GET cache, so native domain mutations appear at the same portal
-URL immediately. Derived report caches retain their source fingerprints, current
-permission checks and write invalidation; offline drafts remain in IndexedDB.
+URL immediately. Deterministic caches retain their source fingerprints and write
+invalidation. Saved Analysis AI reports retain current permission checks and
+change only on explicit regeneration; offline drafts remain in IndexedDB.
 
 ## Video pipeline
 
