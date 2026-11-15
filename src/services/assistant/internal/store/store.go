@@ -89,6 +89,23 @@ func (s *Store) EnsureConversation(ctx context.Context, ref ConversationRef, per
 	return tx.Commit(ctx)
 }
 
+func (s *Store) Participants(ctx context.Context, conversationID string) ([]string, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT person_pk FROM participants WHERE conversation_id=$1 ORDER BY person_pk`, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var people []string
+	for rows.Next() {
+		var person string
+		if err := rows.Scan(&person); err != nil {
+			return nil, err
+		}
+		people = append(people, person)
+	}
+	return people, rows.Err()
+}
+
 func (s *Store) IsParticipant(ctx context.Context, conversationID, person string) (bool, error) {
 	var found bool
 	err := s.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM participants WHERE conversation_id=$1 AND person_pk=$2)`, conversationID, person).Scan(&found)
@@ -187,6 +204,7 @@ type Snippet struct {
 	Kind           string    `json:"kind"`
 	Content        string    `json:"content"`
 	At             time.Time `json:"at"`
+	Permissions    []string  `json:"permissions"`
 }
 
 func (s *Store) Retrieve(ctx context.Context, query RetrievalQuery) ([]Snippet, error) {
@@ -199,7 +217,7 @@ func (s *Store) Retrieve(ctx context.Context, query RetrievalQuery) ([]Snippet, 
 	var snippets []Snippet
 	for rows.Next() {
 		var snippet Snippet
-		if err := rows.Scan(&snippet.TurnID, &snippet.ConversationID, &snippet.Kind, &snippet.Content, &snippet.At); err != nil {
+		if err := rows.Scan(&snippet.TurnID, &snippet.ConversationID, &snippet.Kind, &snippet.Content, &snippet.At, &snippet.Permissions); err != nil {
 			return nil, err
 		}
 		snippets = append(snippets, snippet)

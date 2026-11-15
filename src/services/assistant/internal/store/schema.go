@@ -98,6 +98,18 @@ func schema(dim int) []string {
 			detail JSONB NOT NULL DEFAULT '{}'
 		)`,
 		`CREATE INDEX IF NOT EXISTS audit_conversation_idx ON audit (conversation_id, at)`,
+		`CREATE TABLE IF NOT EXISTS orchestration_events (
+			id BIGSERIAL PRIMARY KEY,
+			at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			kind TEXT NOT NULL,
+			person_pk TEXT NOT NULL DEFAULT '',
+			conversation_id TEXT NOT NULL DEFAULT '',
+			workflow_id TEXT NOT NULL DEFAULT '',
+			model TEXT NOT NULL DEFAULT '',
+			outcome TEXT NOT NULL DEFAULT '',
+			detail JSONB NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE INDEX IF NOT EXISTS orchestration_events_conversation_idx ON orchestration_events (conversation_id, at)`,
 		`CREATE OR REPLACE FUNCTION audit_append_only() RETURNS trigger AS $$
 		BEGIN
 			RAISE EXCEPTION 'audit is append-only';

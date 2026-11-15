@@ -3,11 +3,13 @@ package workflow
 import (
 	"powerlifting/assistant/internal/access"
 	"powerlifting/assistant/internal/llm"
+	"powerlifting/assistant/internal/security"
 )
 
 const (
-	NameConversationTurn = "ConversationTurn"
-	NameSubagentTask     = "SubagentTask"
+	NameConversationTurn   = "ConversationTurn"
+	NameSubagentTask       = "SubagentTask"
+	NameSecurityAssessment = "SecurityAssessment"
 )
 
 type RequestContext struct {
@@ -35,20 +37,25 @@ type TurnOutput struct {
 }
 
 type SubagentInput struct {
-	Kind                string          `json:"kind"`
-	Task                string          `json:"task"`
-	Identity            access.Identity `json:"identity"`
-	ConversationID      string          `json:"conversation_id"`
-	Depth               int             `json:"depth"`
-	Context             RequestContext  `json:"context"`
-	ForceDestructive    bool            `json:"force_destructive"`
-	UnrelatedHistorical bool            `json:"unrelated_historical"`
-	DestructiveIntent   bool            `json:"destructive_intent"`
+	Kind             string               `json:"kind"`
+	Model            string               `json:"model"`
+	Task             string               `json:"task"`
+	Message          string               `json:"message"`
+	Identity         access.Identity      `json:"identity"`
+	ConversationID   string               `json:"conversation_id"`
+	Depth            int                  `json:"depth"`
+	Context          RequestContext       `json:"context"`
+	Signals          []string             `json:"signals"`
+	HistoryGap       bool                 `json:"history_gap"`
+	HistoryReference bool                 `json:"history_reference"`
+	Floor            security.Verdict     `json:"floor"`
+	Assessment       *security.Assessment `json:"assessment,omitempty"`
 }
 
 type SubagentOutput struct {
-	Reply          string   `json:"reply"`
-	UsedOperations []string `json:"used_operations"`
-	Proposals      []string `json:"proposals"`
-	Error          string   `json:"error,omitempty"`
+	Reply          string           `json:"reply"`
+	UsedOperations []string         `json:"used_operations"`
+	Proposals      []string         `json:"proposals"`
+	Floor          security.Verdict `json:"floor"`
+	Error          string           `json:"error,omitempty"`
 }

@@ -51,8 +51,8 @@ func validateTurn(request TurnRequest) error {
 		return errors.New("the last message must be a non-empty user message")
 	}
 	if request.Surface != "" {
-		if _, ok := tools.LookupSurface(request.Surface); !ok {
-			return errors.New("unknown surface")
+		if _, ok := tools.LookupProfile(request.Surface); !ok {
+			return errors.New("unknown surface profile")
 		}
 	}
 	return nil

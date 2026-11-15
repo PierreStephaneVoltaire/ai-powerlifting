@@ -5,18 +5,34 @@ import (
 	"testing"
 )
 
-func TestScopeIntersectsSurfaceWithPermissions(t *testing.T) {
-	surface, _ := LookupSurface(SurfaceSessionDesign)
-	scope := Scope(surface, []string{"sessions:read"})
-	if slices.Contains(scope, "session_patch") || !slices.Contains(scope, "session_get") {
-		t.Fatalf("scope: %v", scope)
+func TestScopeIsDerivedFromPermissionsOverFullCatalog(t *testing.T) {
+	scope := Scope([]string{"sessions:read", "goals:read", "analytics:read"})
+	for _, want := range []string{"session_get", "goals_list", "analytics.lifetime"} {
+		if !slices.Contains(scope, want) {
+			t.Errorf("permitted cross-feature operation %q missing from scope", want)
+		}
 	}
-	if len(Scope(surface, nil)) != 0 {
+	for _, denied := range []string{"session_patch", "goals_replace", "template_get", "weight_log_get"} {
+		if slices.Contains(scope, denied) {
+			t.Errorf("operation %q must be outside scope", denied)
+		}
+	}
+	if len(Scope(nil)) != 0 {
 		t.Fatal("no permissions must give empty scope")
 	}
-	full := Scope(surface, []string{"sessions:read", "sessions:write", "program:read", "performance:read", "glossary:read", "calculations:read"})
-	if !slices.Contains(full, "session_delete") || slices.Contains(full, "template_patch") {
-		t.Fatalf("full scope: %v", full)
+}
+
+func TestScopeIgnoresProfile(t *testing.T) {
+	permissions := []string{"sessions:read", "sessions:write", "templates:read", "templates:write"}
+	scope := Scope(permissions)
+	for _, want := range []string{"session_delete", "template_patch", "template_get"} {
+		if !slices.Contains(scope, want) {
+			t.Errorf("%q missing", want)
+		}
+	}
+	writes := Writes(scope)
+	if !slices.Contains(writes, "template_patch") || slices.Contains(writes, "session_get") {
+		t.Fatalf("writes: %v", writes)
 	}
 }
 
@@ -29,14 +45,20 @@ func TestMutationClassificationFailsClosed(t *testing.T) {
 	}
 }
 
-func TestGeneralHasNoWritesAndDelegation(t *testing.T) {
-	general := General()
-	if len(general.Writes) != 0 || !general.CanDelegate(SurfaceGoals) {
-		t.Fatal("general surface wrong")
+func TestProfilesAreHintsWithDefaultDelegate(t *testing.T) {
+	general, ok := LookupProfile("")
+	if !ok || general.Name != SurfaceGeneral || general.DefaultDelegate == "" {
+		t.Fatalf("general profile: %+v", general)
 	}
-	goals, _ := LookupSurface(SurfaceGoals)
-	if goals.CanDelegate(SurfaceBiometrics) || !goals.CanDelegate(SurfaceResearch) {
-		t.Fatal("delegation rules wrong")
+	goals, ok := LookupProfile(SurfaceGoals)
+	if !ok || goals.Hint == "" || goals.DefaultDelegate != SurfaceGoals {
+		t.Fatalf("goals profile: %+v", goals)
+	}
+	if _, ok := LookupProfile("nope"); ok {
+		t.Fatal("unknown profile must not resolve")
+	}
+	if slices.Contains(SubagentKinds(), SurfaceGeneral) {
+		t.Fatal("general is not a delegate kind")
 	}
 }
 

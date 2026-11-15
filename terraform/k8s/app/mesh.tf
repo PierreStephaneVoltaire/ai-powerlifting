@@ -9,7 +9,7 @@ locals {
     "pl-analytics-ai"     = ["powerlifting-app-backend", "pl-coach", "pl-analytics"]
     "pl-analytics-export" = ["powerlifting-app-backend", "pl-analytics-ai"]
     "pl-rankings"         = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
-    "litellm"             = ["pl-coach", "pl-assistant"]
+    "litellm"             = ["pl-coach", "pl-assistant", "pl-litellm-keys"]
     "pl-assistant"        = ["powerlifting-app-backend", "pl-coach-discord"]
     "pl-prompt-cache-api" = concat(["pl-analytics-ai"], [for name in local.mesh_domains : "pl-${name}"])
   }

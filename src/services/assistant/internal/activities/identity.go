@@ -30,11 +30,7 @@ func (d *Deps) ResolveIdentity(ctx context.Context, in ResolveInput) (ResolveOut
 }
 
 func (d *Deps) MintToken(ctx context.Context, in MintInput) (MintOutput, error) {
-	surface, ok := tools.LookupSurface(in.Surface)
-	if !ok {
-		return MintOutput{}, errors.New("unknown surface")
-	}
-	scope := tools.Scope(surface, in.Identity.Permissions)
+	scope := tools.Scope(in.Identity.Permissions)
 	subject := Subject{Person: in.Identity.Person, Athlete: in.Identity.Athlete, ConversationID: in.ConversationID, WorkflowID: in.WorkflowID, Scope: scope}
 	if len(scope) == 0 {
 		return MintOutput{Subject: subject}, nil
@@ -43,7 +39,7 @@ func (d *Deps) MintToken(ctx context.Context, in MintInput) (MintOutput, error) 
 	if err != nil {
 		return MintOutput{}, err
 	}
-	if err := d.Audit.Tool(ctx, in.Identity.Person, in.Identity.Athlete, in.ConversationID, in.WorkflowID, issued.JTI, "", "token_scope", map[string]any{"surface": in.Surface, "scope": scope}); err != nil {
+	if err := d.Audit.Tool(ctx, in.Identity.Person, in.Identity.Athlete, in.ConversationID, in.WorkflowID, issued.JTI, "", "token_scope", map[string]any{"permissions": in.Identity.Permissions, "scope": scope}); err != nil {
 		return MintOutput{}, err
 	}
 	return MintOutput{Subject: subject, ExpiresAt: issued.ExpiresAt.Truncate(time.Second)}, nil

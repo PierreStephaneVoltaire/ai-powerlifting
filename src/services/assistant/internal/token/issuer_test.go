@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"powerlifting/assistant/internal/tools"
 )
 
 func testKey(t *testing.T) (*ecdsa.PrivateKey, string) {
@@ -85,5 +87,29 @@ func TestMintRejectsIncompleteSubjectAndUniqueJTI(t *testing.T) {
 	second, _ := signer.Mint(subject())
 	if first.JTI == second.JTI {
 		t.Fatal("jti repeated")
+	}
+}
+
+func TestScopeClaimIsPermissionDerivedAcrossCatalog(t *testing.T) {
+	key, pemText := testKey(t)
+	signer, _ := NewSigner(pemText, time.Minute)
+	scope := tools.Scope([]string{"sessions:read", "goals:read", "weight-log:read"})
+	issued, err := signer.Mint(Subject{PersonPK: "p1", AthletePK: "a1", ConversationID: "c", WorkflowID: "wf", Scope: scope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := verify(issued.Token, &key.PublicKey, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"session_get", "goals_list", "weight_log_get"} {
+		if !slices.Contains(claims.Scope, want) {
+			t.Errorf("%q missing from scope claim", want)
+		}
+	}
+	for _, denied := range []string{"session_patch", "template_get", "goals_replace"} {
+		if slices.Contains(claims.Scope, denied) {
+			t.Errorf("%q must not be in the scope claim", denied)
+		}
 	}
 }

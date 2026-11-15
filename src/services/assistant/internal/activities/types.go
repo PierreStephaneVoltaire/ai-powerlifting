@@ -7,6 +7,7 @@ import (
 	"powerlifting/assistant/internal/access"
 	"powerlifting/assistant/internal/agent"
 	"powerlifting/assistant/internal/llm"
+	"powerlifting/assistant/internal/security"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/tools"
 )
@@ -15,7 +16,8 @@ const (
 	NameResolveIdentity = "ResolveIdentity"
 	NameMintToken       = "MintToken"
 	NameGuard           = "Guard"
-	NameDecide          = "Decide"
+	NameSecurityReview  = "SecurityReview"
+	NameRecord          = "RecordOrchestration"
 	NameRetrieve        = "Retrieve"
 	NameListTools       = "ListTools"
 	NameModelCall       = "ModelCall"
@@ -50,7 +52,6 @@ type ResolveOutput struct {
 
 type MintInput struct {
 	Identity       access.Identity `json:"identity"`
-	Surface        string          `json:"surface"`
 	ConversationID string          `json:"conversation_id"`
 	WorkflowID     string          `json:"workflow_id"`
 }
@@ -69,24 +70,16 @@ type GuardOutput struct {
 	Rejected bool   `json:"rejected"`
 	Code     string `json:"code"`
 	Reply    string `json:"reply"`
-}
 
-type DecideInput struct {
-	Message          string `json:"message"`
-	RequestedSurface string `json:"requested_surface"`
-}
-
-type Decision struct {
-	Surface             string `json:"surface"`
-	UnrelatedHistorical bool   `json:"unrelated_historical_change"`
-	DestructiveIntent   bool   `json:"destructive_intent"`
-	Reason              string `json:"reason"`
-	Fallback            bool   `json:"fallback"`
+	Signals          []string `json:"signals"`
+	HistoryReference bool     `json:"history_reference"`
 }
 
 type RetrieveInput struct {
-	Identity access.Identity `json:"identity"`
-	Query    string          `json:"query"`
+	Identity       access.Identity `json:"identity"`
+	Query          string          `json:"query"`
+	ConversationID string          `json:"conversation_id"`
+	WorkflowID     string          `json:"workflow_id"`
 }
 
 type RetrieveOutput struct {
@@ -103,6 +96,7 @@ type ListToolsOutput struct {
 
 type ModelCallInput struct {
 	Model     string        `json:"model"`
+	Meta      llm.Metadata  `json:"meta"`
 	Messages  []llm.Message `json:"messages"`
 	Tools     []llm.ToolDef `json:"tools"`
 	MaxTokens int           `json:"max_tokens"`
@@ -128,6 +122,31 @@ type ProposeInput struct {
 	Subject          Subject               `json:"subject"`
 	Request          agent.ProposalRequest `json:"request"`
 	ForceDestructive bool                  `json:"force_destructive"`
+	Assessment       *security.Assessment  `json:"assessment,omitempty"`
+}
+
+type SecurityReviewInput struct {
+	Person         string   `json:"person"`
+	ConversationID string   `json:"conversation_id"`
+	WorkflowID     string   `json:"workflow_id"`
+	Triggers       []string `json:"triggers"`
+	Signals        []string `json:"signals"`
+	Message        string   `json:"message"`
+	Reason         string   `json:"reason"`
+	Operation      string   `json:"operation"`
+	Summary        string   `json:"summary"`
+	Arguments      string   `json:"arguments"`
+	HistoryGap     bool     `json:"history_gap"`
+}
+
+type RecordInput struct {
+	Kind           string         `json:"kind"`
+	Person         string         `json:"person"`
+	ConversationID string         `json:"conversation_id"`
+	WorkflowID     string         `json:"workflow_id"`
+	Model          string         `json:"model"`
+	Outcome        string         `json:"outcome"`
+	Detail         map[string]any `json:"detail"`
 }
 
 type ProposalView struct {
@@ -154,7 +173,13 @@ type CommitOutput struct {
 	Text    string `json:"text"`
 }
 
+type DeliverOutput struct {
+	Reply    string `json:"reply"`
+	Withheld bool   `json:"withheld"`
+}
+
 type DeliverInput struct {
+	Person         string   `json:"person"`
 	TurnID         string   `json:"turn_id"`
 	ConversationID string   `json:"conversation_id"`
 	Athlete        string   `json:"athlete"`
@@ -163,6 +188,8 @@ type DeliverInput struct {
 	Reply          string   `json:"reply"`
 	Error          string   `json:"error"`
 	UsedOperations []string `json:"used_operations"`
+
+	ExtraPermissions []string `json:"extra_permissions"`
 }
 
 type ApprovalEvent struct {

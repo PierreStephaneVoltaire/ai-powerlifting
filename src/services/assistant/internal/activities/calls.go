@@ -15,7 +15,7 @@ func (d *Deps) ModelCall(ctx context.Context, in ModelCallInput) (llm.ChatRespon
 		return llm.ChatResponse{}, err
 	}
 	defer release()
-	return d.LLM.Chat(ctx, llm.ChatRequest{Model: in.Model, Messages: in.Messages, Tools: in.Tools, MaxTokens: in.MaxTokens})
+	return d.LLM.Chat(ctx, llm.ChatRequest{Model: in.Model, Meta: in.Meta, Messages: in.Messages, Tools: in.Tools, MaxTokens: in.MaxTokens})
 }
 
 func (d *Deps) ListTools(ctx context.Context, in ListToolsInput) (ListToolsOutput, error) {

@@ -1,11 +1,10 @@
-data "aws_ssm_parameter" "job_token" {
-  for_each        = toset(["private_key", "public_key"])
-  name            = "/powerlifting/assistant/job_token_${each.key}"
-  with_decryption = true
+resource "tls_private_key" "job_token" {
+  algorithm   = "ECDSA"
+  ecdsa_curve = "P256"
 }
 
 locals {
-  job_token_public_key = nonsensitive(data.aws_ssm_parameter.job_token["public_key"].value)
+  job_token_public_key = tls_private_key.job_token.public_key_pem
 }
 
 resource "kubernetes_secret_v1" "assistant_job_token" {
@@ -15,6 +14,6 @@ resource "kubernetes_secret_v1" "assistant_job_token" {
   }
 
   data = {
-    PL_JOB_TOKEN_PRIVATE_KEY = data.aws_ssm_parameter.job_token["private_key"].value
+    PL_JOB_TOKEN_PRIVATE_KEY = tls_private_key.job_token.private_key_pem_pkcs8
   }
 }

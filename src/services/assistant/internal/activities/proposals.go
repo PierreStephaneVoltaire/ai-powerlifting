@@ -48,7 +48,11 @@ func (d *Deps) Propose(ctx context.Context, in ProposeInput) (ProposalView, erro
 	} else {
 		before = agent.Truncate(read.Text, 2000)
 	}
-	diff := mustJSON(map[string]any{"operation": request.Operation, "arguments": request.Arguments, "before": before, "target_version": version})
+	diffBody := map[string]any{"operation": request.Operation, "arguments": request.Arguments, "before": before, "target_version": version}
+	if in.Assessment != nil {
+		diffBody["security_assessment"] = in.Assessment
+	}
+	diff := mustJSON(diffBody)
 	proposal := store.Proposal{
 		ID:             in.ID,
 		TurnID:         in.TurnID,

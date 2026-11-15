@@ -225,36 +225,75 @@ Qdrant untouched.
 ## Implementation steps (order)
 
 
-## LiteLLM key mint
-
-Virtual keys are minted at runtime against the LiteLLM database, not in
-Terraform config. Run once per consumer with the master key, then place each
-returned key in tfvars (`litellm_virtual_key_assistant`,
-`litellm_virtual_key_coach`); CI then creates the `litellm-virtual-key-assistant`
-and `litellm-virtual-key-coach` secrets (key `LITELLM_API_KEY`) in the
-`powerlifting` namespace.
-
-```bash
-kubectl -n powerlifting port-forward svc/litellm 4000:4000 &
-MASTER=$(aws ssm get-parameter --name /powerlifting/litellm/master_key --with-decryption --query Parameter.Value --output text)
-
-curl -s localhost:4000/key/generate -H "Authorization: Bearer $MASTER" -H "Content-Type: application/json" \
-  -d '{"key_alias":"assistant","models":["pl-coordinator","pl-responder-fast","pl-embed"],"metadata":{"consumer":"assistant"}}'
-
-curl -s localhost:4000/key/generate -H "Authorization: Bearer $MASTER" -H "Content-Type: application/json" \
-  -d '{"key_alias":"coach","models":["pl-coordinator","pl-responder-fast","pl-embed"],"metadata":{"consumer":"coach"}}'
-```
-
 Domain MCP tool calls carry the signed job token as
 `x-mcp-<alias>-authorization` (aliases use underscores, for example
 `x-mcp-lift_profiles-authorization`).
 
-## Job token key setup
+## Addendum 2026-11-15: direct orchestration
 
-```bash
-openssl ecparam -genkey -name prime256v1 | openssl pkcs8 -topk8 -nocrypt > job_token_private.pem
-openssl ec -in job_token_private.pem -pubout > job_token_public.pem
-aws ssm put-parameter --type SecureString --name /powerlifting/assistant/job_token_private_key --value file://job_token_private.pem
-aws ssm put-parameter --type SecureString --name /powerlifting/assistant/job_token_public_key --value file://job_token_public.pem
-shred -u job_token_private.pem job_token_public.pem
-```
+Supersedes the Luna routing gate, surface allow-lists and per-surface subagent
+toolsets above.
+
+- **No classification gate.** The `Decide` activity is removed. After identity
+  resolution and the deterministic guard (length, rate, injection), the turn goes
+  straight to the orchestrator on the coordinator alias. Retrieval runs once; a
+  failure or empty result is handled as a history gap (below).
+- **Surfaces are context profiles.** `surface` from the frontend selects a prompt
+  hint and a default delegate kind only. It never restricts tools. Discord sends
+  no surface and gets the `general` profile with the full catalog; identity and
+  permissions are resolved per sender on every message.
+- **Permission-driven scope.** The job-token `scope` claim is every catalog
+  operation whose permission the caller holds (`tools.Scope(permissions)`).
+  Writes stay proposal-gated; mutating operations never run directly.
+- **Model selection and review.** The orchestrator picks a `complexity`
+  (low/medium/high) per delegation: fast, coordinator or strong alias
+  (`PL_MODEL_RESPONDER_FAST`, `PL_MODEL_COORDINATOR`, `PL_MODEL_STRONG`).
+  Delegates carry a `delegation_id`; the orchestrator records a verdict with
+  `review_delegation`, and a failed or empty result is auto-reviewed as failed.
+  `delegate_subagent` with `escalate_from` retries one tier up; there is no tier
+  above strong. Provider fallback stays in LiteLLM.
+- **Security subagent.** Child workflow `SecurityAssessment` on
+  `PL_MODEL_SECURITY` (default `pl-light`, falls back to the coordinator alias).
+  Triggers: a high-risk guard signal (other-person reference, approval bypass, or
+  bulk plus destructive language), an orchestrator `flag_suspicious` call, a
+  destructive proposal, or a history-dependent mutation while history is
+  unavailable. The verdict (`allow`, `require_approval`, `block`) can only
+  tighten: it is merged with `Tighten`, floors per trigger cannot be lowered by
+  the model, and it never grants access or widens scope. The assessment is
+  attached to the proposal diff.
+- **Shared-channel visibility gate.** In `Deliver`, for shared (Discord)
+  conversations, the permissions required by the used operations and retrieved
+  snippets are checked against every current participant's live permissions. If
+  anyone lacks one (or cannot be resolved), the reply is replaced by a short
+  notice, the withheld content is not stored or embedded, and the event is
+  audited.
+- **History fallback.** Retrieval failure, or no authorized result for a message
+  that references earlier conversation, continues from the immediate messages,
+  tells the Person history was unavailable, and routes history-dependent
+  mutations through a security assessment before the proposal.
+- **Observability.** LiteLLM requests carry `user`, `metadata` (tags, trace_id,
+  session_id, spend_logs_metadata with user, conversation, workflow and turn ids)
+  and matching `x-litellm-*` headers. Orchestration decisions, escalations,
+  reviews, security assessments, history gaps and visibility withholds are written
+  to the `orchestration_events` table.
+- Unchanged: structured diffs, explicit approval, version re-checks, idempotency.
+
+## Crash-resume verification note (2026-11-15)
+
+Local docker check: a turn killed mid-ModelCall resumed on restart and
+succeeded without resubmission (one activity replay, no duplicate turn); a kill
+during Deliver re-ran only the in-flight embedding. Dapr control plane and
+daprd must be >= 1.18 — 1.16.x/1.17.3 fail `CompleteWorkflowTask` with
+durabletask-go v0.15.1 (chart pin is 1.18.10).
+
+## Operator actions
+
+1. Add the new aliases to `litellm_models` in the `K8S_TFVARS` CI secret, using
+   the values in `terraform/k8s/k8s.tfvars.example`: `pl-coordinator`,
+   `pl-responder-fast`, `pl-embed`, `pl-strong`.
+2. After the pipeline finishes, verify on the cluster:
+   - Repeat the kill test with `kubectl delete pod` mid-turn.
+   - Confirm the Dapr scheduler PVC persists.
+   - Confirm LiteLLM `/mcp/` returns a tools list (a 404 there fails turns).
+   - Note `/v1/jobs/{id}/result` can report succeeded a few seconds before
+     history embeddings finish writing.

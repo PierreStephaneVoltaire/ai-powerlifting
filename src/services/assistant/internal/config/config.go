@@ -34,7 +34,9 @@ type Config struct {
 	ApprovalTimeout  time.Duration
 	RatePerMinute    int
 	CoordinatorModel string
-	LightModel       string
+	StrongModel      string
+	FastModel        string
+	SecurityModel    string
 	EmbedModel       string
 	SubagentModels   map[string]string
 }
@@ -101,7 +103,9 @@ func Load() Config {
 		ApprovalTimeout:  time.Duration(number("APPROVAL_TIMEOUT_HOURS", 24)) * time.Hour,
 		RatePerMinute:    number("TURNS_PER_MINUTE", 12),
 		CoordinatorModel: coordinator,
-		LightModel:       env("PL_MODEL_LIGHT", "pl-light"),
+		FastModel:        fast,
+		StrongModel:      env("PL_MODEL_STRONG", coordinator),
+		SecurityModel:    env("PL_MODEL_SECURITY", "pl-light"),
 		EmbedModel:       env("PL_MODEL_EMBED", "pl-embed"),
 		SubagentModels: map[string]string{
 			"template-phase": env("PL_MODEL_SUBAGENT_TEMPLATE_PHASE", coordinator),

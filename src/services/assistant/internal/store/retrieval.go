@@ -32,7 +32,7 @@ func VectorLiteral(values []float32) string {
 }
 
 func BuildRetrieval(query RetrievalQuery) (string, []any) {
-	sql := `SELECT e.turn_id, e.conversation_id, e.kind, e.content, e.created_at
+	sql := `SELECT e.turn_id, e.conversation_id, e.kind, e.content, e.created_at, e.required_permissions
 FROM embeddings e
 JOIN conversations c ON c.id = e.conversation_id
 WHERE ` + visibleConversation + `

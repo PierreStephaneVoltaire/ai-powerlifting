@@ -43,3 +43,8 @@ func (r *Recorder) Commit(ctx context.Context, proposal store.Proposal, jti, dec
 	detail["target_id"] = proposal.TargetID
 	return r.Record(ctx, store.AuditEntry{Kind: "commit", PersonPK: proposal.RequesterPK, AthletePK: proposal.AthletePK, ConversationID: proposal.ConversationID, WorkflowID: proposal.WorkflowID, JTI: jti, Operation: proposal.Operation, Decision: decision, Detail: detail})
 }
+
+func (r *Recorder) Orchestration(ctx context.Context, event store.OrchestrationEvent) error {
+	r.Log.Info("orchestration", "kind", event.Kind, "conversation_id", event.ConversationID, "workflow_id", event.WorkflowID, "model", event.Model, "outcome", event.Outcome)
+	return r.Store.InsertOrchestrationEvent(ctx, event)
+}

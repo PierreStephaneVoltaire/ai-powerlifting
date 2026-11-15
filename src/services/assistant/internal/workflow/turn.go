@@ -1,21 +1,25 @@
 package workflow
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/dapr/durabletask-go/workflow"
 
 	"powerlifting/assistant/internal/activities"
 	"powerlifting/assistant/internal/llm"
+	"powerlifting/assistant/internal/security"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/tools"
+	"powerlifting/assistant/internal/visibility"
 )
 
 const (
 	statusSucceeded = "succeeded"
 	statusFailed    = "failed"
-	outOfScopeReply = "That is outside what this assistant can do. Ask about your training, sessions, templates, goals, supplements or biometrics."
 	forbiddenReply  = "You no longer have access to this Athlete."
+	blockedReply    = "I can't help with that request."
+	historyNote     = "Note: earlier conversation history was unavailable, so I answered from this conversation only. Restate any details I may have missed."
 )
 
 func turnIDOf(workflowID string) string {
@@ -39,13 +43,18 @@ func (w *Workflows) ConversationTurn(ctx *workflow.WorkflowContext) (any, error)
 	if err := ctx.GetInput(&input); err != nil {
 		return nil, err
 	}
+	var extraPermissions []string
 	finish := func(output TurnOutput, used []string) (any, error) {
 		deliver := activities.DeliverInput{
-			TurnID: input.TurnID, ConversationID: input.ConversationID, Athlete: input.Athlete, Request: lastUserMessage(input.Messages),
-			Status: output.Status, Reply: output.Reply, Error: output.Error, UsedOperations: used,
+			Person: input.Person, TurnID: input.TurnID, ConversationID: input.ConversationID, Athlete: input.Athlete, Request: lastUserMessage(input.Messages),
+			Status: output.Status, Reply: output.Reply, Error: output.Error, UsedOperations: used, ExtraPermissions: extraPermissions,
 		}
-		if _, err := call[struct{}](ctx, activities.NameDeliver, deliver, quickRetry); err != nil {
+		delivered, err := call[activities.DeliverOutput](ctx, activities.NameDeliver, deliver, quickRetry)
+		if err != nil {
 			return nil, err
+		}
+		if output.Status == statusSucceeded {
+			output.Reply = delivered.Reply
 		}
 		return output, nil
 	}
@@ -66,45 +75,55 @@ func (w *Workflows) ConversationTurn(ctx *workflow.WorkflowContext) (any, error)
 	if guard.Rejected {
 		return finish(TurnOutput{Status: statusSucceeded, Reply: guard.Reply}, nil)
 	}
-	decision, err := call[activities.Decision](ctx, activities.NameDecide, activities.DecideInput{Message: message, RequestedSurface: input.Surface}, quickRetry)
-	if err != nil {
-		decision = activities.Decision{Surface: tools.SurfaceGeneral, Fallback: true}
-	}
-	if decision.Surface == "out_of_scope" {
-		return finish(TurnOutput{Status: statusSucceeded, Reply: outOfScopeReply}, nil)
-	}
-	surfaceName := input.Surface
-	if surfaceName == "" {
-		surfaceName = decision.Surface
-	}
-	surface, ok := tools.LookupSurface(surfaceName)
+	profile, ok := tools.LookupProfile(input.Surface)
 	if !ok {
-		surface = tools.General()
+		profile, _ = tools.LookupProfile("")
 	}
-	retrieved, err := call[activities.RetrieveOutput](ctx, activities.NameRetrieve, activities.RetrieveInput{Identity: resolved.Identity, Query: message}, quickRetry)
+	state := newRunState()
+	if security.GuardTriggers(guard.Signals) {
+		assessment := w.assess(ctx, "pre", activities.SecurityReviewInput{
+			Person: input.Person, ConversationID: input.ConversationID, WorkflowID: ctx.ID(),
+			Triggers: security.Triggers(security.TriggerInput{Signals: guard.Signals}), Signals: guard.Signals, Message: message,
+		})
+		state.apply(assessment)
+		if assessment.Verdict == security.Block {
+			return finish(TurnOutput{Status: statusSucceeded, Reply: blockedReply}, nil)
+		}
+	}
+	retrieved, retrieveErr := call[activities.RetrieveOutput](ctx, activities.NameRetrieve, activities.RetrieveInput{
+		Identity: resolved.Identity, Query: message, ConversationID: input.ConversationID, WorkflowID: ctx.ID(),
+	}, quickRetry)
 	var snippets []store.Snippet
-	if err == nil {
+	if retrieveErr == nil {
 		snippets = retrieved.Snippets
 	}
+	historyGap := retrieveErr != nil || (len(snippets) == 0 && guard.HistoryReference)
+	for _, snippet := range snippets {
+		extraPermissions = visibility.Union(extraPermissions, snippet.Permissions)
+	}
+	if historyGap {
+		outcome := "empty"
+		if retrieveErr != nil {
+			outcome = "failed"
+		}
+		w.record(ctx, input.Person, input.ConversationID, "history_unavailable", "", outcome, map[string]any{"history_reference": guard.HistoryReference})
+	}
+	w.record(ctx, input.Person, input.ConversationID, "orchestrate", w.Config.CoordinatorModel, "start", map[string]any{
+		"profile": profile.Name, "signals": guard.Signals, "history_gap": historyGap, "snippets": len(snippets), "security_floor": string(state.Floor),
+	})
 	result, err := w.runAgent(ctx, run{
-		Surface: surface, Model: w.modelFor(surface.Name, true), Identity: resolved.Identity, ConversationID: input.ConversationID, Context: input.Context,
-		Messages: input.Messages, Snippets: snippets,
-		ForceDestructive: decision.DestructiveIntent || decision.UnrelatedHistorical, UnrelatedHistorical: decision.UnrelatedHistorical, DestructiveIntent: decision.DestructiveIntent,
+		Profile: profile, Orchestrator: true, Model: w.Config.CoordinatorModel, Identity: resolved.Identity, ConversationID: input.ConversationID,
+		Context: input.Context, Message: message, Messages: input.Messages, Snippets: snippets,
+		Signals: guard.Signals, HistoryGap: historyGap, HistoryReference: guard.HistoryReference, State: state,
 	})
 	if err != nil {
 		return finish(TurnOutput{Status: statusFailed, Error: "assistant failed: " + err.Error(), Proposals: result.Proposals}, result.Used)
 	}
-	return finish(TurnOutput{Status: statusSucceeded, Reply: result.Reply, Proposals: result.Proposals}, result.Used)
-}
-
-func (w *Workflows) modelFor(surface string, coordinator bool) string {
-	if coordinator {
-		return w.Config.CoordinatorModel
+	reply := result.Reply
+	if historyGap && guard.HistoryReference && !result.Blocked {
+		reply = strings.TrimSpace(reply + "\n\n" + historyNote)
 	}
-	if model := w.Config.SubagentModels[surface]; model != "" {
-		return model
-	}
-	return w.Config.CoordinatorModel
+	return finish(TurnOutput{Status: statusSucceeded, Reply: reply, Proposals: result.Proposals}, result.Used)
 }
 
 func (w *Workflows) SubagentTask(ctx *workflow.WorkflowContext) (any, error) {
@@ -112,17 +131,32 @@ func (w *Workflows) SubagentTask(ctx *workflow.WorkflowContext) (any, error) {
 	if err := ctx.GetInput(&input); err != nil {
 		return nil, err
 	}
-	surface, ok := tools.LookupSurface(input.Kind)
-	if !ok || input.Kind == tools.SurfaceGeneral {
+	profile, ok := tools.LookupProfile(input.Kind)
+	if !ok || !slices.Contains(tools.SubagentKinds(), input.Kind) {
 		return SubagentOutput{Error: "unknown subagent kind"}, nil
 	}
+	state := newRunState()
+	state.Floor = input.Floor
+	state.Assessment = input.Assessment
 	result, err := w.runAgent(ctx, run{
-		Surface: surface, Model: w.modelFor(surface.Name, false), Identity: input.Identity, ConversationID: input.ConversationID, Depth: input.Depth,
-		Context: input.Context, Task: input.Task, Messages: []llm.Message{{Role: "user", Content: input.Task}},
-		ForceDestructive: input.ForceDestructive, UnrelatedHistorical: input.UnrelatedHistorical, DestructiveIntent: input.DestructiveIntent,
+		Profile: profile, Model: input.Model, Identity: input.Identity, ConversationID: input.ConversationID, Depth: input.Depth,
+		Context: input.Context, Task: input.Task, Message: input.Message, Messages: []llm.Message{{Role: "user", Content: input.Task}},
+		Signals: input.Signals, HistoryGap: input.HistoryGap, HistoryReference: input.HistoryReference, State: state,
 	})
 	if err != nil {
-		return SubagentOutput{UsedOperations: result.Used, Proposals: result.Proposals, Error: err.Error()}, nil
+		return SubagentOutput{UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor, Error: err.Error()}, nil
 	}
-	return SubagentOutput{Reply: result.Reply, UsedOperations: result.Used, Proposals: result.Proposals}, nil
+	return SubagentOutput{Reply: result.Reply, UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor}, nil
+}
+
+func (w *Workflows) SecurityAssessment(ctx *workflow.WorkflowContext) (any, error) {
+	var input activities.SecurityReviewInput
+	if err := ctx.GetInput(&input); err != nil {
+		return nil, err
+	}
+	assessment, err := call[security.Assessment](ctx, activities.NameSecurityReview, input, quickRetry)
+	if err != nil {
+		return security.Fallback(input.Triggers, "assessment failed"), nil
+	}
+	return assessment, nil
 }

@@ -2,7 +2,7 @@ resource "helm_release" "dapr" {
   name       = "dapr"
   repository = "https://dapr.github.io/helm-charts/"
   chart      = "dapr"
-  version    = "1.16.21"
+  version    = "1.18.10"
   namespace  = kubernetes_namespace_v1.dapr_system.metadata[0].name
   timeout    = 600
 

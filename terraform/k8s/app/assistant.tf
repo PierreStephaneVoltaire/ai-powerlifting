@@ -1,10 +1,11 @@
 locals {
-  assistant_mcp_aliases = join(",", sort(keys(var.litellm_mcp_servers)))
+  assistant_mcp_aliases = join(",", sort(keys(local.litellm_mcp_registry)))
   assistant_models = {
     PL_MODEL_COORDINATOR    = "pl-coordinator"
     PL_MODEL_RESPONDER_FAST = "pl-responder-fast"
-    PL_MODEL_LIGHT          = "pl-light"
+    PL_MODEL_SECURITY       = "pl-light"
     PL_MODEL_EMBED          = "pl-embed"
+    PL_MODEL_STRONG         = "pl-strong"
   }
   assistant_postgres_keys = {
     PGHOST     = "host"

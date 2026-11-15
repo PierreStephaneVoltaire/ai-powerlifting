@@ -5,8 +5,10 @@
 Conversational and agentic AI moves from `pl-coach` to a new Go service,
 `src/services/assistant` (`pl-assistant`), built on Dapr Workflow via
 `durabletask-go`. Every turn is a workflow; every LLM call, tool call,
-proposal, and delegation is a checkpointed activity. Nested subagents are
-child workflows with restricted toolsets and their own model aliases.
+proposal, and delegation is a checkpointed activity. Turns go directly to an
+orchestrator that delegates to responder subagents (child workflows) on model
+aliases chosen by task complexity and escalates when review fails. Tool scope
+comes from the caller's live permissions, not from the opened surface.
 
 State lives in a pgvector-enabled CNPG PostgreSQL cluster
 (`assistant-postgres`): the Dapr actor/workflow state store plus the
