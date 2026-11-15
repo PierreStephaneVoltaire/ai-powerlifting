@@ -36,6 +36,7 @@ import { useProgramStore } from '@/store/programStore'
 import { useCompetitionsStore } from '@/store/competitionsStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
+import { useAssistant } from '@/components/assistant/useAssistant'
 
 const WEIGHT_CLASS_PRESETS: ReadonlyArray<{ value: string; label: string }> = [
   { value: '53', label: '53 kg (women)' },
@@ -144,6 +145,7 @@ function findFederationStandardsForClasses(
 
 export default function GoalsPage() {
   const { readOnly, age_class: authAgeClass, ranking_country, ranking_region } = useAuth()
+  const assistant = useAssistant('goals', {}, readOnly)
   const { updateGoals } = useProgramStore()
   const { pushToast } = useUiStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
@@ -254,6 +256,7 @@ export default function GoalsPage() {
 
   return (
     <Stack gap="md">
+      {assistant.drawer}
       <Group justify="space-between">
         <Stack gap={0}>
           <Group gap="xs">
@@ -268,6 +271,7 @@ export default function GoalsPage() {
           </Text>
         </Stack>
         <Group gap="sm">
+          {assistant.button}
           {hasChanges && (
             <Button leftSection={<Save size={16} />} onClick={handleSave} disabled={readOnly}>
               Save

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { Request, Response } from 'express'
 import { callOperation } from '../utils/operations'
-import { coachChat, invokeToolDirect, resetCoachChat, templateConversation } from '../utils/agent'
+import { coachChat, invokeToolDirect, templateConversation } from '../utils/agent'
 import { AppError } from '../middleware/errorHandler'
 import { serviceHeaders } from '../utils/serviceHeaders'
 import { coachUrl } from '../utils/coachUrl'
@@ -295,9 +295,9 @@ function chatMessage(req: Request): string {
 export async function chatTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
   const message = chatMessage(req)
-  const conversation = templateConversation(req.mapped_pk || '', sk)
+  const conversation = templateConversation(req.mapped_pk || '', req.actor_mapped_pk || '', sk)
   try {
-    const reply = await coachChat(conversation, message, { surface: 'template', template_sk: sk })
+    const reply = await coachChat(conversation, message, { surface: 'template-phase', template_sk: sk })
     res.json({ conversation_id: conversation, reply })
   } catch (err: any) {
     throw new AppError(`Template chat failed: ${err.message}`, 502)
@@ -308,7 +308,7 @@ export async function chatTemplates(req: Request, res: Response) {
   const message = chatMessage(req)
   const chatId = req.body?.chat_id === undefined ? randomUUID() : String(req.body.chat_id)
   if (!CHAT_ID.test(chatId)) throw new AppError('chat_id must be 1-64 letters, digits, - or _', 422, 'VALIDATION')
-  const conversation = templateConversation(req.mapped_pk || '', undefined, chatId)
+  const conversation = templateConversation(req.mapped_pk || '', req.actor_mapped_pk || '', undefined, chatId)
   try {
     const reply = await coachChat(conversation, message)
     res.json({ chat_id: chatId, conversation_id: conversation, reply })
@@ -317,12 +317,7 @@ export async function chatTemplates(req: Request, res: Response) {
   }
 }
 
-export async function resetTemplateChat(req: Request, res: Response) {
-  const sk = normalizeTemplateSk(req.params.sk)
-  try {
-    await resetCoachChat(templateConversation(req.mapped_pk || '', sk))
-    res.json({ reset: true })
-  } catch (err: any) {
-    throw new AppError(`Template chat reset failed: ${err.message}`, 502)
-  }
+export async function resetTemplateChat(req: Request, _res: Response) {
+  normalizeTemplateSk(req.params.sk)
+  throw new AppError('Assistant conversations are durable and cannot be reset', 410, 'GONE')
 }

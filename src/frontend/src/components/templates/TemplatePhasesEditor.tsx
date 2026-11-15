@@ -5,11 +5,13 @@ import {
   Modal, TextInput, Textarea, SimpleGrid,
 } from '@mantine/core'
 import type { TemplatePhase } from '@powerlifting/types'
+import { useAssistant } from '../assistant/useAssistant'
 
 interface Props {
   phases: TemplatePhase[]
   onChange: (phases: TemplatePhase[]) => void
   disabled?: boolean
+  templateSk?: string
 }
 
 const EMPTY_FORM: Partial<TemplatePhase> = {
@@ -21,7 +23,8 @@ const EMPTY_FORM: Partial<TemplatePhase> = {
   intent: '',
 }
 
-export function TemplatePhasesEditor({ phases, onChange, disabled }: Props) {
+export function TemplatePhasesEditor({ phases, onChange, disabled, templateSk }: Props) {
+  const assistant = useAssistant('template-phase', { template_sk: templateSk }, disabled)
   const [phaseForm, setPhaseForm] = useState<Partial<TemplatePhase>>(EMPTY_FORM)
   const [editingIndex, setEditingIndex] = useState<number>(-1)
   const [isNew, setIsNew] = useState(false)
@@ -71,7 +74,9 @@ export function TemplatePhasesEditor({ phases, onChange, disabled }: Props) {
 
   return (
     <Stack gap="md">
+      {templateSk && assistant.drawer}
       <Group justify="flex-end">
+        {templateSk && assistant.button}
         <Button size="sm" leftSection={<Plus size={16} />} onClick={() => openPhaseEditor()} disabled={disabled}>
           Add Phase
         </Button>

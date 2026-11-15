@@ -49,7 +49,7 @@ build {
   }
 
   provisioner "file" {
-    sources     = ["../src/services/runtime/__init__.py", "../src/services/runtime/mesh.py", "../src/services/runtime/permissions.json", "../src/services/runtime/llm_log.py", "../src/services/runtime/valkey.py", "../src/services/runtime/exercise_names.py", "../src/services/runtime/template_patch.py"]
+    sources     = ["../src/services/runtime/__init__.py", "../src/services/runtime/mesh.py", "../src/services/runtime/permissions.json", "../src/services/runtime/llm_log.py"]
     destination = "/opt/powerlifting/services/runtime/"
   }
 

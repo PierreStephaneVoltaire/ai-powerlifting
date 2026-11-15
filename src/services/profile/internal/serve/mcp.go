@@ -22,7 +22,12 @@ type rpcRequest struct {
 	Params json.RawMessage `json:"params"`
 }
 
-func registerMCP(api huma.API, svc *service.Service) {
+type mcpCallInput struct {
+	callInput
+	Authorization string `header:"Authorization" required:"false" doc:"Bearer job token issued by the assistant."`
+}
+
+func registerMCP(api huma.API, svc *service.Service, verifier *auth.JobVerifier) {
 	huma.Register(api, huma.Operation{
 		OperationID: "mcp",
 		Method:      http.MethodPost,
@@ -32,7 +37,7 @@ func registerMCP(api huma.API, svc *service.Service) {
 		Responses: map[string]*huma.Response{
 			"200": {Description: "JSON-RPC response.", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{Type: "object"}}}},
 		},
-	}, func(ctx context.Context, input *callInput) (*mcpOutput, error) {
+	}, func(ctx context.Context, input *mcpCallInput) (*mcpOutput, error) {
 		var request rpcRequest
 		if err := json.Unmarshal(input.RawBody, &request); err != nil {
 			return nil, apperr.Body()
@@ -40,7 +45,10 @@ func registerMCP(api huma.API, svc *service.Service) {
 		if len(request.ID) == 0 || string(request.ID) == "null" {
 			return &mcpOutput{Status: http.StatusAccepted, Body: map[string]any{}}, nil
 		}
-		caller := auth.Caller{Person: input.PersonPk, Athlete: input.AthletePk, Source: input.SourcePrincipal}
+		caller, _, err := verifier.Resolve(auth.Presented{Authorization: input.Authorization, Person: input.PersonPk, Athlete: input.AthletePk, Source: input.SourcePrincipal}, request.Method, request.Params)
+		if err != nil {
+			return nil, &apperr.Error{Status: http.StatusUnauthorized, Code: "unauthorized", Message: "Job token rejected"}
+		}
 		result, known := rpcResult(ctx, svc, request, caller)
 		if !known {
 			return &mcpOutput{Status: http.StatusOK, Body: map[string]any{

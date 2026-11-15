@@ -8,6 +8,7 @@ locals {
     PROMPT_CACHE_URL            = "http://pl-prompt-cache-api.${var.namespace}.svc.cluster.local:8000"
     AWS_SHARED_CREDENTIALS_FILE = "/secrets/aws/credentials"
     AWS_CONFIG_FILE             = "/secrets/aws/config"
+    PL_JOB_TOKEN_PUBLIC_KEY     = local.job_token_public_key
   }
 
   small = { limits = { cpu = "500m", memory = "256Mi" }, requests = { cpu = "25m", memory = "64Mi" } }

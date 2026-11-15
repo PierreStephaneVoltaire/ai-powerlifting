@@ -3,6 +3,7 @@ import { Plus, Trash2, Save, Calendar, Droplets, Flame, CheckCircle, XCircle, Mo
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
+import { useAssistant } from '@/components/assistant/useAssistant'
 import {
   Paper, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
   TextInput, Textarea, Select, SegmentedControl, Box,
@@ -13,6 +14,7 @@ import { recordsInBlock } from '@/utils/blockScope'
 
 export default function BiometricsPage() {
   const { readOnly } = useAuth()
+  const assistant = useAssistant('biometrics', {}, readOnly)
   const { program, updateDietNotes } = useProgramStore()
   const { pushToast } = useUiStore()
   const [notes, setNotes] = useState<DietNote[]>([])
@@ -61,12 +63,14 @@ export default function BiometricsPage() {
 
   return (
     <Stack gap="md" className="if-mock-page">
+      {assistant.drawer}
       <Group justify="space-between" className="if-mock-header">
         <Box>
           <h1 className="if-mock-title">Biometrics</h1>
           <div className="if-mock-subtitle">Track daily nutrition, sleep, and recovery metrics.</div>
         </Box>
         <Group gap="xs">
+          {assistant.button}
           {hasChanges && (
             <Button leftSection={<Save size={16} />} onClick={handleSave} disabled={readOnly}>
               Save

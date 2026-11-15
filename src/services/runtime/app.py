@@ -15,6 +15,7 @@ from .authorization import check_context
 from .access import permission_map
 from .access_store import current_context
 from .mesh import caller
+from .job_token import JobTokenRejected, MeshIdentity, resolve_mcp_identity
 from services.runtime.session_store import SessionIdentityConflictError
 from services.runtime.program_store import ProgramNotFoundError
 
@@ -89,11 +90,15 @@ async def operation(name: str, arguments: dict[str, Any], x_athlete_pk: str = He
 
 
 @app.post("/mcp")
-async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
+async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default=""), authorization: str = Header(default="")):
     body = await request.json()
     method, request_id = body.get("method"), body.get("id")
     if request_id is None:
         return JSONResponse({}, status_code=202)
+    try:
+        identity, _ = resolve_mcp_identity(authorization, MeshIdentity(x_person_pk, x_athlete_pk, x_pl_source_principal), method or "", body.get("params") or {})
+    except JobTokenRejected:
+        return JSONResponse({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32001, "message": "Job token rejected"}}, status_code=401)
     result: dict[str, Any]
     if method == "initialize":
         result = {"protocolVersion": "2025-03-26", "capabilities": {"tools": {}}, "serverInfo": {"name": f"powerlifting-{DOMAIN}", "version": "1.0.0"}}
@@ -104,7 +109,7 @@ async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person
     elif method == "tools/call":
         params = body.get("params") or {}
         try:
-            value = jsonable_encoder(await call(params.get("name", ""), params.get("arguments", {}), x_athlete_pk, x_person_pk, source=x_pl_source_principal))
+            value = jsonable_encoder(await call(params.get("name", ""), params.get("arguments", {}), identity.athlete, identity.person, source=identity.source))
             result = {"content": [{"type": "text", "text": json.dumps(value)}], "isError": False}
             if isinstance(value, dict):
                 result["structuredContent"] = value

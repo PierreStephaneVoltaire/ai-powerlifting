@@ -68,6 +68,31 @@ litellm_models = {
   pl-light     = [{ provider = "chatgpt", model = "gpt-6-luna" }]
   pl-documents = [{ provider = "chatgpt", model = "gpt-6-astra" }]
   pl-background = [{ provider = "openrouter", model = "deepseek/deepseek-v4-flash" }]
+  pl-coordinator = [
+    { provider = "openrouter", model = "anthropic/claude-sonnet-5" },
+    { provider = "openrouter", model = "anthropic/claude-sonnet-4.5" },
+  ]
+  pl-responder-fast = [{ provider = "openrouter", model = "deepseek/deepseek-v4-flash" }]
+  pl-embed          = [{ provider = "openrouter", model = "openai/text-embedding-3-small", mode = "embedding" }]
 }
-litellm_fallbacks = {}
+litellm_fallbacks = {
+  pl-coordinator    = ["pl-analysis"]
+  pl-responder-fast = ["pl-light"]
+}
+litellm_mcp_servers = {
+  sessions      = { url = "http://pl-sessions.powerlifting.svc.cluster.local:8000/mcp" }
+  program       = { url = "http://pl-program.powerlifting.svc.cluster.local:8000/mcp" }
+  competition   = { url = "http://pl-competition.powerlifting.svc.cluster.local:8000/mcp" }
+  profile       = { url = "http://pl-profile.powerlifting.svc.cluster.local:8000/mcp" }
+  glossary      = { url = "http://pl-glossary.powerlifting.svc.cluster.local:8000/mcp" }
+  templates     = { url = "http://pl-templates.powerlifting.svc.cluster.local:8000/mcp" }
+  goals         = { url = "http://pl-goals.powerlifting.svc.cluster.local:8000/mcp" }
+  performance   = { url = "http://pl-performance.powerlifting.svc.cluster.local:8000/mcp" }
+  lift_profiles = { url = "http://pl-lift-profiles.powerlifting.svc.cluster.local:8000/mcp" }
+  weight_log    = { url = "http://pl-weight-log.powerlifting.svc.cluster.local:8000/mcp" }
+  federation    = { url = "http://pl-federation.powerlifting.svc.cluster.local:8000/mcp" }
+  calculations  = { url = "http://pl-calculations.powerlifting.svc.cluster.local:8000/mcp" }
+}
+litellm_virtual_key_assistant = ""
+litellm_virtual_key_coach     = ""
 litellm_admins            = []

@@ -84,6 +84,11 @@ resource "kubernetes_deployment_v1" "glossary" {
             value = "/secrets/aws/config"
           }
 
+          env {
+            name  = "PL_JOB_TOKEN_PUBLIC_KEY"
+            value = local.job_token_public_key
+          }
+
           env_from {
             config_map_ref {
               name = "powerlifting-app-config"

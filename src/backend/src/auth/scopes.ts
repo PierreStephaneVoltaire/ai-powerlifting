@@ -6,7 +6,7 @@ const ROUTE_SCOPES: Record<string, Scope> = {
   programs: 'program', sessions: 'sessions', exercises: 'glossary', maxes: 'performance', weight: 'weight-log',
   supplements: 'program', 'diet-notes': 'program', 'block-notes': 'program', competitions: 'competition',
   goals: 'goals', federations: 'federation', budget: 'budget', analytics: 'analytics', videos: 'videos',
-  templates: 'templates', export: 'program', import: 'imports', grants: 'grants', settings: 'settings', onboarding: 'settings', setup: 'settings', stats: 'analytics', jobs: 'settings',
+  templates: 'templates', export: 'program', import: 'imports', grants: 'grants', settings: 'settings', onboarding: 'settings', setup: 'settings', stats: 'analytics', jobs: 'settings', assistant: 'settings',
 }
 
 const READ_ONLY_POSTS = new Set(['/api/analytics/analysis/sections/queue', '/api/analytics/block-comparison', '/api/analytics/block-comparison/ai'])

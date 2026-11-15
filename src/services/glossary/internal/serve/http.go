@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -54,7 +55,12 @@ type executionInput struct {
 
 type mcpInput struct {
 	Headers
-	RawBody []byte `contentType:"application/json"`
+	Authorization string `header:"Authorization" doc:"Bearer job token issued by the assistant."`
+	RawBody       []byte `contentType:"application/json"`
+}
+
+func (i mcpInput) presented() auth.Presented {
+	return auth.Presented{Authorization: i.Authorization, Person: i.Person, Athlete: i.Athlete, Source: i.Source}
 }
 
 type output struct {
@@ -98,6 +104,7 @@ func (a *API) call(ctx context.Context, name string, raw []byte, caller auth.Cal
 
 func New(api *API) http.Handler {
 	router := chi.NewRouter()
+	verifier := auth.NewJobVerifier(os.Getenv("PL_JOB_TOKEN_PUBLIC_KEY"), slog.Default())
 	config := huma.DefaultConfig("Powerlifting "+api.Domain, "1.0.0")
 	config.DocsPath = "/docs"
 	config.DocsRenderer = huma.DocsRendererSwaggerUI
@@ -136,7 +143,7 @@ func New(api *API) http.Handler {
 		OperationID: "mcp", Method: http.MethodPost, Path: "/mcp", Tags: []string{"mcp"}, SkipValidateBody: true,
 		Summary: "MCP JSON-RPC endpoint exposing the non-internal operations as tools",
 	}, func(ctx context.Context, input *mcpInput) (*output, error) {
-		status, body := api.mcp(ctx, input.RawBody, input.caller())
+		status, body := api.mcp(ctx, input.RawBody, input.presented(), verifier)
 		return &output{Status: status, Body: body}, nil
 	})
 

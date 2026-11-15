@@ -36,6 +36,7 @@ import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
 import SessionNotesHelperModal from './SessionNotesHelperModal'
 import AutoRegulationModal from './AutoRegulationModal'
+import AssistantDrawer from '../assistant/AssistantDrawer'
 import RestTimerHeaderButton from './RestTimerHeaderButton'
 import { normalizeExerciseName } from '@/utils/volume'
 import { lastPerformance } from '@/utils/lastPerformance'
@@ -597,6 +598,7 @@ export default function SessionDrawer({
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
   const [showNotesHelper, setShowNotesHelper] = useState(false)
   const [autoRegExerciseIndex, setAutoRegExerciseIndex] = useState<number | null>(null)
+  const [assistantExerciseIndex, setAssistantExerciseIndex] = useState<number | null>(null)
   const [failedReasonTarget, setFailedReasonTarget] = useState<{ exerciseIndex: number; setIndex: number } | null>(null)
   const [failedReasonDraft, setFailedReasonDraft] = useState<FailedSetReason[]>([])
   const [toolkitExercise, setToolkitExercise] = useState<{
@@ -1188,6 +1190,13 @@ export default function SessionDrawer({
           Auto-regulation
         </Menu.Item>
         <Menu.Item
+          leftSection={<Bot size={16} />}
+          onClick={() => setAssistantExerciseIndex(exerciseIndex)}
+          styles={{ item: { minHeight: 44, paddingInline: 12 } }}
+        >
+          Assistant
+        </Menu.Item>
+        <Menu.Item
           leftSection={<Calculator size={16} />}
           onClick={() => openToolkitForExercise(exercise)}
           styles={{ item: { minHeight: 44, paddingInline: 12 } }}
@@ -1225,6 +1234,19 @@ export default function SessionDrawer({
         title="Auto-regulation"
         disabled={readOnly}
         data-testid={`exercise-autoreg-${exerciseIndex}`}
+      >
+        <Bot size={iconSize} />
+      </ActionIcon>
+      <ActionIcon
+        visibleFrom="sm"
+        variant="subtle"
+        color="violet"
+        size="md"
+        style={{ minHeight: 44, minWidth: 44 }}
+        onClick={() => setAssistantExerciseIndex(exerciseIndex)}
+        title="Assistant"
+        disabled={readOnly}
+        data-testid={`exercise-assistant-${exerciseIndex}`}
       >
         <Bot size={iconSize} />
       </ActionIcon>
@@ -1862,6 +1884,14 @@ export default function SessionDrawer({
         sessionIndex={sessionArrayIndex}
         exerciseIndex={autoRegExerciseIndex}
         onApply={applyAutoRegulation}
+      />
+
+      <AssistantDrawer
+        opened={assistantExerciseIndex !== null && localSession !== null}
+        onClose={() => setAssistantExerciseIndex(null)}
+        scope="session-design"
+        context={{ session_date: localSession?.date, session_index: sessionArrayIndex, exercise_index: assistantExerciseIndex ?? undefined }}
+        readOnly={readOnly}
       />
 
       <Modal

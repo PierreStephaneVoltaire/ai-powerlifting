@@ -110,6 +110,7 @@ export default function TemplateEditPage() {
             <Title order={3}>Phases</Title>
             <TemplatePhasesEditor
               phases={template.phases}
+              templateSk={resolvedSk}
               onChange={(phases) => setTemplate(t => t ? { ...t, phases } : t)}
               disabled={readOnly || template.is_owner !== true}
             />

@@ -7,11 +7,13 @@ import {
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
+import { useAssistant } from '@/components/assistant/useAssistant'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 import { currentBlockId, recordBlock } from '@/utils/blockScope'
 
 export default function SupplementsPage() {
   const { readOnly } = useAuth()
+  const assistant = useAssistant('supplements', {}, readOnly)
   const { program, updateSupplementPhases } = useProgramStore()
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
@@ -178,12 +180,14 @@ export default function SupplementsPage() {
 
   return (
     <Stack gap="md" className="if-mock-page">
+      {assistant.drawer}
       <Group justify="space-between" className="if-mock-header">
         <Stack gap={0}>
           <h1 className="if-mock-title">Supplements</h1>
           <div className="if-mock-subtitle">What you are taking this block, with dose and notes.</div>
         </Stack>
         <Group gap="sm">
+          {assistant.button}
           <Select
             value={block}
             onChange={(v) => setBlock(v ?? currentBlockId(program))}

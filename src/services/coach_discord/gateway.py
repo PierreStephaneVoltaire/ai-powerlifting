@@ -1,17 +1,19 @@
 import asyncio
 import hashlib
 import logging
+import re
 
 import discord
 from discord import app_commands
 
-from .coach_client import CoachClient
+from .assistant_client import AssistantClient, proposal_message
 from .store import Registration
 from .users import Identity, UserDirectory
 
 logger = logging.getLogger("coach.discord.gateway")
 MESSAGE_LIMIT = 2000
 NOT_LINKED = "Your Discord account is not linked to a powerlifting Person yet."
+DECISION = re.compile(r"^\s*(approve|reject)\s+`?([A-Za-z0-9_-]+)`?(?:\s+`?(\S+?)`?)?\s*$", re.IGNORECASE)
 
 
 def chunks(text: str) -> list[str]:
@@ -45,39 +47,57 @@ def conversation_for(athlete: str, channel_id: str) -> str:
 
 
 class Relay:
-    def __init__(self, coach: CoachClient, directory: UserDirectory):
-        self.coach = coach
+    def __init__(self, assistant: AssistantClient, directory: UserDirectory):
+        self.assistant = assistant
         self.directory = directory
         self.locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def identity(self, author_id: int | str) -> Identity | None:
         return await asyncio.to_thread(self.directory.resolve, author_id)
 
-    async def answer(self, message, text: str) -> None:
-        identity = await self.identity(message.author.id)
-        if not identity:
-            await message.reply(NOT_LINKED, mention_author=False)
-            return
-        channel_id = str(message.channel.id)
-        async with self.locks.setdefault((identity.person, channel_id), asyncio.Lock()):
-            try:
-                async with message.channel.typing():
-                    reply = await self.coach.ask(identity.person, identity.athlete, conversation_for(identity.athlete, channel_id), text)
-            except Exception as exc:
-                logger.exception("coach request failed")
-                reply = f"The Coach is unavailable right now ({type(exc).__name__})."
-        for index, part in enumerate(chunks(reply)):
+    async def post(self, message, text: str) -> None:
+        for index, part in enumerate(chunks(text)):
             if index == 0:
                 await message.reply(part, mention_author=False)
             else:
                 await message.channel.send(part)
 
-    async def reset(self, author_id: int, channel_id: int) -> str:
-        identity = await self.identity(author_id)
+    async def decide(self, message, identity: Identity, text: str) -> bool:
+        match = DECISION.match(text)
+        if not match:
+            return False
+        action, proposal_id, target = match.groups()
+        approve = action.lower() == "approve"
+        try:
+            outcome = await self.assistant.decide(identity.person, identity.athlete, proposal_id, approve, target if approve else None)
+        except Exception as exc:
+            logger.exception("assistant decision failed")
+            outcome = f"The assistant is unavailable right now ({type(exc).__name__})."
+        if outcome is None:
+            return False
+        await self.post(message, outcome)
+        return True
+
+    async def answer(self, message, text: str) -> None:
+        identity = await self.identity(message.author.id)
         if not identity:
-            return NOT_LINKED
-        await self.coach.reset(identity.person, identity.athlete, conversation_for(identity.athlete, str(channel_id)))
-        return "Started a fresh Coach conversation for this channel."
+            await message.reply(NOT_LINKED, mention_author=False)
+            return
+        if await self.decide(message, identity, text):
+            return
+        channel_id = str(message.channel.id)
+        proposals = []
+        async with self.locks.setdefault((identity.athlete, channel_id), asyncio.Lock()):
+            try:
+                async with message.channel.typing():
+                    answer = await self.assistant.ask(identity.person, identity.athlete, conversation_for(identity.athlete, channel_id), text)
+                reply, proposals = answer.content, answer.proposals
+            except Exception as exc:
+                logger.exception("assistant request failed")
+                reply = f"The assistant is unavailable right now ({type(exc).__name__})."
+        await self.post(message, reply)
+        for proposal in proposals:
+            await message.channel.send(proposal_message(proposal))
 
 
 class Gateway:
@@ -121,13 +141,6 @@ class Gateway:
 
         def watched(channel_id: int) -> bool:
             return str(channel_id) in self.channels.get(key, set())
-
-        @tree.command(name="coach-reset", description="Start a fresh Coach conversation in this channel")
-        async def coach_reset(interaction: discord.Interaction):
-            if not watched(interaction.channel_id):
-                await interaction.response.send_message("This channel is not registered with the Coach.", ephemeral=True)
-                return
-            await interaction.response.send_message(await relay.reset(interaction.user.id, interaction.channel_id), ephemeral=True)
 
         @client.event
         async def on_ready():

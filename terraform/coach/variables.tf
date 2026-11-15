@@ -64,15 +64,6 @@ variable "coach_provider_api_keys" {
   sensitive   = true
 }
 
-variable "conversation_ai" {
-  description = "Provider, model and reasoning effort for conversation turns (Discord chat, session notes, auto-regulation)"
-  type = object({
-    provider = string
-    model    = string
-    effort   = string
-  })
-}
-
 variable "operation_ai" {
   description = "Provider, model and reasoning effort for each AI operation; the Coach refuses to start if an AI operation is missing"
   type = map(object({

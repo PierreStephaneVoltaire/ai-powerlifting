@@ -49,6 +49,11 @@ resource "kubernetes_deployment_v1" "coach_discord" {
           }
 
           env {
+            name  = "ASSISTANT_URL"
+            value = "http://pl-assistant.${var.namespace}.svc.cluster.local:8000"
+          }
+
+          env {
             name  = "DISCORD_OPERATOR_ID"
             value = var.discord_operator_id
           }

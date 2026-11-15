@@ -12,7 +12,6 @@ coach_providers = {
   openrouter = { auth = "api_key", base_url = "", max_concurrent = 0 }
 }
 coach_provider_api_keys = { openrouter = "" }
-conversation_ai = { provider = "", model = "", effort = "" }
 operation_ai = {
   block_correlation_analysis      = { provider = "", model = "", effort = "" }
   block_program_evaluation        = { provider = "", model = "", effort = "" }
@@ -37,7 +36,6 @@ coach_replicas = 1
 # coach_providers = {
 #   litellm = { auth = "api_key", base_url = "http://litellm.powerlifting.svc.cluster.local:4000/v1", max_concurrent = 4 }
 # }
-# conversation_ai = { provider = "litellm", model = "<alias>", effort = "medium" }
 # operation_ai = {
 #   program_evaluation = { provider = "litellm", model = "<alias>", effort = "high" }
 # }
