@@ -20,25 +20,6 @@ on:
       - ".github/image-filters.yml"
       - "!**/*.md"
 
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "src/backend/**"
-      - "src/frontend/**"
-      - "src/dependencies/**"
-      - "src/services/**"
-      - "src/lambda/**"
-      - "docker/**"
-      - "terraform/**"
-      - "src/package.json"
-      - "src/package-lock.json"
-      - "src/tsconfig.json"
-      - "scripts/image_tag.py"
-      - "scripts/migrate_identity_pointers.py"
-      - ".github/workflows/**"
-      - ".github/image-filters.yml"
-      - "!**/*.md"
-
   workflow_dispatch:
     inputs:
       backend_only:
@@ -71,7 +52,7 @@ env:
 
 jobs:
   changes:
-    if: ${{ github.event_name == 'pull_request' || (github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
+    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.deploy.outputs.deploy }}
@@ -86,15 +67,22 @@ jobs:
 
       - id: release
         env:
-          RELEASE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
         run: |
           image_tag="$(python3 scripts/image_tag.py "$RELEASE_BRANCH")"
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
 
       - id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] \
-            || { [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "master" ]; } \
+          open_prs=0
+          if [ "${{ github.event_name }}" = "push" ] && [ "$BRANCH" != "master" ]; then
+            open_prs="$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq length)"
+          fi
+          if [ "$open_prs" -gt 0 ] \
+            || { [ "${{ github.event_name }}" = "push" ] && [ "$BRANCH" = "master" ]; } \
             || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply_terraform }}" = "true" ]; }; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           else
