@@ -1,12 +1,9 @@
 package estimate
 
 import (
-	"context"
+	"errors"
 	"slices"
 	"strings"
-
-	"powerlifting/glossary/internal/execution"
-	"powerlifting/glossary/internal/exercise"
 )
 
 type Muscles struct {
@@ -22,7 +19,8 @@ var aliases = map[string]string{
 }
 
 var allowedMuscles = func() []string {
-	properties := tool("estimate_muscle_groups")["function"].(map[string]any)["parameters"].(map[string]any)["properties"].(map[string]any)
+	results := tool("report_exercise_estimates")["function"].(map[string]any)["parameters"].(map[string]any)["properties"].(map[string]any)["results"].(map[string]any)
+	properties := results["items"].(map[string]any)["properties"].(map[string]any)["muscles"].(map[string]any)["properties"].(map[string]any)
 	enum := properties["primary_muscles"].(map[string]any)["items"].(map[string]any)["enum"].([]any)
 	allowed := make([]string, 0, len(enum))
 	for _, muscle := range enum {
@@ -60,26 +58,18 @@ func bucket(values any, seen map[string]bool, limit int) []string {
 	return out
 }
 
-func EstimateMuscles(ctx context.Context, infer execution.Inferer, item exercise.Item, athlete *Athlete) (Muscles, error) {
-	data := struct {
-		Exercise                   exerciseView
-		AthleteLines, ProfileLines []string
-	}{Exercise: view(item, "Existing ")}
-	if athlete != nil {
-		name := strings.ToLower(strings.TrimSpace(exercise.Text(item, "name")))
-		data.AthleteLines = athlete.metricLines()
-		data.ProfileLines = athlete.relatedProfiles(name, strings.ToLower(exercise.Text(item, "category")))
-	}
-	args, err := ask(ctx, infer, render("muscle_group_system", nil), render("muscle_group_user", data), tool("estimate_muscle_groups"))
-	if err != nil {
-		return Muscles{}, err
-	}
+func parseMuscles(raw any) (Muscles, error) {
+	args, _ := raw.(map[string]any)
 	seen := map[string]bool{}
 	reasoning, _ := args["reasoning"].(string)
-	return Muscles{
+	muscles := Muscles{
 		Primary:   bucket(args["primary_muscles"], seen, 4),
 		Secondary: bucket(args["secondary_muscles"], seen, 5),
 		Tertiary:  bucket(args["tertiary_muscles"], seen, 5),
 		Reasoning: reasoning,
-	}, nil
+	}
+	if len(muscles.Primary) == 0 {
+		return Muscles{}, errors.New("muscles lack a primary group")
+	}
+	return muscles, nil
 }

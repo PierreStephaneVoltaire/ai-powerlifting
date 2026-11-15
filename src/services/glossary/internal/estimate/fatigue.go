@@ -1,10 +1,9 @@
 package estimate
 
 import (
-	"context"
+	"errors"
 	"strings"
 
-	"powerlifting/glossary/internal/execution"
 	"powerlifting/glossary/internal/exercise"
 )
 
@@ -13,24 +12,16 @@ type Fatigue struct {
 	Reasoning string
 }
 
-func EstimateFatigue(ctx context.Context, infer execution.Inferer, item exercise.Item, athlete *Athlete) (Fatigue, error) {
-	data := struct {
-		Exercise                   exerciseView
-		AthleteLines, ProfileLines []string
-	}{Exercise: view(item, "")}
-	if athlete != nil {
-		name := strings.ToLower(strings.TrimSpace(exercise.Text(item, "name")))
-		data.AthleteLines = athlete.metricLines()
-		data.ProfileLines = athlete.matchedProfile(name, strings.ToLower(exercise.Text(item, "category")))
-	}
-	args, err := ask(ctx, infer, render("fatigue_system", nil), render("fatigue_user", data), tool("estimate_fatigue_profile"))
-	if err != nil {
-		return Fatigue{}, err
-	}
-	reasoning, _ := args["reasoning"].(string)
+func parseFatigue(raw any) (Fatigue, error) {
+	args, _ := raw.(map[string]any)
 	profile := exercise.Item{}
 	for _, axis := range []string{"axial", "neural", "peripheral", "systemic"} {
-		profile[axis] = roundedStep(number(args[axis]))
+		value, ok := args[axis].(float64)
+		if !ok {
+			return Fatigue{}, errors.New("fatigue lacks " + axis)
+		}
+		profile[axis] = roundedStep(value)
 	}
+	reasoning, _ := args["reasoning"].(string)
 	return Fatigue{Profile: profile, Reasoning: strings.TrimSpace(reasoning)}, nil
 }

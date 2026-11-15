@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -124,33 +125,46 @@ func (e *Estimator) Tick(ctx context.Context) {
 		slog.Error("generic pending query failed", "error", err)
 		return
 	}
+	var claimed []exercise.Item
 	for _, item := range pending {
 		id := exercise.Text(item, "id")
-		claimed, expired := e.claim(id)
+		fresh, expired := e.claim(id)
 		if expired {
 			e.Fail(ctx, id)
 			continue
 		}
-		if !claimed {
+		if !fresh {
 			continue
 		}
-		athlete := exercise.Text(item, "created_by")
-		person := exercise.Text(item, "created_by_person")
-		if person == "" {
-			person = athlete
+		if exercise.Text(item, "created_by") == "" {
+			e.Fail(ctx, id)
+			continue
 		}
+		claimed = append(claimed, item)
+	}
+	if len(claimed) == 0 {
+		return
+	}
+	ids := make([]any, 0, len(claimed))
+	keys := make([]string, 0, len(claimed))
+	for _, item := range claimed {
 		attempts, _ := item["generic_attempts"].(float64)
-		if athlete == "" {
-			e.Fail(ctx, id)
-			continue
-		}
-		_, err := e.Coach.Submit(ctx, coach.Submission{
-			Operation: Operation, Arguments: map[string]any{"id": id, "pk": athlete},
-			Athlete: athlete, Person: person, Key: fmt.Sprintf("%s:%.0f", id, attempts),
-		})
-		if err != nil {
-			slog.Warn("generic estimate submit failed", "id", id, "error", err)
-			e.Fail(ctx, id)
+		ids = append(ids, exercise.Text(item, "id"))
+		keys = append(keys, fmt.Sprintf("%s:%.0f", exercise.Text(item, "id"), attempts))
+	}
+	athlete := exercise.Text(claimed[0], "created_by")
+	person := exercise.Text(claimed[0], "created_by_person")
+	if person == "" {
+		person = athlete
+	}
+	_, err = e.Coach.Submit(ctx, coach.Submission{
+		Operation: Operation, Arguments: map[string]any{"ids": ids, "pk": athlete},
+		Athlete: athlete, Person: person, Key: strings.Join(keys, ","),
+	})
+	if err != nil {
+		slog.Warn("generic estimate submit failed", "ids", ids, "error", err)
+		for _, id := range ids {
+			e.Fail(ctx, id.(string))
 		}
 	}
 }

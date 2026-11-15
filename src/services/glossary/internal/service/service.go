@@ -76,12 +76,8 @@ func New(s *Service) (*Service, error) {
 		"exercise_set_e1rm":  s.setE1RM,
 	}
 	s.planners = map[string]planner{
-		"glossary_estimate_e1rm":          s.planE1RM,
-		"glossary_estimate_fatigue":       s.planFatigue,
-		"glossary_estimate_lift_transfer": s.planLiftTransfer,
-		"glossary_estimate_muscles":       s.planMuscles,
-		"glossary_generate_text":          s.planText,
-		generic.Operation:                 s.planGeneric,
+		batchOperation:    s.planBatch,
+		generic.Operation: s.planGeneric,
 	}
 	for _, operation := range s.Registry.All() {
 		_, deterministic := s.writes[operation.Name]

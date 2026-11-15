@@ -14,7 +14,7 @@ from services.coach.model import Reply
 
 SERVICES = Path(__file__).resolve().parents[2]
 AI_OPERATIONS = [record["name"] for path in sorted((SERVICES / "operations").glob("*.json")) for record in json.loads(path.read_text()) if record.get("execution") == "ai"]
-OPERATION_AI = {name: {"provider": "openrouter" if name == "glossary_estimate_e1rm" else "chatgpt", "model": "estimate-model" if name == "glossary_estimate_e1rm" else "analysis-model", "effort": "high"} for name in AI_OPERATIONS}
+OPERATION_AI = {name: {"provider": "openrouter" if name == "glossary_estimate_batch" else "chatgpt", "model": "estimate-model" if name == "glossary_estimate_batch" else "analysis-model", "effort": "high"} for name in AI_OPERATIONS}
 OPERATION_AI["chat_guard"] = {"provider": "chatgpt", "model": "guard-model", "effort": "low"}
 GENERAL_ROUTE = json.dumps({"surface": "general", "template_name": None, "intent": "other", "standalone": True, "reason": "training question"})
 
@@ -31,7 +31,7 @@ class FakeServices:
             if request.headers["x-person-pk"] == "outsider":
                 return httpx.Response(403, json={"detail": {"code": "forbidden", "message": "Not permitted"}})
             return httpx.Response(200, json={"permissions": ["program:read", "glossary:write"], "competition_scope": {"read": []}})
-        if request.url.path == "/operations/glossary_estimate_e1rm":
+        if request.url.path == "/operations/glossary_estimate_batch":
             assert request.headers["x-if-turn-id"]
             return httpx.Response(200, json={"status": "needs_inference", "execution_id": "exec-1", "challenge_id": "ch-1", "messages": [{"role": "system", "content": "Estimate."}, {"role": "user", "content": "Squat"}], "tools": [{"type": "function", "function": {"name": "report", "parameters": {"type": "object", "properties": {"e1rm_kg": {"type": "number"}}, "required": ["e1rm_kg"]}}}]})
         if request.url.path == "/executions/exec-1":
@@ -107,7 +107,7 @@ def wait(client, job_id, request_headers):
 
 def test_domain_job_answers_inference_challenges_and_returns_compatible_result(harness):
     client, fake, model = harness
-    submitted = client.post("/v1/jobs", json={"kind": "domain", "payload": {"operation": "glossary_estimate_e1rm", "arguments": {"id": "squat"}, "athlete": "operator"}}, headers=headers())
+    submitted = client.post("/v1/jobs", json={"kind": "domain", "payload": {"operation": "glossary_estimate_batch", "arguments": {"id": "squat"}, "athlete": "operator"}}, headers=headers())
     assert submitted.status_code == 202, submitted.text
     job = wait(client, submitted.json()["job_id"], headers())
     assert job["status"] == "succeeded", job
@@ -118,7 +118,7 @@ def test_domain_job_answers_inference_challenges_and_returns_compatible_result(h
 
 def test_domain_job_rejects_unauthorized_person_and_scope(harness):
     client, _, _ = harness
-    payload = {"kind": "domain", "payload": {"operation": "glossary_estimate_e1rm", "arguments": {"id": "squat"}, "athlete": "operator"}}
+    payload = {"kind": "domain", "payload": {"operation": "glossary_estimate_batch", "arguments": {"id": "squat"}, "athlete": "operator"}}
     assert client.post("/v1/jobs", json=payload, headers=headers(person="outsider")).status_code == 403
     scoped = {"kind": "domain", "payload": {**payload["payload"], "arguments": {"id": "squat", "pk": "someone-else"}}}
     assert client.post("/v1/jobs", json=scoped, headers=headers()).status_code == 403
@@ -153,16 +153,16 @@ def test_tools_refuse_finished_turns(harness):
 def test_coach_refuses_to_start_without_model_settings_for_every_ai_operation(harness, monkeypatch):
     from services.coach.runner import Runner
     settings = load()
-    with pytest.raises(ValueError, match="glossary_estimate_e1rm"):
-        Runner(replace(settings, operation_ai={k: v for k, v in settings.operation_ai.items() if k != "glossary_estimate_e1rm"}), FakeModel(), None, None)
+    with pytest.raises(ValueError, match="glossary_estimate_batch"):
+        Runner(replace(settings, operation_ai={k: v for k, v in settings.operation_ai.items() if k != "glossary_estimate_batch"}), FakeModel(), None, None)
 
 
 def test_coach_refuses_unknown_provider(harness):
     from services.coach.runner import Runner
     settings = load()
-    ai = settings.operation_ai["glossary_estimate_e1rm"]
+    ai = settings.operation_ai["glossary_estimate_batch"]
     with pytest.raises(ValueError, match="anthropic"):
-        Runner(replace(settings, operation_ai={**settings.operation_ai, "glossary_estimate_e1rm": replace(ai, provider="anthropic")}), FakeModel(), None, None)
+        Runner(replace(settings, operation_ai={**settings.operation_ai, "glossary_estimate_batch": replace(ai, provider="anthropic")}), FakeModel(), None, None)
 
 
 def test_api_key_provider_runs_codex_as_the_harness_with_its_own_key(harness, tmp_path):

@@ -128,30 +128,10 @@ exercisesRouter.post('/:id/e1rm', async (req, res, next) => {
   }
 })
 
-// POST /api/exercises/:id/estimate-e1rm - AI estimate e1RM
-exercisesRouter.post('/:id/estimate-e1rm', async (req, res, next) => {
+// POST /api/exercises/estimate - one AI call estimates the requested aspects for every listed exercise
+exercisesRouter.post('/estimate', async (req, res, next) => {
   try {
-    const result = await exerciseController.estimateExerciseE1rm(req.mapped_pk!, req.params.id)
-    res.json({ data: result, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-// POST /api/exercises/:id/estimate-fatigue - AI estimate fatigue profile
-exercisesRouter.post('/:id/estimate-fatigue', async (req, res, next) => {
-  try {
-    const result = await exerciseController.estimateExerciseFatigue(req.mapped_pk!, req.params.id)
-    res.json({ data: result, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-// POST /api/exercises/:id/estimate-muscles - AI estimate muscle groups
-exercisesRouter.post('/:id/estimate-muscles', async (req, res, next) => {
-  try {
-    const result = await exerciseController.estimateExerciseMuscles(req.mapped_pk!, req.params.id)
+    const result = await exerciseController.estimateExercises(req.mapped_pk!, req.body?.ids, req.body?.aspects)
     res.json({ data: result, error: null })
   } catch (err) {
     next(err)

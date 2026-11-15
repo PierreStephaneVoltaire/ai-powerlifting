@@ -7,12 +7,9 @@ func TestEveryOperationLoadsWithDeclaredExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ai := map[string]bool{
-		"glossary_estimate_e1rm": true, "glossary_estimate_fatigue": true, "glossary_estimate_lift_transfer": true,
-		"glossary_estimate_muscles": true, "glossary_generate_text": true, "glossary_generic_estimate": true,
-	}
+	ai := map[string]bool{"glossary_estimate_batch": true, "glossary_generic_estimate": true}
 	operations := registry.All()
-	if len(operations) != 12 {
+	if len(operations) != 8 {
 		t.Fatalf("%d operations", len(operations))
 	}
 	for _, operation := range operations {

@@ -20,15 +20,14 @@ import {
   Divider,
   Tooltip,
   SegmentedControl,
-  Progress,
   NumberInput,
 } from '@mantine/core'
 import * as api from '@/api/client'
 import { ExerciseMuscleMap } from '@/components/glossary/ExerciseMuscleMap'
-import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
 import type { GlossaryExercise, MuscleGroup, ExerciseCategory, Equipment, FatigueProfile, FatigueProfileSource, GenericStatus, LiftTransfer } from '@powerlifting/types'
+import DraftNumberInput from '../components/sessions/DraftNumberInput'
 
 function formatFatigue(profile: FatigueProfile): string {
   return `axial ${Math.round(profile.axial * 100)}, neural ${Math.round(profile.neural * 100)}, peripheral ${Math.round(profile.peripheral * 100)}, systemic ${Math.round(profile.systemic * 100)}`
@@ -146,10 +145,33 @@ function emptyExerciseForm(): Partial<GlossaryExercise> {
   }
 }
 
+const ALL_ASPECTS: api.EstimateAspect[] = ['fatigue', 'e1rm', 'muscles', 'lift_transfer', 'text']
+
+const BULK_ESTIMATES: Record<'fatigue' | 'muscles' | 'e1rm', {
+  label: string
+  needsEstimate: (exercise: GlossaryExercise) => boolean
+  overwrites: string
+}> = {
+  fatigue: {
+    label: 'fatigue profiles',
+    needsEstimate: (e) => !e.fatigue_profile || !e.fatigue_profile_personalized,
+    overwrites: 'your personal fatigue profiles',
+  },
+  muscles: {
+    label: 'muscle groups',
+    needsEstimate: (e) => e.tertiary_muscles == null,
+    overwrites: 'existing muscle groups',
+  },
+  e1rm: {
+    label: 'e1RM',
+    needsEstimate: (e) => !e.e1rm_estimate,
+    overwrites: 'existing e1RM estimates',
+  },
+}
+
 export default function GlossaryPage() {
   const { readOnly } = useAuth()
   const { pushToast } = useUiStore()
-  const liftProfiles = useProgramStore((state) => state.program?.lift_profiles ?? [])
   const [exercises, setExercises] = useState<GlossaryExercise[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -165,18 +187,11 @@ export default function GlossaryPage() {
   const [genericStatus, setGenericStatus] = useState<GenericStatus | null>(null)
   const [fatiguePersonalized, setFatiguePersonalized] = useState(false)
   const [liftTransfer, setLiftTransfer] = useState<LiftTransfer | null>(null)
-  const [isEstimatingTransfer, setIsEstimatingTransfer] = useState(false)
   const [e1rmEstimate, setE1rmEstimate] = useState<GlossaryExercise['e1rm_estimate'] | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [hasE1rmFilter, setHasE1rmFilter] = useState<'all' | 'with' | 'without'>('all')
-  const [isEstimating, setIsEstimating] = useState(false)
-  const [isEstimatingMuscles, setIsEstimatingMuscles] = useState(false)
-  const [isEstimatingE1rm, setIsEstimatingE1rm] = useState(false)
-  const [isGeneratingText, setIsGeneratingText] = useState(false)
-  const [isBulkEstimatingFatigue, setIsBulkEstimatingFatigue] = useState(false)
-  const [isBulkEstimatingE1rm, setIsBulkEstimatingE1rm] = useState(false)
-  const [isBulkEstimatingMuscles, setIsBulkEstimatingMuscles] = useState(false)
-  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; label: string } | null>(null)
+  const [formEstimating, setFormEstimating] = useState<api.EstimateAspect[] | null>(null)
+  const [bulkEstimating, setBulkEstimating] = useState<api.EstimateAspect | null>(null)
 
   useEffect(() => {
     loadExercises()
@@ -327,36 +342,6 @@ export default function GlossaryPage() {
     setFatiguePersonalized(true)
   }
 
-  async function handleReEstimate() {
-    setIsEstimating(true)
-    try {
-      const result = await api.estimateFatigueProfile({
-        name: formData.name || '',
-        category: formData.category,
-        equipment: formData.equipment,
-        primary_muscles: formData.primary_muscles,
-        secondary_muscles: formData.secondary_muscles,
-        tertiary_muscles: formData.tertiary_muscles,
-        description: formData.description,
-        how_to_perform: formData.how_to_perform,
-        why_do_it: formData.why_do_it,
-      })
-      setFatigueProfile({
-        axial: result.axial,
-        neural: result.neural,
-        peripheral: result.peripheral,
-        systemic: result.systemic,
-      })
-      setFatigueSource('ai_personal')
-      setFatigueReasoning(result.reasoning)
-      setFatiguePersonalized(true)
-    } catch {
-      pushToast({ message: 'Fatigue estimation failed', type: 'error' })
-    } finally {
-      setIsEstimating(false)
-    }
-  }
-
   function handleTransferChange(lift: 'squat' | 'bench' | 'deadlift', value: number | string) {
     const next = Math.max(0, Math.min(1, Number(value) || 0))
     setLiftTransfer((prev) => ({
@@ -369,205 +354,91 @@ export default function GlossaryPage() {
     }))
   }
 
-  async function handleEstimateTransfer() {
-    setIsEstimatingTransfer(true)
-    try {
-      const result = await api.estimateLiftTransfer({
-        name: formData.name || '',
-        category: formData.category,
-        equipment: formData.equipment,
-        primary_muscles: formData.primary_muscles,
-        secondary_muscles: formData.secondary_muscles,
-        tertiary_muscles: formData.tertiary_muscles,
-        description: formData.description,
-        how_to_perform: formData.how_to_perform,
-      })
-      setLiftTransfer(result.lift_transfer)
-    } catch {
-      pushToast({ message: 'Lift transfer estimation failed', type: 'error' })
-    } finally {
-      setIsEstimatingTransfer(false)
+  function applyEstimated(fresh: GlossaryExercise, aspects: api.EstimateAspect[]) {
+    setIsEditing(fresh)
+    if (aspects.includes('fatigue')) {
+      setFatigueProfile(fresh.fatigue_profile || null)
+      setFatigueSource(fresh.fatigue_profile_source || null)
+      setFatigueReasoning(fresh.fatigue_profile_reasoning || null)
+      setGenericFatigue(fresh.generic_fatigue_profile || null)
+      setGenericStatus(fresh.generic_status || null)
+      setFatiguePersonalized(!!fresh.fatigue_profile_personalized)
     }
+    if (aspects.includes('lift_transfer')) setLiftTransfer(fresh.lift_transfer || null)
+    if (aspects.includes('e1rm')) setE1rmEstimate(fresh.e1rm_estimate || null)
+    setFormData((prev) => ({
+      ...prev,
+      ...(aspects.includes('muscles')
+        ? {
+            primary_muscles: fresh.primary_muscles,
+            secondary_muscles: fresh.secondary_muscles,
+            tertiary_muscles: fresh.tertiary_muscles ?? [],
+          }
+        : {}),
+      ...(aspects.includes('text')
+        ? {
+            description: fresh.description ?? '',
+            how_to_perform: fresh.how_to_perform ?? '',
+            why_do_it: fresh.why_do_it ?? '',
+          }
+        : {}),
+    }))
   }
 
-  async function handleEstimateMuscles() {
-    setIsEstimatingMuscles(true)
-    try {
-      const result = await api.estimateMuscleGroups({
-        name: formData.name || '',
-        category: formData.category,
-        equipment: formData.equipment,
-        primary_muscles: formData.primary_muscles,
-        secondary_muscles: formData.secondary_muscles,
-        tertiary_muscles: formData.tertiary_muscles,
-        description: formData.description,
-        how_to_perform: formData.how_to_perform,
-        why_do_it: formData.why_do_it,
-        lift_profiles: liftProfiles,
-      })
-      setFormData((prev) => ({
-        ...prev,
-        primary_muscles: result.primary_muscles as MuscleGroup[],
-        secondary_muscles: result.secondary_muscles as MuscleGroup[],
-        tertiary_muscles: result.tertiary_muscles as MuscleGroup[],
-      }))
-    } catch {
-      pushToast({ message: 'Muscle group estimation failed', type: 'error' })
-    } finally {
-      setIsEstimatingMuscles(false)
-    }
-  }
-
-  async function handleGenerateText() {
-    if (!formData.name) {
-      pushToast({ message: 'Exercise name is required', type: 'error' })
-      return
-    }
-
+  async function handleFormEstimate(aspects: api.EstimateAspect[]) {
+    const id = isEditing?.id
+    if (!id) return
     const hasExistingText = Boolean(
       formData.description?.trim() ||
       formData.how_to_perform?.trim() ||
       formData.why_do_it?.trim()
     )
-    if (hasExistingText && !window.confirm('Replace the existing exercise text with AI-generated text?')) {
+    if (aspects.includes('text') && hasExistingText && !window.confirm('Replace the existing exercise text with AI-generated text?')) {
       return
     }
 
-    setIsGeneratingText(true)
+    setFormEstimating(aspects)
     try {
-      const result = await api.generateGlossaryText({
-        name: formData.name,
-        category: formData.category,
-        equipment: formData.equipment,
-        primary_muscles: formData.primary_muscles,
-        secondary_muscles: formData.secondary_muscles,
-        tertiary_muscles: formData.tertiary_muscles,
-        description: formData.description,
-        how_to_perform: formData.how_to_perform,
-        why_do_it: formData.why_do_it,
-        lift_profiles: liftProfiles,
-      })
-      setFormData((prev) => ({
-        ...prev,
-        description: result.description || '',
-        how_to_perform: result.how_to_perform || '',
-        why_do_it: result.why_do_it || '',
-      }))
+      const result = await api.estimateExercises([id], aspects)
+      if (result.saved.length === 0) {
+        pushToast({ message: result.failed[0]?.reason || 'Estimation failed', type: 'error' })
+        return
+      }
+      const data = await api.fetchGlossary()
+      setExercises(data || [])
+      const fresh = (data || []).find((exercise) => exercise.id === id)
+      if (fresh) applyEstimated(fresh, aspects)
     } catch {
-      pushToast({ message: 'Glossary text generation failed', type: 'error' })
+      pushToast({ message: 'Estimation failed', type: 'error' })
     } finally {
-      setIsGeneratingText(false)
+      setFormEstimating(null)
     }
   }
 
-  async function handleBulkEstimateFatigue() {
+  async function handleBulkEstimate(aspect: 'fatigue' | 'muscles' | 'e1rm') {
+    const { label, needsEstimate, overwrites } = BULK_ESTIMATES[aspect]
     const candidates = exercises.filter((e) => showArchived || !e.archived)
-    const missingEstimates = candidates.filter(e => !e.fatigue_profile || !e.fatigue_profile_personalized)
-    const shouldReEstimateAll = candidates.length > 0 && missingEstimates.length === 0
-    const toEstimate = shouldReEstimateAll ? candidates : missingEstimates
+    const missing = candidates.filter(needsEstimate)
+    const reEstimateAll = candidates.length > 0 && missing.length === 0
+    const toEstimate = reEstimateAll ? candidates : missing
     if (toEstimate.length === 0) {
-      pushToast({ message: 'No exercises available for fatigue estimation', type: 'warning' })
+      pushToast({ message: `No exercises available for ${label} estimation`, type: 'warning' })
       return
     }
 
-    if (!confirm(`${shouldReEstimateAll ? 'Re-estimate' : 'Estimate'} fatigue profiles for ${toEstimate.length} exercises? This will call the AI backend multiple times${shouldReEstimateAll ? ' and overwrite your personal fatigue profiles' : ''}.`)) return
+    const calls = Math.ceil(toEstimate.length / api.ESTIMATE_BATCH_SIZE)
+    if (!window.confirm(`${reEstimateAll ? 'Re-estimate' : 'Estimate'} ${label} for ${toEstimate.length} exercises in ${calls} AI ${calls === 1 ? 'call' : 'calls'}${reEstimateAll ? ` and overwrite ${overwrites}` : ''}?`)) return
 
-    setIsBulkEstimatingFatigue(true)
-    setBulkProgress({ current: 0, total: toEstimate.length, label: 'Estimating fatigue profiles' })
-
+    setBulkEstimating(aspect)
     try {
-      let successCount = 0
-      for (let i = 0; i < toEstimate.length; i++) {
-        setBulkProgress({ current: i + 1, total: toEstimate.length, label: 'Estimating fatigue profiles' })
-        try {
-          const res = await api.estimateExerciseFatigue(toEstimate[i].id)
-          if (res?.fatigue_profile || res?.profile) {
-            successCount++
-          }
-        } catch (err) {
-          console.error(`Failed to estimate fatigue for ${toEstimate[i].name}`, err)
-        }
-      }
-
-      pushToast({ message: `Successfully estimated fatigue for ${successCount}/${toEstimate.length} exercises`, type: 'success' })
+      const result = await api.estimateExercises(toEstimate.map((e) => e.id), [aspect])
+      pushToast({
+        message: `Estimated ${label} for ${result.saved.length}/${toEstimate.length} exercises`,
+        type: result.failed.length === 0 ? 'success' : 'warning',
+      })
       loadExercises()
     } finally {
-      setIsBulkEstimatingFatigue(false)
-      setBulkProgress(null)
-    }
-  }
-
-  async function handleBulkEstimateE1rm() {
-    const candidates = exercises.filter((e) => showArchived || !e.archived)
-    const missingEstimates = candidates.filter(e => !e.e1rm_estimate)
-    const shouldReEstimateAll = candidates.length > 0 && missingEstimates.length === 0
-    const toEstimate = shouldReEstimateAll ? candidates : missingEstimates
-    if (toEstimate.length === 0) {
-      pushToast({ message: 'No exercises available for e1RM estimation', type: 'warning' })
-      return
-    }
-
-    if (!window.confirm(`${shouldReEstimateAll ? 'Re-estimate' : 'Estimate'} e1RM for ${toEstimate.length} exercises? This will call the AI backend multiple times${shouldReEstimateAll ? ' and overwrite existing e1RM estimates' : ''}.`)) return
-
-    setIsBulkEstimatingE1rm(true)
-    setBulkProgress({ current: 0, total: toEstimate.length, label: 'Estimating e1RM values' })
-
-    try {
-      let successCount = 0
-      for (let i = 0; i < toEstimate.length; i++) {
-        setBulkProgress({ current: i + 1, total: toEstimate.length, label: 'Estimating e1RM values' })
-        try {
-          const res = await api.estimateExerciseE1rm(toEstimate[i].id)
-          if (res?.estimate) {
-            successCount++
-          }
-        } catch (err) {
-          console.error(`Failed to estimate e1RM for ${toEstimate[i].name}`, err)
-        }
-      }
-
-      pushToast({ message: `Successfully estimated e1RM for ${successCount}/${toEstimate.length} exercises`, type: 'success' })
-      loadExercises()
-    } finally {
-      setIsBulkEstimatingE1rm(false)
-      setBulkProgress(null)
-    }
-  }
-
-  async function handleBulkEstimateMuscles() {
-    const candidates = exercises.filter((e) => showArchived || !e.archived)
-    const missingEstimates = candidates.filter((e) => e.tertiary_muscles == null)
-    const shouldReEstimateAll = candidates.length > 0 && missingEstimates.length === 0
-    const toEstimate = shouldReEstimateAll ? candidates : missingEstimates
-    if (toEstimate.length === 0) {
-      pushToast({ message: 'No exercises available for muscle group estimation', type: 'warning' })
-      return
-    }
-
-    if (!confirm(`${shouldReEstimateAll ? 'Re-estimate' : 'Estimate'} muscle groups for ${toEstimate.length} exercises? This will call the AI backend multiple times${shouldReEstimateAll ? ' and overwrite existing muscle groups' : ''}.`)) return
-
-    setIsBulkEstimatingMuscles(true)
-    setBulkProgress({ current: 0, total: toEstimate.length, label: 'Estimating muscle groups' })
-
-    try {
-      let successCount = 0
-      for (let i = 0; i < toEstimate.length; i++) {
-        setBulkProgress({ current: i + 1, total: toEstimate.length, label: 'Estimating muscle groups' })
-        try {
-          const res = await api.estimateExerciseMuscles(toEstimate[i].id)
-          if (Array.isArray(res?.primary_muscles) && Array.isArray(res?.secondary_muscles) && Array.isArray(res?.tertiary_muscles)) {
-            successCount++
-          }
-        } catch (err) {
-          console.error(`Failed to estimate muscles for ${toEstimate[i].name}`, err)
-        }
-      }
-
-      pushToast({ message: `Successfully estimated muscle groups for ${successCount}/${toEstimate.length} exercises`, type: 'success' })
-      loadExercises()
-    } finally {
-      setIsBulkEstimatingMuscles(false)
-      setBulkProgress(null)
+      setBulkEstimating(null)
     }
   }
 
@@ -640,31 +511,31 @@ export default function GlossaryPage() {
             variant="light"
             color="blue"
             leftSection={<RefreshCw size={16} />}
-            onClick={handleBulkEstimateFatigue}
-            loading={isBulkEstimatingFatigue}
-            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles || readOnly}
+            onClick={() => handleBulkEstimate('fatigue')}
+            loading={bulkEstimating === 'fatigue'}
+            disabled={bulkEstimating !== null || readOnly}
           >
-            {isBulkEstimatingFatigue && bulkProgress ? `Fatigue (${bulkProgress.current}/${bulkProgress.total})` : 'Personalize Fatigue'}
+            Personalize Fatigue
           </Button>
           <Button
             variant="light"
             color="cyan"
             leftSection={<RefreshCw size={16} />}
-            onClick={handleBulkEstimateMuscles}
-            loading={isBulkEstimatingMuscles}
-            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles || readOnly}
+            onClick={() => handleBulkEstimate('muscles')}
+            loading={bulkEstimating === 'muscles'}
+            disabled={bulkEstimating !== null || readOnly}
           >
-            {isBulkEstimatingMuscles && bulkProgress ? `Muscles (${bulkProgress.current}/${bulkProgress.total})` : 'Estimate Muscles'}
+            Estimate Muscles
           </Button>
           <Button
             variant="light"
             color="green"
             leftSection={<RefreshCw size={16} />}
-            onClick={handleBulkEstimateE1rm}
-            loading={isBulkEstimatingE1rm}
-            disabled={isBulkEstimatingFatigue || isBulkEstimatingE1rm || isBulkEstimatingMuscles || readOnly}
+            onClick={() => handleBulkEstimate('e1rm')}
+            loading={bulkEstimating === 'e1rm'}
+            disabled={bulkEstimating !== null || readOnly}
           >
-            {isBulkEstimatingE1rm && bulkProgress ? `e1RM (${bulkProgress.current}/${bulkProgress.total})` : 'Estimate e1RM'}
+            Estimate e1RM
           </Button>
           <Button
             leftSection={<Plus size={16} />}
@@ -719,18 +590,6 @@ export default function GlossaryPage() {
           </Button>
         </Group>
       </Paper>
-
-      {bulkProgress && (
-        <Paper withBorder p="sm" className="if-card">
-          <Stack gap={6}>
-            <Group justify="space-between" gap="sm">
-              <Text size="sm" fw={500}>{bulkProgress.label}</Text>
-              <Text size="sm" c="dimmed">{bulkProgress.current}/{bulkProgress.total}</Text>
-            </Group>
-            <Progress value={bulkProgress.total > 0 ? (bulkProgress.current / bulkProgress.total) * 100 : 0} />
-          </Stack>
-        </Paper>
-      )}
 
       {/* Add/Edit Form Modal */}
       <Modal
@@ -793,11 +652,11 @@ export default function GlossaryPage() {
               <Button
                 size="compact-xs"
                 variant="light"
-                onClick={handleReEstimate}
-                disabled={isEstimating || !formData.name || readOnly}
-                leftSection={isEstimating ? <Loader size={12} /> : <RefreshCw size={12} />}
+                onClick={() => handleFormEstimate(['fatigue'])}
+                disabled={formEstimating !== null || !isEditing?.id || readOnly}
+                leftSection={formEstimating?.includes('fatigue') ? <Loader size={12} /> : <RefreshCw size={12} />}
               >
-                {isEstimating ? 'Estimating...' : 'Personalize with AI'}
+                {formEstimating?.includes('fatigue') ? 'Estimating...' : 'Personalize with AI'}
               </Button>
             </Group>
             
@@ -877,11 +736,11 @@ export default function GlossaryPage() {
               <Button
                 size="compact-xs"
                 variant="light"
-                onClick={handleEstimateTransfer}
-                disabled={isEstimatingTransfer || !formData.name || readOnly}
-                leftSection={isEstimatingTransfer ? <Loader size={12} /> : <RefreshCw size={12} />}
+                onClick={() => handleFormEstimate(['lift_transfer'])}
+                disabled={formEstimating !== null || !isEditing?.id || readOnly}
+                leftSection={formEstimating?.includes('lift_transfer') ? <Loader size={12} /> : <RefreshCw size={12} />}
               >
-                {isEstimatingTransfer ? 'Estimating...' : 'Estimate transfer'}
+                {formEstimating?.includes('lift_transfer') ? 'Estimating...' : 'Estimate transfer'}
               </Button>
             </Group>
             <SimpleGrid cols={3}>
@@ -920,47 +779,25 @@ export default function GlossaryPage() {
                 size="compact-xs"
                 variant="light"
                 color="green"
-                onClick={async () => {
-                  if (!isEditing?.id) return
-                  setIsEstimatingE1rm(true)
-                  try {
-                    const res = await api.estimateExerciseE1rm(isEditing.id)
-                    if (res?.estimate) {
-                      setE1rmEstimate({
-                        value_kg: res.estimate.e1rm_kg,
-                        method: 'ai_backfill',
-                        basis: res.estimate.basis,
-                        confidence: res.estimate.confidence,
-                        set_at: new Date().toISOString(),
-                        manually_overridden: false,
-                      })
-                    } else {
-                      pushToast({ message: 'e1RM estimation returned no result', type: 'error' })
-                    }
-                  } catch {
-                    pushToast({ message: 'e1RM estimation failed', type: 'error' })
-                  } finally {
-                    setIsEstimatingE1rm(false)
-                  }
-                }}
-                disabled={isEstimatingE1rm || !isEditing?.id || readOnly}
-                leftSection={isEstimatingE1rm ? <Loader size={12} /> : <RefreshCw size={12} />}
+                onClick={() => handleFormEstimate(['e1rm'])}
+                disabled={formEstimating !== null || !isEditing?.id || readOnly}
+                leftSection={formEstimating?.includes('e1rm') ? <Loader size={12} /> : <RefreshCw size={12} />}
               >
-                {isEstimatingE1rm ? 'Estimating...' : 'AI Estimate'}
+                {formEstimating?.includes('e1rm') ? 'Estimating...' : 'AI Estimate'}
               </Button>
             </Group>
 
             <Group gap="md">
               <Stack gap={4} style={{ flex: 1 }}>
                 <Text size="xs" c="dimmed">Value (kg)</Text>
-                <TextInput
-                  type="number"
+                <DraftNumberInput
                   placeholder="e.g. 140"
-                  value={e1rmEstimate?.value_kg || ''}
-                  onChange={(e) => {
-                    const val = parseFloat(e.currentTarget.value)
-                    setE1rmEstimate(prev => ({
-                      value_kg: isNaN(val) ? 0 : val,
+                  inputMode="decimal"
+                  value={e1rmEstimate?.value_kg ?? null}
+                  isValid={(val) => val > 0}
+                  onValueChange={(val) => {
+                    setE1rmEstimate(prev => val === null ? null : ({
+                      value_kg: val,
                       method: 'manual',
                       basis: prev?.basis || 'Manual override',
                       confidence: 'high',
@@ -988,11 +825,11 @@ export default function GlossaryPage() {
                   size="compact-xs"
                   variant="light"
                   color="blue"
-                  onClick={handleEstimateMuscles}
-                  disabled={isEstimatingMuscles || !formData.name || readOnly}
-                  leftSection={isEstimatingMuscles ? <Loader size={12} /> : <RefreshCw size={12} />}
+                  onClick={() => handleFormEstimate(['muscles'])}
+                  disabled={formEstimating !== null || !isEditing?.id || readOnly}
+                  leftSection={formEstimating?.includes('muscles') ? <Loader size={12} /> : <RefreshCw size={12} />}
                 >
-                  {isEstimatingMuscles ? 'Estimating...' : 'AI Estimate'}
+                  {formEstimating?.includes('muscles') ? 'Estimating...' : 'AI Estimate'}
                 </Button>
               </Group>
               <Paper withBorder p="xs" h={180} className="if-card" style={{ overflowY: 'auto' }}>
@@ -1066,11 +903,11 @@ export default function GlossaryPage() {
                 <Button
                   size="compact-xs"
                   variant="light"
-                  leftSection={isGeneratingText ? <Loader size={12} /> : <Wand2 size={12} />}
-                  onClick={handleGenerateText}
-                  disabled={isGeneratingText || !formData.name || readOnly}
+                  leftSection={formEstimating?.includes('text') ? <Loader size={12} /> : <Wand2 size={12} />}
+                  onClick={() => handleFormEstimate(['text'])}
+                  disabled={formEstimating !== null || !isEditing?.id || readOnly}
                 >
-                  {isGeneratingText ? 'Generating...' : 'AI Generate'}
+                  {formEstimating?.includes('text') ? 'Generating...' : 'AI Generate'}
                 </Button>
               </Group>
 
@@ -1115,6 +952,14 @@ export default function GlossaryPage() {
           <Divider mt="md" />
 
           <Group justify="flex-end">
+            <Button
+              variant="light"
+              leftSection={formEstimating?.length === ALL_ASPECTS.length ? <Loader size={12} /> : <Wand2 size={12} />}
+              onClick={() => handleFormEstimate(ALL_ASPECTS)}
+              disabled={formEstimating !== null || !isEditing?.id || readOnly}
+            >
+              Estimate all
+            </Button>
             <Button
               variant="default"
               onClick={() => {

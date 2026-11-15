@@ -370,262 +370,34 @@
     "ownership": "athlete"
   },
   {
-    "name": "glossary_estimate_e1rm",
+    "name": "glossary_estimate_batch",
     "domain": "glossary",
-    "description": "Estimate the athlete's 1-rep max for an exercise from their maxes, lift profiles and past sessions. Personal to the athlete.",
+    "description": "Estimate any of fatigue, e1rm, muscles, lift_transfer and text for up to 25 exercises with one AI call and save each exercise individually. Personal fatigue and e1rm go to the athlete; muscles, lift transfer and text go to the catalog entry when there is one, otherwise to the athlete's own exercise. Also queues the shared generic profile when the catalog does not have one yet. Exercises the model omits or answers invalidly are listed in failed without failing the rest.",
     "input_schema": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "enum": [
-            "estimated",
-            "error"
-          ]
-        },
-        "id": {
-          "type": "string"
-        },
-        "estimate": {
-          "type": "object",
-          "properties": {
-            "e1rm_kg": {
-              "type": "number"
-            },
-            "basis": {
-              "type": "string"
-            }
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
           },
-          "required": [
-            "e1rm_kg",
-            "basis"
-          ]
+          "minItems": 1,
+          "maxItems": 25
         },
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "status"
-      ]
-    },
-    "execution": "ai",
-    "ownership": "athlete"
-  },
-  {
-    "name": "glossary_estimate_fatigue",
-    "domain": "glossary",
-    "description": "Estimate the athlete's personal fatigue profile for an exercise from their body metrics and lift profiles. Also queues the shared generic profile when the catalog does not have one yet.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "const": "fatigue_estimated"
-        },
-        "id": {
-          "type": "string"
-        },
-        "profile": {
-          "type": "object",
-          "properties": {
-            "axial": {
-              "type": "number"
-            },
-            "neural": {
-              "type": "number"
-            },
-            "peripheral": {
-              "type": "number"
-            },
-            "systemic": {
-              "type": "number"
-            }
-          }
-        },
-        "fatigue_profile": {
-          "type": "object",
-          "properties": {
-            "axial": {
-              "type": "number"
-            },
-            "neural": {
-              "type": "number"
-            },
-            "peripheral": {
-              "type": "number"
-            },
-            "systemic": {
-              "type": "number"
-            }
-          }
-        },
-        "reasoning": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "generic_status": {
-          "enum": [
-            "pending",
-            "ready",
-            "failed"
-          ]
-        },
-        "generic_fatigue_profile": {
-          "type": "object",
-          "properties": {
-            "axial": {
-              "type": "number"
-            },
-            "neural": {
-              "type": "number"
-            },
-            "peripheral": {
-              "type": "number"
-            },
-            "systemic": {
-              "type": "number"
-            }
-          }
-        }
-      },
-      "required": [
-        "status"
-      ]
-    },
-    "execution": "ai",
-    "ownership": "athlete"
-  },
-  {
-    "name": "glossary_estimate_lift_transfer",
-    "domain": "glossary",
-    "description": "Estimate how much an exercise transfers to the squat, bench and deadlift with AI. With id the result is stored on the shared catalog exercise (or the athlete's own); with an inline exercise it is only returned.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "exercise": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "anyOf": [
-        {
-          "required": [
-            "id"
-          ]
-        },
-        {
-          "required": [
-            "exercise"
-          ]
-        }
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "const": "lift_transfer_estimated"
-        },
-        "id": {
-          "type": "string"
-        },
-        "lift_transfer": {
-          "type": "object",
-          "properties": {
-            "squat": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
-            },
-            "bench": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
-            },
-            "deadlift": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
-            },
-            "source": {
-              "enum": [
-                "ai",
-                "rule",
-                "user"
-              ]
-            },
-            "reasoning": {
-              "type": "string"
-            }
+        "aspects": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "fatigue",
+              "e1rm",
+              "muscles",
+              "lift_transfer",
+              "text"
+            ]
           },
-          "required": [
-            "squat",
-            "bench",
-            "deadlift",
-            "source",
-            "reasoning"
-          ]
-        }
-      },
-      "required": [
-        "status",
-        "lift_transfer"
-      ]
-    },
-    "execution": "ai",
-    "ownership": "athlete"
-  },
-  {
-    "name": "glossary_estimate_muscles",
-    "domain": "glossary",
-    "description": "Estimate primary, secondary and tertiary muscle groups for an exercise with AI and store them on the shared catalog exercise (or the athlete's own).",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
+          "minItems": 1,
+          "maxItems": 5
         },
         "pk": {
           "type": "string",
@@ -633,99 +405,41 @@
         }
       },
       "required": [
-        "id"
+        "ids",
+        "aspects"
       ]
     },
     "result_schema": {
       "type": "object",
       "properties": {
-        "status": {
-          "const": "muscles_estimated"
-        },
-        "id": {
-          "type": "string"
-        },
-        "primary_muscles": {
+        "saved": {
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "secondary_muscles": {
+        "failed": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "reason"
+            ]
           }
-        },
-        "tertiary_muscles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "reasoning": {
-          "type": "string"
         }
       },
       "required": [
-        "status"
-      ]
-    },
-    "execution": "ai",
-    "ownership": "athlete"
-  },
-  {
-    "name": "glossary_generate_text",
-    "domain": "glossary",
-    "description": "Generate the description, how-to and purpose text for an exercise with AI. The result is returned, not stored.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "exercise": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "required": [
-            "name"
-          ]
-        },
-        "lift_profiles": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "exercise"
-      ]
-    },
-    "result_schema": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "const": "generated"
-        },
-        "description": {
-          "type": "string"
-        },
-        "how_to_perform": {
-          "type": "string"
-        },
-        "why_do_it": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "status"
+        "saved",
+        "failed"
       ]
     },
     "execution": "ai",
@@ -734,13 +448,18 @@
   {
     "name": "glossary_generic_estimate",
     "domain": "glossary",
-    "description": "Fill a pending shared catalog exercise (muscles and text when empty, lift transfer, generic fatigue profile) from its definition alone. Run by the background estimator; no athlete data is used.",
+    "description": "Fill up to 10 pending shared catalog exercises with one AI call (muscles and text when empty, lift transfer, generic fatigue profile) from their definitions alone, saving each exercise individually. Run by the background estimator; no athlete data is used.",
     "input_schema": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "maxItems": 10
         },
         "pk": {
           "type": "string",
@@ -748,33 +467,47 @@
         }
       },
       "required": [
-        "id"
+        "ids"
       ]
     },
     "result_schema": {
       "type": "object",
       "properties": {
-        "status": {
-          "enum": [
-            "generic_estimated",
-            "skipped"
-          ]
+        "saved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
-        "id": {
-          "type": "string"
+        "failed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "reason"
+            ]
+          }
         },
-        "generic_status": {
-          "enum": [
-            "pending",
-            "ready",
-            "failed"
-          ]
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
-        "status",
-        "id",
-        "generic_status"
+        "saved",
+        "failed",
+        "skipped"
       ]
     },
     "execution": "ai",

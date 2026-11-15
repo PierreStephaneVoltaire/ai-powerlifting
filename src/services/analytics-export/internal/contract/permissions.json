@@ -153,9 +153,6 @@
   "exercise_remove": {
     "permission": "glossary:write"
   },
-  "exercise_search": {
-    "permission": "glossary:read"
-  },
   "exercise_set_e1rm": {
     "permission": "glossary:write"
   },
@@ -194,22 +191,10 @@
     "permission": "analytics:write",
     "cache_read": "analytics:read"
   },
-  "glossary_estimate_e1rm": {
+  "glossary_estimate_batch": {
     "permission": "glossary:write"
   },
-  "glossary_estimate_fatigue": {
-    "permission": "glossary:write"
-  },
-  "glossary_estimate_lift_transfer": {
-    "permission": "glossary:write"
-  },
-  "glossary_backfill_lift_transfer": {
-    "permission": "glossary:write"
-  },
-  "glossary_estimate_muscles": {
-    "permission": "glossary:write"
-  },
-  "glossary_generate_text": {
+  "glossary_generic_estimate": {
     "permission": "glossary:write"
   },
   "goals_list": {

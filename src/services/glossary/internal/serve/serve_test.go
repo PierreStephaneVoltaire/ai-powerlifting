@@ -114,7 +114,7 @@ func TestRejectionsUseDetailEnvelope(t *testing.T) {
 
 func TestAIOperationWithoutJobIsAccepted(t *testing.T) {
 	server := newServer(t)
-	status, body := post(t, server.URL+"/operations/glossary_estimate_fatigue", `{"id":"sq"}`, athleteHeaders)
+	status, body := post(t, server.URL+"/operations/glossary_estimate_batch", `{"ids":["sq"],"aspects":["fatigue"]}`, athleteHeaders)
 	if status != 202 || body["job_id"] != "job_9" {
 		t.Fatalf("submit %d %v", status, body)
 	}
@@ -128,7 +128,7 @@ func TestMCPListsOperationsAndCallsTools(t *testing.T) {
 	for _, tool := range tools {
 		names[tool.(map[string]any)["name"].(string)] = true
 	}
-	if len(names) != 12 || !names["glossary_generic_estimate"] || names["exercise_search"] {
+	if len(names) != 8 || !names["glossary_generic_estimate"] || names["exercise_search"] {
 		t.Fatalf("tools %v", names)
 	}
 	_, called := post(t, server.URL+"/mcp", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"exercise_get_glossary","arguments":{}}}`, athleteHeaders)

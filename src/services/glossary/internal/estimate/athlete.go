@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -104,78 +103,13 @@ func profileLines(profile map[string]any) []string {
 	return lines
 }
 
-var bigLiftKeys = map[string]string{
-	"squat": "squat", "back squat": "squat", "bench press": "bench", "bench": "bench",
-	"deadlift": "deadlift", "conventional deadlift": "deadlift", "sumo deadlift": "deadlift",
-}
-
-var competitionLifts = []string{"squat", "bench", "deadlift"}
-
-func (a Athlete) matchedProfile(name, category string) []string {
-	target := bigLiftKeys[name]
-	if target == "" && slices.Contains(competitionLifts, category) {
-		target = category
-	}
+func (a Athlete) lines() []string {
+	lines := a.metricLines()
 	for _, profile := range a.LiftProfiles {
-		if target != "" && lift(profile) == target {
-			return profileLines(profile)
-		}
-	}
-	return nil
-}
-
-func relatedLifts(name, category string) []string {
-	var related []string
-	if category == "squat" || strings.Contains(name, "squat") {
-		related = append(related, "squat")
-	}
-	if category == "bench" || strings.Contains(name, "bench") {
-		related = append(related, "bench")
-	}
-	hinge := []string{"deadlift", "rdl", "romanian", "stiff leg", "stiff-leg"}
-	if category == "deadlift" || slices.ContainsFunc(hinge, func(part string) bool { return strings.Contains(name, part) }) {
-		related = append(related, "deadlift")
-	}
-	return related
-}
-
-func (a Athlete) relatedProfiles(name, category string) []string {
-	bigThree := map[string]map[string]any{}
-	for _, profile := range a.LiftProfiles {
-		if slices.Contains(competitionLifts, lift(profile)) {
-			bigThree[lift(profile)] = profile
-		}
-	}
-	if len(bigThree) == 0 {
-		return nil
-	}
-	related := relatedLifts(name, category)
-	lines := []string{"Big-3 lift profiles (soft context; use only if the exercise is related):"}
-	if len(related) > 0 {
-		lines = append(lines, "Most related competition lift(s): "+strings.Join(related, ", "))
-	}
-	ordered := slices.Clone(related)
-	for _, competition := range competitionLifts {
-		if !slices.Contains(ordered, competition) {
-			ordered = append(ordered, competition)
-		}
-	}
-	for _, name := range ordered {
-		if profile, ok := bigThree[name]; ok {
+		if len(lines) > 0 {
 			lines = append(lines, "")
-			lines = append(lines, profileLines(profile)...)
 		}
+		lines = append(lines, profileLines(profile)...)
 	}
 	return lines
-}
-
-type profileSummary struct{ Lift, Summary string }
-
-func (a Athlete) summaries() []profileSummary {
-	summaries := make([]profileSummary, 0, len(a.LiftProfiles))
-	for _, profile := range a.LiftProfiles {
-		label, _ := profile["lift"].(string)
-		summaries = append(summaries, profileSummary{Lift: label, Summary: strings.Join(techniqueLines(profile), "; ")})
-	}
-	return summaries
 }

@@ -116,14 +116,19 @@ export async function setE1rmEstimate(
   await callOperation('exercise_set_e1rm', { pk, id, value_kg: valueKg, method })
 }
 
-export async function estimateExerciseE1rm(pk: string, id: string): Promise<any> {
-  return invokeToolDirect('glossary_estimate_e1rm', { id, pk })
-}
+export const ESTIMATE_BATCH_LIMIT = 25
+export const ESTIMATE_ASPECTS = ['fatigue', 'e1rm', 'muscles', 'lift_transfer', 'text'] as const
 
-export async function estimateExerciseFatigue(pk: string, id: string): Promise<any> {
-  return invokeToolDirect('glossary_estimate_fatigue', { id, pk })
-}
-
-export async function estimateExerciseMuscles(pk: string, id: string): Promise<any> {
-  return invokeToolDirect('glossary_estimate_muscles', { id, pk })
+export async function estimateExercises(
+  pk: string,
+  ids: unknown,
+  aspects: unknown,
+): Promise<{ saved: string[]; failed: { id: string; reason: string }[] }> {
+  const validIds = Array.isArray(ids) && ids.length >= 1 && ids.length <= ESTIMATE_BATCH_LIMIT && ids.every((id) => typeof id === 'string' && id)
+  const validAspects =
+    Array.isArray(aspects) && aspects.length >= 1 && aspects.every((aspect) => ESTIMATE_ASPECTS.includes(aspect))
+  if (!validIds || !validAspects) {
+    throw new AppError(`ids (1-${ESTIMATE_BATCH_LIMIT}) and aspects (${ESTIMATE_ASPECTS.join(', ')}) are required`, 400)
+  }
+  return invokeToolDirect('glossary_estimate_batch', { ids, aspects, pk })
 }

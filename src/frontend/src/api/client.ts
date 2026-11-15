@@ -27,8 +27,6 @@ import type {
   LiftResults,
   VideoLibraryItem,
   VideoSort,
-  FatigueProfile,
-  LiftTransfer,
   LiftProfile,
   SessionWellness,
   ImportPending,
@@ -593,102 +591,6 @@ export async function estimateLiftProfileStimulus(
   return res.data.data
 }
 
-// ─── Fatigue Profile ──────────────────────────────────────────────────────────
-
-export async function estimateFatigueProfile(exercise: {
-  name: string
-  category?: string
-  equipment?: string
-  primary_muscles?: string[]
-  secondary_muscles?: string[]
-  tertiary_muscles?: string[]
-  description?: string
-  how_to_perform?: string
-  why_do_it?: string
-}): Promise<FatigueProfile & { reasoning: string }> {
-  const res = await api.post<ApiResponse<FatigueProfile & { reasoning: string }>>(
-    '/analytics/fatigue-profile/estimate',
-    exercise
-  )
-  return res.data.data
-}
-
-export async function estimateLiftTransfer(exercise: {
-  name: string
-  category?: string
-  equipment?: string
-  primary_muscles?: string[]
-  secondary_muscles?: string[]
-  tertiary_muscles?: string[]
-  description?: string
-  how_to_perform?: string
-}): Promise<{ lift_transfer: LiftTransfer }> {
-  const res = await api.post<ApiResponse<{ lift_transfer: LiftTransfer }>>(
-    '/analytics/lift-transfer/estimate',
-    exercise
-  )
-  return res.data.data
-}
-
-export async function estimateMuscleGroups(exercise: {
-  name: string
-  category?: string
-  equipment?: string
-  description?: string
-  how_to_perform?: string
-  why_do_it?: string
-  primary_muscles?: string[]
-  secondary_muscles?: string[]
-  tertiary_muscles?: string[]
-  lift_profiles?: LiftProfile[]
-}): Promise<{
-  primary_muscles: string[]
-  secondary_muscles: string[]
-  tertiary_muscles: string[]
-  reasoning: string
-}> {
-  const { lift_profiles, ...exercisePayload } = exercise
-  const res = await api.post<ApiResponse<{
-    primary_muscles: string[]
-    secondary_muscles: string[]
-    tertiary_muscles: string[]
-    reasoning: string
-  }>>('/analytics/muscle-groups/estimate', {
-    exercise: exercisePayload,
-    lift_profiles,
-  })
-  return res.data.data
-}
-
-export async function generateGlossaryText(exercise: {
-  name: string
-  category?: string
-  equipment?: string
-  primary_muscles?: string[]
-  secondary_muscles?: string[]
-  tertiary_muscles?: string[]
-  description?: string
-  how_to_perform?: string
-  why_do_it?: string
-  lift_profiles?: LiftProfile[]
-}): Promise<{
-  description: string
-  how_to_perform: string
-  why_do_it: string
-}> {
-  const { lift_profiles, ...exercisePayload } = exercise
-  const res = await api.post<ApiResponse<{
-    status?: string
-    description: string
-    how_to_perform: string
-    why_do_it: string
-  }>>('/analytics/glossary/text/generate', {
-    exercise: exercisePayload,
-    lift_profiles,
-  })
-  return res.data.data
-}
-
 export async function fetchE1rmMultiplierSuggestions(): Promise<Record<string, {
   lift: string
   suggested_multiplier: number
@@ -842,19 +744,30 @@ export async function unarchiveExercise(id: string): Promise<void> {
   await api.patch(`/exercises/${id}/unarchive`)
 }
 
-export async function estimateExerciseE1rm(id: string): Promise<any> {
-  const res = await api.post(`/exercises/${id}/estimate-e1rm`)
-  return res.data.data
+export type EstimateAspect = 'fatigue' | 'e1rm' | 'muscles' | 'lift_transfer' | 'text'
+
+export interface EstimateResult {
+  saved: string[]
+  failed: { id: string; reason: string }[]
 }
 
-export async function estimateExerciseFatigue(id: string): Promise<any> {
-  const res = await api.post(`/exercises/${id}/estimate-fatigue`)
-  return res.data.data
-}
+export const ESTIMATE_BATCH_SIZE = 25
 
-export async function estimateExerciseMuscles(id: string): Promise<any> {
-  const res = await api.post(`/exercises/${id}/estimate-muscles`)
-  return res.data.data
+export async function estimateExercises(ids: string[], aspects: EstimateAspect[]): Promise<EstimateResult> {
+  const result: EstimateResult = { saved: [], failed: [] }
+  for (let start = 0; start < ids.length; start += ESTIMATE_BATCH_SIZE) {
+    const chunk = ids.slice(start, start + ESTIMATE_BATCH_SIZE)
+    try {
+      const res = await api.post<ApiResponse<EstimateResult>>('/exercises/estimate', { ids: chunk, aspects })
+      result.saved.push(...res.data.data.saved)
+      result.failed.push(...res.data.data.failed)
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'Request failed'
+      result.failed.push(...chunk.map((id) => ({ id, reason })))
+    }
+  }
+  if (result.saved.length > 0) await invalidateDomain('glossary')
+  return result
 }
 
 // ─── Stats ───────────────────────────────────────────────────────────────────

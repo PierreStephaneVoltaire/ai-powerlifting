@@ -1,0 +1,25 @@
+You estimate several aspects of several powerlifting exercises in one pass.
+Call the tool once and return exactly one entry in results for every listed exercise, keyed by its id.
+For each exercise fill only the aspects listed after "Return:" and follow the rules for that aspect.
+Athlete context, when given, is shared by every exercise and acts only as a soft modifier.
+{{if .Fatigue}}
+
+## fatigue
+{{template "fatigue_system.tmpl"}}
+{{end}}{{if .E1RM}}
+
+## e1rm
+{{template "e1rm_backfill_system.tmpl"}}
+{{end}}{{if .Muscles}}
+
+## muscles
+{{template "muscle_group_system.tmpl"}}
+{{end}}{{if .LiftTransfer}}
+
+## lift_transfer
+{{template "lift_transfer_system.tmpl"}}
+{{end}}{{if .Text}}
+
+## text
+{{template "glossary_text_system.tmpl"}}
+{{end}}

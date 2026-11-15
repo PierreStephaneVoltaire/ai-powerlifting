@@ -2,16 +2,19 @@ package service
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
+	"strings"
 
 	"powerlifting/glossary/internal/apperr"
-	"powerlifting/glossary/internal/athlete"
 	"powerlifting/glossary/internal/estimate"
 	"powerlifting/glossary/internal/execution"
 	"powerlifting/glossary/internal/exercise"
 	"powerlifting/glossary/internal/store"
 )
+
+const batchOperation = "glossary_estimate_batch"
 
 func asList(values []string) []any {
 	list := make([]any, 0, len(values))
@@ -21,298 +24,180 @@ func asList(values []string) []any {
 	return list
 }
 
-func (s *Service) context(ctx context.Context, athleteID string) (athlete.Program, *estimate.Athlete, error) {
-	program, err := s.Athletes.Program(ctx, athleteID)
-	if err != nil {
-		return program, nil, err
+func (c call) strings(key string) []string {
+	values, _ := c.arguments[key].([]any)
+	var unique []string
+	for _, value := range values {
+		if text, _ := value.(string); text != "" && !slices.Contains(unique, text) {
+			unique = append(unique, text)
+		}
 	}
-	return program, &estimate.Athlete{Meta: program.Meta, LiftProfiles: program.LiftProfiles}, nil
+	return unique
 }
 
-func (s *Service) ensureGeneric(ctx context.Context, current *entry, c call) (string, item, error) {
-	shared := current.catalog
-	if shared == nil {
-		if _, err := s.Generic.Create(ctx, current.effective, c.athlete(), c.caller.Person); err != nil {
-			return "", nil, err
-		}
-		s.Cache.InvalidateCatalog(ctx)
-		var err error
-		if shared, err = s.Store.Get(ctx, store.CatalogKey(current.id)); err != nil || shared == nil {
-			return "", nil, err
-		}
-	}
-	status := exercise.Text(shared, "generic_status")
-	if status != exercise.GenericReady && status != exercise.GenericPending {
-		if err := s.Generic.Requeue(ctx, current.id); err != nil {
-			return "", nil, err
-		}
-		status = exercise.GenericPending
-	}
-	generic, _ := shared["fatigue_profile"].(map[string]any)
-	return status, generic, nil
+func failure(id, reason string) map[string]any {
+	return map[string]any{"id": id, "reason": reason}
 }
 
-func (s *Service) planFatigue(ctx context.Context, c call) (plan, error) {
-	current, err := s.load(ctx, c.athlete(), c.text("id"))
+func definitionSet(estimated estimate.Estimate) item {
+	set := item{}
+	if muscles := estimated.Muscles; muscles != nil {
+		set["primary_muscles"], set["secondary_muscles"], set["tertiary_muscles"] = asList(muscles.Primary), asList(muscles.Secondary), asList(muscles.Tertiary)
+	}
+	if estimated.LiftTransfer != nil {
+		set["lift_transfer"] = estimated.LiftTransfer
+	}
+	if text := estimated.Text; text != nil {
+		set["description"], set["how_to_perform"], set["why_do_it"] = text.Description, text.HowToPerform, text.WhyDoIt
+	}
+	return set
+}
+
+func (s *Service) personalSet(estimated estimate.Estimate) item {
+	set := item{}
+	if fatigue := estimated.Fatigue; fatigue != nil {
+		set["fatigue_profile"], set["fatigue_profile_source"] = fatigue.Profile, "ai_personal"
+		set["fatigue_profile_reasoning"], set["estimated_at"] = fatigue.Reasoning, s.timestamp()
+	}
+	if e1rm := estimated.E1RM; e1rm != nil {
+		set["e1rm_estimate"] = item{"value_kg": e1rm.Kg, "method": "ai_backfill", "basis": e1rm.Basis, "confidence": "low", "set_at": s.timestamp(), "manually_overridden": false}
+	}
+	return set
+}
+
+func (s *Service) ensureGeneric(ctx context.Context, current *entry, c call) (bool, error) {
+	if current.catalog == nil {
+		return s.Generic.Create(ctx, current.effective, c.athlete(), c.caller.Person)
+	}
+	status := exercise.Text(current.catalog, "generic_status")
+	if status == exercise.GenericReady || status == exercise.GenericPending {
+		return false, nil
+	}
+	return true, s.Generic.Requeue(ctx, current.id)
+}
+
+func (s *Service) saveEstimate(ctx context.Context, c call, current *entry, estimated estimate.Estimate) (catalogChanged bool, err error) {
+	definition := definitionSet(estimated)
+	personal := s.personalSet(estimated)
+	if len(definition) > 0 && current.catalog == nil {
+		maps.Copy(personal, definition)
+	} else if len(definition) > 0 {
+		catalogChanged = true
+		set := maps.Clone(definition)
+		set["updated_at"] = s.timestamp()
+		if err := s.Store.Update(ctx, store.CatalogKey(current.id), store.Patch{Set: set}); err != nil {
+			return true, err
+		}
+		overridden := slices.DeleteFunc(slices.Collect(maps.Keys(definition)), func(key string) bool { _, present := current.overlay[key]; return !present })
+		if len(overridden) > 0 {
+			if err := s.Store.Update(ctx, store.OverlayKey(c.athlete(), current.id), store.Patch{Remove: overridden}); err != nil {
+				return true, err
+			}
+		}
+	}
+	if len(personal) > 0 {
+		if err := s.patchOverlay(ctx, c.athlete(), current.id, personal); err != nil {
+			return catalogChanged, err
+		}
+	}
+	if estimated.Fatigue == nil {
+		return catalogChanged, nil
+	}
+	merged := &entry{id: current.id, catalog: current.catalog, overlay: current.overlay, effective: maps.Clone(current.effective)}
+	maps.Copy(merged.effective, definition)
+	changed, err := s.ensureGeneric(ctx, merged, c)
+	return catalogChanged || changed, err
+}
+
+func (s *Service) loadAll(ctx context.Context, athlete string, ids []string) ([]*entry, []any, error) {
+	var entries []*entry
+	failed := []any{}
+	for _, id := range ids {
+		current, err := s.load(ctx, athlete, id)
+		var app *apperr.Error
+		if errors.As(err, &app) && app.Status == 404 {
+			failed = append(failed, failure(id, app.Message))
+			continue
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		entries = append(entries, current)
+	}
+	if len(entries) == 0 {
+		return nil, nil, apperr.NotFound("Exercise not found: %s", strings.Join(ids, ", "))
+	}
+	return entries, failed, nil
+}
+
+func (s *Service) request(ctx context.Context, c call, entries []*entry, aspects []string) (estimate.Request, error) {
+	request := estimate.Request{}
+	personal := slices.ContainsFunc(aspects, func(aspect string) bool { return aspect != estimate.AspectLiftTransfer })
+	if personal {
+		loaded, err := s.Athletes.Program(ctx, c.athlete())
+		if err != nil {
+			return request, err
+		}
+		request.Athlete = &estimate.Athlete{Meta: loaded.Meta, LiftProfiles: loaded.LiftProfiles}
+		request.CurrentMaxes = loaded.CurrentMaxes
+		for _, current := range entries {
+			subject := estimate.Subject{ID: current.id, Item: current.effective, Aspects: aspects}
+			if slices.Contains(aspects, estimate.AspectE1RM) {
+				history, err := s.Athletes.Instances(ctx, c.athlete(), loaded, exercise.Text(current.effective, "name"))
+				if err != nil {
+					return request, err
+				}
+				subject.History = history
+			}
+			request.Subjects = append(request.Subjects, subject)
+		}
+		return request, nil
+	}
+	for _, current := range entries {
+		request.Subjects = append(request.Subjects, estimate.Subject{ID: current.id, Item: current.effective, Aspects: aspects})
+	}
+	return request, nil
+}
+
+func (s *Service) planBatch(ctx context.Context, c call) (plan, error) {
+	entries, failed, err := s.loadAll(ctx, c.athlete(), c.strings("ids"))
 	if err != nil {
 		return plan{}, err
 	}
+	aspects := c.strings("aspects")
+	saved := []any{}
+	catalogChanged := false
 	run := func(ctx context.Context, infer execution.Inferer) (any, error) {
-		_, who, err := s.context(ctx, c.athlete())
+		request, err := s.request(ctx, c, entries, aspects)
 		if err != nil {
 			return nil, err
 		}
-		fatigue, err := estimate.EstimateFatigue(ctx, infer, current.effective, who)
+		estimates, failures, err := estimate.Batch(ctx, infer, request)
 		if err != nil {
 			return nil, err
 		}
-		personal := item{
-			"fatigue_profile": fatigue.Profile, "fatigue_profile_source": "ai_personal",
-			"fatigue_profile_reasoning": fatigue.Reasoning, "estimated_at": s.timestamp(),
+		for _, current := range entries {
+			if reason, rejected := failures[current.id]; rejected {
+				failed = append(failed, failure(current.id, reason))
+				continue
+			}
+			changed, err := s.saveEstimate(ctx, c, current, estimates[current.id])
+			catalogChanged = catalogChanged || changed
+			if err != nil {
+				failed = append(failed, failure(current.id, err.Error()))
+				continue
+			}
+			saved = append(saved, current.id)
 		}
-		if err := s.patchOverlay(ctx, c.athlete(), current.id, personal); err != nil {
-			return nil, err
-		}
-		status, generic, err := s.ensureGeneric(ctx, current, c)
-		if err != nil {
-			return nil, err
-		}
-		result := map[string]any{
-			"status": "fatigue_estimated", "id": current.id, "fatigue_profile": fatigue.Profile, "reasoning": fatigue.Reasoning,
-			"profile": withReasoning(fatigue.Profile, fatigue.Reasoning),
-		}
-		if status != "" {
-			result["generic_status"] = status
-		}
-		if generic != nil {
-			result["generic_fatigue_profile"] = generic
-		}
-		return result, nil
+		return map[string]any{"saved": saved, "failed": failed}, nil
 	}
-	return plan{run: run, finish: s.invalidateAthlete(c)}, nil
-}
-
-func withReasoning(profile item, reasoning string) item {
-	merged := maps.Clone(profile)
-	merged["reasoning"] = reasoning
-	return merged
-}
-
-func (s *Service) invalidateAthlete(c call) func(context.Context, error) {
-	return func(ctx context.Context, err error) {
-		if err == nil {
+	finish := func(ctx context.Context, _ error) {
+		if len(saved) > 0 {
 			s.touched(ctx, c.athlete())
 		}
-	}
-}
-
-func (s *Service) writeDefinition(ctx context.Context, c call, current *entry, set item) (shared bool, err error) {
-	if current.catalog == nil {
-		return false, s.patchOverlay(ctx, c.athlete(), current.id, set)
-	}
-	set["updated_at"] = s.timestamp()
-	if err := s.Store.Update(ctx, store.CatalogKey(current.id), store.Patch{Set: set}); err != nil {
-		return true, err
-	}
-	overridden := slices.DeleteFunc(slices.Collect(maps.Keys(set)), func(key string) bool { _, present := current.overlay[key]; return !present })
-	if len(overridden) > 0 {
-		err = s.Store.Update(ctx, store.OverlayKey(c.athlete(), current.id), store.Patch{Remove: overridden})
-	}
-	return true, err
-}
-
-func (s *Service) definitionFinish(c call, shared *bool) func(context.Context, error) {
-	return func(ctx context.Context, err error) {
-		if err != nil {
-			return
-		}
-		s.touched(ctx, c.athlete())
-		if *shared {
+		if catalogChanged {
 			s.Cache.InvalidateCatalog(ctx)
 		}
 	}
-}
-
-func (s *Service) planMuscles(ctx context.Context, c call) (plan, error) {
-	current, err := s.load(ctx, c.athlete(), c.text("id"))
-	if err != nil {
-		return plan{}, err
-	}
-	var shared bool
-	run := func(ctx context.Context, infer execution.Inferer) (any, error) {
-		_, who, err := s.context(ctx, c.athlete())
-		if err != nil {
-			return nil, err
-		}
-		muscles, err := estimate.EstimateMuscles(ctx, infer, current.effective, who)
-		if err != nil {
-			return nil, err
-		}
-		shared, err = s.writeDefinition(ctx, c, current, item{
-			"primary_muscles": asList(muscles.Primary), "secondary_muscles": asList(muscles.Secondary), "tertiary_muscles": asList(muscles.Tertiary),
-		})
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{
-			"status": "muscles_estimated", "id": current.id, "primary_muscles": asList(muscles.Primary),
-			"secondary_muscles": asList(muscles.Secondary), "tertiary_muscles": asList(muscles.Tertiary), "reasoning": muscles.Reasoning,
-		}, nil
-	}
-	return plan{run: run, finish: s.definitionFinish(c, &shared)}, nil
-}
-
-func (s *Service) planLiftTransfer(ctx context.Context, c call) (plan, error) {
-	inline, _ := c.arguments["exercise"].(map[string]any)
-	id := c.text("id")
-	if id == "" {
-		run := func(ctx context.Context, infer execution.Inferer) (any, error) {
-			transfer, err := estimate.EstimateLiftTransfer(ctx, infer, inline)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"status": "lift_transfer_estimated", "lift_transfer": transfer}, nil
-		}
-		return plan{run: run}, nil
-	}
-	current, err := s.load(ctx, c.athlete(), id)
-	if err != nil {
-		return plan{}, err
-	}
-	var shared bool
-	run := func(ctx context.Context, infer execution.Inferer) (any, error) {
-		subject := maps.Clone(current.effective)
-		maps.Copy(subject, inline)
-		transfer, err := estimate.EstimateLiftTransfer(ctx, infer, subject)
-		if err != nil {
-			return nil, err
-		}
-		if shared, err = s.writeDefinition(ctx, c, current, item{"lift_transfer": transfer}); err != nil {
-			return nil, err
-		}
-		return map[string]any{"status": "lift_transfer_estimated", "id": id, "lift_transfer": transfer}, nil
-	}
-	return plan{run: run, finish: s.definitionFinish(c, &shared)}, nil
-}
-
-func (s *Service) planText(ctx context.Context, c call) (plan, error) {
-	subject, _ := c.arguments["exercise"].(map[string]any)
-	run := func(ctx context.Context, infer execution.Inferer) (any, error) {
-		var who estimate.Athlete
-		if given, present := c.arguments["lift_profiles"].([]any); present {
-			for _, profile := range given {
-				if object, isObject := profile.(map[string]any); isObject {
-					who.LiftProfiles = append(who.LiftProfiles, object)
-				}
-			}
-		} else if program, err := s.Athletes.Program(ctx, c.athlete()); err == nil {
-			who.LiftProfiles = program.LiftProfiles
-		}
-		text, err := estimate.GenerateText(ctx, infer, subject, who)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"status": "generated", "description": text.Description, "how_to_perform": text.HowToPerform, "why_do_it": text.WhyDoIt}, nil
-	}
-	return plan{run: run}, nil
-}
-
-func (s *Service) planE1RM(ctx context.Context, c call) (plan, error) {
-	current, err := s.load(ctx, c.athlete(), c.text("id"))
-	if err != nil {
-		return plan{}, err
-	}
-	run := func(ctx context.Context, infer execution.Inferer) (any, error) {
-		program, err := s.Athletes.Program(ctx, c.athlete())
-		if err != nil {
-			return nil, err
-		}
-		instances, err := s.Athletes.Instances(ctx, c.athlete(), program, exercise.Text(current.effective, "name"))
-		if err != nil {
-			return nil, err
-		}
-		estimated, err := estimate.EstimateE1RM(ctx, infer, current.effective, program.CurrentMaxes, program.LiftProfiles, instances)
-		if err != nil {
-			return nil, err
-		}
-		stored := item{"value_kg": estimated.Kg, "method": "ai_backfill", "basis": estimated.Basis, "confidence": "low", "set_at": s.timestamp(), "manually_overridden": false}
-		if err := s.patchOverlay(ctx, c.athlete(), current.id, item{"e1rm_estimate": stored}); err != nil {
-			return nil, err
-		}
-		return map[string]any{"status": "estimated", "id": current.id, "estimate": map[string]any{
-			"e1rm_kg": estimated.Kg, "basis": estimated.Basis, "ratio": estimated.Ratio, "primary_lift_used": estimated.PrimaryLift, "confidence": estimated.Confidence,
-		}}, nil
-	}
-	return plan{run: run, finish: s.invalidateAthlete(c)}, nil
-}
-
-func (s *Service) planGeneric(ctx context.Context, c call) (plan, error) {
-	id := c.text("id")
-	catalog, err := s.Store.Get(ctx, store.CatalogKey(id))
-	if err != nil {
-		return plan{}, err
-	}
-	if catalog == nil {
-		return plan{}, apperr.NotFound("Catalog exercise not found: %s", id)
-	}
-	run := func(ctx context.Context, infer execution.Inferer) (any, error) {
-		status := exercise.Text(catalog, "generic_status")
-		if status != exercise.GenericPending {
-			return map[string]any{"status": "skipped", "id": id, "generic_status": status}, nil
-		}
-		estimated, err := s.estimateGeneric(ctx, infer, catalog)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.Generic.Complete(ctx, id, estimated); err != nil {
-			return nil, err
-		}
-		return map[string]any{"status": "generic_estimated", "id": id, "generic_status": exercise.GenericReady}, nil
-	}
-	finish := func(ctx context.Context, err error) {
-		s.Generic.Done(id)
-		if err != nil {
-			s.Generic.Fail(ctx, id)
-			return
-		}
-		s.Cache.InvalidateCatalog(ctx)
-	}
 	return plan{run: run, finish: finish}, nil
-}
-
-func (s *Service) estimateGeneric(ctx context.Context, infer execution.Inferer, catalog item) (item, error) {
-	subject := maps.Clone(catalog)
-	estimated := item{}
-	if len(exercise.Strings(subject, "primary_muscles")) == 0 {
-		muscles, err := estimate.EstimateMuscles(ctx, infer, subject, nil)
-		if err != nil {
-			return nil, err
-		}
-		estimated["primary_muscles"], estimated["secondary_muscles"], estimated["tertiary_muscles"] = asList(muscles.Primary), asList(muscles.Secondary), asList(muscles.Tertiary)
-		maps.Copy(subject, estimated)
-	}
-	if exercise.Text(subject, "description") == "" || exercise.Text(subject, "how_to_perform") == "" || exercise.Text(subject, "why_do_it") == "" {
-		text, err := estimate.GenerateText(ctx, infer, subject, estimate.Athlete{})
-		if err != nil {
-			return nil, err
-		}
-		for key, generated := range map[string]string{"description": text.Description, "how_to_perform": text.HowToPerform, "why_do_it": text.WhyDoIt} {
-			if exercise.Text(subject, key) == "" {
-				estimated[key], subject[key] = generated, generated
-			}
-		}
-	}
-	if existing, _ := subject["lift_transfer"].(map[string]any); exercise.Text(existing, "source") != "user" {
-		transfer, err := estimate.EstimateLiftTransfer(ctx, infer, subject)
-		if err != nil {
-			return nil, err
-		}
-		estimated["lift_transfer"] = transfer
-	}
-	fatigue, err := estimate.EstimateFatigue(ctx, infer, subject, nil)
-	if err != nil {
-		return nil, err
-	}
-	estimated["fatigue_profile"], estimated["fatigue_profile_source"], estimated["fatigue_profile_reasoning"] = fatigue.Profile, "ai_generic", fatigue.Reasoning
-	return estimated, nil
 }

@@ -67,24 +67,24 @@ conflicts are a no-op. Batch failures report `batchItemFailures`.
 
 **Background generic estimation (in `pl-glossary`):** a ticker (interval from env
 `GLOSSARY_GENERIC_INTERVAL`, e.g. 5m) Queries GSI `generic-pending` (limit small).
-For each item, call the coach with operation `glossary_generic_estimate` — prompt
-carries only the exercise definition, never athlete data — get muscles (if
-empty), fatigue profile, lift_transfer, text (if empty); write them to the catalog
+Once per tick, call the coach with operation `glossary_generic_estimate` for all pending
+items at once (up to 5) — prompt carries only the exercise definitions, never athlete
+data — get muscles (if empty), fatigue profile, lift_transfer, text (if empty) per item; write each to its catalog
 item, `generic_status = ready`, REMOVE `generic_pending`. On failure increment
 `generic_attempts`; after 3 set `failed` and remove `generic_pending`. One
 replica, so no lease needed. The coach maps `glossary_generic_estimate` to the
 cheap OpenRouter alias (`pl-background`, see §4), never the ChatGPT subscription.
 
-**First personal analysis (`glossary_estimate_fatigue` for an athlete):** run the
-personal estimate (athlete program meta + lift profiles, existing model mapping)
-and write it to the athlete overlay. In the same request, if the catalog item is
-missing or not `ready`, ensure it is `pending` (create from the effective
-definition if missing) so the background job fills the generic one. Result =
-both: `{personal, generic_status}`; when the generic already exists, return it
-too. Same split for `glossary_estimate_muscles` / `lift_transfer` / `generate_text`:
-these are definition-level, so they write to the catalog when the athlete's
-exercise is in the catalog, otherwise to the overlay. `glossary_estimate_e1rm`
-is personal only (overlay).
+**Bundled estimates (`glossary_estimate_batch`):** one AI call returns
+`{results: [{id, fatigue?, e1rm?, muscles?, lift_transfer?, text?}]}` for up to 25
+exercises and the requested aspects; athlete context goes into the prompt once.
+Each element is validated and saved individually: personal fatigue and e1rm to the
+athlete overlay; muscles, lift transfer and text to the catalog item when the
+exercise is in the catalog, otherwise to the overlay. A fatigue estimate also
+ensures the catalog item is `pending` (created from the effective definition if
+missing). Catalog cache invalidation happens once per batch. Missing or invalid
+elements come back as `failed: [{id, reason}]` beside `saved: [ids]` without
+failing the batch.
 
 ## 3. Service `pl-glossary` in Go (`src/services/glossary/`)
 
