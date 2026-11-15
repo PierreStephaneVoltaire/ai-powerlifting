@@ -68,7 +68,7 @@ func (s *Service) report(ctx context.Context, operation string, arguments map[st
 	inputs := s.inputs(operation, arguments)
 	identity := s.identity(ctx, inputs, athlete, access)
 	if operation == "correlation_analysis" || operation == "block_correlation_analysis" {
-		identity["prompt_version"] = generation.CorrelationPromptVersion
+		identity["prompt_version"] = generation.CorrelationPromptHash()
 	}
 	id, err := generation.Fingerprint(operation, inputs, identity)
 	if err != nil {

@@ -453,7 +453,7 @@ type CorrelationInputsReply struct {
 	LiftProfiles []*structpb.Struct `protobuf:"bytes,6,rep,name=lift_profiles,json=liftProfiles,proto3" json:"lift_profiles,omitempty"`
 	// Athlete measurements: height, wingspan, leg length, weight class, bodyweight.
 	AthleteMeasurements *structpb.Struct `protobuf:"bytes,7,opt,name=athlete_measurements,json=athleteMeasurements,proto3" json:"athlete_measurements,omitempty"`
-	// One row per week and exercise for the main lifts and the highest transfer-weighted exercises.
+	// One row per week and exercise for every exercise trained in the window.
 	ExerciseWeeks []*ExerciseWeek `protobuf:"bytes,8,rep,name=exercise_weeks,json=exerciseWeeks,proto3" json:"exercise_weeks,omitempty"`
 	// Muscles, fatigue profile and lift transfer of each exercise in exercise_weeks.
 	Exercises []*ExerciseProfile `protobuf:"bytes,9,rep,name=exercises,proto3" json:"exercises,omitempty"`
@@ -465,10 +465,12 @@ type CorrelationInputsReply struct {
 	FatigueWeeks []*FatigueWeek `protobuf:"bytes,12,rep,name=fatigue_weeks,json=fatigueWeeks,proto3" json:"fatigue_weeks,omitempty"`
 	// One row per main-lift session with the fatigue and muscle load of the 48 hours before it.
 	LiftSessions []*LiftSession `protobuf:"bytes,13,rep,name=lift_sessions,json=liftSessions,proto3" json:"lift_sessions,omitempty"`
-	// Precomputed evidence for exercise, muscle and sequence drivers.
-	DriverStats   []*DriverStat `protobuf:"bytes,14,rep,name=driver_stats,json=driverStats,proto3" json:"driver_stats,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Pearson r of weekly volume against the next week's e1RM change for every accessory and main lift.
+	DriverStats []*CorrelationStat `protobuf:"bytes,14,rep,name=driver_stats,json=driverStats,proto3" json:"driver_stats,omitempty"`
+	// Where each accessory sits relative to each main lift's sessions, one row per accessory and lift.
+	ExercisePositions []*ExercisePosition `protobuf:"bytes,15,rep,name=exercise_positions,json=exercisePositions,proto3" json:"exercise_positions,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CorrelationInputsReply) Reset() {
@@ -592,9 +594,16 @@ func (x *CorrelationInputsReply) GetLiftSessions() []*LiftSession {
 	return nil
 }
 
-func (x *CorrelationInputsReply) GetDriverStats() []*DriverStat {
+func (x *CorrelationInputsReply) GetDriverStats() []*CorrelationStat {
 	if x != nil {
 		return x.DriverStats
+	}
+	return nil
+}
+
+func (x *CorrelationInputsReply) GetExercisePositions() []*ExercisePosition {
+	if x != nil {
+		return x.ExercisePositions
 	}
 	return nil
 }
@@ -1209,45 +1218,35 @@ func (x *LiftSession) GetPrior48HMuscleSets() map[string]float64 {
 	return nil
 }
 
-// DriverStat is precomputed evidence for one driver of one lift.
-type DriverStat struct {
+// CorrelationStat is the Pearson correlation of one accessory exercise with one main lift.
+type CorrelationStat struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// exercise, muscle or sequence.
-	DriverType string `protobuf:"bytes,1,opt,name=driver_type,json=driverType,proto3" json:"driver_type,omitempty"`
-	// Exercise name, muscle name or fatigue dimension.
+	// Accessory exercise name.
 	Driver string `protobuf:"bytes,2,opt,name=driver,proto3" json:"driver,omitempty"`
 	// squat, bench or deadlift.
 	Lift string `protobuf:"bytes,3,opt,name=lift,proto3" json:"lift,omitempty"`
-	// Spearman rho of weekly sets against the next week's e1RM change, for exercise and muscle drivers.
+	// Pearson r of weekly volume against the next week's e1RM change.
 	Rho *float64 `protobuf:"fixed64,4,opt,name=rho,proto3,oneof" json:"rho,omitempty"`
-	// Number of week pairs behind rho.
-	N int32 `protobuf:"varint,5,opt,name=n,proto3" json:"n,omitempty"`
-	// Sessions with prior-48h load at or above 1.25x typical, for sequence drivers.
-	NHigh int32 `protobuf:"varint,6,opt,name=n_high,json=nHigh,proto3" json:"n_high,omitempty"`
-	// Sessions below 1.25x typical, for sequence drivers.
-	NLow                int32    `protobuf:"varint,7,opt,name=n_low,json=nLow,proto3" json:"n_low,omitempty"`
-	MeanResidualPctHigh *float64 `protobuf:"fixed64,8,opt,name=mean_residual_pct_high,json=meanResidualPctHigh,proto3,oneof" json:"mean_residual_pct_high,omitempty"`
-	MeanResidualPctLow  *float64 `protobuf:"fixed64,9,opt,name=mean_residual_pct_low,json=meanResidualPctLow,proto3,oneof" json:"mean_residual_pct_low,omitempty"`
-	MeanRpeHigh         *float64 `protobuf:"fixed64,10,opt,name=mean_rpe_high,json=meanRpeHigh,proto3,oneof" json:"mean_rpe_high,omitempty"`
-	MeanRpeLow          *float64 `protobuf:"fixed64,11,opt,name=mean_rpe_low,json=meanRpeLow,proto3,oneof" json:"mean_rpe_low,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Number of weeks behind the correlation.
+	N             int32 `protobuf:"varint,5,opt,name=n,proto3" json:"n,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DriverStat) Reset() {
-	*x = DriverStat{}
+func (x *CorrelationStat) Reset() {
+	*x = CorrelationStat{}
 	mi := &file_analytics_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DriverStat) String() string {
+func (x *CorrelationStat) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DriverStat) ProtoMessage() {}
+func (*CorrelationStat) ProtoMessage() {}
 
-func (x *DriverStat) ProtoReflect() protoreflect.Message {
+func (x *CorrelationStat) ProtoReflect() protoreflect.Message {
 	mi := &file_analytics_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1259,84 +1258,144 @@ func (x *DriverStat) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DriverStat.ProtoReflect.Descriptor instead.
-func (*DriverStat) Descriptor() ([]byte, []int) {
+// Deprecated: Use CorrelationStat.ProtoReflect.Descriptor instead.
+func (*CorrelationStat) Descriptor() ([]byte, []int) {
 	return file_analytics_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *DriverStat) GetDriverType() string {
-	if x != nil {
-		return x.DriverType
-	}
-	return ""
-}
-
-func (x *DriverStat) GetDriver() string {
+func (x *CorrelationStat) GetDriver() string {
 	if x != nil {
 		return x.Driver
 	}
 	return ""
 }
 
-func (x *DriverStat) GetLift() string {
+func (x *CorrelationStat) GetLift() string {
 	if x != nil {
 		return x.Lift
 	}
 	return ""
 }
 
-func (x *DriverStat) GetRho() float64 {
+func (x *CorrelationStat) GetRho() float64 {
 	if x != nil && x.Rho != nil {
 		return *x.Rho
 	}
 	return 0
 }
 
-func (x *DriverStat) GetN() int32 {
+func (x *CorrelationStat) GetN() int32 {
 	if x != nil {
 		return x.N
 	}
 	return 0
 }
 
-func (x *DriverStat) GetNHigh() int32 {
+// ExercisePosition counts the window's accessory sessions by their position relative to one main lift.
+type ExercisePosition struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Accessory exercise name.
+	Exercise string `protobuf:"bytes,1,opt,name=exercise,proto3" json:"exercise,omitempty"`
+	// squat, bench or deadlift.
+	Lift string `protobuf:"bytes,2,opt,name=lift,proto3" json:"lift,omitempty"`
+	// Sessions containing both, with the accessory listed before the lift.
+	SameSessionBefore int32 `protobuf:"varint,3,opt,name=same_session_before,json=sameSessionBefore,proto3" json:"same_session_before,omitempty"`
+	// Sessions containing both, with the accessory listed after the lift.
+	SameSessionAfter int32 `protobuf:"varint,4,opt,name=same_session_after,json=sameSessionAfter,proto3" json:"same_session_after,omitempty"`
+	// Accessory sessions without the lift, 1 day before a session of the lift.
+	DayBefore_1 int32 `protobuf:"varint,5,opt,name=day_before_1,json=dayBefore1,proto3" json:"day_before_1,omitempty"`
+	// Accessory sessions without the lift, 2 days before a session of the lift.
+	DayBefore_2 int32 `protobuf:"varint,6,opt,name=day_before_2,json=dayBefore2,proto3" json:"day_before_2,omitempty"`
+	// Accessory sessions without the lift, more than 2 days or no later session of the lift.
+	Outside_48H int32 `protobuf:"varint,7,opt,name=outside_48h,json=outside48h,proto3" json:"outside_48h,omitempty"`
+	// Mean days from an accessory session to the next later session of the lift.
+	AvgDaysToNext *float64 `protobuf:"fixed64,8,opt,name=avg_days_to_next,json=avgDaysToNext,proto3,oneof" json:"avg_days_to_next,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExercisePosition) Reset() {
+	*x = ExercisePosition{}
+	mi := &file_analytics_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExercisePosition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExercisePosition) ProtoMessage() {}
+
+func (x *ExercisePosition) ProtoReflect() protoreflect.Message {
+	mi := &file_analytics_proto_msgTypes[17]
 	if x != nil {
-		return x.NHigh
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return 0
+	return mi.MessageOf(x)
 }
 
-func (x *DriverStat) GetNLow() int32 {
+// Deprecated: Use ExercisePosition.ProtoReflect.Descriptor instead.
+func (*ExercisePosition) Descriptor() ([]byte, []int) {
+	return file_analytics_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ExercisePosition) GetExercise() string {
 	if x != nil {
-		return x.NLow
+		return x.Exercise
+	}
+	return ""
+}
+
+func (x *ExercisePosition) GetLift() string {
+	if x != nil {
+		return x.Lift
+	}
+	return ""
+}
+
+func (x *ExercisePosition) GetSameSessionBefore() int32 {
+	if x != nil {
+		return x.SameSessionBefore
 	}
 	return 0
 }
 
-func (x *DriverStat) GetMeanResidualPctHigh() float64 {
-	if x != nil && x.MeanResidualPctHigh != nil {
-		return *x.MeanResidualPctHigh
+func (x *ExercisePosition) GetSameSessionAfter() int32 {
+	if x != nil {
+		return x.SameSessionAfter
 	}
 	return 0
 }
 
-func (x *DriverStat) GetMeanResidualPctLow() float64 {
-	if x != nil && x.MeanResidualPctLow != nil {
-		return *x.MeanResidualPctLow
+func (x *ExercisePosition) GetDayBefore_1() int32 {
+	if x != nil {
+		return x.DayBefore_1
 	}
 	return 0
 }
 
-func (x *DriverStat) GetMeanRpeHigh() float64 {
-	if x != nil && x.MeanRpeHigh != nil {
-		return *x.MeanRpeHigh
+func (x *ExercisePosition) GetDayBefore_2() int32 {
+	if x != nil {
+		return x.DayBefore_2
 	}
 	return 0
 }
 
-func (x *DriverStat) GetMeanRpeLow() float64 {
-	if x != nil && x.MeanRpeLow != nil {
-		return *x.MeanRpeLow
+func (x *ExercisePosition) GetOutside_48H() int32 {
+	if x != nil {
+		return x.Outside_48H
+	}
+	return 0
+}
+
+func (x *ExercisePosition) GetAvgDaysToNext() float64 {
+	if x != nil && x.AvgDaysToNext != nil {
+		return *x.AvgDaysToNext
 	}
 	return 0
 }
@@ -1358,7 +1417,7 @@ type WeeklyE1Rm struct {
 
 func (x *WeeklyE1Rm) Reset() {
 	*x = WeeklyE1Rm{}
-	mi := &file_analytics_proto_msgTypes[17]
+	mi := &file_analytics_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1370,7 +1429,7 @@ func (x *WeeklyE1Rm) String() string {
 func (*WeeklyE1Rm) ProtoMessage() {}
 
 func (x *WeeklyE1Rm) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[17]
+	mi := &file_analytics_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1383,7 +1442,7 @@ func (x *WeeklyE1Rm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WeeklyE1Rm.ProtoReflect.Descriptor instead.
 func (*WeeklyE1Rm) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{17}
+	return file_analytics_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *WeeklyE1Rm) GetWeekNumber() int32 {
@@ -1427,7 +1486,7 @@ type WeeklyAccessoryVolume struct {
 
 func (x *WeeklyAccessoryVolume) Reset() {
 	*x = WeeklyAccessoryVolume{}
-	mi := &file_analytics_proto_msgTypes[18]
+	mi := &file_analytics_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1439,7 +1498,7 @@ func (x *WeeklyAccessoryVolume) String() string {
 func (*WeeklyAccessoryVolume) ProtoMessage() {}
 
 func (x *WeeklyAccessoryVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[18]
+	mi := &file_analytics_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1452,7 +1511,7 @@ func (x *WeeklyAccessoryVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WeeklyAccessoryVolume.ProtoReflect.Descriptor instead.
 func (*WeeklyAccessoryVolume) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{18}
+	return file_analytics_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *WeeklyAccessoryVolume) GetWeekNumber() int32 {
@@ -1482,7 +1541,7 @@ type ExerciseVolume struct {
 
 func (x *ExerciseVolume) Reset() {
 	*x = ExerciseVolume{}
-	mi := &file_analytics_proto_msgTypes[19]
+	mi := &file_analytics_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1494,7 +1553,7 @@ func (x *ExerciseVolume) String() string {
 func (*ExerciseVolume) ProtoMessage() {}
 
 func (x *ExerciseVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_analytics_proto_msgTypes[19]
+	mi := &file_analytics_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1507,7 +1566,7 @@ func (x *ExerciseVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExerciseVolume.ProtoReflect.Descriptor instead.
 func (*ExerciseVolume) Descriptor() ([]byte, []int) {
-	return file_analytics_proto_rawDescGZIP(), []int{19}
+	return file_analytics_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ExerciseVolume) GetName() string {
@@ -1560,7 +1619,7 @@ const file_analytics_proto_rawDesc = "" +
 	"\x06Report\x12+\n" +
 	"\x04body\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x04body\"<\n" +
 	"\tBlockList\x12/\n" +
-	"\x06blocks\x18\x01 \x03(\v2\x17.google.protobuf.StructR\x06blocks\"\xbb\a\n" +
+	"\x06blocks\x18\x01 \x03(\v2\x17.google.protobuf.StructR\x06blocks\"\x9c\b\n" +
 	"\x16CorrelationInputsReply\x12\x1b\n" +
 	"\tblock_key\x18\x01 \x01(\tR\bblockKey\x12!\n" +
 	"\fwindow_start\x18\x02 \x01(\tR\vwindowStart\x12\x14\n" +
@@ -1576,8 +1635,9 @@ const file_analytics_proto_rawDesc = "" +
 	" \x03(\v2%.powerlifting.analytics.v1.MuscleWeekR\vmuscleWeeks\x12T\n" +
 	"\x10muscle_landmarks\x18\v \x03(\v2).powerlifting.analytics.v1.MuscleLandmarkR\x0fmuscleLandmarks\x12K\n" +
 	"\rfatigue_weeks\x18\f \x03(\v2&.powerlifting.analytics.v1.FatigueWeekR\ffatigueWeeks\x12K\n" +
-	"\rlift_sessions\x18\r \x03(\v2&.powerlifting.analytics.v1.LiftSessionR\fliftSessions\x12H\n" +
-	"\fdriver_stats\x18\x0e \x03(\v2%.powerlifting.analytics.v1.DriverStatR\vdriverStats\"w\n" +
+	"\rlift_sessions\x18\r \x03(\v2&.powerlifting.analytics.v1.LiftSessionR\fliftSessions\x12M\n" +
+	"\fdriver_stats\x18\x0e \x03(\v2*.powerlifting.analytics.v1.CorrelationStatR\vdriverStats\x12Z\n" +
+	"\x12exercise_positions\x18\x0f \x03(\v2+.powerlifting.analytics.v1.ExercisePositionR\x11exercisePositions\"w\n" +
 	"\vFatigueDims\x12\x14\n" +
 	"\x05axial\x18\x01 \x01(\x01R\x05axial\x12\x16\n" +
 	"\x06neural\x18\x02 \x01(\x01R\x06neural\x12\x1e\n" +
@@ -1637,28 +1697,28 @@ const file_analytics_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01B\x14\n" +
 	"\x12_e1rm_residual_pctB\n" +
 	"\n" +
-	"\b_avg_rpe\"\xcc\x03\n" +
-	"\n" +
-	"DriverStat\x12\x1f\n" +
-	"\vdriver_type\x18\x01 \x01(\tR\n" +
-	"driverType\x12\x16\n" +
+	"\b_avg_rpe\"\xfc\x01\n" +
+	"\x0fCorrelationStat\x12\x16\n" +
 	"\x06driver\x18\x02 \x01(\tR\x06driver\x12\x12\n" +
 	"\x04lift\x18\x03 \x01(\tR\x04lift\x12\x15\n" +
 	"\x03rho\x18\x04 \x01(\x01H\x00R\x03rho\x88\x01\x01\x12\f\n" +
-	"\x01n\x18\x05 \x01(\x05R\x01n\x12\x15\n" +
-	"\x06n_high\x18\x06 \x01(\x05R\x05nHigh\x12\x13\n" +
-	"\x05n_low\x18\a \x01(\x05R\x04nLow\x128\n" +
-	"\x16mean_residual_pct_high\x18\b \x01(\x01H\x01R\x13meanResidualPctHigh\x88\x01\x01\x126\n" +
-	"\x15mean_residual_pct_low\x18\t \x01(\x01H\x02R\x12meanResidualPctLow\x88\x01\x01\x12'\n" +
-	"\rmean_rpe_high\x18\n" +
-	" \x01(\x01H\x03R\vmeanRpeHigh\x88\x01\x01\x12%\n" +
-	"\fmean_rpe_low\x18\v \x01(\x01H\x04R\n" +
-	"meanRpeLow\x88\x01\x01B\x06\n" +
-	"\x04_rhoB\x19\n" +
-	"\x17_mean_residual_pct_highB\x18\n" +
-	"\x16_mean_residual_pct_lowB\x10\n" +
-	"\x0e_mean_rpe_highB\x0f\n" +
-	"\r_mean_rpe_low\"\xbd\x01\n" +
+	"\x01n\x18\x05 \x01(\x05R\x01nB\x06\n" +
+	"\x04_rhoJ\x04\b\x01\x10\x02J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"J\x04\b\n" +
+	"\x10\vJ\x04\b\v\x10\fR\vdriver_typeR\x06n_highR\x05n_lowR\x16mean_residual_pct_highR\x15mean_residual_pct_lowR\rmean_rpe_highR\fmean_rpe_low\"\xc8\x02\n" +
+	"\x10ExercisePosition\x12\x1a\n" +
+	"\bexercise\x18\x01 \x01(\tR\bexercise\x12\x12\n" +
+	"\x04lift\x18\x02 \x01(\tR\x04lift\x12.\n" +
+	"\x13same_session_before\x18\x03 \x01(\x05R\x11sameSessionBefore\x12,\n" +
+	"\x12same_session_after\x18\x04 \x01(\x05R\x10sameSessionAfter\x12 \n" +
+	"\fday_before_1\x18\x05 \x01(\x05R\n" +
+	"dayBefore1\x12 \n" +
+	"\fday_before_2\x18\x06 \x01(\x05R\n" +
+	"dayBefore2\x12\x1f\n" +
+	"\voutside_48h\x18\a \x01(\x05R\n" +
+	"outside48h\x12,\n" +
+	"\x10avg_days_to_next\x18\b \x01(\x01H\x00R\ravgDaysToNext\x88\x01\x01B\x13\n" +
+	"\x11_avg_days_to_next\"\xbd\x01\n" +
 	"\n" +
 	"WeeklyE1rm\x12\x1f\n" +
 	"\vweek_number\x18\x01 \x01(\x05R\n" +
@@ -1685,7 +1745,8 @@ const file_analytics_proto_rawDesc = "" +
 	"\aCompare\x12$.powerlifting.analytics.v1.BlockKeys\x1a!.powerlifting.analytics.v1.Report\x12T\n" +
 	"\bLifetime\x12%.powerlifting.analytics.v1.AthleteRef\x1a!.powerlifting.analytics.v1.Report\x12]\n" +
 	"\x10SelectedLifetime\x12&.powerlifting.analytics.v1.LifetimeRef\x1a!.powerlifting.analytics.v1.Report\x12k\n" +
-	"\x11CorrelationInputs\x12#.powerlifting.analytics.v1.BlockRef\x1a1.powerlifting.analytics.v1.CorrelationInputsReplyb\x06proto3"
+	"\x11CorrelationInputs\x12#.powerlifting.analytics.v1.BlockRef\x1a1.powerlifting.analytics.v1.CorrelationInputsReplyB\xee\x01\n" +
+	"\x1dcom.powerlifting.analytics.v1B\x0eAnalyticsProtoP\x01Z7powerlifting/analytics-export/gen/analytics;analyticsv1\xa2\x02\x03PAX\xaa\x02\x19Powerlifting.Analytics.V1\xca\x02\x19Powerlifting\\Analytics\\V1\xe2\x02%Powerlifting\\Analytics\\V1\\GPBMetadata\xea\x02\x1bPowerlifting::Analytics::V1b\x06proto3"
 
 var (
 	file_analytics_proto_rawDescOnce sync.Once
@@ -1699,7 +1760,7 @@ func file_analytics_proto_rawDescGZIP() []byte {
 	return file_analytics_proto_rawDescData
 }
 
-var file_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_analytics_proto_goTypes = []any{
 	(*AthleteRef)(nil),             // 0: powerlifting.analytics.v1.AthleteRef
 	(*LifetimeRef)(nil),            // 1: powerlifting.analytics.v1.LifetimeRef
@@ -1717,57 +1778,59 @@ var file_analytics_proto_goTypes = []any{
 	(*MuscleLandmark)(nil),         // 13: powerlifting.analytics.v1.MuscleLandmark
 	(*FatigueWeek)(nil),            // 14: powerlifting.analytics.v1.FatigueWeek
 	(*LiftSession)(nil),            // 15: powerlifting.analytics.v1.LiftSession
-	(*DriverStat)(nil),             // 16: powerlifting.analytics.v1.DriverStat
-	(*WeeklyE1Rm)(nil),             // 17: powerlifting.analytics.v1.WeeklyE1rm
-	(*WeeklyAccessoryVolume)(nil),  // 18: powerlifting.analytics.v1.WeeklyAccessoryVolume
-	(*ExerciseVolume)(nil),         // 19: powerlifting.analytics.v1.ExerciseVolume
-	nil,                            // 20: powerlifting.analytics.v1.LiftSession.Prior48hMuscleSetsEntry
-	(*structpb.Struct)(nil),        // 21: google.protobuf.Struct
+	(*CorrelationStat)(nil),        // 16: powerlifting.analytics.v1.CorrelationStat
+	(*ExercisePosition)(nil),       // 17: powerlifting.analytics.v1.ExercisePosition
+	(*WeeklyE1Rm)(nil),             // 18: powerlifting.analytics.v1.WeeklyE1rm
+	(*WeeklyAccessoryVolume)(nil),  // 19: powerlifting.analytics.v1.WeeklyAccessoryVolume
+	(*ExerciseVolume)(nil),         // 20: powerlifting.analytics.v1.ExerciseVolume
+	nil,                            // 21: powerlifting.analytics.v1.LiftSession.Prior48hMuscleSetsEntry
+	(*structpb.Struct)(nil),        // 22: google.protobuf.Struct
 }
 var file_analytics_proto_depIdxs = []int32{
-	21, // 0: powerlifting.analytics.v1.Snapshot.program:type_name -> google.protobuf.Struct
-	21, // 1: powerlifting.analytics.v1.Snapshot.sessions:type_name -> google.protobuf.Struct
-	21, // 2: powerlifting.analytics.v1.Snapshot.weight_log:type_name -> google.protobuf.Struct
-	21, // 3: powerlifting.analytics.v1.Snapshot.goals:type_name -> google.protobuf.Struct
-	21, // 4: powerlifting.analytics.v1.Snapshot.competitions:type_name -> google.protobuf.Struct
-	21, // 5: powerlifting.analytics.v1.Report.body:type_name -> google.protobuf.Struct
-	21, // 6: powerlifting.analytics.v1.BlockList.blocks:type_name -> google.protobuf.Struct
-	17, // 7: powerlifting.analytics.v1.CorrelationInputsReply.weekly_e1rm:type_name -> powerlifting.analytics.v1.WeeklyE1rm
-	18, // 8: powerlifting.analytics.v1.CorrelationInputsReply.weekly_accessory:type_name -> powerlifting.analytics.v1.WeeklyAccessoryVolume
-	21, // 9: powerlifting.analytics.v1.CorrelationInputsReply.lift_profiles:type_name -> google.protobuf.Struct
-	21, // 10: powerlifting.analytics.v1.CorrelationInputsReply.athlete_measurements:type_name -> google.protobuf.Struct
+	22, // 0: powerlifting.analytics.v1.Snapshot.program:type_name -> google.protobuf.Struct
+	22, // 1: powerlifting.analytics.v1.Snapshot.sessions:type_name -> google.protobuf.Struct
+	22, // 2: powerlifting.analytics.v1.Snapshot.weight_log:type_name -> google.protobuf.Struct
+	22, // 3: powerlifting.analytics.v1.Snapshot.goals:type_name -> google.protobuf.Struct
+	22, // 4: powerlifting.analytics.v1.Snapshot.competitions:type_name -> google.protobuf.Struct
+	22, // 5: powerlifting.analytics.v1.Report.body:type_name -> google.protobuf.Struct
+	22, // 6: powerlifting.analytics.v1.BlockList.blocks:type_name -> google.protobuf.Struct
+	18, // 7: powerlifting.analytics.v1.CorrelationInputsReply.weekly_e1rm:type_name -> powerlifting.analytics.v1.WeeklyE1rm
+	19, // 8: powerlifting.analytics.v1.CorrelationInputsReply.weekly_accessory:type_name -> powerlifting.analytics.v1.WeeklyAccessoryVolume
+	22, // 9: powerlifting.analytics.v1.CorrelationInputsReply.lift_profiles:type_name -> google.protobuf.Struct
+	22, // 10: powerlifting.analytics.v1.CorrelationInputsReply.athlete_measurements:type_name -> google.protobuf.Struct
 	10, // 11: powerlifting.analytics.v1.CorrelationInputsReply.exercise_weeks:type_name -> powerlifting.analytics.v1.ExerciseWeek
 	11, // 12: powerlifting.analytics.v1.CorrelationInputsReply.exercises:type_name -> powerlifting.analytics.v1.ExerciseProfile
 	12, // 13: powerlifting.analytics.v1.CorrelationInputsReply.muscle_weeks:type_name -> powerlifting.analytics.v1.MuscleWeek
 	13, // 14: powerlifting.analytics.v1.CorrelationInputsReply.muscle_landmarks:type_name -> powerlifting.analytics.v1.MuscleLandmark
 	14, // 15: powerlifting.analytics.v1.CorrelationInputsReply.fatigue_weeks:type_name -> powerlifting.analytics.v1.FatigueWeek
 	15, // 16: powerlifting.analytics.v1.CorrelationInputsReply.lift_sessions:type_name -> powerlifting.analytics.v1.LiftSession
-	16, // 17: powerlifting.analytics.v1.CorrelationInputsReply.driver_stats:type_name -> powerlifting.analytics.v1.DriverStat
-	8,  // 18: powerlifting.analytics.v1.ExerciseProfile.fatigue:type_name -> powerlifting.analytics.v1.FatigueDims
-	9,  // 19: powerlifting.analytics.v1.ExerciseProfile.lift_transfer:type_name -> powerlifting.analytics.v1.LiftTransferWeights
-	8,  // 20: powerlifting.analytics.v1.FatigueWeek.ratio:type_name -> powerlifting.analytics.v1.FatigueDims
-	8,  // 21: powerlifting.analytics.v1.LiftSession.prior48h_fatigue:type_name -> powerlifting.analytics.v1.FatigueDims
-	20, // 22: powerlifting.analytics.v1.LiftSession.prior48h_muscle_sets:type_name -> powerlifting.analytics.v1.LiftSession.Prior48hMuscleSetsEntry
-	19, // 23: powerlifting.analytics.v1.WeeklyAccessoryVolume.exercises:type_name -> powerlifting.analytics.v1.ExerciseVolume
-	0,  // 24: powerlifting.analytics.v1.AnalyticsData.GetSnapshot:input_type -> powerlifting.analytics.v1.AthleteRef
-	2,  // 25: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:input_type -> powerlifting.analytics.v1.BlockRef
-	0,  // 26: powerlifting.analytics.v1.AnalyticsData.ListBlocks:input_type -> powerlifting.analytics.v1.AthleteRef
-	3,  // 27: powerlifting.analytics.v1.AnalyticsData.Compare:input_type -> powerlifting.analytics.v1.BlockKeys
-	0,  // 28: powerlifting.analytics.v1.AnalyticsData.Lifetime:input_type -> powerlifting.analytics.v1.AthleteRef
-	1,  // 29: powerlifting.analytics.v1.AnalyticsData.SelectedLifetime:input_type -> powerlifting.analytics.v1.LifetimeRef
-	2,  // 30: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:input_type -> powerlifting.analytics.v1.BlockRef
-	4,  // 31: powerlifting.analytics.v1.AnalyticsData.GetSnapshot:output_type -> powerlifting.analytics.v1.Snapshot
-	5,  // 32: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:output_type -> powerlifting.analytics.v1.Report
-	6,  // 33: powerlifting.analytics.v1.AnalyticsData.ListBlocks:output_type -> powerlifting.analytics.v1.BlockList
-	5,  // 34: powerlifting.analytics.v1.AnalyticsData.Compare:output_type -> powerlifting.analytics.v1.Report
-	5,  // 35: powerlifting.analytics.v1.AnalyticsData.Lifetime:output_type -> powerlifting.analytics.v1.Report
-	5,  // 36: powerlifting.analytics.v1.AnalyticsData.SelectedLifetime:output_type -> powerlifting.analytics.v1.Report
-	7,  // 37: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:output_type -> powerlifting.analytics.v1.CorrelationInputsReply
-	31, // [31:38] is the sub-list for method output_type
-	24, // [24:31] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	16, // 17: powerlifting.analytics.v1.CorrelationInputsReply.driver_stats:type_name -> powerlifting.analytics.v1.CorrelationStat
+	17, // 18: powerlifting.analytics.v1.CorrelationInputsReply.exercise_positions:type_name -> powerlifting.analytics.v1.ExercisePosition
+	8,  // 19: powerlifting.analytics.v1.ExerciseProfile.fatigue:type_name -> powerlifting.analytics.v1.FatigueDims
+	9,  // 20: powerlifting.analytics.v1.ExerciseProfile.lift_transfer:type_name -> powerlifting.analytics.v1.LiftTransferWeights
+	8,  // 21: powerlifting.analytics.v1.FatigueWeek.ratio:type_name -> powerlifting.analytics.v1.FatigueDims
+	8,  // 22: powerlifting.analytics.v1.LiftSession.prior48h_fatigue:type_name -> powerlifting.analytics.v1.FatigueDims
+	21, // 23: powerlifting.analytics.v1.LiftSession.prior48h_muscle_sets:type_name -> powerlifting.analytics.v1.LiftSession.Prior48hMuscleSetsEntry
+	20, // 24: powerlifting.analytics.v1.WeeklyAccessoryVolume.exercises:type_name -> powerlifting.analytics.v1.ExerciseVolume
+	0,  // 25: powerlifting.analytics.v1.AnalyticsData.GetSnapshot:input_type -> powerlifting.analytics.v1.AthleteRef
+	2,  // 26: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:input_type -> powerlifting.analytics.v1.BlockRef
+	0,  // 27: powerlifting.analytics.v1.AnalyticsData.ListBlocks:input_type -> powerlifting.analytics.v1.AthleteRef
+	3,  // 28: powerlifting.analytics.v1.AnalyticsData.Compare:input_type -> powerlifting.analytics.v1.BlockKeys
+	0,  // 29: powerlifting.analytics.v1.AnalyticsData.Lifetime:input_type -> powerlifting.analytics.v1.AthleteRef
+	1,  // 30: powerlifting.analytics.v1.AnalyticsData.SelectedLifetime:input_type -> powerlifting.analytics.v1.LifetimeRef
+	2,  // 31: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:input_type -> powerlifting.analytics.v1.BlockRef
+	4,  // 32: powerlifting.analytics.v1.AnalyticsData.GetSnapshot:output_type -> powerlifting.analytics.v1.Snapshot
+	5,  // 33: powerlifting.analytics.v1.AnalyticsData.GetBlockBundle:output_type -> powerlifting.analytics.v1.Report
+	6,  // 34: powerlifting.analytics.v1.AnalyticsData.ListBlocks:output_type -> powerlifting.analytics.v1.BlockList
+	5,  // 35: powerlifting.analytics.v1.AnalyticsData.Compare:output_type -> powerlifting.analytics.v1.Report
+	5,  // 36: powerlifting.analytics.v1.AnalyticsData.Lifetime:output_type -> powerlifting.analytics.v1.Report
+	5,  // 37: powerlifting.analytics.v1.AnalyticsData.SelectedLifetime:output_type -> powerlifting.analytics.v1.Report
+	7,  // 38: powerlifting.analytics.v1.AnalyticsData.CorrelationInputs:output_type -> powerlifting.analytics.v1.CorrelationInputsReply
+	32, // [32:39] is the sub-list for method output_type
+	25, // [25:32] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_analytics_proto_init() }
@@ -1779,13 +1842,14 @@ func file_analytics_proto_init() {
 	file_analytics_proto_msgTypes[15].OneofWrappers = []any{}
 	file_analytics_proto_msgTypes[16].OneofWrappers = []any{}
 	file_analytics_proto_msgTypes[17].OneofWrappers = []any{}
+	file_analytics_proto_msgTypes[18].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_analytics_proto_rawDesc), len(file_analytics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

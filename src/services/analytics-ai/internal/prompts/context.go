@@ -60,22 +60,16 @@ type LiftSession struct {
 	PriorMuscles map[string]float64
 }
 
-type DriverStat struct {
-	Type, Driver, Lift        string
-	Rho                       *float64
-	N, NHigh, NLow            int
-	ResidualHigh, ResidualLow *float64
-	RPEHigh, RPELow           *float64
+type ExercisePosition struct {
+	Exercise, Lift                                    string
+	Before, After, DayBefore1, DayBefore2, Outside48h int
+	AvgDaysToNext                                     *float64
 }
 
 type table struct {
 	Title  string
 	Header []string
 	Rows   [][]string
-}
-
-func (in CorrelationInput) hasDrivers() bool {
-	return len(in.ExerciseWeeks) > 0 || len(in.LiftSessions) > 0
 }
 
 func plain(value float64) string {
@@ -244,31 +238,30 @@ func (in CorrelationInput) sessionTable() table {
 	return result
 }
 
-func (in CorrelationInput) statTables() []table {
-	correlations := table{Title: "Driver Evidence: Spearman rho of weekly sets vs next week's e1RM change", Header: []string{"Type", "Driver", "Lift", "rho", "Weeks"}}
-	sequence := table{Title: "Driver Evidence: Sessions after high vs normal prior-48h load (high = 1.25x typical or more)", Header: []string{"Dimension", "Lift", "n high/low", "vs best % high/low", "RPE high/low"}}
-	for _, stat := range in.DriverStats {
-		if stat.Type == "sequence" {
-			sequence.Rows = append(sequence.Rows, []string{stat.Driver, stat.Lift, fmt.Sprintf("%d/%d", stat.NHigh, stat.NLow), optional(stat.ResidualHigh, "%+.2f") + "/" + optional(stat.ResidualLow, "%+.2f"), optional(stat.RPEHigh, "%.1f") + "/" + optional(stat.RPELow, "%.1f")})
-			continue
-		}
-		correlations.Rows = append(correlations.Rows, []string{stat.Type, stat.Driver, stat.Lift, optional(stat.Rho, "%+.2f"), strconv.Itoa(stat.N)})
+func (in CorrelationInput) roiTable() table {
+	result := table{Title: "Accessory Exercise ROI (pearson r between weekly volume and the lift's next-week e1RM change)", Header: []string{"Exercise", "Lift", "Pearson r", "Weeks"}}
+	for _, row := range in.ExerciseROI {
+		result.Rows = append(result.Rows, []string{row.Exercise, row.Lift, fmt.Sprintf("%+.3f", row.PearsonR), strconv.Itoa(row.WeeksObserved)})
 	}
-	var tables []table
-	for _, candidate := range []table{correlations, sequence} {
-		if len(candidate.Rows) > 0 {
-			tables = append(tables, candidate)
-		}
-	}
-	return tables
+	return result
 }
 
-func (in CorrelationInput) driverTables() []table {
+func (in CorrelationInput) positionTable() table {
+	result := table{Title: "Accessory position relative to main lifts (sessions in the window; same session = accessory listed before or after the lift; day before = accessory session without the lift 1 or 2 days before a session of it; avg days to the lift's next session)", Header: []string{"Exercise", "Lift", "Same session before", "Same session after", "1 day before", "2 days before", "Outside 48h", "Avg days to next"}}
+	for _, row := range in.Positions {
+		result.Rows = append(result.Rows, []string{row.Exercise, row.Lift, strconv.Itoa(row.Before), strconv.Itoa(row.After), strconv.Itoa(row.DayBefore1), strconv.Itoa(row.DayBefore2), strconv.Itoa(row.Outside48h), optional(row.AvgDaysToNext, "%.1f")})
+	}
+	return result
+}
+
+func (in CorrelationInput) contextTables() []table {
 	var tables []table
 	for _, candidate := range []struct {
 		present bool
 		build   func() table
 	}{
+		{len(in.ExerciseROI) > 0, in.roiTable},
+		{len(in.Positions) > 0, in.positionTable},
 		{len(in.ExerciseWeeks) > 0, in.doseTable},
 		{len(in.Exercises) > 0, in.profileTable},
 		{len(in.MuscleWeeks) > 0 || len(in.MuscleLandmarks) > 0, in.muscleTable},
@@ -279,5 +272,5 @@ func (in CorrelationInput) driverTables() []table {
 			tables = append(tables, candidate.build())
 		}
 	}
-	return append(tables, in.statTables()...)
+	return tables
 }

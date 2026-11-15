@@ -105,7 +105,7 @@ message CorrelationInputsReply {
   repeated google.protobuf.Struct lift_profiles = 6;
   // Athlete measurements: height, wingspan, leg length, weight class, bodyweight.
   google.protobuf.Struct athlete_measurements = 7;
-  // One row per week and exercise for the main lifts and the highest transfer-weighted exercises.
+  // One row per week and exercise for every exercise trained in the window.
   repeated ExerciseWeek exercise_weeks = 8;
   // Muscles, fatigue profile and lift transfer of each exercise in exercise_weeks.
   repeated ExerciseProfile exercises = 9;
@@ -117,8 +117,10 @@ message CorrelationInputsReply {
   repeated FatigueWeek fatigue_weeks = 12;
   // One row per main-lift session with the fatigue and muscle load of the 48 hours before it.
   repeated LiftSession lift_sessions = 13;
-  // Precomputed evidence for exercise, muscle and sequence drivers.
-  repeated DriverStat driver_stats = 14;
+  // Pearson r of weekly volume against the next week's e1RM change for every accessory and main lift.
+  repeated CorrelationStat driver_stats = 14;
+  // Where each accessory sits relative to each main lift's sessions, one row per accessory and lift.
+  repeated ExercisePosition exercise_positions = 15;
 }
 
 // FatigueDims is one value per fatigue dimension.
@@ -208,26 +210,38 @@ message LiftSession {
   map<string, double> prior48h_muscle_sets = 7;
 }
 
-// DriverStat is precomputed evidence for one driver of one lift.
-message DriverStat {
-  // exercise, muscle or sequence.
-  string driver_type = 1;
-  // Exercise name, muscle name or fatigue dimension.
+// CorrelationStat is the Pearson correlation of one accessory exercise with one main lift.
+message CorrelationStat {
+  reserved 1, 6, 7, 8, 9, 10, 11;
+  reserved "driver_type", "n_high", "n_low", "mean_residual_pct_high", "mean_residual_pct_low", "mean_rpe_high", "mean_rpe_low";
+  // Accessory exercise name.
   string driver = 2;
   // squat, bench or deadlift.
   string lift = 3;
-  // Spearman rho of weekly sets against the next week's e1RM change, for exercise and muscle drivers.
+  // Pearson r of weekly volume against the next week's e1RM change.
   optional double rho = 4;
-  // Number of week pairs behind rho.
+  // Number of weeks behind the correlation.
   int32 n = 5;
-  // Sessions with prior-48h load at or above 1.25x typical, for sequence drivers.
-  int32 n_high = 6;
-  // Sessions below 1.25x typical, for sequence drivers.
-  int32 n_low = 7;
-  optional double mean_residual_pct_high = 8;
-  optional double mean_residual_pct_low = 9;
-  optional double mean_rpe_high = 10;
-  optional double mean_rpe_low = 11;
+}
+
+// ExercisePosition counts the window's accessory sessions by their position relative to one main lift.
+message ExercisePosition {
+  // Accessory exercise name.
+  string exercise = 1;
+  // squat, bench or deadlift.
+  string lift = 2;
+  // Sessions containing both, with the accessory listed before the lift.
+  int32 same_session_before = 3;
+  // Sessions containing both, with the accessory listed after the lift.
+  int32 same_session_after = 4;
+  // Accessory sessions without the lift, 1 day before a session of the lift.
+  int32 day_before_1 = 5;
+  // Accessory sessions without the lift, 2 days before a session of the lift.
+  int32 day_before_2 = 6;
+  // Accessory sessions without the lift, more than 2 days or no later session of the lift.
+  int32 outside_48h = 7;
+  // Mean days from an accessory session to the next later session of the lift.
+  optional double avg_days_to_next = 8;
 }
 
 // WeeklyE1rm is the best estimated 1RM per lift in one training week.

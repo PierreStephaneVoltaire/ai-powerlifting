@@ -80,7 +80,7 @@ func correlationInput(reply *analyticsv1.CorrelationInputsReply, weeks int) prom
 			input.Accessory = append(input.Accessory, entry)
 		}
 	}
-	mapDrivers(&input, reply)
+	mapContext(&input, reply)
 	for _, profile := range reply.LiftProfiles {
 		fields := profile.AsMap()
 		input.LiftProfiles = append(input.LiftProfiles, prompts.LiftProfile{
@@ -103,7 +103,7 @@ func dims(value *analyticsv1.FatigueDims) prompts.Dims {
 	return prompts.Dims{Axial: value.GetAxial(), Neural: value.GetNeural(), Peripheral: value.GetPeripheral(), Systemic: value.GetSystemic()}
 }
 
-func mapDrivers(input *prompts.CorrelationInput, reply *analyticsv1.CorrelationInputsReply) {
+func mapContext(input *prompts.CorrelationInput, reply *analyticsv1.CorrelationInputsReply) {
 	for _, row := range reply.ExerciseWeeks {
 		input.ExerciseWeeks = append(input.ExerciseWeeks, prompts.ExerciseDose{
 			Week: int(row.WeekNumber), Exercise: row.Exercise, Sets: row.Sets, Reps: row.Reps, VolumeKg: row.VolumeKg,
@@ -132,11 +132,14 @@ func mapDrivers(input *prompts.CorrelationInput, reply *analyticsv1.CorrelationI
 			Prior: dims(row.Prior48HFatigue), PriorMuscles: row.Prior48HMuscleSets,
 		})
 	}
-	for _, row := range reply.DriverStats {
-		input.DriverStats = append(input.DriverStats, prompts.DriverStat{
-			Type: row.DriverType, Driver: row.Driver, Lift: row.Lift, Rho: row.Rho, N: int(row.N), NHigh: int(row.NHigh), NLow: int(row.NLow),
-			ResidualHigh: row.MeanResidualPctHigh, ResidualLow: row.MeanResidualPctLow, RPEHigh: row.MeanRpeHigh, RPELow: row.MeanRpeLow,
+	for _, row := range reply.ExercisePositions {
+		input.Positions = append(input.Positions, prompts.ExercisePosition{
+			Exercise: row.Exercise, Lift: row.Lift, Before: int(row.SameSessionBefore), After: int(row.SameSessionAfter),
+			DayBefore1: int(row.DayBefore_1), DayBefore2: int(row.DayBefore_2), Outside48h: int(row.Outside_48H), AvgDaysToNext: row.AvgDaysToNext,
 		})
+	}
+	for _, row := range reply.DriverStats {
+		input.ExerciseROI = append(input.ExerciseROI, prompts.ROIRow{Exercise: row.Driver, Lift: row.Lift, PearsonR: row.GetRho(), WeeksObserved: int(row.N)})
 	}
 }
 

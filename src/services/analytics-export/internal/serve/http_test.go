@@ -159,11 +159,14 @@ func TestReservedArgumentsAre403BeforeAccess(t *testing.T) {
 	}
 }
 
-func TestMissingPersonIs403WithoutAccessCall(t *testing.T) {
-	e := newEnv(t, 200)
+func TestEmptyPersonReachesAccessContextAndItsDenialPropagates(t *testing.T) {
+	e := newEnv(t, http.StatusForbidden)
 	response := e.do("POST", "/operations/analytics.export", exportBody, map[string]string{"X-Athlete-Pk": "athlete_1"})
-	if response.Code != http.StatusForbidden || e.profile.count() != 0 {
+	if response.Code != http.StatusForbidden || e.profile.count() != 1 {
 		t.Fatalf("status %d hits %d", response.Code, e.profile.count())
+	}
+	if got := e.profile.hits[0].headers.Get("X-Person-Pk"); got != "" {
+		t.Fatalf("X-Person-Pk %q", got)
 	}
 }
 
