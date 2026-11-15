@@ -29,7 +29,7 @@ var Schema = map[string]fakedb.Schema{
 var Tables = store.Tables{
 	User: "if-user", Requests: "if-powerlifting-requests", Notifications: "if-powerlifting-notifications", Tags: "if-powerlifting-tags",
 	Health: "if-health", Sessions: "if-sessions", Competitions: "if-powerlifting-user-competitions", Videos: "workout-Videos",
-	SentIndex: "SentIndex", InboxIndex: "InboxIndex",
+	SentIndex: "SentIndex", InboxIndex: "InboxIndex", RosterIndex: "RosterIndex",
 }
 
 type Bumps struct {

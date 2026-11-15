@@ -23,6 +23,7 @@ type Config struct {
 	VideosTable   string
 	SentIndex     string
 	InboxIndex    string
+	RosterIndex   string
 }
 
 func env(name, fallback string) string {
@@ -51,5 +52,6 @@ func Load() Config {
 		VideosTable:   env("WORKOUT_VIDEOS_TABLE_NAME", "workout-Videos"),
 		SentIndex:     env("IF_POWERLIFTING_REQUESTS_SENT_INDEX", "SentIndex"),
 		InboxIndex:    env("IF_POWERLIFTING_REQUESTS_INBOX_INDEX", "InboxIndex"),
+		RosterIndex:   env("IF_POWERLIFTING_REQUESTS_ROSTER_INDEX", "RosterIndex"),
 	}
 }

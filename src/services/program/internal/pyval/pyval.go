@@ -324,12 +324,7 @@ func Coerce(value any) any {
 }
 
 func Sanitize(value any) any {
-	return convert(value, func(r *big.Rat) bool {
-		if r.IsInt() {
-			return false
-		}
-		return r.Sign() > 0
-	})
+	return Coerce(value)
 }
 
 func convert(value any, fractional func(*big.Rat) bool) any {
@@ -486,26 +481,6 @@ func Str2(value any) string {
 		return ""
 	}
 	return Str(value)
-}
-
-func Stringify(value any) any {
-	switch typed := value.(type) {
-	case json.Number:
-		return DecimalStr(typed)
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, item := range typed {
-			out[key] = Stringify(item)
-		}
-		return out
-	case []any:
-		out := make([]any, len(typed))
-		for index, item := range typed {
-			out[index] = Stringify(item)
-		}
-		return out
-	}
-	return value
 }
 
 func KeyOrder(raw []byte, path ...string) []string {

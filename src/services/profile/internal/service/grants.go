@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -102,6 +103,39 @@ func trimmed(arguments map[string]any, key string) string {
 	return strings.TrimSpace(value.Str(value.Or(arguments[key], "")))
 }
 
+func (s *Service) grantRowsByGrantee(ctx context.Context, grantee string) ([]map[string]any, error) {
+	requests, err := s.deps.DB.Query(ctx, store.Query{
+		Table:   s.deps.DB.Tables.Requests,
+		Index:   s.deps.DB.Tables.RosterIndex,
+		KeyCond: "roster_pk = :key",
+		Values:  map[string]any{":key": "Roster#" + grantee},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var rows []map[string]any
+	for _, request := range requests {
+		athlete, id := str(request, "athlete_mapped_pk"), str(request, "relationship_id")
+		if str(request, "entity") != "relationship_request" || athlete == "" || id == "" {
+			continue
+		}
+		item, err := s.deps.DB.Get(ctx, s.deps.DB.Tables.Requests, store.PKSK("Grant#"+athlete, "Relationship#"+id))
+		if err != nil {
+			return nil, err
+		}
+		if item == nil {
+			continue
+		}
+		if row := normalizeGrant(item); row["grantee_mapped_pk"] == grantee {
+			rows = append(rows, row)
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		return str(rows[i], "pk")+"\x00"+str(rows[i], "sk") < str(rows[j], "pk")+"\x00"+str(rows[j], "sk")
+	})
+	return rows, nil
+}
+
 func (s *Service) grantCheck(ctx context.Context, req *Request) (any, error) {
 	athlete, actor := trimmed(req.Args, "athlete_mapped_pk"), trimmed(req.Args, "actor_mapped_pk")
 	grantType, scope, tied := trimmed(req.Args, "grant_type"), trimmed(req.Args, "scope"), trimmed(req.Args, "tied_competition_id")
@@ -163,15 +197,11 @@ func (s *Service) grantList(ctx context.Context, req *Request) (any, error) {
 			}
 		}
 	} else {
-		scanned, err := s.deps.DB.Scan(ctx, store.Scan{Table: s.deps.DB.Tables.Requests})
+		granted, err := s.grantRowsByGrantee(ctx, grantee)
 		if err != nil {
 			return nil, err
 		}
-		for _, item := range scanned {
-			if row := normalizeGrant(item); row["grantee_mapped_pk"] == grantee {
-				rows = append(rows, row)
-			}
-		}
+		rows = granted
 	}
 	now := s.deps.Env.Now()
 	active, inactive := []any{}, []any{}

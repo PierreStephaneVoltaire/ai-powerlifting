@@ -86,9 +86,8 @@ Code is done (see above). Once deployed and the quota resets:
 - No git writes, no comments in code, no new low-value tests, never write fixtures to prod.
 - Check live state (kubectl / git) before claiming anything. Clean build artifacts (shared disk).
 
-## pl-profile (Go rewrite of `services.profile`) — 2026-11-14
+## Go rewrite of sessions, program, competition, profile (branch `seesion-go`, PR #10)
 
-- Module is at `src/services/profile/` (module path `powerlifting/profile`); the Python package, `runtime/{tag_catalog,profile_views,handler_context}.py` and their tests are deleted. Deploy wiring is in place (packer, ECR `powerlifting-profile`, CI, `terraform/k8s/app/profile.tf`). K8S_TFVARS `repositories` needs a `profile` key before the next apply.
-- `master_copy_seed_user` could not be ported: the Python handler imported `master_copy.MasterCopyService`, which does not exist in the repository. It returns 501 `not_served`. Needs the operator to say where `master_copy` lives, or to drop the op from `profile.json`.
-- `profile.json` holds 44 operations, not 45.
-- Goldens live outside the repo (`scratchpad/goldens/profile/capture.py`, moto-backed); run `PL_GOLDENS_DIR=<dir> go test ./...`.
+Open before the PR can deploy:
+- `K8S_TFVARS` `repositories` needs `sessions`, `program`, `competition` and `profile` keys.
+- The `stage` environment only allows `feat/analytics-rankings-rust` and `istio`; runs on `seesion-go` and `refs/pull/10/merge` are rejected.

@@ -22,9 +22,16 @@ type fakeAccess struct {
 	hits   int
 }
 
-func (f *fakeAccess) Fetch(_ context.Context, _ string, _ map[string]any, _ auth.Caller) (map[string]any, error) {
+func (f *fakeAccess) Fetch(_ context.Context, _ string, _ map[string]any, caller auth.Caller) (map[string]any, error) {
 	f.hits++
-	return f.access, f.status
+	if f.access == nil || f.status != nil {
+		return f.access, f.status
+	}
+	access := map[string]any{"athlete_pk": caller.Athlete}
+	for key, value := range f.access {
+		access[key] = value
+	}
+	return access, nil
 }
 
 type recordedVersions struct {

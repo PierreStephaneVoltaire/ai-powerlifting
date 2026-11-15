@@ -79,13 +79,15 @@ func blockNotesGet(d *Deps, r *Request) (any, error) {
 	if item == nil {
 		return nil, validation("Program version " + version + " not found")
 	}
-	notes := []any{}
-	if meta, ok := item["meta"].(map[string]any); ok {
-		if list, ok := meta["block_notes"].([]any); ok {
-			notes = list
-		}
+	return map[string]any{"version": version, "sk": sk, "block_notes": notesOf(item)}, nil
+}
+
+func notesOf(item map[string]any) []any {
+	meta, _ := item["meta"].(map[string]any)
+	if notes, ok := meta["block_notes"].([]any); ok {
+		return notes
 	}
-	return map[string]any{"version": version, "sk": sk, "block_notes": notes}, nil
+	return []any{}
 }
 
 func scopedList(program map[string]any, blockID, field string) []any {

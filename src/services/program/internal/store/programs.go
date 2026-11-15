@@ -367,17 +367,24 @@ func (p Programs) WriteInitial(ctx context.Context, athlete string, program map[
 	return sk, p.DB.Put(ctx, p.Tables.Health, pointer)
 }
 
+func (p Programs) VersionSK(ctx context.Context, athlete, version string) (string, error) {
+	if version != "current" {
+		return "program#" + version, nil
+	}
+	pointer, err := p.getHealth(ctx, athlete, PointerSK, false)
+	if err != nil {
+		return "", err
+	}
+	if pointer == nil {
+		return "program#v001", nil
+	}
+	return pyOrDefault(pointer["ref_sk"], "program#v001"), nil
+}
+
 func (p Programs) BlockNotes(ctx context.Context, athlete, version string) (string, Item, error) {
-	sk := "program#" + version
-	if version == "current" {
-		pointer, err := p.getHealth(ctx, athlete, PointerSK, false)
-		if err != nil {
-			return "", nil, err
-		}
-		sk = "program#v001"
-		if pointer != nil {
-			sk = pyOrDefault(pointer["ref_sk"], "program#v001")
-		}
+	sk, err := p.VersionSK(ctx, athlete, version)
+	if err != nil {
+		return "", nil, err
 	}
 	item, err := p.DB.Get(ctx, p.Tables.Health, Key{PK: athlete, SK: sk}, GetOptions{Projection: []string{"meta.block_notes", "block_notes"}})
 	return sk, item, err

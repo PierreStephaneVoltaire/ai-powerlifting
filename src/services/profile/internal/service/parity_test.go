@@ -185,6 +185,12 @@ func TestPythonParity(t *testing.T) {
 		t.Fatalf("expected the captured Python scenarios, got %d", len(scenarios))
 	}
 	for _, sc := range scenarios {
+		if operationsRemovedAsDead[sc.Op] {
+			continue
+		}
+		if args, ok := argsAfterSettingsCreateRemoval[sc.Name]; ok {
+			sc.Args = args
+		}
 		t.Run(sc.Name, func(t *testing.T) {
 			h := newHarness(t, options{Now: sc.Now, IDs: sc.IDs, Discord: sc.Discord, Analytics: sc.Analytics, S3Seed: sc.S3Seed})
 			for logical, items := range sc.Seed {
@@ -193,6 +199,13 @@ func TestPythonParity(t *testing.T) {
 				}
 			}
 			result, err := h.call(sc.Op, sc.Args, auth.Caller{Person: sc.Caller.Person, Athlete: sc.Caller.Athlete, Source: sc.Caller.Source, JobID: sc.Caller.Job, Nested: sc.Caller.Nested})
+			if check, ok := resultAfterPeerGrantSchemaFix[sc.Name]; ok {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				check(t, normalizeRender(result).(map[string]any))
+				return
+			}
 			if sc.Expect.OK {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)

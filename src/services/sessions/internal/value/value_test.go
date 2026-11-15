@@ -93,3 +93,23 @@ func TestDecodeKeepsNumberText(t *testing.T) {
 		t.Fatal("trailing data accepted")
 	}
 }
+
+func TestNegativeFractionsKeepTheirFraction(t *testing.T) {
+	for in, want := range map[string]string{"-2.5": "-2.5", "-0.25": "-0.25", "-3.0": "-3", "-3": "-3", "2.5": "2.5"} {
+		if got := Sanitized(Decimal(in)); string(got) != want {
+			t.Errorf("Sanitized(%s): got %s want %s", in, got, want)
+		}
+	}
+	item := Item{"rpe_delta": Decimal("-2.5"), "sets": []any{map[string]any{"kg": Decimal("-0.75")}}}
+	out, _ := json.Marshal(Sanitize(item))
+	if string(out) != `{"rpe_delta":-2.5,"sets":[{"kg":-0.75}]}` {
+		t.Fatalf("Sanitize: %s", out)
+	}
+	rendered, _ := json.Marshal(Render(Item{"a": Decimal("-2.5"), "b": json.Number("-2.5")}))
+	if string(rendered) != `{"a":-2.5,"b":-2.5}` {
+		t.Fatalf("Render: %s", rendered)
+	}
+	if Str(Decimal("-2.5")) != "-2.5" || !Truthy(Decimal("-0.5")) {
+		t.Fatal("Str or Truthy truncated a negative fraction")
+	}
+}

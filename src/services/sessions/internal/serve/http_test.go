@@ -72,7 +72,7 @@ func newEnv(t *testing.T, profileStatus int) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{profile: newProfile(t, profileStatus, `{"settings_pk":"person_1","is_self":true}`), memory: store.NewMemory(), bumps: &bumps{}}
+	e := &env{profile: newProfile(t, profileStatus, `{"settings_pk":"person_1","athlete_pk":"athlete_1","is_self":true}`), memory: store.NewMemory(), bumps: &bumps{}}
 	e.memory.SeedHealth(value.Item{"pk": "athlete_1", "sk": "program#current", "ref_sk": "program#v001"})
 	e.memory.SeedHealth(value.Item{"pk": "athlete_1", "sk": "program#v001", "phases": []any{}})
 	counter := 0
@@ -271,7 +271,7 @@ func TestActiveJobWrapsDeterministicResult(t *testing.T) {
 
 func TestPublishedViewHidesVideosAndWeightForOtherViewers(t *testing.T) {
 	e := newEnv(t, 200)
-	e.profile.body = `{"settings_pk":"viewer","is_self":false,"permissions":["sessions:read"],"granted_permissions":["sessions:read"]}`
+	e.profile.body = `{"settings_pk":"viewer","athlete_pk":"athlete_1","is_self":false,"permissions":["sessions:read"],"granted_permissions":["sessions:read"]}`
 	e.memory.SeedSession(value.Item{"pk": "athlete_1", "sk": "session#program#v001#2026-09-14#001#a", "session_id": "a", "date": "2026-09-14", "program_sk": "program#v001", "body_weight_kg": 80, "videos": []any{map[string]any{"video_id": "v"}}})
 	response := e.do("POST", "/operations/session_get", `{"date":"2026-09-14","index":0}`, identity)
 	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "videos") || strings.Contains(response.Body.String(), "body_weight_kg") {

@@ -30,8 +30,7 @@ func str(value any) string { return pyval.Str(value) }
 func num(value any) any {
 	switch typed := value.(type) {
 	case json.Number:
-		f, _ := pyval.Float(typed)
-		return f
+		return pyval.Coerce(typed)
 	case map[string]any, []any:
 		return pyval.Str(typed)
 	}

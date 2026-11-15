@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -33,38 +32,10 @@ func TestIdentityResolveIsIdempotentAndCreatesPersonHexIDs(t *testing.T) {
 	}
 }
 
-func TestMasterCopySeedUserIsNotServedBecauseItsImplementationDoesNotExist(t *testing.T) {
-	h := newHarness(t, options{})
-	h.seed("user", value.Item{"pk": "person_a", "mapped_pk": "person_a", "roles": []any{"athlete"}})
-	_, err := h.call("master_copy_seed_user", map[string]any{}, caller("person_a", "person_a"))
-	var failure *apperr.Error
-	if !asTyped(err, &failure) || failure.Status != 501 || failure.Code != "not_served" {
-		t.Fatalf("%v", err)
-	}
-}
-
 func asTyped(err error, target **apperr.Error) bool {
 	typed, ok := err.(*apperr.Error)
 	*target = typed
 	return ok
-}
-
-func TestSettingsCreateHandlerCreatesAndReturnsTheWinner(t *testing.T) {
-	h := newHarness(t, options{})
-	request := &Request{Name: "settings_create", Args: map[string]any{"discord_id": "42", "discord_username": "New User!", "avatar_url": "x"}}
-	result, err := h.svc.settingsCreate(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	created := result.(map[string]any)
-	settings := created["settings"].(map[string]any)
-	if created["created"] != true || settings["pk"] != "new_user_" || settings["nickname"] != "new_user_" {
-		t.Fatalf("%v", created)
-	}
-	again, err := h.svc.settingsCreate(context.Background(), request)
-	if err != nil || again.(map[string]any)["created"] != false {
-		t.Fatalf("%v %v", again, err)
-	}
 }
 
 func seedCrowd(h *harness, count int) {

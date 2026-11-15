@@ -37,6 +37,7 @@ type Tables struct {
 	Videos        string
 	SentIndex     string
 	InboxIndex    string
+	RosterIndex   string
 }
 
 type DB struct {

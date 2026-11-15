@@ -53,7 +53,7 @@ export function GrantsPanel() {
   const [submitting, setSubmitting] = useState(false)
 
   const [granteeInput, setGranteeInput] = useState('')
-  const [grantType, setGrantType] = useState<GrantType | 'peer'>(user?.active_role === 'handler' ? 'handler' : 'coach')
+  const [grantType, setGrantType] = useState<GrantType>(user?.active_role === 'handler' ? 'handler' : 'coach')
   const [tiedCompetitionIds, setTiedCompetitionIds] = useState('')
   const [note, setNote] = useState('')
   const [profiles, setProfiles] = useState<PublicProfile[]>([])
@@ -203,7 +203,7 @@ export function GrantsPanel() {
                 <Group justify="space-between" align="flex-start" wrap="nowrap">
                   <Stack gap={4} style={{ flex: 1 }}>
                     <Group gap="xs">
-                      <Badge color={g.grant_type === 'coach' ? 'blue' : 'grape'} variant="light">
+                      <Badge color={g.grant_type === 'coach' ? 'blue' : g.grant_type === 'peer' ? 'teal' : 'grape'} variant="light">
                         {g.grant_type}
                       </Badge>
                       <Badge color={g.scope === 'write' ? 'orange' : 'gray'} variant="light">
@@ -266,7 +266,7 @@ export function GrantsPanel() {
               { value: 'peer', label: 'Peer (selected read-only domains)' },
             ] : [{ value: user?.active_role || 'coach', label: `${user?.active_role || 'coach'} invitation` }]}
             value={grantType}
-            onChange={(v) => setGrantType((v as GrantType | 'peer') ?? 'coach')}
+            onChange={(v) => setGrantType((v as GrantType) ?? 'coach')}
             allowDeselect={false}
           />
           {isAthleteOwner && <MultiSelect

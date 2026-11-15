@@ -26,7 +26,7 @@ func TestFloatRepr(t *testing.T) {
 func TestSanitizeAndCoerce(t *testing.T) {
 	value := map[string]any{"a": json.Number("100"), "b": json.Number("2.5"), "c": json.Number("-2.5")}
 	sanitized := Sanitize(value).(map[string]any)
-	if sanitized["a"] != int64(100) || sanitized["b"] != 2.5 || sanitized["c"] != int64(-2) {
+	if sanitized["a"] != int64(100) || sanitized["b"] != 2.5 || sanitized["c"] != -2.5 {
 		t.Fatalf("%v", sanitized)
 	}
 	coerced := Coerce(value).(map[string]any)

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"powerlifting/profile/internal/access"
 	"powerlifting/profile/internal/apperr"
@@ -214,15 +215,10 @@ func (v *Views) HandlerContext(ctx context.Context, athlete, person string, gran
 	})
 	today := v.Env.Now().UTC().Format("2006-01-02")
 	var phase any
-	if len(sessionList) > 0 {
-		nearest := sessionList[len(sessionList)-1]
-		for _, session := range sessionList {
-			if value.Str(value.Or(session["date"], "")) >= today {
-				nearest = session
-				break
-			}
-		}
-		phase = nearest["phase"]
+	if granted.Has("sessions:read") {
+		phase = sessionDerivedPhase(sessionList, today)
+	} else if program != nil {
+		phase = scheduledPhase(asList(program["phases"]), meta, block, today)
 	}
 	estimated := map[string]any{}
 	if granted.Has("performance:read") && analytics != nil {
@@ -252,4 +248,41 @@ func (v *Views) HandlerContext(ctx context.Context, athlete, person string, gran
 		result["competitions"] = competitions
 	}
 	return value.Sanitize(result).(map[string]any), nil
+}
+
+func sessionDerivedPhase(sessionList []map[string]any, today string) any {
+	if len(sessionList) == 0 {
+		return nil
+	}
+	nearest := sessionList[len(sessionList)-1]
+	for _, session := range sessionList {
+		if value.Str(value.Or(session["date"], "")) >= today {
+			nearest = session
+			break
+		}
+	}
+	return nearest["phase"]
+}
+
+var weekdayIndex = map[string]int{"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
+
+func scheduledPhase(phases []any, meta map[string]any, block any, today string) any {
+	start, err := time.Parse("2006-01-02", value.Str(value.Or(meta["program_start"], "")))
+	if err != nil {
+		return nil
+	}
+	now, err := time.Parse("2006-01-02", today)
+	if err != nil {
+		return nil
+	}
+	weekStartDay := 0
+	if record, ok := block.(map[string]any); ok {
+		if index, known := weekdayIndex[value.Str(value.Or(record["week_start_day"], ""))]; known {
+			weekStartDay = index
+		}
+	}
+	offset := (int(start.Weekday())+6)%7 - weekStartDay
+	anchor := start.AddDate(0, 0, -((offset + 7) % 7))
+	week := max(1, int(now.Sub(anchor).Hours()/24)/7+1)
+	return resolvePhase(map[string]any{"week_number": value.Int(week), "block": defaultBlock}, phases)
 }

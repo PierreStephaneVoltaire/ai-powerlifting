@@ -5,6 +5,7 @@ import {
   checkGrant,
   type ListGrantsInput,
   type CheckGrantInput,
+  type GrantType,
 } from '../services/grants'
 
 function requireUser(req: Request): void {
@@ -42,7 +43,7 @@ export async function checkGrantHandler(req: Request, res: Response): Promise<vo
   const input: CheckGrantInput = {
     athlete_mapped_pk: q.athlete_mapped_pk || '',
     actor_mapped_pk: q.actor_mapped_pk || req.user!.actor_mapped_pk,
-    grant_type: (q.grant_type as 'coach' | 'handler') || undefined,
+    grant_type: (q.grant_type as GrantType) || undefined,
     scope: (q.scope as 'read' | 'write') || undefined,
     tied_competition_id: q.tied_competition_id,
   }

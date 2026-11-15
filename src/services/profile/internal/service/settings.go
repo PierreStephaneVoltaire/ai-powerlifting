@@ -20,7 +20,6 @@ var unsafeSegment = regexp.MustCompile(`[^A-Za-z0-9_-]`)
 
 func (s *Service) registerSettings() {
 	s.handlers["settings_get"] = s.settingsGet
-	s.handlers["settings_create"] = s.settingsCreate
 	s.handlers["settings_update_nickname"] = s.updateNickname
 	s.handlers["settings_update_profile"] = s.updateProfile
 	s.handlers["settings_update_age_class"] = s.updateAgeClass
@@ -32,7 +31,6 @@ func (s *Service) registerSettings() {
 	s.handlers["onboarding_status"] = s.onboardingStatus
 	s.handlers["settings_publication_get"] = s.publication
 	s.handlers["settings_publication_update"] = s.publication
-	s.handlers["master_copy_seed_user"] = s.masterCopy
 }
 
 func (s *Service) existing(ctx context.Context, req *Request) (value.Item, error) {
@@ -388,71 +386,6 @@ func (s *Service) existingBasics(ctx context.Context, athlete string) (map[strin
 		prefill["bodyweight_kg"] = people.FloatValue(bodyweight)
 	}
 	return prefill, nil
-}
-
-func (s *Service) settingsCreate(ctx context.Context, req *Request) (any, error) {
-	args := req.Args
-	provider, _ := args["identity_provider"].(string)
-	sub, _ := args["identity_sub"].(string)
-	username := people.SanitizeUsername(value.Str(value.Or(args["discord_username"], "")), s.deps.Env.Now())
-	if provider != "" && sub != "" {
-		rows, err := s.deps.DB.Scan(ctx, store.Scan{
-			Table:  s.deps.DB.Tables.User,
-			Filter: "identity_provider = :provider AND identity_sub = :sub",
-			Values: map[string]any{":provider": provider, ":sub": sub},
-		})
-		if err != nil {
-			return nil, err
-		}
-		if len(rows) > 0 {
-			return map[string]any{"settings": s.people.Settings(rows[0]).Map(), "created": false}, nil
-		}
-		taken, err := s.people.Get(ctx, username)
-		if err != nil {
-			return nil, err
-		}
-		if taken != nil {
-			digest := identityKey("", sub)
-			username = people.SanitizeUsername(username+"_"+strings.TrimPrefix(digest, "Identity#")[:8], s.deps.Env.Now())
-		}
-	}
-	now := s.deps.Env.Stamp()
-	discordName := value.Str(value.Or(args["discord_username"], ""))
-	item := value.Item{"pk": username}
-	if provider != "" && sub != "" {
-		item["identity_provider"], item["identity_sub"] = provider, sub
-	}
-	avatar, _ := args["avatar_url"].(string)
-	var avatarValue any
-	if _, ok := args["avatar_url"].(string); ok {
-		avatarValue = avatar
-	}
-	for key, v := range map[string]any{
-		"username": username, "discord_id": value.Str(value.Or(args["discord_id"], "")), "discord_username": discordName,
-		"avatar_url": avatarValue, "nickname": username, "profile_visibility": "private", "display_name": discordName, "bio": "",
-		"public_training_summary_enabled": false, "ranking_country": nil, "ranking_region": nil, "age_class": "open", "sex": nil,
-		"bodyweight_kg": nil, "training_maxes": nil, "federations": []any{}, "roles": []any{}, "active_role": "athlete",
-		"athlete_basics_complete": false, "profile_complete": false, "created_at": now, "updated_at": now,
-	} {
-		item[key] = v
-	}
-	created := true
-	if err := s.deps.DB.Put(ctx, s.deps.DB.Tables.User, item, "attribute_not_exists(pk)"); err != nil {
-		if !errors.Is(err, store.ErrConditionFailed) {
-			return nil, err
-		}
-		created = false
-		if raced, getErr := s.people.Get(ctx, username); getErr != nil {
-			return nil, getErr
-		} else if raced != nil {
-			return map[string]any{"settings": s.people.Settings(raced).Map(), "created": false}, nil
-		}
-	}
-	return map[string]any{"settings": s.people.Settings(item).Map(), "created": created}, nil
-}
-
-func (s *Service) masterCopy(context.Context, *Request) (any, error) {
-	return nil, apperr.New(501, "not_served", "master_copy_seed_user is not served: its master_copy implementation does not exist in this repository")
 }
 
 func (s *Service) updateAvatar(ctx context.Context, req *Request) (any, error) {

@@ -63,7 +63,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 	db := &store.DB{API: dynamodb.NewFromConfig(awsCfg), Tables: store.Tables{
 		User: cfg.UserTable, Requests: cfg.RequestsTable, Notifications: cfg.Notifications, Tags: cfg.TagsTable,
 		Health: cfg.HealthTable, Sessions: cfg.SessionsTable, Competitions: cfg.Competitions, Videos: cfg.VideosTable,
-		SentIndex: cfg.SentIndex, InboxIndex: cfg.InboxIndex,
+		SentIndex: cfg.SentIndex, InboxIndex: cfg.InboxIndex, RosterIndex: cfg.RosterIndex,
 	}}
 	svc, err := service.New(service.Deps{
 		Registry:  registry,

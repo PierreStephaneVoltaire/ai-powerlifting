@@ -1,26 +1,5 @@
 [
   {
-    "name": "master_copy_seed_user",
-    "domain": "profile",
-    "description": "Seed per-user copies of master competitions and federations.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "additionalProperties": false
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "person"
-  },
-  {
     "name": "profile_get",
     "domain": "profile",
     "description": "Build a public profile by nickname, including visible training summary and videos.",
@@ -331,93 +310,6 @@
     },
     "execution": "deterministic",
     "ownership": "public"
-  },
-  {
-    "name": "settings_create",
-    "domain": "profile",
-    "description": "Conditionally create the initial settings row for a Discord identity.",
-    "input_schema": {
-      "type": "object",
-      "required": [
-        "discord_id",
-        "discord_username"
-      ],
-      "properties": {
-        "discord_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "discord_username": {
-          "type": "string",
-          "minLength": 1
-        },
-        "avatar_url": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "identity_provider": {
-          "enum": [
-            "discord",
-            "authentik"
-          ]
-        },
-        "identity_sub": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "additionalProperties": false
-    },
-    "result_schema": {
-      "type": "object",
-      "required": [
-        "settings",
-        "created"
-      ],
-      "properties": {
-        "settings": {
-          "type": "object",
-          "required": [
-            "pk",
-            "username",
-            "discord_id",
-            "discord_username",
-            "avatar_url",
-            "nickname",
-            "profile_visibility",
-            "display_name",
-            "bio",
-            "public_training_summary_enabled",
-            "ranking_country",
-            "ranking_region",
-            "age_class",
-            "sex",
-            "bodyweight_kg",
-            "training_maxes",
-            "federations",
-            "roles",
-            "active_role",
-            "athlete_basics_complete",
-            "profile_complete",
-            "created_at",
-            "updated_at"
-          ],
-          "additionalProperties": true
-        },
-        "created": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false
-    },
-    "execution": "deterministic",
-    "ownership": "person"
   },
   {
     "name": "settings_get",
@@ -1433,7 +1325,8 @@
           "enum": [
             "",
             "coach",
-            "handler"
+            "handler",
+            "peer"
           ]
         },
         "scope": {
@@ -1513,7 +1406,8 @@
             "grant_type": {
               "enum": [
                 "coach",
-                "handler"
+                "handler",
+                "peer"
               ]
             },
             "scope": {
@@ -1586,7 +1480,8 @@
         "grant_type": {
           "enum": [
             "coach",
-            "handler"
+            "handler",
+            "peer"
           ]
         },
         "scope": {
@@ -1674,7 +1569,8 @@
             "grant_type": {
               "enum": [
                 "coach",
-                "handler"
+                "handler",
+                "peer"
               ]
             },
             "scope": {
@@ -1769,7 +1665,8 @@
                 "grant_type": {
                   "enum": [
                     "coach",
-                    "handler"
+                    "handler",
+                    "peer"
                   ]
                 },
                 "scope": {
@@ -1892,7 +1789,8 @@
               "grant_type": {
                 "enum": [
                   "coach",
-                  "handler"
+                  "handler",
+                  "peer"
                 ]
               },
               "scope": {
@@ -1981,7 +1879,8 @@
               "grant_type": {
                 "enum": [
                   "coach",
-                  "handler"
+                  "handler",
+                  "peer"
                 ]
               },
               "scope": {
@@ -2112,7 +2011,8 @@
             "grant_type": {
               "enum": [
                 "coach",
-                "handler"
+                "handler",
+                "peer"
               ]
             },
             "scope": {
@@ -2207,7 +2107,8 @@
                 "grant_type": {
                   "enum": [
                     "coach",
-                    "handler"
+                    "handler",
+                    "peer"
                   ]
                 },
                 "scope": {

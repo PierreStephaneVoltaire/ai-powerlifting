@@ -84,10 +84,8 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 
 func render(name string, result any, access ops.Access) any {
 	switch name {
-	case "program_get", "health_get_diet_notes", "health_get_supplements":
+	case "program_get", "health_get_diet_notes", "health_get_supplements", "block_transition":
 		result = pyval.Coerce(result)
-	case "block_transition":
-		result = pyval.Stringify(result)
 	default:
 		result = pyval.Sanitize(result)
 	}

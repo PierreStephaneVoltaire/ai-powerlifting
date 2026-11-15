@@ -214,7 +214,18 @@ func blockNotesUpdate(d *Deps, r *Request) (any, error) {
 	if !ok {
 		return nil, validation("block_notes must be a list")
 	}
-	return d.mutateSource(r, r.Selected(), func(program map[string]any) (map[string]any, error) {
+	selected := r.Selected()
+	if version := r.String("version"); version != "" && version != "current" {
+		sk, item, err := d.Programs.BlockNotes(r.Ctx, r.Athlete, version)
+		if err != nil {
+			return nil, mapError(err)
+		}
+		if item == nil {
+			return nil, validation("Program version " + version + " not found")
+		}
+		selected = sk
+	}
+	return d.mutateSource(r, selected, func(program map[string]any) (map[string]any, error) {
 		meta := metaOf(program)
 		active := scope.CurrentBlockID(program)
 		kept := []any{}

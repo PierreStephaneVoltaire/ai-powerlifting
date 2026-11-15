@@ -62,8 +62,8 @@ func TestEveryOperationIsDocumented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 44 {
-		t.Fatalf("expected the 44 operations of profile.json, got %d", len(registry.All()))
+	if len(registry.All()) != 42 {
+		t.Fatalf("expected the 42 operations of profile.json, got %d", len(registry.All()))
 	}
 	for _, operation := range registry.All() {
 		entry, ok := document.Paths["/operations/"+operation.Name]["post"]
@@ -218,11 +218,11 @@ func TestMCPInitializeListAndCall(t *testing.T) {
 	for _, entry := range tools {
 		names[entry.(map[string]any)["name"].(string)] = true
 	}
-	if !names["access_context"] || !names["profile_search"] || names["identity_resolve"] || names["settings_create"] {
+	if !names["access_context"] || !names["profile_search"] || names["identity_resolve"] {
 		t.Fatalf("internal-only tools must be hidden: %d tools", len(names))
 	}
-	if len(names) != 42 {
-		t.Fatalf("expected 42 public tools, got %d", len(names))
+	if len(names) != 41 {
+		t.Fatalf("expected 41 public tools, got %d", len(names))
 	}
 	called := rpc(t, f, self, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"access_context","arguments":{}}}`)
 	content, _ := called["result"].(map[string]any)
