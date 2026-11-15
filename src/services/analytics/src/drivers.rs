@@ -5,18 +5,14 @@ use chrono::{Duration, NaiveDate};
 use crate::calc::{Dims, Env, e1rm, fatigue, muscle_volume};
 use crate::model::{Exercise, Lift, Maxes, NARROW_TRANSFER, Session};
 use crate::proto::analytics::{
-    DriverStat, ExerciseProfile, ExerciseWeek, FatigueDims, FatigueWeek, LiftSession,
+    CorrelationStat, ExercisePosition, ExerciseProfile, ExerciseWeek, FatigueDims, FatigueWeek, LiftSession,
     LiftTransferWeights, MuscleLandmark, MuscleWeek,
 };
-use crate::util::{mean, median, round, spearman};
+use crate::util::{mean, median, pearson, round};
 
-const MAX_EXERCISES: usize = 20;
-const MIN_TRANSFER: f64 = 0.2;
-const HIGH_LOAD_RATIO: f64 = 1.25;
 const PRIOR_DAYS: i64 = 2;
 const TRAILING_SESSIONS: usize = 3;
-const MIN_PAIRS: usize = 4;
-const DIMENSIONS: [&str; 4] = ["axial", "neural", "peripheral", "systemic"];
+const MIN_PAIRS: usize = 3;
 
 pub struct Input<'a> {
     pub env: Env<'a>,
@@ -35,7 +31,18 @@ pub struct Drivers {
     pub muscle_landmarks: Vec<MuscleLandmark>,
     pub fatigue_weeks: Vec<FatigueWeek>,
     pub lift_sessions: Vec<LiftSession>,
-    pub driver_stats: Vec<DriverStat>,
+    pub driver_stats: Vec<CorrelationStat>,
+    pub exercise_positions: Vec<ExercisePosition>,
+}
+
+#[derive(Default)]
+struct Position {
+    before: i32,
+    after: i32,
+    day_before_1: i32,
+    day_before_2: i32,
+    outside: i32,
+    gaps: Vec<f64>,
 }
 
 #[derive(Default)]
@@ -48,12 +55,6 @@ struct Dose {
     intensity_sum: f64,
     rpe_count: f64,
     rpe_sum: f64,
-}
-
-struct LiftRow {
-    lift: Lift,
-    dims: Dims,
-    row: LiftSession,
 }
 
 fn week_of(week: i64) -> i32 {
@@ -115,7 +116,7 @@ fn estimate(exercise: &Exercise, session_rpe: Option<f64>) -> Option<f64> {
 fn pairs_for(
     weekly_e1rm: &BTreeMap<i64, [Option<f64>; 3]>,
     lift: Lift,
-    sets_of: impl Fn(i64) -> f64,
+    volume_of: impl Fn(i64) -> f64,
 ) -> (Vec<f64>, Vec<f64>) {
     let slot = lift as usize;
     let mut xs = Vec::new();
@@ -127,69 +128,23 @@ fn pairs_for(
         ) else {
             continue;
         };
-        xs.push(sets_of(*week));
+        xs.push(volume_of(*week));
         ys.push(next - now);
     }
     (xs, ys)
 }
 
-fn rho_stat(
-    driver_type: &str,
-    driver: &str,
-    lift: Lift,
-    xs: &[f64],
-    ys: &[f64],
-) -> Option<DriverStat> {
+fn pearson_stat(exercise: &str, lift: Lift, xs: &[f64], ys: &[f64]) -> Option<CorrelationStat> {
     if xs.len() < MIN_PAIRS {
         return None;
     }
-    let rho = spearman(xs, ys)?;
-    Some(DriverStat {
-        driver_type: driver_type.to_owned(),
-        driver: driver.to_owned(),
+    let r = pearson(xs, ys)?;
+    Some(CorrelationStat {
+        driver: exercise.to_owned(),
         lift: lift.key().to_owned(),
-        rho: Some(round(rho, 2)),
+        rho: Some(round(r, 3)),
         n: i32::try_from(xs.len()).unwrap_or(i32::MAX),
-        ..DriverStat::default()
     })
-}
-
-fn mean_of(values: impl Iterator<Item = f64>, digits: usize) -> Option<f64> {
-    let collected: Vec<f64> = values.collect();
-    (!collected.is_empty()).then(|| round(mean(&collected), digits))
-}
-
-fn sequence_stats(rows: &[LiftRow]) -> Vec<DriverStat> {
-    let mut stats = Vec::new();
-    for lift in Lift::ALL {
-        let of_lift: Vec<&LiftRow> = rows.iter().filter(|row| row.lift == lift).collect();
-        for (index, dimension) in DIMENSIONS.iter().enumerate() {
-            let (high, low): (Vec<&LiftRow>, Vec<&LiftRow>) = of_lift
-                .iter()
-                .partition(|row| row.dims.each()[index] >= HIGH_LOAD_RATIO);
-            if high.is_empty() || low.is_empty() {
-                continue;
-            }
-            let residual = |group: &[&LiftRow]| {
-                mean_of(group.iter().filter_map(|row| row.row.e1rm_residual_pct), 2)
-            };
-            let rpe =
-                |group: &[&LiftRow]| mean_of(group.iter().filter_map(|row| row.row.avg_rpe), 2);
-            stats.push(DriverStat {
-                driver_type: "sequence".to_owned(),
-                driver: (*dimension).to_owned(),
-                lift: lift.key().to_owned(),
-                n_high: i32::try_from(high.len()).unwrap_or(i32::MAX),
-                n_low: i32::try_from(low.len()).unwrap_or(i32::MAX),
-                mean_residual_pct_high: residual(&high),
-                mean_residual_pct_low: residual(&low),
-                mean_rpe_high: rpe(&high),
-                mean_rpe_low: rpe(&low),
-                ..DriverStat::default()
-            });
-        }
-    }
-    stats
 }
 
 pub fn build(input: Input<'_>) -> Drivers {
@@ -215,35 +170,13 @@ pub fn build(input: Input<'_>) -> Drivers {
     }
 
     let mut names: BTreeMap<String, String> = BTreeMap::new();
-    let mut transferred: BTreeMap<String, f64> = BTreeMap::new();
     for exercise in completed.iter().flat_map(|session| &session.exercises) {
-        let sets = exercise.executed_sets();
-        if sets <= 0.0 {
-            continue;
+        if exercise.executed_sets() > 0.0 {
+            names
+                .entry(exercise.key.clone())
+                .or_insert_with(|| exercise.name.trim().to_owned());
         }
-        let transfer = env.glossary.transfer(&exercise.key);
-        names
-            .entry(exercise.key.clone())
-            .or_insert_with(|| exercise.name.trim().to_owned());
-        *transferred.entry(exercise.key.clone()).or_default() +=
-            sets * (transfer.squat + transfer.bench + transfer.deadlift);
     }
-    let mut accessories: Vec<(&String, &f64)> = transferred
-        .iter()
-        .filter(|(key, weighted)| Lift::from_name(key).is_none() && **weighted > 0.0)
-        .collect();
-    accessories.sort_by(|a, b| b.1.total_cmp(a.1).then_with(|| a.0.cmp(b.0)));
-    let selected: BTreeSet<String> = transferred
-        .keys()
-        .filter(|key| Lift::from_name(key).is_some())
-        .cloned()
-        .chain(
-            accessories
-                .into_iter()
-                .take(MAX_EXERCISES)
-                .map(|(key, _)| key.clone()),
-        )
-        .collect();
 
     let mut doses: BTreeMap<(i64, String), Dose> = BTreeMap::new();
     let mut muscle_sets: BTreeMap<(i64, String), f64> = BTreeMap::new();
@@ -268,9 +201,6 @@ pub fn build(input: Input<'_>) -> Drivers {
                         }
                     }
                 }
-            }
-            if !selected.contains(&exercise.key) {
-                continue;
             }
             let dose = doses.entry((week, exercise.key.clone())).or_default();
             dose.sets += sets;
@@ -309,8 +239,8 @@ pub fn build(input: Input<'_>) -> Drivers {
         })
         .collect();
 
-    let exercises: Vec<ExerciseProfile> = selected
-        .iter()
+    let exercises: Vec<ExerciseProfile> = names
+        .keys()
         .map(|key| {
             let entry = env.glossary.entry(key);
             let transfer = env.glossary.transfer(key);
@@ -401,7 +331,7 @@ pub fn build(input: Input<'_>) -> Drivers {
     let daily = fatigue::daily_by_dimension(env, &refs, &maxes);
     let typical = typical_daily(&daily);
     let mut best: BTreeMap<Lift, Vec<f64>> = BTreeMap::new();
-    let mut lift_rows: Vec<LiftRow> = Vec::new();
+    let mut lift_sessions: Vec<LiftSession> = Vec::new();
     for session in &refs {
         let Some(date) = session.date else {
             continue;
@@ -462,39 +392,87 @@ pub fn build(input: Input<'_>) -> Drivers {
                 prior48h_muscle_sets: prior_muscles.clone(),
             };
             history.push(top);
-            lift_rows.push(LiftRow {
-                lift,
-                dims: prior_ratio,
-                row,
-            });
+            lift_sessions.push(row);
         }
     }
 
     let mut driver_stats = Vec::new();
     for lift in Lift::ALL {
-        for key in &selected {
-            if env.glossary.transfer(key).get(lift) < MIN_TRANSFER {
+        for (key, name) in &names {
+            if Lift::from_name(key).is_some() {
                 continue;
             }
             let (xs, ys) = pairs_for(weekly_e1rm, lift, |week| {
                 doses
                     .get(&(week, key.clone()))
-                    .map_or(0.0, |dose| dose.sets)
+                    .map_or(0.0, |dose| dose.volume)
             });
-            let name = names.get(key).unwrap_or(key);
-            driver_stats.extend(rho_stat("exercise", name, lift, &xs, &ys));
-        }
-        for muscle in movers.get(&lift).into_iter().flatten() {
-            let (xs, ys) = pairs_for(weekly_e1rm, lift, |week| {
-                muscle_sets
-                    .get(&(week, muscle.clone()))
-                    .copied()
-                    .unwrap_or(0.0)
-            });
-            driver_stats.extend(rho_stat("muscle", muscle, lift, &xs, &ys));
+            driver_stats.extend(pearson_stat(name, lift, &xs, &ys));
         }
     }
-    driver_stats.extend(sequence_stats(&lift_rows));
+
+    let lift_dates: BTreeMap<Lift, Vec<NaiveDate>> = Lift::ALL
+        .into_iter()
+        .map(|lift| {
+            let dates = completed
+                .iter()
+                .filter(|session| {
+                    session.exercises.iter().any(|exercise| {
+                        Lift::from_name(&exercise.key) == Some(lift)
+                            && exercise.executed_sets() > 0.0
+                    })
+                })
+                .filter_map(|session| session.date)
+                .collect();
+            (lift, dates)
+        })
+        .collect();
+    let mut positions: BTreeMap<(String, Lift), Position> = BTreeMap::new();
+    for session in &completed {
+        let Some(date) = session.date else {
+            continue;
+        };
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        for (index, exercise) in session.exercises.iter().enumerate() {
+            if exercise.executed_sets() <= 0.0
+                || Lift::from_name(&exercise.key).is_some()
+                || !seen.insert(exercise.key.as_str())
+            {
+                continue;
+            }
+            for lift in Lift::ALL {
+                let next = lift_dates[&lift].iter().find(|day| **day > date);
+                let entry = positions.entry((exercise.key.clone(), lift)).or_default();
+                let lift_index = session.exercises.iter().position(|other| {
+                    Lift::from_name(&other.key) == Some(lift) && other.executed_sets() > 0.0
+                });
+                if let Some(next) = next {
+                    entry.gaps.push((*next - date).num_days() as f64);
+                }
+                match (lift_index, next.map(|next| (*next - date).num_days())) {
+                    (Some(lift_index), _) if index < lift_index => entry.before += 1,
+                    (Some(_), _) => entry.after += 1,
+                    (None, Some(1)) => entry.day_before_1 += 1,
+                    (None, Some(2)) => entry.day_before_2 += 1,
+                    (None, _) => entry.outside += 1,
+                }
+            }
+        }
+    }
+    let exercise_positions: Vec<ExercisePosition> = positions
+        .into_iter()
+        .filter(|((_, lift), _)| !lift_dates[lift].is_empty())
+        .map(|((key, lift), position)| ExercisePosition {
+            exercise: names.get(&key).cloned().unwrap_or(key),
+            lift: lift.key().to_owned(),
+            same_session_before: position.before,
+            same_session_after: position.after,
+            day_before_1: position.day_before_1,
+            day_before_2: position.day_before_2,
+            outside_48h: position.outside,
+            avg_days_to_next: (!position.gaps.is_empty()).then(|| round(mean(&position.gaps), 1)),
+        })
+        .collect();
 
     Drivers {
         exercise_weeks,
@@ -502,7 +480,8 @@ pub fn build(input: Input<'_>) -> Drivers {
         muscle_weeks,
         muscle_landmarks,
         fatigue_weeks,
-        lift_sessions: lift_rows.into_iter().map(|row| row.row).collect(),
+        lift_sessions,
         driver_stats,
+        exercise_positions,
     }
 }

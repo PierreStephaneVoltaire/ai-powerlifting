@@ -16,7 +16,6 @@ on:
       - 'scripts/image_tag.py'
       - 'scripts/migrate_identity_pointers.py'
       - '.github/workflows/**'
-      - '.github/actions/**'
       - '.github/image-filters.yml'
       - '!**/*.md'
 
@@ -30,15 +29,10 @@ jobs:
     outputs:
       images: ${{ steps.images.outputs.matrix }}
       image_tag: ${{ steps.images.outputs.tag }}
-      deploys: ${{ steps.gate.outputs.deploy }}
       terraform: ${{ steps.filter.outputs.terraform }}
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
     steps:
       - uses: actions/checkout@v4
-      - id: gate
-        uses: ./.github/actions/deploy-gate
-        with:
-          allowed_branches: ${{ vars.STAGE_DEPLOY_BRANCHES }}
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -53,14 +47,14 @@ jobs:
           images=()
           if [ "$BACKEND" = true ]; then images+=(powerlifting-backend); fi
           if [ "$FRONTEND" = true ]; then images+=(powerlifting-frontend); fi
-          if [ "$SERVICES" = true ]; then images+=(powerlifting-services powerlifting-analytics powerlifting-rankings powerlifting-analytics-ai powerlifting-prompt-cache-api powerlifting-analytics-export powerlifting-glossary powerlifting-coach-agent powerlifting-coach-discord); fi
+          if [ "$SERVICES" = true ]; then images+=(powerlifting-services powerlifting-analytics powerlifting-rankings powerlifting-analytics-ai powerlifting-prompt-cache-api powerlifting-analytics-export powerlifting-sessions powerlifting-program powerlifting-competition powerlifting-profile powerlifting-glossary powerlifting-coach-agent powerlifting-coach-discord); fi
           matrix="$(printf '%s\n' "${images[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "tag=$(python3 scripts/image_tag.py "$BRANCH")" >> "$GITHUB_OUTPUT"
 
   images:
     needs: changes
-    if: ${{ needs.changes.outputs.images != '[]' && needs.changes.outputs.deploys != 'true' }}
+    if: ${{ needs.changes.outputs.images != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

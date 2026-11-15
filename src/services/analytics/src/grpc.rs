@@ -392,6 +392,7 @@ impl AnalyticsData for Service {
             fatigue_weeks: drivers.fatigue_weeks,
             lift_sessions: drivers.lift_sessions,
             driver_stats: drivers.driver_stats,
+            exercise_positions: drivers.exercise_positions,
         }))
     }
 }

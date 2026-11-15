@@ -1,34 +1,6 @@
 import copy
-import os
-from datetime import datetime, timezone
 
-
-from .access import DOMAINS, META_DOMAINS, PROGRAM_FIELDS
-from .access_store import database
-from .dispatch import OperationError
-
-
-def _public_publication(value):
-    return {'domains': list(value.get('domains') or [])}
-
-
-def handler(args, _context):
-    person = args['_access']['settings_pk']
-    table = database().Table(os.getenv('IF_USER_TABLE', 'if-user'))
-    owner = table.get_item(Key={'pk': person}, ConsistentRead=True).get('Item')
-    if not owner:
-        raise OperationError(404, 'not_found', 'Profile not found')
-    current = owner.get('publication') or {'domains': []}
-    if args.get('domains') is None:
-        return _public_publication(current)
-    if 'athlete' not in owner.get('roles', []):
-        raise OperationError(403, 'forbidden', 'Only Athletes publish training domains')
-    domains = sorted(set(args['domains']))
-    if any(domain not in DOMAINS for domain in domains):
-        raise ValueError('Unknown publication domain')
-    result = {'domains': domains, 'updated_at': datetime.now(timezone.utc).isoformat()}
-    table.update_item(Key={'pk': person}, UpdateExpression='SET publication = :publication', ExpressionAttributeValues={':publication': result})
-    return _public_publication(result)
+from .access import META_DOMAINS, PROGRAM_FIELDS
 
 
 def session_view(session, access):

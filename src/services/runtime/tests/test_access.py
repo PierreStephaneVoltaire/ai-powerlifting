@@ -39,10 +39,9 @@ def test_every_operation_has_an_explicit_permission_and_generating_requires_writ
 
 
 def test_access_context_result_contract_accepts_actual_evaluator_fields():
-    from services.runtime.dispatch import dispatch
     context = evaluate_facts('', 'athlete', None, None, [], {})
-    result = dispatch(load_operations('profile')['access_context'], {'_access': context})
-    assert result['competition_scope'] == {'read': [], 'write': []}
+    load_operations('profile')['access_context'].validate_result(context)
+    assert context['competition_scope'] == {'read': [], 'write': []}
 
 
 def test_aggregate_program_changes_require_each_affected_domain():

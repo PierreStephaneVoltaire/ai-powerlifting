@@ -15,16 +15,12 @@ locals {
   services = {
     "pl-budget"        = merge(local.small, { domain = "budget" })
     "pl-calculations"  = merge(local.small, { domain = "calculations" })
-    "pl-competition"   = merge(local.small, { domain = "competition" })
     "pl-export"        = { domain = "export", limits = { cpu = "1", memory = "512Mi" }, requests = { cpu = "50m", memory = "128Mi" } }
     "pl-federation"    = merge(local.small, { domain = "federation" })
     "pl-goals"         = merge(local.small, { domain = "goals" })
     "pl-imports"       = merge(local.small, { domain = "imports" })
     "pl-lift-profiles" = merge(local.small, { domain = "lift-profiles" })
     "pl-performance"   = merge(local.small, { domain = "performance" })
-    "pl-profile"       = merge(local.small, { domain = "profile" })
-    "pl-program"       = merge(local.small, { domain = "program" })
-    "pl-sessions"      = merge(local.small, { domain = "sessions" })
     "pl-templates"     = merge(local.small, { domain = "templates" })
     "pl-videos"        = merge(local.small, { domain = "videos" })
     "pl-weight-log"    = merge(local.small, { domain = "weight-log" })
@@ -43,7 +39,7 @@ resource "kubernetes_deployment_v1" "service" {
   }
 
   spec {
-    replicas = each.key == "pl-sessions" ? 2 : 1
+    replicas = 1
 
     selector {
       match_labels = { app = each.key }
@@ -88,19 +84,6 @@ resource "kubernetes_deployment_v1" "service" {
             }
           }
 
-
-          dynamic "env" {
-            for_each = each.key == "pl-profile" ? [1] : []
-            content {
-              name = "DISCORD_BOT_TOKEN"
-              value_from {
-                secret_key_ref {
-                  name = "powerlifting-profile-secrets"
-                  key  = "DISCORD_BOT_TOKEN"
-                }
-              }
-            }
-          }
 
           port {
             container_port = 8000

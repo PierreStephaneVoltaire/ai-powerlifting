@@ -1,0 +1,421 @@
+[
+  {
+    "name": "session_create",
+    "domain": "sessions",
+    "description": "Create a new session for the current program. The session is appended to the program sessions list with the provided session object.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "session": {
+          "type": "object",
+          "description": "Full session object with date, day, week_number, exercises, session_notes."
+        }
+      },
+      "required": [
+        "session"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_delete",
+    "domain": "sessions",
+    "description": "Delete a session at a specific date and index (for same-day ordinals).",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)."
+        },
+        "index": {
+          "type": "integer",
+          "description": "Zero-based index for same-day session ordinals."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
+        }
+      },
+      "required": [
+        "date",
+        "index"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "deleted": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_get",
+    "domain": "sessions",
+    "description": "Load a single session by date and index (for same-day ordinals). Returns the session with resolved phase object.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)."
+        },
+        "index": {
+          "type": "integer",
+          "description": "Zero-based index for same-day session ordinals."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
+        }
+      },
+      "required": [
+        "date",
+        "index"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_list",
+    "domain": "sessions",
+    "description": "List the most recent sessions for a user. Returns session summaries sorted by date descending, then by sort key descending. Use limit to cap the number returned.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of sessions to return. Default 50, max 200."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to the current program."
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "completed": {
+                "type": "boolean"
+              },
+              "exercise_count": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "date",
+              "completed",
+              "exercise_count"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "count": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sessions",
+        "count",
+        "total"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_list_full",
+    "domain": "sessions",
+    "description": "List full session objects (with resolved phases) for a specific program. Returns complete session objects, not summaries.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        }
+      }
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_patch",
+    "domain": "sessions",
+    "description": "Apply a partial patch to a session at a specific date and index. Only the fields in the patch dict are updated; other fields remain unchanged.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)."
+        },
+        "index": {
+          "type": "integer",
+          "description": "Zero-based index for same-day session ordinals."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
+        },
+        "patch": {
+          "type": "object",
+          "description": "Dict with session fields to update. Allowed keys: completed, session_rpe, body_weight_kg, exercises, session_notes, day, week_number."
+        }
+      },
+      "required": [
+        "date",
+        "index",
+        "patch"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_patch_by_date",
+    "domain": "sessions",
+    "description": "Patch a session by date without specifying an index. Finds the matching date and applies the patch. Use when you only have the date, not the ordinal.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date has changed."
+        },
+        "patch": {
+          "type": "object",
+          "description": "Dict with session fields to update."
+        }
+      },
+      "required": [
+        "date",
+        "patch"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_replace",
+    "domain": "sessions",
+    "description": "Full replace of a session at a specific date and index. Overwrites all session fields with the provided session object.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "date": {
+          "type": "string",
+          "description": "Session date (YYYY-MM-DD)."
+        },
+        "index": {
+          "type": "integer",
+          "description": "Zero-based index for same-day session ordinals."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable Session.id used when the legacy date/index has changed."
+        },
+        "session": {
+          "type": "object",
+          "description": "Full session object to write."
+        }
+      },
+      "required": [
+        "date",
+        "index",
+        "session"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_replace_all",
+    "domain": "sessions",
+    "description": "Replace ALL sessions for a program. Deletes all existing sessions and writes the incoming array. Use with caution — this is a destructive full replace.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "sessions": {
+          "type": "array",
+          "description": "Full array of session objects to write."
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "health_get_sessions_range",
+    "domain": "sessions",
+    "description": "Load all sessions within a date range (inclusive). Returns sessions in date order, each with resolved phase object.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "description": "Start of range (YYYY-MM-DD)."
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End of range (YYYY-MM-DD)."
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "start_date",
+        "end_date"
+      ]
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

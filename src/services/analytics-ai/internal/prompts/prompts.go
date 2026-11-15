@@ -81,6 +81,7 @@ type WeekAccessory struct {
 
 type ROIRow struct {
 	Exercise      string
+	Lift          string
 	PearsonR      float64
 	WeeksObserved int
 }
@@ -96,13 +97,13 @@ type CorrelationInput struct {
 	E1rm               []WeekLifts
 	Accessory          []WeekAccessory
 	ExerciseROI        []ROIRow
+	Positions          []ExercisePosition
 	ExerciseWeeks      []ExerciseDose
 	Exercises          []ExerciseInfo
 	MuscleWeeks        []MuscleDose
 	MuscleLandmarks    []MuscleLandmark
 	FatigueWeeks       []FatigueWeek
 	LiftSessions       []LiftSession
-	DriverStats        []DriverStat
 }
 
 type e1rmRow struct {
@@ -215,7 +216,6 @@ func (in CorrelationInput) view() correlationView {
 		weekSet[week.Week] = true
 	}
 	sort.SliceStable(order, func(i, j int) bool { return totals[order[i]] > totals[order[j]] })
-	order = order[:min(len(order), 20)]
 	weeks := make([]int, 0, len(weekSet))
 	for week := range weekSet {
 		weeks = append(weeks, week)
@@ -229,10 +229,7 @@ func (in CorrelationInput) view() correlationView {
 		row := lifts[week]
 		view.E1rmRows = append(view.E1rmRows, e1rmRow{week, fixed("%.1f", row.Squat), fixed("%.1f", row.Bench), fixed("%.1f", row.Deadlift)})
 	}
-	if in.hasDrivers() {
-		view.Tables = in.driverTables()
-		return view
-	}
+	view.Tables = in.contextTables()
 	view.Accessory = order
 	for _, week := range weeks {
 		cells := make([]string, 0, len(order))

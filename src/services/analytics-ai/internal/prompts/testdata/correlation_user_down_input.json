@@ -206,16 +206,19 @@
  "exercise_roi": [
   {
    "exercise": "Leg Press",
+   "lift": "squat",
    "pearson_r": 0.7234,
    "weeks_observed": 5
   },
   {
    "exercise": "Curl",
+   "lift": "bench",
    "pearson_r": -0.31,
    "weeks_observed": 4
   },
   {
-   "exercise": "Nothing"
+   "exercise": "Nothing",
+   "lift": "deadlift"
   }
  ]
 }

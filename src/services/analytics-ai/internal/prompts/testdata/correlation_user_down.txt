@@ -33,19 +33,28 @@
 | W5 | 185.0 | 123.0 | 225.6 |
 | W6 | - | 124.5 | 226.0 |
 
-## Weekly Accessory Volume (sets × reps × kg) — Top 20
+## Weekly Accessory Volume (sets × reps × kg)
 
-| Week | Tríceps Pushdown | Leg Press | Acc 23 | Acc 22 | Acc 21 | Acc 20 | Acc 19 | Acc 18 | Acc 17 | Acc 16 | Acc 15 | Acc 14 | Acc 13 | Acc 12 | Acc 11 | Acc 10 | Acc 9 | Acc 8 | Acc 7 | Acc 6 | 
-|------|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| W1 | 1200 | - | 330 | 320 | 310 | 300 | 290 | 280 | 270 | 260 | 250 | 240 | 230 | 220 | 210 | 200 | 190 | 180 | 170 | 160 | 
-| W2 | 1500 | 2500 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
-| W3 | - | 0 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
-| W4 | - | 2 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
-| W5 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
-| W6 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| Week | Tríceps Pushdown | Leg Press | Acc 23 | Acc 22 | Acc 21 | Acc 20 | Acc 19 | Acc 18 | Acc 17 | Acc 16 | Acc 15 | Acc 14 | Acc 13 | Acc 12 | Acc 11 | Acc 10 | Acc 9 | Acc 8 | Acc 7 | Acc 6 | Acc 5 | Acc 4 | Acc 3 | Acc 2 | Acc 1 | Acc 0 | 
+|------|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| W1 | 1200 | - | 330 | 320 | 310 | 300 | 290 | 280 | 270 | 260 | 250 | 240 | 230 | 220 | 210 | 200 | 190 | 180 | 170 | 160 | 150 | 140 | 130 | 120 | 110 | 100 | 
+| W2 | 1500 | 2500 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W3 | - | 0 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W4 | - | 2 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 4 | - | - | - | 
+| W5 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+| W6 | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | 
+
+## Accessory Exercise ROI (pearson r between weekly volume and the lift's next-week e1RM change)
+
+| Exercise | Lift | Pearson r | Weeks |
+|---|---|---|---|
+| Leg Press | squat | +0.723 | 5 |
+| Curl | bench | -0.310 | 4 |
+| Nothing | deadlift | +0.000 | 0 |
 
 ## Task
-Find which exercises, muscles and session sequences in the data above help or hurt
-Squat, Bench and Deadlift. Judge each driver by dose (frequency, sets, intensity, RPE),
-fatigue profile, session order and muscle landmarks. Cite numbers from the tables in
-every finding's evidence and give one concrete action for each.
+Analyze the data above. Identify which accessory exercises have volume trends
+that plausibly correlate with changes in Squat, Bench, or Deadlift e1RM.
+Only report anatomically relevant correlations as per the system instructions.
+Judge each accessory by its dose, frequency, intensity, position around the main-lift
+sessions and the ROI table together. Cite the numbers in the reasoning.

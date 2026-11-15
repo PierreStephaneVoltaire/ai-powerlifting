@@ -7,7 +7,7 @@ from decimal import Decimal
 import logging
 from typing import Any
 
-from services.program.export_program_markdown.prompt_context import FORMULA_REFERENCE
+from .formula_reference import FORMULA_REFERENCE
 from services.runtime.prompts.loader import load_system_prompt
 
 logger = logging.getLogger(__name__)

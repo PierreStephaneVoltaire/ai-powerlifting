@@ -19,6 +19,10 @@ variable "repositories" {
     prompt_cache_api = string
     analytics_export = string
     glossary         = string
+    sessions         = optional(string, "if-powerlifting-sessions")
+    program          = optional(string, "if-powerlifting-program")
+    competition      = optional(string, "if-powerlifting-competition")
+    profile          = optional(string, "if-powerlifting-profile")
     backend          = string
     frontend         = string
   })

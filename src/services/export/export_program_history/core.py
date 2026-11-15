@@ -322,17 +322,36 @@ def _entries_in_window(entries: list[dict], program: dict, window: dict | None =
     return [e for e in entries if start <= str(e.get("date") or "")[:10] <= end]
 
 
+async def _read_program(store, args: dict) -> dict:
+    from services.runtime.block_scope import ALL_BLOCKS
+    from services.runtime.competition_entries import with_competition_entries
+    program = await store.get_program()
+    program_sk = None
+    if hasattr(store, "_current_program_sk_sync"):
+        program_sk = await asyncio.get_running_loop().run_in_executor(None, store._current_program_sk_sync)
+    block = args.get("block") or ACTIVE
+    window_start = args.get("window_start")
+    window_end = args.get("window_end")
+    program = await asyncio.to_thread(
+        with_competition_entries, program, store.pk, start=window_start, end=window_end
+    )
+    if block != ALL_BLOCKS:
+        program = scope_program(program, block)
+    if program_sk is not None and hasattr(store, "_get_session_store"):
+        program["sessions"] = await store._get_session_store().list_sessions(
+            str(program_sk),
+            program.get("phases", []) if isinstance(program.get("phases"), list) else [],
+            window_start=window_start,
+            window_end=window_end,
+            block_id=block if block != ALL_BLOCKS else None,
+            active_block_id=current_block_id(program),
+        )
+    return _sanitize_decimals(program)
+
+
 def export_program_history(args: dict) -> dict:
-    from services.program.program_get.core import program_get
     store = _get_store(args)
-    program = _run_async(program_get({
-        "pk": args["pk"],
-        "block": args.get("block") or ACTIVE,
-        "window_start": args.get("window_start"),
-        "window_end": args.get("window_end"),
-        "_access": args.get("_access"),
-        "_store": store,
-    }))
+    program = _run_async(_read_program(store, args))
     from services.runtime.publication import program_view
     access = args.get('_access')
     if access:

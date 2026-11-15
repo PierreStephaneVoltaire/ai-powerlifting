@@ -37,18 +37,10 @@
       "properties": {
         "findings": {
           "type": "array",
-          "maxItems": 8,
           "items": {
             "type": "object",
             "properties": {
-              "driver_type": {
-                "enum": [
-                  "exercise",
-                  "muscle",
-                  "sequence"
-                ]
-              },
-              "driver": {
+              "exercise": {
                 "type": "string"
               },
               "lift": {
@@ -58,27 +50,21 @@
                   "deadlift"
                 ]
               },
-              "effect": {
+              "correlation_direction": {
                 "enum": [
-                  "helps",
-                  "hurts",
+                  "positive",
+                  "negative",
                   "unclear"
                 ]
               },
-              "confidence": {
+              "strength": {
                 "enum": [
                   "strong",
                   "moderate",
                   "weak"
                 ]
               },
-              "evidence": {
-                "type": "string"
-              },
-              "mechanism": {
-                "type": "string"
-              },
-              "action": {
+              "reasoning": {
                 "type": "string"
               },
               "caveat": {
@@ -86,14 +72,11 @@
               }
             },
             "required": [
-              "driver_type",
-              "driver",
+              "exercise",
               "lift",
-              "effect",
-              "confidence",
-              "evidence",
-              "mechanism",
-              "action",
+              "correlation_direction",
+              "strength",
+              "reasoning",
               "caveat"
             ]
           }
@@ -163,18 +146,10 @@
       "properties": {
         "findings": {
           "type": "array",
-          "maxItems": 8,
           "items": {
             "type": "object",
             "properties": {
-              "driver_type": {
-                "enum": [
-                  "exercise",
-                  "muscle",
-                  "sequence"
-                ]
-              },
-              "driver": {
+              "exercise": {
                 "type": "string"
               },
               "lift": {
@@ -184,27 +159,21 @@
                   "deadlift"
                 ]
               },
-              "effect": {
+              "correlation_direction": {
                 "enum": [
-                  "helps",
-                  "hurts",
+                  "positive",
+                  "negative",
                   "unclear"
                 ]
               },
-              "confidence": {
+              "strength": {
                 "enum": [
                   "strong",
                   "moderate",
                   "weak"
                 ]
               },
-              "evidence": {
-                "type": "string"
-              },
-              "mechanism": {
-                "type": "string"
-              },
-              "action": {
+              "reasoning": {
                 "type": "string"
               },
               "caveat": {
@@ -212,14 +181,11 @@
               }
             },
             "required": [
-              "driver_type",
-              "driver",
+              "exercise",
               "lift",
-              "effect",
-              "confidence",
-              "evidence",
-              "mechanism",
-              "action",
+              "correlation_direction",
+              "strength",
+              "reasoning",
               "caveat"
             ]
           }
@@ -711,18 +677,10 @@
           "properties": {
             "findings": {
               "type": "array",
-              "maxItems": 8,
               "items": {
                 "type": "object",
                 "properties": {
-                  "driver_type": {
-                    "enum": [
-                      "exercise",
-                      "muscle",
-                      "sequence"
-                    ]
-                  },
-                  "driver": {
+                  "exercise": {
                     "type": "string"
                   },
                   "lift": {
@@ -732,27 +690,21 @@
                       "deadlift"
                     ]
                   },
-                  "effect": {
+                  "correlation_direction": {
                     "enum": [
-                      "helps",
-                      "hurts",
+                      "positive",
+                      "negative",
                       "unclear"
                     ]
                   },
-                  "confidence": {
+                  "strength": {
                     "enum": [
                       "strong",
                       "moderate",
                       "weak"
                     ]
                   },
-                  "evidence": {
-                    "type": "string"
-                  },
-                  "mechanism": {
-                    "type": "string"
-                  },
-                  "action": {
+                  "reasoning": {
                     "type": "string"
                   },
                   "caveat": {
@@ -760,14 +712,11 @@
                   }
                 },
                 "required": [
-                  "driver_type",
-                  "driver",
+                  "exercise",
                   "lift",
-                  "effect",
-                  "confidence",
-                  "evidence",
-                  "mechanism",
-                  "action",
+                  "correlation_direction",
+                  "strength",
+                  "reasoning",
                   "caveat"
                 ]
               }

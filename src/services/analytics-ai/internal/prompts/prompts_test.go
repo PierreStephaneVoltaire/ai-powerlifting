@@ -42,6 +42,7 @@ type fixture struct {
 	} `json:"weekly_accessory"`
 	ROI []struct {
 		Exercise      string  `json:"exercise"`
+		Lift          string  `json:"lift"`
 		PearsonR      float64 `json:"pearson_r"`
 		WeeksObserved int     `json:"weeks_observed"`
 	} `json:"exercise_roi"`

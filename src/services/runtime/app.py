@@ -16,6 +16,7 @@ from .access import permission_map
 from .access_store import current_context
 from .mesh import caller
 from services.runtime.session_store import SessionIdentityConflictError
+from services.runtime.program_store import ProgramNotFoundError
 
 
 DOMAIN = os.environ["PL_DOMAIN"]
@@ -73,6 +74,8 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
         raise HTTPException(exc.status, jsonable_encoder({"code": exc.code, "message": exc.message, **details}))
     except SessionIdentityConflictError as exc:
         raise HTTPException(409, jsonable_encoder({'code': exc.code, 'message': str(exc)}))
+    except ProgramNotFoundError as exc:
+        raise HTTPException(404, {"code": "not_found", "message": str(exc)})
     except ValidationError as exc:
         raise HTTPException(422, {"code": "validation", "message": exc.message})
     except ValueError as exc:

@@ -3,10 +3,34 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+import hashlib
+import os
 
+import boto3
 from botocore.exceptions import ClientError
-from services.profile.identity_resolve.core import _get_table, _identity_key, _scan
+
+
+def _get_table():
+    return boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "ca-central-1")).Table(
+        os.environ.get("IF_USER_TABLE", "if-user")
+    )
+
+
+def _identity_key(issuer: str, sub: str) -> str:
+    return "Identity#" + hashlib.sha256(f"{issuer}\0{sub}".encode()).hexdigest()
+
+
+def _scan(table, **kwargs):
+    start = None
+    while True:
+        request = dict(kwargs)
+        if start:
+            request["ExclusiveStartKey"] = start
+        response = table.scan(**request)
+        yield from response.get("Items", [])
+        start = response.get("LastEvaluatedKey")
+        if not start:
+            return
 
 
 def migrate(table, apply=False):

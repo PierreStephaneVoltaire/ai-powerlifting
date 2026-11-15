@@ -37,6 +37,10 @@ repositories = {
   prompt_cache_api = ""
   analytics_export = ""
   glossary  = ""
+  sessions = ""
+  program = ""
+  competition = ""
+  profile = ""
   backend   = ""
   frontend  = ""
 }

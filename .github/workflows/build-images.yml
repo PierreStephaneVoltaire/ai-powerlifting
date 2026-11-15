@@ -1,8 +1,8 @@
 name: Build & Push Powerlifting Images
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: ['**']
     paths:
       - "src/backend/**"
       - "src/frontend/**"
@@ -17,7 +17,6 @@ on:
       - "scripts/image_tag.py"
       - "scripts/migrate_identity_pointers.py"
       - ".github/workflows/**"
-      - ".github/actions/**"
       - ".github/image-filters.yml"
       - "!**/*.md"
 
@@ -37,12 +36,13 @@ on:
         default: "false"
 
 concurrency:
-  group: powerlifting-release-${{ github.event_name == 'pull_request' && (github.event.action == 'closed' && 'main' || 'stage') || (github.ref_name == 'master' && 'main' || 'stage') }}
+  group: powerlifting-release
   cancel-in-progress: false
 
 permissions:
   id-token: write
   contents: read
+  pull-requests: read
 
 env:
   AWS_REGION: ca-central-1
@@ -52,41 +52,55 @@ env:
 
 jobs:
   changes:
+    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     outputs:
-      deploy: ${{ steps.gate.outputs.deploy }}
-      environment: ${{ steps.gate.outputs.environment }}
-      image_tag: ${{ steps.gate.outputs.image_tag }}
+      deploy: ${{ steps.deploy.outputs.deploy }}
       backend: ${{ steps.result.outputs.backend }}
       frontend: ${{ steps.result.outputs.frontend }}
       services: ${{ steps.result.outputs.services }}
       terraform: ${{ steps.result.outputs.terraform }}
       kubernetes: ${{ steps.result.outputs.kubernetes }}
+      image_tag: ${{ steps.release.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
 
-      - id: gate
-        uses: ./.github/actions/deploy-gate
-        with:
-          allowed_branches: ${{ vars.STAGE_DEPLOY_BRANCHES }}
+      - id: release
+        env:
+          RELEASE_BRANCH: ${{ github.ref_name }}
+        run: |
+          image_tag="$(python3 scripts/image_tag.py "$RELEASE_BRANCH")"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+
+      - id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          open_prs=0
+          if [ "${{ github.event_name }}" = "push" ] && [ "$BRANCH" != "master" ]; then
+            open_prs="$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq length)"
+          fi
+          if [ "$open_prs" -gt 0 ] \
+            || { [ "${{ github.event_name }}" = "push" ] && [ "$BRANCH" = "master" ]; } \
+            || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply_terraform }}" = "true" ]; }; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - id: filter
-        if: ${{ steps.gate.outputs.deploy == 'true' && github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         uses: dorny/paths-filter@v3
         with:
+          base: ${{ github.ref }}
           filters: .github/image-filters.yml
 
       - id: result
         shell: bash
         run: |
           {
-            if [ "${{ steps.gate.outputs.deploy }}" != "true" ]; then
-              echo "backend=false"
-              echo "frontend=false"
-              echo "services=false"
-              echo "terraform=false"
-              echo "kubernetes=false"
-            elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               echo "backend=true"
               echo "frontend=true"
               echo "services=true"
@@ -103,7 +117,7 @@ jobs:
 
   build-backend:
     needs: changes
-    environment: ${{ needs.changes.outputs.environment }}
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ needs.changes.outputs.backend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
     steps:
@@ -136,7 +150,7 @@ jobs:
 
   build-services:
     needs: [changes, terraform-apply]
-    environment: ${{ needs.changes.outputs.environment }}
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ always() && needs.changes.outputs.services == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') && needs.terraform-apply.result != 'failure' && needs.terraform-apply.result != 'cancelled' }}
     strategy:
@@ -154,6 +168,14 @@ jobs:
             repository: powerlifting-prompt-cache-api
           - image: powerlifting-analytics-export
             repository: powerlifting-analytics-export
+          - image: powerlifting-sessions
+            repository: powerlifting-sessions
+          - image: powerlifting-program
+            repository: powerlifting-program
+          - image: powerlifting-competition
+            repository: powerlifting-competition
+          - image: powerlifting-profile
+            repository: powerlifting-profile
           - image: powerlifting-glossary
             repository: powerlifting-glossary
     steps:
@@ -186,7 +208,7 @@ jobs:
 
   build-coach:
     needs: [changes, terraform-apply]
-    environment: ${{ needs.changes.outputs.environment }}
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ always() && needs.changes.outputs.services == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') && needs.terraform-apply.result != 'failure' && needs.terraform-apply.result != 'cancelled' }}
     strategy:
@@ -222,7 +244,7 @@ jobs:
 
   build-frontend:
     needs: changes
-    environment: ${{ needs.changes.outputs.environment }}
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ needs.changes.outputs.frontend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
     steps:
@@ -271,11 +293,79 @@ jobs:
             -var "cloudfront_media_base_url=${{ steps.tfout.outputs.cloudfront_media_base_url }}" \
             powerlifting-frontend.pkr.hcl
 
-  terraform-apply:
+  terraform-validate:
     needs: changes
-    environment: ${{ needs.changes.outputs.environment }}
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ needs.changes.outputs.terraform == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - working-directory: terraform
+        run: terraform init -input=false
+
+      - working-directory: terraform
+        run: terraform validate
+
+  terraform-plan:
+    needs: terraform-validate
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
+    runs-on: ubuntu-latest
+    if: ${{ needs.terraform-validate.result == 'success' }}
+    env:
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_tunnel_origin_url: ${{ vars.TUNNEL_ORIGIN_URL }}
+      TF_VAR_app_domain: ${{ vars.APP_DOMAIN }}
+      TF_VAR_app_zone: ${{ vars.APP_ZONE }}
+      TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN }}
+      TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
+      TF_VAR_llm_domain: ${{ vars.LLM_DOMAIN }}
+      TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
+      TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
+      TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/lambda/glossary-catalog/go.mod
+          cache-dependency-path: src/lambda/glossary-catalog/go.sum
+
+      - name: Build glossary catalog lambda
+        working-directory: src/lambda/glossary-catalog
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o dist/bootstrap . && cd dist && zip bootstrap.zip bootstrap
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - working-directory: terraform
+        run: terraform init -input=false
+
+      - working-directory: terraform
+        run: terraform plan -input=false -no-color -var="region=${{ env.AWS_REGION }}"
+
+  terraform-apply:
+    needs: [changes, terraform-plan]
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
+    runs-on: ubuntu-latest
+    if: ${{ needs.changes.outputs.deploy == 'true' && needs.terraform-plan.result == 'success' }}
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -317,14 +407,11 @@ jobs:
         run: |
           umask 077
           terraform plan -input=false -no-color -var="region=${{ env.AWS_REGION }}" -out="$RUNNER_TEMP/aws.tfplan"
-
-      - if: ${{ github.event_name == 'pull_request' || inputs.apply_terraform == 'true' }}
-        working-directory: terraform
-        run: terraform apply -input=false -no-color "$RUNNER_TEMP/aws.tfplan"
+          terraform apply -input=false -no-color "$RUNNER_TEMP/aws.tfplan"
 
   kubernetes-apply:
     needs: [changes, build-backend, build-services, build-coach, build-frontend, terraform-apply]
-    environment: ${{ needs.changes.outputs.environment }}
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: powerlifting-k8s
     if: >-
       ${{ always()
@@ -333,7 +420,6 @@ jobs:
       && github.actor == github.repository_owner
       && !contains(needs.*.result, 'failure')
       && !contains(needs.*.result, 'cancelled')
-      && (github.event_name == 'pull_request' || inputs.apply_terraform == 'true')
       && (needs.changes.outputs.kubernetes == 'true'
         || needs.build-backend.result == 'success'
         || needs.build-services.result == 'success'
