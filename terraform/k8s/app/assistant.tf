@@ -62,7 +62,7 @@ resource "kubernetes_deployment_v1" "assistant" {
 
       spec {
         service_account_name             = kubernetes_service_account_v1.assistant.metadata[0].name
-        automount_service_account_token  = false
+        automount_service_account_token  = true
         enable_service_links             = false
         termination_grace_period_seconds = 60
 
