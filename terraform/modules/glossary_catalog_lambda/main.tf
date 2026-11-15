@@ -1,15 +1,14 @@
-resource "aws_cloudwatch_log_group" "this" {
-  name              = "/aws/lambda/${var.function_name}"
-  retention_in_days = var.log_retention_days
+data "aws_caller_identity" "current" {}
 
-  tags = {
-    Project = "if-prototype-a1"
-    Service = "powerlifting-glossary-catalog"
-  }
+data "aws_region" "current" {}
+
+locals {
+  log_group_arn = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.function_name}"
 }
 
 resource "aws_iam_role" "this" {
-  name = "${var.function_name}-role"
+  name                 = "${var.function_name}-role"
+  permissions_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${var.function_name}-boundary"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -35,8 +34,13 @@ resource "aws_iam_role_policy" "this" {
     Statement = [
       {
         Effect   = "Allow"
+        Action   = "logs:CreateLogGroup"
+        Resource = local.log_group_arn
+      },
+      {
+        Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "${aws_cloudwatch_log_group.this.arn}:*"
+        Resource = "${local.log_group_arn}:*"
       },
       {
         Effect = "Allow"
@@ -80,8 +84,6 @@ resource "aws_lambda_function" "this" {
       GLOSSARY_TABLE_NAME = var.table_name
     }
   }
-
-  depends_on = [aws_cloudwatch_log_group.this]
 
   tags = {
     Project = "if-prototype-a1"

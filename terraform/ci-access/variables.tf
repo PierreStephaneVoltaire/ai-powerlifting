@@ -12,3 +12,7 @@ variable "ci_role_name" {
 variable "glossary_catalog_function_name" {
   type = string
 }
+
+variable "glossary_table_name" {
+  type = string
+}
