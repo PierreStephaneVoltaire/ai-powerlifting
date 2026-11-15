@@ -8,3 +8,7 @@ variable "ci_role_name" {
   type        = string
   default     = "github-actions"
 }
+
+variable "glossary_catalog_function_name" {
+  type = string
+}
