@@ -84,19 +84,22 @@ func (s *Service) latestVersion(ctx context.Context, athlete string) (string, er
 	return latest, nil
 }
 
+func competitionOperation(arguments map[string]any) string {
+	if operation := textArg(arguments["op"]); operation != "" {
+		return operation
+	}
+	switch {
+	case pyval.Truthy(arguments["master_id"]) && arguments["patch"] != nil:
+		return "update"
+	case pyval.Truthy(arguments["master_id"]) && arguments["results"] != nil:
+		return "complete"
+	}
+	return "list"
+}
+
 func (s *Service) competitions(ctx context.Context, arguments map[string]any) (any, error) {
 	athlete := pk(arguments)
-	operation := textArg(arguments["op"])
-	if operation == "" {
-		switch {
-		case pyval.Truthy(arguments["master_id"]) && arguments["patch"] != nil:
-			operation = "update"
-		case pyval.Truthy(arguments["master_id"]) && arguments["results"] != nil:
-			operation = "complete"
-		default:
-			operation = "list"
-		}
-	}
+	operation := competitionOperation(arguments)
 	switch operation {
 	case "list":
 		list, err := s.rows.List(ctx, athlete, arguments)
@@ -235,8 +238,14 @@ func (s *Service) snapshotProgram(ctx context.Context, athlete, version string, 
 	for index, row := range rows {
 		entryItems[index] = row
 	}
+	glossary, err := s.Programs.Item(ctx, athlete, glossarySK)
+	if err != nil {
+		return projection.Program{}, err
+	}
+	exercises, _ := glossary["exercises"].([]any)
 	meta, _ := item["meta"].(map[string]any)
 	return projection.Program{
+		Glossary:     projection.GlossaryFromItems(exercises),
 		Meta:         meta,
 		Sessions:     projection.SessionsFromItems(sessionItems),
 		Competitions: projection.CompetitionsFromEntries(entryItems),

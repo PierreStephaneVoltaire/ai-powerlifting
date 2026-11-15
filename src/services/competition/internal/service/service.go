@@ -16,9 +16,22 @@ import (
 
 var reserved = []string{"_person_pk", "_access", "_if_job_id"}
 
+const glossarySK = "glossary#v1"
+
 var analysisInputWrites = map[string]bool{
 	"health_update_user_competition":   true,
 	"health_complete_user_competition": true,
+}
+
+func mutatesCompetition(name string, arguments map[string]any) bool {
+	if analysisInputWrites[name] {
+		return true
+	}
+	if name != "health_list_competitions" {
+		return false
+	}
+	operation := competitionOperation(arguments)
+	return operation == "update" || operation == "complete"
 }
 
 type Accessor interface {
@@ -99,16 +112,16 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 	if err := operation.ValidateResult(result); err != nil {
 		return nil, apperr.InvalidResult()
 	}
-	s.recordWrite(ctx, name, access)
+	s.recordWrite(ctx, name, scoped, access)
 	if caller.Nested || caller.ActiveJob() == "" {
 		return result, nil
 	}
 	return map[string]any{"status": "succeeded", "result": result}, nil
 }
 
-func (s *Service) recordWrite(ctx context.Context, name string, access map[string]any) {
+func (s *Service) recordWrite(ctx context.Context, name string, arguments, access map[string]any) {
 	athlete := auth.AnalysisAthlete(access)
-	if athlete == "" || !analysisInputWrites[name] {
+	if athlete == "" || !mutatesCompetition(name, arguments) {
 		return
 	}
 	if err := s.Versions.Bump(ctx, athlete); err != nil {

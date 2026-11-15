@@ -158,3 +158,33 @@ func TestSnapshotWriteFailureSurfaces(t *testing.T) {
 		t.Fatal("write failure swallowed")
 	}
 }
+
+func TestEveryCompetitionMutationBumpsTheAnalysisVersion(t *testing.T) {
+	cases := []struct {
+		name      string
+		operation string
+		arguments map[string]any
+		bumps     int
+	}{
+		{"update operation", "health_update_user_competition", map[string]any{"master_id": "m", "patch": map[string]any{"notes": "x"}}, 1},
+		{"complete operation", "health_complete_user_competition", map[string]any{"master_id": "m", "body_weight_kg": 90.0, "results": map[string]any{"squat_kg": 200.0}}, 1},
+		{"list op update explicit", "health_list_competitions", map[string]any{"op": "update", "master_id": "m", "patch": map[string]any{"notes": "x"}}, 1},
+		{"list op update inferred", "health_list_competitions", map[string]any{"master_id": "m", "patch": map[string]any{"notes": "x"}}, 1},
+		{"list op complete explicit", "health_list_competitions", map[string]any{"op": "complete", "master_id": "m", "results": map[string]any{"squat_kg": 200.0}}, 1},
+		{"list op complete inferred", "health_list_competitions", map[string]any{"master_id": "m", "results": map[string]any{"squat_kg": 200.0}}, 1},
+		{"list op list explicit", "health_list_competitions", map[string]any{"op": "list"}, 0},
+		{"list op list default", "health_list_competitions", map[string]any{}, 0},
+		{"list op failed update", "health_list_competitions", map[string]any{"op": "update", "master_id": "missing", "patch": map[string]any{"notes": "x"}}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			memory := store.NewMemory()
+			memory.Load("entries", []store.Item{{"pk": athlete, "sk": "COMP#m", "user_status": "available", "start_date": "2027-05-01", "name": "Meet", "units": "kg"}})
+			svc := build(t, memory, memory)
+			_, _ = call(svc, tc.operation, tc.arguments)
+			if got := memory.Bumps[store.AnalysisVersionPK+athlete]; got != tc.bumps {
+				t.Fatalf("bumps %d, want %d", got, tc.bumps)
+			}
+		})
+	}
+}

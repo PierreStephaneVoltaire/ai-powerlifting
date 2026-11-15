@@ -157,6 +157,7 @@ type Program struct {
 	Meta         map[string]any
 	Sessions     []Session
 	Competitions []Competition
+	Glossary     Glossary
 }
 
 func (p Program) ProgramStart() string { return textOf(p.Meta["program_start"]) }

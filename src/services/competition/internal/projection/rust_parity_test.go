@@ -111,7 +111,15 @@ func TestMeetMatchesTheRustProjection(t *testing.T) {
 				t.Fatalf("bad today %q", golden.Today)
 			}
 			projected, reason := Meet(programFrom(t, golden.Program), golden.Target, reference, today)
-			if want, insufficient := golden.Answer["insufficient"]; insufficient {
+			answer := golden.Answer
+			if corrected, ok := answersCorrectedForBenchPressNaming[golden.Name]; ok {
+				decoded, err := pyjson.Decode([]byte(corrected))
+				if err != nil {
+					t.Fatal(err)
+				}
+				answer = decoded.(map[string]any)
+			}
+			if want, insufficient := answer["insufficient"]; insufficient {
 				if projected != nil || reason != want {
 					t.Fatalf("want insufficient %q, got %v %q", want, projected, reason)
 				}
@@ -121,7 +129,7 @@ func TestMeetMatchesTheRustProjection(t *testing.T) {
 				t.Fatalf("want a projection, got insufficient %q", reason)
 			}
 			ready++
-			want := canonical(t, golden.Answer)
+			want := canonical(t, answer)
 			if got := canonical(t, asMap(projected)); got != want {
 				t.Fatalf("projection differs\n got %s\nwant %s", got, want)
 			}

@@ -207,7 +207,7 @@ func Meet(program Program, compDate string, reference, today Day) (*Projection, 
 			continue
 		}
 		slope, fitValue := 0.0, 0.0
-		if result, ok := progressionRate(sessions, lift.Key(), programStart, reference); ok {
+		if result, ok := progressionRate(sessions, lift, program.Glossary, programStart, reference); ok {
 			hasProgression = true
 			slope, fitValue = result.slope, result.fitQuality
 		}

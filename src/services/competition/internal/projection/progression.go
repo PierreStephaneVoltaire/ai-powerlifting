@@ -13,11 +13,14 @@ type progression struct {
 	fitQuality float64
 }
 
-func progressionRate(sessions []Session, exercise, programStart string, reference Day) (progression, bool) {
+func progressionRate(sessions []Session, lift Lift, glossary Glossary, programStart string, reference Day) (progression, bool) {
 	if programStart == "" {
 		programStart = inferProgramStart(sessions)
 	}
-	name := NormalizeName(exercise)
+	matches := func(key string) bool {
+		resolved, ok := glossary.ResolveLift(key)
+		return ok && resolved == lift
+	}
 	cutoff := reference.Add(-lookbackDays * 24 * time.Hour)
 	effective := map[int64]int{}
 	for _, load := range detectWeekLoads(sessions, programStart) {
@@ -27,7 +30,7 @@ func progressionRate(sessions []Session, exercise, programStart string, referenc
 	}
 	byWeek := map[int][]float64{}
 	for _, session := range sessions {
-		if !session.Completed || !hasExercise(session, name) {
+		if !session.Completed || !hasExercise(session, matches) {
 			continue
 		}
 		if session.Date == nil || session.Date.Before(cutoff) || session.Date.After(reference) {
@@ -42,7 +45,7 @@ func progressionRate(sessions []Session, exercise, programStart string, referenc
 			continue
 		}
 		for _, item := range session.Exercises {
-			if item.Key != name || item.FailedSets() > 0 || item.ExecutedSets() <= 0 || item.Kg <= 0 || item.RepsInt() <= 0 {
+			if !matches(item.Key) || item.FailedSets() > 0 || item.ExecutedSets() <= 0 || item.Kg <= 0 || item.RepsInt() <= 0 {
 				continue
 			}
 			if value, ok := estimate(item.Kg, item.RepsInt(), session.SessionRPE); ok {
@@ -72,9 +75,9 @@ func progressionRate(sessions []Session, exercise, programStart string, referenc
 	return progression{slope: round(line.slope, 2), fitQuality: fitQuality(xs, ys, line)}, true
 }
 
-func hasExercise(session Session, name string) bool {
+func hasExercise(session Session, matches func(string) bool) bool {
 	for _, exercise := range session.Exercises {
-		if exercise.Key == name {
+		if matches(exercise.Key) {
 			return true
 		}
 	}
