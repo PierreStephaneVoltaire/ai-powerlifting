@@ -5,7 +5,7 @@ import { requestPartition, setRequestAthlete, setRequestPerson } from './context
 
 test('queue eligibility follows the route and the stable session id', () => {
   const body = { text: 'local' }
-  assert.equal(isQueueableMutation('PUT', '/authored-notes/private', body), true)
+  assert.equal(isQueueableMutation('PUT', '/block-notes/current', body), true)
   assert.equal(isQueueableMutation('POST', '/videos/current/upload', body), false)
   assert.equal(isQueueableMutation('PUT', '/competitions/current/unsupported', body), false)
   assert.equal(isQueueableMutation('PUT', '/sessions/current/2026-09-14/0', { ...body, session_id: ' ' }), false)

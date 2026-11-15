@@ -117,7 +117,7 @@ export function isQueueableMutation(method: string, url: string, data: unknown):
   const hasSessionId = typeof body.session_id === 'string' && body.session_id.trim().length > 0
   if (/^\/sessions\//.test(url) && !(method.toUpperCase() === 'POST' && /^\/sessions\/[^/]+$/.test(url)) && !hasSessionId) return false
   if (/^\/programs\/[^/]+\/designer\//.test(url) && !hasSessionId) return false
-  return /^\/competitions\/[^/]+(?:\/complete)?$/.test(url) || /^\/sessions\//.test(url) || /^\/programs\/[^/]+\/(meta|body-weight|phases|lift-profiles|archive|unarchive|blocks\/transition|designer\/)/.test(url) || /^\/(maxes|supplements|diet-notes|block-notes)\//.test(url) || /^\/authored-notes\/(private|share|detach)$/.test(url) || /^\/attempts\//.test(url)
+  return /^\/competitions\/[^/]+(?:\/complete)?$/.test(url) || /^\/sessions\//.test(url) || /^\/programs\/[^/]+\/(meta|body-weight|phases|lift-profiles|archive|unarchive|blocks\/transition|designer\/)/.test(url) || /^\/(maxes|supplements|diet-notes|block-notes)\//.test(url) || /^\/attempts\//.test(url)
 }
 
 interface MutationSender { (record: PendingMutation): Promise<{ status: number; data?: unknown }> }
@@ -145,12 +145,6 @@ export async function synchronizePendingMutations(send: MutationSender, partitio
               const { session_id: _session_id, ...session } = sessionData
               await removeDraftIfValue(sessionDraftKey(sessionMatch[1], sessionId), session, record.partition)
             }
-          }
-          if (record.url === '/authored-notes/private' && record.data && typeof record.data === 'object') {
-            const { expected_revision: _expectedRevision, idempotency_key: _idempotencyKey, ...note } = record.data as Record<string, unknown>
-            const noteId = String(note.note_id || '')
-            const sameNote = (item: PendingMutation) => item.url === record.url && item.data && typeof item.data === 'object' && (item.data as Record<string, unknown>).note_id === noteId
-            if (!(await listMutations(record.partition)).some(sameNote)) await removeDraftIfValue(noteId ? `authored-note:${noteId}` : 'authored-note:new', note, record.partition)
           }
         }
       } catch (cause: any) {

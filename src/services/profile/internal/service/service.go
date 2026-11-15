@@ -74,7 +74,6 @@ func New(deps Deps) (*Service, error) {
 	s.registerViews()
 	s.registerGrants()
 	s.registerRelationships()
-	s.registerNotes()
 	s.registerHandlerContext()
 	for _, operation := range deps.Registry.All() {
 		if s.handlers[operation.Name] == nil {

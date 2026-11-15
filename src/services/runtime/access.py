@@ -6,9 +6,9 @@ from pathlib import Path
 import casbin
 
 
-DOMAINS = ('profile', 'program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'lift-profiles', 'analytics', 'videos')
+DOMAINS = ('profile', 'program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'lift-profiles', 'analytics', 'videos')
 COACH_PERMISSIONS = [f'{domain}:{action}' for domain in DOMAINS for action in ('read', 'write')]
-HANDLER_PERMISSIONS = [f'{domain}:read' for domain in ('profile', 'program', 'sessions', 'competition', 'budget', 'performance', 'lift-profiles', 'videos', 'calculations')] + ['competition:write']
+HANDLER_PERMISSIONS = [f'{domain}:read' for domain in ('profile', 'program', 'sessions', 'competition', 'performance', 'lift-profiles', 'videos', 'calculations')] + ['competition:write']
 PROGRAM_FIELDS = {'phases': 'program', 'diet_notes': 'program', 'supplements': 'program', 'supplement_phases': 'program', 'sessions': 'sessions', 'competitions': 'competition', 'competition': 'competition', 'lift_profiles': 'lift-profiles', 'current_maxes': 'performance', 'goals': 'goals', 'weight_log': 'weight-log', 'max_history': 'performance', 'federation_library': 'federation'}
 META_DOMAINS = {
     'competition': ('practicing_for', 'weight_class_kg', 'weight_class_confirm_by', 'attempt_pct', 'lift_attempt_settings'),
@@ -29,9 +29,6 @@ def operation_permission(name: str, arguments: dict) -> str | None:
         if not operation:
             operation = 'update' if arguments.get('master_id') and arguments.get('patch') is not None else 'complete' if arguments.get('master_id') and arguments.get('results') is not None else 'list'
         return 'competition:read' if operation == 'list' else 'competition:write' if operation in ('update', 'complete') else None
-    if name in ('note_list_attachments', 'note_share'):
-        domain = arguments.get('context_domain')
-        return f"{domain}:{'read' if name == 'note_list_attachments' else 'write'}" if domain in ('program', 'sessions', 'competition') else None
     if name == 'domain_resume':
         resumed = arguments.get('operation')
         if resumed in ('domain_resume', 'generation_status'):

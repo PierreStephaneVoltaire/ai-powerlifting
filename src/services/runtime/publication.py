@@ -22,6 +22,10 @@ def in_current_block(session):
     return (session.get('block') or 'current') == 'current'
 
 
+def shared_notes(notes):
+    return [note for note in notes if not (isinstance(note, dict) and note.get('private'))]
+
+
 def program_view(program, access):
     from .competition_access import visible_entries
     out = copy.deepcopy(program)
@@ -49,6 +53,11 @@ def program_view(program, access):
     if 'performance:read' not in permissions:
         for block in meta.get('blocks', []):
             block.pop('start_maxes_kg', None)
+    if not access.get('is_self'):
+        if isinstance(meta.get('block_notes'), list):
+            meta['block_notes'] = shared_notes(meta['block_notes'])
+        if isinstance(out.get('block_notes'), list):
+            out['block_notes'] = shared_notes(out['block_notes'])
     out['meta'] = meta
     return out
 
@@ -71,6 +80,8 @@ def operation_result(name, value, access):
         return {**value, 'programs': [program_view(item, access) for item in value.get('programs', [])]}
     if name == 'program_update_meta_field' and isinstance(value, dict):
         return {**value, 'meta': program_view({'meta': value.get('meta') or {}}, access)['meta']}
+    if name in ('block_notes_get', 'block_notes_update') and isinstance(value, dict) and isinstance(value.get('block_notes'), list):
+        return {**value, 'block_notes': shared_notes(value['block_notes'])}
     if name == 'block_transition' and isinstance(value, dict) and isinstance(value.get('program'), dict):
         return {**value, 'program': program_view(value['program'], access)}
     if name == 'session_get':

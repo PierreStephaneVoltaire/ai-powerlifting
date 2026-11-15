@@ -47,7 +47,7 @@ def test_scope_entries_keeps_unstamped_dated_records_in_their_range():
     assert [item["name"] for item in scope_entries(entries, "current", program, "competitions")] == ["active"]
 
 
-def test_notes_nutrition_and_budget_use_record_dates_even_when_stamped_wrong():
+def test_notes_and_nutrition_use_record_dates_even_when_stamped_wrong():
     program = program_with_ranges()
     records = [
         {"date": "2026-09-27", "block_id": "block-active", "name": "previous"},
@@ -55,7 +55,6 @@ def test_notes_nutrition_and_budget_use_record_dates_even_when_stamped_wrong():
     ]
     assert [item["name"] for item in scope_entries(records, "block-middle", program, "diet_notes")] == ["previous"]
     assert [item["name"] for item in scope_entries(records, "block-active", program, "supplements")] == ["active"]
-    assert [item["name"] for item in scope_entries(records, "block-active", program, "budget")] == ["active"]
 
 
 def test_scope_program_filters_records_outside_the_block():

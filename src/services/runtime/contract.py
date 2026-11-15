@@ -11,7 +11,7 @@ JOB_SUBMITTED_SCHEMA = {"type": "object", "properties": {"job_id": {"type": ["st
 
 DOMAINS = (
     "program", "sessions", "competition", "federation", "glossary", "goals",
-    "budget", "calculations", "performance", "weight-log", "templates",
+    "calculations", "performance", "weight-log", "templates",
     "imports", "profile", "lift-profiles", "analytics", "analytics-ai", "analytics-export", "videos",
     "export", "rankings",
 )

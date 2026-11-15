@@ -9,7 +9,7 @@ great, some providing cookie-cutter coaching. I came to the conclusion that my
 bad experiences came down to a lack of communication. But it's hard to explain
 six years of training history to someone over a couple of sessions. This
 platform exists to fix that: it aggregates everything past workouts, fatigue
-profile, budget, even past competition performance and lift videos into one
+profile, even past competition performance and lift videos into one
 place an athlete can share with their coach so they can collaborate on training.
 
 This is a **competition-geared** notebook, not a free-form workout tracker. The
@@ -84,8 +84,6 @@ the roadmap.
 - **Videos** S3-backed lift video library with auto-generated thumbnails.
 - **Rankings** compare your totals/DOTS against the OpenPowerlifting dataset.
 - **Profiles** public lifter profile search and your own profile management.
-- **Budget** comp-prep budget tracking (equipment, supplements, memberships,
-  meet entry) with a purchase timeline.
 - **Supplements / Biometrics / Notes** supplement phases, diet & recovery
   notes, dated program notes.
 
@@ -149,7 +147,6 @@ Where the AI shows up:
 - **Accessory e1RM backfill**
 - **Spreadsheet import** (classify / parse / glossary-resolve)
 - **Glossary text generation**, muscle-group and fatigue-profile estimation
-- **Budget** advice and purchase timeline
 - **Session note drafting**, **auto-regulation** suggestions, and the
   **Discord** coach chat
 

@@ -42,10 +42,6 @@ import type {
   UserCompetition,
   UserCompetitionUpdate,
   MasterFederation,
-  BudgetItem,
-  BudgetConfig,
-  BudgetStore,
-  BudgetAiAnalysis,
   BlockTransitionInput,
   BlockTransitionResult,
 } from '@powerlifting/types'
@@ -845,45 +841,5 @@ export async function fetchRankingPercentile(params: RankingPercentileParams): P
   return data
 }
 
-
-// ─── Budget ───────────────────────────────────────────────────────────────────
-
-export async function fetchBudget(blockId?: string): Promise<BudgetStore> {
-  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
-  const data = await cachedGet(api, `/budget${query}`, ['budget'])
-  return data.data
-}
-
-export async function putBudget(store: { config: BudgetConfig; items: BudgetItem[] }, blockId?: string): Promise<void> {
-  const query = blockId ? `?block_id=${encodeURIComponent(blockId)}` : ''
-  await api.put(`/budget${query}`, store)
-  await invalidateDomain('budget')
-}
-
-export async function uploadBudgetItemPhoto(itemId: string, file: File): Promise<{ photo_s3_key: string }> {
-  const form = new FormData()
-  form.append('photo', file)
-  const res = await api.post<ApiResponse<{ photo_s3_key: string }>>(`/budget/items/${itemId}/photo`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
-  return res.data.data
-}
-
-export async function deleteBudgetItemPhoto(itemId: string): Promise<void> {
-  await api.delete(`/budget/items/${itemId}/photo`)
-}
-
-export async function fetchBudgetAiAnalysis(refresh = false): Promise<BudgetAiAnalysis> {
-  const params = new URLSearchParams({ refresh: String(refresh) })
-  const res = await api.post<ApiResponse<BudgetAiAnalysis>>(`/budget/ai-analysis?${params.toString()}`)
-  if (res.data.error) throw new Error(res.data.error)
-  return res.data.data
-}
-
-export async function markBudgetItemCut(id: string, cut: boolean): Promise<BudgetItem> {
-  const res = await api.patch<ApiResponse<BudgetItem>>(`/budget/items/${encodeURIComponent(id)}/cut`, { cut })
-  await invalidateDomain('budget')
-  return res.data.data
-}
 
 export default api

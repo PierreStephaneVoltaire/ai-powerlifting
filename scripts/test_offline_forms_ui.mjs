@@ -7,9 +7,7 @@ import react from '@vitejs/plugin-react'
 import { otherAthlete, ownAthlete, program, me, relationships, settings } from './fixtures/backlog-ui.mjs'
 import {
   offlineCompetition,
-  offlineAttachment,
   offlineMe,
-  offlineNote,
   offlinePerson,
   offlineProgram,
   offlineRelationships,
@@ -49,8 +47,6 @@ function state(overrides = {}) {
     expectedConsoleResponses: 0,
     mode: 'success',
     program: offlineProgram(),
-    note: { ...offlineNote },
-    attachments: [{ ...offlineAttachment }],
     competitions: [{ ...offlineCompetition, post_meet_report: { ...offlineCompetition.post_meet_report, attempts: [...offlineCompetition.post_meet_report.attempts] } }],
     publication: { domains: [], revision: 2 },
     unhandled: [],
@@ -96,26 +92,12 @@ async function routeApi(route, current) {
   if (path === '/stats/countries' && method === 'GET') return route.fulfill(response({ data: { countries: [], country_regions: {} } }))
   if (path === '/stats/categories' && method === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ countries: [], country_regions: {} }) })
   if (path === '/competitions' && method === 'GET') return route.fulfill(response({ data: current.competitions }))
-  if (path === '/authored-notes/private' && method === 'GET') return route.fulfill(response({ data: { notes: [current.note], next_cursor: null } }))
-  if (path === '/authored-notes/attachments/program' && method === 'GET') return route.fulfill(response({ data: { attachments: current.attachments, next_cursor: null } }))
   if (path === '/settings/publication' && method === 'GET') return route.fulfill(response({ data: current.publication }))
   if (path === '/settings' && method === 'GET') return route.fulfill(response({ data: settings({ roles: ['athlete', 'coach'] }) }))
   if (path === '/profiles/current' && method === 'GET') return route.fulfill(response({ data: { athlete_pk: ownAthlete, nickname: 'luna', display_name: 'Luna', profile_visibility: 'private', public_training_summary_enabled: false, is_self: true, tags: [], bio: '' } }))
   if (path === '/videos' && method === 'GET') return route.fulfill(response({ data: { videos: [], exercises: [] } }))
   if (path === '/profiles/tags' && method === 'GET') return route.fulfill(response({ data: [] }))
 
-  if (path === '/authored-notes/private' && method === 'PUT') {
-    if (current.mode === 'conflict') return route.fulfill(response({ code: 'conflict', current_revision: 4, current_record: { ...current.note, text: 'Server note' } }, 409))
-    if (current.mode === 'failed') return route.fulfill(response({ message: 'temporary failure' }, 503))
-    current.note = { ...current.note, text: body.text, revision: current.note.revision + 1, updated_at: new Date().toISOString() }
-    return route.fulfill(response({ data: current.note }))
-  }
-  if (path === '/authored-notes/share' && method === 'POST') {
-    current.shared = body
-    const shared = { ...current.attachments.find(item => item.note_id === body.note_id), text: current.note.text, source_revision: body.wanted_revision, context_domain: body.context_domain }
-    current.attachments = current.attachments.map(item => item.note_id === body.note_id ? shared : item)
-    return route.fulfill(response({ data: shared }))
-  }
   if (path === '/settings/publication' && method === 'PUT') {
     current.publication = { domains: body.domains, revision: current.publication.revision + 1 }
     return route.fulfill(response({ data: current.publication }))
@@ -318,40 +300,6 @@ try {
   check(drafts.own?.value?.session_notes === 'Retry me' && !drafts.other, `Session drafts are partitioned by Athlete: ${JSON.stringify(drafts)}`)
   await failed.context.close()
 
-  const noteState = state()
-  const notes = await openScenario(noteState, '/my-notes')
-  await notes.page.getByTestId('authored-notes').waitFor()
-  await notes.page.getByText('Previously shared revision').waitFor()
-  check(await notes.page.getByText('Attached revision 1').count() === 1, 'private note edit leaves the old shared attachment visible')
-  await notes.page.getByTestId('authored-notes').locator('textarea').first().fill('Private offline revision')
-  setPhase(noteState, 'offline-note-save')
-  expectFailure(noteState, { kind: 'console', method: 'PUT', path: '/authored-notes/private', phase: 'offline-note-save', error: /OfflineQueuedError|Saved locally/i })
-  await notes.context.setOffline(true)
-  await notes.page.getByRole('button', { name: 'Save private', exact: true }).click()
-  await notes.page.getByText('Private note saved for when you reconnect').waitFor()
-  const noteQueue = await queue(notes.page)
-  check(noteQueue.length === 1 && noteQueue[0].url === '/authored-notes/private' && noteQueue[0].data.text === 'Private offline revision', 'offline authored-note edit queues as a private original')
-  await notes.context.setOffline(false)
-  setPhase(noteState, 'online-note-sync')
-  await synchronize(notes.page)
-  await notes.page.waitForFunction(async () => {
-    const { listMutations } = await import('/src/api/drafts.ts')
-    return (await listMutations()).length === 0
-  }, null, { timeout: 5000 })
-  await notes.page.getByText('Revision 3').waitFor()
-  check(await notes.page.getByText('Attached revision 1').count() === 1, 'replayed private note does not replace its old attachment before sharing')
-  await notes.page.getByTestId('authored-notes').locator('textarea').first().fill('Private online followup')
-  setPhase(noteState, 'online-note-followup')
-  const followupRequestPromise = notes.page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/authored-notes/private')
-  await notes.page.getByRole('button', { name: 'Save private', exact: true }).click()
-  const followupRequest = await followupRequestPromise
-  await notes.page.getByText('Private note saved').waitFor()
-  const followupBody = followupRequest.postDataJSON()
-  check(followupBody.expected_revision === 3, `post-replay private note save uses the refreshed revision: ${JSON.stringify(noteState.requests.filter(request => request.path === '/authored-notes/private'))}`)
-  await notes.page.getByRole('button', { name: 'Share revision' }).click()
-  check(noteState.shared?.context_domain === 'program' && noteState.shared?.note_id === 'offline-note' && noteState.shared?.wanted_revision === 4 && noteState.attachments[0].source_revision === 4, 'sharing explicitly publishes the latest private revision')
-  await notes.context.close()
-
   const publicationState = state()
   const publication = await openScenario(publicationState, '/settings')
   await publication.page.getByText('Published training domains').waitFor()
@@ -365,7 +313,7 @@ try {
   check(await publication.page.getByRole('checkbox', { name: 'Sessions and training logs' }).isChecked(), 'offline publication form restores unsent selections after reload')
   await publication.context.close()
 
-  const states = [sessionState, attemptState, reconnectState, failedState, noteState, publicationState]
+  const states = [sessionState, attemptState, reconnectState, failedState, publicationState]
   check(states.every(item => item.unhandled.length === 0 && item.browserErrors.length === 0), 'offline scenarios have no unhandled mock requests or browser errors')
   console.log(JSON.stringify({ verification: 'local Chromium DOM with simulated API interception; no deployment or Authentik evidence', passed, uncovered: ['delegated revocation UI/cache clearing', 'context switching during pending sync', 'upload and AI form preservation', 'relationship approval while offline'] }, null, 2))
 } finally {

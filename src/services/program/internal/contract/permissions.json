@@ -91,34 +91,6 @@
   "block_transition": {
     "permission": "program:write"
   },
-  "budget_advisor": {
-    "permission": "budget:write",
-    "cache_read": "budget:read"
-  },
-  "budget_create_item": {
-    "permission": "budget:write"
-  },
-  "budget_delete_item": {
-    "permission": "budget:write"
-  },
-  "budget_get_config": {
-    "permission": "budget:read"
-  },
-  "budget_get_summary": {
-    "permission": "budget:read"
-  },
-  "budget_list_items": {
-    "permission": "budget:read"
-  },
-  "budget_priority_timeline": {
-    "permission": "budget:write"
-  },
-  "budget_put_config": {
-    "permission": "budget:write"
-  },
-  "budget_update_item": {
-    "permission": "budget:write"
-  },
   "calculate_attempts": {
     "permission": "competition:read"
   },
@@ -555,21 +527,6 @@
   },
   "handler_context": {
     "permission": "competition:read"
-  },
-  "note_list_private": {
-    "permission": "settings:read"
-  },
-  "note_save_private": {
-    "permission": "settings:write"
-  },
-  "note_list_attachments": {
-    "permission": "program:read"
-  },
-  "note_share": {
-    "permission": "program:write"
-  },
-  "note_detach": {
-    "permission": "grants:write"
   },
   "template_report": {
     "permission": "templates:read"

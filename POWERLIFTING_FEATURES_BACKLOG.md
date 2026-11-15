@@ -211,7 +211,7 @@ identifiers, storage operations and processing stay. Browser receives no storage
 upload URL and performs no S3 upload. No chunk protocol, resumable upload API or
 browser-direct fallback. Interrupted requests retry the file; retries cannot
 attach duplicates or confirm incomplete storage objects. Already backend-mediated
-avatar, budget-photo and spreadsheet uploads remain.
+avatar and spreadsheet uploads remain.
 
 Serve media through authorized `/api` GET, HEAD and Range. Close unauthenticated
 CloudFront access by configuration and invalidation without deleting infrastructure.

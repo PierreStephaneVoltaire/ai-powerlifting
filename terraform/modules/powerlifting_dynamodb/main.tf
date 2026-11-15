@@ -358,32 +358,6 @@ resource "aws_dynamodb_table" "powerlifting_tags" {
   }
 }
 
-resource "aws_dynamodb_table" "if_powerlifting_budget" {
-  name         = "if-powerlifting-budget"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"
-  range_key    = "sk"
-
-  attribute {
-    name = "pk"
-    type = "S"
-  }
-
-  attribute {
-    name = "sk"
-    type = "S"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Project = "powerlifting-app"
-    Service = "budget"
-  }
-}
-
 resource "aws_dynamodb_table" "if_webhooks" {
   name         = "if-webhooks"
   billing_mode = "PAY_PER_REQUEST"

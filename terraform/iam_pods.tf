@@ -47,7 +47,6 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
         ]
         Resource = [
           "arn:aws:s3:::powerlifting-session-videos",
-          "arn:aws:s3:::powerlifting-budget-media",
           "arn:aws:s3:::powerlifting-data-2b0f699b",
         ]
       },
@@ -62,7 +61,6 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
         ]
         Resource = [
           "arn:aws:s3:::powerlifting-session-videos/*",
-          "arn:aws:s3:::powerlifting-budget-media/*",
           "arn:aws:s3:::powerlifting-data-2b0f699b/*",
         ]
       },

@@ -9,12 +9,12 @@ function encodeKey(s3Key: string): string {
 export function getMediaUrl(s3Key: string | null | undefined, athletePk?: string): string {
   if (!s3Key) return ''
   if (MEDIA_CDN_BASE_URL && s3Key.startsWith('thumbnails/')) return `${MEDIA_CDN_BASE_URL}/${encodeKey(s3Key)}`
-  const domain = s3Key.startsWith('budget/') ? 'budget' : s3Key.startsWith('profiles/') ? 'profiles' : 'videos'
+  const domain = s3Key.startsWith('profiles/') ? 'profiles' : 'videos'
   const owner = domain === 'profiles' ? s3Key.split('/')[1] : athletePk || requestAthlete()
   return `/api/${domain}/media/${encodeKey(s3Key)}?athlete=${encodeURIComponent(owner)}`
 }
 
-const SERVED_MEDIA_PATH = /^\/api\/(?:budget|profiles|videos)\/media\/([^?]+)/
+const SERVED_MEDIA_PATH = /^\/api\/(?:profiles|videos)\/media\/([^?]+)/
 
 export function resolveAvatarUrl(value: string | null | undefined): string {
   if (!value) return ''
